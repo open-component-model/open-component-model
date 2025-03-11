@@ -1,6 +1,6 @@
 package extensions
 
-import "ocm.software/open-component-model/bindings/golang/runtime"
+import "ocm.software/open-component-model/bindings/go/runtime"
 
 var Scheme = runtime.NewScheme()
 

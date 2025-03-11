@@ -8,7 +8,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/golang/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // TODO: Evaluate where we even need this, the plugin knows the type it wants

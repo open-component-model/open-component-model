@@ -7,9 +7,9 @@ import (
 	"maps"
 	"strings"
 
-	v1 "ocm.software/open-component-model/bindings/golang/config/v1"
-	"ocm.software/open-component-model/bindings/golang/descriptor/codec"
-	"ocm.software/open-component-model/bindings/golang/runtime"
+	v1 "ocm.software/open-component-model/bindings/go/config/v1"
+	"ocm.software/open-component-model/bindings/go/descriptor/codec"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // cli needs sample of transfer (source repo - target repo + parsing)

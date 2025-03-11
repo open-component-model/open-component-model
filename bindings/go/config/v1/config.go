@@ -3,8 +3,8 @@ package v1
 import (
 	"encoding/json"
 
-	//configv1 "ocm.software/open-component-model/bindings/golang/configuration/v1"
-	"ocm.software/open-component-model/bindings/golang/runtime"
+	//configv1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 //var CredentialConfigTypeRegistry = runtime.NewScheme()

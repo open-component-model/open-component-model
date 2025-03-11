@@ -2,7 +2,7 @@ package codec
 
 import (
 	"github.com/stretchr/testify/assert"
-	"ocm.software/open-component-model/bindings/golang/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"strings"
 	"testing"
 )

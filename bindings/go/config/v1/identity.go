@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"ocm.software/open-component-model/bindings/golang/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (

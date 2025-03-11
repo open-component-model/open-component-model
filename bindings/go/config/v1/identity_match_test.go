@@ -3,7 +3,7 @@ package v1_test
 import (
 	"testing"
 
-	. "ocm.software/open-component-model/bindings/golang/credentials/config/v1"
+	. "ocm.software/open-component-model/bindings/go/config/v1"
 )
 
 func TestIdentityEqual(t *testing.T) {

@@ -1,4 +1,4 @@
-module ocm.software/open-component-model/bindings/golang/runtime
+module ocm.software/open-component-model/bindings/go/runtime
 
 go 1.24.1
 

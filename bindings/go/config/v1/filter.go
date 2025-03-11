@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"ocm.software/open-component-model/bindings/golang/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type FilterOptions struct {

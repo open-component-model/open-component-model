@@ -1,8 +1,8 @@
 package extensions
 
 import (
-	"ocm.software/open-component-model/bindings/golang/descriptor"
-	"ocm.software/open-component-model/bindings/golang/runtime"
+	"ocm.software/open-component-model/bindings/go/descriptor"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // LocalBlobAccessType is the access type of a blob local to a component.
