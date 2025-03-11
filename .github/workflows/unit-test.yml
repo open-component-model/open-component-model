@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         go-version: [ '1.24.x' ]
-        module: ${{ fromJSON(needs.discover_modules.outputs.modules) }}
+        module: ${{ needs.discover_modules.outputs.modules }}
 
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
