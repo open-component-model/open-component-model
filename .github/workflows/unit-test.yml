@@ -18,7 +18,7 @@ jobs:
     - name: Discover Go Modules
       id: discover-modules
       run: |
-        MODULES=$(find ${{ env.DIR }} -name go.mod -exec dirname {} \; | sed 's|${{ env.DIR }}/||' | jq -R -s -c 'split("\n") | map(select(. != ""))')
+        MODULES="$(find ${{ env.DIR }} -name go.mod -exec dirname {} \; | sed 's|${{ env.DIR }}/||' | jq -R -s -c 'split("\n") | map(select(. != ""))')"
         echo "Detected modules: $MODULES"
         echo "modules=$MODULES" >> $GITHUB_OUTPUT
 
@@ -28,7 +28,7 @@ jobs:
     strategy:
       matrix:
         go-version: [ '1.24.x' ]
-        module: ${{ fromJson(needs.discover_modules.outputs.modules) }}
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules) }}
 
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
