@@ -12,7 +12,7 @@ type TestType struct {
 }
 
 func TestRegistry_Decode(t *testing.T) {
-	typ := Type("test.type")
+	typ := Type("test.type/v1")
 	registry := NewScheme()
 	registry.MustRegisterWithAlias(&TestType{}, typ)
 

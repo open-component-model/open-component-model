@@ -150,7 +150,7 @@ func (r *Scheme) Decode(data io.Reader, into Typed) error {
 }
 
 func (r *Scheme) Convert(from Typed, into Typed) error {
-	// check if typed is a raw, yaml unmarshalling has its own reflection check so we dont need to do this
+	// check if typed is a raw, yaml unmarshalling has its own reflection check so we don't need to do this
 	// before the raw assertion.
 	if raw, ok := from.(*Raw); ok {
 		if _, err := r.TypeForPrototype(into); err != nil && !r.allowUnknown {
