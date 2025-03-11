@@ -18,7 +18,7 @@ jobs:
     - name: Discover Go Modules
       id: discover-modules
       run: |
-        MODULES=$(find ${{ env.DIR }} -name go.mod -exec dirname {} \; | sed 's|${{ env.DIR }}||' | jq -R -s -c 'split("\n") | map(select(. != ""))')
+        MODULES=$(find ${{ env.DIR }} -name go.mod -exec dirname {} \; | sed 's|${{ env.DIR }}/||' | jq -R -s -c 'split("\n") | map(select(. != ""))')
         echo "Detected modules: $MODULES"
         echo "modules=$MODULES" >> $GITHUB_OUTPUT
 
