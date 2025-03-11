@@ -10,17 +10,18 @@ on:
 
 jobs:
   discover-go-modules:
+    name: "Discover Go Modules"
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
     outputs:
-      projects: ${{ steps.detect-modules.outputs.projects }}
+      projects: ${{ steps.discover.outputs.projects }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find Go Modules
-        id: detect-modules
+      - name: Discover
+        id: discover
         run: |
           # Find all directories containing go.mod under bindings/go
           MODULES=$(find bindings/go -name "go.mod" -exec dirname {} \;)
@@ -52,12 +53,12 @@ jobs:
         with:
           languages: go
           queries: security-extended
-          config: |
-            paths:
-              - '${{ matrix.project.path }}'
+          build-mode: manual
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: '${{ github.workspace }}/${{ matrix.project.path }}/go.mod'
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
