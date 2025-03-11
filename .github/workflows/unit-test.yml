@@ -18,7 +18,7 @@ jobs:
     - name: Discover Go Modules
       id: discover-modules
       run: |
-        MODULES=$(find ${{ env.BINDINGS_GO_DIR }} -name go.mod -exec dirname {} \; | sed 's|${{ env.BINDINGS_GO_DIR }}||' | jq -R -s -c 'split("\n") | map(select(. != ""))')
+        MODULES=$(find ${{ env.DIR }} -name go.mod -exec dirname {} \; | sed 's|${{ env.DIR }}||' | jq -R -s -c 'split("\n") | map(select(. != ""))')
         echo "Detected modules: $MODULES"
         echo "modules=$MODULES" >> $GITHUB_OUTPUT
 
@@ -41,10 +41,10 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: '${{ env.BINDINGS_GO_DIR }}/${{ matrix.module }}'
+          sparse-checkout: '${{ env.DIR }}/${{ matrix.module }}'
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
-          go-version-file: '${{ github.workspace }}/${{ env.BINDINGS_GO_DIR }}/${{ matrix.module }}/go.mod'
+          go-version-file: '${{ github.workspace }}/${{ env.DIR }}/${{ matrix.module }}/go.mod'
       - name: Run Tests
         run: task bindings/go/${{ matrix.module }}:test
