@@ -11,6 +11,9 @@ env:
 
 jobs:
   discover_modules:
+    name: "Discover Go Modules"
+    runs-on: ubuntu-latest
+    steps:
     - uses: actions/checkout@v4
     - name: Discover Go Modules
       id: discover-modules
