@@ -29,7 +29,6 @@ jobs:
           echo "projects=$JSON_ARRAY" >> "$GITHUB_OUTPUT"
 
   analyze-go:
-    if: ${{ fromJSON(needs.changes.outputs.projects) != null }}
     name: Analyze Go Modules
     needs: discover-go-modules
     runs-on: large_runner
@@ -52,6 +51,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: go
+          queries: security-extended
           config: |
             paths:
               - '${{ matrix.project.path }}'
