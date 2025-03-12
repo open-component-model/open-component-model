@@ -3,16 +3,8 @@ package v1
 import (
 	"encoding/json"
 
-	//configv1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-//var CredentialConfigTypeRegistry = runtime.NewScheme()
-//
-//func init() {
-//	configv1.DefaultConfigTypeRegistry.MustRegisterWithAlias(&Config{}, ConfigType, ConfigTypeV1)
-//	CredentialConfigTypeRegistry.MustRegisterWithAlias(&DirectCredentials{}, CredentialsType, CredentialsTypeV1)
-//}
 
 type Attribute string
 
