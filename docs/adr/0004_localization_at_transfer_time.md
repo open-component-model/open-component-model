@@ -402,23 +402,23 @@ The function definition for `parseRef()` is defined in the CEL library and can b
 
 ```go
 parseReference := func(values ...ref.Val) ref.Val {
-		val, err := dependency.GoNativeType(values[0])
-		if err != nil {
-			return types.NewErr("could not parse reference: %v", err)
-		}
-		valStr, ok := val.(string)
-		if !ok {
-			return types.NewErr("could not parse reference: %v", val)
-		}
-		r, err := registry.ParseReference(valStr)
-		if err != nil {
-			return types.NewErr("could not parse reference: %v", err)
-		}
-		return types.NewStringStringMap(types.DefaultTypeAdapter, map[string]string{
-			"registry":   r.Registry,
-			"repository": r.Repository,
-			"reference":  r.Reference,
-		})
+        val, err := dependency.GoNativeType(values[0])
+        if err != nil {
+            return types.NewErr("could not parse reference: %v", err)
+        }
+        valStr, ok := val.(string)
+        if !ok {
+            return types.NewErr("could not parse reference: %v", val)
+        }
+        r, err := registry.ParseReference(valStr)
+        if err != nil {
+            return types.NewErr("could not parse reference: %v", err)
+        }
+        return types.NewStringStringMap(types.DefaultTypeAdapter, map[string]string{
+            "registry":   r.Registry,
+            "repository": r.Repository,
+            "reference":  r.Reference,
+        })
 }
 
 // Declare the custom contains function and its implementation.

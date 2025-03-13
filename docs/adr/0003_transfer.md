@@ -62,7 +62,7 @@ for a resource:
 ## Decision Drivers
 
 * flexibility in transferring components and resources
-* debuggability and reproduceability/transparency of transfers
+* debuggability and reproducibility/transparency of transfers
 * separation of concerns between
   [component specification](https://github.com/open-component-model/ocm-spec)
   and transfer information (e.g. the repository name of a resource that shall be
@@ -275,7 +275,7 @@ _There is no way to configure multiple targets for a single component transfer._
 #### Limited Control Over Resource Transfer
 
 - **No fine-grained control over WHICH resources to transfer**  
-  Essentially, there are 3 modi for resource transfer:
+  Essentially, there are 3 modesx for resource transfer:
     - _Without an additional flag_, the command only copies the component
       descriptors and the local blobs.
     - _With the `--copy-local-resources` flag_, the command copies only the
@@ -337,7 +337,7 @@ _There is no way to configure multiple targets for a single component transfer._
   on how to resolve the issue mentioned in the previous point.
 
 
-- **Uploader Mechanism is implicit, intransparent and hard to reproduce**
+- **Uploader Mechanism is implicit, non-transparent and hard to reproduce**
 
 ### Upload Handlers
 

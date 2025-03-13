@@ -17,7 +17,7 @@ OCM describes delivery [artifacts](https://github.com/open-component-model/ocm-s
 
 ## OCM Library
 
-> **WIP**: This OCM Library is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Library API. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and reference the previous implementation [here](https://github.com/open-component-model/ocm)
+> **Work In Progress**: This OCM Library is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Library API. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and reference the previous implementation [here](https://github.com/open-component-model/ocm)
 
 This project provides a Go library containing an API for interacting with the
 [Open Component Model (OCM)](https://github.com/open-component-model/ocm-spec) elements and mechanisms.
@@ -29,7 +29,6 @@ The library currently supports the following [repository mappings](https://githu
 - **CTF (Common Transport Format)**: Use a file-based binding to represent any set of
   component versions as filesystem content (directory, tar, tgz).
 
-For the usage of the library to access OCM repositories, handle configuration and credentials see the [examples section](examples/lib/README.md).
 
 Additionally, OCM provides a generic solution for how to:
 
@@ -41,7 +40,7 @@ Additionally, OCM provides a generic solution for how to:
 
 ## [OCM CLI](docs/reference/cli/ocm.md)
 
-> **WIP**: This OCM CLI is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Commands available. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and reference the previous implementation [here](https://github.com/open-component-model/ocm)
+> **Work In Progress**: This OCM CLI is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Commands available. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and reference the previous implementation [here](https://github.com/open-component-model/ocm)
 
 The [`ocm` CLI](docs/reference/cli/ocm.md) may also be used to interact with OCM mechanisms. It makes it easy to create component versions and embed them in build processes.
 

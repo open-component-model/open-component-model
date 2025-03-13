@@ -174,7 +174,7 @@ The base contract that will be supported by the graph implementation is the foll
 
 ```go
 type CredentialProvider interface {
-	Resolve(identity credentialsv1.Identity, credentials credentialsv1.Attributes) (credentialsv1.Attributes, error)
+    Resolve(identity credentialsv1.Identity, credentials credentialsv1.Attributes) (credentialsv1.Attributes, error)
 }
 ```
 
@@ -187,10 +187,10 @@ The graph itself needs two input variables passed as options
 type GraphComputeOptions struct {
     // CredentialPlugins maps each credential type to its corresponding plugin.
     // These plugins are responsible for performing the resolution from identities to credentials.
-	CredentialPlugins           map[types.Type][]CredentialPlugin
+    CredentialPlugins           map[types.Type][]CredentialPlugin
     // CredentialRepositoryPlugins maps each credential type to repository plugins.
     // These plugins are used as a fallback mechanism when direct resolution fails.
-	CredentialRepositoryPlugins map[types.Type][]RepositoryPlugin
+    CredentialRepositoryPlugins map[types.Type][]RepositoryPlugin
 }
 
 // ToCredentialGraph builds a CredentialGraph instance from a configuration object.
@@ -235,15 +235,15 @@ This is a configuration that must rely on a `CredentialPlugin` that returns `Sup
 //
 // Typical examples are credential entries embedded in the graph like a HashiCorpVault reference
 type CredentialPlugin interface {
-	// SupportedCredentialTypes returns the list of credential types supported by the plugin.
-	// The plugin is expected to be able to resolveDirect credentials for these types.
-	SupportedCredentialTypes() []types.Type
-	// ConsumerIdentityForCredential returns an identity for the given credential.
-	// The credential MUST be of a supported type returned from SupportedCredentialTypes.
-	ConsumerIdentityForCredential(credential types.Typed) (credentialsv1.Identity, error)
-	// CredentialProvider defines that a CredentialPlugin can resolveDirect credentials for a given identity.
-	// The identities passed SHOULD be derived from IdentityForCredential or they can be rejected.
-	CredentialProvider
+    // SupportedCredentialTypes returns the list of credential types supported by the plugin.
+    // The plugin is expected to be able to resolveDirect credentials for these types.
+    SupportedCredentialTypes() []types.Type
+    // ConsumerIdentityForCredential returns an identity for the given credential.
+    // The credential MUST be of a supported type returned from SupportedCredentialTypes.
+    ConsumerIdentityForCredential(credential types.Typed) (credentialsv1.Identity, error)
+    // CredentialProvider defines that a CredentialPlugin can resolveDirect credentials for a given identity.
+    // The identities passed SHOULD be derived from IdentityForCredential or they can be rejected.
+    CredentialProvider
 }
 ```
 
@@ -285,14 +285,14 @@ resolving credentials.
 //
 // Typical examples are dynamic credential files (think of .docker/config.json and helpers)
 type RepositoryPlugin interface {
-	// SupportedRepositoryConfigTypes declares which types of repository configuration the plugin supports
-	SupportedRepositoryConfigTypes(ctx context.Context) ([]types.Type, error)
-	// ConsumerIdentityForRepositoryConfig returns a unique identity under which credentials
-	// can be resolved to forward for the Repository.
-	ConsumerIdentityForRepositoryConfig(ctx context.Context, config types.Typed) (credentialsv1.Identity, error)
-	// Resolve is able to return credentials for an identity backed by a repository indicated by config.
-	// The type of the config SHOULD come from the SupportedRepositoryConfigTypes or it CAN be rejected.
-	Resolve(ctx context.Context, config types.Typed, identity credentialsv1.Identity, credentials credentialsv1.Attributes) (credentialsv1.Attributes, error)
+    // SupportedRepositoryConfigTypes declares which types of repository configuration the plugin supports
+    SupportedRepositoryConfigTypes(ctx context.Context) ([]types.Type, error)
+    // ConsumerIdentityForRepositoryConfig returns a unique identity under which credentials
+    // can be resolved to forward for the Repository.
+    ConsumerIdentityForRepositoryConfig(ctx context.Context, config types.Typed) (credentialsv1.Identity, error)
+    // Resolve is able to return credentials for an identity backed by a repository indicated by config.
+    // The type of the config SHOULD come from the SupportedRepositoryConfigTypes or it CAN be rejected.
+    Resolve(ctx context.Context, config types.Typed, identity credentialsv1.Identity, credentials credentialsv1.Attributes) (credentialsv1.Attributes, error)
 }
 ```
 

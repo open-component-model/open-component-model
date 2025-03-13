@@ -54,8 +54,7 @@ Chosen because of the way it separates concerns and makes isolating technology s
 That is the binary's implementation.
 
 This is a language agnostic approach. Users can choose the language that best fits their needs, environments and
-knowledge. As long as they follow the necessary contracts and formats, which are defined by an
-[OpenAPI Schema](../../plugin_spec.yaml) and documentation, their plugin will work.
+knowledge. As long as they follow the necessary contracts and formats, which are defined by schemes and documentation, their plugin will work.
 
 #### High-level Architecture
 
@@ -143,14 +142,14 @@ The server will provide a way to be started with a configuration as a JSON encod
 
 ```go
 type Config struct {
-	// ID defines what ID the plugin should take.
-	ID string `json:"id"`
-	// Type of the connection.
-	Type Type `json:"type"`
-	// Location defines either a socket path or an HTTP url with port.
-	Location string `json:"location"`
-	// IdleTimeout sets how long the plugin should sit around without work to do.
-	IdleTimeout *time.Duration `json:"idleTimeout,omitempty"`
+    // ID defines what ID the plugin should take.
+    ID string `json:"id"`
+    // Type of the connection.
+    Type Type `json:"type"`
+    // Location defines either a socket path or an HTTP url with port.
+    Location string `json:"location"`
+    // IdleTimeout sets how long the plugin should sit around without work to do.
+    IdleTimeout *time.Duration `json:"idleTimeout,omitempty"`
 }
 ```
 
@@ -164,27 +163,27 @@ The `capabilities` command returns the following structured response upon a call
 
 ```go
 type Capabilities struct {
-	// Type is a map of types with capabilities.
-	Type map[Type][]string `json:"type"`
+    // Type is a map of types with capabilities.
+    Type map[Type][]string `json:"type"`
 }
 ```
 
 Here is an example for the OCI plugin:
 
 ```go
-		caps := &manager.Capabilities{
-			Type: map[manager.Type][]string{
-				"oci": {
-					manager.ReadComponentVersionRepositoryCapability,
-					manager.WriteComponentVersionRepositoryCapability,
-					manager.ReadResourceRepositoryCapability,
-					manager.WriteResourceRepositoryCapability,
-				},
-				ConsumerIdentityTypeV1: {
-					manager.CredentialRepositoryPluginCapability,
-				},
-			},
-		}
+        caps := &manager.Capabilities{
+            Type: map[manager.Type][]string{
+                "oci": {
+                    manager.ReadComponentVersionRepositoryCapability,
+                    manager.WriteComponentVersionRepositoryCapability,
+                    manager.ReadResourceRepositoryCapability,
+                    manager.WriteResourceRepositoryCapability,
+                },
+                ConsumerIdentityTypeV1: {
+                    manager.CredentialRepositoryPluginCapability,
+                },
+            },
+        }
 ```
 
 This is converted to JSON and then sent back to the plugin manager. To add a new capability simply extend this list.
@@ -202,23 +201,23 @@ To achieve this, the plugin manager offers the following function:
 
 ```go
 type ImplementedPlugin struct {
-	Base         PluginBase
-	Capabilities []string
-	Type         string
-	ID           string
+    Base         PluginBase
+    Capabilities []string
+    Type         string
+    ID           string
 }
 
 var implementedRegisteredPlugins = map[string]map[string][]*ImplementedPlugin{}
 
 // RegisterPluginImplementationForTypeAndCapabilities can be called by actual implementations in the source.
 func RegisterPluginImplementationForTypeAndCapabilities(p *ImplementedPlugin) {
-	for _, capability := range p.Capabilities {
-		if _, ok := implementedRegisteredPlugins[p.Type]; !ok {
-			implementedRegisteredPlugins[p.Type] = map[string][]*ImplementedPlugin{}
-		}
+    for _, capability := range p.Capabilities {
+        if _, ok := implementedRegisteredPlugins[p.Type]; !ok {
+            implementedRegisteredPlugins[p.Type] = map[string][]*ImplementedPlugin{}
+        }
 
-		implementedRegisteredPlugins[p.Type][capability] = append(implementedRegisteredPlugins[p.Type][capability], p)
-	}
+        implementedRegisteredPlugins[p.Type][capability] = append(implementedRegisteredPlugins[p.Type][capability], p)
+    }
 }
 ```
 
@@ -235,19 +234,19 @@ const ID = "ocm.software/oci-plugin/v1"
 var _ manager.ReadWriteRepositoryPluginContract = &OCIPlugin{}
 
 func init() {
-	// Ignore configuration for now
-	plugin, _ := NewPlugin(nil)
-	// construct the plugin...
-	o := &OCIPlugin{p: plugin}
-	manager.RegisterPluginImplementationForTypeAndCapabilities(&manager.ImplementedPlugin{
-		Type: "oci",
-		Capabilities: []string{
-			manager.ReadComponentVersionRepositoryCapability,
-			manager.WriteComponentVersionRepositoryCapability,
-		},
-		Base: o,
-		ID:   ID,
-	})
+    // Ignore configuration for now
+    plugin, _ := NewPlugin(nil)
+    // construct the plugin...
+    o := &OCIPlugin{p: plugin}
+    manager.RegisterPluginImplementationForTypeAndCapabilities(&manager.ImplementedPlugin{
+        Type: "oci",
+        Capabilities: []string{
+            manager.ReadComponentVersionRepositoryCapability,
+            manager.WriteComponentVersionRepositoryCapability,
+        },
+        Base: o,
+        ID:   ID,
+    })
 }
 ```
 
