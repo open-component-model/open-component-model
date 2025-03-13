@@ -34,17 +34,18 @@ func NewScheme(opts ...SchemeOption) *Scheme {
 type SchemeOption func(*Scheme)
 
 // WithAllowUnknown allows unknown types to be created.
-func WithAllowUnknown(allowUnknown bool) SchemeOption {
+func WithAllowUnknown() SchemeOption {
 	return func(registry *Scheme) {
-		registry.allowUnknown = allowUnknown
+		registry.allowUnknown = true
 	}
 }
 
 func (r *Scheme) Clone() *Scheme {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	clone := NewScheme(WithAllowUnknown(r.allowUnknown))
-	maps.Copy(r.types, clone.types)
+	clone := NewScheme()
+	clone.allowUnknown = r.allowUnknown
+	maps.Copy(clone.types, r.types)
 	return clone
 }
 
@@ -116,7 +117,7 @@ func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
 	return Type{}, fmt.Errorf("prototype not found in registry")
 }
 
-func (r *Scheme) MustTypeForPrototype(prototype Typed) Type {
+func (r *Scheme) MustTypeForPrototype(prototype any) Type {
 	typ, err := r.TypeForPrototype(prototype)
 	if err != nil {
 		panic(err)
@@ -139,7 +140,7 @@ func (r *Scheme) MustRegisterWithAlias(prototype any, types ...Type) {
 }
 
 // NewObject creates a new instance of types.Typed.
-func (r *Scheme) NewObject(typ Type) (Typed, error) {
+func (r *Scheme) NewObject(typ Type) (any, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -153,7 +154,7 @@ func (r *Scheme) NewObject(typ Type) (Typed, error) {
 		}
 		object = reflect.New(t).Interface()
 
-		return object.(Typed), nil
+		return object, nil
 	}
 
 	if r.allowUnknown {
@@ -163,7 +164,7 @@ func (r *Scheme) NewObject(typ Type) (Typed, error) {
 	return nil, fmt.Errorf("unsupported type: %s", typ)
 }
 
-func (r *Scheme) Decode(data io.Reader, into Typed) error {
+func (r *Scheme) Decode(data io.Reader, into any) error {
 	if _, err := r.TypeForPrototype(into); err != nil && !r.allowUnknown {
 		return fmt.Errorf("%T is not a valid registered type and cannot be decoded: %w", into, err)
 	}
