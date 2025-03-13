@@ -1,2 +1,0 @@
-# Plugin manager and implementations
-
