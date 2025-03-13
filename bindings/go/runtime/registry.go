@@ -17,13 +17,13 @@ type Scheme struct {
 	// if the constructors cannot determine a match,
 	// this will trigger the creation of an unstructured.Unstructured with NewScheme instead of failing.
 	allowUnknown bool
-	types        map[Type]Typed
+	types        map[Type]any
 }
 
 // NewScheme creates a new registry.
 func NewScheme(opts ...SchemeOption) *Scheme {
 	reg := &Scheme{
-		types: make(map[Type]Typed),
+		types: make(map[Type]any),
 	}
 	for _, opt := range opts {
 		opt(reg)
@@ -48,36 +48,64 @@ func (r *Scheme) Clone() *Scheme {
 	return clone
 }
 
-func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
+func (r *Scheme) RegisterWithAlias(prototype any, types ...Type) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	for _, typ := range types {
-		if _, exists := r.types[typ.GetType()]; exists {
+		if _, exists := r.types[typ]; exists {
 			return fmt.Errorf("type %q is already registered", typ)
 		}
-		r.types[typ.GetType()] = prototype
+		r.types[typ] = prototype
 	}
 	return nil
 }
 
-func (r *Scheme) MustRegister(prototype Typed, version string) {
+// GetTypeFromAny uses reflection to extract the "Type" field from any struct.
+func GetTypeFromAny(v any) (Type, error) {
+	val := reflect.ValueOf(v)
+
+	// Ensure v is a struct or a pointer to a struct
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	if val.Kind() != reflect.Struct {
+		return Type{}, fmt.Errorf("expected struct, got %s", val.Kind())
+	}
+
+	// Get the field by name
+	field := val.FieldByName("Type")
+	if !field.IsValid() {
+		return Type{}, fmt.Errorf("field 'Type' not found")
+	}
+
+	// Ensure it's of Type type
+	if field.Type() != reflect.TypeOf(Type{}) {
+		return Type{}, fmt.Errorf("field 'Type' is not of expected Type struct")
+	}
+
+	// Return the Type value
+	return field.Interface().(Type), nil
+}
+
+func (r *Scheme) MustRegister(prototype any, version string) {
 	t := reflect.TypeOf(prototype)
 	if t.Kind() != reflect.Pointer {
 		panic("All types must be pointers to structs.")
 	}
 	t = t.Elem()
-	r.MustRegisterWithAlias(prototype, NewType(t.Name(), version))
+	r.MustRegisterWithAlias(prototype, NewUngroupedVersionedType(t.Name(), version))
 }
 
-func (r *Scheme) TypeForPrototype(prototype Typed) (Type, error) {
+func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	for typ, proto := range r.types {
 		// if there is an unversioned type registered, do not use it
-		// TODO find a way to avoid this
-		if typ.GetVersion() == "" {
+		// TODO find a way to avoid this or to fallback to the fully qualified type instead of unqualified ones
+		if !typ.HasVersion() {
 			continue
 		}
 		if reflect.TypeOf(prototype).Elem() == reflect.TypeOf(proto).Elem() {
@@ -85,7 +113,7 @@ func (r *Scheme) TypeForPrototype(prototype Typed) (Type, error) {
 		}
 	}
 
-	return "", fmt.Errorf("prototype not found in registry")
+	return Type{}, fmt.Errorf("prototype not found in registry")
 }
 
 func (r *Scheme) MustTypeForPrototype(prototype Typed) Type {
@@ -104,7 +132,7 @@ func (r *Scheme) IsRegistered(typ Type) bool {
 	return exists
 }
 
-func (r *Scheme) MustRegisterWithAlias(prototype Typed, types ...Type) {
+func (r *Scheme) MustRegisterWithAlias(prototype any, types ...Type) {
 	if err := r.RegisterWithAlias(prototype, types...); err != nil {
 		panic(err)
 	}
@@ -149,15 +177,19 @@ func (r *Scheme) Decode(data io.Reader, into Typed) error {
 	return nil
 }
 
-func (r *Scheme) Convert(from Typed, into Typed) error {
+func (r *Scheme) Convert(from any, into any) error {
 	// check if typed is a raw, yaml unmarshalling has its own reflection check so we don't need to do this
 	// before the raw assertion.
 	if raw, ok := from.(*Raw); ok {
 		if _, err := r.TypeForPrototype(into); err != nil && !r.allowUnknown {
 			return fmt.Errorf("%T is not a valid registered type and cannot be decoded: %w", into, err)
 		}
-		if !r.IsRegistered(from.GetType()) {
-			return fmt.Errorf("cannot decode from unregistered type: %s", from.GetType())
+		fromType, err := GetTypeFromAny(from)
+		if err != nil {
+			return fmt.Errorf("could not get type from prototype: %w", err)
+		}
+		if !r.IsRegistered(fromType) {
+			return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
 		}
 		if err := yaml.Unmarshal(raw.Data, into); err != nil {
 			return fmt.Errorf("failed to unmarshal raw: %w", err)

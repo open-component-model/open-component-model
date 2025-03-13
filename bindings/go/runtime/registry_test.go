@@ -7,12 +7,12 @@ import (
 )
 
 type TestType struct {
-	Type  `json:"type"`
+	Type  Type   `json:"type"`
 	Value string `json:"value"`
 }
 
 func TestRegistry_Decode(t *testing.T) {
-	typ := Type("test.type/v1")
+	typ := NewUngroupedVersionedType("test.type", "v1")
 	registry := NewScheme()
 	registry.MustRegisterWithAlias(&TestType{}, typ)
 

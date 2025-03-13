@@ -6,3 +6,13 @@ includes:
   bindings/go/descriptor:
     taskfile: ./bindings/go/descriptor/Taskfile.yml
     dir: ./bindings/go/descriptor
+  bindings/go/runtime:
+    taskfile: ./bindings/go/runtime/Taskfile.yml
+    dir: ./bindings/go/runtime
+
+
+tasks:
+  test:
+    cmds:
+      - task: bindings/go/descriptor:test
+      - task: bindings/go/runtime:test
