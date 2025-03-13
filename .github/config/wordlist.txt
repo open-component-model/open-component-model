@@ -329,6 +329,8 @@ learnings
 shoutout
 devops
 sre
+adrs
+sres
 deployable
 toolings
 tbd
@@ -342,3 +344,9 @@ performant
 authenticationtype
 localhost
 acyclic
+pluggable
+gz
+accessTypes
+kustomize
+reproducibility
+subprocesses

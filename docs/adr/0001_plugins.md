@@ -133,8 +133,9 @@ dealing with REST calls, payloads, and communication details.
 #### Contract
 
 A plugin consists of a binary with two commands:
-- [`capabilities`](#capabilities)
-- [`server`](#server)
+
+* [`capabilities`](#capabilities)
+* [`server`](#server)
 
 #### Server
 
@@ -304,62 +305,74 @@ This can be used to fetch and access the right plugin for the right OS and ARCH.
 ### [Option 1] Separate go modules
 
 Pros:
-- go modules can be imported separately and offer nice isolation between implementations
+
+* go modules can be imported separately and offer nice isolation between implementations
 
 Cons:
-- people will, in the end, import everything, since they won't know which access is required at any given point
-- module versioning and co-dependent code will make imports and version handling a pain
+
+* people will, in the end, import everything, since they won't know which access is required at any given point
+* module versioning and co-dependent code will make imports and version handling a pain
 
 ### [Option 2] Separate binaries
 
 Pros:
-- implementation is completely separate
-- loading has minimal overhead
-- even if all the plugins are registered, only the ones that are really needed are started (lazy loading)
-- the core library can be super tiny hence module imports are low if users want to use ocm as a library
+
+* implementation is completely separate
+* loading has minimal overhead
+* even if all the plugins are registered, only the ones that are really needed are started (lazy loading)
+* the core library can be super tiny hence module imports are low if users want to use ocm as a library
 
 Cons:
-- need to manage the binary lifecycle
-- multiple processes
-- if the parent process isn't allowed to launch subprocesses, this will not work
+
+* need to manage the binary lifecycle
+* multiple processes
+* if the parent process isn't allowed to launch subprocesses, this will not work
 
 #### [Option 2.1] plugin implementation using hashicorp grpc plugin
 
 Pros:
-- a mature environment where communication is already taken care off
-- tcp communication and maturity; implementation of the connection is highly performant
+
+* a mature environment where communication is already taken care off
+* tcp communication and maturity; implementation of the connection is highly performant
 
 Cons:
-- the learning curve is pretty steep and might deter people from learning yet another framework
+
+* the learning curve is pretty steep and might deter people from learning yet another framework
 
 #### [Options 2.2] go based plugin
 
 Pros:
-- an existing ecosystem
-- native to go
+
+* an existing ecosystem
+* native to go
 
 Cons:
-- only go can be used
-- windows support is none existent
+
+* only go can be used
+* windows support is none existent
 
 #### [Options 2.3] plain binary communication on stdin/stdout
 
 Pros:
-- dead simple
-- any language could support it
+
+* dead simple
+* any language could support it
 
 Cons:
-- needs very well-defined contract that cannot be documented and standardized nicely
-- communicating complex structures will become difficult
-- bidirectional communication such as, request-response is cumbersome to take care of
+
+* needs very well-defined contract that cannot be documented and standardized nicely
+* communicating complex structures will become difficult
+* bidirectional communication such as, request-response is cumbersome to take care of
 
 #### [Options 2.4] http/unix domain socket server based communication
 
 Pros:
-- lazy load plugins without starting them
-- anything can implement it
-- communicating complex structures becomes a lot easier
-- byte streams and bidirectional communication becomes trivial
+
+* lazy load plugins without starting them
+* anything can implement it
+* communicating complex structures becomes a lot easier
+* byte streams and bidirectional communication becomes trivial
 
 Cons:
-- life cycle management of the server communication
+
+* life cycle management of the server communication

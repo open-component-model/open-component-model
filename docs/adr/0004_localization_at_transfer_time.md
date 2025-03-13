@@ -9,24 +9,23 @@ before it needs to be deployed.
 
 ## Table of Contents
 
-- [Context and Problem Statement](#context-and-problem-statement)
-  - [How to Localize at Transfer Time](#how-to-localize-at-transfer-time)
-- [Contract](#contract)
-  - [Deep Dive: YAML-based Localization as a Special Transformer](#deep-dive-yaml-based-localization-as-a-special-transformer)
-  - [Combining Transformers for Complex Modifications and Format Compatibility](#combining-transformers-for-complex-modifications-and-format-compatibility)
-  - [Resolving Relative Dependencies and References to other Resources for Localization with CEL](#resolving-relative-dependencies-and-references-to-other-resources-for-localization-with-cel)
-  - [Maintaining Localization Instructions alongside Deployment Instructions (Localization with `Sibling Resources`)](#maintaining-localization-instructions-alongside-deployment-instructions-localization-with-sibling-resources)
-- [Process Impacts and Changes in Workflows](#process-impacts-and-changes-in-workflows)
-  - [Impacts on Signing and Verification of Component Versions](#impacts-on-signing-and-verification-of-component-versions)
-  - [Impacts on Designing and Maintaining Localization Instructions](#impacts-on-designing-and-maintaining-localization-instructions)
-    - [RACI Matrix – Before](#raci-matrix--before)
-    - [RACI Matrix – Then](#raci-matrix--then)
-- [Decision Drivers](#decision-drivers)
-- [Considered Options](#considered-options)
-- [Decision Outcome](#decision-outcome)
-  - [Justification](#justification)
-- [Pros & Cons of Options](#pros--cons-of-options)
-- [Conclusion](#conclusion)
+* [Context and Problem Statement](#context-and-problem-statement)
+  * [How to Localize at Transfer Time](#how-to-localize-at-transfer-time)
+* [Contract](#contract)
+  * [Deep Dive: YAML-based Localization as a Special Transformer](#deep-dive-yaml-based-localization-as-a-special-transformer)
+  * [Combining Transformers for Complex Modifications and Format Compatibility](#combining-transformers-for-complex-modifications-and-format-compatibility)
+  * [Resolving Relative Dependencies and References to other Resources for Localization with CEL](#resolving-relative-dependencies-and-references-to-other-resources-for-localization-with-cel)
+  * [Maintaining Localization Instructions alongside Deployment Instructions (Localization with `Sibling Resources`)](#maintaining-localization-instructions-alongside-deployment-instructions-localization-with-sibling-resources)
+* [Process Impacts and Changes in Workflows](#process-impacts-and-changes-in-workflows)
+  * [Impacts on Signing and Verification of Component Versions](#impacts-on-signing-and-verification-of-component-versions)
+  * [Impacts on Designing and Maintaining Localization Instructions](#impacts-on-designing-and-maintaining-localization-instructions)
+    * [RACI Matrix](#raci-matrix)
+* [Decision Drivers](#decision-drivers)
+* [Considered Options](#considered-options)
+* [Decision Outcome](#decision-outcome)
+  * [Justification](#justification)
+* [Pros & Cons of Options](#pros--cons-of-options)
+* [Conclusion](#conclusion)
 
 ## Context and Problem Statement
 
@@ -139,8 +138,8 @@ For localizing a Helm chart, we use a specific transformation engine: `yaml.engi
 4. Converts the modified content back into a byte stream.
 5. Saves the updated stream to the target location.
 
-> It is important to note that transformations, while stream-based, often still require **either access to a temporary filesystem or a memory buffer to modify the resource**. 
-> 
+> It is important to note that transformations, while stream-based, often still require **either access to a temporary filesystem or a memory buffer to modify the resource**.
+>
 > This means that access to a buffering location is important for efficient transformation.
 > The proposal does not have an opinion on a system to choose which buffering method to use for any given transformer.
 
@@ -252,7 +251,7 @@ We do not need to pass it a resource, as YAML localization is purely value based
 
 In our example above, the `yaml.engine.localization/v1` would be called with
 
-```
+```text
 data => byte stream of the resource (DownloadLocalResource in the ComponentVersionRepository)
 instruction => the transformation instruction
     type: yaml.engine.localization/v1
@@ -264,10 +263,9 @@ output => byte stream of the localized resource
 ```
 
 Note that the yaml engine used here only supports one input format: **A TAR archive or a Gzipped TAR archive.**
-For more information on how to make localizations work with other formats, [a combination of transformers may be used](#combining-transformers-to-achieve-complex-modifications).
+For more information on how to make localizations work with other formats, [a combination of transformers may be used](#combining-transformers-for-complex-modifications-and-format-compatibility).
 
 This can then be wrapped in a transformer plugin simply by passing the instruction to the `Localize` function.
-
 
 ### Combining Transformers for Complex Modifications and Format Compatibility
 
@@ -289,9 +287,10 @@ To handle different formats, you can chain transformers together. For example, s
 This will result in the byte stream being an OCI Image Layout, which will not be a valid TAR archive.
 
 Thus we need to construct a transformer chain:
+
 1. Convert the OCI Image Layout to a TAR Archive using oci.to.tar.transformer/v1.
 2. Localize the TAR Archive with yaml.engine.localization/v1.
-3- Convert the TAR Archive back to an OCI Image Layout with tar.to.oci.transformer/v1.
+3. Convert the TAR Archive back to an OCI Image Layout with tar.to.oci.transformer/v1.
 
 ```yaml
 resources:
@@ -309,10 +308,8 @@ resources:
     - type: tar.to.oci.transformer/v1
 ```
 
-> Note: Transformers can be lossy (some original details might be lost). To reduce this loss, the orchestrator uses named inputs and outputs. In the above example, the output from the first transformer (an OCI Descriptor for the Config Layer that would be otherwise "lost" while converting the Layout to a plain TAR) is used as an input for the final transformer to help rebuild the OCI Image Layout. This Input / Output mapping happens implicitly and is managed by the orchestrator.
-
-> Opinionation: The orchestrator CLI can and will be opinionated about the order and type of transformers it understands. For example, it should be possible to still generate Specifications like the example above without the user having to know about the exact nature of the component versions. Nevertheless, this localization is clearly decoupled from the actual implementation of the transformers. This means that the orchestrator can be extended with new transformers without having to change the orchestrator itself.
-
+> **Note**: Transformers can be lossy (some original details might be lost). To reduce this loss, the orchestrator uses named inputs and outputs. In the above example, the output from the first transformer (an OCI Descriptor for the Config Layer that would be otherwise "lost" while converting the Layout to a plain TAR) is used as an input for the final transformer to help rebuild the OCI Image Layout. This Input / Output mapping happens implicitly and is managed by the orchestrator.
+> **Opinionation**: The orchestrator CLI can and will be opinionated about the order and type of transformers it understands. For example, it should be possible to still generate Specifications like the example above without the user having to know about the exact nature of the component versions. Nevertheless, this localization is clearly decoupled from the actual implementation of the transformers. This means that the orchestrator can be extended with new transformers without having to change the orchestrator itself.
 
 ### Resolving Relative Dependencies and References to other Resources for Localization with CEL
 
@@ -457,7 +454,7 @@ flowchart TD
     C --> G
 ```
 
-The Localization specification will then transform from 
+The Localization specification will then transform from
 
 ```yaml
 type: yaml.engine.localization/v1
@@ -467,7 +464,7 @@ mappings:
     value: "${myImage.access.imageReference.parseRef().registry}/${myImage.access.imageReference.parseRef().repository}"
 ```
 
-to 
+to
 
 ```yaml
 type: yaml.engine.localization/v1
@@ -511,7 +508,7 @@ resources:
     imageReference: ghcr.io/open-component-model/image:v1.0.0
 ```
 
-The `chart-localization` resource is a  that contains the localization instructions for the chart. This allows the DevOps and SRE teams to maintain the localization instructions alongside the deployment instructions, without having to modify the transfer specification. 
+The `chart-localization` resource is a  that contains the localization instructions for the chart. This allows the DevOps and SRE teams to maintain the localization instructions alongside the deployment instructions, without having to modify the transfer specification.
 This is a common practice in many organizations, as it allows for a more streamlined and efficient workflow. We call the maintaining of localization instructions alongside deployment instructions **Sibling Resource Localization**.
 
 The content of this chart-localization can be detected through a well known label: `localization.ocm.software/from-reference`. This label is used to identify the localization instructions for the chart. The orchestrator will then automatically detect this label and use the localization instructions from the `chart-localization` resource to localize the chart when generating the transfer specification.
@@ -611,7 +608,6 @@ This means that
 
 > This is a significant change. Previously, trust was based solely on the component's original signature. Now, **trust is built on both the component signature and the new digests of transformed resources.**
 
-
 **But is this still secure? Now my signature has changed!!**
 
 Yes, it is still secure. The signature chain is verified by the landscape operator. The component developer signs the component version initially (with both the deployment and localization instructions).
@@ -629,9 +625,9 @@ This is by design: the landscape operator is responsible for the trust within th
 
 This new flow changes how localization is handled:
 
-- **Creation**: Localization instructions are still contained within the component version, but can be referenced in the transfer specification.
-- **Maintenance**: Since landscape operators usually manage the transfer specification, they are responsible for a successful component version transfer as well.
-- **Resigning Responsibility**: Landscape operators are required to resign components after localization to continue the chain of trust.
+* **Creation**: Localization instructions are still contained within the component version, but can be referenced in the transfer specification.
+* **Maintenance**: Since landscape operators usually manage the transfer specification, they are responsible for a successful component version transfer as well.
+* **Resigning Responsibility**: Landscape operators are required to resign components after localization to continue the chain of trust.
 
 The flow changes slightly to accommodate this new process:
 
@@ -691,9 +687,10 @@ Below is the updated RACI matrix reflecting that localization instructions remai
 | **4. Transfer Component & Monitor Deployment**                       | I            | I                                      | R, A                    |
 
 > **Notes:**
-> - **Engineer:** Still creates and maintains the localization instructions within the component version.
-> - **Chart Developer:** Still responsible for creating and maintaining deployment and localization instructions.
-> - **Operator/SRE/DevOps:** Manages the transfer specification and ensures the component version (with embedded localization) is correctly transferred and deployed. Now also manages the resigning process and executes localizations during transfer.
+>
+> * **Engineer:** Still creates and maintains the localization instructions within the component version.
+> * **Chart Developer:** Still responsible for creating and maintaining deployment and localization instructions.
+> * **Operator/SRE/DevOps:** Manages the transfer specification and ensures the component version (with embedded localization) is correctly transferred and deployed. Now also manages the resigning process and executes localizations during transfer.
 
 ---
 
@@ -702,16 +699,15 @@ This matrix ensures that while the operator remains responsible for transfer and
 #### Maintaining templated Localization Instructions (as an Engineer)
 
 The localization instructions are still maintained by the engineer owning the component version
-Thus, they are able to reference resources that are colocated with their deployment instruction. 
-This is done through templating. 
+Thus, they are able to reference resources that are co-located with their deployment instruction.
+This is done through templating.
 
 > We call these co-located resources **sibling resources** because they are closely related to each other and are usually developed and maintained together.
 
 There should always be a pair of sibling resources containing:
 
-- **The deployment instruction** (e.g. Helm Chart, Kustomize, etc.)
-- **The localization instruction** (defined by OCM Localization syntax)
-
+* **The deployment instruction** (e.g. Helm Chart, Kustomize, etc.)
+* **The localization instruction** (defined by OCM Localization syntax)
 
 An example component descriptor containing both could look like this:
 
@@ -754,10 +750,11 @@ localizations:
 ```
 
 The localization needs 4 key pieces of information:
-- **The resource to localize**: This is the resource that will be transformed.
-- **The localization instruction**: This is the instruction that will be used to transform the resource.
-- **Relative references**: These are references to other resources that are used in the transformation.
-- **The target location**: This is the location where the transformed resource will be stored.
+
+* **The resource to localize**: This is the resource that will be transformed.
+* **The localization instruction**: This is the instruction that will be used to transform the resource.
+* **Relative references**: These are references to other resources that are used in the transformation.
+* **The target location**: This is the location where the transformed resource will be stored.
 
 In the example above, the localization instruction is a YAML localization instruction that will update the `.image.name` field in the `values.yaml` file of the resource to the value of the `imageReference` of the `chart` resource.
 
@@ -767,10 +764,10 @@ Here we can see, that to localize the value correctly, the template needs to acc
 
 Thus, any localization can only work correctly if
 
-- The resource is accessible (downloaded)
-- The localization instruction is available (embedded in the component version by the engineer)
-- All relative references in the instruction are available (embedded in the component version by the engineer)
-- The relative reference has not been modified to be of a different type (here, the `chart` resource is still an `ociArtifact`)
+* The resource is accessible (downloaded)
+* The localization instruction is available (embedded in the component version by the engineer)
+* All relative references in the instruction are available (embedded in the component version by the engineer)
+* The relative reference has not been modified to be of a different type (here, the `chart` resource is still an `ociArtifact`)
 
 ## Decision Drivers
 
@@ -803,23 +800,23 @@ TBD
 
 **Pros**
 
-- **Does not change Artifact Signatures**: The artifact signature remains the same, simplifying the trust chain.
+* **Does not change Artifact Signatures**: The artifact signature remains the same, simplifying the trust chain.
 
 **Cons**
 
-- **Hard to Debug**: Localization is applied at a time when the artifact is already in use, making it hard to debug on failure
-- **Requires Deployment Tool to understand OCM Localization**: The deployment tool must understand OCM Localization to apply the localization correctly
+* **Hard to Debug**: Localization is applied at a time when the artifact is already in use, making it hard to debug on failure
+* **Requires Deployment Tool to understand OCM Localization**: The deployment tool must understand OCM Localization to apply the localization correctly
 
 ### Localize at Transfer Time
 
 **Pros**
 
-- **Easier to Debug**: Localization is applied during the transfer process, making it easier to debug on failure
-- **No Changes to Deployment Tool**: The deployment tool does not need to understand OCM Localization to apply the localization correctly
+* **Easier to Debug**: Localization is applied during the transfer process, making it easier to debug on failure
+* **No Changes to Deployment Tool**: The deployment tool does not need to understand OCM Localization to apply the localization correctly
 
 **Cons**
 
-- **Changes Artifact Signatures**: The artifact signature changes, requiring a resigning process to maintain trust
+* **Changes Artifact Signatures**: The artifact signature changes, requiring a resigning process to maintain trust
 
 ## Conclusion
 

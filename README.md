@@ -9,11 +9,9 @@ The Open Component Model (OCM) is an open standard to describe software bills of
 
 Check out the [the main OCM project web page](https://ocm.software) to find out what OCM offers you for implementing a secure software supply chain. It is your central entry point to all kind of OCM related [docs and guides](https://ocm.software/docs/overview/about), the [OCM specification](https://ocm.software/docs/overview/specification/) and all project [github repositories](https://github.com/open-component-model). It also offers a [Getting Started](https://ocm.software/docs/getting-started/) to quickly make your hands dirty with OCM, its toolset and concepts :smiley:
 
-
 ## OCM Specifications
 
 OCM describes delivery [artifacts](https://github.com/open-component-model/ocm-spec/tree/main/doc/01-model/02-elements-toplevel.md#artifacts-resources-and-sources) that can be accessed from many types of [component repositories](https://github.com/open-component-model/ocm-spec/tree/main/doc/01-model/01-model.md#component-repositories). It defines a set of semantic, formatting, and other types of specifications that can be found in the [`ocm-spec` repository](https://github.com/open-component-model/ocm-spec). Start learning about the core concepts of OCM elements [here](https://github.com/open-component-model/ocm-spec/tree/main/doc/01-model/02-elements-toplevel.md#model-elements).
-
 
 ## OCM Library
 
@@ -29,14 +27,12 @@ The library currently supports the following [repository mappings](https://githu
 - **CTF (Common Transport Format)**: Use a file-based binding to represent any set of
   component versions as filesystem content (directory, tar, tgz).
 
-
 Additionally, OCM provides a generic solution for how to:
 
 - Sign component versions in any supported OCM repository implementation.
 - Verify signatures based on public keys or verified certificates.
 - Transport component versions, per reference or as values to any of the
   repository implementations.
-
 
 ## [OCM CLI](docs/reference/cli/ocm.md)
 
@@ -45,7 +41,6 @@ Additionally, OCM provides a generic solution for how to:
 The [`ocm` CLI](docs/reference/cli/ocm.md) may also be used to interact with OCM mechanisms. It makes it easy to create component versions and embed them in build processes.
 
 The code for the CLI can be found in [`cli`](cli).
-
 
 ## [OCM Language Bindings](bindings)
 
