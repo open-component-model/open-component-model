@@ -18,9 +18,9 @@ Technical Story: <Brief description of the technical context and need for the de
 
 ## Considered Options
 
-* [Option 1](#option-1) <Brief description>
-* [Option 2](#option-2) <Brief description>
-* [Option 3](#option-3) <Brief description>
+* Option 1 <Brief description>
+* Option 2 <Brief description>
+* Option 3 <Brief description>
 
 ## Decision Outcome
 
@@ -51,32 +51,38 @@ Justification:
 ### [Option 1] <Option Name>
 
 Pros:
-- <Pro 1>
-- <Pro 2>
+
+* <Pro 1>
+* <Pro 2>
 
 Cons:
-- <Con 1>
-- <Con 2>
+
+* <Con 1>
+* <Con 2>
 
 ### [Option 2] <Option Name>
 
 Pros:
-- <Pro 1>
-- <Pro 2>
+
+* <Pro 1>
+* <Pro 2>
 
 Cons:
-- <Con 1>
-- <Con 2>
+
+* <Con 1>
+* <Con 2>
 
 ### [Option 3] <Option Name>
 
 Pros:
-- <Pro 1>
-- <Pro 2>
+
+* <Pro 1>
+* <Pro 2>
 
 Cons:
-- <Con 1>
-- <Con 2>
+
+* <Con 1>
+* <Con 2>
 
 ## Discovery and Distribution
 

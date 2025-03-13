@@ -10,8 +10,8 @@ Technical Story: Design a modular, recursive credential resolution system that i
 
 OCM defines credentials based on the relationship between two sets of attributes:
 
-- Consumer Identities – Define what is using the credentials.
-- Credentials – Key-value attributes used by the system to resolve authentication.
+* Consumer Identities – Define what is using the credentials.
+* Credentials – Key-value attributes used by the system to resolve authentication.
 
 ### Example of a Simple Credential Configuration
 
@@ -31,6 +31,7 @@ consumers:
 This basic setup works well, but more complex cases introduce challenges, such as:
 
 1. **Recursive Dependencies at Compile-Time**: If credentials require other credentials, resolution becomes nested.
+
    ```yaml
     type: credentials.config.ocm.software
     consumers:
@@ -49,7 +50,9 @@ This basic setup works well, but more complex cases introduce challenges, such a
          properties:
            token: my-vault-token
     ```
+
 2. **Dynamic Consumer Identity Matching**: Credentials may need to match patterns rather than strict values.
+
    ```yaml
    type: credentials.config.ocm.software
    consumers:
@@ -62,7 +65,9 @@ This basic setup works well, but more complex cases introduce challenges, such a
          username: ocmuser
          password: ocmpass
    ```
+
 3. **Repository-Based Credential Lookup**: Credentials might be stored in external configurations rather than directly provided.
+
    ```yaml
    type: credentials.config.ocm.software
    repositories:
@@ -90,26 +95,27 @@ These factors create a complex dependency chain that makes maintenance difficult
 
 Chosen option: Limited recursion (Option 2).
 
-### Justification:
-- Full repository recursion is not needed at this stage and is difficult to implement. 
-- Repository recursion complicates debugging and control.
-- Limiting recursion to credentials still allows most use cases while avoiding excessive complexity.
+### Justification
+
+* Full repository recursion is not needed at this stage and is difficult to implement.
+* Repository recursion complicates debugging and control.
+* Limiting recursion to credentials still allows most use cases while avoiding excessive complexity.
 
 ### Resolution of Credentials
 
-1. Load Configuration & Consumer Data 
-   - Reads system configuration (e.g., $HOME/.ocmconfig) 
-   - Load credential configuration (`credentials.config.ocm.software`).
+1. Load Configuration & Consumer Data
+   * Reads system configuration (e.g., $HOME/.ocmconfig)
+   * Load credential configuration (`credentials.config.ocm.software`).
 2. Extract Direct Credentials
-   - If direct credentials exist, store them. 
-   - If not, mark for plugin-based resolution.
-3. Process Plugin-Based Credentials 
-   - Determine the correct plugin to use for a credential. 
-   - Derive new identities if necessary. 
-   - Store nodes (identity vertex) and dependencies (edges) in a Directed Acyclic Graph (DAG) of credentials.
-4. Resolve Credential Requests 
-   - Traverse the graph for direct credentials. (Top-Down Recursion, call [`CredentialPlugin`](#credentialplugin) where needed) 
-   - If unavailable, attempt repository-based resolution. (Call [`RepositoryPlugin`](#repositoryplugin) where needed)
+   * If direct credentials exist, store them.
+   * If not, mark for plugin-based resolution.
+3. Process Plugin-Based Credentials
+   * Determine the correct plugin to use for a credential.
+   * Derive new identities if necessary.
+   * Store nodes (identity vertex) and dependencies (edges) in a Directed Acyclic Graph (DAG) of credentials.
+4. Resolve Credential Requests
+   * Traverse the graph for direct credentials. (Top-Down Recursion, call [`CredentialPlugin`](#credentialplugin) where needed)
+   * If unavailable, attempt repository-based resolution. (Call [`RepositoryPlugin`](#repositoryplugin) where needed)
 
 ### Credential Graph Example / Recursive Traversal
 
@@ -153,7 +159,7 @@ flowchart TD
     Consumer_1 --> Consumer_2
 ```
 
-For indirect resolutions via repositories, imagine a configuration such as 
+For indirect resolutions via repositories, imagine a configuration such as
 
 ```yaml
 type: credentials.config.ocm.software
@@ -174,7 +180,7 @@ The base contract that will be supported by the graph implementation is the foll
 
 ```go
 type CredentialProvider interface {
-	Resolve(identity credentialsv1.Identity, credentials credentialsv1.Attributes) (credentialsv1.Attributes, error)
+    Resolve(identity credentialsv1.Identity, credentials credentialsv1.Attributes) (credentialsv1.Attributes, error)
 }
 ```
 
@@ -187,10 +193,10 @@ The graph itself needs two input variables passed as options
 type GraphComputeOptions struct {
     // CredentialPlugins maps each credential type to its corresponding plugin.
     // These plugins are responsible for performing the resolution from identities to credentials.
-	CredentialPlugins           map[types.Type][]CredentialPlugin
+    CredentialPlugins           map[types.Type][]CredentialPlugin
     // CredentialRepositoryPlugins maps each credential type to repository plugins.
     // These plugins are used as a fallback mechanism when direct resolution fails.
-	CredentialRepositoryPlugins map[types.Type][]RepositoryPlugin
+    CredentialRepositoryPlugins map[types.Type][]RepositoryPlugin
 }
 
 // ToCredentialGraph builds a CredentialGraph instance from a configuration object.
@@ -235,15 +241,15 @@ This is a configuration that must rely on a `CredentialPlugin` that returns `Sup
 //
 // Typical examples are credential entries embedded in the graph like a HashiCorpVault reference
 type CredentialPlugin interface {
-	// SupportedCredentialTypes returns the list of credential types supported by the plugin.
-	// The plugin is expected to be able to resolveDirect credentials for these types.
-	SupportedCredentialTypes() []types.Type
-	// ConsumerIdentityForCredential returns an identity for the given credential.
-	// The credential MUST be of a supported type returned from SupportedCredentialTypes.
-	ConsumerIdentityForCredential(credential types.Typed) (credentialsv1.Identity, error)
-	// CredentialProvider defines that a CredentialPlugin can resolveDirect credentials for a given identity.
-	// The identities passed SHOULD be derived from IdentityForCredential or they can be rejected.
-	CredentialProvider
+    // SupportedCredentialTypes returns the list of credential types supported by the plugin.
+    // The plugin is expected to be able to resolveDirect credentials for these types.
+    SupportedCredentialTypes() []types.Type
+    // ConsumerIdentityForCredential returns an identity for the given credential.
+    // The credential MUST be of a supported type returned from SupportedCredentialTypes.
+    ConsumerIdentityForCredential(credential types.Typed) (credentialsv1.Identity, error)
+    // CredentialProvider defines that a CredentialPlugin can resolveDirect credentials for a given identity.
+    // The identities passed SHOULD be derived from IdentityForCredential or they can be rejected.
+    CredentialProvider
 }
 ```
 
@@ -272,7 +278,6 @@ The example below gives a simple example of such a recursion.
             token: my-vault-token
 ```
 
-
 ### `RepositoryPlugin`
 
 `RepositoryPlugin`'s are more complex than a `CredentialPlugin`, because they cannot be statically linked in the graph
@@ -285,14 +290,14 @@ resolving credentials.
 //
 // Typical examples are dynamic credential files (think of .docker/config.json and helpers)
 type RepositoryPlugin interface {
-	// SupportedRepositoryConfigTypes declares which types of repository configuration the plugin supports
-	SupportedRepositoryConfigTypes(ctx context.Context) ([]types.Type, error)
-	// ConsumerIdentityForRepositoryConfig returns a unique identity under which credentials
-	// can be resolved to forward for the Repository.
-	ConsumerIdentityForRepositoryConfig(ctx context.Context, config types.Typed) (credentialsv1.Identity, error)
-	// Resolve is able to return credentials for an identity backed by a repository indicated by config.
-	// The type of the config SHOULD come from the SupportedRepositoryConfigTypes or it CAN be rejected.
-	Resolve(ctx context.Context, config types.Typed, identity credentialsv1.Identity, credentials credentialsv1.Attributes) (credentialsv1.Attributes, error)
+    // SupportedRepositoryConfigTypes declares which types of repository configuration the plugin supports
+    SupportedRepositoryConfigTypes(ctx context.Context) ([]types.Type, error)
+    // ConsumerIdentityForRepositoryConfig returns a unique identity under which credentials
+    // can be resolved to forward for the Repository.
+    ConsumerIdentityForRepositoryConfig(ctx context.Context, config types.Typed) (credentialsv1.Identity, error)
+    // Resolve is able to return credentials for an identity backed by a repository indicated by config.
+    // The type of the config SHOULD come from the SupportedRepositoryConfigTypes or it CAN be rejected.
+    Resolve(ctx context.Context, config types.Typed, identity credentialsv1.Identity, credentials credentialsv1.Attributes) (credentialsv1.Attributes, error)
 }
 ```
 
@@ -327,9 +332,10 @@ repository:
    authenticationType: Token
 ```
 
-would then be able to resolve its credentials with the credential, by 
-- first generating the `ConsumerIdentityForRepositoryConfig`,
-- and then matching against
+would then be able to resolve its credentials with the credential, by
+
+* first generating the `ConsumerIdentityForRepositoryConfig`,
+* and then matching against
 
 ```yaml
 identity:
@@ -340,7 +346,6 @@ credentials:
     properties:
        token: my-vault-token
 ```
-
 
 ### Resolving and interpreting of `credentialsv1.Attributes`
 
@@ -388,22 +393,25 @@ keys in any order that makes sense to the plugin.
 ## Pros & Cons of Options
 
 ### **[Option 1]: No Recursion**
+
 ✅ Simple and easy to maintain.  
 ❌ Breaks dynamic credential resolution.  
 ❌ Limits plugin flexibility.
 
 ### **[Option 2]: Limited Recursion (Chosen)**
+
 ✅ Covers most use cases with manageable complexity.  
 ✅ Keeps plugins simple.  
 ❌ Requires graph-based recursion implementation.
 
 ### **[Option 3]: Full Recursion**
+
 ✅ Maximum flexibility.  
 ❌ Difficult to debug and maintain.  
 ❌ Repository recursion only detectable at runtime.
 
-
 ## Conclusion
-The **limited recursion** approach balances complexity and flexibility, 
+
+The **limited recursion** approach balances complexity and flexibility,
 allowing credential-based recursion while avoiding excessive recursive repository lookups.
 This avoids maintaining a recursion stack while still preserving the vast majority of the feature set.
