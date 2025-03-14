@@ -73,12 +73,14 @@ jobs:
               const filteredProjects = projectsJson.filter(project => {
                 return changeJson.some(change => change.includes(project));
               });
+              console.log(`Filtered modules: ${JSON.stringify(filteredModules)}`);
+              core.setOutput("modules_json", JSON.stringify(filteredModules));
+              core.setOutput("projects_json", JSON.stringify(filteredProjects));
             } else {
               console.log("check_only_changed is false, no filtering applied.");
+              core.setOutput("modules_json", JSON.stringify(modulesJson));
+              core.setOutput("projects_json", JSON.stringify(projectsJson));
             }
-            console.log(`Filtered modules: ${JSON.stringify(filteredModules)}`);
-            core.setOutput("modules_json", JSON.stringify(filteredModules));
-            core.setOutput("projects_json", JSON.stringify(filteredProjects));
 
   golangci_lint:
     name: "golangci-lint"
