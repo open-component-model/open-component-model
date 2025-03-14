@@ -104,7 +104,7 @@ jobs:
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
       - name: Run Tests
-        run: task bindings/go/${{ matrix.module }}:test
+        run: task ${{ matrix.module }}:test
   analyze-go:
     name: "Analyze Go Modules"
     needs: discover_modules
