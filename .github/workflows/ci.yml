@@ -16,7 +16,6 @@ jobs:
     permissions:
       pull-requests: read
     outputs:
-      modules: ${{ steps.discover.outputs.modules }}
       # useful for working directly with modules
       modules_json: ${{ steps.discover.outputs.modules_json }}
       # should be used in conjunction with codeql
@@ -34,7 +33,6 @@ jobs:
           echo "Generated modules JSON: $MODULES_JSON"
           echo "Generated projects JSON: $PROJECTS_JSON"
           
-          echo "modules=$MODULES" >> $GITHUB_OUTPUT
           echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT
           echo "projects_json=$PROJECTS_JSON" >> $GITHUB_OUTPUT
 
