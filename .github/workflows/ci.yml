@@ -65,7 +65,7 @@ jobs:
             const projectsJson = JSON.parse(process.env.PROJECTS_JSON || '[]');
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
             
-            if process.env.check_only_changed == "true" {
+            if (process.env.check_only_changed) {
               console.log(`Filtering modules based on changes: ${JSON.stringify(changeJson)}`);
               const filteredModules = modulesJson.filter(module => {
                 return changeJson.some(change => change.includes(module));
