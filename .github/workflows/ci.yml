@@ -28,13 +28,22 @@ jobs:
           MODULES=$(find ${{ env.DIR }} -name "go.mod" -exec dirname {} \;)
           MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
           PROJECTS_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != "")) | map({path: .})')
+          FILTERS=$(echo "$MODULES" | jq -r 'map("\(.):\n  - \"\(.|sub("^";""))/**\"") | join("\n")')
           
           echo "Detected modules: $MODULES"
           echo "Generated modules JSON: $MODULES_JSON"
           echo "Generated projects JSON: $PROJECTS_JSON"
+          echo "Generated filters: $FILTERS"
           
           echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT
           echo "projects_json=$PROJECTS_JSON" >> $GITHUB_OUTPUT
+          
+          echo 'filters="${FILTERS}"' >> $GITHUB_ENV
+
+#      - uses: dorny/paths-filter@v3
+#        id: changes
+#        with:
+#          filters: ${{ env.filters }}
 
   golangci_lint:
     name: "golangci-lint"
@@ -54,7 +63,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: |
-            '${{ env.DIR }}/${{ matrix.module }}'
+            ${{ env.DIR }}/${{ matrix.module }}
             .github/config/golangci.yml
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
