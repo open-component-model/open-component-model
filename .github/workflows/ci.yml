@@ -28,7 +28,7 @@ jobs:
           MODULES="$(find ${{ env.DIR }} -name "go.mod" -exec dirname {} \;)"
           MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
           PROJECTS_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != "")) | map({path: .})')
-          FILTERS=$(echo "$MODULES" | jq -r 'map("\(.):\n  - \"\(.|sub("^";""))/**\"") | join("\n")')
+          FILTERS="$(echo "$MODULES" | jq -rR -s -c 'split("\n") | map(select(. != "")) | map("\(.):\n - \"\(sub("^";""))/**\"") | join ("\n")')"
           
           echo "Detected modules: $MODULES"
           echo "Generated modules JSON: $MODULES_JSON"
