@@ -15,9 +15,9 @@ jobs:
       pull-requests: read
     outputs:
       # useful for working directly with modules
-      modules_json: ${{ steps.discover.outputs.modules_json }}
+      modules_json: ${{ steps.filtered.outputs.modules_json }}
       # should be used in conjunction with codeql
-      projects_json: ${{ steps.discover.outputs.modules_json }}
+      projects_json: ${{ steps.filtered.outputs.modules_json }}
     env:
       DIR: bindings/go
     steps:
@@ -50,7 +50,7 @@ jobs:
           filters: ${{ env.filters }}
 
       - name: Filter JSONs Based on Changes
-        id: filter_json
+        id: filtered
         uses: actions/github-script@v7
         env:
           MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
@@ -69,8 +69,8 @@ jobs:
               return changeJson.some(change => change.includes(projectPath));
             });
   
-            core.setOutput("filtered_modules_json", JSON.stringify(filteredModules));
-            core.setOutput("filtered_projects_json", JSON.stringify(filteredProjects));
+            core.setOutput("modules_json", JSON.stringify(filteredModules));
+            core.setOutput("projects_json", JSON.stringify(filteredProjects));
 
   golangci_lint:
     name: "golangci-lint"
