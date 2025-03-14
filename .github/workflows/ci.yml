@@ -40,10 +40,10 @@ jobs:
           
           echo 'filters="${FILTERS}"' >> $GITHUB_ENV
 
-#      - uses: dorny/paths-filter@v3
-#        id: changes
-#        with:
-#          filters: ${{ env.filters }}
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: ${{ env.filters }}
 
   golangci_lint:
     name: "golangci-lint"
