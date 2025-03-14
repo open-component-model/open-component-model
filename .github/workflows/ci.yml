@@ -56,7 +56,6 @@ jobs:
           MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
           PROJECTS_JSON: ${{ steps.discover.outputs.projects_json }}
           CHANGE_JSON: ${{ steps.changes.outputs.changes }}
-
         with:
           script: |
             const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
@@ -72,6 +71,7 @@ jobs:
   
             core.setOutput("filtered_modules_json", JSON.stringify(filteredModules));
             core.setOutput("filtered_projects_json", JSON.stringify(filteredProjects));
+
   golangci_lint:
     name: "golangci-lint"
     needs: discover_modules
