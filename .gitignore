@@ -37,3 +37,6 @@ output/
 # Task files and generation with tmp folders
 **/tmp
 **/.task
+go.work
+go.work.sum
+

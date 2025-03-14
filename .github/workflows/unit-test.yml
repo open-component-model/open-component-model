@@ -10,19 +10,33 @@ env:
   DIR: bindings/go
 
 jobs:
-  discover_modules:
-    name: "Discover Go Modules"
-    runs-on: ubuntu-latest
-    outputs:
-      modules: ${{ steps.discover.outputs.modules }}
-    steps:
+discover_modules:
+  name: "Discover Go Modules"
+  runs-on: ubuntu-latest
+  permissions:
+    pull-requests: read
+  outputs:
+    modules: ${{ steps.discover.outputs.modules }}
+    # useful for working directly with modules
+    modules_json: ${{ steps.discover.outputs.modules_json }}
+    # should be used in conjunction with codeql
+    projects_json: ${{ steps.discover.outputs.modules_json }}
+  steps:
     - uses: actions/checkout@v4
     - name: Discover Go Modules
       id: discover
       run: |
-        MODULES="$(find ${{ env.DIR }} -name go.mod -exec dirname {} \; | sed 's|${{ env.DIR }}/||' | jq -R -s -c 'split("\n") | map(select(. != ""))')"
+        MODULES=$(find ${{ env.DIR }} -name "go.mod" -exec dirname {} \;)
+        MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
+        PROJECTS_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != "")) | map({path: .})')
+        
         echo "Detected modules: $MODULES"
+        echo "Generated modules JSON: $MODULES_JSON"
+        echo "Generated projects JSON: $PROJECTS_JSON"
+        
         echo "modules=$MODULES" >> $GITHUB_OUTPUT
+        echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT
+        echo "projects_json=$PROJECTS_JSON" >> $GITHUB_OUTPUT
 
   golangci_lint:
     name: "golangci-lint"
@@ -35,7 +49,7 @@ jobs:
       checks: write
     strategy:
       matrix:
-        module: ${{ fromJSON(needs.discover_modules.outputs.modules) }}
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
         uses: TooMuch4U/actions-clean@v2.2
@@ -57,11 +71,11 @@ jobs:
 
   run_unit_tests:
     name: "Unit Tests"
-    runs-on: large_runner
     needs: discover_modules
+    runs-on: large_runner
     strategy:
       matrix:
-        module: ${{ fromJSON(needs.discover_modules.outputs.modules) }}
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
         uses: TooMuch4U/actions-clean@v2.2
@@ -80,3 +94,34 @@ jobs:
           go-version-file: '${{ github.workspace }}/${{ env.DIR }}/${{ matrix.module }}/go.mod'
       - name: Run Tests
         run: task bindings/go/${{ matrix.module }}:test
+
+  analyze-go:
+    name: "Analyze Go Modules"
+    needs: discover_modules
+    runs-on: large_runner
+    timeout-minutes: 360
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.discover_modules.outputs.projects) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: ${{ matrix.project.path }}
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          queries: security-extended
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
