@@ -63,12 +63,12 @@ jobs:
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
             
             const filteredModules = modulesJson.filter(module => {
-              return changeJson.some(change => change.includes(modulePath));
+              return changeJson.some(change => change.includes(module));
             });
             const filteredProjects = projectsJson.filter(project => {
-              return changeJson.some(change => change.includes(projectPath));
+              return changeJson.some(change => change.includes(project));
             });
-  
+            console.log(`Filtered modules: ${JSON.stringify(filteredModules)}`);
             core.setOutput("modules_json", JSON.stringify(filteredModules));
             core.setOutput("projects_json", JSON.stringify(filteredProjects));
 
