@@ -28,6 +28,7 @@ func TestTypeFromString(t *testing.T) {
 		{"", runtime.Type{}, true},
 		{"software.ocm.accessType./v1", runtime.Type{}, true},
 		{"./v1", runtime.Type{}, true},
+		{"/v1", runtime.Type{}, true},
 		{"software.ocm.accessType.OCIArtifact/v1/extra", runtime.Type{}, true},
 	}
 
