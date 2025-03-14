@@ -33,7 +33,7 @@ jobs:
           echo "Detected modules: $MODULES"
           echo "Generated modules JSON: $MODULES_JSON"
           echo "Generated projects JSON: $PROJECTS_JSON"
-          echo "Generated filters\n: $FILTERS"
+          echo "Generated filters: $FILTERS"
           
           echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT 
           echo "projects_json=$PROJECTS_JSON" >> $GITHUB_OUTPUT
