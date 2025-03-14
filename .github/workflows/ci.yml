@@ -38,7 +38,11 @@ jobs:
           echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT
           echo "projects_json=$PROJECTS_JSON" >> $GITHUB_OUTPUT
           
-          echo "filters=\"$FILTERS\"" >> $GITHUB_ENV
+          {
+            echo 'filters<<EOF'
+            echo "$FILTERS"
+            echo EOF
+          } >> $GITHUB_ENV
 
       - uses: dorny/paths-filter@v3
         id: changes
