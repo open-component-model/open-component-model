@@ -21,8 +21,6 @@ jobs:
     outputs:
       # useful for working directly with modules
       modules_json: ${{ steps.filtered.outputs.modules_json }}
-      # should be used in conjunction with codeql
-      projects_json: ${{ steps.filtered.outputs.modules_json }}
     env:
       DIR: bindings/go
     steps:
@@ -32,16 +30,13 @@ jobs:
         run: |
           MODULES="$(find ${{ env.DIR }} -name "go.mod" -exec dirname {} \;)"
           MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
-          PROJECTS_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != "")) | map({path: .})')
           FILTERS="$(echo "$MODULES" | jq -rR -s -c 'split("\n") | map(select(. != "")) | map("\(.):\n - \"\(sub("^";""))/**\"") | join ("\n")')"
           
           echo "Detected modules: $MODULES"
           echo "Generated modules JSON: $MODULES_JSON"
-          echo "Generated projects JSON: $PROJECTS_JSON"
           echo "Generated filters: $FILTERS"
           
           echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT 
-          echo "projects_json=$PROJECTS_JSON" >> $GITHUB_OUTPUT
           
           {
             echo 'filters<<EOF'
@@ -57,12 +52,10 @@ jobs:
         uses: actions/github-script@v7
         env:
           MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
-          PROJECTS_JSON: ${{ steps.discover.outputs.projects_json }}
           CHANGE_JSON: ${{ steps.changes.outputs.changes }}
         with:
           script: |
             const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
-            const projectsJson = JSON.parse(process.env.PROJECTS_JSON || '[]');
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
             
             if (process.env.check_only_changed) {
@@ -70,16 +63,11 @@ jobs:
               const filteredModules = modulesJson.filter(module => {
                 return changeJson.some(change => change.includes(module));
               });
-              const filteredProjects = projectsJson.filter(project => {
-                return changeJson.some(change => change.includes(project));
-              });
               console.log(`Filtered modules: ${JSON.stringify(filteredModules)}`);
               core.setOutput("modules_json", JSON.stringify(filteredModules));
-              core.setOutput("projects_json", JSON.stringify(filteredProjects));
             } else {
               console.log("check_only_changed is false, no filtering applied.");
               core.setOutput("modules_json", JSON.stringify(modulesJson));
-              core.setOutput("projects_json", JSON.stringify(projectsJson));
             }
 
   golangci_lint:
