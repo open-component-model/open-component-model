@@ -10,7 +10,7 @@ env:
   # Check Only Changed Modules
   # If true, only changed modules will be analyzed.
   # If false, all discovered modules will be analyzed.
-  check_only_changed: true
+  check_only_changed: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   discover_modules:
