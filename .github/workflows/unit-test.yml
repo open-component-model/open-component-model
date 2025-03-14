@@ -1,4 +1,4 @@
-name: Unit Test
+name: CI
 
 on:
   pull_request:
@@ -24,15 +24,44 @@ jobs:
         echo "Detected modules: $MODULES"
         echo "modules=$MODULES" >> $GITHUB_OUTPUT
 
+  golangci_lint:
+    name: "golangci-lint"
+    needs: discover_modules
+    runs-on: large_runner
+    permissions:
+      # Required: allow read access to the content for analysis.
+      contents: read
+      # Optional: allow write access to checks to allow the action to annotate code in the PR.
+      checks: write
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules) }}
+    steps:
+      - name: Self Hosted Runner Post Job Cleanup Action
+        uses: TooMuch4U/actions-clean@v2.2
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            '${{ env.DIR }}/${{ matrix.module }}'
+            .github/config/golangci.yml
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: '${{ github.workspace }}/${{ env.DIR }}/${{ matrix.module }}/go.mod'
+      - name: golangci-lint ${{ matrix.modules }}
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: ${{ github.workspace }}/${{ env.DIR }}/${{ matrix.module }}
+          args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml --issues-exit-code=0
+
   run_unit_tests:
-    name: "Run"
+    name: "Unit Tests"
     runs-on: large_runner
     needs: discover_modules
     strategy:
       matrix:
-        go-version: [ '1.24.x' ]
         module: ${{ fromJSON(needs.discover_modules.outputs.modules) }}
-
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
         uses: TooMuch4U/actions-clean@v2.2
