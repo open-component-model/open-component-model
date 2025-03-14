@@ -25,7 +25,7 @@ jobs:
       - name: Discover Go Modules
         id: discover
         run: |
-          MODULES=$(find ${{ env.DIR }} -name "go.mod" -exec dirname {} \;)
+          MODULES="$(find ${{ env.DIR }} -name "go.mod" -exec dirname {} \;)"
           MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
           PROJECTS_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != "")) | map({path: .})')
           FILTERS=$(echo "$MODULES" | jq -r 'map("\(.):\n  - \"\(.|sub("^";""))/**\"") | join("\n")')
@@ -93,7 +93,8 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: '${{ env.DIR }}/${{ matrix.module }}'
+          sparse-checkout: |
+            ${{ env.DIR }}/${{ matrix.module }}
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
@@ -112,12 +113,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: ${{ fromJSON(needs.discover_modules.outputs.projects) }}
+        project: ${{ fromJSON(needs.discover_modules.outputs.projects_json) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          sparse-checkout: ${{ matrix.project.path }}
+          sparse-checkout: |
+            ${{ matrix.project.path }}
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
