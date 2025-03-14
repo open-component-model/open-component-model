@@ -43,8 +43,8 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
-#        with:
-#          sparse-checkout: '${{ env.DIR }}/${{ matrix.module }}'
+        with:
+          sparse-checkout: '${{ env.DIR }}/${{ matrix.module }}'
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
