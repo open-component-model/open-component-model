@@ -6,8 +6,6 @@ on:
     branches:
     - main
 
-env:
-  DIR: bindings/go
 
 jobs:
   discover_modules:
@@ -20,6 +18,8 @@ jobs:
       modules_json: ${{ steps.discover.outputs.modules_json }}
       # should be used in conjunction with codeql
       projects_json: ${{ steps.discover.outputs.modules_json }}
+    env:
+      DIR: bindings/go
     steps:
       - uses: actions/checkout@v4
       - name: Discover Go Modules
@@ -49,6 +49,29 @@ jobs:
         with:
           filters: ${{ env.filters }}
 
+      - name: Filter JSONs Based on Changes
+        id: filter_json
+        uses: actions/github-script@v7
+        env:
+          MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
+          PROJECTS_JSON: ${{ steps.discover.outputs.projects_json }}
+          CHANGE_JSON: ${{ steps.changes.outputs.changes }}
+
+        with:
+          script: |
+            const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
+            const projectsJson = JSON.parse(process.env.PROJECTS_JSON || '[]');
+            const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
+            
+            const filteredModules = modulesJson.filter(module => {
+              return changeJson.some(change => change.includes(modulePath));
+            });
+            const filteredProjects = projectsJson.filter(project => {
+              return changeJson.some(change => change.includes(projectPath));
+            });
+  
+            core.setOutput("filtered_modules_json", JSON.stringify(filteredModules));
+            core.setOutput("filtered_projects_json", JSON.stringify(filteredProjects));
   golangci_lint:
     name: "golangci-lint"
     needs: discover_modules
