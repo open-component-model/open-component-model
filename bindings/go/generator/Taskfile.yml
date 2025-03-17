@@ -1,0 +1,29 @@
+version: '3'
+
+tasks:
+  test:
+    desc: "Run all Generator tests"
+    cmds:
+      - task: ocmtypegen/test
+
+  ocmtypegen/install:
+    desc: "Install {{.PKG}} into tmp directory if not already present"
+    vars:
+      PKG: '{{ .TASKFILE_DIR }}/ocmtypegen/...'
+    cmds:
+      - go install {{ .PKG }}
+
+  ocmtypegen/generate:
+    deps: ["ocmtypegen/install"]
+    desc: "Run Type OCM Type Code Generation in the Project"
+    vars:
+      GO_MODULES:
+        sh: find {{ .ROOT_DIR }}/bindings/go -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/bindings/go/||'
+    cmds:
+      - for: { var: GO_MODULES }
+        cmd: 'go generate {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...'
+
+  ocmtypegen/test:
+    desc: "Run OCM Type Generation test"
+    cmds:
+      - go run {{ .TASKFILE_DIR }}/ocmtypegen/... {{ .TASKFILE_DIR }}/ocmtypegen/test/type.go

@@ -51,3 +51,24 @@ jobs:
           go-version-file: '${{ github.workspace }}/${{ env.DIR }}/${{ matrix.module }}/go.mod'
       - name: Run Tests
         run: task bindings/go/${{ matrix.module }}:test
+
+  generate:
+    runs-on: ubuntu-latest
+    name: "Code Generation"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Go (required by some generators)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Initialize go.work
+        run: task init/go.work
+      - name: Run Code Generation
+        run: task generate
+      - name: Ensure Clean Target Repository
+        run: task ensure-clean
