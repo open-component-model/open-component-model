@@ -138,7 +138,7 @@ func TestIdentity_Match(t *testing.T) {
 
 	type args struct {
 		o        runtime.Identity
-		matchers []runtime.IdentityMatcher
+		matchers []runtime.ChainableIdentityMatcher
 	}
 	tests := []struct {
 		name string
@@ -189,8 +189,8 @@ func TestIdentity_Match(t *testing.T) {
 				o: runtime.Identity{
 					runtime.IdentityAttributePath: "base/*",
 				},
-				matchers: []runtime.IdentityMatcher{
-					runtime.IdentityMatchingFn(runtime.IdentityEqual),
+				matchers: []runtime.ChainableIdentityMatcher{
+					runtime.IdentityMatchingChainFn(runtime.IdentityEqual),
 				},
 			},
 			false,
