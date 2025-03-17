@@ -17,6 +17,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/generator/Taskfile.yml
     dir: ./bindings/go/generator
+  bindings/go/blob:
+    optional: true
+    taskfile: ./bindings/go/blob/Taskfile.yml
+    dir: ./bindings/go/blob
 
 vars:
   GO_MODULES:
