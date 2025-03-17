@@ -172,4 +172,10 @@ jobs:
       - name: Run Code Generation
         run: task generate
       - name: Ensure Clean Target Repository
-        run: task ensure-clean
+        run: |
+          gitStatus="$(git status --porcelain)"
+          if [[ -z "${gitStatus}" ]]; then
+              exit 0
+          fi
+          echo "${gitStatus}"
+          exit 1

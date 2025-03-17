@@ -44,9 +44,3 @@ tasks:
     cmds:
       - task: 'bindings/go/generator:ocmtypegen/generate'
       - task: 'tools:controller-gen/generate-deepcopy'
-
-  ensure-clean:
-    desc: "Ensure the project is clean by checking for uncommitted changes"
-    cmds:
-      - git diff --exit-code
-      - git status --porcelain
