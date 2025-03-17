@@ -27,6 +27,8 @@ func (f IdentityMatchingChainFn) Match(a, b Identity) bool {
 // For more information, check path.Match.
 // IdentityMatchesPath deletes the path attribute from both identities, because it is expected
 // that it is used in a chain with Identity.Match and the authority decision of the path attribute.
+//
+// see IdentityMatchingChainFn and Identity.Match for more information.
 func IdentityMatchesPath(i, o Identity) bool {
 	ip, iok := i[IdentityAttributePath]
 	delete(i, IdentityAttributePath)
