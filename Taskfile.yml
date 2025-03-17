@@ -47,6 +47,4 @@ tasks:
 
   ensure-clean:
     desc: "Ensure the project is clean by checking for uncommitted changes"
-    cmds:
-      - git diff --exit-code
-      - git status --porcelain
+    cmds: [git diff --exit-code]
