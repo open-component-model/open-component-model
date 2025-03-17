@@ -8,6 +8,7 @@ run:
 linters:
   enable-all: true
   disable:
+    - tenv
     # We are working on it
     - wrapcheck
 
@@ -30,7 +31,6 @@ linters:
                        #   No snake_case in Go.
                        #   convert_ComponentReferences_from should be convertComponentReferencesFrom
     - prealloc         # Performance.
-    - exportloopref
     - nilerr           # There a few places where we don't return with an error
                        #   in an 'if err != nil {}' block. If it's intentional,
                        #   we should add a '//nolint: nilerr // Reason why...'
@@ -39,7 +39,6 @@ linters:
     - varnamelen       # m, d, p < These are not so meaningful variables.
     - testpackage      # Blackbox testing is preferred.
     - funlen           # Break long functions.
-    - gomnd            # Give constant values a name with constants.
     - ireturn          # Accept interface, return concrete.
     - nestif           # Some nexted if statements are 8 or 9 deep.
     - dupl             # Check code duplications.
@@ -87,9 +86,6 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - wastedassign
-
-    # Disabled because of deprecation
-    - execinquery
 
     # Seriously, who wants every comment to end in a period???
     - godot

@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+    - main
+
+env:
+  # Check Only Changed Modules
+  # If true, only changed modules will be analyzed.
+  # If false, all discovered modules will be analyzed.
+  check_only_changed: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  discover_modules:
+    name: "Discover Go Modules"
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      # useful for working directly with modules
+      modules_json: ${{ steps.filtered.outputs.modules_json }}
+    env:
+      DIR: bindings/go
+    steps:
+      - uses: actions/checkout@v4
+      - name: Discover Go Modules
+        id: discover
+        run: |
+          MODULES="$(find ${{ env.DIR }} -name "go.mod" -exec dirname {} \;)"
+          MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          FILTERS="$(echo "$MODULES" | jq -rR -s -c 'split("\n") | map(select(. != "")) | map("\(.):\n - \"\(sub("^";""))/**\"") | join ("\n")')"
+          
+          echo "Detected modules: $MODULES"
+          echo "Generated modules JSON: $MODULES_JSON"
+          echo "Generated filters: $FILTERS"
+          
+          echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT 
+          
+          {
+            echo 'filters<<EOF'
+            echo "$FILTERS"
+            echo EOF
+          } >> $GITHUB_ENV
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: ${{ env.filters }}
+      - name: Filter JSONs Based on Changes
+        id: filtered
+        uses: actions/github-script@v7
+        env:
+          MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
+          CHANGE_JSON: ${{ steps.changes.outputs.changes }}
+        with:
+          script: |
+            const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
+            const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
+            
+            if (process.env.check_only_changed) {
+              console.log(`Filtering modules based on changes: ${JSON.stringify(changeJson)}`);
+              const filteredModules = modulesJson.filter(module => {
+                return changeJson.some(change => change.includes(module));
+              });
+              console.log(`Filtered modules: ${JSON.stringify(filteredModules)}`);
+              core.setOutput("modules_json", JSON.stringify(filteredModules));
+            } else {
+              console.log("check_only_changed is false, no filtering applied.");
+              core.setOutput("modules_json", JSON.stringify(modulesJson));
+            }
+
+  golangci_lint:
+    name: "golangci-lint"
+    needs: discover_modules
+    runs-on: ubuntu-latest
+    permissions:
+      # Required: allow read access to the content for analysis.
+      contents: read
+      # Optional: allow write access to checks to allow the action to annotate code in the PR.
+      checks: write
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ matrix.module }}
+            .github/config/golangci.yml
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+      - name: golangci-lint ${{ matrix.modules }}
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: ${{ github.workspace }}/${{ matrix.module }}
+          args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml --issues-exit-code=0
+  run_unit_tests:
+    name: "Unit Tests"
+    needs: discover_modules
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
+    steps:
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ matrix.module }}
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+      - name: Run Tests
+        run: task ${{ matrix.module }}:test
+  analyze-go:
+    name: "Analyze Go Modules"
+    needs: discover_modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ matrix.project }}
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          queries: security-extended
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
+
+  generate:
+    runs-on: ubuntu-latest
+    name: "Code Generation"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Go (required by some generators)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Initialize go.work
+        run: task init/go.work
+      - name: Run Code Generation
+        run: task generate
+      - name: Ensure Clean Target Repository
+        run: task ensure-clean
