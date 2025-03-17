@@ -10,11 +10,24 @@ import (
 )
 
 const (
-	IdentityAttributeType     = "type"
+	// IdentityAttributeType     is the key for the type attribute in an identity.
+	// It is used to identity the type of a resource and is standardized to always be empty or a parseable Type
+	// See TypeFromString for more information.
+	IdentityAttributeType = "type"
+	// IdentityAttributeHostname is the key for the hostname attribute in an identity.
+	// It is used to identity the hostname of a target system (e.g. a registry server).
 	IdentityAttributeHostname = "hostname"
-	IdentityAttributeScheme   = "scheme"
-	IdentityAttributePath     = "path"
-	IdentityAttributePort     = "port"
+	// IdentityAttributeScheme is the key for the scheme attribute in an identity.
+	// It is used to identity the scheme of a target system (e.g. http, https, etc.).
+	IdentityAttributeScheme = "scheme"
+	// IdentityAttributePath is the key for the path attribute in an identity.
+	// It is used to identity any potential sub-path of a target system (e.g. /v1/),
+	// which is used to identity the API version of a target system.
+	// Alternatively, for local systems it can be interpreted as a local path.
+	IdentityAttributePath = "path"
+	// IdentityAttributePort is the key for the port attribute in an identity.
+	// It is used to identity the port of a target system (e.g. 8080).
+	IdentityAttributePort = "port"
 )
 
 // Identity is a map that represents a set of attributes that uniquely identity
@@ -30,17 +43,6 @@ var _ Typed = Identity{}
 // map comparison is sufficient for equality of 2 identities.
 func (i Identity) Equal(o Identity) bool {
 	return maps.Equal(i, o)
-}
-
-// IsContainedIn checks if the identity i is contained in the identity o.
-// It checks if all keys and values of i are present in o.
-func (i Identity) IsContainedIn(o Identity) bool {
-	for k, v := range i {
-		if ov, ok := o[k]; !ok || ov != v {
-			return false
-		}
-	}
-	return true
 }
 
 // Clone creates a deep copy of the identity.

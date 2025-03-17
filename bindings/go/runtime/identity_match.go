@@ -15,31 +15,9 @@ type IdentityMatcher interface {
 	Match(Identity, Identity) bool
 }
 
-// functionalIdentityMatcher is a wrapper around IdentityMatchingFn that implements IdentityMatcher.
-type functionalIdentityMatcher struct {
-	fn IdentityMatchingFn
-}
-
 // Match delegates to the IdentityMatchingFn.
-func (f *functionalIdentityMatcher) Match(a, b Identity) bool {
-	return f.fn(a, b)
-}
-
-// NewMatcher creates a new IdentityMatcher from a IdentityMatchingFn.
-func NewMatcher(fn IdentityMatchingFn) IdentityMatcher {
-	return &functionalIdentityMatcher{fn: fn}
-}
-
-// IdentityIsContained is a matcher that checks if the identity i is contained in the identity o.
-func IdentityIsContained(i, o Identity) bool {
-	del := func(s string, s2 string) bool {
-		return true
-	}
-	defer func() {
-		maps.DeleteFunc(i, del)
-		maps.DeleteFunc(o, del)
-	}()
-	return i.IsContainedIn(o)
+func (f IdentityMatchingFn) Match(a, b Identity) bool {
+	return f(a, b)
 }
 
 // IdentityMatchesPath returns true if the identity a matches the subpath of the identity b.
@@ -80,7 +58,7 @@ func IdentityEqual(a Identity, b Identity) bool {
 // If any matcher returns false, it returns false.
 func (i Identity) Match(o Identity, matchers ...IdentityMatcher) bool {
 	if len(matchers) == 0 {
-		return i.Match(o, MatchAll(NewMatcher(IdentityMatchesPath), NewMatcher(IdentityEqual)))
+		return i.Match(o, MatchAll(IdentityMatchingFn(IdentityMatchesPath), IdentityMatchingFn(IdentityEqual)))
 	}
 
 	ci, co := maps.Clone(i), maps.Clone(o)
