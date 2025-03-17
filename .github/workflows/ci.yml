@@ -97,7 +97,7 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
-          args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml --issues-exit-code=0
+          args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml
   run_unit_tests:
     name: "Unit Tests"
     needs: discover_modules

@@ -128,16 +128,6 @@ func (t Type) HasVersion() bool {
 	return t.Version != ""
 }
 
-// SetGroup sets a new group for the type.
-func (t Type) SetGroup(group string) {
-	t.Group = group
-}
-
-// SetVersion sets a new version for the type.
-func (t Type) SetVersion(version string) {
-	t.Version = version
-}
-
 // MarshalJSON converts Type to a JSON string.
 func (t Type) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())

@@ -115,7 +115,7 @@ func main() {
 		output.WriteString(GenerateGetTypeMethod(structName))
 	}
 
-	if err := os.WriteFile(outputFile, []byte(output.String()), 0644); err != nil {
+	if err := os.WriteFile(outputFile, []byte(output.String()), 0o600); err != nil {
 		log.Fatalf("Failed to write generated file: %v", err)
 	}
 

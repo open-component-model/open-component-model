@@ -121,6 +121,10 @@ linters-settings:
   gocritic:
     disabled-checks:
       - elseif
+  recvcheck:
+    disable-builtin: true
+    exclusions:
+      - "*.UnmarshalJSON" # UnmarshalJSON always needs pointer values to do proper value assignments
 
 issues:
   max-issues-per-linter: 0
