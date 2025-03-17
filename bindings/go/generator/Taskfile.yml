@@ -7,7 +7,7 @@ tasks:
       - task: ocmtypegen/test
 
   ocmtypegen/install:
-    desc: "Install {{.PKG}} into tmp directory if not already present"
+    desc: "Install {{.PKG}} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
     vars:
       PKG: '{{ .TASKFILE_DIR }}/ocmtypegen/...'
     cmds:

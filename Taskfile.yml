@@ -3,6 +3,8 @@ version: '3'
 dotenv: ['.env', '.env.local']
 
 includes:
+  tools:
+    taskfile: ./tools.Taskfile.yml
   bindings/go/descriptor:
     optional: true
     taskfile: ./bindings/go/descriptor/Taskfile.yml
@@ -41,54 +43,10 @@ tasks:
     desc: "Run all Code Generators in the project"
     cmds:
       - task: 'bindings/go/generator:ocmtypegen/generate'
-      - task: 'controller-gen/generate-deepcopy'
+      - task: 'tools:controller-gen/generate-deepcopy'
 
   ensure-clean:
     desc: "Ensure the project is clean by checking for uncommitted changes"
     cmds:
       - git diff --exit-code
       - git status --porcelain
-
-  controller-gen/generate-deepcopy:
-    desc: "Generate kubernetes-style deepcopy code for all types in the project"
-    deps: [controller-gen/install]
-    cmds:
-      - 'tmp/bin/controller-gen object paths=./bindings/go/generator/ocmtypegen/test/...'
-
-  controller-gen/install:
-    desc: "Install {{.PKG}} at {{ .TARGET_VERSION }} into tmp directory if not already present"
-    vars:
-      PKG: sigs.k8s.io/controller-tools/cmd/controller-gen
-      TARGET_VERSION: v0.17.2
-      CURRENT_VERSION:
-        sh: 'tmp/bin/controller-gen --version || echo "0.0.0"'
-    status:
-    - '{{ contains .TARGET_VERSION .CURRENT_VERSION }}'
-    env:
-      GOBIN: '{{ .ROOT_DIR }}/tmp/bin'
-    cmds:
-      - go install {{ .PKG }}@{{ .TARGET_VERSION }}
-
-  golangci-lint/run:
-    desc: "Run golangci-lint on all go modules"
-    deps: [golangci-lint/install]
-    cmds:
-      - for: { var: GO_MODULES }
-        cmd: |
-          cd {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} && 
-          {{ .ROOT_DIR }}/tmp/bin/golangci-lint run \
-            --timeout 10m \
-            --config={{ .ROOT_DIR }}/.github/config/golangci.yml \
-            --path-prefix {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} \
-            {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
-
-  golangci-lint/install:
-    desc: "Install golangci-lint at {{ .TARGET_VERSION }} into tmp directory if not already present"
-    vars:
-      TARGET_VERSION: 1.64.7
-      CURRENT_VERSION:
-        sh: 'tmp/bin/golangci-lint version --format short || echo "0.0.0"'
-    status:
-      - '{{ contains .TARGET_VERSION .CURRENT_VERSION }}'
-    cmds:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b {{ .ROOT_DIR }}/tmp/bin v{{ .TARGET_VERSION }}

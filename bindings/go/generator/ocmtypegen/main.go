@@ -11,15 +11,6 @@ import (
 	"strings"
 )
 
-// Type struct definition
-// It must be embedded in other structs to generate GetType
-
-type Type struct {
-	Group   string
-	Version string
-	Name    string
-}
-
 // GenerateGetTypeMethod generates a GetType method for structs embedding Type
 func GenerateGetTypeMethod(structName string) string {
 	return fmt.Sprintf(`import (
