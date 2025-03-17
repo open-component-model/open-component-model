@@ -190,7 +190,7 @@ func TestIdentity_Match(t *testing.T) {
 					runtime.IdentityAttributePath: "base/*",
 				},
 				matchers: []runtime.IdentityMatcher{
-					runtime.NewMatcher(runtime.IdentityEqual),
+					runtime.IdentityMatchingFn(runtime.IdentityEqual),
 				},
 			},
 			false,
