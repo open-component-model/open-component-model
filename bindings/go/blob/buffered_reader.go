@@ -24,7 +24,7 @@ type EagerBufferedReader struct {
 	mu        sync.RWMutex
 	buf       *bytes.Buffer
 	digest    string
-	size      uint64
+	size      int64
 	loaded    bool
 	reader    io.Reader
 	mediaType string
@@ -58,7 +58,7 @@ func (b *EagerBufferedReader) LoadEagerly() error {
 		return err
 	}
 	b.digest = dig.String()
-	if newSize := uint64(b.buf.Len()); newSize > b.size { //nolint:gosec // G115 can never be negative
+	if newSize := int64(b.buf.Len()); newSize > b.size {
 		b.size = newSize
 	}
 	b.loaded = true
@@ -105,12 +105,12 @@ func (b *EagerBufferedReader) SetPrecalculatedDigest(digest string) {
 	b.digest = digest
 }
 
-func (b *EagerBufferedReader) Size() (uint64, bool) {
+func (b *EagerBufferedReader) Size() int64 {
 	if b.LoadEagerly() != nil {
-		return 0, false
+		return SizeUnknown
 	}
 	// the size is always known based on its buffer
-	return b.size, true
+	return b.size
 }
 
 func (b *EagerBufferedReader) HasPrecalculatedSize() bool {
@@ -118,7 +118,7 @@ func (b *EagerBufferedReader) HasPrecalculatedSize() bool {
 	return b.Loaded()
 }
 
-func (b *EagerBufferedReader) SetPrecalculatedSize(size uint64) {
+func (b *EagerBufferedReader) SetPrecalculatedSize(size int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.size = size

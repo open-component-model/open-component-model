@@ -63,12 +63,12 @@ func (f *Blob) WriteCloser() (io.WriteCloser, error) {
 	return writeable, nil
 }
 
-func (f *Blob) Size() (uint64, bool) {
+func (f *Blob) Size() int64 {
 	fi, err := f.fileSystem.Stat(f.path)
 	if err != nil {
-		return 0, false
+		return blob.SizeUnknown
 	}
-	return uint64(fi.Size()), true //nolint:gosec // G115 can never be negative
+	return fi.Size()
 }
 
 func (f *Blob) Digest() (string, bool) {

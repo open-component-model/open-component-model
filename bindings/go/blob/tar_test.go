@@ -25,7 +25,7 @@ func (m *mockReadOnlyBlob) ReadCloser() (io.ReadCloser, error) {
 func TestArchiveBlob(t *testing.T) {
 	r := require.New(t)
 	name := "test-blob"
-	size := uint64(12)
+	size := int64(12)
 	digest := "test-digest"
 	blobData := []byte("hello world!")
 	mockBlob := &mockReadOnlyBlob{data: blobData}
@@ -44,7 +44,7 @@ func TestArchiveBlob(t *testing.T) {
 	header, err := tr.Next()
 	r.NoError(err, "error reading tar header")
 	r.Equal(name, header.Name, "unexpected tar entry name")
-	r.Equal(size, uint64(header.Size), "unexpected tar entry size")
+	r.Equal(size, int64(header.Size), "unexpected tar entry size")
 
 	content := make([]byte, size)
 	n, err := tr.Read(content)
