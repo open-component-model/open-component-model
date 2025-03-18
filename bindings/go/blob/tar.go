@@ -15,15 +15,11 @@ const DefaultArchiveBlobBufferSize = 128 * 1024 // 128 KiB
 // ArchiveBlob archives a ReadOnlyBlob to the tar writer.
 // it assumes that size and digest are already known to compute its header.
 // The buffer is used to copy the blob data, if nil, a new buffer is allocated.
-func ArchiveBlob(name string, size uint64, digest string, b ReadOnlyBlob, writer *tar.Writer, buf []byte) (err error) {
-	sizeInt := int64(size)
-	if sizeInt < 0 {
-		return fmt.Errorf("size %d is negative (overflow)", size)
-	}
+func ArchiveBlob(name string, size int64, digest string, b ReadOnlyBlob, writer *tar.Writer, buf []byte) (err error) {
 	if err := writer.WriteHeader(&tar.Header{
 		Name: name,
 		Mode: 0o644,
-		Size: sizeInt,
+		Size: size,
 	}); err != nil {
 		return fmt.Errorf("unable to write blob header: %w", err)
 	}

@@ -34,12 +34,16 @@ type ReadOnlyBlob interface {
 	ReadCloser() (io.ReadCloser, error)
 }
 
+// SizeUnknown is a constant that represents an unknown size of a blob.
+const SizeUnknown = -1
+
 // SizeAware is an interface that represents any arbitrary object that can be sized.
 //
 // Size is used to always determine the size of the object in bytes.
 type SizeAware interface {
 	// Size returns the blob size in bytes if known.
-	Size() (size uint64, known bool)
+	// If the size is unknown, it MUST return SizeUnknown.
+	Size() (size int64)
 }
 
 // SizePrecalculatable is an interface that represents any arbitrary object that can be set with Sizes
@@ -55,7 +59,7 @@ type SizePrecalculatable interface {
 	// It MUST be safe to call multiple times, with the same or greater different size.
 	// Once called, HasPrecalculatedSize MUST return true.
 	// If called with a size less than the current size, it MUST ignore this size.
-	SetPrecalculatedSize(size uint64)
+	SetPrecalculatedSize(size int64)
 }
 
 // DigestAware is an interface that represents any arbitrary object that can be digested.

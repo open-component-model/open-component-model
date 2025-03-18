@@ -9,6 +9,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
@@ -60,9 +61,9 @@ func TestBlob_Size(t *testing.T) {
 	r.NoError(err)
 	r.NoError(writer.Close())
 
-	size, ok := b.Size()
-	r.True(ok)
-	r.Equal(uint64(9), size)
+	size := b.Size()
+	r.Greater(size, int64(blob.SizeUnknown))
+	r.Equal(int64(9), size)
 }
 
 func TestBlob_Digest(t *testing.T) {

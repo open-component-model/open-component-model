@@ -48,18 +48,18 @@ func TestBufferedReader(t *testing.T) {
 		br = blob.NewEagerBufferedReader(strings.NewReader(data))
 		buf := make([]byte, len(data)/2)
 		br.Read(buf) // Partial read
-		expectedSize := uint64(len(data))
-		actualSize, known := br.Size()
-		assert.True(t, known)
-		assert.Equal(t, expectedSize, actualSize)
+		expectedSize := int64(len(data))
+		size := br.Size()
+		assert.Greater(t, size, int64(0))
+		assert.Equal(t, expectedSize, size)
 	})
 
 	t.Run("Test Size Calculation Before Read", func(t *testing.T) {
 		br = blob.NewEagerBufferedReader(strings.NewReader(data))
-		expectedSize := uint64(len(data))
-		actualSize, known := br.Size()
-		assert.True(t, known)
-		assert.Equal(t, expectedSize, actualSize)
+		expectedSize := int64(len(data))
+		size := br.Size()
+		assert.Greater(t, size, int64(0))
+		assert.Equal(t, expectedSize, size)
 	})
 
 	t.Run("Test Precalculated Digest", func(t *testing.T) {
@@ -87,9 +87,9 @@ func TestBufferedReader(t *testing.T) {
 		assert.False(t, br.HasPrecalculatedSize())
 		assert.NoError(t, br.LoadEagerly())
 		assert.True(t, br.HasPrecalculatedSize())
-		size, known := br.Size()
-		assert.True(t, known)
-		expectedSize := uint64(len(data))
+		size := br.Size()
+		assert.Greater(t, size, int64(0))
+		expectedSize := int64(len(data))
 		assert.Equal(t, expectedSize, size)
 	})
 
