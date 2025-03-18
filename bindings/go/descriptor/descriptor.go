@@ -1,10 +1,8 @@
 package descriptor
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -16,13 +14,13 @@ import (
 //
 
 type Descriptor struct {
-	Meta       *Meta        `json:"meta"`
-	Component  *Component   `json:"component"`
-	Signatures []*Signature `json:"signatures,omitempty"`
+	Meta       Meta        `json:"meta"`
+	Component  Component   `json:"component"`
+	Signatures []Signature `json:"signatures,omitempty"`
 }
 
 func (d *Descriptor) String() string {
-	base := fmt.Sprintf("%s", d.Component)
+	base := d.Component.GetType().String()
 	if d.Meta.Version != "" {
 		base += fmt.Sprintf(" (schema version %s)", d.Meta.Version)
 	}
@@ -30,52 +28,22 @@ func (d *Descriptor) String() string {
 }
 
 type Component struct {
-	ComponentIdentity  `json:",inline"`
-	Labels             []*Label                `json:"labels,omitempty"`
-	RepositoryContexts []*runtime.Unstructured `json:"repositoryContexts,omitempty"`
-	Provider           string                  `json:"provider"`
-	Resources          []*Resource             `json:"resources,omitempty"`
-	Sources            []*Source               `json:"sources,omitempty"`
-	References         []*Reference            `json:"componentReferences,omitempty"`
-}
-
-type ComponentIdentity struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
-func (c *ComponentIdentity) String() string {
-	return fmt.Sprintf("%s:%s", c.Name, c.Version)
-}
-
-func ParseComponentIdentity(s string) (ComponentIdentity, error) {
-	ci := ComponentIdentity{}
-	split := strings.Split(s, ":")
-	if len(split) != 2 {
-		return ci, fmt.Errorf("invalid component identity %q", s)
-	}
-	ci.Name = split[0]
-	ci.Version = split[1]
-	if ci.Name == "" || ci.Version == "" {
-		return ci, fmt.Errorf("invalid component identity %q", s)
-	}
-	return ci, nil
-}
-
-func (c *ComponentIdentity) AsIdentity() runtime.Identity {
-	return runtime.Identity{
-		"name":    c.Name,
-		"version": c.Version,
-	}
+	runtime.Identity   `json:",inline"`
+	Labels             []Label                `json:"labels,omitempty"`
+	RepositoryContexts []runtime.Unstructured `json:"repositoryContexts,omitempty"`
+	Provider           string                 `json:"provider"`
+	Resources          []Resource             `json:"resources,omitempty"`
+	Sources            []Source               `json:"sources,omitempty"`
+	References         []Reference            `json:"componentReferences,omitempty"`
 }
 
 type Resource struct {
 	ObjectMeta    `json:",inline"`
 	ExtraIdentity map[string]string `json:"extraIdentity,omitempty"`
-	SourceRefs    []*SourceRef      `json:"sourceRefs,omitempty"`
+	SourceRefs    []SourceRef       `json:"sourceRefs,omitempty"`
 	Type          string            `json:"type"`
 	Relation      string            `json:"relation"`
-	Access        Access            `json:"access"`
+	Access        runtime.Typed     `json:"access"`
 	Digest        *Digest           `json:"digest,omitempty"`
 	Size          int64             `json:"size,omitempty"`
 }
@@ -85,7 +53,7 @@ func (r *Resource) GetIdentity() map[string]string {
 	if m == nil {
 		m = make(map[string]string)
 	}
-	m["name"] = r.Name
+	m["name"] = r.GetType().GetName()
 	return m
 }
 
@@ -93,7 +61,7 @@ type Source struct {
 	ObjectMeta    `json:",inline"`
 	ExtraIdentity map[string]string `json:"extraIdentity,omitempty"`
 	Type          string            `json:"type"`
-	Access        Access            `json:"access"`
+	Access        runtime.Typed     `json:"access"`
 }
 
 func (r *Source) GetIdentity() map[string]string {
@@ -101,21 +69,8 @@ func (r *Source) GetIdentity() map[string]string {
 	if m == nil {
 		m = make(map[string]string)
 	}
-	m["name"] = r.Name
+	m["name"] = r.GetType().GetName()
 	return m
-}
-
-type Access struct {
-	runtime.Typed `json:",inline"`
-}
-
-func (a *Access) UnmarshalJSON(data []byte) error {
-	a.Typed = &runtime.Raw{}
-	return json.Unmarshal(data, a.Typed)
-}
-
-func (a *Access) MarshalJSON() ([]byte, error) {
-	return json.Marshal(a.Typed)
 }
 
 type Reference struct {
@@ -124,12 +79,12 @@ type Reference struct {
 	Component     string            `json:"componentName"`
 	Version       string            `json:"version"`
 	Digest        Digest            `json:"digest,omitempty"`
-	Labels        []*Label          `json:"labels,omitempty"`
+	Labels        []Label           `json:"labels,omitempty"`
 }
 
 type SourceRef struct {
 	IdentitySelector map[string]string `json:"identitySelector,omitempty"`
-	Labels           map[string]string `json:"labels,omitempty"`
+	Labels           []Label           `json:"labels,omitempty"`
 }
 
 type Meta struct {
@@ -137,14 +92,14 @@ type Meta struct {
 }
 
 type ObjectMeta struct {
-	ComponentIdentity `json:",inline"`
-	Labels            []*Label `json:"labels,omitempty"`
+	runtime.Identity `json:",inline"`
+	Labels           []Label `json:"labels,omitempty"`
 }
 
 func (o *ObjectMeta) String() string {
-	base := o.Name
-	if o.Version != "" {
-		base += ":" + o.Version
+	base := o.GetType().GetName()
+	if o.GetType().GetVersion() != "" {
+		base += ":" + o.GetType().GetVersion()
 	}
 	if o.Labels != nil {
 		base += fmt.Sprintf(" (%v)", o.Labels)
