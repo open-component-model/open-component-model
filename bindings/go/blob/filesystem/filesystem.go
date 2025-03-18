@@ -60,10 +60,13 @@ func NewFS(base string, flag int) (FileSystem, error) {
 }
 
 type osFileSystem struct {
+	// base is the base path of the filesystem
 	base string
-
+	// flagMu is a mutex to protect the flag read / write access
 	flagMu sync.RWMutex
-	flag   int
+	// flag is the bitmask applied to limit fs operations with e.g. os.O_RDONLY
+	// see os.OpenFile for details
+	flag int
 }
 
 func (s *osFileSystem) Base() string {
