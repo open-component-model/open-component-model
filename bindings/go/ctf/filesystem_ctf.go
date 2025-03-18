@@ -88,11 +88,11 @@ func (c *FileSystemCTF) SetIndex(index v1.Index) (err error) {
 }
 
 func (c *FileSystemCTF) WriteFile(name string, raw io.Reader) (err error) {
-	if err := c.FileSystem.MkdirAll(filepath.Dir(name), 0755); err != nil {
+	if err := c.FileSystem.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return fmt.Errorf("unable to create directory: %w", err)
 	}
 	var file fs.File
-	if file, err = c.FileSystem.OpenFile(name, os.O_CREATE|os.O_WRONLY, 0644); err != nil {
+	if file, err = c.FileSystem.OpenFile(name, os.O_CREATE|os.O_WRONLY, 0o644); err != nil {
 		return fmt.Errorf("unable to open artifact index: %w", err)
 	}
 	defer func() {

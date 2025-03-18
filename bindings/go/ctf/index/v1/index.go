@@ -75,7 +75,6 @@ func NewIndex() Index {
 }
 
 func (i *index) AddArtifact(a *ArtifactMetadata) {
-
 	i.Artifacts = append(i.Artifacts, a)
 }
 

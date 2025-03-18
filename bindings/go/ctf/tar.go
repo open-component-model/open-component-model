@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
@@ -88,7 +87,7 @@ func extractTARToFilesystemCTF(reader *tar.Reader, ctf *FileSystemCTF) (err erro
 				return fmt.Errorf("unable to write file: %w", err)
 			}
 		case tar.TypeDir:
-			if err = os.MkdirAll(header.Name, 0755); err != nil {
+			if err = os.MkdirAll(header.Name, 0o755); err != nil {
 				return fmt.Errorf("unable to create directory: %w", err)
 			}
 		}
@@ -118,7 +117,7 @@ func Archive(ctf CTF, path string, format FileFormat) error {
 // The directory is created if it does not exist.
 // The blobs are written to the blobs directory concurrently.
 func ArchiveDirectory(ctf CTF, path string) error {
-	if err := os.Mkdir(path, 0755); err != nil {
+	if err := os.Mkdir(path, 0o755); err != nil {
 		return fmt.Errorf("unable to create directory: %w", err)
 	}
 
@@ -176,7 +175,7 @@ func ArchiveDirectory(ctf CTF, path string) error {
 //
 // see ArchiveTARToWriter for more details.
 func ArchiveTAR(ctf CTF, path string, format FileFormat) (err error) {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("unable to open file for writing ctf archive: %w", err)
 	}
@@ -251,7 +250,7 @@ func archiveIndex(ctf CTF, tarWriter *tar.Writer, buf []byte) (err error) {
 	}
 	if err := tarWriter.WriteHeader(&tar.Header{
 		Name: v1.ArtifactIndexFileName,
-		Mode: 0644,
+		Mode: 0o644,
 		Size: int64(len(rawIdx)),
 	}); err != nil {
 		return fmt.Errorf("unable to write index header: %w", err)

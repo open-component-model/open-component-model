@@ -151,7 +151,7 @@ func WorkWithinCTF(path string, flag int, work func(ctf CTF) error) error {
 
 	if flag&O_RDWR != 0 && (format == FormatTAR || format == FormatTGZ) {
 		slog.Debug(
-			"work within ctf has concluded and format format and mode indicates it needs to be rearchived, this might take a while",
+			"work within ctf has concluded and format and mode indicates it needs to be rearchived, this might take a while",
 			slog.String("path", path),
 			slog.String("format", format.String()),
 			slog.String("mode", "readwrite"),
