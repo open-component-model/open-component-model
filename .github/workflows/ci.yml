@@ -58,7 +58,7 @@ jobs:
             const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
             
-            if (process.env.check_only_changed) {
+            if (process.env.check_only_changed === "true") {
               console.log(`Filtering modules based on changes: ${JSON.stringify(changeJson)}`);
               const filteredModules = modulesJson.filter(module => {
                 return changeJson.some(change => change.includes(module));
@@ -156,8 +156,17 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     name: "Code Generation"
+    needs: discover_modules
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ matrix.project }}
+            bindings/go/generator
+            Taskfile.yml
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
