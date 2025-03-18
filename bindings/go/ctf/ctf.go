@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 

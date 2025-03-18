@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
@@ -129,7 +128,6 @@ func ArchiveDirectory(ctf CTF, path string) error {
 		return fmt.Errorf("unable to setup file system ctf: %w", err)
 	}
 	if err := os.Mkdir(path, 0o755); os.IsExist(err) {
-
 	} else if err != nil {
 		return fmt.Errorf("unable to create directory: %w", err)
 	} else {
