@@ -9,9 +9,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
@@ -76,6 +78,9 @@ func extractTARToFilesystemCTF(reader *tar.Reader, ctf *FileSystemCTF) (err erro
 		}
 		if err != nil {
 			return err
+		}
+		if strings.Contains(header.Name, "..") {
+			return fmt.Errorf("invalid tar entry, contains %q: %s", "..", header.Name)
 		}
 		switch header.Typeflag {
 		case tar.TypeReg:
