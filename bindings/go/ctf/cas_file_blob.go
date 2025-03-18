@@ -24,6 +24,7 @@ var (
 	_ blob.ReadOnlyBlob          = (*CASFileBlob)(nil)
 	_ blob.DigestAware           = (*CASFileBlob)(nil)
 	_ blob.DigestPrecalculatable = (*CASFileBlob)(nil)
+	_ blob.SizeAware             = (*CASFileBlob)(nil)
 )
 
 func NewCASFileBlob(fs filesystem.FileSystem, path string) *CASFileBlob {
@@ -58,4 +59,8 @@ func (b *CASFileBlob) SetPrecalculatedDigest(digest string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.digest = digest
+}
+
+func (b *CASFileBlob) Size() (size int64) {
+	return b.blob.Size()
 }

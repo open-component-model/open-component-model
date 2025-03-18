@@ -1,6 +1,7 @@
 package ctf
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log/slog"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
@@ -30,7 +32,7 @@ const (
 )
 
 // formats is a list of all supported formats corresponding to the FileFormat constants.
-var formats = [3]string{"directory", "tar", "tgz"}
+var formats = [4]string{"unknown", "directory", "tar", "tgz"}
 
 func (f FileFormat) String() string {
 	return formats[f]
@@ -105,7 +107,11 @@ func OpenCTF(path string, format FileFormat, flag int) (CTF, error) {
 		}
 		slog.Debug("ctf is automatically extracted and will need to be rearchived to persist", slog.String("path", tmp))
 
-		return ExtractTAR(tmp, path, format, flag)
+		ctf, err := ExtractTAR(tmp, path, format, flag)
+		if errors.Is(err, os.ErrNotExist) && flag&O_CREATE != 0 {
+			return OpenCTFFromOSPath(tmp, flag)
+		}
+		return ctf, nil
 	default:
 		return nil, ErrUnsupportedFormat
 	}
@@ -117,6 +123,9 @@ func OpenCTF(path string, format FileFormat, flag int) (CTF, error) {
 // For more information on how flag behaves for FormatTAR (and FormatTGZ), see ExtractTAR.
 func OpenCTFByFileExtension(path string, flag int) (archive CTF, discovered FileFormat, err error) {
 	ext := filepath.Ext(path)
+	if doubleGzExt := ".gz"; ext == doubleGzExt {
+		ext = filepath.Ext(path[:len(path)-len(doubleGzExt)]) + ext
+	}
 	switch ext {
 	case ".tgz", ".tar.gz":
 		discovered = FormatTGZ

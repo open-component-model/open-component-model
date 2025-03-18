@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
@@ -111,50 +112,61 @@ func Archive(ctf CTF, path string, format FileFormat) error {
 	}
 }
 
-// ArchiveDirectory archives the CTF to the specified directory.
+// ArchiveDirectory archives the CTF to the specified path with FormatDirectory.
 // The blobs are copied to the directory and the index is written to the index file.
 // The CTF is not modified and only read from.
 // The directory is created if it does not exist.
 // The blobs are written to the blobs directory concurrently.
 func ArchiveDirectory(ctf CTF, path string) error {
-	if err := os.Mkdir(path, 0o755); err != nil {
-		return fmt.Errorf("unable to create directory: %w", err)
-	}
+	var fsCTF CTF
 
 	blobs, err := ctf.ListBlobs()
 	if err != nil {
 		return fmt.Errorf("unable to list blobs: %w", err)
 	}
-	fsCTF, err := OpenCTFFromOSPath(path, O_RDWR)
-	if err != nil {
+
+	if fsCTF, err = OpenCTFFromOSPath(path, O_RDWR|O_CREATE); err != nil {
 		return fmt.Errorf("unable to setup file system ctf: %w", err)
 	}
+	if err := os.Mkdir(path, 0o755); os.IsExist(err) {
 
-	var wg sync.WaitGroup
-	wg.Add(len(blobs))
-	errs := make(chan error, len(blobs))
-	for _, digest := range blobs {
-		go func(digest string) {
-			defer wg.Done()
-			b, err := ctf.GetBlob(digest)
-			if err != nil {
-				errs <- fmt.Errorf("unable to get blob %s: %w", digest, err)
-				return
-			}
-			if err := fsCTF.SaveBlob(b); err != nil {
-				errs <- fmt.Errorf("unable to save blob %s: %w", digest, err)
-				return
-			}
-		}(digest)
+	} else if err != nil {
+		return fmt.Errorf("unable to create directory: %w", err)
+	} else {
+		if fsCTF, err = OpenCTFFromOSPath(path, O_RDWR); err != nil {
+			return fmt.Errorf("unable to setup file system ctf: %w", err)
+		}
 	}
-	wg.Wait()
 
-	err = nil
-	for r := range errs {
-		err = errors.Join(err, r)
-	}
-	if err != nil {
-		return err
+	if len(blobs) > 0 {
+		var wg sync.WaitGroup
+		wg.Add(len(blobs))
+		errs := make(chan error, len(blobs))
+
+		for _, digest := range blobs {
+			go func(digest string) {
+				defer wg.Done()
+				b, err := ctf.GetBlob(digest)
+				if err != nil {
+					errs <- fmt.Errorf("unable to get blob %s: %w", digest, err)
+					return
+				}
+				if err := fsCTF.SaveBlob(b); err != nil {
+					errs <- fmt.Errorf("unable to save blob %s: %w", digest, err)
+					return
+				}
+				errs <- nil
+			}(digest)
+		}
+		wg.Wait()
+
+		var err error
+		for i := 0; i < len(blobs); i++ {
+			err = errors.Join(<-errs)
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	idx, err := ctf.GetIndex()

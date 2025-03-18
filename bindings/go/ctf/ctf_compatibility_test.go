@@ -37,7 +37,8 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			archive, err := ctf.OpenCTF(tc.path, tc.format, ctf.O_RDONLY)
+			archive, discovered, err := ctf.OpenCTFByFileExtension(tc.path, ctf.O_RDONLY)
+			r.Equal(tc.format, discovered, "discovered format should be the same as the one used to open")
 			r.NoError(err)
 			blobs, err := archive.ListBlobs()
 			r.NoError(err)
@@ -53,9 +54,16 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 
 			r.Error(archive.SetIndex(idx), "should not be able to set index on read-only archive")
 
-			blob, err := archive.GetBlob("sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08")
+			dig := "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+			blob, err := archive.GetBlob(dig)
 			r.NoError(err)
 			r.NotNil(blob)
+			r.IsType(&ctf.CASFileBlob{}, blob)
+			r.True(blob.(*ctf.CASFileBlob).HasPrecalculatedDigest())
+			digFromBlob, known := blob.(*ctf.CASFileBlob).Digest()
+			r.True(known)
+			r.Equal(dig, digFromBlob)
+
 			readCloser, err := blob.ReadCloser()
 			r.NoError(err)
 			t.Cleanup(func() {
@@ -64,6 +72,19 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 			data, err := io.ReadAll(readCloser)
 			r.NoError(err)
 			r.Equal("test", string(data))
+		})
+
+		t.Run("work within "+tc.name, func(t *testing.T) {
+			r := require.New(t)
+			err := ctf.WorkWithinCTF(tc.path, ctf.O_RDONLY, func(ctf ctf.CTF) error {
+				blobs, err := ctf.ListBlobs()
+				if err != nil {
+					return err
+				}
+				r.Len(blobs, 4)
+				return nil
+			})
+			r.NoError(err, "should be able to work within CTF")
 		})
 	}
 }

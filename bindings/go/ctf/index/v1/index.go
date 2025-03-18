@@ -17,13 +17,13 @@ var ErrSchemaVersionMismatch = fmt.Errorf("schema version mismatch, only %v is s
 // It is used to store metadata about the artifacts in a CTF and used for discovery purposes
 // The Index is canonically stored in the root of a CTF as ArtifactIndexFileName with SchemaVersion.
 type Index interface {
-	AddArtifact(a *ArtifactMetadata)
-	GetArtifacts() []*ArtifactMetadata
+	AddArtifact(a ArtifactMetadata)
+	GetArtifacts() []ArtifactMetadata
 }
 
 type index struct {
 	Versioned `json:",inline"`
-	Artifacts []*ArtifactMetadata `json:"artifacts"`
+	Artifacts []ArtifactMetadata `json:"artifacts"`
 }
 
 // ArtifactMetadata is a struct that contains metadata about an artifact stored in a CTF.
@@ -74,10 +74,10 @@ func NewIndex() Index {
 	}
 }
 
-func (i *index) AddArtifact(a *ArtifactMetadata) {
+func (i *index) AddArtifact(a ArtifactMetadata) {
 	i.Artifacts = append(i.Artifacts, a)
 }
 
-func (i *index) GetArtifacts() []*ArtifactMetadata {
+func (i *index) GetArtifacts() []ArtifactMetadata {
 	return i.Artifacts
 }
