@@ -1,13 +1,18 @@
 package ctf_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"testing"
 
+	"github.com/nlepage/go-tarfs"
+	"github.com/opencontainers/go-digest"
+	ociimagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
-	"ocm.software/open-component-model/bindings/go/ctf/compatibility/artifactset"
 )
 
 // Test_CTF_Basic_ReadOnly_Compatibility tests the compatibility of CTF archives
@@ -136,29 +141,58 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 		blob, err := archive.GetBlob("sha256:e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b")
 		r.NoError(err)
 
-		as, err := artifactset.NewArtifactSetFromBlob(blob)
-		t.Cleanup(func() {
-			r.NoError(as.Close())
+		t.Run("interpret as artifact set", func(t *testing.T) {
+			r := require.New(t)
+			as, err := ctf.NewArtifactSetFromBlob(blob)
+			t.Cleanup(func() {
+				r.NoError(as.Close())
+			})
+			r.NoError(err)
+
+			blobs, err = as.ListBlobs()
+			r.NoError(err)
+			r.Len(blobs, 3)
+
+			artifactSetIndex := as.GetIndex()
+			r.Len(artifactSetIndex.Manifests, 1)
+
+			nestedBlob, err := as.GetBlob(artifactSetIndex.Manifests[0].Digest.String())
+			r.NoError(err)
+			r.IsType(&ctf.ArtifactBlob{}, nestedBlob)
+			nestedBlobStream, err := nestedBlob.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() {
+				r.NoError(nestedBlobStream.Close())
+			})
+			nestedBlobData, err := io.ReadAll(nestedBlobStream)
+			r.NoError(err)
+			r.NotEmpty(nestedBlobData)
+
+			t.Run("convert to OCI image layout", func(t *testing.T) {
+				r := require.New(t)
+				prefixFromDescriptor := "my-repo-from-external-descriptor/my-image"
+				var buf bytes.Buffer
+				r.NoError(ctf.ConvertToOCIImageLayout(as, &buf, func(digest digest.Digest, oldName string) (string, error) {
+					return fmt.Sprintf("%s:%s@%s", prefixFromDescriptor, oldName, digest.String()), nil
+				}))
+
+				ociLayoutFs, err := tarfs.New(&buf)
+				r.NoError(err)
+
+				rawOCIIndex, err := ociLayoutFs.Open("index.json")
+				r.NoError(err)
+				t.Cleanup(func() {
+					r.NoError(rawOCIIndex.Close())
+				})
+
+				index := ociimagespecv1.Index{}
+				r.NoError(json.NewDecoder(rawOCIIndex).Decode(&index))
+				r.Len(index.Manifests, 1)
+				r.NotNil(artifactSetIndex.Manifests[0].Annotations[ociimagespecv1.AnnotationRefName])
+				r.Equal(
+					fmt.Sprintf("%s:%s@%s", prefixFromDescriptor, "6.7.1", "sha256:62be4af3382a4493cb7f1dd4ec47bcb28f1863b615fc9e4a1dceefbe93898dd0"),
+					artifactSetIndex.Manifests[0].Annotations[ociimagespecv1.AnnotationRefName])
+			})
 		})
-		r.NoError(err)
-
-		blobs, err = as.ListBlobs()
-		r.NoError(err)
-		r.Len(blobs, 3)
-
-		artifactSetIndex := as.GetIndex()
-		r.Len(artifactSetIndex.Manifests, 1)
-
-		nestedBlob, err := as.GetBlob(artifactSetIndex.Manifests[0].Digest.String())
-		r.NoError(err)
-		r.IsType(&artifactset.ArtifactBlob{}, nestedBlob)
-		nestedBlobStream, err := nestedBlob.ReadCloser()
-		r.NoError(err)
-		t.Cleanup(func() {
-			r.NoError(nestedBlobStream.Close())
-		})
-		nestedBlobData, err := io.ReadAll(nestedBlobStream)
-		r.NoError(err)
-		r.NotEmpty(nestedBlobData)
 	})
 }

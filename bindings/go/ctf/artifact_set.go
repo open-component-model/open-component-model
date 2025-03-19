@@ -1,6 +1,7 @@
-package artifactset
+package ctf
 
 import (
+	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
@@ -11,10 +12,10 @@ import (
 	"path/filepath"
 
 	"github.com/nlepage/go-tarfs"
+	"github.com/opencontainers/go-digest"
 	ociimagespec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/ctf"
 )
 
 // MediaType is the definition of the ArtifactSet Media Type in old format CTFs
@@ -68,7 +69,7 @@ const MediaType = "application/vnd.oci.image.manifest.v1+tar+gzip"
 // OCI Image Layouts.
 type ArtifactSet interface {
 	io.Closer
-	ctf.ReadOnlyBlobStore
+	ReadOnlyBlobStore
 	GetIndex() ociimagespec.Index
 }
 
@@ -145,6 +146,107 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (ArtifactSet, error) {
 	}, nil
 }
 
+// ConvertToOCIImageLayout converts an ArtifactSet to an OCI Image Layout in tar format.
+// It will write the index.json and all blobs to the writer.
+// It converts old blobs according to a given manifestNameFn.
+//
+// The manifestNameFn is used to convert the old name of the blob to the new name.
+// Example:
+//
+//	func manifestNameFn(digest digest.Digest, oldName string) (string, error) {
+//		return fmt.Sprintf("ghcr.io/open-component-model/%s", digest), nil
+//	}
+//
+// This is needed due to the lossy typing that requires the component descriptor (see ArtifactSet for information).
+func ConvertToOCIImageLayout(as ArtifactSet, writer io.Writer, manifestNameFn func(digest digest.Digest, oldName string) (string, error)) (err error) {
+	tw := tar.NewWriter(writer)
+	defer func() {
+		err = errors.Join(err, tw.Close())
+	}()
+
+	layout := ociimagespec.ImageLayout{Version: ociimagespec.ImageLayoutVersion}
+	layoutRaw, err := json.Marshal(layout)
+	if err != nil {
+		return fmt.Errorf("unable to marshal layout: %w", err)
+	}
+	if err := tw.WriteHeader(&tar.Header{
+		Name: ociimagespec.ImageLayoutFile,
+		Size: int64(len(layoutRaw)),
+	}); err != nil {
+		return fmt.Errorf("unable to write layout header: %w", err)
+	}
+	if _, err := tw.Write(layoutRaw); err != nil {
+		return fmt.Errorf("unable to write layout: %w", err)
+	}
+
+	idx := as.GetIndex()
+	for _, manifest := range idx.Manifests {
+		annotations := manifest.Annotations
+		if annotations == nil {
+			continue
+		}
+		name, ok := annotations[ociimagespec.AnnotationRefName]
+		if !ok {
+			continue
+		}
+		name, err = manifestNameFn(manifest.Digest, name)
+		if err != nil {
+			return fmt.Errorf("unable to generate manifest name: %w", err)
+		}
+		annotations[ociimagespec.AnnotationRefName] = name
+	}
+	idxJson, err := json.Marshal(idx)
+	if err != nil {
+		return fmt.Errorf("unable to marshal index.json: %w", err)
+	}
+	if err := tw.WriteHeader(&tar.Header{
+		Name: ociimagespec.ImageIndexFile,
+		Size: int64(len(idxJson)),
+	}); err != nil {
+		return fmt.Errorf("unable to write index.json header: %w", err)
+	}
+	if _, err := tw.Write(idxJson); err != nil {
+		return fmt.Errorf("unable to write index.json: %w", err)
+	}
+
+	blobs, err := as.ListBlobs()
+	if err != nil {
+		return fmt.Errorf("unable to list blobs: %w", err)
+	}
+
+	for _, b := range blobs {
+		dig, err := digest.Parse(b)
+		if err != nil {
+			return fmt.Errorf("unable to parse digest %s: %w", b, err)
+		}
+		b, err := as.GetBlob(b)
+		if err != nil {
+			return fmt.Errorf("unable to get blob %s: %w", b, err)
+		}
+		bsizeAware, ok := b.(blob.SizeAware)
+		if !ok {
+			return fmt.Errorf("blob %s does not have a Size", b)
+		}
+
+		if err := tw.WriteHeader(&tar.Header{
+			Name: filepath.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded()),
+			Size: bsizeAware.Size(),
+		}); err != nil {
+			return fmt.Errorf("unable to write header for blob %s: %w", b, err)
+		}
+
+		rc, err := b.ReadCloser()
+		if err != nil {
+			return fmt.Errorf("unable to read blob %s: %w", b, err)
+		}
+		if _, err := io.Copy(tw, rc); err != nil {
+			return fmt.Errorf("unable to copy blob %s: %w", b, err)
+		}
+	}
+
+	return nil
+}
+
 // fileSystem is a subset of the tarfs interface that is used to
 // access the tar underneath with Stat and ReadDir.
 // This is needed because there is no such interface available from tarfs directly
@@ -168,7 +270,7 @@ func (a *artifactSet) GetIndex() ociimagespec.Index {
 }
 
 func (a *artifactSet) ListBlobs() (digests []string, err error) {
-	dir, err := a.fs.ReadDir(ctf.BlobsDirectoryName)
+	dir, err := a.fs.ReadDir(BlobsDirectoryName)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list blobs: %w", err)
 	}
@@ -176,7 +278,7 @@ func (a *artifactSet) ListBlobs() (digests []string, err error) {
 	digests = make([]string, 0, len(dir))
 	for _, entry := range dir {
 		if entry.Type().IsRegular() {
-			digests = append(digests, ctf.ToDigest(entry.Name()))
+			digests = append(digests, ToDigest(entry.Name()))
 		}
 	}
 	return digests, nil
@@ -205,7 +307,7 @@ var (
 )
 
 func newArtifactBlob(fs fileSystem, digest string) (blob.ReadOnlyBlob, error) {
-	name := filepath.Join(ctf.BlobsDirectoryName, ctf.ToBlobFileName(digest))
+	name := filepath.Join(BlobsDirectoryName, ToBlobFileName(digest))
 	f, err := fs.Stat(name)
 	if err != nil {
 		return nil, fmt.Errorf("unable to stat file %q: %w", name, err)
