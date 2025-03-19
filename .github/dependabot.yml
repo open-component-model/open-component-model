@@ -18,6 +18,7 @@ updates:
   - component/github-actions
 - package-ecosystem: "gomod"
   directories:
+    - "/cli"
     - "/bindings/go/*"
   groups:
     go:
