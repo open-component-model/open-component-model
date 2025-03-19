@@ -42,6 +42,6 @@ func (u Unstructured) MarshalJSON() ([]byte, error) {
 	return json.Marshal(u.Data)
 }
 
-func (u Unstructured) UnmarshalJSON(data []byte) error {
+func (u *Unstructured) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, &u.Data)
 }
