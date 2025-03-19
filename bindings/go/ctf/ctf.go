@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
@@ -65,22 +66,30 @@ type CTF interface {
 
 // IndexStore provides access to the index of a CTF.
 type IndexStore interface {
-	// GetIndex returns the artifact index of the CTF.
-	GetIndex() (v1.Index, error)
+	ReadOnlyIndexStore
 	// SetIndex sets the artifact index of the CTF.
 	SetIndex(index v1.Index) (err error)
 }
 
+type ReadOnlyIndexStore interface {
+	// GetIndex returns the artifact index of the CTF.
+	GetIndex() (v1.Index, error)
+}
+
 // BlobStore provides access to the blobs of a CTF.
 type BlobStore interface {
-	// ListBlobs returns a list of all blobs in the CTF irrespective of if they are referenced by the index.
-	ListBlobs() ([]string, error)
-	// GetBlob returns the blob with the specified digest.
-	GetBlob(digest string) (blob.ReadOnlyBlob, error)
+	ReadOnlyBlobStore
 	// SaveBlob saves the blob to the CTF.
 	SaveBlob(blob blob.ReadOnlyBlob) (err error)
 	// DeleteBlob deletes the blob with the specified digest from the CTF.
 	DeleteBlob(digest string) (err error)
+}
+
+type ReadOnlyBlobStore interface {
+	// ListBlobs returns a list of all blobs in the CTF irrespective of if they are referenced by the index.
+	ListBlobs() ([]string, error)
+	// GetBlob returns the blob with the specified digest.
+	GetBlob(digest string) (blob.ReadOnlyBlob, error)
 }
 
 // OpenCTF opens a CTF at the specified path with the specified format.
@@ -114,6 +123,16 @@ func OpenCTF(path string, format FileFormat, flag int) (CTF, error) {
 	default:
 		return nil, ErrUnsupportedFormat
 	}
+}
+
+// OpenCTFFromOSPath opens a CTF at the specified path with the specified flags.
+// Supported flags are O_RDONLY, O_RDWR, and O_CREATE, other flags can lead to undefined behavior.
+func OpenCTFFromOSPath(path string, flag int) (*FileSystemCTF, error) {
+	fileSystem, err := filesystem.NewFS(path, flag)
+	if err != nil {
+		return nil, fmt.Errorf("unable to setup file system: %w", err)
+	}
+	return NewFileSystemCTF(fileSystem), nil
 }
 
 // OpenCTFByFileExtension opens a CTF at the specified path by determining the format from the file extension.

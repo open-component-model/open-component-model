@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -19,39 +20,54 @@ const (
 	BlobsDirectoryName = "blobs"
 )
 
+// ioBufPool is a pool of byte buffers that can be reused for copying content
+// between i/o relevant data, such as files.
+var ioBufPool = sync.Pool{
+	New: func() interface{} {
+		// the buffer size should be larger than or equal to 128 KiB
+		// for performance considerations.
+		// we choose 1 MiB here so there will be less disk I/O.
+		buffer := make([]byte, blob.DefaultArchiveBlobBufferSize)
+		return &buffer
+	},
+}
+
+// FileSystemCTF is a CTF implementation that uses any filesystem.FileSystem as the underlying storage.
+// It is used to read and write CTFs from a directory structure.
+// This is the canonical implementation of the CTF interface, accessing
+//   - the index file at v1.ArtifactIndexFileName
+//   - the blobs at BlobsDirectoryName
+//
+// The CTF offered will always be of type FormatDirectory.
 type FileSystemCTF struct {
-	filesystem.FileSystem
+	fs filesystem.FileSystem
 }
 
-var (
-	_ CTF                   = (*FileSystemCTF)(nil)
-	_ filesystem.FileSystem = (*FileSystemCTF)(nil)
-)
+var _ CTF = (*FileSystemCTF)(nil)
 
-func OpenCTFFromOSPath(path string, flag int) (*FileSystemCTF, error) {
-	fileSystem, err := filesystem.NewFS(path, flag)
-	if err != nil {
-		return nil, fmt.Errorf("unable to setup file system: %w", err)
-	}
-	return OpenCTFFromFilesystem(fileSystem), nil
-}
-
-func OpenCTFFromFilesystem(fileSystem filesystem.FileSystem) *FileSystemCTF {
+// NewFileSystemCTF opens a CTF with the specified filesystem as its root
+func NewFileSystemCTF(filesystem filesystem.FileSystem) *FileSystemCTF {
 	return &FileSystemCTF{
-		FileSystem: fileSystem,
+		fs: filesystem,
 	}
 }
 
+// FS returns the underlying filesystem.FileSystem of the CTF.
+// Note that write operations to the FileSystem can affect the integrity of the CTF.
+// TODO(jakobmoellerdev): restrict returned FileSystem to only allow read operations.
 func (c *FileSystemCTF) FS() filesystem.FileSystem {
-	return c.FileSystem
+	return c.fs
 }
 
+// Format always returns FormatDirectory for FileSystemCTF.
 func (c *FileSystemCTF) Format() FileFormat {
 	return FormatDirectory
 }
 
+// GetIndex returns the v1.ArtifactIndexFileName parsed as v1.Index of the CTF.
+// If the CTF is empty, an empty index is returned so it can be set with SetIndex.
 func (c *FileSystemCTF) GetIndex() (index v1.Index, err error) {
-	fi, err := c.FileSystem.Stat(v1.ArtifactIndexFileName)
+	fi, err := c.fs.Stat(v1.ArtifactIndexFileName)
 	if errors.Is(err, fs.ErrNotExist) {
 		return v1.NewIndex(), nil
 	}
@@ -64,7 +80,7 @@ func (c *FileSystemCTF) GetIndex() (index v1.Index, err error) {
 	}
 
 	var indexFile fs.File
-	if indexFile, err = c.FileSystem.Open(v1.ArtifactIndexFileName); err != nil {
+	if indexFile, err = c.fs.Open(v1.ArtifactIndexFileName); err != nil {
 		return nil, fmt.Errorf("unable to open artifact index: %w", err)
 	}
 	defer func() {
@@ -78,21 +94,24 @@ func (c *FileSystemCTF) GetIndex() (index v1.Index, err error) {
 	return index, nil
 }
 
+// SetIndex sets the v1.ArtifactIndexFileName of the CTF to the given index.
 func (c *FileSystemCTF) SetIndex(index v1.Index) (err error) {
 	data, err := v1.Encode(index)
 	if err != nil {
 		return fmt.Errorf("unable to encode artifact index: %w", err)
 	}
 
-	return c.WriteFile(v1.ArtifactIndexFileName, bytes.NewReader(data))
+	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data))
 }
 
-func (c *FileSystemCTF) WriteFile(name string, raw io.Reader) (err error) {
-	if err := c.FileSystem.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+// writeFile writes the given raw data to the given name in the CTF.
+// If the directory does not exist, it will be created.
+func (c *FileSystemCTF) writeFile(name string, raw io.Reader) (err error) {
+	if err := c.fs.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return fmt.Errorf("unable to create directory: %w", err)
 	}
 	var file fs.File
-	if file, err = c.FileSystem.OpenFile(name, os.O_CREATE|os.O_WRONLY, 0o644); err != nil {
+	if file, err = c.fs.OpenFile(name, os.O_CREATE|os.O_WRONLY, 0o644); err != nil {
 		return fmt.Errorf("unable to open artifact index: %w", err)
 	}
 	defer func() {
@@ -104,29 +123,34 @@ func (c *FileSystemCTF) WriteFile(name string, raw io.Reader) (err error) {
 		return fmt.Errorf("file %s is read only and cannot be saved", name)
 	}
 
-	if _, err = io.Copy(writeable, raw); err != nil {
+	buf := ioBufPool.Get().(*[]byte)
+	defer ioBufPool.Put(buf)
+	if _, err = io.CopyBuffer(writeable, raw, *buf); err != nil {
 		return fmt.Errorf("unable to write artifact index: %w", err)
 	}
 
 	return nil
 }
 
+// DeleteBlob deletes the blob with the given digest from the CTF by removing the file from BlobsDirectoryName.
 func (c *FileSystemCTF) DeleteBlob(digest string) (err error) {
-	if err = c.FileSystem.Remove(filepath.Join(BlobsDirectoryName, ToBlobFileName(digest))); err != nil {
+	if err = c.fs.Remove(filepath.Join(BlobsDirectoryName, ToBlobFileName(digest))); err != nil {
 		return fmt.Errorf("unable to delete blob: %w", err)
 	}
 
 	return nil
 }
 
+// GetBlob returns the blob with the given digest from the CTF by reading the file from BlobsDirectoryName.
 func (c *FileSystemCTF) GetBlob(digest string) (blob.ReadOnlyBlob, error) {
-	b := NewCASFileBlob(c.FileSystem, filepath.Join(BlobsDirectoryName, ToBlobFileName(digest)))
+	b := NewCASFileBlob(c.fs, filepath.Join(BlobsDirectoryName, ToBlobFileName(digest)))
 	b.SetPrecalculatedDigest(digest)
 	return b, nil
 }
 
+// ListBlobs returns a list of all blobs in the CTF by listing the files in BlobsDirectoryName.
 func (c *FileSystemCTF) ListBlobs() (digests []string, err error) {
-	dir, err := c.FileSystem.ReadDir(BlobsDirectoryName)
+	dir, err := c.fs.ReadDir(BlobsDirectoryName)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list blobs: %w", err)
 	}
@@ -160,16 +184,20 @@ func (c *FileSystemCTF) SaveBlob(b blob.ReadOnlyBlob) (err error) {
 		return errors.New("blob does not have a digest that can be used to save it")
 	}
 
-	return c.WriteFile(filepath.Join(
+	return c.writeFile(filepath.Join(
 		BlobsDirectoryName,
 		ToBlobFileName(dig),
 	), data)
 }
 
+// ToBlobFileName converts a digest to a blob file name by replacing the ":" with ".", which is the
+// default separator for blobs in the CTF under BlobsDirectoryName.
 func ToBlobFileName(digest string) string {
 	return strings.ReplaceAll(digest, ":", ".")
 }
 
+// ToDigest converts a blob file name to a digest by replacing the "." with ":", which is the
+// default separator for digests in standard notation.
 func ToDigest(blobFileName string) string {
 	return strings.ReplaceAll(blobFileName, ".", ":")
 }

@@ -1,14 +1,13 @@
 package ctf_test
 
 import (
-	"compress/gzip"
 	"io"
 	"testing"
 
-	"github.com/nlepage/go-tarfs"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/ctf/compatibility/artifactset"
 )
 
 // Test_CTF_Basic_ReadOnly_Compatibility tests the compatibility of CTF archives
@@ -137,31 +136,29 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 		blob, err := archive.GetBlob("sha256:e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b")
 		r.NoError(err)
 
-		artifactSet, err := blob.ReadCloser()
-		r.NoError(err)
+		as, err := artifactset.NewArtifactSetFromBlob(blob)
 		t.Cleanup(func() {
-			r.NoError(artifactSet.Close())
+			r.NoError(as.Close())
 		})
-
-		unzippedArtifactSet, err := gzip.NewReader(artifactSet)
-		r.NoError(err)
-		t.Cleanup(func() {
-			r.NoError(unzippedArtifactSet.Close())
-		})
-
-		fs, err := tarfs.New(unzippedArtifactSet)
 		r.NoError(err)
 
-		layout, err := fs.Open("oci-layout")
+		blobs, err = as.ListBlobs()
 		r.NoError(err)
-		t.Cleanup(func() {
-			r.NoError(layout.Close())
-		})
+		r.Len(blobs, 3)
 
-		index, err := fs.Open("index.json")
+		artifactSetIndex := as.GetIndex()
+		r.Len(artifactSetIndex.Manifests, 1)
+
+		nestedBlob, err := as.GetBlob(artifactSetIndex.Manifests[0].Digest.String())
+		r.NoError(err)
+		r.IsType(&artifactset.ArtifactBlob{}, nestedBlob)
+		nestedBlobStream, err := nestedBlob.ReadCloser()
 		r.NoError(err)
 		t.Cleanup(func() {
-			r.NoError(index.Close())
+			r.NoError(nestedBlobStream.Close())
 		})
+		nestedBlobData, err := io.ReadAll(nestedBlobStream)
+		r.NoError(err)
+		r.NotEmpty(nestedBlobData)
 	})
 }
