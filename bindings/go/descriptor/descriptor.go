@@ -7,11 +7,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// cli needs sample of transfer (source repo - target repo + parsing)
-// once the command starts up, load plugins, get capabilities of plugins, match repository type from the command
-// download component version -> hands me descriptor
-// use descriptor to parse, look for the target plugin and use transfer component version
-//
+const (
+	// ExcludeFromSignature used in digest field for normalisationAlgorithm (in combination with NoDigest for hashAlgorithm and value)
+	// to indicate the resource content should not be part of the signature.
+	ExcludeFromSignature = "EXCLUDE-FROM-SIGNATURE"
+	// NoDigest used in digest field for hashAlgorithm and value (in combination with ExcludeFromSignature for normalisationAlgorithm)
+	// to indicate the resource content should not be part of the signature.
+	NoDigest = "NO-DIGEST"
+)
 
 type Descriptor struct {
 	Meta       Meta        `json:"meta"`
@@ -46,6 +49,7 @@ type Resource struct {
 	Access        runtime.Raw       `json:"access"`
 	Digest        *Digest           `json:"digest,omitempty"`
 	Size          int64             `json:"size,omitempty"`
+	CreationTime  string            `json:"creationTime,omitempty"`
 }
 
 func (r *Resource) GetIdentity() map[string]string {
@@ -97,7 +101,7 @@ type ObjectMeta struct {
 	Labels  []Label `json:"labels,omitempty"`
 }
 
-func (o *ObjectMeta) String() string {
+func (o ObjectMeta) String() string {
 	base := o.Name
 	if o.Version != "" {
 		base += ":" + o.Version
@@ -130,4 +134,6 @@ type SignatureSpec struct {
 type Label struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+	// Signing describes whether the label should be included into the signature
+	Signing bool `json:"signing,omitempty"`
 }
