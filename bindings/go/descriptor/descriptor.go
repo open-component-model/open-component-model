@@ -20,7 +20,7 @@ type Descriptor struct {
 }
 
 func (d *Descriptor) String() string {
-	base := d.Component.GetType().String()
+	base := d.Component.String()
 	if d.Meta.Version != "" {
 		base += fmt.Sprintf(" (schema version %s)", d.Meta.Version)
 	}
@@ -28,7 +28,7 @@ func (d *Descriptor) String() string {
 }
 
 type Component struct {
-	runtime.Identity   `json:",inline"`
+	ObjectMeta         `json:",inline"`
 	Labels             []Label                `json:"labels,omitempty"`
 	RepositoryContexts []runtime.Unstructured `json:"repositoryContexts,omitempty"`
 	Provider           string                 `json:"provider"`
@@ -43,7 +43,7 @@ type Resource struct {
 	SourceRefs    []SourceRef       `json:"sourceRefs,omitempty"`
 	Type          string            `json:"type"`
 	Relation      string            `json:"relation"`
-	Access        runtime.Typed     `json:"access"`
+	Access        runtime.Raw       `json:"access"`
 	Digest        *Digest           `json:"digest,omitempty"`
 	Size          int64             `json:"size,omitempty"`
 }
@@ -53,7 +53,7 @@ func (r *Resource) GetIdentity() map[string]string {
 	if m == nil {
 		m = make(map[string]string)
 	}
-	m["name"] = r.GetType().GetName()
+	m["name"] = r.Name
 	return m
 }
 
@@ -61,7 +61,7 @@ type Source struct {
 	ObjectMeta    `json:",inline"`
 	ExtraIdentity map[string]string `json:"extraIdentity,omitempty"`
 	Type          string            `json:"type"`
-	Access        runtime.Typed     `json:"access"`
+	Access        runtime.Raw       `json:"access"`
 }
 
 func (r *Source) GetIdentity() map[string]string {
@@ -69,7 +69,7 @@ func (r *Source) GetIdentity() map[string]string {
 	if m == nil {
 		m = make(map[string]string)
 	}
-	m["name"] = r.GetType().GetName()
+	m["name"] = r.Name
 	return m
 }
 
@@ -92,14 +92,15 @@ type Meta struct {
 }
 
 type ObjectMeta struct {
-	runtime.Identity `json:",inline"`
-	Labels           []Label `json:"labels,omitempty"`
+	Name    string  `json:"name"`
+	Version string  `json:"version"`
+	Labels  []Label `json:"labels,omitempty"`
 }
 
 func (o *ObjectMeta) String() string {
-	base := o.GetType().GetName()
-	if o.GetType().GetVersion() != "" {
-		base += ":" + o.GetType().GetVersion()
+	base := o.Name
+	if o.Version != "" {
+		base += ":" + o.Version
 	}
 	if o.Labels != nil {
 		base += fmt.Sprintf(" (%v)", o.Labels)
