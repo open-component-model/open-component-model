@@ -33,7 +33,7 @@ import (
 const ArtifactSetMediaType = "application/vnd.oci.image.manifest.v1+tar+gzip"
 
 // ArtifactSet is the equivalent (deprecated) implementation of
-// https://github.com/open-component-model/ocm/blob/main/api/oci/extensions/repositories/artifactset
+// https://github.com/open-component-model/ocm/tree/2091216b223a5c084895cf501a0570a4de485c09/api/oci/extensions/repositories/artifactset
 //
 // NOTE: Even though it does look similar to an OCI Image Layout, it is not
 // the same. Notable differences are:
@@ -67,13 +67,16 @@ const ArtifactSetMediaType = "application/vnd.oci.image.manifest.v1+tar+gzip"
 //
 // New CTFs should and will always include localBlobs not as artifact sets, but as proper
 // OCI Image Layouts.
-type ArtifactSet interface {
-	io.Closer
-	ReadOnlyBlobStore
-	GetIndex() ociimagespec.Index
+type ArtifactSet struct {
+	close func() error
+	fs    fileSystem
+	idx   ociimagespec.Index
 }
 
-var _ ArtifactSet = (*artifactSet)(nil)
+var (
+	_ io.Closer         = (*ArtifactSet)(nil)
+	_ ReadOnlyBlobStore = (*ArtifactSet)(nil)
+)
 
 // NewArtifactSetFromBlob creates a new ArtifactSet from a blob.
 // It will start owning the readcloser in the blob and needs to be closed due to this.
@@ -81,11 +84,11 @@ var _ ArtifactSet = (*artifactSet)(nil)
 // The gzip format is not detected by ArtifactSetMediaType, but by the magic number in the first 512 bytes of the file.
 // The blob must be a valid ArtifactSet, otherwise an error is returned.
 //
-// The ArtifactSet mereley supports read-only and any future write operation is no longer supported.
+// The ArtifactSet merely supports read-only and any future write operation is no longer supported.
 // All ArtifactSet's encountered in the wild MUST be converted to OCI Image Layouts.
 //
 // See ArtifactSet for more information about the format.
-func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (ArtifactSet, error) {
+func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 	// if we are media type aware, we need to check the media type.
 	// otherwise we do a best effort to detect the media type.
 	// TODO(jakobmoellerdev) based on media type we could immediately detect if we are gzipped or not.
@@ -139,7 +142,7 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (ArtifactSet, error) {
 		return nil, fmt.Errorf("unable to decode index.json: %w", err)
 	}
 
-	return &artifactSet{
+	return &ArtifactSet{
 		close: closeFn,
 		fs:    fileSystem,
 		idx:   idx,
@@ -257,19 +260,11 @@ type fileSystem interface {
 	fs.ReadDirFS
 }
 
-// artifactSet is the implementation of the ArtifactSet interface.
-// See ArtifactSet for more information about the format.
-type artifactSet struct {
-	close func() error
-	fs    fileSystem
-	idx   ociimagespec.Index
-}
-
-func (a *artifactSet) GetIndex() ociimagespec.Index {
+func (a *ArtifactSet) GetIndex() ociimagespec.Index {
 	return a.idx
 }
 
-func (a *artifactSet) ListBlobs() (digests []string, err error) {
+func (a *ArtifactSet) ListBlobs() (digests []string, err error) {
 	dir, err := a.fs.ReadDir(BlobsDirectoryName)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list blobs: %w", err)
@@ -284,11 +279,11 @@ func (a *artifactSet) ListBlobs() (digests []string, err error) {
 	return digests, nil
 }
 
-func (a *artifactSet) GetBlob(digest string) (blob.ReadOnlyBlob, error) {
+func (a *ArtifactSet) GetBlob(digest string) (blob.ReadOnlyBlob, error) {
 	return newArtifactBlob(a.fs, digest)
 }
 
-func (a *artifactSet) Close() error {
+func (a *ArtifactSet) Close() error {
 	return a.close()
 }
 
