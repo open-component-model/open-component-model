@@ -32,4 +32,8 @@
 // operating system file system or a virtual file system (FormatDirectory) or as content of
 // a TAR archive (unzipped - FormatTAR or zipped - FormatTGZ).
 // The descriptor SHOULD be the first file if stored in an archive.
+//
+// This package also offers a legacy compatibility layer access for the ArtifactSet, a now no longer recommended
+// artifact format that was used in the past by OCM CLI to package local blobs. We now instead recommend packaging
+// in the format of OCI Image Layouts as they are almost identical. See ArtifactSet for more details.
 package ctf

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
+	"path/filepath"
 	"testing"
 
 	"github.com/nlepage/go-tarfs"
@@ -191,7 +193,13 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 				r.NotNil(artifactSetIndex.Manifests[0].Annotations[ociimagespecv1.AnnotationRefName])
 				r.Equal(
 					fmt.Sprintf("%s:%s@%s", prefixFromDescriptor, "6.7.1", "sha256:62be4af3382a4493cb7f1dd4ec47bcb28f1863b615fc9e4a1dceefbe93898dd0"),
-					artifactSetIndex.Manifests[0].Annotations[ociimagespecv1.AnnotationRefName])
+					artifactSetIndex.Manifests[0].Annotations[ociimagespecv1.AnnotationRefName],
+				)
+
+				dirfs := ociLayoutFs.(fs.ReadDirFS)
+				entries, err := dirfs.ReadDir(filepath.Join("blobs", "sha256"))
+				r.NoError(err)
+				r.Len(entries, 3)
 			})
 		})
 	})
