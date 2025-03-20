@@ -149,9 +149,12 @@ signatures:
 `
 
 func TestDescriptor_JSON(t *testing.T) {
-	desc := &Descriptor{}
-	err := json.Unmarshal([]byte(jsonData), desc)
+	desc := Descriptor{}
+	err := json.Unmarshal([]byte(jsonData), &desc)
 	assert.Nil(t, err)
+
+	assert.NotEmpty(t, desc.Component.Resources[0].GetIdentity())
+
 	descData, err := json.Marshal(desc)
 	assert.JSONEq(t, jsonData, string(descData))
 	assert.Nil(t, err)
