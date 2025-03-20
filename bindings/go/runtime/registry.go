@@ -139,7 +139,7 @@ func (r *Scheme) MustRegisterWithAlias(prototype any, types ...Type) {
 	}
 }
 
-// NewObject creates a new instance of types.Typed.
+// NewObject creates a new instance of runtime.Typed.
 func (r *Scheme) NewObject(typ Type) (any, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
