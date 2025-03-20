@@ -18,6 +18,14 @@ const (
 	NoDigest = "NO-DIGEST"
 )
 
+// These constants describe identity attributes predefined by the
+// model used to identify elements (resources, sources and references)
+// in a component version.
+const (
+	IdentityAttributeName    = "name"
+	IdentityAttributeVersion = "version"
+)
+
 // Descriptor defines a schema specific descriptor of a component containing additionally embedded signatures
 // verifying the validity of the component.
 type Descriptor struct {
@@ -92,15 +100,6 @@ type Resource struct {
 	CreationTime *Timestamp `json:"creationTime,omitempty"`
 }
 
-func (r *Resource) GetIdentity() map[string]string {
-	m := maps.Clone(r.ExtraIdentity)
-	if m == nil {
-		m = make(map[string]string)
-	}
-	m["name"] = r.Name
-	return m
-}
-
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
 // Source elements do not have specific additional formal attributes.
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#sources
@@ -109,15 +108,6 @@ type Source struct {
 	ElementMeta `json:",inline"`
 	Type        string      `json:"type"`
 	Access      runtime.Raw `json:"access"`
-}
-
-func (r *Source) GetIdentity() map[string]string {
-	m := maps.Clone(r.ExtraIdentity)
-	if m == nil {
-		m = make(map[string]string)
-	}
-	m["name"] = r.Name
-	return m
 }
 
 // Reference describes the reference to another component in the registry.
@@ -156,9 +146,9 @@ type Meta struct {
 	Version string `json:"schemaVersion"`
 }
 
-// ObjectMeta defines a object that is uniquely identified by its name and version.
+// ObjectMeta defines an object that is uniquely identified by its name and version.
 // Additionally the object can be defined by an optional set of labels.
-// Its an implementation of the Element Identity as per
+// It is an implementation of the Element Identity as per
 // https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#element-identity
 // +k8s:deepcopy-gen=true
 type ObjectMeta struct {
@@ -177,7 +167,7 @@ func (m *ObjectMeta) String() string {
 	if m.Version != "" {
 		base += ":" + m.Version
 	}
-	if m.Labels != nil {
+	if len(m.Labels) > 0 {
 		base += fmt.Sprintf("+labels(%v)", m.Labels)
 	}
 	return base
@@ -200,6 +190,21 @@ func (m *ElementMeta) String() string {
 	return base
 }
 
+// ToIdentity returns the runtime.Identity equivalent of the ElementMeta.
+// It is used to create a unique identity for the object.
+func (m *ElementMeta) ToIdentity() runtime.Identity {
+	if m == nil {
+		return nil
+	}
+	mp := maps.Clone(m.ExtraIdentity)
+	if mp == nil {
+		mp = make(runtime.Identity, 2)
+	}
+	mp[IdentityAttributeName] = m.Name
+	mp[IdentityAttributeVersion] = m.Version
+	return mp
+}
+
 // ComponentMeta defines an object with name and version containing labels.
 // The ObjectMeta is used to contain the Component Identity as per
 // https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#component-identity
@@ -208,6 +213,18 @@ type ComponentMeta struct {
 	ObjectMeta `json:",inline"`
 	// CreationTime is the creation time of the component version
 	CreationTime string `json:"creationTime,omitempty"`
+}
+
+// ToIdentity returns the runtime.Identity equivalent of the ElementMeta.
+// It is used to create a unique identity for the object.
+func (r *ComponentMeta) ToIdentity() runtime.Identity {
+	if r == nil {
+		return nil
+	}
+	m := make(runtime.Identity, 2)
+	m[IdentityAttributeName] = r.Name
+	m[IdentityAttributeVersion] = r.Version
+	return m
 }
 
 // Digest defines digest information such as hashing algorithm, normalization and the actual value.

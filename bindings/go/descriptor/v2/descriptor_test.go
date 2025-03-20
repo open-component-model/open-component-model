@@ -153,7 +153,7 @@ func TestDescriptor_JSON(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &desc)
 	assert.Nil(t, err)
 
-	assert.NotEmpty(t, desc.Component.Resources[0].GetIdentity())
+	assert.NotEmpty(t, desc.Component.Resources[0].ToIdentity())
 
 	descData, err := json.Marshal(desc)
 	assert.JSONEq(t, jsonData, string(descData))
