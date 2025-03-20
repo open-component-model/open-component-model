@@ -12,22 +12,23 @@ import (
 )
 
 func Test_Archive(t *testing.T) {
+	ctx := t.Context()
 	r := require.New(t)
 	path := t.TempDir()
 
-	archive, err := ctf.OpenCTF(path, ctf.FormatDirectory, ctf.O_RDWR)
+	archive, err := ctf.OpenCTF(ctx, path, ctf.FormatDirectory, ctf.O_RDWR)
 	r.NoError(err)
 
 	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test")))
 
-	r.NoError(archive.SaveBlob(testBlob))
+	r.NoError(archive.SaveBlob(ctx, testBlob))
 
 	t.Run("Directory", func(t *testing.T) {
 		newArchive := t.TempDir()
-		r.NoError(ctf.ArchiveDirectory(archive, newArchive))
+		r.NoError(ctf.ArchiveDirectory(ctx, archive, newArchive))
 	})
 	t.Run("TAR", func(t *testing.T) {
 		newArchive := filepath.Join(t.TempDir(), "archive.tar")
-		r.NoError(ctf.Archive(archive, newArchive, ctf.FormatTAR))
+		r.NoError(ctf.Archive(ctx, archive, newArchive, ctf.FormatTAR))
 	})
 }

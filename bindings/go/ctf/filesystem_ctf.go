@@ -2,6 +2,7 @@ package ctf
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -66,7 +69,7 @@ func (c *FileSystemCTF) Format() FileFormat {
 
 // GetIndex returns the v1.ArtifactIndexFileName parsed as v1.Index of the CTF.
 // If the CTF is empty, an empty index is returned so it can be set with SetIndex.
-func (c *FileSystemCTF) GetIndex() (index v1.Index, err error) {
+func (c *FileSystemCTF) GetIndex(_ context.Context) (index v1.Index, err error) {
 	fi, err := c.fs.Stat(v1.ArtifactIndexFileName)
 	if errors.Is(err, fs.ErrNotExist) {
 		return v1.NewIndex(), nil
@@ -95,7 +98,7 @@ func (c *FileSystemCTF) GetIndex() (index v1.Index, err error) {
 }
 
 // SetIndex sets the v1.ArtifactIndexFileName of the CTF to the given index.
-func (c *FileSystemCTF) SetIndex(index v1.Index) (err error) {
+func (c *FileSystemCTF) SetIndex(_ context.Context, index v1.Index) (err error) {
 	data, err := v1.Encode(index)
 	if err != nil {
 		return fmt.Errorf("unable to encode artifact index: %w", err)
@@ -133,8 +136,12 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader) (err error) {
 }
 
 // DeleteBlob deletes the blob with the given digest from the CTF by removing the file from BlobsDirectoryName.
-func (c *FileSystemCTF) DeleteBlob(digest string) (err error) {
-	if err = c.fs.Remove(filepath.Join(BlobsDirectoryName, ToBlobFileName(digest))); err != nil {
+func (c *FileSystemCTF) DeleteBlob(_ context.Context, digest string) (err error) {
+	file, err := ToBlobFileName(digest)
+	if err != nil {
+		return err
+	}
+	if err = c.fs.Remove(filepath.Join(BlobsDirectoryName, file)); err != nil {
 		return fmt.Errorf("unable to delete blob: %w", err)
 	}
 
@@ -142,14 +149,18 @@ func (c *FileSystemCTF) DeleteBlob(digest string) (err error) {
 }
 
 // GetBlob returns the blob with the given digest from the CTF by reading the file from BlobsDirectoryName.
-func (c *FileSystemCTF) GetBlob(digest string) (blob.ReadOnlyBlob, error) {
-	b := NewCASFileBlob(c.fs, filepath.Join(BlobsDirectoryName, ToBlobFileName(digest)))
+func (c *FileSystemCTF) GetBlob(_ context.Context, digest string) (blob.ReadOnlyBlob, error) {
+	file, err := ToBlobFileName(digest)
+	if err != nil {
+		return nil, err
+	}
+	b := NewCASFileBlob(c.fs, filepath.Join(BlobsDirectoryName, file))
 	b.SetPrecalculatedDigest(digest)
 	return b, nil
 }
 
 // ListBlobs returns a list of all blobs in the CTF by listing the files in BlobsDirectoryName.
-func (c *FileSystemCTF) ListBlobs() (digests []string, err error) {
+func (c *FileSystemCTF) ListBlobs(_ context.Context) (digests []string, err error) {
 	dir, err := c.fs.ReadDir(BlobsDirectoryName)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list blobs: %w", err)
@@ -165,7 +176,7 @@ func (c *FileSystemCTF) ListBlobs() (digests []string, err error) {
 	return digests, nil
 }
 
-func (c *FileSystemCTF) SaveBlob(b blob.ReadOnlyBlob) (err error) {
+func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err error) {
 	digestable, ok := b.(blob.DigestAware)
 	if !ok {
 		return errors.New("blob does not have a digest that can be used to save it")
@@ -184,16 +195,30 @@ func (c *FileSystemCTF) SaveBlob(b blob.ReadOnlyBlob) (err error) {
 		return errors.New("blob does not have a digest that can be used to save it")
 	}
 
+	file, err := ToBlobFileName(dig)
+	if err != nil {
+		return err
+	}
+
+	ctxRead, err := newCtxReader(ctx, data)
+	if err != nil {
+		return fmt.Errorf("unable to create context reader: %w", err)
+	}
+
 	return c.writeFile(filepath.Join(
 		BlobsDirectoryName,
-		ToBlobFileName(dig),
-	), data)
+		file,
+	), ctxRead)
 }
 
 // ToBlobFileName converts a digest to a blob file name by replacing the ":" with ".", which is the
 // default separator for blobs in the CTF under BlobsDirectoryName.
-func ToBlobFileName(digest string) string {
-	return strings.ReplaceAll(digest, ":", ".")
+func ToBlobFileName(dig string) (string, error) {
+	// parse the digest to check if it is valid, ensure there are no invalid replacements
+	if _, err := digest.Parse(dig); err != nil {
+		return "", fmt.Errorf("invalid digest %q could not be converted to blob file name: %w", dig, err)
+	}
+	return strings.ReplaceAll(dig, ":", "."), nil
 }
 
 // ToDigest converts a blob file name to a digest by replacing the "." with ":", which is the

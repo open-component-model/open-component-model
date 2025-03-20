@@ -2,6 +2,7 @@ package ctf_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,15 +43,16 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
 			r := require.New(t)
-			archive, discovered, err := ctf.OpenCTFByFileExtension(tc.path, ctf.O_RDONLY)
+			archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, tc.path, ctf.O_RDONLY)
 			r.Equal(tc.format, discovered, "discovered format should be the same as the one used to open")
 			r.NoError(err)
-			blobs, err := archive.ListBlobs()
+			blobs, err := archive.ListBlobs(ctx)
 			r.NoError(err)
 			r.Len(blobs, 4)
 			r.Contains(blobs, "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08")
-			idx, err := archive.GetIndex()
+			idx, err := archive.GetIndex(ctx)
 			r.NoError(err)
 			r.Len(idx.GetArtifacts(), 1)
 			artifact := idx.GetArtifacts()[0]
@@ -58,10 +60,10 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 			r.Equal("component-descriptors/github.com/acme.org/helloworld", artifact.Repository)
 			r.Equal("1.0.0", artifact.Tag)
 
-			r.Error(archive.SetIndex(idx), "should not be able to set index on read-only archive")
+			r.Error(archive.SetIndex(ctx, idx), "should not be able to set index on read-only archive")
 
 			dig := "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
-			blob, err := archive.GetBlob(dig)
+			blob, err := archive.GetBlob(ctx, dig)
 			r.NoError(err)
 			r.NotNil(blob)
 			r.IsType(&ctf.CASFileBlob{}, blob)
@@ -81,9 +83,10 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 		})
 
 		t.Run("work within "+tc.name, func(t *testing.T) {
+			ctx := t.Context()
 			r := require.New(t)
-			err := ctf.WorkWithinCTF(tc.path, ctf.O_RDONLY, func(ctf ctf.CTF) error {
-				blobs, err := ctf.ListBlobs()
+			err := ctf.WorkWithinCTF(ctx, tc.path, ctf.O_RDONLY, func(ctx context.Context, ctf ctf.CTF) error {
+				blobs, err := ctf.ListBlobs(ctx)
 				if err != nil {
 					return err
 				}
@@ -99,13 +102,14 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 // that have advanced properties such as remote or local accesses in their descriptors.
 func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 	t.Run("remote resource", func(t *testing.T) {
+		ctx := t.Context()
 		r := require.New(t)
-		archive, err := ctf.OpenCTF("testdata/compatibility/02/without-resource", ctf.FormatDirectory, ctf.O_RDONLY)
+		archive, err := ctf.OpenCTF(ctx, "testdata/compatibility/02/without-resource", ctf.FormatDirectory, ctf.O_RDONLY)
 		r.NoError(err)
-		blobs, err := archive.ListBlobs()
+		blobs, err := archive.ListBlobs(ctx)
 		r.NoError(err)
 		r.Len(blobs, 3)
-		idx, err := archive.GetIndex()
+		idx, err := archive.GetIndex(ctx)
 		r.NoError(err)
 		r.Len(idx.GetArtifacts(), 1)
 		artifact := idx.GetArtifacts()[0]
@@ -113,17 +117,18 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 		r.Equal("component-descriptors/github.com/acme.org/helloworld", artifact.Repository)
 		r.Equal("1.0.0", artifact.Tag)
 
-		r.Error(archive.SetIndex(idx), "should not be able to set index on read-only archive")
+		r.Error(archive.SetIndex(ctx, idx), "should not be able to set index on read-only archive")
 	})
 
 	t.Run("local (embedded) resource", func(t *testing.T) {
+		ctx := t.Context()
 		r := require.New(t)
-		archive, err := ctf.OpenCTF("testdata/compatibility/02/with-resource", ctf.FormatDirectory, ctf.O_RDONLY)
+		archive, err := ctf.OpenCTF(ctx, "testdata/compatibility/02/with-resource", ctf.FormatDirectory, ctf.O_RDONLY)
 		r.NoError(err)
-		blobs, err := archive.ListBlobs()
+		blobs, err := archive.ListBlobs(ctx)
 		r.NoError(err)
 		r.Len(blobs, 4)
-		idx, err := archive.GetIndex()
+		idx, err := archive.GetIndex(ctx)
 		r.NoError(err)
 		r.Len(idx.GetArtifacts(), 1)
 		artifact := idx.GetArtifacts()[0]
@@ -131,7 +136,7 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 		r.Equal("component-descriptors/github.com/acme.org/helloworld", artifact.Repository)
 		r.Equal("1.0.0", artifact.Tag)
 
-		r.Error(archive.SetIndex(idx), "should not be able to set index on read-only archive")
+		r.Error(archive.SetIndex(ctx, idx), "should not be able to set index on read-only archive")
 
 		// this is the blob containing the local blob.
 		// for old CTFs (created with the old OCM reference library) this is a special case
@@ -140,7 +145,7 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 		//
 		// This format (called "Artifact Set" in old OCM) is a custom format and we dont want to keep this.
 		// Instead, we will now access it explicitly as another tgz (wrapped Artifact Set).
-		blob, err := archive.GetBlob("sha256:e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b")
+		blob, err := archive.GetBlob(ctx, "sha256:e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b")
 		r.NoError(err)
 
 		t.Run("interpret as artifact set", func(t *testing.T) {
@@ -151,14 +156,14 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 			})
 			r.NoError(err)
 
-			blobs, err = as.ListBlobs()
+			blobs, err = as.ListBlobs(ctx)
 			r.NoError(err)
 			r.Len(blobs, 3)
 
 			artifactSetIndex := as.GetIndex()
 			r.Len(artifactSetIndex.Manifests, 1)
 
-			nestedBlob, err := as.GetBlob(artifactSetIndex.Manifests[0].Digest.String())
+			nestedBlob, err := as.GetBlob(ctx, artifactSetIndex.Manifests[0].Digest.String())
 			r.NoError(err)
 			r.IsType(&ctf.ArtifactBlob{}, nestedBlob)
 			nestedBlobStream, err := nestedBlob.ReadCloser()
@@ -174,7 +179,7 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 				r := require.New(t)
 				prefixFromDescriptor := "my-repo-from-external-descriptor/my-image"
 				var buf bytes.Buffer
-				r.NoError(ctf.ConvertToOCIImageLayout(as, &buf, func(digest digest.Digest, oldName string) (string, error) {
+				r.NoError(ctf.ConvertToOCIImageLayout(ctx, as, &buf, func(_ context.Context, digest digest.Digest, oldName string) (string, error) {
 					return fmt.Sprintf("%s:%s@%s", prefixFromDescriptor, oldName, digest.String()), nil
 				}))
 
