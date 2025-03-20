@@ -148,7 +148,11 @@ func (in *Resource) DeepCopyInto(out *Resource) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	in.Access.DeepCopyInto(&out.Access)
+	if in.Access != nil {
+		in, out := &in.Access, &out.Access
+		*out = new(runtime.Raw)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Digest != nil {
 		in, out := &in.Digest, &out.Digest
 		*out = new(Digest)
@@ -210,7 +214,11 @@ func (in *SignatureInfo) DeepCopy() *SignatureInfo {
 func (in *Source) DeepCopyInto(out *Source) {
 	*out = *in
 	in.ElementMeta.DeepCopyInto(&out.ElementMeta)
-	in.Access.DeepCopyInto(&out.Access)
+	if in.Access != nil {
+		in, out := &in.Access, &out.Access
+		*out = new(runtime.Raw)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 

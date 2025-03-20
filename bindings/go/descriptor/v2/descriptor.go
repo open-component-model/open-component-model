@@ -91,7 +91,7 @@ type Resource struct {
 	// Can be a local or external resource.
 	Relation ResourceRelation `json:"relation"`
 	// Access defines the type of access this resource requires.
-	Access runtime.Raw `json:"access"`
+	Access *runtime.Raw `json:"access"`
 	// Digest is the optional digest of the referenced resource.
 	Digest *Digest `json:"digest,omitempty"`
 	// Size of the resource blob.
@@ -106,8 +106,8 @@ type Resource struct {
 // +k8s:deepcopy-gen=true
 type Source struct {
 	ElementMeta `json:",inline"`
-	Type        string      `json:"type"`
-	Access      runtime.Raw `json:"access"`
+	Type        string       `json:"type"`
+	Access      *runtime.Raw `json:"access"`
 }
 
 // Reference describes the reference to another component in the registry.
