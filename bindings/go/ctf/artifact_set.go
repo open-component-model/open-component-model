@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -161,7 +162,7 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 //	}
 //
 // This is needed due to the lossy typing that requires the component descriptor (see ArtifactSet for information).
-func ConvertToOCIImageLayout(as ArtifactSet, writer io.Writer, manifestNameFn func(digest digest.Digest, oldName string) (string, error)) (err error) {
+func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Writer, manifestNameFn func(ctx context.Context, digest digest.Digest, oldName string) (string, error)) (err error) {
 	tw := tar.NewWriter(writer)
 	defer func() {
 		err = errors.Join(err, tw.Close())
@@ -192,7 +193,7 @@ func ConvertToOCIImageLayout(as ArtifactSet, writer io.Writer, manifestNameFn fu
 		if !ok {
 			continue
 		}
-		name, err = manifestNameFn(manifest.Digest, name)
+		name, err = manifestNameFn(ctx, manifest.Digest, name)
 		if err != nil {
 			return fmt.Errorf("unable to generate manifest name: %w", err)
 		}
@@ -212,7 +213,7 @@ func ConvertToOCIImageLayout(as ArtifactSet, writer io.Writer, manifestNameFn fu
 		return fmt.Errorf("unable to write index.json: %w", err)
 	}
 
-	blobs, err := as.ListBlobs()
+	blobs, err := as.ListBlobs(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to list blobs: %w", err)
 	}
@@ -222,7 +223,7 @@ func ConvertToOCIImageLayout(as ArtifactSet, writer io.Writer, manifestNameFn fu
 		if err != nil {
 			return fmt.Errorf("unable to parse digest %s: %w", b, err)
 		}
-		b, err := as.GetBlob(b)
+		b, err := as.GetBlob(ctx, b)
 		if err != nil {
 			return fmt.Errorf("unable to get blob %s: %w", b, err)
 		}
@@ -264,7 +265,7 @@ func (a *ArtifactSet) GetIndex() ociimagespec.Index {
 	return a.idx
 }
 
-func (a *ArtifactSet) ListBlobs() (digests []string, err error) {
+func (a *ArtifactSet) ListBlobs(ctx context.Context) (digests []string, err error) {
 	dir, err := a.fs.ReadDir(BlobsDirectoryName)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list blobs: %w", err)
@@ -279,7 +280,7 @@ func (a *ArtifactSet) ListBlobs() (digests []string, err error) {
 	return digests, nil
 }
 
-func (a *ArtifactSet) GetBlob(digest string) (blob.ReadOnlyBlob, error) {
+func (a *ArtifactSet) GetBlob(ctx context.Context, digest string) (blob.ReadOnlyBlob, error) {
 	return newArtifactBlob(a.fs, digest)
 }
 
@@ -302,7 +303,11 @@ var (
 )
 
 func newArtifactBlob(fs fileSystem, digest string) (blob.ReadOnlyBlob, error) {
-	name := filepath.Join(BlobsDirectoryName, ToBlobFileName(digest))
+	file, err := ToBlobFileName(digest)
+	if err != nil {
+		return nil, err
+	}
+	name := filepath.Join(BlobsDirectoryName, file)
 	f, err := fs.Stat(name)
 	if err != nil {
 		return nil, fmt.Errorf("unable to stat file %q: %w", name, err)

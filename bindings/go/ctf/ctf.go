@@ -1,6 +1,7 @@
 package ctf
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -68,34 +69,34 @@ type CTF interface {
 type IndexStore interface {
 	ReadOnlyIndexStore
 	// SetIndex sets the artifact index of the CTF.
-	SetIndex(index v1.Index) (err error)
+	SetIndex(ctx context.Context, index v1.Index) (err error)
 }
 
 type ReadOnlyIndexStore interface {
 	// GetIndex returns the artifact index of the CTF.
-	GetIndex() (v1.Index, error)
+	GetIndex(ctx context.Context) (v1.Index, error)
 }
 
 // BlobStore provides access to the blobs of a CTF.
 type BlobStore interface {
 	ReadOnlyBlobStore
 	// SaveBlob saves the blob to the CTF.
-	SaveBlob(blob blob.ReadOnlyBlob) (err error)
+	SaveBlob(ctx context.Context, blob blob.ReadOnlyBlob) (err error)
 	// DeleteBlob deletes the blob with the specified digest from the CTF.
-	DeleteBlob(digest string) (err error)
+	DeleteBlob(ctx context.Context, digest string) (err error)
 }
 
 type ReadOnlyBlobStore interface {
 	// ListBlobs returns a list of all blobs in the CTF irrespective of if they are referenced by the index.
-	ListBlobs() ([]string, error)
+	ListBlobs(ctx context.Context) ([]string, error)
 	// GetBlob returns the blob with the specified digest.
-	GetBlob(digest string) (blob.ReadOnlyBlob, error)
+	GetBlob(ctx context.Context, digest string) (blob.ReadOnlyBlob, error)
 }
 
 // OpenCTF opens a CTF at the specified path with the specified format.
 // the CTF may be backed by a temporary directory if the format is FormatTAR or FormatTGZ.
 // In this case, the temporary directory is used to extract the archive before returning access on that path.
-func OpenCTF(path string, format FileFormat, flag int) (CTF, error) {
+func OpenCTF(ctx context.Context, path string, format FileFormat, flag int) (CTF, error) {
 	switch format {
 	case FormatDirectory:
 		ctf, err := OpenCTFFromOSPath(path, flag)
@@ -115,7 +116,7 @@ func OpenCTF(path string, format FileFormat, flag int) (CTF, error) {
 		}
 		slog.Debug("ctf is automatically extracted and will need to be rearchived to persist", slog.String("path", tmp))
 
-		ctf, err := ExtractTAR(tmp, path, format, flag)
+		ctf, err := ExtractTAR(ctx, tmp, path, format, flag)
 		if errors.Is(err, os.ErrNotExist) && flag&O_CREATE != 0 {
 			return OpenCTFFromOSPath(tmp, flag)
 		}
@@ -139,8 +140,10 @@ func OpenCTFFromOSPath(path string, flag int) (*FileSystemCTF, error) {
 // For FormatDirectory, the path is treated as a directory, otherwise the path is interpreted as a file with
 // an extension that determines its behavior.
 // For more information on how flag behaves for FormatTAR (and FormatTGZ), see ExtractTAR.
-func OpenCTFByFileExtension(path string, flag int) (archive CTF, discovered FileFormat, err error) {
+func OpenCTFByFileExtension(ctx context.Context, path string, flag int) (archive CTF, discovered FileFormat, err error) {
 	ext := filepath.Ext(path)
+	// check if the extension is in form of ".tar.gz" in which case the extension is ".tar" and ".gz"
+	// but filepath.Ext only returns ".gz". Then we need to check if previous extension is ".tar"
 	if doubleGzExt := ".gz"; ext == doubleGzExt {
 		ext = filepath.Ext(path[:len(path)-len(doubleGzExt)]) + ext
 	}
@@ -153,7 +156,7 @@ func OpenCTFByFileExtension(path string, flag int) (archive CTF, discovered File
 		discovered = FormatDirectory
 	}
 
-	if archive, err = OpenCTF(path, discovered, flag); err != nil {
+	if archive, err = OpenCTF(ctx, path, discovered, flag); err != nil {
 		return nil, FormatUnknown, fmt.Errorf("failed to open CTF: %w", err)
 	}
 
@@ -166,13 +169,13 @@ func OpenCTFByFileExtension(path string, flag int) (archive CTF, discovered File
 // If an error occurs during the work function, the CTF is not archived if the format is FormatTAR or FormatTGZ
 // However, if the format is FormatDirectory, the CTF is edited in place, which can lead to non atomic failures.
 // To avoid this, by default (flag not set to O_RDWR), the CTF is not rearchived and opened in read-only mode.
-func WorkWithinCTF(path string, flag int, work func(ctf CTF) error) error {
-	archive, format, err := OpenCTFByFileExtension(path, flag)
+func WorkWithinCTF(ctx context.Context, path string, flag int, work func(ctx context.Context, ctf CTF) error) error {
+	archive, format, err := OpenCTFByFileExtension(ctx, path, flag)
 	if err != nil {
 		return fmt.Errorf("failed to open CTF %q: %w", path, err)
 	}
 
-	if err := work(archive); err != nil {
+	if err := work(ctx, archive); err != nil {
 		return fmt.Errorf("failed to work within CTF at %q: %w", path, err)
 	}
 
@@ -183,7 +186,7 @@ func WorkWithinCTF(path string, flag int, work func(ctf CTF) error) error {
 			slog.String("format", format.String()),
 			slog.String("mode", "readwrite"),
 		)
-		if err := Archive(archive, path, format); err != nil {
+		if err := Archive(ctx, archive, path, format); err != nil {
 			return fmt.Errorf("failed to archive CTF %q: %w", path, err)
 		}
 	}

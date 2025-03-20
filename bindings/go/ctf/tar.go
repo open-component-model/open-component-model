@@ -4,13 +4,16 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
-	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
@@ -23,7 +26,7 @@ import (
 // and the TAR itself is not modified.
 // If the flag O_RDONLY is set, the extracted CTF will be read-only as well, however
 // the CTF will be first opened as O_RDWR to copy the data from the TAR into the new FileSystemCTF.
-func ExtractTAR(base, path string, format FileFormat, flag int) (extracted *FileSystemCTF, err error) {
+func ExtractTAR(ctx context.Context, base, path string, format FileFormat, flag int) (extracted *FileSystemCTF, err error) {
 	if format == FormatDirectory {
 		return nil, ErrUnsupportedFormat
 	}
@@ -36,6 +39,11 @@ func ExtractTAR(base, path string, format FileFormat, flag int) (extracted *File
 		err = errors.Join(err, tarFile.Close())
 	}()
 
+	ctxReader, err := newCtxReader(ctx, tarFile)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create context reader: %w", err)
+	}
+
 	// for the extracted version we will first open the CTF with O_RDWR
 	ctf, err := OpenCTFFromOSPath(base, O_RDWR)
 	if err != nil {
@@ -44,7 +52,7 @@ func ExtractTAR(base, path string, format FileFormat, flag int) (extracted *File
 
 	var reader *tar.Reader
 	if format == FormatTGZ {
-		gzipped, err := gzip.NewReader(tarFile)
+		gzipped, err := gzip.NewReader(ctxReader)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create gzip reader: %w", err)
 		}
@@ -53,7 +61,7 @@ func ExtractTAR(base, path string, format FileFormat, flag int) (extracted *File
 		}()
 		reader = tar.NewReader(gzipped)
 	} else {
-		reader = tar.NewReader(tarFile)
+		reader = tar.NewReader(ctxReader)
 	}
 
 	if err := extractTARToFilesystemCTF(reader, ctf); err != nil {
@@ -100,12 +108,12 @@ func extractTARToFilesystemCTF(reader *tar.Reader, ctf *FileSystemCTF) (err erro
 // The format of the archive is determined by the format parameter.
 // Supported formats are FormatTAR, FormatTGZ, and FormatDirectory.
 // If the format is FormatDirectory, the filesystem is copied to the specified path.
-func Archive(ctf CTF, path string, format FileFormat) error {
+func Archive(ctx context.Context, ctf CTF, path string, format FileFormat) error {
 	switch format {
 	case FormatDirectory:
-		return ArchiveDirectory(ctf, path)
+		return ArchiveDirectory(ctx, ctf, path)
 	case FormatTAR, FormatTGZ:
-		return ArchiveTAR(ctf, path, format)
+		return ArchiveTAR(ctx, ctf, path, format)
 	default:
 		return ErrUnsupportedFormat
 	}
@@ -116,62 +124,45 @@ func Archive(ctf CTF, path string, format FileFormat) error {
 // The CTF is not modified and only read from.
 // The directory is created if it does not exist.
 // The blobs are written to the blobs directory concurrently.
-func ArchiveDirectory(ctf CTF, path string) error {
-	var fsCTF CTF
+func ArchiveDirectory(ctx context.Context, ctf CTF, path string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	blobs, err := ctf.ListBlobs()
+	blobs, err := ctf.ListBlobs(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to list blobs: %w", err)
 	}
 
-	if fsCTF, err = OpenCTFFromOSPath(path, O_RDWR|O_CREATE); err != nil {
+	fsCTF, err := OpenCTFFromOSPath(path, O_RDWR|O_CREATE)
+	if err != nil {
 		return fmt.Errorf("unable to setup file system ctf: %w", err)
 	}
-	if err := os.Mkdir(path, 0o755); os.IsExist(err) {
-	} else if err != nil {
-		return fmt.Errorf("unable to create directory: %w", err)
-	} else {
-		if fsCTF, err = OpenCTFFromOSPath(path, O_RDWR); err != nil {
-			return fmt.Errorf("unable to setup file system ctf: %w", err)
-		}
-	}
-
 	if len(blobs) > 0 {
-		var wg sync.WaitGroup
-		wg.Add(len(blobs))
-		errs := make(chan error, len(blobs))
-
+		group, ctx := errgroup.WithContext(ctx)
+		group.SetLimit(runtime.NumCPU())
 		for _, digest := range blobs {
-			go func(digest string) {
-				defer wg.Done()
-				b, err := ctf.GetBlob(digest)
+			group.Go(func() error {
+				b, err := ctf.GetBlob(ctx, digest)
 				if err != nil {
-					errs <- fmt.Errorf("unable to get blob %s: %w", digest, err)
-					return
+					return fmt.Errorf("unable to get blob %s: %w", digest, err)
 				}
-				if err := fsCTF.SaveBlob(b); err != nil {
-					errs <- fmt.Errorf("unable to save blob %s: %w", digest, err)
-					return
+				if err := fsCTF.SaveBlob(ctx, b); err != nil {
+					return fmt.Errorf("unable to save blob %s: %w", digest, err)
 				}
-				errs <- nil
-			}(digest)
+				return nil
+			})
 		}
-		wg.Wait()
 
-		var err error
-		for i := 0; i < len(blobs); i++ {
-			err = errors.Join(<-errs)
-		}
-		if err != nil {
+		if err := group.Wait(); err != nil {
 			return err
 		}
 	}
 
-	idx, err := ctf.GetIndex()
+	idx, err := ctf.GetIndex(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to get index: %w", err)
 	}
-	if err := fsCTF.SetIndex(idx); err != nil {
+	if err := fsCTF.SetIndex(ctx, idx); err != nil {
 		return fmt.Errorf("unable to set index: %w", err)
 	}
 
@@ -184,7 +175,7 @@ func ArchiveDirectory(ctf CTF, path string) error {
 // The file is created if it does not exist.
 //
 // see ArchiveTARToWriter for more details.
-func ArchiveTAR(ctf CTF, path string, format FileFormat) (err error) {
+func ArchiveTAR(ctx context.Context, ctf CTF, path string, format FileFormat) (err error) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("unable to open file for writing ctf archive: %w", err)
@@ -193,7 +184,7 @@ func ArchiveTAR(ctf CTF, path string, format FileFormat) (err error) {
 		err = errors.Join(err, file.Close())
 	}()
 
-	return ArchiveTARToWriter(ctf, file, format)
+	return ArchiveTARToWriter(ctx, ctf, file, format)
 }
 
 // ArchiveTARToWriter archives the CTF to the specified writer.
@@ -202,7 +193,7 @@ func ArchiveTAR(ctf CTF, path string, format FileFormat) (err error) {
 // The blobs are written to the blobs directory sequentially due to the nature of TAR archives.
 // The blobs are written in the order they are returned by ListBlobs.
 // The index is written to the index file as first entry.
-func ArchiveTARToWriter(ctf CTF, writer io.Writer, format FileFormat) (err error) {
+func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format FileFormat) (err error) {
 	if format == FormatDirectory {
 		return ErrUnsupportedFormat
 	}
@@ -221,18 +212,18 @@ func ArchiveTARToWriter(ctf CTF, writer io.Writer, format FileFormat) (err error
 		err = errors.Join(err, tarWriter.Close())
 	}()
 
-	blobs, err := ctf.ListBlobs()
+	blobs, err := ctf.ListBlobs(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to list blobs: %w", err)
 	}
 
 	copyBuffer := make([]byte, blob.DefaultArchiveBlobBufferSize) // shared buffer for all data to avoid allocs.
 
-	if err := archiveIndex(ctf, tarWriter, copyBuffer); err != nil {
+	if err := archiveIndex(ctx, ctf, tarWriter, copyBuffer); err != nil {
 		return fmt.Errorf("unable to archive index: %w", err)
 	}
 	for _, digest := range blobs {
-		b, err := ctf.GetBlob(digest)
+		b, err := ctf.GetBlob(ctx, digest)
 		if err != nil {
 			return fmt.Errorf("unable to get blob %s: %w", digest, err)
 		}
@@ -240,7 +231,11 @@ func ArchiveTARToWriter(ctf CTF, writer io.Writer, format FileFormat) (err error
 		if !sizeAware {
 			return fmt.Errorf("blob %s has no known size", digest)
 		}
-		name := filepath.Join(BlobsDirectoryName, ToBlobFileName(digest))
+		file, err := ToBlobFileName(digest)
+		if err != nil {
+			return err
+		}
+		name := filepath.Join(BlobsDirectoryName, file)
 		if err := blob.ArchiveBlob(name, size.Size(), digest, b, tarWriter, copyBuffer); err != nil {
 			return err
 		}
@@ -249,8 +244,8 @@ func ArchiveTARToWriter(ctf CTF, writer io.Writer, format FileFormat) (err error
 	return nil
 }
 
-func archiveIndex(ctf CTF, tarWriter *tar.Writer, buf []byte) (err error) {
-	idx, err := ctf.GetIndex()
+func archiveIndex(ctx context.Context, ctf CTF, tarWriter *tar.Writer, buf []byte) (err error) {
+	idx, err := ctf.GetIndex(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to get index: %w", err)
 	}
