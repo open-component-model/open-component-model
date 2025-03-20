@@ -17,57 +17,14 @@ updates:
   - kind/skip-release-notes
   - component/github-actions
 - package-ecosystem: "gomod"
-  directory: "/"
+  directories:
+    - "/cli"
+    - "/bindings/go/*"
   groups:
     go:
       update-types: [ "minor", "patch" ]
   schedule:
-    interval: "weekly"
-    day: "sunday"
-  labels:
-  - kind/dependency
-  - kind/chore
-- package-ecosystem: "docker"
-  directory: "/"
-  groups:
-    docker:
-      update-types: [ "minor", "patch" ]
-  schedule:
-    interval: "weekly"
-    day: "sunday"
-  labels:
-  - kind/dependency
-  - kind/chore
-- package-ecosystem: "bundler"
-  directory: "/"
-  groups:
-    ruby:
-      update-types: [ "minor", "patch" ]
-  schedule:
-    interval: "weekly"
-    day: "sunday"
-  labels:
-  - kind/dependency
-  - kind/chore
-- package-ecosystem: "pip"
-  directory: "/"
-  groups:
-    python:
-      update-types: [ "minor", "patch" ]
-  schedule:
-    interval: "weekly"
-    day: "sunday"
-  labels:
-  - kind/dependency
-  - kind/chore
-- package-ecosystem: "npm"
-  directory: "/"
-  groups:
-    node:
-      update-types: [ "minor", "patch" ]
-  schedule:
-    interval: "weekly"
-    day: "sunday"
+    interval: "daily"
   labels:
   - kind/dependency
   - kind/chore

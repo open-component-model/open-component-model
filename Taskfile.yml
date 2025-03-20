@@ -5,10 +5,10 @@ dotenv: ['.env', '.env.local']
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
-  bindings/go/descriptor:
+  bindings/go/descriptor/v2:
     optional: true
-    taskfile: ./bindings/go/descriptor/Taskfile.yml
-    dir: ./bindings/go/descriptor
+    taskfile: ./bindings/go/descriptor/v2/Taskfile.yml
+    dir: ./bindings/go/descriptor/v2
   bindings/go/runtime:
     optional: true
     taskfile: ./bindings/go/runtime/Taskfile.yml
