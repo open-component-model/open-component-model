@@ -1,4 +1,4 @@
-package descriptor_test
+package v2_test
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/go/descriptor"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -154,7 +154,7 @@ signatures:
 `
 
 func TestDescriptor_JSON(t *testing.T) {
-	desc := descriptor.Descriptor{}
+	desc := descriptorv2.Descriptor{}
 	err := json.Unmarshal([]byte(jsonData), &desc)
 	assert.Nil(t, err)
 
@@ -166,7 +166,7 @@ func TestDescriptor_JSON(t *testing.T) {
 }
 
 func TestDescriptor_YAML(t *testing.T) {
-	desc := &descriptor.Descriptor{}
+	desc := &descriptorv2.Descriptor{}
 	err := yaml.Unmarshal([]byte(yamlData), desc)
 	assert.Nil(t, err)
 	descData, err := yaml.Marshal(desc)
@@ -177,13 +177,13 @@ func TestDescriptor_YAML(t *testing.T) {
 
 func TestDescriptor_String(t *testing.T) {
 	// Setup
-	desc := descriptor.Descriptor{
-		Meta: descriptor.Meta{
+	desc := descriptorv2.Descriptor{
+		Meta: descriptorv2.Meta{
 			Version: "v1",
 		},
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
 					Name:    "test-component",
 					Version: "1.0.0",
 				},
@@ -201,12 +201,12 @@ func TestDescriptor_String(t *testing.T) {
 
 func TestComponent_String(t *testing.T) {
 	// Setup
-	comp := descriptor.Component{
-		ComponentMeta: descriptor.ComponentMeta{
-			ObjectMeta: descriptor.ObjectMeta{
+	comp := descriptorv2.Component{
+		ComponentMeta: descriptorv2.ComponentMeta{
+			ObjectMeta: descriptorv2.ObjectMeta{
 				Name:    "test-component",
 				Version: "1.0.0",
-				Labels: []descriptor.Label{
+				Labels: []descriptorv2.Label{
 					{Name: "env", Value: "prod"},
 				},
 			},
@@ -224,19 +224,19 @@ func TestComponent_String(t *testing.T) {
 func TestObjectMeta_String(t *testing.T) {
 	tests := []struct {
 		name     string
-		objMeta  descriptor.ObjectMeta
+		objMeta  descriptorv2.ObjectMeta
 		expected string
 	}{
 		{
 			name: "with name only",
-			objMeta: descriptor.ObjectMeta{
+			objMeta: descriptorv2.ObjectMeta{
 				Name: "test-object",
 			},
 			expected: "test-object",
 		},
 		{
 			name: "with name and version",
-			objMeta: descriptor.ObjectMeta{
+			objMeta: descriptorv2.ObjectMeta{
 				Name:    "test-object",
 				Version: "1.0.0",
 			},
@@ -244,10 +244,10 @@ func TestObjectMeta_String(t *testing.T) {
 		},
 		{
 			name: "with name, version and labels",
-			objMeta: descriptor.ObjectMeta{
+			objMeta: descriptorv2.ObjectMeta{
 				Name:    "test-object",
 				Version: "1.0.0",
-				Labels: []descriptor.Label{
+				Labels: []descriptorv2.Label{
 					{Name: "type", Value: "library"},
 					{Name: "priority", Value: "high"},
 				},
@@ -266,11 +266,11 @@ func TestObjectMeta_String(t *testing.T) {
 
 func TestElementMeta_String(t *testing.T) {
 	// Setup
-	elemMeta := descriptor.ElementMeta{
-		ObjectMeta: descriptor.ObjectMeta{
+	elemMeta := descriptorv2.ElementMeta{
+		ObjectMeta: descriptorv2.ObjectMeta{
 			Name:    "test-element",
 			Version: "2.0.0",
-			Labels: []descriptor.Label{
+			Labels: []descriptorv2.Label{
 				{Name: "type", Value: "backend"},
 			},
 		},
@@ -293,8 +293,8 @@ func TestElementMeta_String(t *testing.T) {
 
 func TestElementMeta_ToIdentity(t *testing.T) {
 	// Setup
-	elemMeta := descriptor.ElementMeta{
-		ObjectMeta: descriptor.ObjectMeta{
+	elemMeta := descriptorv2.ElementMeta{
+		ObjectMeta: descriptorv2.ObjectMeta{
 			Name:    "test-element",
 			Version: "2.0.0",
 		},
@@ -317,7 +317,7 @@ func TestElementMeta_ToIdentity(t *testing.T) {
 
 func TestElementMeta_ToIdentity_Nil(t *testing.T) {
 	// Test
-	var elemMeta *descriptor.ElementMeta
+	var elemMeta *descriptorv2.ElementMeta
 	identity := elemMeta.ToIdentity()
 
 	// Assert
@@ -326,11 +326,11 @@ func TestElementMeta_ToIdentity_Nil(t *testing.T) {
 
 func TestComponentMeta_ToIdentity(t *testing.T) {
 	// Setup
-	compMeta := descriptor.ComponentMeta{
-		ObjectMeta: descriptor.ObjectMeta{
+	compMeta := descriptorv2.ComponentMeta{
+		ObjectMeta: descriptorv2.ObjectMeta{
 			Name:    "test-component",
 			Version: "3.0.0",
-			Labels: []descriptor.Label{
+			Labels: []descriptorv2.Label{
 				{Name: "stage", Value: "dev"},
 			},
 		},
@@ -349,7 +349,7 @@ func TestComponentMeta_ToIdentity(t *testing.T) {
 
 func TestComponentMeta_ToIdentity_Nil(t *testing.T) {
 	// Test
-	var compMeta *descriptor.ComponentMeta
+	var compMeta *descriptorv2.ComponentMeta
 	identity := compMeta.ToIdentity()
 
 	// Assert
@@ -358,19 +358,19 @@ func TestComponentMeta_ToIdentity_Nil(t *testing.T) {
 
 func TestNewExcludeFromSignatureDigest(t *testing.T) {
 	// Test
-	digest := descriptor.NewExcludeFromSignatureDigest()
+	digest := descriptorv2.NewExcludeFromSignatureDigest()
 
 	// Assert
-	assert.Equal(t, descriptor.NoDigest, digest.HashAlgorithm)
-	assert.Equal(t, descriptor.ExcludeFromSignature, digest.NormalisationAlgorithm)
-	assert.Equal(t, descriptor.NoDigest, digest.Value)
+	assert.Equal(t, descriptorv2.NoDigest, digest.HashAlgorithm)
+	assert.Equal(t, descriptorv2.ExcludeFromSignature, digest.NormalisationAlgorithm)
+	assert.Equal(t, descriptorv2.NoDigest, digest.Value)
 }
 
 func TestTimestamp_MarshalJSON(t *testing.T) {
 	// Setup
-	ts := &descriptor.Timestamp{}
+	ts := &descriptorv2.Timestamp{}
 	timeValue := time.Date(2023, 10, 15, 14, 30, 45, 123456789, time.UTC)
-	ts.Time = descriptor.NewTime(timeValue)
+	ts.Time = descriptorv2.NewTime(timeValue)
 
 	// Test
 	data, err := json.Marshal(ts)
@@ -382,7 +382,7 @@ func TestTimestamp_MarshalJSON(t *testing.T) {
 
 func TestTimestamp_UnmarshalJSON(t *testing.T) {
 	// Setup
-	ts := &descriptor.Timestamp{}
+	ts := &descriptorv2.Timestamp{}
 	jsonData := []byte(`"2023-10-15T14:30:45Z"`)
 
 	// Test
@@ -396,7 +396,7 @@ func TestTimestamp_UnmarshalJSON(t *testing.T) {
 
 func TestTimestamp_UnmarshalJSON_Null(t *testing.T) {
 	// Setup
-	ts := &descriptor.Timestamp{}
+	ts := &descriptorv2.Timestamp{}
 	jsonData := []byte(`null`)
 
 	// Test
@@ -409,7 +409,7 @@ func TestTimestamp_UnmarshalJSON_Null(t *testing.T) {
 
 func TestTimestamp_UnmarshalJSON_InvalidFormat(t *testing.T) {
 	// Setup
-	ts := &descriptor.Timestamp{}
+	ts := &descriptorv2.Timestamp{}
 	jsonData := []byte(`"2023-10-15"`)
 
 	// Test
@@ -421,9 +421,9 @@ func TestTimestamp_UnmarshalJSON_InvalidFormat(t *testing.T) {
 
 func TestTimestamp_MarshalJSON_InvalidYear(t *testing.T) {
 	// Setup
-	ts := &descriptor.Timestamp{}
+	ts := &descriptorv2.Timestamp{}
 	timeValue := time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
-	ts.Time = descriptor.NewTime(timeValue)
+	ts.Time = descriptorv2.NewTime(timeValue)
 
 	// Test
 	_, err := json.Marshal(ts)
@@ -435,36 +435,36 @@ func TestTimestamp_MarshalJSON_InvalidYear(t *testing.T) {
 
 func TestConstantValues(t *testing.T) {
 	// Test identity attribute constants
-	assert.Equal(t, "name", descriptor.IdentityAttributeName)
-	assert.Equal(t, "version", descriptor.IdentityAttributeVersion)
+	assert.Equal(t, "name", descriptorv2.IdentityAttributeName)
+	assert.Equal(t, "version", descriptorv2.IdentityAttributeVersion)
 
 	// Test digest constants
-	assert.Equal(t, "EXCLUDE-FROM-SIGNATURE", descriptor.ExcludeFromSignature)
-	assert.Equal(t, "NO-DIGEST", descriptor.NoDigest)
+	assert.Equal(t, "EXCLUDE-FROM-SIGNATURE", descriptorv2.ExcludeFromSignature)
+	assert.Equal(t, "NO-DIGEST", descriptorv2.NoDigest)
 
 	// Test resource relation constants
-	assert.Equal(t, descriptor.ResourceRelation("local"), descriptor.LocalRelation)
-	assert.Equal(t, descriptor.ResourceRelation("external"), descriptor.ExternalRelation)
+	assert.Equal(t, descriptorv2.ResourceRelation("local"), descriptorv2.LocalRelation)
+	assert.Equal(t, descriptorv2.ResourceRelation("external"), descriptorv2.ExternalRelation)
 }
 
 func TestResource_Struct(t *testing.T) {
 	// Setup
-	resource := descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
+	resource := descriptorv2.Resource{
+		ElementMeta: descriptorv2.ElementMeta{
+			ObjectMeta: descriptorv2.ObjectMeta{
 				Name:    "test-resource",
 				Version: "1.0.0",
 			},
 		},
 		Type:     "ociImage",
-		Relation: descriptor.LocalRelation,
+		Relation: descriptorv2.LocalRelation,
 		Access: &runtime.Raw{
 			Type: runtime.Type{
 				Name: "ociArtifact",
 			},
 			Data: []byte(`{"type":"ociArtifact","imageReference":"test/image:1.0"}`),
 		},
-		Digest: &descriptor.Digest{
+		Digest: &descriptorv2.Digest{
 			HashAlgorithm:          "SHA-256",
 			NormalisationAlgorithm: "OciArtifactDigest",
 			Value:                  "abcdef1234567890",
@@ -488,9 +488,9 @@ func TestResource_Struct(t *testing.T) {
 
 func TestSource_Struct(t *testing.T) {
 	// Setup
-	source := descriptor.Source{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
+	source := descriptorv2.Source{
+		ElementMeta: descriptorv2.ElementMeta{
+			ObjectMeta: descriptorv2.ObjectMeta{
 				Name:    "test-source",
 				Version: "1.0.0",
 			},
@@ -517,15 +517,15 @@ func TestSource_Struct(t *testing.T) {
 
 func TestReference_Struct(t *testing.T) {
 	// Setup
-	reference := descriptor.Reference{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
+	reference := descriptorv2.Reference{
+		ElementMeta: descriptorv2.ElementMeta{
+			ObjectMeta: descriptorv2.ObjectMeta{
 				Name:    "test-reference",
 				Version: "1.0.0",
 			},
 		},
 		Component: "referenced-component",
-		Digest: descriptor.Digest{
+		Digest: descriptorv2.Digest{
 			HashAlgorithm:          "SHA-256",
 			NormalisationAlgorithm: "JsonNormalization",
 			Value:                  "0123456789abcdef",
@@ -545,14 +545,14 @@ func TestReference_Struct(t *testing.T) {
 
 func TestSignature_Struct(t *testing.T) {
 	// Setup
-	signature := descriptor.Signature{
+	signature := descriptorv2.Signature{
 		Name: "test-signature",
-		Digest: descriptor.Digest{
+		Digest: descriptorv2.Digest{
 			HashAlgorithm:          "SHA-256",
 			NormalisationAlgorithm: "JsonNormalization",
 			Value:                  "0123456789abcdef",
 		},
-		Signature: descriptor.SignatureInfo{
+		Signature: descriptorv2.SignatureInfo{
 			Algorithm: "RSASSA-PKCS1-V1_5",
 			Value:     "base64-encoded-signature-value",
 			MediaType: "application/vnd.ocm.signature.rsa",
@@ -612,7 +612,7 @@ func TestComponentDeserialization(t *testing.T) {
 		}
 	}`
 
-	var desc descriptor.Descriptor
+	var desc descriptorv2.Descriptor
 	err := json.Unmarshal([]byte(jsonData), &desc)
 
 	require.NoError(t, err)
@@ -626,7 +626,7 @@ func TestComponentDeserialization(t *testing.T) {
 	assert.Equal(t, "example-resource", desc.Component.Resources[0].Name)
 	assert.Equal(t, "1.0.0", desc.Component.Resources[0].Version)
 	assert.Equal(t, "ociImage", desc.Component.Resources[0].Type)
-	assert.Equal(t, descriptor.LocalRelation, desc.Component.Resources[0].Relation)
+	assert.Equal(t, descriptorv2.LocalRelation, desc.Component.Resources[0].Relation)
 
 	// Check sources
 	require.Len(t, desc.Component.Sources, 1)

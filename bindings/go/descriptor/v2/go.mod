@@ -1,4 +1,4 @@
-module ocm.software/open-component-model/bindings/go/descriptor
+module ocm.software/open-component-model/bindings/go/descriptor/v2
 
 go 1.24.1
 
