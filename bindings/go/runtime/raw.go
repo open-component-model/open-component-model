@@ -7,6 +7,8 @@ import (
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 )
 
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
 type Raw struct {
 	Type `json:"type"`
 	Data []byte `json:"-"`

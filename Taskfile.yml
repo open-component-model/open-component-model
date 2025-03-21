@@ -52,4 +52,4 @@ tasks:
     desc: "Run all Code Generators in the project"
     cmds:
       - task: 'bindings/go/generator:ocmtypegen/generate'
-      - task: 'tools:controller-gen/generate-deepcopy'
+      - task: 'tools:deepcopy-gen/generate-deepcopy'

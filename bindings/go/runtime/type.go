@@ -10,6 +10,7 @@ import (
 type Typed interface {
 	// GetType returns the object's type
 	GetType() Type
+	DeepCopyTyped() Typed
 }
 
 // Type represents a structured type with an optional group, an optional version and a name.
