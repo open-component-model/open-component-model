@@ -78,7 +78,7 @@ jobs:
             echo "::error file=$STATUS_FILE::Black Duck scan had technical issues:"
             
             # Extract and print issue details
-            jq -r '.issues[] | "\(.type): \(.title)\n  Details: \((.messages | if type == "string" then [.] else . end) | join("; "))"' status.json | \
+            jq -r '.issues[] | "\(.type): \(.title)\n  Details: \((.messages | if type == "string" then [.] else . end) | join("; "))"' "$STATUS_FILE" | \
             while IFS= read -r line; do
               echo "::error::$line"
             done
