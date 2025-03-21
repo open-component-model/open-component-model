@@ -71,4 +71,4 @@
 //
 // Additional fields MAY be defined, such as `extraIdentity` or `labels`.
 // To read more about the specification of a component visit https://github.com/open-component-model/ocm-spec/.
-package descriptor
+package v2

@@ -1,4 +1,4 @@
-package descriptor
+package v2
 
 import (
 	"errors"

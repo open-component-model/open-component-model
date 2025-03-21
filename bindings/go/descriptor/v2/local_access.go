@@ -1,4 +1,4 @@
-package descriptor
+package v2
 
 import (
 	"ocm.software/open-component-model/bindings/go/runtime"
