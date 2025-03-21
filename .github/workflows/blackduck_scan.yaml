@@ -30,6 +30,7 @@ jobs:
           DETECT_PROJECT_USER_GROUPS: opencomponentmodel
           DETECT_PROJECT_VERSION_DISTRIBUTION: opensource
           DETECT_BLACKDUCK_SIGNATURE_SCANNER_ARGUMENTS: '--min-scan-interval=0'
+          DETECT_DETECTOR_SEARCH_DEPTH: 3
           NODE_TLS_REJECT_UNAUTHORIZED: true
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -44,6 +45,7 @@ jobs:
         env:
           DETECT_PROJECT_USER_GROUPS: opencomponentmodel
           DETECT_PROJECT_VERSION_DISTRIBUTION: opensource
+          DETECT_DETECTOR_SEARCH_DEPTH: 3
           NODE_TLS_REJECT_UNAUTHORIZED: true
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
