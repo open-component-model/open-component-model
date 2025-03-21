@@ -9,7 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// LocalBlobAccessType was the Type information of OCIImageLayer in the old CLI.
+// LegacyOCIBlobAccessType and LegacyOCIBlobAccessTypeVersion were the Type information of OCIImageLayer in the old CLI.
 const (
 	LegacyOCIBlobAccessType        = "ociBlob"
 	LegacyOCIBlobAccessTypeVersion = "v1"
