@@ -11,5 +11,6 @@ require (
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
+	golang.org/x/sync v0.12.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
