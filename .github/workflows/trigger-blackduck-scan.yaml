@@ -1,0 +1,25 @@
+name: Trigger Blackduck Scan
+on: 
+  push:
+    paths-ignore:
+    - '.github/workflows/**'
+    branches: [ "main" ]
+  pull_request_target:
+    paths-ignore:
+    - '.github/workflows/**'
+    branches: [ "main" ]
+  schedule:
+    - cron:  '10 0 * * 0'
+  workflow_dispatch:
+
+jobs:
+  trigger-scan:
+    uses: open-component-model/.github/.github/workflows/blackduck-scan.yaml@main
+    with:
+      pull_request: ${{ github.event_name }}
+      detector_search_depth: '3'
+    secrets:
+      BLACKDUCK_API_TOKEN: ${{ secrets.BLACKDUCK_API_TOKEN }}
+      BLACKDUCK_URL: ${{ secrets.BLACKDUCK_URL }}
+    permissions:
+      contents: read
