@@ -29,7 +29,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/ctf/Taskfile.yml
     dir: ./bindings/go/ctf
-
+  cli/configuration/v1:
+    optional: true
+    taskfile: ./cli/configuration/v1/Taskfile.yml
+    dir: ./cli/configuration/v1
 
 vars:
   GO_MODULES:
