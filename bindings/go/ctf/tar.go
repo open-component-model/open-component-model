@@ -127,14 +127,14 @@ func Archive(ctx context.Context, ctf CTF, path string, format FileFormat) error
 func ArchiveDirectory(ctx context.Context, ctf CTF, path string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	var fsCTF CTF
 
 	blobs, err := ctf.ListBlobs(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to list blobs: %w", err)
 	}
 
-	if fsCTF, err = OpenCTFFromOSPath(path, O_RDWR|O_CREATE); err != nil {
+	fsCTF, err := OpenCTFFromOSPath(path, O_RDWR|O_CREATE)
+	if err != nil {
 		return fmt.Errorf("unable to setup file system ctf: %w", err)
 	}
 	if len(blobs) > 0 {
