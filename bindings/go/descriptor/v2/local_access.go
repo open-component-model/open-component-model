@@ -11,9 +11,21 @@ const (
 	LocalBlobAccessTypeGroup   = "software.ocm.accessType"
 )
 
+var typ = runtime.Type{
+	Name:    LocalBlobAccessType,
+	Version: LocalBlobAccessTypeVersion,
+	Group:   LocalBlobAccessTypeGroup,
+}
+
+func GetLocalBlobAccessType() runtime.Type {
+	return typ
+}
+
 // LocalBlob describes the access for a local blob.
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
 type LocalBlob struct {
-	runtime.Type `json:"type"`
+	Type runtime.Type `json:"type"`
 	// LocalReference is the repository local identity of the blob.
 	// it is used by the repository implementation to get access
 	// to the blob and if therefore specific to a dedicated repository type.
@@ -31,4 +43,10 @@ type LocalBlob struct {
 	// The value is typically an OCI repository name optionally
 	// followed by a colon ':' and a tag
 	ReferenceName string `json:"referenceName,omitempty"`
+}
+
+// GetType returns the type definition of LocalBlob as per OCM's Type System.
+// It is the type on which it will be registered with the dynamic type system.
+func (t *LocalBlob) GetType() runtime.Type {
+	return t.Type
 }

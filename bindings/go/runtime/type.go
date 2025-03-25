@@ -129,6 +129,11 @@ func (t Type) HasVersion() bool {
 	return t.Version != ""
 }
 
+// IsEmpty checks if the Type is empty (no group, version, or name).
+func (t Type) IsEmpty() bool {
+	return t.Group == "" && t.Version == "" && t.Name == ""
+}
+
 // MarshalJSON converts Type to a JSON string.
 func (t Type) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())

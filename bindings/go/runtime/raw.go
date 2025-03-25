@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -33,7 +34,30 @@ func (u *Raw) GetType() Type {
 }
 
 func (u *Raw) MarshalJSON() ([]byte, error) {
-	return u.Data, nil
+	d, err := AddTypeIfMissing(u.Data, u.Type)
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal data into raw: %w", err)
+	}
+	return d, nil
+}
+
+func AddTypeIfMissing(input []byte, typ Type) ([]byte, error) {
+	if typ.IsEmpty() {
+		return input, nil
+	}
+	// Use json.Decoder to only scan top-level keys
+	// Use map[string]json.RawMessage to avoid full unmarshalling
+	var rawMap map[string]json.RawMessage
+	if err := json.NewDecoder(bytes.NewReader(input)).Decode(&rawMap); err != nil {
+		return nil, err
+	}
+
+	if raw, exists := rawMap[IdentityAttributeType]; !exists || bytes.Equal(raw, []byte(`""`)) {
+		rawMap[IdentityAttributeType] = json.RawMessage(`"` + typ.String() + `"`)
+	}
+
+	// Marshal the modified map back to JSON
+	return json.Marshal(rawMap)
 }
 
 func (u *Raw) UnmarshalJSON(data []byte) error {

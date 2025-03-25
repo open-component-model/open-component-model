@@ -113,7 +113,7 @@ func ConvertFromV2Resources(resources []v2.Resource) []Resource {
 		n[i].Version = resources[i].Version
 		n[i].Type = resources[i].Type
 		if resources[i].CreationTime != nil {
-			n[i].CreationTime = resources[i].CreationTime.Time.Time
+			n[i].CreationTime = CreationTime(resources[i].CreationTime.Time.Time)
 		}
 		if resources[i].Labels != nil {
 			n[i].Labels = ConvertFromV2Labels(resources[i].Labels)
@@ -248,8 +248,8 @@ func ConvertToV2Resources(resources []Resource) []v2.Resource {
 		n[i].Name = resources[i].Name
 		n[i].Version = resources[i].Version
 		n[i].Type = resources[i].Type
-		if resources[i].CreationTime != (time.Time{}) {
-			n[i].CreationTime = &v2.Timestamp{Time: v2.Time{Time: resources[i].CreationTime}}
+		if time.Time(resources[i].CreationTime) != (time.Time{}) {
+			n[i].CreationTime = &v2.Timestamp{Time: v2.Time{Time: time.Time(resources[i].CreationTime)}}
 		}
 		n[i].Labels = ConvertToV2Labels(resources[i].Labels)
 		n[i].Digest = ConvertToV2Digest(resources[i].Digest)

@@ -96,7 +96,13 @@ type Resource struct {
 	// Size of the resource blob.
 	Size int64 `json:"-"`
 	// CreationTime of the resource.
-	CreationTime time.Time `json:"-"`
+	CreationTime CreationTime `json:"-"`
+}
+
+type CreationTime time.Time
+
+func (t CreationTime) DeepCopyInto(to *CreationTime) {
+	*to = t
 }
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.

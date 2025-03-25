@@ -142,6 +142,10 @@ func (repo *Repository) AddLocalResource(
 		return nil, err
 	}
 
+	if resource.Access == nil {
+		return nil, fmt.Errorf("resource access is required for uploading to an OCI repository")
+	}
+
 	var access v2.LocalBlob
 	if err := repo.scheme.Convert(resource.Access, &access); err != nil {
 		return nil, fmt.Errorf("error converting resource access to OCI image: %w", err)
@@ -228,32 +232,35 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	var matchingLayers []ociImageSpecV1.Descriptor
 	var notMatched []ociImageSpecV1.Descriptor
 	for _, layer := range manifest.Layers {
-		artifactAnnotation, err := GetArtifactOCILayerAnnotation(&layer)
-		if errors.Is(err, ErrArtifactOCILayerAnnotationDoesNotExist) {
+		artifactAnnotations, err := GetArtifactOCILayerAnnotations(&layer)
+		if errors.Is(err, ErrArtifactOCILayerAnnotationDoesNotExist) || len(artifactAnnotations) == 0 {
 			continue
 		}
 		if err != nil {
-			return nil, err
-		}
-		if artifactAnnotation.Kind != ArtifactKindResource {
-			continue
+			return nil, fmt.Errorf("error getting artifact annotation: %w", err)
 		}
 		required := identity
 		matched := 0
-		for key, value := range required {
-			if artifactAnnotation.Identity[key] == value {
-				matched++
+
+		for _, artifactAnnotation := range artifactAnnotations {
+			if artifactAnnotation.Kind != ArtifactKindResource {
+				continue
 			}
-			if matched == len(required) {
+			if runtime.Identity(required).Match(artifactAnnotation.Identity) {
 				matchingLayers = append(matchingLayers, layer)
-				break
+				matched++
+			} else {
+				notMatched = append(notMatched, layer)
 			}
 		}
-		notMatched = append(notMatched, layer)
+
+		if matched > 0 {
+			break
+		}
 	}
 
 	if len(matchingLayers) == 0 {
-		return nil, fmt.Errorf("no matching layers for identity %v (from %v): %w", identity, notMatched, errdef.ErrNotFound)
+		return nil, fmt.Errorf("no matching layers for identity %v (not matched other layers %v): %w", identity, notMatched, errdef.ErrNotFound)
 	} else if len(matchingLayers) > 1 {
 		return nil, fmt.Errorf("found multiple matching layers for identity %v", identity)
 	}

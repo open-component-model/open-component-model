@@ -22,8 +22,11 @@ const (
 // can be set in the OCIImageLayer directly and can be used instead of a manifest lookup.
 // Note however, that presence of the layer in OCI is only guaranteed if a Manifest
 // is present in the repository that references the layer.
+//
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
 type OCIImageLayer struct {
-	runtime.Type `json:"type"`
+	Type runtime.Type `json:"type"`
 	// Reference is the oci reference to the OCI repository
 	Reference string `json:"ref"`
 	// MediaType is the media type of the object this schema refers to.
@@ -34,23 +37,29 @@ type OCIImageLayer struct {
 	Size int64 `json:"size"`
 }
 
-func (o *OCIImageLayer) Validate() error {
-	if err := o.Digest.Validate(); err != nil {
+func (t *OCIImageLayer) Validate() error {
+	if err := t.Digest.Validate(); err != nil {
 		return err
 	}
-	if o.Size < 0 {
-		return fmt.Errorf("size %d is invalid, must be greater than 0", o.Size)
+	if t.Size < 0 {
+		return fmt.Errorf("size %d is invalid, must be greater than 0", t.Size)
 	}
-	if o.Reference == "" {
+	if t.Reference == "" {
 		return fmt.Errorf("reference is empty")
 	}
-	ref, err := registry.ParseReference(o.Reference)
+	ref, err := registry.ParseReference(t.Reference)
 	if err != nil {
-		return fmt.Errorf("invalid reference %q: %w", o.Reference, err)
+		return fmt.Errorf("invalid reference %q: %w", t.Reference, err)
 	}
-	if dig, err := ref.Digest(); err == nil && dig != o.Digest {
-		return fmt.Errorf("digest field value %q does not match digest contained in reference %q", o.Digest, o.Reference)
+	if dig, err := ref.Digest(); err == nil && dig != t.Digest {
+		return fmt.Errorf("digest field value %q does not match digest contained in reference %q", t.Digest, t.Reference)
 	}
 
 	return nil
+}
+
+// GetType returns the type definition of LocalBlob as per OCM's Type System.
+// It is the type on which it will be registered with the dynamic type system.
+func (t *OCIImageLayer) GetType() runtime.Type {
+	return t.Type
 }

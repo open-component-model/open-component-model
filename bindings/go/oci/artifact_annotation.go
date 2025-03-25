@@ -2,6 +2,7 @@ package oci
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -26,27 +27,35 @@ type ArtifactOCILayerAnnotation struct {
 	Kind     ArtifactKind      `json:"kind"`
 }
 
-func GetArtifactOCILayerAnnotation(descriptor *ociImageSpecV1.Descriptor) (*ArtifactOCILayerAnnotation, error) {
+func GetArtifactOCILayerAnnotations(descriptor *ociImageSpecV1.Descriptor) ([]ArtifactOCILayerAnnotation, error) {
 	annotation, isOCMArtifact := descriptor.Annotations[ArtifactOCILayerAnnotationKey]
 	if !isOCMArtifact {
 		return nil, ErrArtifactOCILayerAnnotationDoesNotExist
 	}
-	var artifactAnnotations []*ArtifactOCILayerAnnotation
+	var artifactAnnotations []ArtifactOCILayerAnnotation
 	if err := json.Unmarshal([]byte(annotation), &artifactAnnotations); err != nil {
 		return nil, err
 	}
-	artifactAnnotation := artifactAnnotations[0]
-	return artifactAnnotation, nil
+	return artifactAnnotations, nil
 }
 
-func (a *ArtifactOCILayerAnnotation) AddToDescriptor(descriptor *ociImageSpecV1.Descriptor) error {
-	annotation, err := json.Marshal(a)
-	if err != nil {
-		return err
-	}
+func (a ArtifactOCILayerAnnotation) AddToDescriptor(descriptor *ociImageSpecV1.Descriptor) error {
+	var annotations []ArtifactOCILayerAnnotation
 	if descriptor.Annotations == nil {
 		descriptor.Annotations = map[string]string{}
+	} else {
+		var err error
+		if annotations, err = GetArtifactOCILayerAnnotations(descriptor); err != nil &&
+			!errors.Is(err, ErrArtifactOCILayerAnnotationDoesNotExist) {
+			return err
+		}
 	}
+	annotations = append(annotations, a)
+	annotation, err := json.Marshal(annotations)
+	if err != nil {
+		return fmt.Errorf("could not marshal artifact annotations: %w", err)
+	}
+
 	descriptor.Annotations[ArtifactOCILayerAnnotationKey] = string(annotation)
 	return nil
 }

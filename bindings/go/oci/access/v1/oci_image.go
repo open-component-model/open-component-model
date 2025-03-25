@@ -14,16 +14,21 @@ const (
 )
 
 // OCIImage describes the access for a oci registry.
+//
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
 type OCIImage struct {
-	runtime.Type `json:"type"`
+	Type runtime.Type `json:"type"`
 	// ImageReference is the actual reference to the oci image repository and tag.
 	ImageReference string `json:"imageReference"`
 }
 
-func (a *OCIImage) GetType() runtime.Type {
-	return a.Type
+// GetType returns the type definition of LocalBlob as per OCM's Type System.
+// It is the type on which it will be registered with the dynamic type system.
+func (t *OCIImage) GetType() runtime.Type {
+	return t.Type
 }
 
-func (a *OCIImage) String() string {
-	return a.ImageReference
+func (t *OCIImage) String() string {
+	return t.ImageReference
 }
