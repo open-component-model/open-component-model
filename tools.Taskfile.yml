@@ -40,7 +40,8 @@ tasks:
             --timeout 10m \
             --config={{ .ROOT_DIR }}/.github/config/golangci.yml \
             --path-prefix {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} \
-            {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
+            {{ .CLI_ARGS }} {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
+            
 
   golangci-lint/install:
     desc: "Install golangci-lint at {{ .GOLANGCI_LINT_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
