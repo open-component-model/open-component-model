@@ -174,6 +174,16 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 
 	// Handle Raw → Raw (cheap shortcut)
 	if rawFrom, ok := from.(*Raw); ok {
+		// in case the from type info is empty, we may still infer the actual type from the type in the registry
+		if fromType.IsEmpty() {
+			typ, err := r.TypeForPrototype(from)
+			if err != nil {
+				return fmt.Errorf("cannot convert from unregistered type: %w", err)
+			}
+			fromType = typ
+			rawFrom.Type = typ
+		}
+
 		if rawInto, ok := into.(*Raw); ok {
 			rawFrom.DeepCopyInto(rawInto)
 			return nil
@@ -191,6 +201,14 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 
 	// Typed → Raw
 	if rawInto, ok := into.(*Raw); ok {
+		// in case the from type info is empty, we may still infer the actual type from the type in the registry
+		if fromType.IsEmpty() {
+			typ, err := r.TypeForPrototype(from)
+			if err != nil {
+				return fmt.Errorf("cannot convert from unregistered type: %w", err)
+			}
+			fromType = typ
+		}
 		// 'from' can never be a *Raw (shouldn't happen due to earlier check)
 
 		if !r.IsRegistered(fromType) {
@@ -200,6 +218,10 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		data, err := json.Marshal(from)
 		if err != nil {
 			return fmt.Errorf("failed to marshal into raw: %w", err)
+		}
+
+		if data, err = AddTypeIfMissing(data, fromType); err != nil {
+			return fmt.Errorf("failed to add type to raw: %w", err)
 		}
 
 		canonicalData, err := jsoncanonicalizer.Transform(data)
