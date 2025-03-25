@@ -9,12 +9,12 @@ tasks:
     desc: "Generate kubernetes-style deepcopy code for all types in the project"
     deps: [deepcopy-gen/install]
     cmds:
-      - for: { var: GO_MODULES }
+      - for: { var: GO_GENERATE }
         cmd: |
-          cd {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} && \
+          cd {{.ITEM}} && \
           {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }} -v9 \
           --output-file "zz_generated.deepcopy.go" \
-          {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
+          {{.ITEM}}/...
 
   deepcopy-gen/install:
     desc: "Install {{.PKG}} at {{ .DEEPCOPY_GEN_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
