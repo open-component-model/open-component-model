@@ -9,11 +9,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type testType struct {
-	runtime.Typed `json:"type"`
-	Key           string `json:"key"`
-}
-
 func TestFlatMap(t *testing.T) {
 	r := require.New(t)
 

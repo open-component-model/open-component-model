@@ -18,9 +18,10 @@ const (
 )
 
 // Config holds configuration entities loaded through a configuration file.
+// +k8s:deepcopy-gen=true
 type Config struct {
-	runtime.Type   `json:"type"`
-	Configurations []Configuration `json:"configurations,omitempty"`
+	Type           runtime.Type    `json:"type"`
+	Configurations []Configuration `json:"configurations"`
 }
 
 // Configuration holds a single configuration entity.
