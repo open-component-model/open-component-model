@@ -25,6 +25,11 @@ includes:
     optional: true
     taskfile: ./bindings/go/blob/Taskfile.yml
     dir: ./bindings/go/blob
+  bindings/go/ctf:
+    optional: true
+    taskfile: ./bindings/go/ctf/Taskfile.yml
+    dir: ./bindings/go/ctf
+
 
 vars:
   GO_MODULES:
