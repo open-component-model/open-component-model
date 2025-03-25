@@ -33,14 +33,14 @@ tasks:
     desc: "Run golangci-lint on all go modules"
     deps: [golangci-lint/install]
     cmds:
-      - for: { var: GO_MODULES }
+      - for: { var: GO_GENERATE }
         cmd: |
-          cd {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} && 
+          cd {{.ITEM}} && 
           {{ .ROOT_DIR }}/tmp/bin/golangci-lint run \
             --timeout 10m \
             --config={{ .ROOT_DIR }}/.github/config/golangci.yml \
-            --path-prefix {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} \
-            {{ .CLI_ARGS }} {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
+            --path-prefix {{.ITEM}} \
+            {{ .CLI_ARGS }} ./...          
             
 
   golangci-lint/install:

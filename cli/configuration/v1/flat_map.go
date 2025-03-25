@@ -28,9 +28,8 @@ func FlatMap(configs ...*Config) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, entry := range cfg.Configurations {
-			merged.Configurations = append(merged.Configurations, entry)
-		}
+
+		merged.Configurations = append(merged.Configurations, cfg.Configurations...)
 	}
 	// reverse the order of the configurations to match the order of the input configs
 	// this is important for the order of the configurations to be preserved.
