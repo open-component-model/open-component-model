@@ -25,8 +25,9 @@ type Config struct {
 }
 
 // Configuration holds a single configuration entity.
+// +k8s:deepcopy-gen=true
 type Configuration struct {
-	runtime.Raw `json:",inline"`
+	*runtime.Raw `json:",inline"`
 }
 
 // UnmarshalJSON takes raw data and unmarshalls it into a Configuration object.
@@ -35,7 +36,7 @@ func (a *Configuration) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, raw); err != nil {
 		return err
 	}
-	a.Raw = *raw
+	a.Raw = raw
 	return nil
 }
 
