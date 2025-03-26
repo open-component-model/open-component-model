@@ -10,6 +10,7 @@ import (
 type Typed interface {
 	// GetType returns the object's type
 	GetType() Type
+	SetType(Type)
 	DeepCopyTyped() Typed
 }
 

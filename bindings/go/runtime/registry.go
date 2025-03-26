@@ -166,30 +166,32 @@ func (r *Scheme) Decode(data io.Reader, into Typed) error {
 //   - A type is not registered in the Scheme (for Raw conversions).
 //   - A reflection-based assignment fails due to type mismatch.
 func (r *Scheme) Convert(from Typed, into Typed) error {
+	// Check for nil arguments.
 	if from == nil || into == nil {
 		return fmt.Errorf("both 'from' and 'into' must be non-nil")
 	}
 
+	// Ensure that from's type is populated. If its not, attempt to infer type information based on the scheme.
+	if from.GetType().IsEmpty() {
+		// avoid mutating the original object
+		from = from.DeepCopyTyped()
+		typ, err := r.TypeForPrototype(from)
+		if err != nil {
+			return fmt.Errorf("cannot convert from unregistered type: %w", err)
+		}
+		from.SetType(typ)
+	}
 	fromType := from.GetType()
 
-	// Handle Raw → Raw (cheap shortcut)
+	// Case 1: Raw -> Raw or Raw -> Typed
 	if rawFrom, ok := from.(*Raw); ok {
-		// in case the from type info is empty, we may still infer the actual type from the type in the registry
-		if fromType.IsEmpty() {
-			typ, err := r.TypeForPrototype(from)
-			if err != nil {
-				return fmt.Errorf("cannot convert from unregistered type: %w", err)
-			}
-			fromType = typ
-			rawFrom.Type = typ
-		}
-
+		// Raw → Raw: Deep copy the underlying data.
 		if rawInto, ok := into.(*Raw); ok {
 			rawFrom.DeepCopyInto(rawInto)
 			return nil
 		}
 
-		// Raw → Typed (YAML decode)
+		// Raw → Typed: Unmarshal the Raw.Data into the target.
 		if !r.IsRegistered(fromType) {
 			return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
 		}
@@ -199,60 +201,38 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		return nil
 	}
 
-	// Typed → Raw
+	// Case 2: Typed -> Raw
 	if rawInto, ok := into.(*Raw); ok {
-		// in case the from type info is empty, we may still infer the actual type from the type in the registry
-		if fromType.IsEmpty() {
-			typ, err := r.TypeForPrototype(from)
-			if err != nil {
-				return fmt.Errorf("cannot convert from unregistered type: %w", err)
-			}
-			fromType = typ
-		}
-		// 'from' can never be a *Raw (shouldn't happen due to earlier check)
-
 		if !r.IsRegistered(fromType) {
 			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
 		}
-
 		data, err := json.Marshal(from)
 		if err != nil {
 			return fmt.Errorf("failed to marshal into raw: %w", err)
 		}
-
-		if data, err = AddTypeIfMissing(data, fromType); err != nil {
-			return fmt.Errorf("failed to add type to raw: %w", err)
-		}
-
 		canonicalData, err := jsoncanonicalizer.Transform(data)
 		if err != nil {
 			return fmt.Errorf("could not canonicalize data: %w", err)
 		}
-
 		rawInto.Type = fromType
 		rawInto.Data = canonicalData
 		return nil
 	}
 
-	// Generic Typed → Typed conversion
+	// Case 3: Generic Typed -> Typed conversion using reflection.
 	intoVal := reflect.ValueOf(into)
 	if intoVal.Kind() != reflect.Ptr || intoVal.IsNil() {
 		return fmt.Errorf("'into' must be a non-nil pointer")
 	}
-
 	copied := from.DeepCopyTyped()
 	copiedVal := reflect.ValueOf(copied)
-
-	// Make sure copiedVal is the value, not the pointer
 	if copiedVal.Kind() == reflect.Ptr {
 		copiedVal = copiedVal.Elem()
 	}
-
 	intoElem := intoVal.Elem()
 	if !copiedVal.Type().AssignableTo(intoElem.Type()) {
 		return fmt.Errorf("cannot assign value of type %T to target of type %T", copied, into)
 	}
-
 	intoElem.Set(copiedVal)
 	return nil
 }
