@@ -46,6 +46,7 @@ tasks:
     cmds:
       - for: { var: GO_MODULES }
         task: bindings/go/{{.ITEM}}:test
+      - task: cli:test
 
   init/go.work:
     desc: "Initialize the workspace environment"
