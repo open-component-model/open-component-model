@@ -14,9 +14,23 @@ import (
 )
 
 const (
+	// typegenMarker is the marker used to identify types for code generation.
+	// It should be present in the comments of the type declaration.
+	// The marker is used to indicate that the type should be processed by the generator.
+	// The marker is expected to be in the format: "+ocm:typegen=true"
 	typegenMarker = "+ocm:typegen=true"
+	// generatedFile is the name of the generated file.
+	// The generator will create this file in the same package directory as the source files.
+	// The file will contain the generated code for the types marked for generation.
 	generatedFile = "zz_generated.ocm_type.go"
+	// runtimeImport is the import path for the `runtime` package.
+	// This package contains the `Type` struct that is used in the generated code.
+	// The generator will ensure that this import is included in the generated file,
+	// if the package is not the same as the runtime package.
 	runtimeImport = "ocm.software/open-component-model/bindings/go/runtime"
+	// runtimeTypeFieldName is the name of the field in the struct that holds the type information.
+	// This field must be of type `runtime.Type` for the generator to process the struct.
+	runtimeTypeFieldName = "Type"
 )
 
 func main() {
@@ -151,9 +165,9 @@ func hasMarker(groups ...*ast.CommentGroup) bool {
 func hasRuntimeTypeField(s *ast.StructType) bool {
 	for _, field := range s.Fields.List {
 		for _, name := range field.Names {
-			if name.Name == "Type" {
+			if name.Name == runtimeTypeFieldName {
 				if sel, ok := field.Type.(*ast.SelectorExpr); ok {
-					if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "runtime" && sel.Sel.Name == "Type" {
+					if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "runtime" && sel.Sel.Name == runtimeTypeFieldName {
 						return true
 					}
 				}
