@@ -23,11 +23,11 @@ func NewUnstructured() Unstructured {
 }
 
 func (u *Unstructured) SetType(v Type) {
-	u.Data["type"] = v
+	u.Data[IdentityAttributeType] = v
 }
 
 func (u *Unstructured) GetType() Type {
-	v, _ := Get[Type](u, "type")
+	v, _ := Get[Type](u, IdentityAttributeType)
 	return v
 }
 
