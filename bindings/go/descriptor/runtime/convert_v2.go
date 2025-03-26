@@ -38,11 +38,22 @@ func ConvertFromV2(descriptor *v2.Descriptor) (*Descriptor, error) {
 	}, nil
 }
 
-func ConvertToV2(descriptor *Descriptor) (*v2.Descriptor, error) {
+func ConvertToV2(scheme *runtime.Scheme, descriptor *Descriptor) (*v2.Descriptor, error) {
 	provider, err := ConvertToV2Provider(descriptor.Component.Provider)
 	if err != nil {
 		return nil, err
 	}
+
+	res, err := ConvertToV2Resources(scheme, descriptor.Component.Resources)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert resources: %w", err)
+	}
+
+	srcs, err := ConvertToV2Sources(scheme, descriptor.Component.Sources)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert sources: %w", err)
+	}
+
 	return &v2.Descriptor{
 		Meta: v2.Meta{
 			Version: descriptor.Meta.Version,
@@ -58,8 +69,8 @@ func ConvertToV2(descriptor *Descriptor) (*v2.Descriptor, error) {
 			},
 			RepositoryContexts: ConvertToV2RepositoryContexts(descriptor.Component.RepositoryContexts),
 			Provider:           provider,
-			Resources:          ConvertToV2Resources(descriptor.Component.Resources),
-			Sources:            ConvertToV2Sources(descriptor.Component.Sources),
+			Resources:          res,
+			Sources:            srcs,
 			References:         ConvertToV2References(descriptor.Component.References),
 		},
 		Signatures: ConvertToV2Signatures(descriptor.Signatures),
@@ -239,9 +250,9 @@ func ConvertToV2Labels(labels []Label) []v2.Label {
 	return n
 }
 
-func ConvertToV2Resources(resources []Resource) []v2.Resource {
+func ConvertToV2Resources(scheme *runtime.Scheme, resources []Resource) ([]v2.Resource, error) {
 	if resources == nil {
-		return nil
+		return nil, nil
 	}
 	n := make([]v2.Resource, len(resources))
 	for i := range resources {
@@ -254,12 +265,15 @@ func ConvertToV2Resources(resources []Resource) []v2.Resource {
 		n[i].Labels = ConvertToV2Labels(resources[i].Labels)
 		n[i].Digest = ConvertToV2Digest(resources[i].Digest)
 		n[i].SourceRefs = ConvertToV2SourceRefs(resources[i].SourceRefs)
-		n[i].Access = resources[i].Access.DeepCopy()
+		n[i].Access = &runtime.Raw{}
+		if err := scheme.Convert(resources[i].Access, n[i].Access); err != nil {
+			return nil, fmt.Errorf("could not convert access %q: %w", resources[i].String(), err)
+		}
 		n[i].ExtraIdentity = resources[i].ExtraIdentity.DeepCopy()
 		n[i].Size = resources[i].Size
 		n[i].Relation = v2.ResourceRelation(resources[i].Relation)
 	}
-	return n
+	return n, nil
 }
 
 func ConvertToV2SourceRefs(refs []SourceRef) []v2.SourceRef {
@@ -285,9 +299,9 @@ func ConvertToV2Digest(digest *Digest) *v2.Digest {
 	}
 }
 
-func ConvertToV2Sources(sources []Source) []v2.Source {
+func ConvertToV2Sources(scheme *runtime.Scheme, sources []Source) ([]v2.Source, error) {
 	if sources == nil {
-		return nil
+		return nil, nil
 	}
 	n := make([]v2.Source, len(sources))
 	for i := range sources {
@@ -295,10 +309,12 @@ func ConvertToV2Sources(sources []Source) []v2.Source {
 		n[i].Version = sources[i].Version
 		n[i].Labels = ConvertToV2Labels(sources[i].Labels)
 		n[i].ExtraIdentity = sources[i].ExtraIdentity.DeepCopy()
-		n[i].Access = sources[i].Access.DeepCopy()
+		if err := scheme.Convert(sources[i].Access, n[i].Access); err != nil {
+			return nil, fmt.Errorf("could not convert access %q: %w", sources[i].String(), err)
+		}
 		n[i].Type = sources[i].Type
 	}
-	return n
+	return n, nil
 }
 
 func ConvertToV2References(references []Reference) []v2.Reference {

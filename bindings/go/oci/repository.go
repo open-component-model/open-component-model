@@ -189,25 +189,15 @@ func (repo *Repository) AddLocalResource(
 	}
 	repo.localBlobMemory[reference] = append(repo.localBlobMemory[reference], layer)
 
-	newGlobalAccess := v1.OCIImageLayer{
-		Digest:    layer.Digest,
-		MediaType: layer.MediaType,
-		Reference: fmt.Sprintf("%s@%s", reference, layer.Digest.String()),
-		Size:      layer.Size,
-	}
-	localBlob := v2.LocalBlob{
+	resource.Access = &descriptor.LocalBlob{
 		LocalReference: layer.Digest.String(),
 		MediaType:      layer.MediaType,
-		GlobalAccess:   &runtime.Raw{},
-	}
-	if err := repo.scheme.Convert(&newGlobalAccess, localBlob.GlobalAccess); err != nil {
-		return nil, fmt.Errorf("error converting global access to OCI image: %w", err)
-	}
-	if resource.Access == nil {
-		resource.Access = &runtime.Raw{}
-	}
-	if err := repo.scheme.Convert(&localBlob, resource.Access); err != nil {
-		return nil, fmt.Errorf("error converting local blob access to OCI image: %w", err)
+		GlobalAccess: &v1.OCIImageLayer{
+			Digest:    layer.Digest,
+			MediaType: layer.MediaType,
+			Reference: fmt.Sprintf("%s@%s", reference, layer.Digest.String()),
+			Size:      layer.Size,
+		},
 	}
 	if err := ociDigestV1.ApplyToResource(resource, layer.Digest); err != nil {
 		return nil, fmt.Errorf("error applying digest to resource: %w", err)

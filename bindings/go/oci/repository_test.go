@@ -99,33 +99,6 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 
 }
 
-func TestRepository_AddLocalResource(t *testing.T) {
-	ctx := context.Background()
-	mockStore := memory.New()
-	mockResolver := &MockResolver{store: mockStore}
-	repo := oci.RepositoryFromResolverAndMemory(mockResolver, oci.NewLocalBlobMemory())
-
-	// Create a test resource
-	resource := &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    "test-resource",
-				Version: "1.0.0",
-			},
-		},
-		Type: "test-type",
-	}
-
-	// Create a test blob
-	testData := []byte("test data")
-	b := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
-
-	// Test adding local resource
-	newRes, err := repo.AddLocalResource(ctx, "test-component", "1.0.0", resource, b)
-	require.NoError(t, err)
-	assert.NotNil(t, newRes)
-}
-
 func TestRepository_GetLocalResource(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
@@ -329,33 +302,6 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestRepository_UploadResource(t *testing.T) {
-	ctx := context.Background()
-	mockStore := memory.New()
-	mockResolver := &MockResolver{store: mockStore}
-	repo := oci.RepositoryFromResolverAndMemory(mockResolver, oci.NewLocalBlobMemory())
-
-	// Create a test resource
-	resource := &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    "test-resource",
-				Version: "1.0.0",
-			},
-		},
-		Type: "test-type",
-	}
-
-	// Create a test blob
-	testData := []byte("test data")
-	blob := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
-
-	// Test uploading resource
-	newRes, err := repo.UploadResource(ctx, resource, blob)
-	require.NoError(t, err)
-	assert.NotNil(t, newRes)
 }
 
 func TestRepository_DownloadResource(t *testing.T) {

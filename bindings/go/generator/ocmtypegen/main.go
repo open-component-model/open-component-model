@@ -1,114 +1,280 @@
 package main
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// GenerateGetTypeMethod generates a GetType method for structs embedding Type
-func GenerateGetTypeMethod(structName string) string {
-	return fmt.Sprintf(`import (
-	"ocm.software/open-component-model/bindings/go/runtime"
+const (
+	typegenMarker = "+ocm:typegen=true"
+	generatedFile = "zz_generated.ocm_type.go"
+	runtimeImport = "ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// GetType returns the type definition of %[1]s as per OCM's Type System.
-// It is the type on which it will be registered with the dynamic type system.
-func (t *%[1]s) GetType() runtime.Type {
-	return t.Type
-}
-`, structName)
-}
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: generator <root-folder>")
+		os.Exit(1)
+	}
+	root := os.Args[1]
 
-// ParseStructsWithGenerateDirective parses Go source code and finds structs with a specific go:generate directive
-func ParseStructsWithGenerateDirective(sourceFile string) (string, []string, error) {
-	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, sourceFile, nil, parser.AllErrors|parser.ParseComments)
+	packages, err := findGoPackages(root)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to parse source code: %w", err)
+		fmt.Fprintf(os.Stderr, "Error finding Go packages: %v\n", err)
+		os.Exit(1)
 	}
 
-	var structNames []string
+	for _, pkgDir := range packages {
+		// Important: scanFolder must only look inside this one subpackage directory
+		pkgName, types, err := scanSinglePackage(pkgDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error scanning %s: %v\n", pkgDir, err)
+			continue
+		}
+		if len(types) == 0 {
+			continue
+		}
+		fmt.Printf("Generating for %s (%s): %v\n", pkgName, pkgDir, types)
 
-	for _, comment := range node.Comments {
-		for _, c := range comment.List {
-			if strings.Contains(c.Text, "ocmtypegen") {
-				for _, decl := range node.Decls {
-					genDecl, ok := decl.(*ast.GenDecl)
-					if !ok || genDecl.Tok != token.TYPE {
-						continue
-					}
+		err = generateCode(pkgDir, pkgName, types)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating in %s: %v\n", pkgDir, err)
+		}
+	}
+}
 
-					for _, spec := range genDecl.Specs {
-						typeSpec, ok := spec.(*ast.TypeSpec)
-						if !ok {
-							continue
-						}
+func scanSinglePackage(folder string) (string, []string, error) {
+	fset := token.NewFileSet()
+	var packageName string
+	var typesToGenerate []string
 
-						structType, ok := typeSpec.Type.(*ast.StructType)
-						if !ok {
-							continue
-						}
+	files, err := os.ReadDir(folder)
+	if err != nil {
+		return "", nil, err
+	}
 
-						for _, field := range structType.Fields.List {
-							if !strings.Contains(field.Tag.Value, `json:"type"`) {
-								continue
-							}
-							ident, ok := field.Type.(*ast.SelectorExpr)
-							if !ok {
-								return "", nil, fmt.Errorf("type expression found at %q but was not an import from runtime", typeSpec.Name.String())
-							}
-							if ident.Sel.Name == "type" {
-								return "", nil, fmt.Errorf("type expression found at %q but was unexported", typeSpec.Name.String())
-							}
-							if ident.Sel.Name == "Type" {
-								structNames = append(structNames, typeSpec.Name.Name)
-								break
-							}
-						}
+	for _, f := range files {
+		if f.IsDir() || !isValidGoFile(f.Name()) {
+			continue
+		}
+
+		fullPath := filepath.Join(folder, f.Name())
+		file, err := parser.ParseFile(fset, fullPath, nil, parser.ParseComments)
+		if err != nil {
+			return "", nil, err
+		}
+
+		if packageName == "" {
+			packageName = file.Name.Name
+		}
+
+		for _, decl := range file.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok || !hasMarker(genDecl.Doc, typeSpec.Doc) {
+					continue
+				}
+
+				structType, ok := typeSpec.Type.(*ast.StructType)
+				if !ok || !hasRuntimeTypeField(structType) {
+					continue
+				}
+
+				typesToGenerate = append(typesToGenerate, typeSpec.Name.Name)
+			}
+		}
+	}
+
+	return packageName, typesToGenerate, nil
+}
+
+func findGoPackages(root string) ([]string, error) {
+	var packages []string
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || !info.IsDir() {
+			return err
+		}
+		files, err := os.ReadDir(path)
+		if err != nil {
+			return err
+		}
+		for _, file := range files {
+			if !file.IsDir() && isValidGoFile(file.Name()) {
+				packages = append(packages, path)
+				break
+			}
+		}
+		return nil
+	})
+	return packages, err
+}
+
+func scanFolder(folder string) (string, []string, error) {
+	fset := token.NewFileSet()
+	var packageName string
+	var typesToGenerate []string
+
+	err := filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !isValidGoFile(info.Name()) {
+			return err
+		}
+
+		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			return err
+		}
+		if packageName == "" {
+			packageName = file.Name.Name
+		}
+
+		for _, decl := range file.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok || !hasMarker(genDecl.Doc, typeSpec.Doc) {
+					continue
+				}
+				structType, ok := typeSpec.Type.(*ast.StructType)
+				if !ok || !hasRuntimeTypeField(structType) {
+					continue
+				}
+				typesToGenerate = append(typesToGenerate, typeSpec.Name.Name)
+			}
+		}
+		return nil
+	})
+
+	return packageName, typesToGenerate, err
+}
+
+func isValidGoFile(name string) bool {
+	return strings.HasSuffix(name, ".go") &&
+		!strings.HasSuffix(name, "_test.go") &&
+		!strings.HasPrefix(name, "zz_generated.")
+}
+
+func hasMarker(groups ...*ast.CommentGroup) bool {
+	for _, g := range groups {
+		if g == nil {
+			continue
+		}
+		for _, c := range g.List {
+			if strings.Contains(strings.TrimSpace(c.Text), typegenMarker) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasRuntimeTypeField(s *ast.StructType) bool {
+	for _, field := range s.Fields.List {
+		for _, name := range field.Names {
+			if name.Name == "Type" {
+				if sel, ok := field.Type.(*ast.SelectorExpr); ok {
+					if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "runtime" && sel.Sel.Name == "Type" {
+						return true
 					}
 				}
 			}
 		}
 	}
-
-	return node.Name.Name, structNames, nil
+	return false
 }
 
-func main() {
-	// Get the source file path from command-line arguments
-	if len(os.Args) < 2 {
-		log.Fatal("Usage: //go:generate ocmtypegen $GOFILE")
-	}
-	sourceFile := os.Args[1]
-	outputFile := filepath.Join(filepath.Dir(sourceFile), "zz_generated.type.ocm.software.go")
-
-	pkg, structs, err := ParseStructsWithGenerateDirective(sourceFile)
+func getImportPath(folder string) (string, error) {
+	absFolder, err := filepath.Abs(folder)
 	if err != nil {
-		log.Fatalf("Error parsing structs: %v", err)
+		return "", err
 	}
 
-	if len(structs) == 0 {
-		log.Println("No applicable structs found for GetType generation.")
-		return
+	dir := absFolder
+	for {
+		goModPath := filepath.Join(dir, "go.mod")
+		if _, err := os.Stat(goModPath); err == nil {
+			modulePath, err := readModulePath(goModPath)
+			if err != nil {
+				return "", err
+			}
+			relPath, err := filepath.Rel(dir, absFolder)
+			if err != nil {
+				return "", err
+			}
+			if relPath == "." {
+				return modulePath, nil
+			}
+			return filepath.ToSlash(filepath.Join(modulePath, relPath)), nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
 
-	var output strings.Builder
-	output.WriteString("// Code generated by ocmtypegen; DO NOT EDIT.\n\n")
-	output.WriteString("package " + pkg + "\n\n")
+	return "", errors.New("go.mod not found")
+}
 
-	for _, structName := range structs {
-		output.WriteString(GenerateGetTypeMethod(structName))
+func readModulePath(goModPath string) (string, error) {
+	file, err := os.Open(goModPath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
+		}
+	}
+	return "", errors.New("module path not found")
+}
+
+func generateCode(folder, pkg string, types []string) error {
+	outputPath := filepath.Join(folder, generatedFile)
+	out, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	importPath, err := getImportPath(folder)
+	if err != nil {
+		return fmt.Errorf("failed to determine import path: %w", err)
 	}
 
-	if err := os.WriteFile(outputFile, []byte(output.String()), 0o600); err != nil {
-		log.Fatalf("Failed to write generated file: %v", err)
+	fmt.Fprintln(out, `//go:build !ignore_autogenerated
+// +build !ignore_autogenerated
+
+// Code generated by typegen. DO NOT EDIT.`)
+	fmt.Fprintf(out, "\npackage %s\n\n", pkg)
+
+	if importPath != runtimeImport {
+		fmt.Fprintf(out, "import \"%s\"\n\n", runtimeImport)
 	}
 
-	log.Printf("Generated file: %s\n", outputFile)
+	for _, name := range types {
+		fmt.Fprintf(out, "func (t *%s) SetType(typ runtime.Type) {\n\tt.Type = typ\n}\n\n", name)
+		fmt.Fprintf(out, "func (t *%s) GetType() runtime.Type {\n\treturn t.Type\n}\n\n", name)
+	}
+	return nil
 }

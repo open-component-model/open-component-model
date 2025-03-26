@@ -21,9 +21,9 @@ tasks:
         sh: find {{ .ROOT_DIR }}/bindings/go -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/bindings/go/||'
     cmds:
       - for: { var: GO_MODULES }
-        cmd: 'go generate {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...'
+        cmd: 'ocmtypegen {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}'
 
   ocmtypegen/test:
     desc: "Run OCM Type Generation test"
     cmds:
-      - go run {{ .TASKFILE_DIR }}/ocmtypegen/... {{ .TASKFILE_DIR }}/ocmtypegen/test/type.go
+      - ocmtypegen {{ .TASKFILE_DIR }}/ocmtypegen/test

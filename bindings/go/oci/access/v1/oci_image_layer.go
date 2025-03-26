@@ -25,6 +25,7 @@ const (
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
+// +ocm:typegen=true
 type OCIImageLayer struct {
 	Type runtime.Type `json:"type"`
 	// Reference is the oci reference to the OCI repository
@@ -56,10 +57,4 @@ func (t *OCIImageLayer) Validate() error {
 	}
 
 	return nil
-}
-
-// GetType returns the type definition of LocalBlob as per OCM's Type System.
-// It is the type on which it will be registered with the dynamic type system.
-func (t *OCIImageLayer) GetType() runtime.Type {
-	return t.Type
 }

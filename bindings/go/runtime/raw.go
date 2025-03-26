@@ -1,13 +1,18 @@
 package runtime
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 )
 
+// Raw is used to hold extensions in external versions.
+//
+// To use this, make a field which has RawExtension as its type in your external, versioned
+// struct, and Typed in your internal struct. You also need to register your
+// various plugin types.
+//
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 type Raw struct {
@@ -34,30 +39,7 @@ func (u *Raw) GetType() Type {
 }
 
 func (u *Raw) MarshalJSON() ([]byte, error) {
-	d, err := AddTypeIfMissing(u.Data, u.Type)
-	if err != nil {
-		return nil, fmt.Errorf("could not marshal data into raw: %w", err)
-	}
-	return d, nil
-}
-
-func AddTypeIfMissing(input []byte, typ Type) ([]byte, error) {
-	if typ.IsEmpty() {
-		return input, nil
-	}
-	// Use json.Decoder to only scan top-level keys
-	// Use map[string]json.RawMessage to avoid full unmarshalling
-	var rawMap map[string]json.RawMessage
-	if err := json.NewDecoder(bytes.NewReader(input)).Decode(&rawMap); err != nil {
-		return nil, err
-	}
-
-	if raw, exists := rawMap[IdentityAttributeType]; !exists || bytes.Equal(raw, []byte(`""`)) {
-		rawMap[IdentityAttributeType] = json.RawMessage(`"` + typ.String() + `"`)
-	}
-
-	// Marshal the modified map back to JSON
-	return json.Marshal(rawMap)
+	return u.Data, nil
 }
 
 func (u *Raw) UnmarshalJSON(data []byte) error {

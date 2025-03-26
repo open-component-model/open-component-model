@@ -7,8 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorRuntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const jsonData = `
@@ -54,11 +55,11 @@ const jsonData = `
 }`
 
 func TestDescriptorString(t *testing.T) {
-	d := runtime.Descriptor{
-		Meta: runtime.Meta{Version: "v1"},
-		Component: runtime.Component{
-			ComponentMeta: runtime.ComponentMeta{
-				ObjectMeta: runtime.ObjectMeta{
+	d := descriptorRuntime.Descriptor{
+		Meta: descriptorRuntime.Meta{Version: "v1"},
+		Component: descriptorRuntime.Component{
+			ComponentMeta: descriptorRuntime.ComponentMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
 					Name:    "test-component",
 					Version: "1.0.0",
 				},
@@ -73,9 +74,9 @@ func TestDescriptorString(t *testing.T) {
 }
 
 func TestComponentString(t *testing.T) {
-	c := runtime.Component{
-		ComponentMeta: runtime.ComponentMeta{
-			ObjectMeta: runtime.ObjectMeta{
+	c := descriptorRuntime.Component{
+		ComponentMeta: descriptorRuntime.ComponentMeta{
+			ObjectMeta: descriptorRuntime.ObjectMeta{
 				Name:    "test-component",
 				Version: "1.0.0",
 			},
@@ -93,7 +94,7 @@ func TestConvertFromV2(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &v2Descriptor)
 	require.NoError(t, err)
 
-	descriptor, err := runtime.ConvertFromV2(&v2Descriptor)
+	descriptor, err := descriptorRuntime.ConvertFromV2(&v2Descriptor)
 	require.NoError(t, err)
 
 	assert.Equal(t, "github.com/weaveworks/weave-gitops", descriptor.Component.Name)
@@ -106,15 +107,17 @@ func TestConvertToV2(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonData), &v2Descriptor)
 	require.NoError(t, err)
 
-	descriptor, err := runtime.ConvertFromV2(&v2Descriptor)
+	descriptor, err := descriptorRuntime.ConvertFromV2(&v2Descriptor)
 	require.NoError(t, err)
 
-	convertedV2Descriptor, err := runtime.ConvertToV2(descriptor)
+	scheme := runtime.NewScheme()
+
+	convertedV2Descriptor, err := descriptorRuntime.ConvertToV2(scheme, descriptor)
 	require.NoError(t, err)
 
 	assert.Equal(t, v2Descriptor, *convertedV2Descriptor)
-	assert.Empty(t, convertedV2Descriptor.Component.Resources[0].Labels)
-	assert.Empty(t, convertedV2Descriptor.Component.Resources[0].SourceRefs)
+	assert.NotEmpty(t, convertedV2Descriptor.Component.Resources[0].Name)
+	assert.NotEmpty(t, convertedV2Descriptor.Component.Resources[0].Access.Data)
 	assert.Empty(t, convertedV2Descriptor.Component.Sources)
 	assert.Empty(t, convertedV2Descriptor.Component.References)
 	assert.Empty(t, convertedV2Descriptor.Signatures)

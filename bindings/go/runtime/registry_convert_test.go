@@ -15,11 +15,15 @@ type TestType struct {
 	Foo  string       `json:"foo"`
 }
 
-func (t TestType) GetType() runtime.Type {
+func (t *TestType) SetType(typ runtime.Type) {
+	t.Type = typ
+}
+
+func (t *TestType) GetType() runtime.Type {
 	return t.Type
 }
 
-func (t TestType) DeepCopyTyped() runtime.Typed {
+func (t *TestType) DeepCopyTyped() runtime.Typed {
 	return &TestType{
 		Type: t.Type,
 		Foo:  t.Foo,
@@ -33,15 +37,19 @@ type TestType2 struct {
 	Foo  string       `json:"foo"`
 }
 
-func (t TestType2) GetType() runtime.Type {
+func (t *TestType2) GetType() runtime.Type {
 	return t.Type
 }
 
-func (t TestType2) DeepCopyTyped() runtime.Typed {
+func (t *TestType2) DeepCopyTyped() runtime.Typed {
 	return &TestType2{
 		Type: t.Type,
 		Foo:  t.Foo,
 	}
+}
+
+func (t *TestType2) SetType(typ runtime.Type) {
+	t.Type = typ
 }
 
 var _ runtime.Typed = &TestType2{}
@@ -119,7 +127,8 @@ func TestConvert_TypedToRaw(t *testing.T) {
 }
 
 func TestConvert_TypedToTyped(t *testing.T) {
-	s := &runtime.Scheme{}
+	s := runtime.NewScheme()
+	s.MustRegister(&TestType{}, "v1")
 
 	from := &TestType{Foo: "bar"}
 	to := &TestType{}
@@ -129,6 +138,7 @@ func TestConvert_TypedToTyped(t *testing.T) {
 
 	assert.Equal(t, "bar", to.Foo)
 	assert.NotSame(t, from, to)
+	assert.NotEmpty(t, to.Type)
 }
 
 func TestConvert_Errors(t *testing.T) {

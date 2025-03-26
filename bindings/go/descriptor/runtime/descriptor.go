@@ -90,7 +90,7 @@ type Resource struct {
 	// Can be a local or external resource.
 	Relation ResourceRelation `json:"-"`
 	// Access defines the type of access this resource requires.
-	Access *runtime.Raw `json:"-"`
+	Access runtime.Typed `json:"-"`
 	// Digest is the optional digest of the referenced resource.
 	Digest *Digest `json:"-"`
 	// Size of the resource blob.
@@ -111,8 +111,8 @@ func (t CreationTime) DeepCopyInto(to *CreationTime) {
 // +k8s:deepcopy-gen=true
 type Source struct {
 	ElementMeta `json:",inline"`
-	Type        string       `json:"-"`
-	Access      *runtime.Raw `json:"-"`
+	Type        string        `json:"-"`
+	Access      runtime.Typed `json:"-"`
 }
 
 // Reference describes the reference to another component in the registry.
