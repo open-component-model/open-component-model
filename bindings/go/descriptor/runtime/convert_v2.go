@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ConvertFromV2 converts a v2.Descriptor to a custom Descriptor.
+// ConvertFromV2 converts a v2.Descriptor to the internal Descriptor format.
 func ConvertFromV2(descriptor *v2.Descriptor) (*Descriptor, error) {
 	provider, err := ConvertFromV2Provider(descriptor.Component.Provider)
 	if err != nil {
@@ -39,12 +40,23 @@ func ConvertFromV2(descriptor *v2.Descriptor) (*Descriptor, error) {
 	}, nil
 }
 
-// ConvertToV2 converts a custom Descriptor back to a v2.Descriptor.
-func ConvertToV2(descriptor *Descriptor) (*v2.Descriptor, error) {
+// ConvertToV2 converts an internal Descriptor to a v2.Descriptor format.
+func ConvertToV2(scheme *runtime.Scheme, descriptor *Descriptor) (*v2.Descriptor, error) {
 	provider, err := ConvertToV2Provider(descriptor.Component.Provider)
 	if err != nil {
 		return nil, err
 	}
+
+	res, err := ConvertToV2Resources(scheme, descriptor.Component.Resources)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert resources: %w", err)
+	}
+
+	srcs, err := ConvertToV2Sources(scheme, descriptor.Component.Sources)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert sources: %w", err)
+	}
+
 	return &v2.Descriptor{
 		Meta: v2.Meta{
 			Version: descriptor.Meta.Version,
@@ -60,103 +72,109 @@ func ConvertToV2(descriptor *Descriptor) (*v2.Descriptor, error) {
 			},
 			RepositoryContexts: ConvertToV2RepositoryContexts(descriptor.Component.RepositoryContexts),
 			Provider:           provider,
-			Resources:          ConvertToV2Resources(descriptor.Component.Resources),
-			Sources:            ConvertToV2Sources(descriptor.Component.Sources),
+			Resources:          res,
+			Sources:            srcs,
 			References:         ConvertToV2References(descriptor.Component.References),
 		},
 		Signatures: ConvertToV2Signatures(descriptor.Signatures),
 	}, nil
 }
 
-// ConvertFromV2Provider converts a provider string to a runtime.Identity.
+// ConvertFromV2Provider parses a provider string to an Identity map or JSON structure.
 func ConvertFromV2Provider(provider string) (runtime.Identity, error) {
-	if json.Valid([]byte(provider)) {
-		var id runtime.Identity
+	if provider == "" {
+		return nil, nil
+	}
+	if strings.HasPrefix(strings.TrimSpace(provider), "{") {
+		if !json.Valid([]byte(provider)) {
+			return nil, fmt.Errorf("invalid JSON format")
+		}
+		id := runtime.Identity{}
 		if err := json.Unmarshal([]byte(provider), &id); err != nil {
 			return nil, fmt.Errorf("could not unmarshal provider string: %w", err)
 		}
 		return id, nil
 	}
+	// If not JSON, fallback to a single key map.
 	return runtime.Identity{
 		v2.IdentityAttributeName: provider,
 	}, nil
 }
 
-// ConvertFromV2RepositoryContexts deep copies repository contexts.
+// ConvertFromV2RepositoryContexts deep copies a slice of unstructured repository contexts.
 func ConvertFromV2RepositoryContexts(contexts []runtime.Unstructured) []runtime.Unstructured {
 	if contexts == nil {
 		return nil
 	}
 	n := make([]runtime.Unstructured, len(contexts))
 	for i := range contexts {
-		contexts[i].DeepCopyInto(&n[i])
+		(&contexts[i]).DeepCopyInto(&n[i])
 	}
 	return n
 }
 
-// ConvertFromV2Labels maps v2 labels to internal Label format.
+// ConvertFromV2Labels converts a list of v2.Label to internal Label.
 func ConvertFromV2Labels(labels []v2.Label) []Label {
 	if labels == nil {
 		return nil
 	}
 	n := make([]Label, len(labels))
 	for i := range labels {
-		n[i] = Label{
-			Name:    labels[i].Name,
-			Value:   labels[i].Value,
-			Signing: labels[i].Signing,
-		}
+		n[i].Name = labels[i].Name
+		n[i].Value = labels[i].Value
+		n[i].Signing = labels[i].Signing
 	}
 	return n
 }
 
-// ConvertFromV2Resources maps v2 resources to internal Resource format.
+// ConvertFromV2Resources converts v2 resources to internal representation.
 func ConvertFromV2Resources(resources []v2.Resource) []Resource {
 	if resources == nil {
 		return nil
 	}
 	n := make([]Resource, len(resources))
 	for i := range resources {
-		r := resources[i]
-		n[i] = Resource{
-			ElementMeta: ElementMeta{
-				ObjectMeta: ObjectMeta{
-					Name:    r.Name,
-					Version: r.Version,
-				},
-				ExtraIdentity: r.ExtraIdentity.DeepCopy(),
-			},
-			Type:     r.Type,
-			Size:     r.Size,
-			Relation: ResourceRelation(r.Relation),
-			Access:   r.Access.DeepCopy(),
+		n[i].Name = resources[i].Name
+		n[i].Version = resources[i].Version
+		n[i].Type = resources[i].Type
+		if resources[i].CreationTime != nil {
+			n[i].CreationTime = CreationTime(resources[i].CreationTime.Time.Time)
 		}
-		if r.CreationTime != nil {
-			n[i].CreationTime = CreationTime(r.CreationTime.Time.Time)
+		if resources[i].Labels != nil {
+			n[i].Labels = ConvertFromV2Labels(resources[i].Labels)
 		}
-		n[i].Labels = ConvertFromV2Labels(r.Labels)
-		n[i].Digest = ConvertFromV2Digest(r.Digest)
-		n[i].SourceRefs = ConvertFromV2SourceRefs(r.SourceRefs)
+		if resources[i].Digest != nil {
+			n[i].Digest = ConvertFromV2Digest(resources[i].Digest)
+		}
+		if resources[i].SourceRefs != nil {
+			n[i].SourceRefs = ConvertFromV2SourceRefs(resources[i].SourceRefs)
+		}
+		if resources[i].Access != nil {
+			n[i].Access = resources[i].Access.DeepCopy()
+		}
+		if resources[i].ExtraIdentity != nil {
+			n[i].ExtraIdentity = resources[i].ExtraIdentity.DeepCopy()
+		}
+		n[i].Size = resources[i].Size
+		n[i].Relation = ResourceRelation(resources[i].Relation)
 	}
 	return n
 }
 
-// ConvertFromV2SourceRefs maps v2 SourceRefs to internal SourceRef.
+// ConvertFromV2SourceRefs converts v2 source references to internal format.
 func ConvertFromV2SourceRefs(refs []v2.SourceRef) []SourceRef {
 	if refs == nil {
 		return nil
 	}
 	n := make([]SourceRef, len(refs))
 	for i := range refs {
-		n[i] = SourceRef{
-			IdentitySelector: maps.Clone(refs[i].IdentitySelector),
-			Labels:           ConvertFromV2Labels(refs[i].Labels),
-		}
+		n[i].IdentitySelector = maps.Clone(refs[i].IdentitySelector)
+		n[i].Labels = ConvertFromV2Labels(refs[i].Labels)
 	}
 	return n
 }
 
-// ConvertFromV2Digest converts v2.Digest to internal Digest.
+// ConvertFromV2Digest converts a v2.Digest to internal Digest.
 func ConvertFromV2Digest(digest *v2.Digest) *Digest {
 	if digest == nil {
 		return nil
@@ -168,75 +186,66 @@ func ConvertFromV2Digest(digest *v2.Digest) *Digest {
 	}
 }
 
-// ConvertFromV2Sources maps v2 Sources to internal Source.
+// ConvertFromV2Sources converts v2 sources to internal sources.
 func ConvertFromV2Sources(sources []v2.Source) []Source {
 	if sources == nil {
 		return nil
 	}
 	n := make([]Source, len(sources))
 	for i := range sources {
-		s := sources[i]
-		n[i] = Source{
-			ElementMeta: ElementMeta{
-				ObjectMeta: ObjectMeta{
-					Name:    s.Name,
-					Version: s.Version,
-					Labels:  ConvertFromV2Labels(s.Labels),
-				},
-				ExtraIdentity: s.ExtraIdentity.DeepCopy(),
+		n[i].ElementMeta = ElementMeta{
+			ObjectMeta: ObjectMeta{
+				Name:    sources[i].Name,
+				Version: sources[i].Version,
+				Labels:  ConvertFromV2Labels(sources[i].Labels),
 			},
-			Type:   s.Type,
-			Access: s.Access.DeepCopy(),
+			ExtraIdentity: sources[i].ExtraIdentity.DeepCopy(),
 		}
+		if sources[i].Access != nil {
+			n[i].Access = sources[i].Access.DeepCopy()
+		}
+		n[i].Type = sources[i].Type
 	}
 	return n
 }
 
-// ConvertFromV2References maps v2 References to internal Reference.
+// ConvertFromV2References converts v2 references to internal references.
 func ConvertFromV2References(references []v2.Reference) []Reference {
 	if references == nil {
 		return nil
 	}
 	n := make([]Reference, len(references))
 	for i := range references {
-		r := references[i]
-		n[i] = Reference{
-			ElementMeta: ElementMeta{
-				ObjectMeta: ObjectMeta{
-					Name:    r.Name,
-					Version: r.Version,
-					Labels:  ConvertFromV2Labels(r.Labels),
-				},
-				ExtraIdentity: r.ExtraIdentity.DeepCopy(),
-			},
-			Component: r.Component,
-		}
+		n[i].Name = references[i].Name
+		n[i].Version = references[i].Version
+		n[i].Labels = ConvertFromV2Labels(references[i].Labels)
+		n[i].ExtraIdentity = references[i].ExtraIdentity.DeepCopy()
+		n[i].Component = references[i].Component
+		n[i].Digest = *ConvertFromV2Digest(&references[i].Digest)
 	}
 	return n
 }
 
-// ConvertFromV2Signatures maps v2.Signature to internal Signature.
+// ConvertFromV2Signatures converts v2 signatures to internal format.
 func ConvertFromV2Signatures(signatures []v2.Signature) []Signature {
 	if signatures == nil {
 		return nil
 	}
 	n := make([]Signature, len(signatures))
 	for i := range signatures {
-		n[i] = Signature{
-			Name:   signatures[i].Name,
-			Digest: *ConvertFromV2Digest(&signatures[i].Digest),
-			Signature: SignatureInfo{
-				Algorithm: signatures[i].Signature.Algorithm,
-				Value:     signatures[i].Signature.Value,
-				MediaType: signatures[i].Signature.MediaType,
-				Issuer:    signatures[i].Signature.Issuer,
-			},
+		n[i].Name = signatures[i].Name
+		n[i].Digest = *ConvertFromV2Digest(&signatures[i].Digest)
+		n[i].Signature = SignatureInfo{
+			Algorithm: signatures[i].Signature.Algorithm,
+			Value:     signatures[i].Signature.Value,
+			MediaType: signatures[i].Signature.MediaType,
+			Issuer:    signatures[i].Signature.Issuer,
 		}
 	}
 	return n
 }
 
-// ConvertToV2Provider converts runtime.Identity to a provider string.
+// ConvertToV2Provider converts an internal provider identity to a string format expected by v2.
 func ConvertToV2Provider(provider runtime.Identity) (string, error) {
 	if provider == nil {
 		return "", nil
@@ -247,82 +256,74 @@ func ConvertToV2Provider(provider runtime.Identity) (string, error) {
 	return "", fmt.Errorf("provider name not found")
 }
 
-// ConvertToV2RepositoryContexts deep copies repository contexts.
+// ConvertToV2RepositoryContexts deep copies internal repository contexts to v2 format.
 func ConvertToV2RepositoryContexts(contexts []runtime.Unstructured) []runtime.Unstructured {
 	if contexts == nil {
 		return nil
 	}
 	n := make([]runtime.Unstructured, len(contexts))
 	for i := range contexts {
-		contexts[i].DeepCopyInto(&n[i])
+		(&contexts[i]).DeepCopyInto(&n[i])
 	}
 	return n
 }
 
-// ConvertToV2Labels maps internal Label to v2.Label.
+// ConvertToV2Labels converts internal labels to v2.Label format.
 func ConvertToV2Labels(labels []Label) []v2.Label {
 	if labels == nil {
 		return nil
 	}
 	n := make([]v2.Label, len(labels))
 	for i := range labels {
-		n[i] = v2.Label{
-			Name:    labels[i].Name,
-			Value:   labels[i].Value,
-			Signing: labels[i].Signing,
-		}
+		n[i].Name = labels[i].Name
+		n[i].Value = labels[i].Value
+		n[i].Signing = labels[i].Signing
 	}
 	return n
 }
 
-// ConvertToV2Resources maps internal Resource to v2.Resource.
-func ConvertToV2Resources(resources []Resource) []v2.Resource {
+// ConvertToV2Resources converts internal resources to v2 resources.
+func ConvertToV2Resources(scheme *runtime.Scheme, resources []Resource) ([]v2.Resource, error) {
 	if resources == nil {
-		return nil
+		return nil, nil
 	}
 	n := make([]v2.Resource, len(resources))
 	for i := range resources {
-		r := resources[i]
-		res := v2.Resource{
-			ElementMeta: v2.ElementMeta{
-				ObjectMeta: v2.ObjectMeta{
-					Name:    r.Name,
-					Version: r.Version,
-					Labels:  ConvertToV2Labels(r.Labels),
-				},
-				ExtraIdentity: r.ExtraIdentity.DeepCopy(),
-			},
-			Type:       r.Type,
-			Size:       r.Size,
-			Relation:   v2.ResourceRelation(r.Relation),
-			Access:     r.Access.DeepCopy(),
-			Digest:     ConvertToV2Digest(r.Digest),
-			SourceRefs: ConvertToV2SourceRefs(r.SourceRefs),
+		n[i].Name = resources[i].Name
+		n[i].Version = resources[i].Version
+		n[i].Type = resources[i].Type
+		if time.Time(resources[i].CreationTime) != (time.Time{}) {
+			n[i].CreationTime = &v2.Timestamp{Time: v2.Time{Time: time.Time(resources[i].CreationTime)}}
 		}
-		if time.Time(r.CreationTime) != (time.Time{}) {
-			res.CreationTime = &v2.Timestamp{Time: v2.Time{Time: time.Time(r.CreationTime)}}
+		n[i].Labels = ConvertToV2Labels(resources[i].Labels)
+		n[i].Digest = ConvertToV2Digest(resources[i].Digest)
+		n[i].SourceRefs = ConvertToV2SourceRefs(resources[i].SourceRefs)
+		n[i].Access = &runtime.Raw{}
+		// Use runtime.Scheme to convert custom access types.
+		if err := scheme.Convert(resources[i].Access, n[i].Access); err != nil {
+			return nil, fmt.Errorf("could not convert access %q: %w", resources[i].String(), err)
 		}
-		n[i] = res
+		n[i].ExtraIdentity = resources[i].ExtraIdentity.DeepCopy()
+		n[i].Size = resources[i].Size
+		n[i].Relation = v2.ResourceRelation(resources[i].Relation)
 	}
-	return n
+	return n, nil
 }
 
-// ConvertToV2SourceRefs maps internal SourceRef to v2.SourceRef.
+// ConvertToV2SourceRefs converts internal source references to v2 format.
 func ConvertToV2SourceRefs(refs []SourceRef) []v2.SourceRef {
 	if refs == nil {
 		return nil
 	}
 	n := make([]v2.SourceRef, len(refs))
 	for i := range refs {
-		n[i] = v2.SourceRef{
-			IdentitySelector: maps.Clone(refs[i].IdentitySelector),
-			Labels:           ConvertToV2Labels(refs[i].Labels),
-		}
+		n[i].IdentitySelector = maps.Clone(refs[i].IdentitySelector)
+		n[i].Labels = ConvertToV2Labels(refs[i].Labels)
 	}
 	return n
 }
 
-// ConvertToV2Digest converts internal Digest to v2.Digest.
+// ConvertToV2Digest converts an internal digest to v2 format.
 func ConvertToV2Digest(digest *Digest) *v2.Digest {
 	if digest == nil {
 		return nil
@@ -334,71 +335,96 @@ func ConvertToV2Digest(digest *Digest) *v2.Digest {
 	}
 }
 
-// ConvertToV2Sources maps internal Source to v2.Source.
-func ConvertToV2Sources(sources []Source) []v2.Source {
+// ConvertToV2Sources converts internal sources to v2 sources.
+func ConvertToV2Sources(scheme *runtime.Scheme, sources []Source) ([]v2.Source, error) {
 	if sources == nil {
-		return nil
+		return nil, nil
 	}
 	n := make([]v2.Source, len(sources))
 	for i := range sources {
-		s := sources[i]
-		n[i] = v2.Source{
-			ElementMeta: v2.ElementMeta{
-				ObjectMeta: v2.ObjectMeta{
-					Name:    s.Name,
-					Version: s.Version,
-					Labels:  ConvertToV2Labels(s.Labels),
-				},
-				ExtraIdentity: s.ExtraIdentity.DeepCopy(),
-			},
-			Type:   s.Type,
-			Access: s.Access.DeepCopy(),
+		n[i].Name = sources[i].Name
+		n[i].Version = sources[i].Version
+		n[i].Labels = ConvertToV2Labels(sources[i].Labels)
+		n[i].ExtraIdentity = sources[i].ExtraIdentity.DeepCopy()
+		n[i].Access = &runtime.Raw{}
+		// Use runtime.Scheme to convert custom access types.
+		if err := scheme.Convert(sources[i].Access, n[i].Access); err != nil {
+			return nil, fmt.Errorf("could not convert access %q: %w", sources[i].String(), err)
 		}
+		n[i].Type = sources[i].Type
 	}
-	return n
+	return n, nil
 }
 
-// ConvertToV2References maps internal Reference to v2.Reference.
+// ConvertToV2References converts internal references to v2 references.
 func ConvertToV2References(references []Reference) []v2.Reference {
 	if references == nil {
 		return nil
 	}
 	n := make([]v2.Reference, len(references))
 	for i := range references {
-		r := references[i]
-		n[i] = v2.Reference{
-			ElementMeta: v2.ElementMeta{
-				ObjectMeta: v2.ObjectMeta{
-					Name:    r.Name,
-					Version: r.Version,
-					Labels:  ConvertToV2Labels(r.Labels),
-				},
-				ExtraIdentity: r.ExtraIdentity.DeepCopy(),
-			},
-			Component: r.Component,
-		}
+		n[i].Name = references[i].Name
+		n[i].Version = references[i].Version
+		n[i].Labels = ConvertToV2Labels(references[i].Labels)
+		n[i].ExtraIdentity = references[i].ExtraIdentity.DeepCopy()
+		n[i].Component = references[i].Component
+		n[i].Digest = *ConvertToV2Digest(&references[i].Digest)
 	}
 	return n
 }
 
-// ConvertToV2Signatures maps internal Signature to v2.Signature.
+// ConvertToV2Signatures converts internal signatures to v2 format.
 func ConvertToV2Signatures(signatures []Signature) []v2.Signature {
 	if signatures == nil {
 		return nil
 	}
 	n := make([]v2.Signature, len(signatures))
 	for i := range signatures {
-		s := signatures[i]
-		n[i] = v2.Signature{
-			Name:   s.Name,
-			Digest: *ConvertToV2Digest(&s.Digest),
-			Signature: v2.SignatureInfo{
-				Algorithm: s.Signature.Algorithm,
-				Value:     s.Signature.Value,
-				MediaType: s.Signature.MediaType,
-				Issuer:    s.Signature.Issuer,
-			},
+		n[i].Name = signatures[i].Name
+		n[i].Digest = *ConvertToV2Digest(&signatures[i].Digest)
+		n[i].Signature = v2.SignatureInfo{
+			Algorithm: signatures[i].Signature.Algorithm,
+			Value:     signatures[i].Signature.Value,
+			MediaType: signatures[i].Signature.MediaType,
+			Issuer:    signatures[i].Signature.Issuer,
 		}
 	}
 	return n
+}
+
+// ConvertFromV2LocalBlob converts a v2.LocalBlob to runtime.LocalBlob.
+func ConvertFromV2LocalBlob(scheme *runtime.Scheme, blob *v2.LocalBlob) (*LocalBlob, error) {
+	if blob == nil {
+		return nil, nil
+	}
+	result := &LocalBlob{
+		Type:           blob.Type,
+		LocalReference: blob.LocalReference,
+		MediaType:      blob.MediaType,
+		ReferenceName:  blob.ReferenceName,
+	}
+	if blob.GlobalAccess != nil {
+		result.GlobalAccess = blob.GlobalAccess.DeepCopy()
+	}
+	return result, nil
+}
+
+// ConvertToV2LocalBlob converts a runtime.LocalBlob to v2.LocalBlob.
+func ConvertToV2LocalBlob(scheme *runtime.Scheme, blob *LocalBlob) (*v2.LocalBlob, error) {
+	if blob == nil {
+		return nil, nil
+	}
+	result := &v2.LocalBlob{
+		Type:           blob.Type,
+		LocalReference: blob.LocalReference,
+		MediaType:      blob.MediaType,
+		ReferenceName:  blob.ReferenceName,
+	}
+	if blob.GlobalAccess != nil {
+		result.GlobalAccess = &runtime.Raw{}
+		if err := scheme.Convert(blob.GlobalAccess, result.GlobalAccess); err != nil {
+			return nil, fmt.Errorf("could not convert global access: %w", err)
+		}
+	}
+	return result, nil
 }

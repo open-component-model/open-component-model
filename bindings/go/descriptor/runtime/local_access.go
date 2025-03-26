@@ -1,4 +1,4 @@
-package v2
+package runtime
 
 import (
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -10,6 +10,16 @@ const (
 	LocalBlobAccessTypeVersion = "v1"
 	LocalBlobAccessTypeGroup   = "software.ocm.accessType"
 )
+
+var typ = runtime.Type{
+	Name:    LocalBlobAccessType,
+	Version: LocalBlobAccessTypeVersion,
+	Group:   LocalBlobAccessTypeGroup,
+}
+
+func GetLocalBlobAccessType() runtime.Type {
+	return typ
+}
 
 // LocalBlob describes the access for a local blob.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
@@ -25,7 +35,7 @@ type LocalBlob struct {
 	MediaType string `json:"mediaType"`
 	// GlobalAccess is an optional field describing a possibility
 	// for a global access. If given, it MUST describe a global access method.
-	GlobalAccess *runtime.Raw `json:"globalAccess,omitempty"`
+	GlobalAccess runtime.Typed `json:"globalAccess,omitempty"`
 	// ReferenceName is an optional static name the object should be
 	// use in a local repository context. It is use by a repository
 	// to optionally determine a globally referenceable access according
