@@ -11,16 +11,6 @@ const (
 	LocalBlobAccessTypeGroup   = "software.ocm.accessType"
 )
 
-var typ = runtime.Type{
-	Name:    LocalBlobAccessType,
-	Version: LocalBlobAccessTypeVersion,
-	Group:   LocalBlobAccessTypeGroup,
-}
-
-func GetLocalBlobAccessType() runtime.Type {
-	return typ
-}
-
 // LocalBlob describes the access for a local blob.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true

@@ -100,9 +100,6 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 }
 
 func TestRepository_GetLocalResource(t *testing.T) {
-	r := require.New(t)
-	ctx := context.Background()
-
 	// Create test resources with different configurations
 	testCases := []struct {
 		name           string
@@ -176,10 +173,10 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				},
 				Type: "test-type",
 				Access: &runtime.Raw{
-					Type: v2.GetLocalBlobAccessType(),
+					Type: runtime.NewType(v2.LocalBlobAccessTypeGroup, v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 					Data: []byte(fmt.Sprintf(
 						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
-						v2.GetLocalBlobAccessType().String(),
+						runtime.NewType(v2.LocalBlobAccessTypeGroup, v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 						digest.FromString("platform specific content").String(),
 					)),
 				},
@@ -246,6 +243,8 @@ func TestRepository_GetLocalResource(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
 			mockStore := memory.New()
 			mockResolver := &MockResolver{store: mockStore}
 			repo := oci.RepositoryFromResolverAndMemory(mockResolver, oci.NewLocalBlobMemory())
