@@ -73,7 +73,19 @@ func (s *ociLayoutTarWriter) Resolve(ctx context.Context, reference string) (oci
 func (s *ociLayoutTarWriter) Close() error {
 	s.indexSync.Lock()
 	defer s.indexSync.Unlock()
+
+	var err error
+	defer func() {
+		if err != nil {
+			// If there was an error, ensure we still close the writer
+			s.writer.Close()
+		}
+	}()
+
 	indexJSON, err := json.Marshal(s.index)
+	if err != nil {
+		return fmt.Errorf("failed to marshal index: %w", err)
+	}
 	if err := s.writer.WriteHeader(&tar.Header{
 		Name: ociImageSpecV1.ImageIndexFile,
 		Size: int64(len(indexJSON)),
