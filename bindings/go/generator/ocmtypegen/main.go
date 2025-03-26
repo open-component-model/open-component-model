@@ -28,14 +28,14 @@ func main() {
 
 	packages, err := findGoPackages(root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error finding Go packages: %v\n", err)
+		slog.Error("Failed to find go packages", "error", err)
 		os.Exit(1)
 	}
 
 	for _, pkgDir := range packages {
 		pkgName, types, err := scanSinglePackage(pkgDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error scanning %s: %v\n", pkgDir, err)
+			slog.Error("error scanning", "dir", "pkgDir", "error", err)
 			continue
 		}
 		if len(types) == 0 {
@@ -90,6 +90,7 @@ func scanSinglePackage(folder string) (string, []string, error) {
 
 				structType, ok := typeSpec.Type.(*ast.StructType)
 				if !ok || !hasRuntimeTypeField(structType) {
+					slog.Info("skipping type", "name", typeSpec.Name.Name, "reason", "not a struct with runtime.Type field")
 					continue
 				}
 
