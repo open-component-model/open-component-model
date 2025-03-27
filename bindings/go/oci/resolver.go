@@ -21,6 +21,7 @@ func NewURLPathResolver(baseURL string) *URLPathResolver {
 type URLPathResolver struct {
 	BaseURL    string
 	BaseClient remote.Client
+	PlainHTTP  bool
 }
 
 func (resolver *URLPathResolver) SetClient(client remote.Client) {
@@ -61,6 +62,9 @@ func (resolver *URLPathResolver) StoreForReference(_ context.Context, reference 
 	repo, err := remote.NewRepository(reference)
 	if err != nil {
 		return nil, err
+	}
+	if resolver.PlainHTTP {
+		repo.PlainHTTP = true
 	}
 	if resolver.BaseClient != nil {
 		repo.Client = resolver.BaseClient

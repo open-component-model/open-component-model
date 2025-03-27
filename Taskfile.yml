@@ -29,6 +29,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/ctf/Taskfile.yml
     dir: ./bindings/go/ctf
+  bindings/go/oci:
+    optional: true
+    taskfile: ./bindings/go/oci/Taskfile.yml
+    dir: ./bindings/go/oci
+  bindings/go/oci/integration:
+    optional: true
+    taskfile: ./bindings/go/oci/integration/Taskfile.yml
+    dir: ./bindings/go/oci/integration
 
 
 vars:

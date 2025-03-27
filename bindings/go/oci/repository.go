@@ -17,7 +17,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/opencontainers/go-digest"
@@ -136,65 +135,7 @@ func RepositoryFromResolverAndMemory(resolver Resolver, blobMemory *LocalBlobMem
 	}
 }
 
-// LocalBlobMemory is a temporary storage for local blobs until they are added to a component version.
-// TODO: Implement a file-based cache similar to OCI Layout's "ingest" directory.
-type LocalBlobMemory struct {
-	sync.RWMutex
-	blobs map[string][]ociImageSpecV1.Descriptor
-}
-
-// NewLocalBlobMemory creates a new LocalBlobMemory instance.
-func NewLocalBlobMemory() *LocalBlobMemory {
-	return &LocalBlobMemory{
-		blobs: make(map[string][]ociImageSpecV1.Descriptor),
-	}
-}
-
-// AddBlob adds a blob to the memory store.
-func (m *LocalBlobMemory) AddBlob(reference string, layer ociImageSpecV1.Descriptor) {
-	m.Lock()
-	defer m.Unlock()
-	m.blobs[reference] = append(m.blobs[reference], layer)
-}
-
-// GetBlobs retrieves all blobs for a reference.
-func (m *LocalBlobMemory) GetBlobs(reference string) []ociImageSpecV1.Descriptor {
-	m.RLock()
-	defer m.RUnlock()
-	return m.blobs[reference]
-}
-
-// DeleteBlobs removes all blobs for a reference.
-func (m *LocalBlobMemory) DeleteBlobs(reference string) {
-	m.Lock()
-	defer m.Unlock()
-	delete(m.blobs, reference)
-}
-
 var _ OCMComponentVersionRepository = (*Repository)(nil)
-
-// validateAndFetchLocalBlobResourceAccess validates and converts a resource's access information to OCI format.
-func (repo *Repository) validateAndFetchLocalBlobResourceAccess(resource *descriptor.Resource) (*v2.LocalBlob, error) {
-	if resource.Access == nil {
-		return nil, fmt.Errorf("resource access is required for uploading to an OCI repository")
-	}
-
-	var access v2.LocalBlob
-	if err := repo.scheme.Convert(resource.Access, &access); err != nil {
-		return nil, fmt.Errorf("error converting resource access to OCI image: %w", err)
-	}
-
-	if access.MediaType == "" {
-		return nil, fmt.Errorf("resource access media type is required for uploading to an OCI repository")
-	}
-
-	layerDigest := digest.Digest(access.LocalReference)
-	if err := layerDigest.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid layer digest in local reference: %w", err)
-	}
-
-	return &access, nil
-}
 
 // AddLocalResource adds a local resource to the repository.
 func (repo *Repository) AddLocalResource(
@@ -215,15 +156,24 @@ func (repo *Repository) AddLocalResource(
 		return nil, err
 	}
 
-	access, err := repo.validateAndFetchLocalBlobResourceAccess(resource)
+	access, err := getLocalBlobAccess(repo.scheme, resource)
 	if err != nil {
 		return nil, err
 	}
 
-	size := content.(blob.SizeAware).Size()
+	contentSizeAware, ok := content.(blob.SizeAware)
+	if !ok {
+		return nil, fmt.Errorf("content does not implement blob.SizeAware interface, size cannot be inferred")
+	}
+
+	size := contentSizeAware.Size()
+	if size == blob.SizeUnknown {
+		return nil, fmt.Errorf("content size is unknown")
+	}
+
 	layer, err := createLayer(access, size, resource)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating layer descriptor: %v", err)
 	}
 
 	layerData, err := content.ReadCloser()
@@ -244,35 +194,6 @@ func (repo *Repository) AddLocalResource(
 	}
 
 	return resource, nil
-}
-
-// findMatchingLayer finds a layer in the manifest that matches the given identity.
-func findMatchingLayer(manifest ociImageSpecV1.Manifest, identity runtime.Identity) (ociImageSpecV1.Descriptor, error) {
-	var notMatched []ociImageSpecV1.Descriptor
-
-	for _, layer := range manifest.Layers {
-		artifactAnnotations, err := GetArtifactOCILayerAnnotations(&layer)
-		if errors.Is(err, ErrArtifactOCILayerAnnotationDoesNotExist) || len(artifactAnnotations) == 0 {
-			notMatched = append(notMatched, layer)
-			continue
-		}
-		if err != nil {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("error getting artifact annotation: %w", err)
-		}
-
-		for _, artifactAnnotation := range artifactAnnotations {
-			if artifactAnnotation.Kind != ArtifactKindResource {
-				notMatched = append(notMatched, layer)
-				continue
-			}
-			if identity.Match(artifactAnnotation.Identity) {
-				return layer, nil
-			}
-		}
-		notMatched = append(notMatched, layer)
-	}
-
-	return ociImageSpecV1.Descriptor{}, fmt.Errorf("no matching layers for identity %v (not matched other layers %v): %w", identity, notMatched, errdef.ErrNotFound)
 }
 
 // GetLocalResource retrieves a local resource from the repository.
@@ -316,25 +237,6 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	}
 
 	return NewDescriptorBlob(data, layer), nil
-}
-
-// logOperation is a helper function to log operations with timing and error handling.
-func logOperation(ctx context.Context, operation string, fields ...slog.Attr) func(error) {
-	start := time.Now()
-	attrs := make([]any, 0, len(fields)+1)
-	attrs = append(attrs, slog.String("operation", operation))
-	for _, field := range fields {
-		attrs = append(attrs, field)
-	}
-	logger := logger.With(attrs...)
-	logger.Log(ctx, slog.LevelInfo, "starting operation")
-	return func(err error) {
-		if err != nil {
-			logger.Log(ctx, slog.LevelError, "operation failed", slog.Duration("duration", time.Since(start)), slog.String("error", err.Error()))
-		} else {
-			logger.Log(ctx, slog.LevelInfo, "operation completed", slog.Duration("duration", time.Since(start)))
-		}
-	}
 }
 
 // AddComponentVersion adds a new component version to the repository.
@@ -463,134 +365,6 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	return singleFileTARDecodeDescriptor(descriptorRaw)
 }
 
-// createLayer creates an OCI layer descriptor for a resource.
-func createLayer(access *v2.LocalBlob, size int64, resource *descriptor.Resource) (ociImageSpecV1.Descriptor, error) {
-	layer := ociImageSpecV1.Descriptor{
-		MediaType: access.MediaType,
-		Digest:    digest.Digest(access.LocalReference),
-		Size:      size,
-	}
-
-	identity := resource.ToIdentity()
-	applyLayerToIdentity(resource, layer)
-
-	if err := (&ArtifactOCILayerAnnotation{
-		Identity: identity,
-		Kind:     ArtifactKindResource,
-	}).AddToDescriptor(&layer); err != nil {
-		return ociImageSpecV1.Descriptor{}, err
-	}
-
-	return layer, nil
-}
-
-// updateResourceAccess updates the resource access with the new layer information.
-func updateResourceAccess(resource *descriptor.Resource, layer ociImageSpecV1.Descriptor) error {
-	if resource == nil {
-		return fmt.Errorf("resource must not be nil")
-	}
-
-	resource.Access = &descriptor.LocalBlob{
-		LocalReference: layer.Digest.String(),
-		MediaType:      layer.MediaType,
-		GlobalAccess: &v1.OCIImageLayer{
-			Digest:    layer.Digest,
-			MediaType: layer.MediaType,
-			Reference: fmt.Sprintf("%s@%s", layer.Digest.String(), layer.Digest.String()),
-			Size:      layer.Size,
-		},
-	}
-
-	if err := ociDigestV1.ApplyToResource(resource, layer.Digest); err != nil {
-		return fmt.Errorf("failed to apply digest to resource: %w", err)
-	}
-
-	return nil
-}
-
-// prepareResourceFile creates a temporary file with the resource content.
-func prepareResourceFile(resource *descriptor.Resource, content blob.ReadOnlyBlob) (string, error) {
-	// Use a unique temporary file name to avoid conflicts
-	fileBufferPath := filepath.Join(os.TempDir(), fmt.Sprintf("%s-%d", resource.Name, time.Now().UnixNano()))
-	tmp, err := os.OpenFile(fileBufferPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
-	if err != nil {
-		return "", fmt.Errorf("failed to create temporary file: %w", err)
-	}
-
-	data, err := content.ReadCloser()
-	if err != nil {
-		tmp.Close()
-		os.Remove(fileBufferPath)
-		return "", fmt.Errorf("failed to get resource content: %w", err)
-	}
-	defer data.Close()
-
-	// Try to read as gzipped data first
-	unzippedData, err := gzip.NewReader(data)
-	if err == nil {
-		// Data is gzipped, copy it directly
-		if _, err := io.Copy(tmp, unzippedData); err != nil {
-			tmp.Close()
-			os.Remove(fileBufferPath)
-			return "", fmt.Errorf("failed to write content to temporary file: %w", err)
-		}
-	} else {
-		// Data is not gzipped, copy it directly
-		if _, err := io.Copy(tmp, data); err != nil {
-			tmp.Close()
-			os.Remove(fileBufferPath)
-			return "", fmt.Errorf("failed to write content to temporary file: %w", err)
-		}
-	}
-
-	// Ensure all data is written to disk
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(fileBufferPath)
-		return "", fmt.Errorf("failed to sync temporary file: %w", err)
-	}
-
-	// Seek to the beginning of the file for reading
-	if _, err := tmp.Seek(0, 0); err != nil {
-		tmp.Close()
-		os.Remove(fileBufferPath)
-		return "", fmt.Errorf("failed to seek to beginning of file: %w", err)
-	}
-
-	// Close the file so it can be reopened by the caller
-	if err := tmp.Close(); err != nil {
-		os.Remove(fileBufferPath)
-		return "", fmt.Errorf("failed to close temporary file: %w", err)
-	}
-
-	return fileBufferPath, nil
-}
-
-// copyResource copies a resource from the source to the target store.
-func copyResource(ctx context.Context, srcPath, srcRef, targetRef string, store Store) (ociImageSpecV1.Descriptor, error) {
-	src, err := oci.NewFromTar(ctx, srcPath)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, err
-	}
-
-	return oras.Copy(ctx, src, srcRef, store, targetRef, oras.CopyOptions{
-		CopyGraphOptions: oras.CopyGraphOptions{
-			PreCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.DebugContext(ctx, "uploading", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
-				return nil
-			},
-			PostCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.DebugContext(ctx, "uploaded", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
-				return nil
-			},
-			OnCopySkipped: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.DebugContext(ctx, "skipped", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
-				return nil
-			},
-		},
-	})
-}
-
 // UploadResource uploads a resource to the repository.
 func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Resource, b blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {
 	done := logOperation(ctx, "upload resource", slog.String("resource", res.Name))
@@ -617,8 +391,7 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 
 	desc, err := copyResource(ctx, fileBufferPath, access.ImageReference, targetRef, store)
 	if err != nil {
-		os.Remove(fileBufferPath)
-		return nil, err
+		return nil, errors.Join(os.Remove(fileBufferPath), err)
 	}
 	defer os.Remove(fileBufferPath)
 
@@ -727,9 +500,11 @@ func getManifest(ctx context.Context, store Store, reference string) (manifest o
 }
 
 // singleFileTARDecodeDescriptor decodes a component descriptor from a TAR archive.
-func singleFileTARDecodeDescriptor(raw io.Reader) (desc *descriptor.Descriptor, err error) {
+func singleFileTARDecodeDescriptor(raw io.Reader) (*descriptor.Descriptor, error) {
+	const descriptorFileHeader = "component-descriptor.yaml"
+
 	tarReader := tar.NewReader(raw)
-	var descriptorBuffer bytes.Buffer
+	var buf bytes.Buffer
 	found := false
 
 	for {
@@ -738,35 +513,35 @@ func singleFileTARDecodeDescriptor(raw io.Reader) (desc *descriptor.Descriptor, 
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("error reading tar header: %w", err)
+			return nil, fmt.Errorf("reading tar header: %w", err)
 		}
 
-		if header.Name == "component-descriptor.yaml" {
+		switch header.Name {
+		case descriptorFileHeader:
 			if found {
-				return nil, fmt.Errorf("multiple component-descriptor.yaml files found in archive")
+				return nil, fmt.Errorf("multiple component-descriptor.yaml files found")
 			}
 			found = true
-			if _, err := io.Copy(&descriptorBuffer, tarReader); err != nil {
-				return nil, fmt.Errorf("error reading component descriptor: %w", err)
+			if _, err := io.Copy(&buf, tarReader); err != nil {
+				return nil, fmt.Errorf("reading component descriptor: %w", err)
 			}
-		} else {
-			// Skip other files
+		default:
 			if _, err := io.Copy(io.Discard, tarReader); err != nil {
-				return nil, fmt.Errorf("error skipping file %s: %w", header.Name, err)
+				return nil, fmt.Errorf("skipping file %s: %w", header.Name, err)
 			}
 		}
 	}
 
 	if !found {
-		return nil, fmt.Errorf("no component-descriptor.yaml found in archive")
+		return nil, fmt.Errorf("component-descriptor.yaml not found in archive")
 	}
 
-	var decoded descriptor.Descriptor
-	if err := yaml.Unmarshal(descriptorBuffer.Bytes(), &decoded); err != nil {
-		return nil, fmt.Errorf("error unmarshaling component descriptor: %w", err)
+	var desc descriptor.Descriptor
+	if err := yaml.Unmarshal(buf.Bytes(), &desc); err != nil {
+		return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
 	}
 
-	return &decoded, nil
+	return &desc, nil
 }
 
 // singleFileTAREncodeDescriptor encodes a component descriptor into a TAR archive.
@@ -797,6 +572,25 @@ func singleFileTAREncodeDescriptor(desc *descriptor.Descriptor) (encoding string
 	return descriptorEncoding, &descriptorBuffer, nil
 }
 
+// logOperation is a helper function to log operations with timing and error handling.
+func logOperation(ctx context.Context, operation string, fields ...slog.Attr) func(error) {
+	start := time.Now()
+	attrs := make([]any, 0, len(fields)+1)
+	attrs = append(attrs, slog.String("operation", operation))
+	for _, field := range fields {
+		attrs = append(attrs, field)
+	}
+	logger := logger.With(attrs...)
+	logger.Log(ctx, slog.LevelInfo, "starting operation")
+	return func(err error) {
+		if err != nil {
+			logger.Log(ctx, slog.LevelError, "operation failed", slog.Duration("duration", time.Since(start)), slog.String("error", err.Error()))
+		} else {
+			logger.Log(ctx, slog.LevelInfo, "operation completed", slog.Duration("duration", time.Since(start)))
+		}
+	}
+}
+
 // descriptorLogAttr creates a log attribute for an OCI descriptor.
 func descriptorLogAttr(descriptor ociImageSpecV1.Descriptor) slog.Attr {
 	return slog.Group("descriptor",
@@ -806,8 +600,15 @@ func descriptorLogAttr(descriptor ociImageSpecV1.Descriptor) slog.Attr {
 	)
 }
 
-// applyLayerToIdentity applies resource identity information to an OCI layer.
-func applyLayerToIdentity(resource *descriptor.Resource, layer ociImageSpecV1.Descriptor) {
+// createLayer creates an OCI layer descriptor for a resource.
+func createLayer(access *v2.LocalBlob, size int64, resource *descriptor.Resource) (ociImageSpecV1.Descriptor, error) {
+	layer := ociImageSpecV1.Descriptor{
+		MediaType: access.MediaType,
+		Digest:    digest.Digest(access.LocalReference),
+		Size:      size,
+	}
+
+	identity := resource.ToIdentity()
 	special := map[string]func(platform *ociImageSpecV1.Platform, value string){
 		"architecture": func(platform *ociImageSpecV1.Platform, value string) {
 			platform.Architecture = value
@@ -838,4 +639,177 @@ func applyLayerToIdentity(resource *descriptor.Resource, layer ociImageSpecV1.De
 			set(layer.Platform, value)
 		}
 	}
+
+	if err := (&ArtifactOCILayerAnnotation{
+		Identity: identity,
+		Kind:     ArtifactKindResource,
+	}).AddToDescriptor(&layer); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to add resource artifact annotation to descriptor: %w", err)
+	}
+
+	return layer, nil
+}
+
+// updateResourceAccess updates the resource access with the new layer information.
+func updateResourceAccess(resource *descriptor.Resource, layer ociImageSpecV1.Descriptor) error {
+	if resource == nil {
+		return fmt.Errorf("resource must not be nil")
+	}
+
+	resource.Access = &descriptor.LocalBlob{
+		LocalReference: layer.Digest.String(),
+		MediaType:      layer.MediaType,
+		GlobalAccess: &v1.OCIImageLayer{
+			Digest:    layer.Digest,
+			MediaType: layer.MediaType,
+			Reference: fmt.Sprintf("%s@%s", layer.Digest.String(), layer.Digest.String()),
+			Size:      layer.Size,
+		},
+	}
+
+	if err := ociDigestV1.ApplyToResource(resource, layer.Digest); err != nil {
+		return fmt.Errorf("failed to apply digest to resource: %w", err)
+	}
+
+	return nil
+}
+
+// prepareResourceFile creates a temporary file with the resource content.
+func prepareResourceFile(resource *descriptor.Resource, content blob.ReadOnlyBlob) (path string, err error) {
+	filePath := filepath.Join(os.TempDir(), fmt.Sprintf("%s-%d", resource.Name, time.Now().UnixNano()))
+	tmpFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, tmpFile.Close(), os.Remove(filePath))
+		}
+	}()
+
+	var reader io.ReadCloser
+	if reader, err = content.ReadCloser(); err != nil {
+		return "", fmt.Errorf("failed to get resource content: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, reader.Close())
+	}()
+
+	if err = copyWithGzipDetection(reader, tmpFile); err != nil {
+		return "", fmt.Errorf("failed to copy resource content: %w", err)
+	}
+
+	if err = tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temporary file: %w", err)
+	}
+
+	return filePath, nil
+}
+
+func copyWithGzipDetection(src io.Reader, dst io.Writer) (err error) {
+	const gzipMagic1, gzipMagic2 = 0x1F, 0x8B
+	var header [2]byte
+
+	// Read the first two bytes for gzip detection
+	n, err := io.ReadFull(src, header[:])
+	if err != nil && err != io.EOF && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return fmt.Errorf("failed to read data for gzip detection: %w", err)
+	}
+
+	// Reconstruct reader with the first two bytes prepended
+	var reader = io.MultiReader(bytes.NewReader(header[:n]), src)
+
+	if n == 2 && header[0] == gzipMagic1 && header[1] == gzipMagic2 {
+		var gzReader *gzip.Reader
+		if gzReader, err = gzip.NewReader(reader); err != nil {
+			return fmt.Errorf("failed to initialize gzip reader: %w", err)
+		}
+		defer func() {
+			err = errors.Join(err, gzReader.Close())
+		}()
+		reader = gzReader
+	}
+
+	if _, err = io.Copy(dst, reader); err != nil {
+		return fmt.Errorf("failed to write content to temporary file: %w", err)
+	}
+
+	return nil
+}
+
+// copyResource copies a resource from the source to the target store.
+func copyResource(ctx context.Context, srcPath, srcRef, targetRef string, store Store) (ociImageSpecV1.Descriptor, error) {
+	src, err := oci.NewFromTar(ctx, srcPath)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	}
+
+	return oras.Copy(ctx, src, srcRef, store, targetRef, oras.CopyOptions{
+		CopyGraphOptions: oras.CopyGraphOptions{
+			PreCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
+				slog.DebugContext(ctx, "uploading", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
+				return nil
+			},
+			PostCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
+				slog.DebugContext(ctx, "uploaded", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
+				return nil
+			},
+			OnCopySkipped: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
+				slog.DebugContext(ctx, "skipped", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
+				return nil
+			},
+		},
+	})
+}
+
+// findMatchingLayer finds a layer in the manifest that matches the given identity.
+func findMatchingLayer(manifest ociImageSpecV1.Manifest, identity runtime.Identity) (ociImageSpecV1.Descriptor, error) {
+	var notMatched []ociImageSpecV1.Descriptor
+
+	for _, layer := range manifest.Layers {
+		artifactAnnotations, err := GetArtifactOCILayerAnnotations(&layer)
+		if errors.Is(err, ErrArtifactOCILayerAnnotationDoesNotExist) || len(artifactAnnotations) == 0 {
+			notMatched = append(notMatched, layer)
+			continue
+		}
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("error getting artifact annotation: %w", err)
+		}
+
+		for _, artifactAnnotation := range artifactAnnotations {
+			if artifactAnnotation.Kind != ArtifactKindResource {
+				notMatched = append(notMatched, layer)
+				continue
+			}
+			if identity.Match(artifactAnnotation.Identity) {
+				return layer, nil
+			}
+		}
+		notMatched = append(notMatched, layer)
+	}
+
+	return ociImageSpecV1.Descriptor{}, fmt.Errorf("no matching layers for identity %v (not matched other layers %v): %w", identity, notMatched, errdef.ErrNotFound)
+}
+
+// getLocalBlobAccess validates and converts a resource's access information to v2.LocalBLob format.
+func getLocalBlobAccess(scheme *runtime.Scheme, resource *descriptor.Resource) (*v2.LocalBlob, error) {
+	if resource.Access == nil {
+		return nil, fmt.Errorf("resource access is required for uploading to an OCI repository")
+	}
+
+	var access v2.LocalBlob
+	if err := scheme.Convert(resource.Access, &access); err != nil {
+		return nil, fmt.Errorf("error converting resource access to OCI image: %w", err)
+	}
+
+	if access.MediaType == "" {
+		return nil, fmt.Errorf("resource access media type is required for uploading to an OCI repository")
+	}
+
+	layerDigest := digest.Digest(access.LocalReference)
+	if err := layerDigest.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid layer digest in local reference: %w", err)
+	}
+
+	return &access, nil
 }
