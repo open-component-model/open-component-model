@@ -1,4 +1,4 @@
-package descriptor
+package v2
 
 import (
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -6,14 +6,17 @@ import (
 
 // LocalBlobAccessType is the access type of blob local to a component.
 const (
-	LocalBlobAccessType        = "localBlob"
+	LocalBlobAccessType        = "LocalBlob"
 	LocalBlobAccessTypeVersion = "v1"
 	LocalBlobAccessTypeGroup   = "software.ocm.accessType"
 )
 
 // LocalBlob describes the access for a local blob.
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
+// +ocm:typegen=true
 type LocalBlob struct {
-	runtime.Type `json:"type"`
+	Type runtime.Type `json:"type"`
 	// LocalReference is the repository local identity of the blob.
 	// it is used by the repository implementation to get access
 	// to the blob and if therefore specific to a dedicated repository type.

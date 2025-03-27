@@ -80,6 +80,11 @@ func (i Identity) GetType() Type {
 	return typ
 }
 
+// SetType sets the type of the identity.
+func (i Identity) SetType(typ Type) {
+	i[IdentityAttributeType] = typ.String()
+}
+
 // ParseType attempts to parse the type from the identity.
 // It returns an error if the type is not present or invalid.
 func (i Identity) ParseType() (Type, error) {

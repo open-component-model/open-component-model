@@ -1,12 +1,14 @@
 package runtime
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
 	"reflect"
 	"sync"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"sigs.k8s.io/yaml"
 )
 
@@ -17,13 +19,13 @@ type Scheme struct {
 	// if the constructors cannot determine a match,
 	// this will trigger the creation of an unstructured.Unstructured with NewScheme instead of failing.
 	allowUnknown bool
-	types        map[Type]any
+	types        map[Type]Typed
 }
 
 // NewScheme creates a new registry.
 func NewScheme(opts ...SchemeOption) *Scheme {
 	reg := &Scheme{
-		types: make(map[Type]any),
+		types: make(map[Type]Typed),
 	}
 	for _, opt := range opts {
 		opt(reg)
@@ -49,7 +51,7 @@ func (r *Scheme) Clone() *Scheme {
 	return clone
 }
 
-func (r *Scheme) RegisterWithAlias(prototype any, types ...Type) error {
+func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -62,35 +64,7 @@ func (r *Scheme) RegisterWithAlias(prototype any, types ...Type) error {
 	return nil
 }
 
-// GetTypeFromAny uses reflection to extract the "Type" field from any struct.
-func GetTypeFromAny(v any) (Type, error) {
-	val := reflect.ValueOf(v)
-
-	// Ensure v is a struct or a pointer to a struct
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
-	}
-
-	if val.Kind() != reflect.Struct {
-		return Type{}, fmt.Errorf("expected struct, got %s", val.Kind())
-	}
-
-	// Get the field by name
-	field := val.FieldByName("Type")
-	if !field.IsValid() {
-		return Type{}, fmt.Errorf("field 'Type' not found")
-	}
-
-	// Ensure it's of Type type
-	if field.Type() != reflect.TypeOf(Type{}) {
-		return Type{}, fmt.Errorf("field 'Type' is not of expected Type struct")
-	}
-
-	// Return the Type value
-	return field.Interface().(Type), nil
-}
-
-func (r *Scheme) MustRegister(prototype any, version string) {
+func (r *Scheme) MustRegister(prototype Typed, version string) {
 	t := reflect.TypeOf(prototype)
 	if t.Kind() != reflect.Pointer {
 		panic("All types must be pointers to structs.")
@@ -117,7 +91,7 @@ func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
 	return Type{}, fmt.Errorf("prototype not found in registry")
 }
 
-func (r *Scheme) MustTypeForPrototype(prototype any) Type {
+func (r *Scheme) MustTypeForPrototype(prototype Typed) Type {
 	typ, err := r.TypeForPrototype(prototype)
 	if err != nil {
 		panic(err)
@@ -133,14 +107,14 @@ func (r *Scheme) IsRegistered(typ Type) bool {
 	return exists
 }
 
-func (r *Scheme) MustRegisterWithAlias(prototype any, types ...Type) {
+func (r *Scheme) MustRegisterWithAlias(prototype Typed, types ...Type) {
 	if err := r.RegisterWithAlias(prototype, types...); err != nil {
 		panic(err)
 	}
 }
 
 // NewObject creates a new instance of runtime.Typed.
-func (r *Scheme) NewObject(typ Type) (any, error) {
+func (r *Scheme) NewObject(typ Type) (Typed, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -154,7 +128,7 @@ func (r *Scheme) NewObject(typ Type) (any, error) {
 		}
 		object = reflect.New(t).Interface()
 
-		return object, nil
+		return object.(Typed), nil
 	}
 
 	if r.allowUnknown {
@@ -164,7 +138,7 @@ func (r *Scheme) NewObject(typ Type) (any, error) {
 	return nil, fmt.Errorf("unsupported type: %s", typ)
 }
 
-func (r *Scheme) Decode(data io.Reader, into any) error {
+func (r *Scheme) Decode(data io.Reader, into Typed) error {
 	if _, err := r.TypeForPrototype(into); err != nil && !r.allowUnknown {
 		return fmt.Errorf("%T is not a valid registered type and cannot be decoded: %w", into, err)
 	}
@@ -178,45 +152,87 @@ func (r *Scheme) Decode(data io.Reader, into any) error {
 	return nil
 }
 
-func (r *Scheme) Convert(from any, into any) error {
-	// check if typed is a raw, yaml unmarshalling has its own reflection check so we don't need to do this
-	// before the raw assertion.
-	if raw, ok := from.(*Raw); ok {
-		if _, err := r.TypeForPrototype(into); err != nil && !r.allowUnknown {
-			return fmt.Errorf("%T is not a valid registered type and cannot be decoded: %w", into, err)
-		}
-		fromType, err := GetTypeFromAny(from)
+// Convert transforms one Typed object into another. Both 'from' and 'into' must be non-nil pointers.
+//
+// Special Cases:
+//   - Raw → Raw: performs a deep copy of the underlying []byte data.
+//   - Raw → Typed: unmarshals Raw.Data JSON via json.Unmarshal into the Typed object (if Typed.GetType is registered).
+//   - Typed → Raw: marshals the Typed with json.Marshal, applies canonicalization, and stores the result in Raw.Data.
+//     (See Raw.UnmarshalJSON for equivalent behavior)
+//   - Typed → Typed: performs a deep copy using Typed.DeepCopyTyped, with reflection-based assignment.
+//
+// Errors are returned if:
+//   - Either argument is nil.
+//   - A type is not registered in the Scheme (for Raw conversions).
+//   - A reflection-based assignment fails due to type mismatch.
+func (r *Scheme) Convert(from Typed, into Typed) error {
+	// Check for nil arguments.
+	if from == nil || into == nil {
+		return fmt.Errorf("both 'from' and 'into' must be non-nil")
+	}
+
+	// Ensure that from's type is populated. If its not, attempt to infer type information based on the scheme.
+	if from.GetType().IsEmpty() {
+		// avoid mutating the original object
+		from = from.DeepCopyTyped()
+		typ, err := r.TypeForPrototype(from)
 		if err != nil {
-			return fmt.Errorf("could not get type from prototype: %w", err)
+			return fmt.Errorf("cannot convert from unregistered type: %w", err)
 		}
+		from.SetType(typ)
+	}
+	fromType := from.GetType()
+
+	// Case 1: Raw -> Raw or Raw -> Typed
+	if rawFrom, ok := from.(*Raw); ok {
+		// Raw → Raw: Deep copy the underlying data.
+		if rawInto, ok := into.(*Raw); ok {
+			rawFrom.DeepCopyInto(rawInto)
+			return nil
+		}
+
+		// Raw → Typed: Unmarshal the Raw.Data into the target.
 		if !r.IsRegistered(fromType) {
 			return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
 		}
-		if err := yaml.Unmarshal(raw.Data, into); err != nil {
-			return fmt.Errorf("failed to unmarshal raw: %w", err)
+		if err := json.Unmarshal(rawFrom.Data, into); err != nil {
+			return fmt.Errorf("failed to unmarshal from raw: %w", err)
 		}
 		return nil
 	}
 
-	intoValue := reflect.ValueOf(into)
-	if intoValue.Kind() != reflect.Ptr || intoValue.IsNil() {
-		return fmt.Errorf("into must be a non-nil pointer")
+	// Case 2: Typed -> Raw
+	if rawInto, ok := into.(*Raw); ok {
+		if !r.IsRegistered(fromType) {
+			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
+		}
+		data, err := json.Marshal(from)
+		if err != nil {
+			return fmt.Errorf("failed to marshal into raw: %w", err)
+		}
+		canonicalData, err := jsoncanonicalizer.Transform(data)
+		if err != nil {
+			return fmt.Errorf("could not canonicalize data: %w", err)
+		}
+		rawInto.Type = fromType
+		rawInto.Data = canonicalData
+		return nil
 	}
 
-	fromValue := reflect.ValueOf(from)
-	if fromValue.Kind() == reflect.Ptr {
-		fromValue = fromValue.Elem()
+	// Case 3: Generic Typed -> Typed conversion using reflection.
+	intoVal := reflect.ValueOf(into)
+	if intoVal.Kind() != reflect.Ptr || intoVal.IsNil() {
+		return fmt.Errorf("'into' must be a non-nil pointer")
 	}
-
-	if !fromValue.IsValid() || fromValue.IsZero() {
-		return fmt.Errorf("from must be a non-nil pointer")
+	copied := from.DeepCopyTyped()
+	copiedVal := reflect.ValueOf(copied)
+	if copiedVal.Kind() == reflect.Ptr {
+		copiedVal = copiedVal.Elem()
 	}
-
-	if fromValue.Type() != intoValue.Elem().Type() {
-		return fmt.Errorf("from and into must be the same type, cannot decode from %s into %s", fromValue.Type(), intoValue.Elem().Type())
+	intoElem := intoVal.Elem()
+	if !copiedVal.Type().AssignableTo(intoElem.Type()) {
+		return fmt.Errorf("cannot assign value of type %T to target of type %T", copied, into)
 	}
-
-	// set the pointer value of into to the new object pointer
-	intoValue.Elem().Set(fromValue)
+	intoElem.Set(copiedVal)
 	return nil
 }
