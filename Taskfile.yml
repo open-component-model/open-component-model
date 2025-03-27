@@ -38,19 +38,9 @@ vars:
 tasks:
   test:
     desc: "Run all tests in the project"
-    cmds:
+    deps:
       - for: { var: GO_MODULES }
         task: bindings/go/{{.ITEM}}:test
-
-  init/go.work:
-    desc: "Initialize the workspace environment"
-    status:
-      - find go.work
-    cmds:
-      - go work init
-      - for: { var: GO_MODULES }
-        cmd: 'go work use bindings/go/{{.ITEM}}'
-      - go work sync
 
   generate:
     desc: "Run all Code Generators in the project"
