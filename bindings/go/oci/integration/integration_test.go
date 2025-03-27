@@ -18,69 +18,82 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 )
 
+const (
+	distributionRegistryImage = "registry:2.8.3"
+	testUsername              = "ocm"
+	passwordLength            = 20
+	charset                   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}<>?"
+	userAgent                 = "ocm.software"
+)
+
 func Test_Integration_OCIRepository(t *testing.T) {
-	const DistributionRegistry = "registry:2.8.3"
 	ctx := t.Context()
-	r := require.New(t)
-	t.Logf("Running integration tests for OCI")
+	require := require.New(t)
 
-	user, password := "ocm", generateRandomPassword(t, 20)
-	htpasswd := generateHtpasswd(t, user, password)
+	t.Logf("Starting OCI integration test")
 
-	t.Logf("starting registry %q ...", DistributionRegistry)
-	registryContainer, err := registry.Run(ctx, DistributionRegistry, registry.WithHtpasswd(htpasswd))
+	// Setup credentials and htpasswd
+	password := generateRandomPassword(t, passwordLength)
+	htpasswd := generateHtpasswd(t, testUsername, password)
+
+	// Start containerized registry
+	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
+	registryContainer, err := registry.Run(ctx, distributionRegistryImage, registry.WithHtpasswd(htpasswd))
+	require.NoError(err)
 	t.Cleanup(func() {
-		r.NoError(testcontainers.TerminateContainer(registryContainer))
+		require.NoError(testcontainers.TerminateContainer(registryContainer))
 	})
-	r.NoError(err)
-	t.Logf("registry started!")
+	t.Logf("Test registry started")
 
 	registryAddress, err := registryContainer.HostAddress(ctx)
-	r.NoError(err)
+	require.NoError(err)
 
 	reference := func(image string) string {
 		return fmt.Sprintf("%s/%s", registryAddress, image)
 	}
 
-	client := &auth.Client{
+	client := createAuthClient(registryAddress, testUsername, password)
+
+	t.Run("basic connectivity and resolution failure", func(t *testing.T) {
+		testResolverConnectivity(t, registryAddress, reference("target:latest"), client)
+	})
+}
+
+func testResolverConnectivity(t *testing.T, registryAddr, imageRef string, client *auth.Client) {
+	ctx := t.Context()
+	require := require.New(t)
+
+	resolver := oci.NewURLPathResolver(registryAddr)
+	resolver.SetClient(client)
+	resolver.PlainHTTP = true
+
+	store, err := resolver.StoreForReference(ctx, imageRef)
+	require.NoError(err)
+
+	_, err = store.Resolve(ctx, imageRef)
+	require.ErrorIs(err, errdef.ErrNotFound)
+	require.ErrorContains(err, fmt.Sprintf("%s: not found", imageRef))
+}
+
+func createAuthClient(address, username, password string) *auth.Client {
+	return &auth.Client{
 		Client: retry.DefaultClient,
 		Header: http.Header{
-			"User-Agent": []string{"ocm.software"},
+			"User-Agent": []string{userAgent},
 		},
-		Credential: auth.StaticCredential(registryAddress, auth.Credential{
-			Username: user,
+		Credential: auth.StaticCredential(address, auth.Credential{
+			Username: username,
 			Password: password,
 		}),
 	}
-
-	t.Run("test basic connectivity resolution and resolution failure", func(t *testing.T) {
-		ctx := t.Context()
-		r := require.New(t)
-
-		resolver := oci.NewURLPathResolver(registryAddress)
-		resolver.SetClient(client)
-		resolver.PlainHTTP = true
-
-		ref := reference("target:latest")
-
-		store, err := resolver.StoreForReference(ctx, ref)
-		r.NoError(err)
-
-		_, err = store.Resolve(ctx, ref)
-		r.ErrorIs(err, errdef.ErrNotFound)
-		r.ErrorContains(err, fmt.Sprintf("%s: not found", ref))
-	})
-
 }
 
 func generateHtpasswd(t *testing.T, username, password string) string {
 	t.Helper()
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	require.NoError(t, err)
-	return fmt.Sprintf("%s:%s", username, string(hashedPassword))
+	return fmt.Sprintf("%s:%s", username, hashedPassword)
 }
-
-const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}<>?"
 
 func generateRandomPassword(t *testing.T, length int) string {
 	t.Helper()

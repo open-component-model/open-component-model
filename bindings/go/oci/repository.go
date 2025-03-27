@@ -5,7 +5,6 @@
 package oci
 
 import (
-	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -22,8 +21,6 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"sigs.k8s.io/yaml"
-
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/oci"
@@ -497,107 +494,6 @@ func getManifest(ctx context.Context, store Store, reference string) (manifest o
 		return ociImageSpecV1.Manifest{}, err
 	}
 	return manifest, nil
-}
-
-// singleFileTARDecodeDescriptor decodes a component descriptor from a TAR archive.
-func singleFileTARDecodeDescriptor(raw io.Reader) (*descriptor.Descriptor, error) {
-	const descriptorFileHeader = "component-descriptor.yaml"
-
-	tarReader := tar.NewReader(raw)
-	var buf bytes.Buffer
-	found := false
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("reading tar header: %w", err)
-		}
-
-		switch header.Name {
-		case descriptorFileHeader:
-			if found {
-				return nil, fmt.Errorf("multiple component-descriptor.yaml files found")
-			}
-			found = true
-			if _, err := io.Copy(&buf, tarReader); err != nil {
-				return nil, fmt.Errorf("reading component descriptor: %w", err)
-			}
-		default:
-			if _, err := io.Copy(io.Discard, tarReader); err != nil {
-				return nil, fmt.Errorf("skipping file %s: %w", header.Name, err)
-			}
-		}
-	}
-
-	if !found {
-		return nil, fmt.Errorf("component-descriptor.yaml not found in archive")
-	}
-
-	var desc descriptor.Descriptor
-	if err := yaml.Unmarshal(buf.Bytes(), &desc); err != nil {
-		return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
-	}
-
-	return &desc, nil
-}
-
-// singleFileTAREncodeDescriptor encodes a component descriptor into a TAR archive.
-func singleFileTAREncodeDescriptor(desc *descriptor.Descriptor) (encoding string, _ *bytes.Buffer, err error) {
-	descriptorEncoding := "+yaml"
-	descriptorYAML, err := yaml.Marshal(desc)
-	if err != nil {
-		return "", nil, fmt.Errorf("unable to encode component descriptor: %w", err)
-	}
-	// prepare the descriptor
-	descriptorEncoding += "+tar"
-	var descriptorBuffer bytes.Buffer
-	tarWriter := tar.NewWriter(&descriptorBuffer)
-	defer func() {
-		err = errors.Join(err, tarWriter.Close())
-	}()
-
-	if err := tarWriter.WriteHeader(&tar.Header{
-		Name: "component-descriptor.yaml",
-		Mode: 0644,
-		Size: int64(len(descriptorYAML)),
-	}); err != nil {
-		return "", nil, fmt.Errorf("unable to write component descriptor header: %w", err)
-	}
-	if _, err := io.Copy(tarWriter, bytes.NewReader(descriptorYAML)); err != nil {
-		return "", nil, err
-	}
-	return descriptorEncoding, &descriptorBuffer, nil
-}
-
-// logOperation is a helper function to log operations with timing and error handling.
-func logOperation(ctx context.Context, operation string, fields ...slog.Attr) func(error) {
-	start := time.Now()
-	attrs := make([]any, 0, len(fields)+1)
-	attrs = append(attrs, slog.String("operation", operation))
-	for _, field := range fields {
-		attrs = append(attrs, field)
-	}
-	logger := logger.With(attrs...)
-	logger.Log(ctx, slog.LevelInfo, "starting operation")
-	return func(err error) {
-		if err != nil {
-			logger.Log(ctx, slog.LevelError, "operation failed", slog.Duration("duration", time.Since(start)), slog.String("error", err.Error()))
-		} else {
-			logger.Log(ctx, slog.LevelInfo, "operation completed", slog.Duration("duration", time.Since(start)))
-		}
-	}
-}
-
-// descriptorLogAttr creates a log attribute for an OCI descriptor.
-func descriptorLogAttr(descriptor ociImageSpecV1.Descriptor) slog.Attr {
-	return slog.Group("descriptor",
-		slog.String("mediaType", descriptor.MediaType),
-		slog.String("digest", descriptor.Digest.String()),
-		slog.Int64("size", descriptor.Size),
-	)
 }
 
 // createLayer creates an OCI layer descriptor for a resource.
