@@ -85,6 +85,10 @@ jobs:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ matrix.module }}
+            .github/config/golangci.yml
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
@@ -110,6 +114,9 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ matrix.module }}
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
@@ -118,19 +125,24 @@ jobs:
         run: task ${{ matrix.module }}:test
   analyze-go:
     name: "Analyze Go Modules"
+    needs: discover_modules
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:
       actions: read
       contents: read
       security-events: write
+    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Setup Go
-        uses: actions/setup-go@v5
         with:
-          go-version: '1.24.x'
+          sparse-checkout: |
+            ${{ matrix.project }}
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -147,8 +159,18 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     name: "Code Generation"
+    needs: discover_modules
+    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ matrix.project }}
+            bindings/go/generator
+            Taskfile.yml
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
@@ -158,6 +180,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
+      - name: Initialize go.work
+        run: task init/go.work
       - name: Run Code Generation
         run: task generate
       - name: Ensure Clean Target Repository
