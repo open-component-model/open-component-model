@@ -4,7 +4,7 @@ go 1.24.1
 
 require (
 	github.com/stretchr/testify v1.10.0
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250320125128-fe47d799eaad
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250326130017-a5ccd214394b
 	sigs.k8s.io/yaml v1.4.0
 )
 
