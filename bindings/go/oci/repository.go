@@ -249,7 +249,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	}
 
 	// Encode and upload the descriptor
-	descriptorEncoding, descriptorBuffer, err := singleFileTAREncodeDescriptor(descriptor)
+	descriptorEncoding, descriptorBuffer, err := singleFileTAREncodeDescriptor(repo.scheme, descriptor)
 	if err != nil {
 		return fmt.Errorf("failed to encode descriptor: %w", err)
 	}

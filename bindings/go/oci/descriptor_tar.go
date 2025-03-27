@@ -10,6 +10,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // singleFileTARDecodeDescriptor decodes a component descriptor from a TAR archive.
@@ -49,18 +51,27 @@ func singleFileTARDecodeDescriptor(raw io.Reader) (*descriptor.Descriptor, error
 		return nil, fmt.Errorf("component-descriptor.yaml not found in archive")
 	}
 
-	var desc descriptor.Descriptor
-	if err := yaml.Unmarshal(buf.Bytes(), &desc); err != nil {
+	var v2desc v2.Descriptor
+	if err := yaml.Unmarshal(buf.Bytes(), &v2desc); err != nil {
 		return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
 	}
+	desc, err := descriptor.ConvertFromV2(&v2desc)
+	if err != nil {
+		return nil, fmt.Errorf("converting component descriptor: %w", err)
+	}
 
-	return &desc, nil
+	return desc, nil
 }
 
 // singleFileTAREncodeDescriptor encodes a component descriptor into a TAR archive.
-func singleFileTAREncodeDescriptor(desc *descriptor.Descriptor) (encoding string, _ *bytes.Buffer, err error) {
+func singleFileTAREncodeDescriptor(scheme *runtime.Scheme, desc *descriptor.Descriptor) (encoding string, _ *bytes.Buffer, err error) {
+	v2desc, err := descriptor.ConvertToV2(scheme, desc)
+	if err != nil {
+		return "", nil, fmt.Errorf("unable to convert component descriptor: %w", err)
+	}
+
 	descriptorEncoding := "+yaml"
-	descriptorYAML, err := yaml.Marshal(desc)
+	descriptorYAML, err := yaml.Marshal(v2desc)
 	if err != nil {
 		return "", nil, fmt.Errorf("unable to encode component descriptor: %w", err)
 	}

@@ -77,8 +77,13 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 
 	resolved, err := mockStore.Resolve(ctx, mockResolver.ComponentVersionReference(desc.Component.Name, desc.Component.Version))
 	r.NoError(err, "Failed to resolve component version after adding it")
-
 	r.NotNil(resolved, "Resolved component version should not be nil")
+
+	desc2, err := repo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
+	r.NoError(err, "Failed to get component version after adding it")
+
+	r.NotNil(desc2, "Component version should not be nil after adding it")
+	r.Equal(desc.Component.Name, desc2.Component.Name, "Component name should match")
 }
 
 func TestRepository_GetComponentVersion(t *testing.T) {
