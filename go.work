@@ -1,0 +1,10 @@
+go 1.24.1
+
+use (
+	./bindings/go/blob
+	./bindings/go/ctf
+	./bindings/go/descriptor/runtime
+	./bindings/go/descriptor/v2
+	./bindings/go/generator
+	./bindings/go/runtime
+)
