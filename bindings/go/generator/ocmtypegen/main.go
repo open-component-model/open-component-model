@@ -7,49 +7,64 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
 const (
+	// typegenMarker is the marker used to identify types for code generation.
+	// It should be present in the comments of the type declaration.
+	// The marker is used to indicate that the type should be processed by the generator.
+	// The marker is expected to be in the format: "+ocm:typegen=true"
 	typegenMarker = "+ocm:typegen=true"
+	// generatedFile is the name of the generated file.
+	// The generator will create this file in the same package directory as the source files.
+	// The file will contain the generated code for the types marked for generation.
 	generatedFile = "zz_generated.ocm_type.go"
+	// runtimeImport is the import path for the `runtime` package.
+	// This package contains the `Type` struct that is used in the generated code.
+	// The generator will ensure that this import is included in the generated file,
+	// if the package is not the same as the runtime package.
 	runtimeImport = "ocm.software/open-component-model/bindings/go/runtime"
+	// runtimeTypeFieldName is the name of the field in the struct that holds the type information.
+	// This field must be of type `runtime.Type` for the generator to process the struct.
+	runtimeTypeFieldName = "Type"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: generator <root-folder>")
+		slog.Info("Usage: generator <root-folder>")
 		os.Exit(1)
 	}
 	root := os.Args[1]
 
 	packages, err := findGoPackages(root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error finding Go packages: %v\n", err)
+		slog.Error("Failed to find go packages", "error", err)
 		os.Exit(1)
 	}
 
 	for _, pkgDir := range packages {
-		// Important: scanFolder must only look inside this one subpackage directory
 		pkgName, types, err := scanSinglePackage(pkgDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error scanning %s: %v\n", pkgDir, err)
+			slog.Error("error scanning", "dir", "pkgDir", "error", err)
 			continue
 		}
 		if len(types) == 0 {
 			continue
 		}
-		fmt.Printf("Generating for %s (%s): %v\n", pkgName, pkgDir, types)
+		slog.Info("Generating", "pkg", pkgName, "dir", pkgDir, "types", types)
 
 		err = generateCode(pkgDir, pkgName, types)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error generating in %s: %v\n", pkgDir, err)
+			slog.Error("Error generating", "pkg", pkgName, "dir", pkgDir, "error", err)
 		}
 	}
 }
 
+// scanSinglePackage inspects a folder for Go type definitions marked for code generation.
 func scanSinglePackage(folder string) (string, []string, error) {
 	fset := token.NewFileSet()
 	var packageName string
@@ -89,6 +104,7 @@ func scanSinglePackage(folder string) (string, []string, error) {
 
 				structType, ok := typeSpec.Type.(*ast.StructType)
 				if !ok || !hasRuntimeTypeField(structType) {
+					slog.Info("skipping type", "name", typeSpec.Name.Name, "reason", "not a struct with runtime.Type field")
 					continue
 				}
 
@@ -100,6 +116,7 @@ func scanSinglePackage(folder string) (string, []string, error) {
 	return packageName, typesToGenerate, nil
 }
 
+// findGoPackages recursively walks a directory to find all folders containing valid Go files.
 func findGoPackages(root string) ([]string, error) {
 	var packages []string
 
@@ -122,54 +139,14 @@ func findGoPackages(root string) ([]string, error) {
 	return packages, err
 }
 
-func scanFolder(folder string) (string, []string, error) {
-	fset := token.NewFileSet()
-	var packageName string
-	var typesToGenerate []string
-
-	err := filepath.Walk(folder, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !isValidGoFile(info.Name()) {
-			return err
-		}
-
-		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-		if err != nil {
-			return err
-		}
-		if packageName == "" {
-			packageName = file.Name.Name
-		}
-
-		for _, decl := range file.Decls {
-			genDecl, ok := decl.(*ast.GenDecl)
-			if !ok || genDecl.Tok != token.TYPE {
-				continue
-			}
-
-			for _, spec := range genDecl.Specs {
-				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok || !hasMarker(genDecl.Doc, typeSpec.Doc) {
-					continue
-				}
-				structType, ok := typeSpec.Type.(*ast.StructType)
-				if !ok || !hasRuntimeTypeField(structType) {
-					continue
-				}
-				typesToGenerate = append(typesToGenerate, typeSpec.Name.Name)
-			}
-		}
-		return nil
-	})
-
-	return packageName, typesToGenerate, err
-}
-
+// isValidGoFile checks if a file should be considered for parsing.
 func isValidGoFile(name string) bool {
 	return strings.HasSuffix(name, ".go") &&
 		!strings.HasSuffix(name, "_test.go") &&
 		!strings.HasPrefix(name, "zz_generated.")
 }
 
+// hasMarker returns true if any comment group contains the typegen marker.
 func hasMarker(groups ...*ast.CommentGroup) bool {
 	for _, g := range groups {
 		if g == nil {
@@ -184,12 +161,13 @@ func hasMarker(groups ...*ast.CommentGroup) bool {
 	return false
 }
 
+// hasRuntimeTypeField checks if the struct has a field named Type of type runtime.Type.
 func hasRuntimeTypeField(s *ast.StructType) bool {
 	for _, field := range s.Fields.List {
 		for _, name := range field.Names {
-			if name.Name == "Type" {
+			if name.Name == runtimeTypeFieldName {
 				if sel, ok := field.Type.(*ast.SelectorExpr); ok {
-					if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "runtime" && sel.Sel.Name == "Type" {
+					if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "runtime" && sel.Sel.Name == runtimeTypeFieldName {
 						return true
 					}
 				}
@@ -199,6 +177,7 @@ func hasRuntimeTypeField(s *ast.StructType) bool {
 	return false
 }
 
+// getImportPath returns the Go import path for a given folder by reading the nearest go.mod file.
 func getImportPath(folder string) (string, error) {
 	absFolder, err := filepath.Abs(folder)
 	if err != nil {
@@ -232,6 +211,7 @@ func getImportPath(folder string) (string, error) {
 	return "", errors.New("go.mod not found")
 }
 
+// readModulePath reads the module path declared in a go.mod file.
 func readModulePath(goModPath string) (string, error) {
 	file, err := os.Open(goModPath)
 	if err != nil {
@@ -249,6 +229,7 @@ func readModulePath(goModPath string) (string, error) {
 	return "", errors.New("module path not found")
 }
 
+// generateCode creates a file with SetType and GetType methods for the provided types.
 func generateCode(folder, pkg string, types []string) error {
 	outputPath := filepath.Join(folder, generatedFile)
 	out, err := os.Create(outputPath)
@@ -265,7 +246,7 @@ func generateCode(folder, pkg string, types []string) error {
 	fmt.Fprintln(out, `//go:build !ignore_autogenerated
 // +build !ignore_autogenerated
 
-// Code generated by typegen. DO NOT EDIT.`)
+// Code generated by ocmtypegen. DO NOT EDIT.`)
 	fmt.Fprintf(out, "\npackage %s\n\n", pkg)
 
 	if importPath != runtimeImport {
@@ -273,8 +254,10 @@ func generateCode(folder, pkg string, types []string) error {
 	}
 
 	for _, name := range types {
+		fmt.Fprintf(out, "// SetType is an autogenerated setter function, useful for type inference and defaulting.\n")
 		fmt.Fprintf(out, "func (t *%s) SetType(typ runtime.Type) {\n\tt.Type = typ\n}\n\n", name)
-		fmt.Fprintf(out, "func (t *%s) GetType() runtime.Type {\n\treturn t.Type\n}\n\n", name)
+		fmt.Fprintf(out, "// GetType is an autogenerated getter function, useful for type inference and defaulting.\n")
+		fmt.Fprintf(out, "func (t *%s) GetType() runtime.Type {\n\treturn t.Type\n}\n", name)
 	}
 	return nil
 }

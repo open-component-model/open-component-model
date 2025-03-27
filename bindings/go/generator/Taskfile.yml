@@ -1,15 +1,25 @@
 version: '3'
 
 tasks:
+  tmp:
+    cmds:
+      - mkdir -p tmp
+    status:
+      - test -d tmp
   test:
+    deps:
+      - tmp
     desc: "Run all Generator tests"
     cmds:
       - task: ocmtypegen/test
+      - go test -v -coverprofile=tmp/coverage.out ./...
 
   ocmtypegen/install:
     desc: "Install {{.PKG}} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
     vars:
       PKG: '{{ .TASKFILE_DIR }}/ocmtypegen/...'
+    env:
+      GOBIN: '{{ .ROOT_DIR }}/tmp/bin'
     cmds:
       - go install {{ .PKG }}
 
@@ -21,9 +31,9 @@ tasks:
         sh: find {{ .ROOT_DIR }}/bindings/go -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/bindings/go/||'
     cmds:
       - for: { var: GO_MODULES }
-        cmd: 'ocmtypegen {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}'
+        cmd: '{{ .ROOT_DIR }}/tmp/bin/ocmtypegen {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}'
 
   ocmtypegen/test:
     desc: "Run OCM Type Generation test"
     cmds:
-      - ocmtypegen {{ .TASKFILE_DIR }}/ocmtypegen/test
+      - cmd: 'go run {{ .TASKFILE_DIR }}/ocmtypegen/... {{ .TASKFILE_DIR }}/ocmtypegen/test'
