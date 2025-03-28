@@ -2,6 +2,9 @@
 // with component descriptors in all schema versions without
 // restricting the code to the public API for future major changes.
 //
+// Overall this package makes it easier to work with embedded types as well
+// due to its reliance on interfaces instead of Raw like the external versions.
+//
 // This package should be preferred whenever working with non-serialization
 // relevant routines (such as working with accesses or components)
 //
