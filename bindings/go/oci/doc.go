@@ -13,6 +13,17 @@
 //     - OCI manifest handling
 //     - Layer management
 //
+//     Every Repository is based on a Resolver which in turn provides the Resolver.StoreForReference.
+//     This means that for every OCI reference, there is a Store implementation that backs it.
+//
+//     The Store abstracts OCI Operations from the Repository and provides methods for
+//     - Fetching OCI Descriptors (and checking their Existence)
+//     - Pushing OCI Descriptors
+//     - Tagging OCI Descriptors and resolving those tags
+//
+//     As long as a store provides these abstractions (which are lent from ORAS) the repository
+//     will be able to interact with the underlying storage as if it was an OCI registry.
+//
 //  2. Subpackages:
 //     - access/v1: Provides version 1 of the OCI image access specification
 //     - digest/v1: Handles content addressing and digest operations
@@ -22,33 +33,13 @@
 //
 //  3. Supporting Types and Utilities:
 //     - LocalBlobMemory: Manages temporary storage of local blobs
-//     - ResourceBlob: Handles resource-specific blob operations
-//     - DescriptorBlob: Manages OCI descriptor operations
 //     - ComponentConfig: Stores component-specific configuration
 //     - ArtifactAnnotation: Handles OCI artifact annotations
 //
-// Core Functionality:
-//
-//  1. Component Version Management
-//     The package provides comprehensive support for OCM component versions:
-//     - Storage of component descriptors as OCI manifests
-//     - Version-specific resource management
-//     - Component configuration handling
-//     - Artifact annotation support
-//
-//  2. Resource Handling
-//     Resources are managed through multiple layers:
+//     Resources are managed through multiple types:
 //     - LocalBlob: For temporary storage of resources
-//     - OCIImage: For remote resource access
-//     - ResourceBlob: For resource-specific operations
-//     - DescriptorBlob: For OCI descriptor management
-//
-//  3. OCI Integration
-//     Deep integration with OCI specifications:
-//     - Manifest handling
-//     - Layer management
-//     - Content addressing
-//     - Registry operations
+//     - ResourceBlob: For resource-specific operations (a blob described by an OCM resource)
+//     - DescriptorBlob: For OCI descriptor management (a blob described by an OCI descriptor)
 //
 // Usage Example:
 //
@@ -66,7 +57,7 @@
 //	desc, err := repo.GetComponentVersion(ctx, "component", "v1")
 //
 //	// Get a local resource
-//	blob, err := repo.GetLocalResource(ctx, "component", "v1", identity)
+//	blob, err := repo.GetLocalResource(ctx, "component", "v1", newRes.ElementMeta.ToIdentity())
 //
 // Media Types:
 //
