@@ -198,7 +198,7 @@ func (repo *Repository) AddLocalResource(
 
 	layer, err := layerFromResourceIdentityAndLocalBlob(access, size, resource)
 	if err != nil {
-		return nil, fmt.Errorf("error creating layer descriptor: %v", err)
+		return nil, fmt.Errorf("error creating layer descriptor: %w", err)
 	}
 
 	layerData, err := content.ReadCloser()
@@ -457,11 +457,11 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 
 	target := tar.NewOCILayoutWriter(zippedBuf)
 	defer func() {
-		if err := target.Close(); err != nil {
+		if err = target.Close(); err != nil {
 			err = errors.Join(err, fmt.Errorf("failed to close tar writer: %w", err))
 			return
 		}
-		if err := zippedBuf.Close(); err != nil {
+		if err = zippedBuf.Close(); err != nil {
 			err = errors.Join(err, fmt.Errorf("failed to close gzip writer: %w", err))
 			return
 		}
@@ -552,7 +552,7 @@ func updateResourceAccess(resource *descriptor.Resource, layer ociImageSpecV1.De
 // prepareResourceFile creates a temporary file with the resource content.
 func prepareResourceFile(resource *descriptor.Resource, content blob.ReadOnlyBlob) (path string, err error) {
 	filePath := filepath.Join(os.TempDir(), fmt.Sprintf("%s-%d", resource.Name, time.Now().UnixNano()))
-	tmpFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+	tmpFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o644)
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %w", err)
 	}
@@ -587,12 +587,12 @@ func copyWithGzipDetection(src io.Reader, dst io.Writer) (err error) {
 
 	// Read the first two bytes for gzip detection
 	n, err := io.ReadFull(src, header[:])
-	if err != nil && err != io.EOF && !errors.Is(err, io.ErrUnexpectedEOF) {
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return fmt.Errorf("failed to read data for gzip detection: %w", err)
 	}
 
 	// Reconstruct reader with the first two bytes prepended
-	var reader = io.MultiReader(bytes.NewReader(header[:n]), src)
+	reader := io.MultiReader(bytes.NewReader(header[:n]), src)
 
 	if n == 2 && header[0] == gzipMagic1 && header[1] == gzipMagic2 {
 		var gzReader *gzip.Reader

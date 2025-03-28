@@ -37,11 +37,11 @@ func SingleFileTARDecodeV2Descriptor(raw io.Reader) (*descriptor.Descriptor, err
 				return nil, fmt.Errorf("multiple component-descriptor.yaml files found")
 			}
 			found = true
-			if _, err := io.Copy(&buf, tarReader); err != nil {
+			if _, err := io.CopyN(&buf, tarReader, header.Size); err != nil {
 				return nil, fmt.Errorf("reading component descriptor: %w", err)
 			}
 		default:
-			if _, err := io.Copy(io.Discard, tarReader); err != nil {
+			if _, err := io.CopyN(io.Discard, tarReader, header.Size); err != nil {
 				return nil, fmt.Errorf("skipping file %s: %w", header.Name, err)
 			}
 		}
@@ -85,7 +85,7 @@ func SingleFileTAREncodeV2Descriptor(scheme *runtime.Scheme, desc *descriptor.De
 
 	if err := tarWriter.WriteHeader(&tar.Header{
 		Name: "component-descriptor.yaml",
-		Mode: 0644,
+		Mode: 0o644,
 		Size: int64(len(descriptorYAML)),
 	}); err != nil {
 		return "", nil, fmt.Errorf("unable to write component descriptor header: %w", err)

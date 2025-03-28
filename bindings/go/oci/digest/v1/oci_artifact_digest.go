@@ -8,8 +8,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
-const OCIArtifactDigestAlgorithm = "ociArtifactDigest"
-const OCIArtifactDigestAlgorithmVersion = "v1"
+const (
+	OCIArtifactDigestAlgorithm        = "ociArtifactDigest"
+	OCIArtifactDigestAlgorithmVersion = "v1"
+)
 
 var SHAMapping = map[string]digest.Algorithm{
 	"SHA-256": digest.SHA256,

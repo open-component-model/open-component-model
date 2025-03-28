@@ -175,7 +175,6 @@ func (s *OCILayoutWriter) tag(ctx context.Context, desc ociImageSpecV1.Descripto
 }
 
 func (s *OCILayoutWriter) updateIndex() error {
-
 	var manifests []ociImageSpecV1.Descriptor
 	tagged := newSet[digest.Digest]()
 	refMap := s.tagResolver.Map()
@@ -210,7 +209,7 @@ var _ content.Pusher = &OCILayoutWriter{}
 // blobPath calculates blob path from the given digest.
 func blobPath(dgst digest.Digest) (string, error) {
 	if err := dgst.Validate(); err != nil {
-		return "", fmt.Errorf("cannot calculate blob path from invalid digest %s: %w: %v",
+		return "", fmt.Errorf("cannot calculate blob path from invalid digest %s: %w: %w",
 			dgst.String(), errdef.ErrInvalidDigest, err)
 	}
 	return path.Join(ociImageSpecV1.ImageBlobsDir, dgst.Algorithm().String(), dgst.Encoded()), nil
