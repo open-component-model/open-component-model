@@ -1,4 +1,4 @@
-package oci
+package tar
 
 import (
 	"archive/tar"
@@ -14,8 +14,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// singleFileTARDecodeDescriptor decodes a component descriptor from a TAR archive.
-func singleFileTARDecodeDescriptor(raw io.Reader) (*descriptor.Descriptor, error) {
+// SingleFileTARDecodeV2Descriptor decodes a component descriptor from a TAR archive.
+func SingleFileTARDecodeV2Descriptor(raw io.Reader) (*descriptor.Descriptor, error) {
 	const descriptorFileHeader = "component-descriptor.yaml"
 
 	tarReader := tar.NewReader(raw)
@@ -63,8 +63,8 @@ func singleFileTARDecodeDescriptor(raw io.Reader) (*descriptor.Descriptor, error
 	return desc, nil
 }
 
-// singleFileTAREncodeDescriptor encodes a component descriptor into a TAR archive.
-func singleFileTAREncodeDescriptor(scheme *runtime.Scheme, desc *descriptor.Descriptor) (encoding string, _ *bytes.Buffer, err error) {
+// SingleFileTAREncodeV2Descriptor encodes a component descriptor into a TAR archive.
+func SingleFileTAREncodeV2Descriptor(scheme *runtime.Scheme, desc *descriptor.Descriptor) (encoding string, _ *bytes.Buffer, err error) {
 	v2desc, err := descriptor.ConvertToV2(scheme, desc)
 	if err != nil {
 		return "", nil, fmt.Errorf("unable to convert component descriptor: %w", err)

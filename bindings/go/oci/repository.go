@@ -15,7 +15,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/opencontainers/go-digest"
@@ -29,10 +28,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	ocmoci "ocm.software/open-component-model/bindings/go/oci/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/access/v1"
 	ociDigestV1 "ocm.software/open-component-model/bindings/go/oci/digest/v1"
+	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+// Annotations for Manifes
+const (
+	AnnotationOCMComponentVersion = "software.ocm.componentversion"
+	AnnotationOCMCreator          = "software.ocm.creator"
 )
 
 // Media type constants for component descriptors
@@ -54,11 +59,14 @@ type LocalBlob interface {
 	blob.MediaTypeAware
 }
 
-// OCMComponentVersionRepository defines the interface for storing and retrieving OCM component versions
-// and their associated resources in an OCI repository.
-type OCMComponentVersionRepository interface {
+// ComponentVersionRepository defines the interface for storing and retrieving OCM component versions
+// and their associated resources in a Store.
+type ComponentVersionRepository interface {
 	// AddComponentVersion adds a new component version to the repository.
 	// If a component version already exists, it will be updated with the new descriptor.
+	// The descriptor internally will be serialized via the runtime package.
+	// The descriptor MUST have its target Name and Version already set as they are used to identify the target
+	// Location in the Store.
 	AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error
 
 	// GetComponentVersion retrieves a component version from the repository.
@@ -68,6 +76,8 @@ type OCMComponentVersionRepository interface {
 	// AddLocalResource adds a local resource to the repository.
 	// The resource must be referenced in the component descriptor.
 	// Resources for non-existent component versions may be stored but may be removed during garbage collection.
+	// The Resource given is identified later on by its own Identity and a collection of a set of reserved identity values
+	// that can have a special meaning.
 	AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error)
 
 	// GetLocalResource retrieves a local resource from the repository.
@@ -75,15 +85,31 @@ type OCMComponentVersionRepository interface {
 	GetLocalResource(ctx context.Context, component, version string, identity map[string]string) (LocalBlob, error)
 }
 
-// OCMResourceRepository defines the interface for storing and retrieving OCM resources
-// independently of component versions.
-type OCMResourceRepository interface {
+// ResourceRepository defines the interface for storing and retrieving OCM resources
+// independently of component versions from a Store Implementation
+type ResourceRepository interface {
 	// UploadResource uploads a resource to the repository.
 	// Returns the updated resource with repository-specific information.
-	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error)
+	// The resource must be referenced in the component descriptor.
+	// Note that UploadResource is special in that it considers both
+	// - the Source Access from descriptor.Resource
+	// - the Target Access from the given target specification
+	// It might be that during the upload, the source pointer may be updated with information gathered during upload
+	// (e.g. digest, size, etc).
+	//
+	// The content of form blob.ReadOnlyBlob is expected to be a (optionally gzipped) tar archive that can be read with
+	// oci.NewFromTar, which interprets the blob as an OCILayout.
+	//
+	// The given OCI Layout MUST contain the resource described in source with an v1.OCIImage specification,
+	// otherwise the upload will fail
+	UploadResource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Resource, content blob.ReadOnlyBlob) (err error)
 
 	// DownloadResource downloads a resource from the repository.
-	// Returns a blob containing the resource data.
+	// THe resource MUST contain a valid v1.OCIImage specification that exists in the Store.
+	// Otherwise, the download will fail.
+	//
+	// The blob.ReadOnlyBlob returned will always be an OCI Layout, readable by oci.NewFromTar.
+	// For more information on the download procedure, see NewOCILayoutWriter.
 	DownloadResource(ctx context.Context, res *descriptor.Resource) (content blob.ReadOnlyBlob, err error)
 }
 
@@ -95,9 +121,6 @@ type Resolver interface {
 
 	// ComponentVersionReference returns a unique reference for a component version.
 	ComponentVersionReference(component, version string) string
-
-	// TargetResourceReference returns a reference for uploading a resource.
-	TargetResourceReference(srcReference string) (targetReference string, err error)
 }
 
 // Store defines the interface for interacting with an OCI store.
@@ -108,31 +131,36 @@ type Store interface {
 	content.Tagger
 }
 
-// Repository implements the OCMComponentVersionRepository interface using OCI registries.
+// Repository implements the ComponentVersionRepository interface using OCI registries.
 // Each component version is stored in a separate OCI repository.
 type Repository struct {
 	scheme *runtime.Scheme
 
 	// localBlobMemory temporarily stores local blobs until they are added to a component version.
-	localBlobMemory *LocalBlobMemory
+	// thus any local blob added with AddLocalResource will be added to the memory until
+	// AddComponentVersion is called with a reference to that resource.
+	// Note that Store implementations are expected to either allow orphaned LocalBlobs or
+	// regularly issue an async garbage collection to remove them.
+	localBlobMemory LocalBlobMemory
 
 	// resolver resolves component version references to OCI stores.
 	resolver Resolver
 }
 
 // RepositoryFromResolverAndMemory creates a new Repository instance.
-func RepositoryFromResolverAndMemory(resolver Resolver, blobMemory *LocalBlobMemory) *Repository {
-	scheme := runtime.NewScheme()
-	ocmoci.MustAddToScheme(scheme)
-	v2.MustAddToScheme(scheme)
-	return &Repository{
-		resolver:        resolver,
-		localBlobMemory: blobMemory,
-		scheme:          scheme,
+// This is a convenience function that uses the new options pattern.
+func RepositoryFromResolverAndMemory(resolver Resolver, memory LocalBlobMemory) *Repository {
+	repo, err := NewRepository(
+		WithResolver(resolver),
+		WithLocalBlobMemory(memory),
+	)
+	if err != nil {
+		panic(err)
 	}
+	return repo
 }
 
-var _ OCMComponentVersionRepository = (*Repository)(nil)
+var _ ComponentVersionRepository = (*Repository)(nil)
 
 // AddLocalResource adds a local resource to the repository.
 func (repo *Repository) AddLocalResource(
@@ -168,7 +196,7 @@ func (repo *Repository) AddLocalResource(
 		return nil, fmt.Errorf("content size is unknown")
 	}
 
-	layer, err := createLayer(access, size, resource)
+	layer, err := layerFromResourceIdentityAndLocalBlob(access, size, resource)
 	if err != nil {
 		return nil, fmt.Errorf("error creating layer descriptor: %v", err)
 	}
@@ -249,7 +277,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	}
 
 	// Encode and upload the descriptor
-	descriptorEncoding, descriptorBuffer, err := singleFileTAREncodeDescriptor(repo.scheme, descriptor)
+	descriptorEncoding, descriptorBuffer, err := tar.SingleFileTAREncodeV2Descriptor(repo.scheme, descriptor)
 	if err != nil {
 		return fmt.Errorf("failed to encode descriptor: %w", err)
 	}
@@ -288,8 +316,8 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
 		Config:    componentConfigDescriptor,
 		Annotations: map[string]string{
-			"software.ocm.componentversion": fmt.Sprintf("component-descriptors/%s:%s", component, version),
-			"software.ocm.creator":          "OCM OCI Repository Plugin (POCM)",
+			AnnotationOCMComponentVersion: fmt.Sprintf("component-descriptors/%s:%s", component, version),
+			AnnotationOCMCreator:          "OCM OCI Repository Plugin (POCM)",
 		},
 		Layers: append(
 			[]ociImageSpecV1.Descriptor{descriptorOCIDescriptor},
@@ -359,36 +387,37 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 		_ = descriptorRaw.Close()
 	}()
 
-	return singleFileTARDecodeDescriptor(descriptorRaw)
+	return tar.SingleFileTARDecodeV2Descriptor(descriptorRaw)
 }
 
 // UploadResource uploads a resource to the repository.
-func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Resource, b blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {
+func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed, res *descriptor.Resource, b blob.ReadOnlyBlob) (err error) {
 	done := logOperation(ctx, "upload resource", slog.String("resource", res.Name))
 	defer done(err)
 
-	var access v1.OCIImage
-	if err := repo.scheme.Convert(res.Access, &access); err != nil {
-		return nil, fmt.Errorf("error converting resource access to OCI image: %w", err)
+	var old v1.OCIImage
+	if err := repo.scheme.Convert(res.Access, &old); err != nil {
+		return fmt.Errorf("error converting resource old to OCI image: %w", err)
 	}
 
-	targetRef, err := repo.resolver.TargetResourceReference(access.ImageReference)
-	if err != nil {
-		return nil, err
+	var access v1.OCIImage
+	if err := repo.scheme.Convert(target, &access); err != nil {
+		return fmt.Errorf("error converting resource target to OCI image: %w", err)
 	}
-	store, err := repo.resolver.StoreForReference(ctx, targetRef)
+
+	store, err := repo.resolver.StoreForReference(ctx, access.ImageReference)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	fileBufferPath, err := prepareResourceFile(res, b)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	desc, err := copyResource(ctx, fileBufferPath, access.ImageReference, targetRef, store)
+	desc, err := copyResource(ctx, fileBufferPath, old.ImageReference, access.ImageReference, store)
 	if err != nil {
-		return nil, errors.Join(os.Remove(fileBufferPath), err)
+		return errors.Join(os.Remove(fileBufferPath), err)
 	}
 	defer os.Remove(fileBufferPath)
 
@@ -397,9 +426,9 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 		HashAlgorithm: digest.SHA256.String(),
 		Value:         desc.Digest.Encoded(),
 	}
-	access.ImageReference = targetRef
+	res.Access = &access
 
-	return res, nil
+	return nil
 }
 
 // DownloadResource downloads a resource from the repository.
@@ -426,7 +455,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		}
 	}()
 
-	target := NewOCILayoutTarWriter(zippedBuf)
+	target := tar.NewOCILayoutWriter(zippedBuf)
 	defer func() {
 		if err := target.Close(); err != nil {
 			err = errors.Join(err, fmt.Errorf("failed to close tar writer: %w", err))
@@ -438,7 +467,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		}
 	}()
 
-	desc, err := copyResourceToTarget(ctx, src, access.ImageReference, target)
+	desc, err := copyResourceToOCILayout(ctx, src, access.ImageReference, target)
 	if err != nil {
 		return nil, fmt.Errorf("failed to copy resource: %w", err)
 	}
@@ -451,8 +480,8 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	return NewResourceBlob(res, describedBlob, mediaType), nil
 }
 
-// copyResourceToTarget copies a resource from the store to a buffer.
-func copyResourceToTarget(ctx context.Context, store Store, srcRef string, storage CloseableTarget) (ociImageSpecV1.Descriptor, error) {
+// copyResourceToOCILayout copies a resource from the store to a buffer.
+func copyResourceToOCILayout(ctx context.Context, store Store, srcRef string, storage *tar.OCILayoutWriter) (ociImageSpecV1.Descriptor, error) {
 	return oras.Copy(ctx, store, srcRef, storage, srcRef, oras.CopyOptions{
 		CopyGraphOptions: oras.CopyGraphOptions{
 			Concurrency: 8,
@@ -494,56 +523,6 @@ func getManifest(ctx context.Context, store Store, reference string) (manifest o
 		return ociImageSpecV1.Manifest{}, err
 	}
 	return manifest, nil
-}
-
-// createLayer creates an OCI layer descriptor for a resource.
-func createLayer(access *v2.LocalBlob, size int64, resource *descriptor.Resource) (ociImageSpecV1.Descriptor, error) {
-	layer := ociImageSpecV1.Descriptor{
-		MediaType: access.MediaType,
-		Digest:    digest.Digest(access.LocalReference),
-		Size:      size,
-	}
-
-	identity := resource.ToIdentity()
-	special := map[string]func(platform *ociImageSpecV1.Platform, value string){
-		"architecture": func(platform *ociImageSpecV1.Platform, value string) {
-			platform.Architecture = value
-			return
-		},
-		"os": func(platform *ociImageSpecV1.Platform, value string) {
-			platform.OS = value
-			return
-		},
-		"variant": func(platform *ociImageSpecV1.Platform, value string) {
-			platform.Variant = value
-			return
-		},
-		"os.features": func(platform *ociImageSpecV1.Platform, value string) {
-			platform.OSFeatures = strings.Split(value, ",")
-			return
-		},
-		"os.version": func(platform *ociImageSpecV1.Platform, value string) {
-			platform.OSVersion = value
-			return
-		},
-	}
-	for key, value := range resource.ExtraIdentity {
-		if set, ok := special[key]; ok {
-			if layer.Platform == nil {
-				layer.Platform = &ociImageSpecV1.Platform{}
-			}
-			set(layer.Platform, value)
-		}
-	}
-
-	if err := (&ArtifactOCILayerAnnotation{
-		Identity: identity,
-		Kind:     ArtifactKindResource,
-	}).AddToDescriptor(&layer); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to add resource artifact annotation to descriptor: %w", err)
-	}
-
-	return layer, nil
 }
 
 // updateResourceAccess updates the resource access with the new layer information.

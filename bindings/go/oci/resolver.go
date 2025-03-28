@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 )
 
@@ -47,15 +46,6 @@ func (resolver *URLPathResolver) ComponentVersionReference(component, version st
 		panic("version must not contain ':' or '/' characters")
 	}
 	return fmt.Sprintf("%s:%s", resolver.BaseReference(component), version)
-}
-
-func (resolver *URLPathResolver) TargetResourceReference(srcReference string) (targetReference string, err error) {
-	ref, err := registry.ParseReference(srcReference)
-	if err != nil {
-		return "", err
-	}
-	ref.Registry = resolver.BaseURL
-	return ref.String(), nil
 }
 
 func (resolver *URLPathResolver) StoreForReference(_ context.Context, reference string) (Store, error) {

@@ -1,17 +1,16 @@
 version: '3'
 
+vars:
+  INTEGRATION_TEST_IDENTIFIER: 'Integration'
+
 tasks:
   tmp:
     cmds:
       - mkdir -p tmp
     status:
       - test -d tmp
-  test:
-    sources:
-      - ./**/*.go
-      - ./go.mod
-      - ./go.sum
+  test/integration:
     cmds:
-      - go test -v -coverprofile=tmp/coverage.out ./...
+      - 'go test -run "{{ .INTEGRATION_TEST_IDENTIFIER }}" -v -coverprofile=tmp/coverage.out ./...'
     deps:
       - tmp

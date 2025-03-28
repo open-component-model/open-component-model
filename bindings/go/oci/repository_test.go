@@ -24,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -363,7 +364,7 @@ func TestRepository_DownloadResource(t *testing.T) {
 
 			// Create a temporary OCI store
 			buf := bytes.NewBuffer(nil)
-			store := oci.NewOCILayoutTarWriter(buf)
+			store := tar.NewOCILayoutWriter(buf)
 
 			// Create and write the OCI layout file
 			layout := ociImageSpecV1.ImageLayout{
@@ -458,12 +459,8 @@ func TestRepository_DownloadResource(t *testing.T) {
 
 			// Upload the resource with the store content
 			b := blob.NewDirectReadOnlyBlob(buf)
-			newRes, err := repo.UploadResource(ctx, tc.resource, b)
-			r.NoError(err, "Failed to upload test resource")
-			r.NotNil(newRes, "Resource should not be nil after uploading")
-
-			// Update the test resource with the new information
-			tc.resource = newRes
+			r.NoError(repo.UploadResource(ctx, tc.resource.Access, tc.resource, b), "Failed to upload test resource")
+			r.NotNil(tc.resource.Access, "Resource should not be nil after uploading")
 
 			// Download the resource
 			downloadedRes, err := repo.DownloadResource(ctx, tc.resource)

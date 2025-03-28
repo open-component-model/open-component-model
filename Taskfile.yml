@@ -42,13 +42,34 @@ includes:
 vars:
   GO_MODULES:
     sh: find {{ .ROOT_DIR }}/bindings/go -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/bindings/go/||'
+  TESTABLE: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test\")) | .name | rtrimstr(\":test\")'"
+  INTEGRATION_TESTABLE: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test/integration\")) | .name | rtrimstr(\":test/integration\")'"
+
 
 tasks:
+  testable:
+    silent: true
+    cmd: "{{ .TESTABLE }}"
   test:
     desc: "Run all tests in the project"
+    vars:
+      TASKS:
+        sh: "{{ .TESTABLE }}"
     cmds:
-      - for: { var: GO_MODULES }
-        task: bindings/go/{{.ITEM}}:test
+      - for: { var: TASKS }
+        task: '{{.ITEM}}:test'
+
+  testable/integration:
+    silent: true
+    cmd: "{{ .INTEGRATION_TESTABLE }}"
+  test/integration:
+    desc: "Run all integration tests in the project, possibly requiring external systems"
+    vars:
+      TASKS:
+        sh: "{{ .INTEGRATION_TESTABLE }}"
+    cmds:
+      - for: { var: TASKS }
+        task: '{{.ITEM}}:test/integration'
 
   init/go.work:
     desc: "Initialize the workspace environment"

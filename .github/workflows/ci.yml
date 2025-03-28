@@ -25,6 +25,11 @@ jobs:
       DIR: bindings/go
     steps:
       - uses: actions/checkout@v4
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Discover Go Modules
         id: discover
         run: |
@@ -99,6 +104,32 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
           args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml
+
+  run_integration_tests:
+    name: "Integration Tests"
+    runs-on: large_runner
+    env:
+      TESTCONTAINER_DOCKER_NETWORK: integration-testcontainers
+      DOCKER_BUILDKIT: 1
+    steps:
+      - name: Self Hosted Runner Post Job Cleanup Action
+        uses: TooMuch4U/actions-clean@v2.2
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Docker network for running Testcontainers
+        run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
+      - name: "Run Integration Tests"
+        run: task test/integration
+
   run_unit_tests:
     name: "Unit Tests"
     needs: discover_modules
@@ -206,6 +237,7 @@ jobs:
       - generate
       - analyze-go
       - run_unit_tests
+      - run_integration_tests
       - golangci_lint
     if: failure()
     steps:

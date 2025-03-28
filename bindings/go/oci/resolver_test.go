@@ -46,45 +46,6 @@ func TestURLPathResolver_ComponentVersionReference(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
-func TestURLPathResolver_TargetResourceReference(t *testing.T) {
-	tests := []struct {
-		name         string
-		baseURL      string
-		srcReference string
-		expectedRef  string
-		expectError  bool
-	}{
-		{
-			name:         "valid reference",
-			baseURL:      "http://example.com",
-			srcReference: "example.com/test-component:v1.0.0",
-			expectedRef:  "http://example.com/test-component:v1.0.0",
-			expectError:  false,
-		},
-		{
-			name:         "invalid reference",
-			baseURL:      "http://example.com",
-			srcReference: "invalid:reference:format",
-			expectError:  true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resolver := NewURLPathResolver(tt.baseURL)
-			result, err := resolver.TargetResourceReference(tt.srcReference)
-
-			if tt.expectError {
-				assert.Error(t, err)
-				return
-			}
-
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expectedRef, result)
-		})
-	}
-}
-
 func TestURLPathResolver_StoreForReference(t *testing.T) {
 	tests := []struct {
 		name        string

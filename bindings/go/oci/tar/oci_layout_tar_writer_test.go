@@ -1,4 +1,4 @@
-package oci
+package tar
 
 import (
 	"archive/tar"
@@ -16,7 +16,7 @@ import (
 
 func TestNewOCILayoutTarWriter(t *testing.T) {
 	buf := &bytes.Buffer{}
-	writer := NewOCILayoutTarWriter(buf)
+	writer := NewOCILayoutWriter(buf)
 	require.NotNil(t, writer)
 }
 
@@ -62,7 +62,7 @@ func TestOCILayoutTarWriter_Push(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			writer := NewOCILayoutTarWriter(buf)
+			writer := NewOCILayoutWriter(buf)
 			defer writer.Close()
 
 			err := writer.Push(context.Background(), tt.desc, bytes.NewReader(tt.data))
@@ -118,7 +118,7 @@ func TestOCILayoutTarWriter_Tag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			writer := NewOCILayoutTarWriter(buf)
+			writer := NewOCILayoutWriter(buf)
 			defer writer.Close()
 
 			// First push the content
@@ -143,7 +143,7 @@ func TestOCILayoutTarWriter_Tag(t *testing.T) {
 
 func TestOCILayoutTarWriter_Close(t *testing.T) {
 	buf := &bytes.Buffer{}
-	writer := NewOCILayoutTarWriter(buf)
+	writer := NewOCILayoutWriter(buf)
 
 	// Push some content
 	desc := ociImageSpecV1.Descriptor{
@@ -191,7 +191,7 @@ func TestOCILayoutTarWriter_Close(t *testing.T) {
 
 func TestOCILayoutTarWriter_Exists(t *testing.T) {
 	buf := &bytes.Buffer{}
-	writer := NewOCILayoutTarWriter(buf)
+	writer := NewOCILayoutWriter(buf)
 	defer writer.Close()
 
 	desc := ociImageSpecV1.Descriptor{
@@ -217,7 +217,7 @@ func TestOCILayoutTarWriter_Exists(t *testing.T) {
 
 func TestOCILayoutTarWriter_Fetch(t *testing.T) {
 	buf := &bytes.Buffer{}
-	writer := NewOCILayoutTarWriter(buf)
+	writer := NewOCILayoutWriter(buf)
 	defer writer.Close()
 
 	desc := ociImageSpecV1.Descriptor{
@@ -264,7 +264,7 @@ func TestOCILayoutTarWriter_Resolve(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			writer := NewOCILayoutTarWriter(buf)
+			writer := NewOCILayoutWriter(buf)
 			defer writer.Close()
 
 			// Push and tag the content if we expect it to exist

@@ -1,4 +1,4 @@
-package oci
+package tar
 
 import (
 	"archive/tar"
@@ -14,12 +14,11 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 )
 
-// NewOCILayoutTarWriter creates a new oras.Target that writes to the given writer an oci-layout in tar format.
+// NewOCILayoutWriter creates a new oras.Target that writes to the given writer an oci-layout in tar format.
 // The index and layout files are written to the storage when it is closed.
 // This writer is bound to serialization of tar archives and thus cannot be concurrently copied to efficiently, however
 // it is significantly more efficient in terms of I/O than writing an OCI Layout to the filesystem and then
@@ -28,8 +27,8 @@ import (
 // Note however that in most modern systems, I/O is generally fast enough (ssd) to keep up with
 // network speeds and concurrent reads, so this should not be a problem in most cases,
 // as long as your final goal is a tar of an oci layout and not just the oci layout itself.
-func NewOCILayoutTarWriter(w io.Writer) CloseableTarget {
-	return &ociLayoutTarWriter{
+func NewOCILayoutWriter(w io.Writer) *OCILayoutWriter {
+	return &OCILayoutWriter{
 		writer:      tar.NewWriter(w),
 		tagResolver: newMemoryResolver(),
 		index: &ociImageSpecV1.Index{
@@ -41,17 +40,7 @@ func NewOCILayoutTarWriter(w io.Writer) CloseableTarget {
 	}
 }
 
-// CloseableTarget is a target that can be closed after which it can no longer be operated on.
-type CloseableTarget interface {
-	oras.Target
-	io.Closer
-}
-
-var (
-	_ oras.Target = &ociLayoutTarWriter{}
-)
-
-type ociLayoutTarWriter struct {
+type OCILayoutWriter struct {
 	writeLock sync.Mutex
 	writer    *tar.Writer
 
@@ -62,15 +51,15 @@ type ociLayoutTarWriter struct {
 }
 
 // Fetch is only implemented to satisfy the oras.Target interface.
-func (s *ociLayoutTarWriter) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+func (s *OCILayoutWriter) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	return nil, errdef.ErrUnsupported
 }
 
-func (s *ociLayoutTarWriter) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
+func (s *OCILayoutWriter) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
 	return s.tagResolver.Resolve(ctx, reference)
 }
 
-func (s *ociLayoutTarWriter) Close() error {
+func (s *OCILayoutWriter) Close() error {
 	s.indexSync.Lock()
 	defer s.indexSync.Unlock()
 
@@ -116,7 +105,7 @@ func (s *ociLayoutTarWriter) Close() error {
 	return s.writer.Close()
 }
 
-func (s *ociLayoutTarWriter) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
+func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
 	blobPath, err := blobPath(expected.Digest)
 	if err != nil {
 		return err
@@ -144,7 +133,7 @@ func (s *ociLayoutTarWriter) Push(ctx context.Context, expected ociImageSpecV1.D
 }
 
 // Exists returns true if the described content Exists.
-func (s *ociLayoutTarWriter) Exists(_ context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
+func (s *OCILayoutWriter) Exists(_ context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
 	s.indexSync.RLock()
 	defer s.indexSync.RUnlock()
 	for _, manifest := range s.index.Manifests {
@@ -155,7 +144,7 @@ func (s *ociLayoutTarWriter) Exists(_ context.Context, target ociImageSpecV1.Des
 	return false, nil
 }
 
-func (s *ociLayoutTarWriter) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
+func (s *OCILayoutWriter) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	if reference == "" {
 		return errdef.ErrMissingReference
 	}
@@ -171,7 +160,7 @@ func (s *ociLayoutTarWriter) Tag(ctx context.Context, desc ociImageSpecV1.Descri
 	return s.tag(ctx, desc, reference)
 }
 
-func (s *ociLayoutTarWriter) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
+func (s *OCILayoutWriter) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	dgst := desc.Digest.String()
 	if reference != dgst {
 		// also tag desc by its digest
@@ -185,7 +174,7 @@ func (s *ociLayoutTarWriter) tag(ctx context.Context, desc ociImageSpecV1.Descri
 	return s.updateIndex()
 }
 
-func (s *ociLayoutTarWriter) updateIndex() error {
+func (s *OCILayoutWriter) updateIndex() error {
 
 	var manifests []ociImageSpecV1.Descriptor
 	tagged := newSet[digest.Digest]()
@@ -216,7 +205,7 @@ func (s *ociLayoutTarWriter) updateIndex() error {
 	return nil
 }
 
-var _ content.Pusher = &ociLayoutTarWriter{}
+var _ content.Pusher = &OCILayoutWriter{}
 
 // blobPath calculates blob path from the given digest.
 func blobPath(dgst digest.Digest) (string, error) {
