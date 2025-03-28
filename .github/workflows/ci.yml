@@ -114,6 +114,27 @@ jobs:
             
             core.setOutput('unit_test_modules_json', JSON.stringify(unitTestModules));
             core.setOutput('integration_test_modules_json', JSON.stringify(integrationTestModules));
+      - name: Generate Job Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const modules = JSON.parse(`${{ steps.discover.outputs.modules_json || '[]' }}`);
+            const filtered = JSON.parse(`${{ steps.filtered.outputs.modules_json || '[]' }}`);
+            const unitTests = JSON.parse(`${{ steps.filtered_test.outputs.unit_test_modules_json || '[]' }}`);
+            const integrationTests = JSON.parse(`${{ steps.filtered_test.outputs.integration_test_modules_json || '[]' }}`);
+            
+            function toMarkdownList(items) {
+              return items.length ? items.map(item => `- \`${item}\``).join('\n') : '_None_';
+            }
+            
+            let summary = `### 🧩 Go Module Discovery Summary\n\n`;
+            
+            summary += `**🔍 Discovered Modules (${modules.length}):**\n${toMarkdownList(modules)}\n\n`;
+            summary += `**🎯 Filtered Modules (${filtered.length}):**\n${toMarkdownList(filtered)}\n\n`;
+            summary += `**🧪 Unit Test Modules (${unitTests.length}):**\n${toMarkdownList(unitTests)}\n\n`;
+            summary += `**🧬 Integration Test Modules (${integrationTests.length}):**\n${toMarkdownList(integrationTests)}\n`;
+            
+            core.summary.addRaw(summary).write();
 
   golangci_lint:
     name: "golangci-lint"
@@ -175,7 +196,7 @@ jobs:
     name: "Unit Tests"
     needs: discover_modules
     runs-on: ubuntu-latest
-    if: ${{ fromJSON(needs.discover_modules.outputs.test_modules_json)[0] != null }} # skip if no modules are found
+    if: ${{ fromJSON(needs.discover_modules.outputs.unit_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.unit_test_modules_json) }}

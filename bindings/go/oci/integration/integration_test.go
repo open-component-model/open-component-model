@@ -15,6 +15,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 )
 
@@ -57,22 +58,55 @@ func Test_Integration_OCIRepository(t *testing.T) {
 	t.Run("basic connectivity and resolution failure", func(t *testing.T) {
 		testResolverConnectivity(t, registryAddress, reference("target:latest"), client)
 	})
+
+	t.Run("basic upload and download of a component version", func(t *testing.T) {
+		testResolverUploadDownload(t, registryAddress, client)
+	})
 }
 
-func testResolverConnectivity(t *testing.T, registryAddr, imageRef string, client *auth.Client) {
+func testResolverUploadDownload(t *testing.T, address string, client *auth.Client) {
 	ctx := t.Context()
-	require := require.New(t)
+	r := require.New(t)
 
-	resolver := oci.NewURLPathResolver(registryAddr)
+	resolver := oci.NewURLPathResolver(address)
 	resolver.SetClient(client)
 	resolver.PlainHTTP = true
 
-	store, err := resolver.StoreForReference(ctx, imageRef)
-	require.NoError(err)
+	repo, err := oci.NewRepository(oci.WithResolver(resolver))
+	r.NoError(err)
 
-	_, err = store.Resolve(ctx, imageRef)
-	require.ErrorIs(err, errdef.ErrNotFound)
-	require.ErrorContains(err, fmt.Sprintf("%s: not found", imageRef))
+	name, version := "test-component", "v1.0.0"
+
+	desc := descriptor.Descriptor{}
+	desc.Component.Name = name
+	desc.Component.Version = version
+	desc.Component.Labels = append(desc.Component.Labels, descriptor.Label{Name: "foo", Value: "bar"})
+
+	r.NoError(repo.AddComponentVersion(ctx, &desc))
+
+	// Verify that the component version can be retrieved
+	retrievedDesc, err := repo.GetComponentVersion(ctx, name, version)
+	r.NoError(err)
+
+	r.Equal(name, retrievedDesc.Component.Name)
+	r.Equal(version, retrievedDesc.Component.Version)
+	r.Len(retrievedDesc.Component.Labels, 1)
+}
+
+func testResolverConnectivity(t *testing.T, address, reference string, client *auth.Client) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	resolver := oci.NewURLPathResolver(address)
+	resolver.SetClient(client)
+	resolver.PlainHTTP = true
+
+	store, err := resolver.StoreForReference(ctx, reference)
+	r.NoError(err)
+
+	_, err = store.Resolve(ctx, reference)
+	r.ErrorIs(err, errdef.ErrNotFound)
+	r.ErrorContains(err, fmt.Sprintf("%s: not found", reference))
 }
 
 func createAuthClient(address, username, password string) *auth.Client {
