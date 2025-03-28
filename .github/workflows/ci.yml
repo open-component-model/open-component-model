@@ -21,7 +21,8 @@ jobs:
     outputs:
       # useful for working directly with modules
       modules_json: ${{ steps.filtered.outputs.modules_json }}
-      test_modules_json: ${{ steps.filtered_test.outputs.test_modules_json }}
+      integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
+      unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
     env:
       DIR: bindings/go
     steps:
@@ -82,29 +83,37 @@ jobs:
         id: filtered_test
         uses: actions/github-script@v7
         env:
-          MODULES_JSON: ${{ steps.discover.outputs.modules_json }}
+          MODULES_JSON: ${{ steps.filtered.outputs.modules_json }}
         with:
           script: |
             const { execSync } = require('child_process');
             const modules = JSON.parse(process.env.MODULES_JSON || '[]');
             
-            const testableModules = [];
-            
+            const unitTestModules = [];
+            const integrationTestModules = [];
+
             for (const module of modules) {
               try {
                 const output = execSync(`task -d ${module} -aj`, { encoding: 'utf-8' });
                 const parsed = JSON.parse(output);
-                const hasTestTask = parsed.tasks.some(task => task.name === 'test');
-                if (hasTestTask) {
-                  testableModules.push(module);
+                const taskNames = parsed.tasks.map(task => task.name);
+
+                if (taskNames.includes('test')) {
+                  unitTestModules.push(module);
+                }
+                if (taskNames.includes('test/integration')) {
+                  integrationTestModules.push(module);
                 }
               } catch (error) {
                 console.log(`Skipping module '${module}' due to error or no taskfile: ${error.message}`);
               }
             }
+
+            console.log(`Unit test modules: ${JSON.stringify(unitTestModules)}`);
+            console.log(`Integration test modules: ${JSON.stringify(integrationTestModules)}`);
             
-            console.log(`Testable modules: ${JSON.stringify(testableModules)}`);
-            core.setOutput('test_modules_json', JSON.stringify(testableModules));
+            core.setOutput('unit_test_modules_json', JSON.stringify(unitTestModules));
+            core.setOutput('integration_test_modules_json', JSON.stringify(integrationTestModules));
 
   golangci_lint:
     name: "golangci-lint"
@@ -136,6 +145,32 @@ jobs:
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
           args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml
 
+  run_integration_tests:
+    name: "Integration Tests"
+    needs: discover_modules
+    runs-on: large_runner
+    if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json) }}
+    env:
+      TESTCONTAINER_DOCKER_NETWORK: integration-testcontainers
+    steps:
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+      - name: Create Docker network for running Testcontainers
+        run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
+      - name: Run Tests
+        run: task ${{ matrix.module }}:test/integration
+
   run_unit_tests:
     name: "Unit Tests"
     needs: discover_modules
@@ -143,7 +178,7 @@ jobs:
     if: ${{ fromJSON(needs.discover_modules.outputs.test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
-        module: ${{ fromJSON(needs.discover_modules.outputs.test_modules_json) }}
+        module: ${{ fromJSON(needs.discover_modules.outputs.unit_test_modules_json) }}
     steps:
       - name: Install Task
         uses: arduino/setup-task@v2
@@ -160,6 +195,7 @@ jobs:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
       - name: Run Tests
         run: task ${{ matrix.module }}:test
+
   analyze-go:
     name: "Analyze Go Modules"
     needs: discover_modules
@@ -243,6 +279,7 @@ jobs:
       - generate
       - analyze-go
       - run_unit_tests
+      - run_integration_tests
       - golangci_lint
     if: failure()
     steps:
