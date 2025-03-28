@@ -116,18 +116,20 @@ Also, users might want to incorporate their own operations:
 
 An _ocm orchestration specification_ is a formalized description of 
 operations that have to be performed on components and their resources. It 
-uses a _CEL expression syntax_ to determine dependencies between operations. 
-Based on the dependencies, a _directed acyclic graph (DAG)_ is built up that 
+uses a **CEL expression syntax** to determine dependencies between operations. 
+Based on the dependencies, a **directed acyclic graph (DAG)** is built up that 
 determines the order of operations.
 
-fact,
-the description format is currently so generic that it can be used to 
-orchestrate arbitrary operations on arbitrary data.
+In fact, the description format is currently so generic that it can be used to 
+orchestrate arbitrary operations on arbitrary data - essentially 
+establishing is **general purpose CEL based pipeline language**. 
 
-In fact, the ocm orchestration spe
+This allows to prepare or enrich operations on components and resources with 
+additional information.
 
-Assume, we want to transfer the component described by the following component
-descriptor:
+### Example: OCM orchestration specification
+
+Assume, we have the following components stored in `ghcr.io/fabianburth/source-ocm-repository`:
 
 ```yaml
 meta:
@@ -137,23 +139,47 @@ component:
   version: 1.0.0
   provider: ocm.software
   resources:
-    - name: podinfo-image
-      relation: external
-      type: ociImage
-      version: 1.0.0
-      access:
-        type: ociArtifact
-        imageReference: ghcr.io/stefanprodan/podinfo:6.7.1
-    - name: podinfo-chart
-      relation: local
-      type: helmChart
-      version: 1.0.0
-      access:
-        type: localBlob
-        localReference: sha256:ee03b550efa3fe87e3e2471d407de4ded833969112f2f40a628f9c3716666cef
-        mediaType: application/vnd.oci.image.manifest.v1+tar+gzip
-        referenceName: ocm.software/root-component/podinfo-chart:6.7.1
+  - access:
+      imageReference: ghcr.io/fabianburth/source-charts/podinfo:6.7.1
+      type: ociArtifact
+    name: mychart
+    relation: external
+    type: helmChart
+    version: 6.7.1
+  - access:
+      imageReference: ghcr.io/fabianburth/source-image/podinfo:6.7.1
+      type: ociArtifact
+    name: myimage
+    relation: external
+    type: ociImage
+    version: 6.7.1
+  componentReferences:
+  - name: leaf
+    componentName: ocm.software/leaf-component
+    version: 1.0.0
+---
+meta:
+  schemaVersion: v2
+component:
+  name: ocm.software/leaf-component
+  version: 1.0.0
+  provider: ocm.software
+  resources:
+  - access:
+      localReference: sha256:d7952ffc553c8f25044b4414fc40e1919d904b9bbc9a50e4d8aae188dabe4dba
+      mediaType: application/vnd.oci.image.index.v1+tar+gzip
+      referenceName: ocm.software/leaf-component/ocmcli-image:0.21.0
+      type: localBlob
+    name: ocmcli-image
+    relation: external
+    type: ociImage
+    version: 1.0.0
 ```
+
+We want to transfer the components to `ghcr.
+io/fabianburth/target-ocm-repository/*`  and the resources to `ghcr.
+io/fabianburth/target-*`. Thereby, we want to **localize the helm chart**, 
+**transform the ocm image to an oci artifact
 
 We want the component to be uploaded to `ghcr.
 io/open-component-model/transfer-target`, the podinfo-image to be uploaded to
