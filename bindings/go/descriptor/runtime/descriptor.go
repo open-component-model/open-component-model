@@ -66,7 +66,7 @@ type ResourceRelation string
 
 const (
 	// LocalRelation defines a internal relation
-	// which describes a internally maintained resource in the origin's context.
+	// which describes an internally maintained resource in the origin's context.
 	LocalRelation ResourceRelation = "local"
 	// ExternalRelation defines a external relation
 	// which describes a resource maintained by a third party vendor in the origin's context.
@@ -80,11 +80,11 @@ const (
 // +k8s:deepcopy-gen=true
 type Resource struct {
 	ElementMeta `json:",inline"`
-	// SourceRefs defines a list of source names.
+	// SourceRefs defines a list of sources used to generate the resource.
 	// These entries reference the sources defined in the
 	// component.sources.
 	SourceRefs []SourceRef `json:"-"`
-	// Type describes the type of the object.
+	// Type describes the type of the resource.
 	Type string `json:"-"`
 	// Relation describes the relation of the resource to the component.
 	// Can be a local or external resource.
@@ -115,19 +115,20 @@ type Source struct {
 	Access      runtime.Typed `json:"-"`
 }
 
-// Reference describes the reference to another component in the registry.
+// Reference describes the reference to another component.
 // A component version may refer to other component versions by adding a reference to the component version.
 //
 // The Open Component Model makes no assumptions about how content described by the model is finally deployed or used.
 // This is left to external tools.
 //
-// Tool specific deployment information is formally represented by other artifacts with an appropriate type.
+// Tool specific deployment information is formally represented by other artifacts with an appropriate type and/or by labels.
 //
 // In addition to the common artifact information, a resource may optionally describe a reference to the source by specifying its artifact identity.
 //
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/01-references.md#referencing
 // +k8s:deepcopy-gen=true
 type Reference struct {
+	// The name in ElementMeta describes the name of the reference itself within this component (not the name of the referenced component). But the version in ElementMeta specifies the version of the referenced component.
 	ElementMeta `json:",inline"`
 	// Component describes the remote name of the referenced object.
 	Component string `json:"-"`
@@ -153,8 +154,6 @@ type Meta struct {
 
 // ObjectMeta defines an object that is uniquely identified by its name and version.
 // Additionally the object can be defined by an optional set of labels.
-// It is an implementation of the Element Identity as per
-// https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#element-identity
 // +k8s:deepcopy-gen=true
 type ObjectMeta struct {
 	// Name is the context unique name of the object.
@@ -179,11 +178,13 @@ func (m *ObjectMeta) String() string {
 }
 
 // ElementMeta defines an object with name and version containing labels.
+// It is an implementation of the Element Identity as per
+// https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#element-identity
 // +k8s:deepcopy-gen=true
 type ElementMeta struct {
 	ObjectMeta `json:",inline"`
 	// ExtraIdentity is the identity of an object.
-	// An additional label with key "name" is not allowed
+	// An additional identity attribute with key "name" is not allowed
 	ExtraIdentity runtime.Identity `json:"-"`
 }
 
