@@ -12,6 +12,21 @@ type TestType struct {
 	Value string `json:"value"`
 }
 
+func (t *TestType) GetType() Type {
+	return t.Type
+}
+
+func (t *TestType) SetType(typ Type) {
+	t.Type = typ
+}
+
+func (t *TestType) DeepCopyTyped() Typed {
+	return &TestType{
+		Type:  t.Type,
+		Value: t.Value,
+	}
+}
+
 func TestRegistry_Decode(t *testing.T) {
 	r := require.New(t)
 	typ := NewType("test", "v1", "type")

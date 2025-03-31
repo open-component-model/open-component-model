@@ -10,6 +10,8 @@ import (
 type Typed interface {
 	// GetType returns the object's type
 	GetType() Type
+	SetType(Type)
+	DeepCopyTyped() Typed
 }
 
 // Type represents a structured type with an optional group, an optional version and a name.
@@ -126,6 +128,11 @@ func (t Type) HasGroup() bool {
 // HasVersion checks if the type has a version associated with it.
 func (t Type) HasVersion() bool {
 	return t.Version != ""
+}
+
+// IsEmpty checks if the Type is empty (no group, version, or name).
+func (t Type) IsEmpty() bool {
+	return t.Group == "" && t.Version == "" && t.Name == ""
 }
 
 // MarshalJSON converts Type to a JSON string.

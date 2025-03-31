@@ -5,8 +5,7 @@ import (
 )
 
 // +k8s:deepcopy-gen=true
-//
-//go:generate ocmtypegen $GOFILE
+// +ocm:typegen=true
 type SampleType struct {
 	Type runtime.Type `json:"type"`
 }

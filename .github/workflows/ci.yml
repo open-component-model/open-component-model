@@ -58,7 +58,7 @@ jobs:
             const modulesJson = JSON.parse(process.env.MODULES_JSON || '[]');
             const changeJson = JSON.parse(process.env.CHANGE_JSON || '[]');
             
-            if (process.env.check_only_changed) {
+            if (process.env.check_only_changed === "true") {
               console.log(`Filtering modules based on changes: ${JSON.stringify(changeJson)}`);
               const filteredModules = modulesJson.filter(module => {
                 return changeJson.some(change => change.includes(module));
@@ -79,6 +79,7 @@ jobs:
       contents: read
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
+    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
@@ -102,6 +103,7 @@ jobs:
     name: "Unit Tests"
     needs: discover_modules
     runs-on: ubuntu-latest
+    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
@@ -130,6 +132,7 @@ jobs:
       actions: read
       contents: read
       security-events: write
+    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
     strategy:
       fail-fast: false
       matrix:
@@ -156,8 +159,18 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     name: "Code Generation"
+    needs: discover_modules
+    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ${{ matrix.project }}
+            bindings/go/generator
+            Taskfile.yml
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
@@ -179,3 +192,22 @@ jobs:
           fi
           echo "${gitStatus}"
           exit 1
+
+  # failure aggregation job
+  # Our CI matrix is dynamic so it cannot be used for required status checks in github.
+  # However we can add a failure step that can get triggered if any dependency fails or is cancelled.
+  # If this is the case, this job will fail. If CI is successful, the CI Completion Check will be skipped.
+  # see https://github.com/orgs/community/discussions/60792 for details on why this is needed
+  check-completion:
+    name: "Completion"
+    runs-on: ubuntu-latest
+    needs:
+      - discover_modules
+      - generate
+      - analyze-go
+      - run_unit_tests
+      - golangci_lint
+    if: failure()
+    steps:
+      - name: Some CI step failed or was cancelled!
+        run: exit 1

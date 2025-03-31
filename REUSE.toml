@@ -11,6 +11,18 @@ SPDX-FileCopyrightText = "2025 SAP SE or an SAP affiliate company and Open Compo
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
+path = "bindings/go/runtime/deep_copy_json*.go"
+precedence = "override"
+SPDX-FileCopyrightText = "Copyright 2017 The Kubernetes Authors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "bindings/go/descriptor/v2/time*.go"
+precedence = "override"
+SPDX-FileCopyrightText = "Copyright 2017 The Kubernetes Authors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
 path = "bindings/go/dag/**"
 precedence = "override"
 SPDX-FileCopyrightText = "Copyright 2025 The Kube Resource Orchestrator Authors."

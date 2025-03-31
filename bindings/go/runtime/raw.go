@@ -7,6 +7,14 @@ import (
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 )
 
+// Raw is used to hold extensions in external versions.
+//
+// To use this, make a field which has RawExtension as its type in your external, versioned
+// struct, and Typed in your internal struct. You also need to register your
+// various plugin types.
+//
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
 type Raw struct {
 	Type `json:"type"`
 	Data []byte `json:"-"`

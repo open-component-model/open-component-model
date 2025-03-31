@@ -1,29 +1,32 @@
 version: '3'
 
 vars:
-  CONTROLLER_GEN_TARGET_VERSION: v0.17.2
+  DEEPCOPY_GEN_TARGET_VERSION: v0.32.3
   GOLANGCI_LINT_TARGET_VERSION: 1.64.7
 
 tasks:
-  controller-gen/generate-deepcopy:
+  deepcopy-gen/generate-deepcopy:
     desc: "Generate kubernetes-style deepcopy code for all types in the project"
-    deps: [controller-gen/install]
+    deps: [deepcopy-gen/install]
     cmds:
-      - '{{ .ROOT_DIR }}/tmp/bin/controller-gen object paths={{ .ROOT_DIR }}/bindings/go/generator/ocmtypegen/test/...'
+      - for: { var: GO_MODULES }
+        cmd: |
+          cd {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} && \
+          {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }} -v9 \
+          --output-file "zz_generated.deepcopy.go" \
+          {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
 
-  controller-gen/install:
-    desc: "Install {{.PKG}} at {{ .CONTROLLER_GEN_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
+  deepcopy-gen/install:
+    desc: "Install {{.PKG}} at {{ .DEEPCOPY_GEN_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
     vars:
-      PKG: sigs.k8s.io/controller-tools/cmd/controller-gen
-      CURRENT_VERSION:
-        sh: '{{ .ROOT_DIR }}/tmp/bin/controller-gen --version || echo "0.0.0"'
+      PKG: k8s.io/code-generator/cmd/deepcopy-gen
     status:
-      - '{{ contains .CONTROLLER_GEN_TARGET_VERSION .CURRENT_VERSION }}'
+      - '{{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }}'
     env:
       GOBIN: '{{ .ROOT_DIR }}/tmp/bin'
     cmds:
-      - go install {{ .PKG }}@{{ .CONTROLLER_GEN_TARGET_VERSION }}
-
+      - go install {{ .PKG }}@{{ .DEEPCOPY_GEN_TARGET_VERSION }}
+      - mv {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }}
 
 
   golangci-lint/run:
@@ -37,7 +40,8 @@ tasks:
             --timeout 10m \
             --config={{ .ROOT_DIR }}/.github/config/golangci.yml \
             --path-prefix {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} \
-            {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
+            {{ .CLI_ARGS }} {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
+            
 
   golangci-lint/install:
     desc: "Install golangci-lint at {{ .GOLANGCI_LINT_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"

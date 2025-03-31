@@ -5,10 +5,14 @@ dotenv: ['.env', '.env.local']
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
-  bindings/go/descriptor:
+  bindings/go/descriptor/v2:
     optional: true
-    taskfile: ./bindings/go/descriptor/Taskfile.yml
-    dir: ./bindings/go/descriptor
+    taskfile: ./bindings/go/descriptor/v2/Taskfile.yml
+    dir: ./bindings/go/descriptor/v2
+  bindings/go/descriptor/runtime:
+    optional: true
+    taskfile: ./bindings/go/descriptor/runtime/Taskfile.yml
+    dir: ./bindings/go/descriptor/runtime
   bindings/go/runtime:
     optional: true
     taskfile: ./bindings/go/runtime/Taskfile.yml
@@ -17,6 +21,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/generator/Taskfile.yml
     dir: ./bindings/go/generator
+  bindings/go/blob:
+    optional: true
+    taskfile: ./bindings/go/blob/Taskfile.yml
+    dir: ./bindings/go/blob
+  bindings/go/ctf:
+    optional: true
+    taskfile: ./bindings/go/ctf/Taskfile.yml
+    dir: ./bindings/go/ctf
   bindings/go/dag:
     optional: true
     taskfile: ./bindings/go/dag/Taskfile.yml
@@ -47,4 +59,4 @@ tasks:
     desc: "Run all Code Generators in the project"
     cmds:
       - task: 'bindings/go/generator:ocmtypegen/generate'
-      - task: 'tools:controller-gen/generate-deepcopy'
+      - task: 'tools:deepcopy-gen/generate-deepcopy'

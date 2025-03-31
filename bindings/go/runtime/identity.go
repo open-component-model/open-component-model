@@ -33,7 +33,13 @@ const (
 // Identity is a map that represents a set of attributes that uniquely identity
 // arbitrary resources. It is used in various places in Open Component Model to uniquely
 // identity objects such as resources or components.
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
 type Identity map[string]string
+
+func (i Identity) DeepCopyTyped() Typed {
+	return i.DeepCopy()
+}
 
 var _ Typed = Identity{}
 
@@ -72,6 +78,11 @@ func (i Identity) GetType() Type {
 		panic(err)
 	}
 	return typ
+}
+
+// SetType sets the type of the identity.
+func (i Identity) SetType(typ Type) {
+	i[IdentityAttributeType] = typ.String()
 }
 
 // ParseType attempts to parse the type from the identity.
