@@ -39,6 +39,10 @@ vars:
     sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'
 
 tasks:
+  default:
+    deps: ["cli:build"]
+
+
   test:
     desc: "Run all tests in the project"
     cmds:
@@ -60,3 +64,7 @@ tasks:
     cmds:
       - task: 'bindings/go/generator:ocmtypegen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
+      - task: 'cli:generate/docs'
+        vars:
+          CLI_DOCUMENTATION_MODE: "markdown"
+          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/docs/reference/cli'
