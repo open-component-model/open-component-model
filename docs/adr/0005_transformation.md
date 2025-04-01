@@ -81,15 +81,26 @@ components and their resources**.
 
   **Example:**
   - component `ocm.software/root-component:1.0.0` references component
-    `ocm.software/leaf-component:1.0.0`.
+    `ocm.software/leaf-component:1.0.0`
   - therefore, the _hash_ of component `ocm.software/root-component:1.0.0`
-    incorporates the _hash_ of component `ocm.software/leaf-component:1.0.0`.
+    incorporates the _hash_ of component `ocm.software/leaf-component:1.0.0`
 
   Thus, the hash of `ocm.software/leaf-component:1.0.0` has to be calculated
   before the hash of `ocm.software/root-component:1.0.0` can be calculated.
   Since the hash of the resources content is part of the component hash,
   _cross storage system transfers_ and _localization_ require the hash to be
   recalculated during transfer.
+
+
+- **Parallelization of transfer operations**
+
+  **Example:**
+  - resource `myimageA` and resource `myimageB` both have to be transferred as
+    part of a component transfer
+  - while the download and upload of each resource depend on each other, there
+    are no dependencies between the two resources
+  - therefore, the download and upload of `myimageA` and `myimageB` can be
+    performed in parallel
 
 ### Conclusion
 
@@ -106,6 +117,10 @@ specific order (child before parent components). Besides, there are several
 other operations that either kind of **implicitly** depend on each other (data
 flow between download resource and upload resource) or **explicitly** depend on
 each other (localization needs the location of the image after transfer).
+
+**Parallelization**: Operations such as download and upload of resources, but
+also hashing and localization of resources can be performed in parallel to
+significantly speed up the transfer process.
 
 Also, users might want to incorporate their own operations:
 
@@ -129,7 +144,7 @@ additional information.
 
 ### Example: OCM orchestration specification
 
-Assume, we have the following components stored in
+Assume, we have the following component stored in
 `ghcr.io/fabianburth/source-ocm-repository`:
 
 ```yaml
@@ -154,54 +169,37 @@ component:
       relation: external
       type: ociImage
       version: 6.7.1
-  componentReferences:
-    - name: leaf
-      componentName: ocm.software/leaf-component
-      version: 1.0.0
----
-meta:
-  schemaVersion: v2
-component:
-  name: ocm.software/leaf-component
-  version: 1.0.0
-  provider: ocm.software
-  resources:
     - access:
-        localReference: sha256:d7952ffc553c8f25044b4414fc40e1919d904b9bbc9a50e4d8aae188dabe4dba
-        mediaType: application/vnd.oci.image.index.v1+tar+gzip
-        referenceName: ocm.software/leaf-component/ocmcli-image:0.21.0
+        localReference: sha256:<sha256>
+        mediaType: application/yaml
         type: localBlob
-      name: ocmcli-image
+      name: mylocalization
       relation: external
-      type: ociImage
-      version: 1.0.0
+      type: localization-rule
+      version: 6.7.1
 ```
 
-We want to transfer the components to
+We want to transfer the component to
 `ghcr.io/fabianburth/target-ocm-repository/*`  and the resources to `ghcr.
-io/fabianburth/target-*`. Thereby, we want to **localize the helm chart** and
-**transform a local blob to an oci artifact**.
-
-We want the component to be uploaded to `ghcr.
-io/open-component-model/transfer-target`, the podinfo-image to be uploaded to
-`ghcr.io/open-component-model/transfer-target/podinfo-image:1.0.0`, the
-podinfo-chart to be uploaded to
-`ghcr. io/open-component-model/transfer-target/podinfo-chart:1.0.0`, and the 
-ocmcli-image to be uploaded to `ghcr.io/open-component-model/transfer-target/ocmcli-image:0.21.0`.
+io/fabianburth/target-*`. Thereby, we want to localize the helm chart.
 
 ```yaml
-type: transformation.ocm.component/v1alpha1
+type: operations.ocm./v1alpha1
 transformations:
-  - type: attributes.transformation/v1alpha1
+  - type: attributes.operation/v1alpha1
     id: constants
     attributes:
-      targetFilePath: "./test/localization-multi-component/archive-after-localization"
+      targetImageReference: "ghcr.io/fabianburth/target-ocm-repository/ocm.
+        software/root-component:1.0.0"
+
   # component 1
   - type: downloader.component.ctf/v1alpha1
     id: downloadcomponent1
-    name: github.com/acme.org/helloworld
+    name: ocm.software/root-component
     version: 1.0.0
-    filePath: ./test/localization-multi-component/archive
+    filePath: ghcr.io/fabianburth/source-ocm-repository/ocm.
+      software/root-component:1.0.0
+
   # resource 1
   - type: downloader.resource.oci/v1alpha1
     id: resourcedownload1
@@ -210,8 +208,9 @@ transformations:
       name: myimage
   - type: uploader.resource.oci/v1alpha1
     id: resourceupload1
-    imageReference: ghcr.io/fabianburth/images/myimage:after-localize
+    imageReference: ghcr.io/fabianburth/target-image/myimage:6.7.1
     data: ${resourcedownload1.outputs.data}
+
   # resource 2
   - type: downloader.resource.oci/v1alpha1
     id: resourcedownload2
@@ -237,67 +236,94 @@ transformations:
     configLayer: ${ocitotar1.outputs.configLayer}
   - type: uploader.resource.oci/v1alpha1
     id: resourceupload2
-    imageReference: ghcr.io/fabianburth/charts/myimage:after-localize
+    imageReference: ghcr.io/fabianburth/target-chart/mychart:6.7.1
     componentDescriptor: ${downloadcomponent1.outputs.descriptor}
     data: ${tartooci1.outputs.data}
 
-  - type: uploader.component.ctf/v1alpha1
-    filePath: ${constants.spec.attributes.targetFilePath}
-    data: ${downloadcomponent1.outputs.data}
-  # component 2
-  - type: downloader.component.ctf/v1alpha1
-    id: downloadcomponent2
-    name: github.com/acme.org/helloeurope
-    version: 1.0.0
-    filePath: ./test/localization-multi-component/archive
   # resource 3
-  - type: downloader.localblob.ctf/v1alpha1 # we are overwriting our dependency here
+  - type: downloader.localblob.oci/v1alpha1
     id: downloadresource3
-    filePath: ${downloadcomponent2.spec.filePath}
+    componentDescriptor: ${downloadcomponent1.outputs.descriptor}
     resource:
-      name: helloeurope
-  - type: uploader.localblob.ctf/v1alpha1
+      name: mylocalization
+  - type: uploader.localblob.oci/v1alpha1
     id: uploadresource3
-    filePath: ${constants.spec.attributes.targetFilePath}
-    componentDescriptor: ${downloadcomponent2.outputs.descriptor}
+    componentDescriptor: ${downloadcomponent1.outputs.descriptor}
+    imageReference: ${constants.spec.attributes.targetImageReference}
     data: ${downloadresource3.outputs.data}
 
   - type: uploader.component.ctf/v1alpha1
-    filePath: ${constants.spec.attributes.targetFilePath}
-    componentDescriptor: ${uploadresource3.outputs.descriptor}
+    filePath: ${constants.spec.attributes.targetImageReference}
+    componentDescriptor: ${downloadcomponent1.outputs.descriptor}
+    dependencies:
+      - ${uploadresource1}
+      - ${uploadresource2}
+      - ${uploadresource3}
 ```
 
-### Specification
+Internally, this would be represented as the following **directed acyclic graph
+(DAG)**:
 
-```yaml
-metadata:
-  version: v1alpha1
-spec:
-  mappings:
-    - component:
-        name: github.com/acme.org/helloworld
-        version: 1.0.0
-      source:
-        type: CommonTransportFormat
-        filePath: /root/user/home/ocm-repository
-      target:
-        type: OCIRegistry
-        baseUrl: ghcr.io
-        subPath: open-component-model/transfer-target
-      resources:
-        - resource:
-            name: podinfo-image
-          transformations:
-            - type: uploader.oci/v1alpha1
-              imageReference: ghcr.io/open-component-model/transfer-target/podinfo-image:1.0.0
-        - resource:
-            name: podinfo-chart
-          transformations:
-            - type: localblob.to.oci/v1alpha1
-            - type: uploader.oci/v1alpha1
-              imageReference: ghcr.io/open-component-model/transfer-target/podinfo-chart:1.0.0
-...
+```mermaid
+graph TD
+    P[Constants]
+    A[Download Component]
+    B[Download Resource 1]
+    C[Download Resource 2]
+    D[Download Resource 3]
+    E[OCI to TAR Transformation]
+    F[Localization]
+    G[TAR to OCI Transformation]
+    H[Upload Resource 1]
+    I[Upload Resource 2]
+    J[Upload Resource 3]
+    K[Upload Component]
+    A --> B
+    A --> C
+    A --> D
+    B -- datastream --> H
+    H --> F
+    C -- datastream --> E
+    E -- datastream --> F
+    F -- datastream --> G
+    G -- datastream --> I
+    D -- datastream --> J
+    A --> K
+    H --> K
+    I --> K
+    J --> K
+    P --> J
+    P --> K
 ```
+
+**This enables efficient parallelization of the operations.**
+
+> **NOTES:** The _constants_ (the operation with the type
+`attributes.transformation/v1alpha1`)
+> is required to prevent a circular dependency between the upload of the
+> local blob (`uploadresource3`) and the upload of the component. To upload
+> a `localBlob`, the upload location of the component is required. And the
+> component upload has to wait for the upload of the local blob as this
+> might change its resource specification in the component descriptor.
+>
+> Alternatively, the `uploadresource3` could also specify the target location
+> itself. The component depends on the upload anyway.
+
+### Contract
+
+- **Operations** provide a **JSON Schema** that defines their input parameters.
+  This json schema has to be provided during *operation type registration*
+  AND during *plugin registration*. This way, we don’t need an additional
+  endpoint at the plugins to validate the types but can do the type checking
+  statically with the json schemas.
+
+- **Operations** can use **CEL expressions** to refer to the **input and output
+  parameters** of other operations. This references automatically create a
+  corresponding dependency in the **DAG**.
+
+**Operations** can optionally either be compiled in as part of the core ocm cli
+or can be integrated as plugins.
+
 
 > **NOTES:**
 >
@@ -307,241 +333,151 @@ spec:
     transferring multiple components in one transfer operation based on a single
     transfer spec.
 
-This specification contains all the information necessary to perform a transfer:
+### Issues
 
-* Source and target location of the component
-* Target location of the resources (and sources, if any)
-* Transformations required to perform the upload to the target location such as:
-  * format adjustments (e.g. local blob to oci artifact)
-  * [localization](./0004_localization_at_transfer_time.md)
+Our current graph traversal requires buffering in between operations. With a
+pipes architecture, all operations that are connected to data stream
+(so, typically, all operations on a single resource) would block all until the
+final transformation in that starts to run. In the graph shown above, i.e.
+`Download Resource 2` would block until `Upload Resource 2` starts.
 
-The transformation are implemented as plugins.
+Now, let's assume `Download Resource 1` requires inputs from `Download 
+Resource 2`. So, the directed acyclic graph (DAG) would look like this:
 
-* The properties such as `imageReference` are passed to the plugin specified by
-  the `type` as configuration.
-* The byte stream of the resource content is passed from each transformation to
-  the next transformation forming a pipeline.
-* Besides the resource content, each transformation can also edit the resource
-  specification in the component descriptor (e.g. adjust the digest after a
-  format change or add a label)
+```mermaid
+graph TD
+    P[Constants]
+    A[Download Component]
+    B[Download Resource 1]
+    C[Download Resource 2]
+    D[Download Resource 3]
+    E[OCI to TAR Transformation]
+    F[Localization]
+    G[TAR to OCI Transformation]
+    H[Upload Resource 1]
+    I[Upload Resource 2]
+    J[Upload Resource 3]
+    K[Upload Component]
+    A --> B
+    A --> C
+    A --> D
+    C --> B
+    B -- datastream --> H
+    H --> F
+    C -- datastream --> E
+    E -- datastream --> F
+    F -- datastream --> G
+    G -- datastream --> I
+    D -- datastream --> J
+    A --> K
+    H --> K
+    I --> K
+    J --> K
+    P --> J
+    P --> K
+```
 
-> **NOTE:** The transformations are significantly more powerful than shown
-> here. But this part should suffice to illustrate the concept for the basic
-> transfer behavior.  
-> For details about the transformation contract and implementation, refer to
-> the localization adr [here](./0004_localization_at_transfer_time.md).
+With **buffering the data stream**, this is not a problem. We would process in
+the following order:
+
+- `Download Resource 2`
+- `Download Resource 1`
+- ...
+
+But considering **streaming the data stream**, we would be **deadlocked**.
+
+- `Download Resource 2` blocks until `Upload Resource 2` starts
+- `Upload Resource 2` transitively depends on `Localization`, and thus, also
+  transitively depends on `Download Resource 1`
+- `Download Resource 1` blocks until `Download Resource 2` starts
+
+Ideally, we would statically analyze the graph to determine that we have to
+buffer before `Localization`. Since that would be quite complex and
+time-consuming, we decided to postpone these efforts.
+
+### Backwards Compatibility
+
+Despite the introduction of this `ocm orchestration specification`, the current
+commands will still be supported.
+
+Current behaviour such as
+
+```bash
+ocm transfer component ...
+```
+
+will be preserved.
+
+The commands will be implemented through an **opinionated generation** of a
+corresponding **ocm orchestration specifications** representing the behaviour of
+the current command.
+
+## Pros and Cons
 
 **Pro**
 
-* **Reusable (custom) transformations** - Since the transformations are exposed
-  on the API, users can define their own custom transformations or reuse other
-  transformations (like github actions). This might be a _significant
-  value-add_.
-* **Clean formalization of transformation pipelines** - Exposing the
-  transformations as an API forces a formalized and clean definition.
-* **Localization as yet another transformation** - Localization can be
-  implemented and exposed in the transfer spec as just another transformation.
-* **Multiple upload targets** - The transfer spec allows for multiple upload
-  targets for a resource.
+- **Reusable Graph Orchestration Logic**:  
+  As pointed out in the requirements, various operation in ocm require the
+  complex graph orchestration logic. The formalization through the **ocm
+  orchestration specification** allows to reuse this complex logic for arbitrary
+  operations (kind of like crd's and controllers in k8s).
+
+
+- **Extensibility**:
+  The **ocm orchestration specification** allows for incorporating arbitrary
+  operations.
+
+
+- **Uniform Extension Interface**:
+  Through the **operations** contract, ocm provides a **single clean interface**
+  for its core functionality as well as its extensions. This might also enable
+  us to provide additional command line tools or libraries
+- (kind of like kubebuilder) to further improve the developer experience.
+
+
+- **Ecosystem / Community Contributed Operations**:
+  The value of ocm as a standard is highly dependent on its ecosystem. This
+  extensible system is a great starting point to enable the creation of an
+  actual ecosystem.
 
 **Con**
 
-* **Complexity** - A lot of custom transformations might make it hard to
-  understand what is happening in the transfer.
-* **Hard to generate**
+- **Complexity**:
+  The generic graph traversal logic introduces significant complexity that might
+  be hard to understand and debug.
 
-### Usage
+> Although, the clear separation between algorithm and business logic
+> introduced through this formalization is a clear benefit.
 
-1. **Transfer based on existing transfer spec:**
+- **Hard to Generate**
 
-    ```bash
-    ocm transfer --transfer-spec ./transfer-spec.yaml
-    ```
+**Neutral**
 
-   This command will transfer the component and its resources based on a defined
-   transfer spec.
+- **Generic**:
+  - We decided to **omit any kind of implicit dependencies or data flow** in
+    this version of the specification.
+  - Instead of implicitly creating a dependency between each consecutive
+    resource operation and passing a data stram between them, we explicitly
+    require the user (or the generator) to specify the dependency through a CEL
+    expression.
+  - **Pro**:
+    - Further improves the separation between algorithm and business logic.
+    - Requires less implicit knowledge
+  - **Con**:
+    - Requires a lot of boilerplate
+    - Requires to really understand the dependencies between the operations
+    - Manual creation is quite difficult and error-prone
 
-2. **Transfer based on dynamically generated transfer spec:**
+## Conclusion
 
-    ```bash
-    ocm transfer component [<options>] \
-    ctf::/root/user/home/ocm-repository//ocm.software/component \
-    ghcr.io/open-component-model/ocm-v1-transfer-target
-    ```  
+The concept behind the **ocm orchestration specification** quite clean. The
+reusable graph orchestration logic provides significant value.
 
-   This command mimics the old ocm v1 transfer command. It will provide the
-   known options such as `--copy-resources` and `--recursive`. In the
-   background, we will implement an opinionated generation of a transfer spec
-   that essentially models the old transfer behavior.
-
-### Considerations
-
-#### Specification: Source Locations for Component but no Source Locations for
-
-Resources The transfer spec currently includes the `source` location of the
-components but not the source location of the resources.
-
-* **Components:**  
-  The transfer specification includes the source location of a component. This
-  location is given as a command line input or in a config file.
-* **Resources:**  
-  The resource’s source location is already defined in the component
-  descriptors.
-* **Benefit:**  
-  This approach makes the transfer specification the single source of truth for
-  a transfer.
-
-#### Generation of the Transfer Specification as part of the Transfer Command
-
-The generation of the transfer spec (usage 2) will likely be part of the `ocm
-transfer` command.
-
-* **Avoid Fetching Descriptors Twice:**  
-  The orchestrator will fetch component descriptors once and cache them. This
-  avoids fetching them again during the transfer command.
-* **--dry-run**:  
-  To leverage the advantage of the cached component descriptors and still be
-  able to run the generation independently of the transfer, it is intended to
-  offer a `--dry-run` option to the `ocm
-  transfer` command.
-
-    ```bash
-    ocm transfer component ctf::./ocm-repository//ocm.software/component \
-    --copy-resources --recursive --dry-run 
-    ```
-
-## Option 2: OCM v1 Transfer Handler
-
-This is the approach represents the `ocm transfer` command of the current ocm
-cli.
-
-```bash
-ocm transfer component ctf::./ocm-repository//ocm.software/component \
-  ghcr.io/open-component-model/ocm-v1-transfer-target
-```
-
-### Considerations
-
-#### Single Target Location Only
-
-The current version of ocm (ocm v1) only supports transferring components from
-multiple source locations to a single target location. To look up components in
-multiple ocm repositories with the above command, the user either has to use the
-`--lookup` flag or specify a list of resolvers in the config file. If a
-component cannot be found in the specified target repository, the lookup
-repositories (aka resolvers) _will be iterated through_ as fallbacks which is
-also rather inefficient (see
-`ocm transfer --help` or `ocm configfile` documentation for more details).
-_There is no way to configure multiple targets for a single component transfer._
-
-#### Limited Control Over Resource Transfer
-
-* **No fine-grained control over WHICH resources to transfer**  
-  Essentially, there are 3 modes for resource transfer:
-  * _Without an additional flag_, the command only copies the component
-    descriptors and the local blobs.
-  * _With the `--copy-local-resources` flag_, the command copies only the
-    component descriptors, the local blobs, and all resources that have the
-    relation `local`.
-  * _With the `--copy-resources` flag_, the command copies all the resources
-    during transfer. -
-  > **NOTE:** Without **uploaders** registered, all the above option lead to all
-  resources being transferred as a local blob - no matter the source storage
-  system. For those wondering, that they never actively configured an uploader
-  but their oci artifacts still ended up back in the target oci registry - that
-  is because there is an _oci uploader_ configured by default.
-* **No fine-grained decision on WHERE to transfer resources**  
-  The resources are converted to local blobs during the transfer by default. To
-  change this behavior and instead upload a resource to a particular target
-  storage system during transfer, the user has to register so called
-  [**uploadhandlers**](#upload-handlers) (for further details, see
-  [documentation](https://ocm.software/docs/cli-reference/help/ocm-uploadhandlers/)).
-  This can be done through the flag `--uploadhandler` or by specifying an
-  uploader configuration in the config file.
-
-* **No cross storage system / cross format transfers**-
-  * The current version of the ocm implementation does not give the uploader
-    implementations the possibility to edit the resource, only the resource
-    access.
-  * A cross storage system transfer requires a transformation of the resource
-    content. This typically leads to a changed digest that has to be reflected
-    in the component descriptor. Since the digest is part of the resource but
-    not part of the access, this is currently not possible.
-
-* **No transformers**  
-  To actually enable the cross storage system transfer, the resource contents
-  format typically has to be adjusted. In the current architecture, to enable
-  this, each uploader would have to know all possible input formats itself.
-
-* **No concept to specify target location information for resources**
-  * In the [uploader handler](#upload-handlers) config below, it is mentioned
-    that the resources matching the registration would be uploaded to oci with
-    the prefix `https://ghcr.io/open-component-model/oci`. _But what is the
-    resource specific suffix?_
-  * Currently, there is a field called
-    `hint` in the local blob access. If oci resources are downloaded into a
-    local blob and then re-uploaded to oci, this hint is used to preserve the
-    original repository name. These hints are not sufficient to fulfill the
-    requirements of ocm (there are
-    open [issues](https://github.com/open-component-model/ocm/issues/935)
-    and [proposals](https://github.com/open-component-model/ocm/issues/1213))
-
-* **No separation of concerns between ocm spec and transfer**  
-  The transfer is supposed to be an operation ON TOP of the ocm spec. Thus,
-  additional information required by a transfer should not pollute the ocm spec.
-  Essentially, this is already violated by the current `hint` but would be
-  completely broken through the
-  current [proposal](https://github.com/open-component-model/ocm/issues/1213)
-  on how to resolve the issue mentioned in the previous point.
-
-* **Uploader Mechanism is implicit, non-transparent and hard to reproduce**
-
-### Upload Handlers
-
-Uploaders (in the code and repository also known as blobhandler) can be
-registered for any combination of:
-
-* _resource type_ (NOT access type)
-* _media type_
-* _implementation repository type_ - If the corresponding component is uploaded
-  to an oci ocm repository, the implementation repository type is `OCIRegistry`.
-  Another implementation repository type is `CommonTransportFormat`.
-
-Additionally, the uploaders can be assigned a _priority_ to resolve conflicts of
-the registration of multiple uploaders matches the same resource.
-
-```yaml
-type: uploader.ocm.config.ocm.software
-handlers:
-  - name: ocm/ociArtifacts
-    artifactType: ociArtifact
-    # media type does not make a lot of sense for oci artifacts, it improves 
-    # the clarity of the registration example
-    mediaType: application/vnd.oci.artifact
-    repositoryType: OCIRegistry
-    priority: 100 # this is the default priority
-    config:
-      ociRef: https://ghcr.io/open-component-model/oci
-```
-
-The config section in the upload handler registration depends on the type of
-uploader being registered. The `ociRef` in the above example would mean that all
-the resources that match this registration would be uploaded under the prefix
-`https://ghcr.io/open-component-model/oci`.
-
-## Decision Outcome
-
-Chosen option: [Option 1](#option-1-transfer-specification), because:
-
-* **Reusable Transformation Pipelines:**  
-  These pipelines are valuable and work well with the transformation logic
-  needed for localization during transfers.
-
-* **Improve Debugging:**  
-  The transfer specification makes it easier to debug and reproduce transfers.
-
-* **Current Limitations:**  
-  The existing transfer mechanism does not meet OCM requirements. It is too
-  implicit and hard to understand, debug, and reproduce.
+The main **disadvantage** is the complexity of the manual creation of a
+specification. We assume that the manual creation is a rare task. Either, the
+current commands which generate the specification will be sufficient for most
+users. Or a user will create a specification once and reuse it with different
+parametrizations (kind of like the instance specification in KRO). Therefore,
+we think this is an acceptable trade-off.
 
 ## Links <!-- optional -->
