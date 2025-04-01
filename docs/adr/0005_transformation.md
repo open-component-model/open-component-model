@@ -41,7 +41,6 @@ components and their resources**.
   and `quay.io/ocm-component-model/transfer-target` in a single transfer
   process.
 
-
 - **Transfer resources between different storage systems**
 
   **Example:**
@@ -52,7 +51,6 @@ components and their resources**.
   `https://repo1.maven.org/maven2` with the `GAV` `software.
   ocm/ocm-cli/1.0.0`. Thereby, the resource has to be transformed to a maven
   artifact.
-
 
 - **Localize resources that are deployment instructions during transfer**
 
@@ -76,7 +74,6 @@ components and their resources**.
   ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0` to `image: 
   private-registry.com/ocm-component-model/transfer-target/ocm-controller:1.0.0`
 
-
 - **Hash and sign components (during transfer)**
 
   **Example:**
@@ -90,7 +87,6 @@ components and their resources**.
   Since the hash of the resources content is part of the component hash,
   _cross storage system transfers_ and _localization_ require the hash to be
   recalculated during transfer.
-
 
 - **Parallelization of transfer operations**
 
@@ -312,8 +308,8 @@ graph TD
 ### Contract
 
 - **Operations** provide a **JSON Schema** that defines their input parameters.
-  This json schema has to be provided during *operation type registration*
-  AND during *plugin registration*. This way, we don’t need an additional
+  This json schema has to be provided during _operation type registration_
+  AND during _plugin registration_. This way, we don’t need an additional
   endpoint at the plugins to validate the types but can do the type checking
   statically with the json schemas.
 
@@ -413,18 +409,15 @@ the current command.
   orchestration specification** allows to reuse this complex logic for arbitrary
   operations (kind of like crd's and controllers in k8s).
 
-
 - **Extensibility**:
   The **ocm orchestration specification** allows for incorporating arbitrary
   operations.
-
 
 - **Uniform Extension Interface**:
   Through the **operations** contract, ocm provides a **single clean interface**
   for its core functionality as well as its extensions. This might also enable
   us to provide additional command line tools or libraries
 - (kind of like kubebuilder) to further improve the developer experience.
-
 
 - **Ecosystem / Community Contributed Operations**:
   The value of ocm as a standard is highly dependent on its ecosystem. This
