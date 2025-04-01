@@ -1,8 +1,9 @@
 package v1
 
 import (
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"slices"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // FlatMap merges the provided configs into a single config.
