@@ -30,11 +30,11 @@ components and their resources**.
   repositories to one or multiple target repositories**
 
   **Example:**
-    - root component `ocm.software/root-component:1.0.0` is stored at `ghcr.
+  - root component `ocm.software/root-component:1.0.0` is stored at `ghcr.
     io/ocm-component-model/transfer-source/ocm.software/root-component:1.0.0`
-    - root component references `ocm.software/leaf-component:1.0.0`
-    - leaf component is stored at
-      `quay.io/ocm-component-model/transfer-source/ocm.software/leaf-component:1.0.0`
+  - root component references `ocm.software/leaf-component:1.0.0`
+  - leaf component is stored at
+    `quay.io/ocm-component-model/transfer-source/ocm.software/leaf-component:1.0.0`
 
   Both components should be transferred to
   `ghcr.io/ocm-component-model/transfer-target`
@@ -45,8 +45,8 @@ components and their resources**.
 - **Transfer resources between different storage systems**
 
   **Example:**
-    - resource `ocm-cli:1.0.0` is stored as an oci artifact at
-      `ghcr.io/ocm-component-model/transfer-source/ocm-cli:1.0.0`
+  - resource `ocm-cli:1.0.0` is stored as an oci artifact at
+    `ghcr.io/ocm-component-model/transfer-source/ocm-cli:1.0.0`
 
   Resource `ocm-cli:1.0.0` should be transferred to the central maven repository
   `https://repo1.maven.org/maven2` with the `GAV` `software.
@@ -57,18 +57,18 @@ components and their resources**.
 - **Localize resources that are deployment instructions during transfer**
 
   **Example:**
-    - component `ocm.software/root-component:1.0.0` contains a resource
-      `ghcr.io/ocm-component-model/transfer-source/ocm-controller-deployment-manifest:1.0.0`
-      and a resource
-      `ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0`
-    - resource `ocm-controller-deployment-manifest:1.0.0` is a k8s deployment
-      and specifies
-      `image: ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0`
-      in its pod template
-    - `ocm.software/root-component:1.0.0` and all its resources are transferred
-      to a registry in a private environment to
-      `private-registry.com/ocm-component-model/transfer-target/ocm
-      -controller-deployment-manifest:1.0.0` and `private-registry.
+  - component `ocm.software/root-component:1.0.0` contains a resource
+    `ghcr.io/ocm-component-model/transfer-source/ocm-controller-deployment-manifest:1.0.0`
+    and a resource
+    `ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0`
+  - resource `ocm-controller-deployment-manifest:1.0.0` is a k8s deployment and
+    specifies
+    `image: ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0`
+    in its pod template
+  - `ocm.software/root-component:1.0.0` and all its resources are transferred to
+    a registry in a private environment to
+    `private-registry.com/ocm-component-model/transfer-target/ocm
+    -controller-deployment-manifest:1.0.0` and `private-registry.
       com/ocm-component-model/transfer-target/ocm-controller:1.0.0`
 
   The be able to consume the component in the private environment, the pod
@@ -80,10 +80,10 @@ components and their resources**.
 - **Hash and sign components (during transfer)**
 
   **Example:**
-    - component `ocm.software/root-component:1.0.0` references component
-      `ocm.software/leaf-component:1.0.0`.
-    - therefore, the _hash_ of component `ocm.software/root-component:1.0.0`
-      incorporates the _hash_ of component `ocm.software/leaf-component:1.0.0`.
+  - component `ocm.software/root-component:1.0.0` references component
+    `ocm.software/leaf-component:1.0.0`.
+  - therefore, the _hash_ of component `ocm.software/root-component:1.0.0`
+    incorporates the _hash_ of component `ocm.software/leaf-component:1.0.0`.
 
   Thus, the hash of `ocm.software/leaf-component:1.0.0` has to be calculated
   before the hash of `ocm.software/root-component:1.0.0` can be calculated.
@@ -91,10 +91,9 @@ components and their resources**.
   _cross storage system transfers_ and _localization_ require the hash to be
   recalculated during transfer.
 
-
 ### Conclusion
 
-**Extensibility**: The **cross storage system transfer** and the 
+**Extensibility**: The **cross storage system transfer** and the
 **localization** require the operations to be performed to be extensible.
 
 - the transformation logic for re-packaging for cross storage system transfers
@@ -102,34 +101,36 @@ components and their resources**.
 - the transformation logic for localization depends on the deployment
   description format (e.g. manifest, kustomization, helm)
 
-**Ordering**: The **hash and sign** require the operations to be performed 
-in a specific order (child before parent components). Besides, there are several
-other operations that either kind of **implicitly** depend on each other (data 
-flow between download resource and upload resource) or **explicitly** depend on 
-each other (localization needs the location of the image after transfer). 
+**Ordering**: The **hash and sign** require the operations to be performed in a
+specific order (child before parent components). Besides, there are several
+other operations that either kind of **implicitly** depend on each other (data
+flow between download resource and upload resource) or **explicitly** depend on
+each other (localization needs the location of the image after transfer).
 
 Also, users might want to incorporate their own operations:
-- **filtering** image layers or entire resources based on target location of the 
+
+- **filtering** image layers or entire resources based on target location of the
   transfer (e.g. for customer deliveries)
 
 ## Solution Proposal
 
-An _ocm orchestration specification_ is a formalized description of 
-operations that have to be performed on components and their resources. It 
-uses a **CEL expression syntax** to determine dependencies between operations. 
-Based on the dependencies, a **directed acyclic graph (DAG)** is built up that 
-determines the order of operations.
+An _ocm orchestration specification_ is a formalized description of operations
+that have to be performed on components and their resources. It uses a **CEL
+expression syntax** to determine dependencies between operations. Based on the
+dependencies, a **directed acyclic graph (DAG)** is built up that determines the
+order of operations.
 
-In fact, the description format is currently so generic that it can be used to 
-orchestrate arbitrary operations on arbitrary data - essentially 
-establishing is **general purpose CEL based pipeline language**. 
+In fact, the description format is currently so generic that it can be used to
+orchestrate arbitrary operations on arbitrary data - essentially establishing is
+**general purpose CEL based pipeline language**.
 
-This allows to prepare or enrich operations on components and resources with 
+This allows to prepare or enrich operations on components and resources with
 additional information.
 
 ### Example: OCM orchestration specification
 
-Assume, we have the following components stored in `ghcr.io/fabianburth/source-ocm-repository`:
+Assume, we have the following components stored in
+`ghcr.io/fabianburth/source-ocm-repository`:
 
 ```yaml
 meta:
@@ -139,24 +140,24 @@ component:
   version: 1.0.0
   provider: ocm.software
   resources:
-  - access:
-      imageReference: ghcr.io/fabianburth/source-charts/podinfo:6.7.1
-      type: ociArtifact
-    name: mychart
-    relation: external
-    type: helmChart
-    version: 6.7.1
-  - access:
-      imageReference: ghcr.io/fabianburth/source-image/podinfo:6.7.1
-      type: ociArtifact
-    name: myimage
-    relation: external
-    type: ociImage
-    version: 6.7.1
+    - access:
+        imageReference: ghcr.io/fabianburth/source-charts/podinfo:6.7.1
+        type: ociArtifact
+      name: mychart
+      relation: external
+      type: helmChart
+      version: 6.7.1
+    - access:
+        imageReference: ghcr.io/fabianburth/source-image/podinfo:6.7.1
+        type: ociArtifact
+      name: myimage
+      relation: external
+      type: ociImage
+      version: 6.7.1
   componentReferences:
-  - name: leaf
-    componentName: ocm.software/leaf-component
-    version: 1.0.0
+    - name: leaf
+      componentName: ocm.software/leaf-component
+      version: 1.0.0
 ---
 meta:
   schemaVersion: v2
@@ -165,27 +166,106 @@ component:
   version: 1.0.0
   provider: ocm.software
   resources:
-  - access:
-      localReference: sha256:d7952ffc553c8f25044b4414fc40e1919d904b9bbc9a50e4d8aae188dabe4dba
-      mediaType: application/vnd.oci.image.index.v1+tar+gzip
-      referenceName: ocm.software/leaf-component/ocmcli-image:0.21.0
-      type: localBlob
-    name: ocmcli-image
-    relation: external
-    type: ociImage
-    version: 1.0.0
+    - access:
+        localReference: sha256:d7952ffc553c8f25044b4414fc40e1919d904b9bbc9a50e4d8aae188dabe4dba
+        mediaType: application/vnd.oci.image.index.v1+tar+gzip
+        referenceName: ocm.software/leaf-component/ocmcli-image:0.21.0
+        type: localBlob
+      name: ocmcli-image
+      relation: external
+      type: ociImage
+      version: 1.0.0
 ```
 
-We want to transfer the components to `ghcr.
-io/fabianburth/target-ocm-repository/*`  and the resources to `ghcr.
-io/fabianburth/target-*`. Thereby, we want to **localize the helm chart**, 
-**transform the ocm image to an oci artifact
+We want to transfer the components to
+`ghcr.io/fabianburth/target-ocm-repository/*`  and the resources to `ghcr.
+io/fabianburth/target-*`. Thereby, we want to **localize the helm chart** and
+**transform a local blob to an oci artifact**.
 
 We want the component to be uploaded to `ghcr.
 io/open-component-model/transfer-target`, the podinfo-image to be uploaded to
-`ghcr.io/open-component-model/transfer-target/podinfo-image:1.0.0`, and the
-podinfo-chart to be uploaded to `ghcr.
-io/open-component-model/transfer-target/podinfo-chart:1.0.0`.
+`ghcr.io/open-component-model/transfer-target/podinfo-image:1.0.0`, the
+podinfo-chart to be uploaded to
+`ghcr. io/open-component-model/transfer-target/podinfo-chart:1.0.0`, and the 
+ocmcli-image to be uploaded to `ghcr.io/open-component-model/transfer-target/ocmcli-image:0.21.0`.
+
+```yaml
+type: transformation.ocm.component/v1alpha1
+transformations:
+  - type: attributes.transformation/v1alpha1
+    id: constants
+    attributes:
+      targetFilePath: "./test/localization-multi-component/archive-after-localization"
+  # component 1
+  - type: downloader.component.ctf/v1alpha1
+    id: downloadcomponent1
+    name: github.com/acme.org/helloworld
+    version: 1.0.0
+    filePath: ./test/localization-multi-component/archive
+  # resource 1
+  - type: downloader.resource.oci/v1alpha1
+    id: resourcedownload1
+    componentDescriptor: ${downloadcomponent1.outputs.descriptor}
+    resource:
+      name: myimage
+  - type: uploader.resource.oci/v1alpha1
+    id: resourceupload1
+    imageReference: ghcr.io/fabianburth/images/myimage:after-localize
+    data: ${resourcedownload1.outputs.data}
+  # resource 2
+  - type: downloader.resource.oci/v1alpha1
+    id: resourcedownload2
+    componentDescriptor: ${downloadcomponent1.descriptor}
+    resource:
+      name: mychart
+  - type: oci.to.tar.transformer/v1alpha1
+    id: ocitotar1
+    data: ${resourcedownload2.outputs.data}
+  - type: yaml.engine.localization/v1
+    id: localization1
+    data: ${ocitotar1.outputs.data}
+    file: "*/values.yaml"
+    mappings:
+      - path: "image.repository"
+        value: "${resourceupload1.resource.access.imageReference.parseRef().
+      registry}/${resourceupload1.resource.access.imageReference.parseRef().
+      repository}"
+  - type: tar.to.oci.transformer/v1alpha1
+    id: tartooci1
+    manifest: ${ocitotar1.outputs.manifest}
+    ref: ${ocitotar1.outputs.ref}
+    configLayer: ${ocitotar1.outputs.configLayer}
+  - type: uploader.resource.oci/v1alpha1
+    id: resourceupload2
+    imageReference: ghcr.io/fabianburth/charts/myimage:after-localize
+    componentDescriptor: ${downloadcomponent1.outputs.descriptor}
+    data: ${tartooci1.outputs.data}
+
+  - type: uploader.component.ctf/v1alpha1
+    filePath: ${constants.spec.attributes.targetFilePath}
+    data: ${downloadcomponent1.outputs.data}
+  # component 2
+  - type: downloader.component.ctf/v1alpha1
+    id: downloadcomponent2
+    name: github.com/acme.org/helloeurope
+    version: 1.0.0
+    filePath: ./test/localization-multi-component/archive
+  # resource 3
+  - type: downloader.localblob.ctf/v1alpha1 # we are overwriting our dependency here
+    id: downloadresource3
+    filePath: ${downloadcomponent2.spec.filePath}
+    resource:
+      name: helloeurope
+  - type: uploader.localblob.ctf/v1alpha1
+    id: uploadresource3
+    filePath: ${constants.spec.attributes.targetFilePath}
+    componentDescriptor: ${downloadcomponent2.outputs.descriptor}
+    data: ${downloadresource3.outputs.data}
+
+  - type: uploader.component.ctf/v1alpha1
+    filePath: ${constants.spec.attributes.targetFilePath}
+    componentDescriptor: ${uploadresource3.outputs.descriptor}
+```
 
 ### Specification
 
@@ -222,18 +302,18 @@ spec:
 > **NOTES:**
 >
 > * **Sources:** The specification also support sources (analogous to
-    > resources). They are omitted here for brevity.
+    resources). They are omitted here for brevity.
 > * **Multiple Components:** The mappings property is a list. This allows
-    > transferring multiple components in one transfer operation based on a
-    > single transfer spec.
+    transferring multiple components in one transfer operation based on a single
+    transfer spec.
 
 This specification contains all the information necessary to perform a transfer:
 
 * Source and target location of the component
 * Target location of the resources (and sources, if any)
 * Transformations required to perform the upload to the target location such as:
-    * format adjustments (e.g. local blob to oci artifact)
-    * [localization](./0004_localization_at_transfer_time.md)
+  * format adjustments (e.g. local blob to oci artifact)
+  * [localization](./0004_localization_at_transfer_time.md)
 
 The transformation are implemented as plugins.
 
@@ -358,13 +438,13 @@ _There is no way to configure multiple targets for a single component transfer._
 
 * **No fine-grained control over WHICH resources to transfer**  
   Essentially, there are 3 modes for resource transfer:
-    * _Without an additional flag_, the command only copies the component
-      descriptors and the local blobs.
-    * _With the `--copy-local-resources` flag_, the command copies only the
-      component descriptors, the local blobs, and all resources that have the
-      relation `local`.
-    * _With the `--copy-resources` flag_, the command copies all the resources
-      during transfer. -
+  * _Without an additional flag_, the command only copies the component
+    descriptors and the local blobs.
+  * _With the `--copy-local-resources` flag_, the command copies only the
+    component descriptors, the local blobs, and all resources that have the
+    relation `local`.
+  * _With the `--copy-resources` flag_, the command copies all the resources
+    during transfer. -
   > **NOTE:** Without **uploaders** registered, all the above option lead to all
   resources being transferred as a local blob - no matter the source storage
   system. For those wondering, that they never actively configured an uploader
@@ -380,13 +460,13 @@ _There is no way to configure multiple targets for a single component transfer._
   uploader configuration in the config file.
 
 * **No cross storage system / cross format transfers**-
-    * The current version of the ocm implementation does not give the uploader
-      implementations the possibility to edit the resource, only the resource
-      access.
-    * A cross storage system transfer requires a transformation of the resource
-      content. This typically leads to a changed digest that has to be reflected
-      in the component descriptor. Since the digest is part of the resource but
-      not part of the access, this is currently not possible.
+  * The current version of the ocm implementation does not give the uploader
+    implementations the possibility to edit the resource, only the resource
+    access.
+  * A cross storage system transfer requires a transformation of the resource
+    content. This typically leads to a changed digest that has to be reflected
+    in the component descriptor. Since the digest is part of the resource but
+    not part of the access, this is currently not possible.
 
 * **No transformers**  
   To actually enable the cross storage system transfer, the resource contents
@@ -394,17 +474,17 @@ _There is no way to configure multiple targets for a single component transfer._
   this, each uploader would have to know all possible input formats itself.
 
 * **No concept to specify target location information for resources**
-    * In the [uploader handler](#upload-handlers) config below, it is mentioned
-      that the resources matching the registration would be uploaded to oci with
-      the prefix `https://ghcr.io/open-component-model/oci`. _But what is the
-      resource specific suffix?_
-    * Currently, there is a field called
-      `hint` in the local blob access. If oci resources are downloaded into a
-      local blob and then re-uploaded to oci, this hint is used to preserve the
-      original repository name. These hints are not sufficient to fulfill the
-      requirements of ocm (there are
-      open [issues](https://github.com/open-component-model/ocm/issues/935)
-      and [proposals](https://github.com/open-component-model/ocm/issues/1213))
+  * In the [uploader handler](#upload-handlers) config below, it is mentioned
+    that the resources matching the registration would be uploaded to oci with
+    the prefix `https://ghcr.io/open-component-model/oci`. _But what is the
+    resource specific suffix?_
+  * Currently, there is a field called
+    `hint` in the local blob access. If oci resources are downloaded into a
+    local blob and then re-uploaded to oci, this hint is used to preserve the
+    original repository name. These hints are not sufficient to fulfill the
+    requirements of ocm (there are
+    open [issues](https://github.com/open-component-model/ocm/issues/935)
+    and [proposals](https://github.com/open-component-model/ocm/issues/1213))
 
 * **No separation of concerns between ocm spec and transfer**  
   The transfer is supposed to be an operation ON TOP of the ocm spec. Thus,
