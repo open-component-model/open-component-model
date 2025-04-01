@@ -29,7 +29,7 @@ func (t *TestType) DeepCopyTyped() Typed {
 
 func TestRegistry_Decode(t *testing.T) {
 	r := require.New(t)
-	typ := NewType("test", "v1", "type")
+	typ := NewVersionedType("test", "v1")
 	registry := NewScheme()
 	registry.MustRegisterWithAlias(&TestType{}, typ)
 

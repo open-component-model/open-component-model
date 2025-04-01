@@ -70,7 +70,7 @@ func (r *Scheme) MustRegister(prototype Typed, version string) {
 		panic("All types must be pointers to structs.")
 	}
 	t = t.Elem()
-	r.MustRegisterWithAlias(prototype, NewUngroupedVersionedType(t.Name(), version))
+	r.MustRegisterWithAlias(prototype, NewVersionedType(t.Name(), version))
 }
 
 func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
