@@ -29,7 +29,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/ctf/Taskfile.yml
     dir: ./bindings/go/ctf
-
+  bindings/go/dag:
+    optional: true
+    taskfile: ./bindings/go/dag/Taskfile.yml
+    dir: ./bindings/go/dag
 
 vars:
   GO_MODULES:
