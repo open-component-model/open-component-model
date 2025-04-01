@@ -57,7 +57,7 @@ tasks:
     cmds:
       - go work init
       - for: { var: GO_MODULES }
-        cmd: 'go work use bindings/go/{{.ITEM}}'
+        cmd: 'go work use {{.ITEM}}'
       - go work sync
 
   generate:
