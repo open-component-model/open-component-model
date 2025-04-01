@@ -17,7 +17,7 @@ func FlatMap(configs ...*Config) (*Config, error) {
 		flattenCandidates := make([]*Config, 0)
 		for _, config := range config.Configurations {
 			var cfg Config
-			if err := scheme.Convert(config.GetType(), &cfg); err != nil {
+			if err := scheme.Convert(config.Raw, &cfg); err != nil {
 				merged.Configurations = append(merged.Configurations, config)
 			} else {
 				flattenCandidates = append(flattenCandidates, &cfg)

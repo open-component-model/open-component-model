@@ -29,24 +29,21 @@ includes:
     optional: true
     taskfile: ./bindings/go/ctf/Taskfile.yml
     dir: ./bindings/go/ctf
-  cli/configuration/v1:
+  cli:
     optional: true
-    taskfile: ./cli/configuration/v1/Taskfile.yml
-    dir: ./cli/configuration/v1
+    taskfile: ./cli/Taskfile.yml
+    dir: ./cli
 
 vars:
   GO_MODULES:
-    sh: find {{ .ROOT_DIR }}/bindings/go -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/bindings/go/||'
-  GO_GENERATE:
-    sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \;
+    sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'
 
 tasks:
   test:
     desc: "Run all tests in the project"
     cmds:
       - for: { var: GO_MODULES }
-        task: bindings/go/{{.ITEM}}:test
-      - task: cli:test
+        task: '{{.ITEM}}:test'
 
   init/go.work:
     desc: "Initialize the workspace environment"

@@ -9,7 +9,7 @@ import (
 var scheme = runtime.NewScheme()
 
 func init() {
-	scheme.MustRegisterWithAlias(&Config{}, runtime.NewUngroupedVersionedType(ConfigType, ConfigTypeV1))
+	scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, ConfigTypeV1))
 }
 
 const (
@@ -18,14 +18,18 @@ const (
 )
 
 // Config holds configuration entities loaded through a configuration file.
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
+// +ocm:typegen=true
 type Config struct {
 	Type           runtime.Type    `json:"type"`
 	Configurations []Configuration `json:"configurations"`
 }
 
 // Configuration holds a single configuration entity.
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
+// +ocm:typegen=true
 type Configuration struct {
 	*runtime.Raw `json:",inline"`
 }

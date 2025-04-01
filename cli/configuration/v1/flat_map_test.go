@@ -13,11 +13,11 @@ func TestFlatMap(t *testing.T) {
 	r := require.New(t)
 
 	cfg, err := FlatMap(&Config{
-		Type: runtime.NewUngroupedVersionedType(ConfigType, ConfigTypeV1),
+		Type: runtime.NewVersionedType(ConfigType, ConfigTypeV1),
 		Configurations: []Configuration{
 			{
 				Raw: &runtime.Raw{
-					Type: runtime.NewUngroupedVersionedType(ConfigType, ConfigTypeV1),
+					Type: runtime.NewVersionedType(ConfigType, ConfigTypeV1),
 					Data: []byte(fmt.Sprintf(`{"type": "%[1]s", "configurations": [
 {"type": "%[1]s", "configurations": [
 	{"type": "custom-config", "key": "valuea"}
@@ -26,11 +26,11 @@ func TestFlatMap(t *testing.T) {
 			},
 		},
 	}, &Config{
-		Type: runtime.NewUngroupedVersionedType(ConfigType, ConfigTypeV1),
+		Type: runtime.NewVersionedType(ConfigType, ConfigTypeV1),
 		Configurations: []Configuration{
 			{
 				Raw: &runtime.Raw{
-					Type: runtime.NewUngroupedVersionedType(ConfigType, ConfigTypeV1),
+					Type: runtime.NewVersionedType(ConfigType, ConfigTypeV1),
 					Data: []byte(`{"key":"valuea","type":"custom-config"}`),
 				},
 			},
