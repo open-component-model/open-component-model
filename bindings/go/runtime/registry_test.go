@@ -70,3 +70,35 @@ func TestRegistry_Decode(t *testing.T) {
 	// Version is not set because it is not part of the raw data
 	r.Equal(parsed4.(*Raw).Type.String(), "test.type")
 }
+
+func TestRegistry_Convert_WithAllowUnknown(t *testing.T) {
+	r := require.New(t)
+	typ := NewVersionedType("test", "v1")
+	registry := NewScheme(WithAllowUnknown())
+	raw := &Raw{Type: typ, Data: []byte(`{"type": "test/v1", "value": "foo"}`)}
+
+	// Test Raw → Typed conversion
+	parsed := &TestType{}
+	r.NoError(registry.Convert(raw, parsed))
+	r.Equal(parsed.Value, "foo")
+	r.Equal(parsed.Type, typ)
+
+	// Test Typed → Raw conversion
+	from := &TestType{Type: typ, Value: "bar"}
+	target := &Raw{}
+	r.NoError(registry.Convert(from, target))
+	r.Equal(target.Type, typ)
+	r.JSONEq(`{"type": "test/v1", "value": "bar"}`, string(target.Data))
+
+	// Test Raw → Raw conversion
+	target2 := &Raw{}
+	r.NoError(registry.Convert(raw, target2))
+	r.Equal(raw.Type, target2.Type)
+	r.Equal(raw.Data, target2.Data)
+
+	// Test Typed → Typed conversion
+	to := &TestType{}
+	r.NoError(registry.Convert(from, to))
+	r.Equal(from.Value, to.Value)
+	r.Equal(from.Type, to.Type)
+}
