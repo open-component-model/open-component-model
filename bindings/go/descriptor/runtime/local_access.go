@@ -8,13 +8,11 @@ import (
 const (
 	LocalBlobAccessType        = "localBlob"
 	LocalBlobAccessTypeVersion = "v1"
-	LocalBlobAccessTypeGroup   = "software.ocm.accessType"
 )
 
 var typ = runtime.Type{
 	Name:    LocalBlobAccessType,
 	Version: LocalBlobAccessTypeVersion,
-	Group:   LocalBlobAccessTypeGroup,
 }
 
 func GetLocalBlobAccessType() runtime.Type {

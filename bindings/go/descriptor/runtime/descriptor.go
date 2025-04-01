@@ -50,7 +50,7 @@ type Component struct {
 	ComponentMeta `json:",inline"`
 	// RepositoryContexts defines the previous repositories of the component.
 	// See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#repository-contexts
-	RepositoryContexts []runtime.Unstructured `json:"-"`
+	RepositoryContexts []runtime.Typed `json:"-"`
 	// Provider describes the provider type of component in the origin's context.
 	Provider runtime.Identity `json:"-"`
 	// Resources defines all resources that are created by the component and by a third party.

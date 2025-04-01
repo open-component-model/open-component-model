@@ -57,6 +57,11 @@ func ConvertToV2(scheme *runtime.Scheme, descriptor *Descriptor) (*v2.Descriptor
 		return nil, fmt.Errorf("could not convert sources: %w", err)
 	}
 
+	repoCtx, err := ConvertToV2RepositoryContexts(scheme, descriptor.Component.RepositoryContexts)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert repository contexts: %w", err)
+	}
+
 	return &v2.Descriptor{
 		Meta: v2.Meta{
 			Version: descriptor.Meta.Version,
@@ -70,7 +75,7 @@ func ConvertToV2(scheme *runtime.Scheme, descriptor *Descriptor) (*v2.Descriptor
 				},
 				CreationTime: descriptor.Component.CreationTime,
 			},
-			RepositoryContexts: ConvertToV2RepositoryContexts(descriptor.Component.RepositoryContexts),
+			RepositoryContexts: repoCtx,
 			Provider:           provider,
 			Resources:          res,
 			Sources:            srcs,
@@ -102,13 +107,13 @@ func ConvertFromV2Provider(provider string) (runtime.Identity, error) {
 }
 
 // ConvertFromV2RepositoryContexts deep copies a slice of unstructured repository contexts.
-func ConvertFromV2RepositoryContexts(contexts []runtime.Unstructured) []runtime.Unstructured {
+func ConvertFromV2RepositoryContexts(contexts []*runtime.Raw) []runtime.Typed {
 	if contexts == nil {
 		return nil
 	}
-	n := make([]runtime.Unstructured, len(contexts))
+	n := make([]runtime.Typed, len(contexts))
 	for i := range contexts {
-		(&contexts[i]).DeepCopyInto(&n[i])
+		n[i] = contexts[i].DeepCopy()
 	}
 	return n
 }
@@ -257,15 +262,18 @@ func ConvertToV2Provider(provider runtime.Identity) (string, error) {
 }
 
 // ConvertToV2RepositoryContexts deep copies internal repository contexts to v2 format.
-func ConvertToV2RepositoryContexts(contexts []runtime.Unstructured) []runtime.Unstructured {
+func ConvertToV2RepositoryContexts(scheme *runtime.Scheme, contexts []runtime.Typed) ([]*runtime.Raw, error) {
 	if contexts == nil {
-		return nil
+		return nil, nil
 	}
-	n := make([]runtime.Unstructured, len(contexts))
+	n := make([]*runtime.Raw, len(contexts))
 	for i := range contexts {
-		(&contexts[i]).DeepCopyInto(&n[i])
+		n[i] = &runtime.Raw{}
+		if err := scheme.Convert(contexts[i], n[i]); err != nil {
+			return nil, fmt.Errorf("could not convert repository context at index %d: %w", i, err)
+		}
 	}
-	return n
+	return n, nil
 }
 
 // ConvertToV2Labels converts internal labels to v2.Label format.

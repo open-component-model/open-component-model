@@ -788,7 +788,6 @@ func TestConvertFromV2LocalBlob(t *testing.T) {
 				Type: runtime.Type{
 					Name:    "test",
 					Version: "v1",
-					Group:   "test.group",
 				},
 				LocalReference: "test-ref",
 				MediaType:      "test/media",
@@ -798,7 +797,6 @@ func TestConvertFromV2LocalBlob(t *testing.T) {
 				Type: runtime.Type{
 					Name:    "test",
 					Version: "v1",
-					Group:   "test.group",
 				},
 				LocalReference: "test-ref",
 				MediaType:      "test/media",
@@ -839,7 +837,6 @@ func TestConvertToV2LocalBlob(t *testing.T) {
 				Type: runtime.Type{
 					Name:    "test",
 					Version: "v1",
-					Group:   "test.group",
 				},
 				LocalReference: "test-ref",
 				MediaType:      "test/media",
@@ -849,7 +846,6 @@ func TestConvertToV2LocalBlob(t *testing.T) {
 				Type: runtime.Type{
 					Name:    "test",
 					Version: "v1",
-					Group:   "test.group",
 				},
 				LocalReference: "test-ref",
 				MediaType:      "test/media",
