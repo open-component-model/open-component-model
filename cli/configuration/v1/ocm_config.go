@@ -44,7 +44,7 @@ func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return FlatMap(cfg)
+	return FlatMap(cfg), nil
 }
 
 func GetOCMConfigForCommand(cmd *cobra.Command) (*Config, error) {
@@ -83,7 +83,7 @@ func GetOCMConfig(additional ...string) (*Config, error) {
 		}
 		cfgs = append(cfgs, cfg)
 	}
-	return FlatMap(cfgs...)
+	return FlatMap(cfgs...), nil
 }
 
 // GetConfigFromPath reads and decodes the YAML configuration file from the specified path.
@@ -150,7 +150,7 @@ func GetOCMConfigPaths() ([]string, error) {
 		return paths, nil
 	}
 
-	return nil, fmt.Errorf("OCM config not found in any known locations")
+	return nil, fmt.Errorf("ocm config not found in any known locations: %s", paths)
 }
 
 // getFromEnvironment checks if the OCM_CONFIG_PATH environment variable is set.

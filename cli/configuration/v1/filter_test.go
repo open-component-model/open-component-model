@@ -26,21 +26,17 @@ func TestFilter(t *testing.T) {
 						Version: "v1",
 						Name:    "test",
 					},
-					Configurations: []Configuration{
+					Configurations: []*runtime.Raw{
 						{
-							Raw: &runtime.Raw{
-								Type: runtime.Type{
-									Version: "v1",
-									Name:    "test2",
-								},
+							Type: runtime.Type{
+								Version: "v1",
+								Name:    "test2",
 							},
 						},
 						{
-							Raw: &runtime.Raw{
-								Type: runtime.Type{
-									Version: "v1",
-									Name:    "test3",
-								},
+							Type: runtime.Type{
+								Version: "v1",
+								Name:    "test3",
 							},
 						},
 					},
@@ -62,21 +58,17 @@ func TestFilter(t *testing.T) {
 						Version: "v1",
 						Name:    "test",
 					},
-					Configurations: []Configuration{
+					Configurations: []*runtime.Raw{
 						{
-							Raw: &runtime.Raw{
-								Type: runtime.Type{
-									Version: "v1",
-									Name:    "test2",
-								},
+							Type: runtime.Type{
+								Version: "v1",
+								Name:    "test2",
 							},
 						},
 						{
-							Raw: &runtime.Raw{
-								Type: runtime.Type{
-									Version: "v1",
-									Name:    "test3",
-								},
+							Type: runtime.Type{
+								Version: "v1",
+								Name:    "test3",
 							},
 						},
 					},
@@ -95,13 +87,11 @@ func TestFilter(t *testing.T) {
 					Version: "v1",
 					Name:    "test",
 				},
-				Configurations: []Configuration{
+				Configurations: []*runtime.Raw{
 					{
-						Raw: &runtime.Raw{
-							Type: runtime.Type{
-								Version: "v1",
-								Name:    "test2",
-							},
+						Type: runtime.Type{
+							Version: "v1",
+							Name:    "test2",
 						},
 					},
 				},

@@ -24,11 +24,16 @@ jobs:
     env:
       DIR: ${{ github.workspace }}
     steps:
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@v4
       - name: Discover Go Modules
         id: discover
         run: |
-          MODULES="$(find ${{ env.DIR }} -name "go.mod" -exec dirname {} \;)"
+          MODULES="$(task go_modules)"
           MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
           FILTERS="$(echo "$MODULES" | jq -rR -s -c 'split("\n") | map(select(. != "")) | map("\(.):\n - \"\(sub("^";""))/**\"") | join ("\n")')"
           

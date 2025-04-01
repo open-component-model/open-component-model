@@ -12,38 +12,30 @@ import (
 func TestFlatMap(t *testing.T) {
 	r := require.New(t)
 
-	cfg, err := FlatMap(&Config{
+	cfg := FlatMap(&Config{
 		Type: runtime.NewVersionedType(ConfigType, ConfigTypeV1),
-		Configurations: []Configuration{
+		Configurations: []*runtime.Raw{
 			{
-				Raw: &runtime.Raw{
-					Type: runtime.NewVersionedType(ConfigType, ConfigTypeV1),
-					Data: []byte(fmt.Sprintf(`{"type": "%[1]s", "configurations": [
+				Type: runtime.NewVersionedType(ConfigType, ConfigTypeV1),
+				Data: []byte(fmt.Sprintf(`{"type": "%[1]s", "configurations": [
 {"type": "%[1]s", "configurations": [
-	{"type": "custom-config", "key": "valuea"}
+	{"type": "custom-config-1", "key": "valuea"}
 ]}]}`, ConfigType+"/"+ConfigTypeV1)),
-				},
 			},
 		},
 	}, &Config{
 		Type: runtime.NewVersionedType(ConfigType, ConfigTypeV1),
-		Configurations: []Configuration{
+		Configurations: []*runtime.Raw{
 			{
-				Raw: &runtime.Raw{
-					Type: runtime.NewVersionedType(ConfigType, ConfigTypeV1),
-					Data: []byte(`{"key":"valuea","type":"custom-config"}`),
-				},
+				Type: runtime.NewUnversionedType("custom-config-2"),
+				Data: []byte(`{"key":"valueb","type":"custom-config-2"}`),
 			},
 		},
 	})
-	r.NoError(err)
 	r.Len(cfg.Configurations, 2)
 
-	r.IsType(&runtime.Raw{}, cfg.Configurations[0].Raw)
-	r.Equal(`{"key":"valuea","type":"custom-config"}`, string(cfg.Configurations[0].Raw.Data))
-	r.IsType(&runtime.Raw{}, cfg.Configurations[1].Raw)
-	r.Equal(`{"type": "generic.config.ocm.software/v1", "configurations": [
-{"type": "generic.config.ocm.software/v1", "configurations": [
-	{"type": "custom-config", "key": "valuea"}
-]}]}`, string(cfg.Configurations[1].Raw.Data))
+	r.IsType(&runtime.Raw{}, cfg.Configurations[1])
+	r.Equal(`{"key":"valuea","type":"custom-config-1"}`, string(cfg.Configurations[1].Data))
+	r.IsType(&runtime.Raw{}, cfg.Configurations[0])
+	r.Equal(`{"key":"valueb","type":"custom-config-2"}`, string(cfg.Configurations[0].Data))
 }

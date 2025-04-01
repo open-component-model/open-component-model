@@ -49,6 +49,11 @@ tasks:
       - for: { var: GO_MODULES }
         task: '{{.ITEM}}:test'
 
+  go_modules:
+    desc: "List all Go Modules available in this project"
+    cmd: echo "{{ .GO_MODULES }}"
+    silent: true
+
   init/go.work:
     desc: "Initialize the workspace environment"
     status:
@@ -56,7 +61,7 @@ tasks:
     cmds:
       - go work init
       - for: { var: GO_MODULES }
-        cmd: 'go work use bindings/go/{{.ITEM}}'
+        cmd: 'go work use {{.ITEM}}'
       - go work sync
 
   generate:
