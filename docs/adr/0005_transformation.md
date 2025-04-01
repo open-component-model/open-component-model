@@ -324,15 +324,6 @@ graph TD
 **Operations** can optionally either be compiled in as part of the core ocm cli
 or can be integrated as plugins.
 
-
-> **NOTES:**
->
-> * **Sources:** The specification also support sources (analogous to
-    resources). They are omitted here for brevity.
-> * **Multiple Components:** The mappings property is a list. This allows
-    transferring multiple components in one transfer operation based on a single
-    transfer spec.
-
 ### Issues
 
 Our current graph traversal requires buffering in between operations. With a
