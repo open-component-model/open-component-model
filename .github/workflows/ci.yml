@@ -171,11 +171,6 @@ jobs:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            ${{ matrix.project }}
-            bindings/go/generator
-            Taskfile.yml
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
