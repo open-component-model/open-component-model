@@ -407,7 +407,7 @@ the current command.
   As pointed out in the requirements, various operation in ocm require the
   complex graph orchestration logic. The formalization through the **ocm
   orchestration specification** allows to reuse this complex logic for arbitrary
-  operations (kind of like crd's and controllers in k8s).
+  operations (kind of like CRDs and controllers in k8s).
 
 - **Extensibility**:
   The **ocm orchestration specification** allows for incorporating arbitrary
@@ -441,7 +441,7 @@ the current command.
   - We decided to **omit any kind of implicit dependencies or data flow** in
     this version of the specification.
   - Instead of implicitly creating a dependency between each consecutive
-    resource operation and passing a data stram between them, we explicitly
+    resource operation and passing a data stream between them, we explicitly
     require the user (or the generator) to specify the dependency through a CEL
     expression.
   - **Pro**:
@@ -461,7 +461,7 @@ The main **disadvantage** is the complexity of the manual creation of a
 specification. We assume that the manual creation is a rare task. Either, the
 current commands which generate the specification will be sufficient for most
 users. Or a user will create a specification once and reuse it with different
-parametrizations (kind of like the instance specification in KRO). Therefore,
+parameterization (kind of like the instance specification in KRO). Therefore,
 we think this is an acceptable trade-off.
 
 ## Links <!-- optional -->
