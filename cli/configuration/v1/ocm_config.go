@@ -150,7 +150,7 @@ func GetOCMConfigPaths() ([]string, error) {
 		return paths, nil
 	}
 
-	return nil, fmt.Errorf("OCM config not found in any known locations")
+	return nil, fmt.Errorf("ocm config not found in any known locations: %s", paths)
 }
 
 // getFromEnvironment checks if the OCM_CONFIG_PATH environment variable is set.
