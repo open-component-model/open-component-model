@@ -98,6 +98,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: golangci-lint ${{ matrix.modules }}
         uses: golangci/golangci-lint-action@v6
         with:
@@ -126,6 +127,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: Run Tests
         run: task ${{ matrix.module }}:test
   analyze-go:
