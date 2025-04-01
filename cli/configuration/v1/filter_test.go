@@ -23,27 +23,20 @@ func TestFilter(t *testing.T) {
 			args: args{
 				config: &Config{
 					Type: runtime.Type{
-						Group:   "group",
 						Version: "v1",
 						Name:    "test",
 					},
-					Configurations: []Configuration{
+					Configurations: []*runtime.Raw{
 						{
-							Raw: &runtime.Raw{
-								Type: runtime.Type{
-									Group:   "group",
-									Version: "v1",
-									Name:    "test2",
-								},
+							Type: runtime.Type{
+								Version: "v1",
+								Name:    "test2",
 							},
 						},
 						{
-							Raw: &runtime.Raw{
-								Type: runtime.Type{
-									Group:   "group",
-									Version: "v1",
-									Name:    "test3",
-								},
+							Type: runtime.Type{
+								Version: "v1",
+								Name:    "test3",
 							},
 						},
 					},
@@ -52,7 +45,6 @@ func TestFilter(t *testing.T) {
 			},
 			want: &Config{
 				Type: runtime.Type{
-					Group:   "group",
 					Version: "v1",
 					Name:    "test",
 				},
@@ -63,27 +55,20 @@ func TestFilter(t *testing.T) {
 			args: args{
 				config: &Config{
 					Type: runtime.Type{
-						Group:   "group",
 						Version: "v1",
 						Name:    "test",
 					},
-					Configurations: []Configuration{
+					Configurations: []*runtime.Raw{
 						{
-							Raw: &runtime.Raw{
-								Type: runtime.Type{
-									Group:   "group",
-									Version: "v1",
-									Name:    "test2",
-								},
+							Type: runtime.Type{
+								Version: "v1",
+								Name:    "test2",
 							},
 						},
 						{
-							Raw: &runtime.Raw{
-								Type: runtime.Type{
-									Group:   "group",
-									Version: "v1",
-									Name:    "test3",
-								},
+							Type: runtime.Type{
+								Version: "v1",
+								Name:    "test3",
 							},
 						},
 					},
@@ -91,7 +76,6 @@ func TestFilter(t *testing.T) {
 				options: &FilterOptions{
 					ConfigTypes: []runtime.Type{
 						{
-							Group:   "group",
 							Version: "v1",
 							Name:    "test2",
 						},
@@ -100,18 +84,14 @@ func TestFilter(t *testing.T) {
 			},
 			want: &Config{
 				Type: runtime.Type{
-					Group:   "group",
 					Version: "v1",
 					Name:    "test",
 				},
-				Configurations: []Configuration{
+				Configurations: []*runtime.Raw{
 					{
-						Raw: &runtime.Raw{
-							Type: runtime.Type{
-								Group:   "group",
-								Version: "v1",
-								Name:    "test2",
-							},
+						Type: runtime.Type{
+							Version: "v1",
+							Name:    "test2",
 						},
 					},
 				},

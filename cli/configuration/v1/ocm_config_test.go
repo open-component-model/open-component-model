@@ -24,55 +24,39 @@ func TestGetFlattenedGetConfigFromPath(t *testing.T) {
 			},
 			want: &Config{
 				Type: runtime.Type{
-					Group:   "generic.config.ocm",
 					Version: "v1",
-					Name:    "software",
+					Name:    "generic.config.ocm.software",
 				},
-				Configurations: []Configuration{
+				Configurations: []*runtime.Raw{
 					{
-						Raw: &runtime.Raw{
-							Type: runtime.Type{
-								Group: "credentials.config.ocm",
-								Name:  "software",
-							},
-							Data: []byte(`{"repositories":[{"repository":{"dockerConfigFile":"~/.docker/config.json","propagateConsumerIdentity":true,"type":"DockerConfig/v1"}}],"type":"credentials.config.ocm.software"}`),
+						Type: runtime.Type{
+							Name: "credentials.config.ocm.software",
 						},
+						Data: []byte(`{"repositories":[{"repository":{"dockerConfigFile":"~/.docker/config.json","propagateConsumerIdentity":true,"type":"DockerConfig/v1"}}],"type":"credentials.config.ocm.software"}`),
 					},
 					{
-						Raw: &runtime.Raw{
-							Type: runtime.Type{
-								Group: "attributes.config.ocm",
-								Name:  "software",
-							},
-							Data: []byte(`{"attributes":{"cache":"~/.ocm/cache"},"type":"attributes.config.ocm.software"}`),
+						Type: runtime.Type{
+							Name: "attributes.config.ocm.software",
 						},
+						Data: []byte(`{"attributes":{"cache":"~/.ocm/cache"},"type":"attributes.config.ocm.software"}`),
 					},
 					{
-						Raw: &runtime.Raw{
-							Type: runtime.Type{
-								Group: "credentials.config.ocm",
-								Name:  "software",
-							},
-							Data: []byte(`{"consumers":[{"credentials":[{"properties":{"password":"password","username":"username"},"type":"Credentials/v1"}],"identity":{"hostname":"common.repositories.cloud.sap","type":"HelmChartRepository"}}],"type":"credentials.config.ocm.software"}`),
+						Type: runtime.Type{
+							Name: "credentials.config.ocm.software",
 						},
+						Data: []byte(`{"consumers":[{"credentials":[{"properties":{"password":"password","username":"username"},"type":"Credentials/v1"}],"identity":{"hostname":"common.repositories.cloud.sap","type":"HelmChartRepository"}}],"type":"credentials.config.ocm.software"}`),
 					},
 					{
-						Raw: &runtime.Raw{
-							Type: runtime.Type{
-								Group: "credentials.config.ocm",
-								Name:  "software",
-							},
-							Data: []byte(`{"consumers":[{"credentials":[{"properties":{"password":"password","username":"username"},"type":"Credentials/v1"}],"identity":{"hostname":"common.repositories.cloud.sap","type":"JFrogHelm"}}],"type":"credentials.config.ocm.software"}`),
+						Type: runtime.Type{
+							Name: "credentials.config.ocm.software",
 						},
+						Data: []byte(`{"consumers":[{"credentials":[{"properties":{"password":"password","username":"username"},"type":"Credentials/v1"}],"identity":{"hostname":"common.repositories.cloud.sap","type":"JFrogHelm"}}],"type":"credentials.config.ocm.software"}`),
 					},
 					{
-						Raw: &runtime.Raw{
-							Type: runtime.Type{
-								Group: "uploader.ocm.config.ocm",
-								Name:  "software",
-							},
-							Data: []byte(`{"registrations":[{"artifactType":"helmChart","config":{"repository":"test-ocm","type":"JFrogHelm/v1alpha1","url":"common.repositories.cloud.sap"},"name":"plugin/jfrog/JFrogHelm","priority":200}],"type":"uploader.ocm.config.ocm.software"}`),
+						Type: runtime.Type{
+							Name: "uploader.ocm.config.ocm.software",
 						},
+						Data: []byte(`{"registrations":[{"artifactType":"helmChart","config":{"repository":"test-ocm","type":"JFrogHelm/v1alpha1","url":"common.repositories.cloud.sap"},"name":"plugin/jfrog/JFrogHelm","priority":200}],"type":"uploader.ocm.config.ocm.software"}`),
 					},
 				},
 			},

@@ -14,8 +14,7 @@ func TestConfig(t *testing.T) {
 ]}]}`)
 	config := &Config{}
 	require.NoError(t, json.Unmarshal(convert, config))
-	require.Equal(t, "software", config.Type.Name)
-	require.Equal(t, "generic.config.ocm", config.Type.Group)
+	require.Equal(t, "generic.config.ocm.software", config.Type.Name)
 	require.Equal(t, "v1", config.Type.Version)
 	require.Len(t, config.Configurations, 1)
 }

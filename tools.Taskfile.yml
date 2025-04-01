@@ -9,10 +9,10 @@ tasks:
     desc: "Generate kubernetes-style deepcopy code for all types in the project"
     deps: [deepcopy-gen/install]
     cmds:
-      - for: { var: GO_GENERATE }
+      - for: { var: GO_MODULES }
         cmd: |
           cd {{.ITEM}} && \
-          {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }} -v9 \
+          {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }} \
           --output-file "zz_generated.deepcopy.go" \
           ./...
 
@@ -33,7 +33,7 @@ tasks:
     desc: "Run golangci-lint on all go modules"
     deps: [golangci-lint/install]
     cmds:
-      - for: { var: GO_GENERATE }
+      - for: { var: GO_MODULES }
         cmd: |
           cd {{.ITEM}} && 
           {{ .ROOT_DIR }}/tmp/bin/golangci-lint run \

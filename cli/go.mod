@@ -1,11 +1,11 @@
-module ocm.software/open-component-model/bindings/go/configuration/v1
+module ocm.software/open-component-model/cli
 
 go 1.24.1
 
 require (
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250321093145-d1928b826110
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250401070708-ba195f4dacb0
 )
 
 require (

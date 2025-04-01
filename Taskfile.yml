@@ -36,9 +36,7 @@ includes:
 
 vars:
   GO_MODULES:
-    sh: find {{ .ROOT_DIR }}/bindings/go -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/bindings/go/||'
-  GO_GENERATE:
-    sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \;
+    sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'
 
 tasks:
   test:
@@ -46,7 +44,11 @@ tasks:
     cmds:
       - for: { var: GO_MODULES }
         task: bindings/go/{{.ITEM}}:test
-      - task: cli:test
+
+  go_modules:
+    desc: ""
+    cmd: echo "{{ .GO_MODULES }}"
+    silent: true
 
   init/go.work:
     desc: "Initialize the workspace environment"
