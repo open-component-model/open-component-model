@@ -176,7 +176,7 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		// avoid mutating the original object
 		from = from.DeepCopyTyped()
 		typ, err := r.TypeForPrototype(from)
-		if err != nil {
+		if err != nil && !r.allowUnknown {
 			return fmt.Errorf("cannot convert from unregistered type: %w", err)
 		}
 		from.SetType(typ)
@@ -192,7 +192,7 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		}
 
 		// Raw → Typed: Unmarshal the Raw.Data into the target.
-		if !r.IsRegistered(fromType) {
+		if !r.IsRegistered(fromType) && !r.allowUnknown {
 			return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
 		}
 		if err := json.Unmarshal(rawFrom.Data, into); err != nil {
@@ -203,7 +203,7 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 
 	// Case 2: Typed -> Raw
 	if rawInto, ok := into.(*Raw); ok {
-		if !r.IsRegistered(fromType) {
+		if !r.IsRegistered(fromType) && !r.allowUnknown {
 			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
 		}
 		data, err := json.Marshal(from)

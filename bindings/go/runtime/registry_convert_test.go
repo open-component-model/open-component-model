@@ -190,3 +190,48 @@ func TestConvert_Errors(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestConvert_AllowUnknown(t *testing.T) {
+	typ := runtime.NewVersionedType("TestType", "v1")
+	raw := &runtime.Raw{
+		Type: typ,
+		Data: []byte(`{"type": "TestType/v1", "foo": "bar"}`),
+	}
+
+	t.Run("Raw → Typed with allowUnknown", func(t *testing.T) {
+		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+		out := &TestType{}
+		err := scheme.Convert(raw, out)
+		require.NoError(t, err)
+		assert.Equal(t, "bar", out.Foo)
+	})
+
+	t.Run("Typed → Raw with allowUnknown", func(t *testing.T) {
+		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+		from := &TestType{Type: typ, Foo: "bar"}
+		target := &runtime.Raw{}
+		err := scheme.Convert(from, target)
+		require.NoError(t, err)
+		assert.Equal(t, typ, target.Type)
+		assert.JSONEq(t, string(raw.Data), string(target.Data))
+	})
+
+	t.Run("Raw → Raw with allowUnknown", func(t *testing.T) {
+		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+		target := &runtime.Raw{}
+		err := scheme.Convert(raw, target)
+		require.NoError(t, err)
+		assert.Equal(t, raw.Type, target.Type)
+		assert.Equal(t, raw.Data, target.Data)
+	})
+
+	t.Run("Typed → Typed with allowUnknown", func(t *testing.T) {
+		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+		from := &TestType{Type: typ, Foo: "bar"}
+		to := &TestType{}
+		err := scheme.Convert(from, to)
+		require.NoError(t, err)
+		assert.Equal(t, "bar", to.Foo)
+		assert.Equal(t, typ, to.Type)
+	})
+}
