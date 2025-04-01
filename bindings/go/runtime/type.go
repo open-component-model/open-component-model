@@ -10,40 +10,32 @@ import (
 type Typed interface {
 	// GetType returns the object's type
 	GetType() Type
+	SetType(Type)
 	DeepCopyTyped() Typed
 }
 
-// Type represents a structured type with an optional group, an optional version and a name.
+// Type represents a structured type with an optional version and a name.
 // It is used to identify the type of an object in a versioned API.
-// A Group is a namespace for related types,
-// a Version is a specific iteration of the type,
+// A Version is a specific iteration of the type,
 // and Name is the name of the type.
 type Type struct {
-	Group   string
 	Version string
 	Name    string
 }
 
-// NewUngroupedVersionedType creates a new Type instance without a group and with a version.
-func NewUngroupedVersionedType(name, version string) Type {
-	return Type{Name: name, Version: version}
-}
-
-// NewUngroupedUnversionedType creates a new Type instance without a group and without a version.
-func NewUngroupedUnversionedType(name string) Type {
+// NewUnversionedType creates a new Type instance without a version.
+func NewUnversionedType(name string) Type {
 	return Type{Name: name}
 }
 
-// NewType creates a new Type instance with a group and version.
-func NewType(group, version, name string) Type {
-	return Type{Group: group, Version: version, Name: name}
+// NewVersionedType creates a new Type instance with a version.
+func NewVersionedType(name, version string) Type {
+	return Type{Name: name, Version: version}
 }
 
 // TypeFromString parses a type string in the formats:
-// - "name" (unversioned, no group)
-// - "name/version" (versioned, no group)
-// - "group.name" (unversioned, with group)
-// - "group.name/version" (versioned, with group)
+// - "name" (unversioned)
+// - "name/version" (versioned)
 func TypeFromString(typ string) (Type, error) {
 	parts := strings.Split(typ, "/")
 
@@ -52,32 +44,14 @@ func TypeFromString(typ string) (Type, error) {
 		return Type{}, fmt.Errorf("invalid type %q, too many segments", typ)
 	}
 
-	var namePart, versionPart string
-	if len(parts) == 1 {
-		namePart = parts[0] // Unversioned format
-	} else {
-		namePart, versionPart = parts[0], parts[1] // Versioned format
-	}
-
-	// Split name part to extract group (if present)
-	nameParts := strings.Split(namePart, ".")
-	if len(nameParts) < 1 {
-		return Type{}, fmt.Errorf("invalid type %q, missing name", typ)
-	}
-
-	// Extract Group and Name correctly
 	var t Type
-	if len(nameParts) == 1 {
-		t = Type{Name: nameParts[0], Version: versionPart}
+	if len(parts) == 1 {
+		t = Type{Name: parts[0]} // Unversioned format
 	} else {
-		t = Type{
-			Group:   strings.Join(nameParts[:len(nameParts)-1], "."),
-			Name:    nameParts[len(nameParts)-1],
-			Version: versionPart,
-		}
+		t = Type{Name: parts[0], Version: parts[1]} // Versioned format
 	}
 
-	// Validate fields
+	// Validate name
 	if t.Name == "" {
 		return Type{}, fmt.Errorf("invalid type %q, missing name", typ)
 	}
@@ -87,26 +61,17 @@ func TypeFromString(typ string) (Type, error) {
 
 // Equal checks if two Types are the same.
 func (t Type) Equal(other Type) bool {
-	return t.Group == other.Group && t.Name == other.Name && t.Version == other.Version
+	return t.Name == other.Name && t.Version == other.Version
 }
 
 // String returns the formatted Type string.
-// - Unversioned: "name" or "group.name"
-// - Versioned: "name/version" or "group.name/version"
+// - Unversioned: "name"
+// - Versioned: "name/version"
 func (t Type) String() string {
-	namePart := t.Name
-	if t.Group != "" {
-		namePart = fmt.Sprintf("%s.%s", t.Group, t.Name)
-	}
 	if t.Version != "" {
-		return fmt.Sprintf("%s/%s", namePart, t.Version)
+		return fmt.Sprintf("%s/%s", t.Name, t.Version)
 	}
-	return namePart // Unversioned type
-}
-
-// GetGroup returns the group of the type.
-func (t Type) GetGroup() string {
-	return t.Group
+	return t.Name // Unversioned type
 }
 
 // GetName returns the name of the type.
@@ -119,14 +84,14 @@ func (t Type) GetVersion() string {
 	return t.Version
 }
 
-// HasGroup checks if the type has a group associated with it.
-func (t Type) HasGroup() bool {
-	return t.Group != ""
-}
-
 // HasVersion checks if the type has a version associated with it.
 func (t Type) HasVersion() bool {
 	return t.Version != ""
+}
+
+// IsEmpty checks if the Type is empty (no version or name).
+func (t Type) IsEmpty() bool {
+	return t.Version == "" && t.Name == ""
 }
 
 // MarshalJSON converts Type to a JSON string.

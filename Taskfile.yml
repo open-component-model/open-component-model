@@ -9,6 +9,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/descriptor/v2/Taskfile.yml
     dir: ./bindings/go/descriptor/v2
+  bindings/go/descriptor/runtime:
+    optional: true
+    taskfile: ./bindings/go/descriptor/runtime/Taskfile.yml
+    dir: ./bindings/go/descriptor/runtime
   bindings/go/runtime:
     optional: true
     taskfile: ./bindings/go/runtime/Taskfile.yml
@@ -25,11 +29,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/ctf/Taskfile.yml
     dir: ./bindings/go/ctf
-
+  cli:
+    optional: true
+    taskfile: ./cli/Taskfile.yml
+    dir: ./cli
 
 vars:
   GO_MODULES:
-    sh: find {{ .ROOT_DIR }}/bindings/go -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/bindings/go/||'
+    sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'
 
 tasks:
   test:
@@ -38,6 +45,11 @@ tasks:
       - for: { var: GO_MODULES }
         task: bindings/go/{{.ITEM}}:test
 
+  go_modules:
+    desc: "List all Go Modules available in this project"
+    cmd: echo "{{ .GO_MODULES }}"
+    silent: true
+
   init/go.work:
     desc: "Initialize the workspace environment"
     status:
@@ -45,7 +57,7 @@ tasks:
     cmds:
       - go work init
       - for: { var: GO_MODULES }
-        cmd: 'go work use bindings/go/{{.ITEM}}'
+        cmd: 'go work use {{.ITEM}}'
       - go work sync
 
   generate:

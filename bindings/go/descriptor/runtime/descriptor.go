@@ -1,7 +1,6 @@
-package v2
+package runtime
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 	"time"
@@ -30,11 +29,11 @@ const (
 // verifying the validity of the component.
 type Descriptor struct {
 	// Meta defines the schema version of the component.
-	Meta Meta `json:"meta"`
+	Meta Meta `json:"-"`
 	// Component defines the component spec.
-	Component Component `json:"component"`
+	Component Component `json:"-"`
 	// Signatures contains optional signing information.
-	Signatures []Signature `json:"signatures,omitempty"`
+	Signatures []Signature `json:"-"`
 }
 
 func (d *Descriptor) String() string {
@@ -51,15 +50,15 @@ type Component struct {
 	ComponentMeta `json:",inline"`
 	// RepositoryContexts defines the previous repositories of the component.
 	// See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#repository-contexts
-	RepositoryContexts []*runtime.Raw `json:"repositoryContexts,omitempty"`
+	RepositoryContexts []runtime.Typed `json:"-"`
 	// Provider describes the provider type of component in the origin's context.
-	Provider string `json:"provider"`
+	Provider runtime.Identity `json:"-"`
 	// Resources defines all resources that are created by the component and by a third party.
-	Resources []Resource `json:"resources,omitempty"`
+	Resources []Resource `json:"-"`
 	// Sources defines sources that produced the component.
-	Sources []Source `json:"sources,omitempty"`
+	Sources []Source `json:"-"`
 	// References component dependencies that can be resolved in the current context.
-	References []Reference `json:"componentReferences,omitempty"`
+	References []Reference `json:"-"`
 }
 
 // ResourceRelation describes whether the component is created by a third party or internally.
@@ -67,7 +66,7 @@ type ResourceRelation string
 
 const (
 	// LocalRelation defines a internal relation
-	// which describes a internally maintained resource in the origin's context.
+	// which describes an internally maintained resource in the origin's context.
 	LocalRelation ResourceRelation = "local"
 	// ExternalRelation defines a external relation
 	// which describes a resource maintained by a third party vendor in the origin's context.
@@ -81,23 +80,29 @@ const (
 // +k8s:deepcopy-gen=true
 type Resource struct {
 	ElementMeta `json:",inline"`
-	// SourceRefs defines a list of source names.
+	// SourceRefs defines a list of sources used to generate the resource.
 	// These entries reference the sources defined in the
 	// component.sources.
-	SourceRefs []SourceRef `json:"sourceRefs,omitempty"`
-	// Type describes the type of the object.
-	Type string `json:"type"`
+	SourceRefs []SourceRef `json:"-"`
+	// Type describes the type of the resource.
+	Type string `json:"-"`
 	// Relation describes the relation of the resource to the component.
 	// Can be a local or external resource.
-	Relation ResourceRelation `json:"relation"`
+	Relation ResourceRelation `json:"-"`
 	// Access defines the type of access this resource requires.
-	Access *runtime.Raw `json:"access"`
+	Access runtime.Typed `json:"-"`
 	// Digest is the optional digest of the referenced resource.
-	Digest *Digest `json:"digest,omitempty"`
+	Digest *Digest `json:"-"`
 	// Size of the resource blob.
-	Size int64 `json:"size,omitempty"`
+	Size int64 `json:"-"`
 	// CreationTime of the resource.
-	CreationTime *Timestamp `json:"creationTime,omitempty"`
+	CreationTime CreationTime `json:"-"`
+}
+
+type CreationTime time.Time
+
+func (t CreationTime) DeepCopyInto(to *CreationTime) {
+	*to = t
 }
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
@@ -106,60 +111,59 @@ type Resource struct {
 // +k8s:deepcopy-gen=true
 type Source struct {
 	ElementMeta `json:",inline"`
-	Type        string       `json:"type"`
-	Access      *runtime.Raw `json:"access"`
+	Type        string        `json:"-"`
+	Access      runtime.Typed `json:"-"`
 }
 
-// Reference describes the reference to another component in the registry.
+// Reference describes the reference to another component.
 // A component version may refer to other component versions by adding a reference to the component version.
 //
 // The Open Component Model makes no assumptions about how content described by the model is finally deployed or used.
 // This is left to external tools.
 //
-// Tool specific deployment information is formally represented by other artifacts with an appropriate type.
+// Tool specific deployment information is formally represented by other artifacts with an appropriate type and/or by labels.
 //
 // In addition to the common artifact information, a resource may optionally describe a reference to the source by specifying its artifact identity.
 //
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/01-references.md#referencing
 // +k8s:deepcopy-gen=true
 type Reference struct {
+	// The name in ElementMeta describes the name of the reference itself within this component (not the name of the referenced component). But the version in ElementMeta specifies the version of the referenced component.
 	ElementMeta `json:",inline"`
 	// Component describes the remote name of the referenced object.
-	Component string `json:"componentName"`
+	Component string `json:"-"`
 	// Digest of the reference.
-	Digest Digest `json:"digest,omitempty"`
+	Digest Digest `json:"-"`
 }
 
 // SourceRef defines a reference to a source.
 // +k8s:deepcopy-gen=true
 type SourceRef struct {
 	// IdentitySelector provides selection means for sources.
-	IdentitySelector map[string]string `json:"identitySelector,omitempty"`
+	IdentitySelector map[string]string `json:"-"`
 	// Labels provided for further identification and extra selection rules.
-	Labels []Label `json:"labels,omitempty"`
+	Labels []Label `json:"-"`
 }
 
 // Meta defines the metadata of the component descriptor.
 // +k8s:deepcopy-gen=true
 type Meta struct {
 	// Version is the schema version of the component descriptor.
-	Version string `json:"schemaVersion"`
+	Version string `json:"-"`
 }
 
 // ObjectMeta defines an object that is uniquely identified by its name and version.
 // Additionally the object can be defined by an optional set of labels.
-// It is an implementation of the Element Identity as per
-// https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#element-identity
 // +k8s:deepcopy-gen=true
 type ObjectMeta struct {
 	// Name is the context unique name of the object.
-	Name string `json:"name"`
+	Name string `json:"-"`
 	// Version is the semver version of the object.
-	Version string `json:"version"`
+	Version string `json:"-"`
 	// Labels defines an optional set of additional labels
 	// describing the object.
 	// +optional
-	Labels []Label `json:"labels,omitempty"`
+	Labels []Label `json:"-"`
 }
 
 func (m *ObjectMeta) String() string {
@@ -174,12 +178,14 @@ func (m *ObjectMeta) String() string {
 }
 
 // ElementMeta defines an object with name and version containing labels.
+// It is an implementation of the Element Identity as per
+// https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#element-identity
 // +k8s:deepcopy-gen=true
 type ElementMeta struct {
 	ObjectMeta `json:",inline"`
 	// ExtraIdentity is the identity of an object.
-	// An additional label with key "name" is not allowed
-	ExtraIdentity runtime.Identity `json:"extraIdentity,omitempty"`
+	// An additional identity attribute with key "name" is not allowed
+	ExtraIdentity runtime.Identity `json:"-"`
 }
 
 func (m *ElementMeta) String() string {
@@ -212,7 +218,7 @@ func (m *ElementMeta) ToIdentity() runtime.Identity {
 type ComponentMeta struct {
 	ObjectMeta `json:",inline"`
 	// CreationTime is the creation time of the component version
-	CreationTime string `json:"creationTime,omitempty"`
+	CreationTime string `json:"-"`
 }
 
 // ToIdentity returns the runtime.Identity equivalent of the ElementMeta.
@@ -231,9 +237,9 @@ func (r *ComponentMeta) ToIdentity() runtime.Identity {
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#digest-info
 // +k8s:deepcopy-gen=true
 type Digest struct {
-	HashAlgorithm          string `json:"hashAlgorithm"`
-	NormalisationAlgorithm string `json:"normalisationAlgorithm"`
-	Value                  string `json:"value"`
+	HashAlgorithm          string `json:"-"`
+	NormalisationAlgorithm string `json:"-"`
+	Value                  string `json:"-"`
 }
 
 // Signature contains a list of signatures for the component.
@@ -241,29 +247,29 @@ type Digest struct {
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/02-signing.md
 // +k8s:deepcopy-gen=true
 type Signature struct {
-	Name      string        `json:"name"`
-	Digest    Digest        `json:"digest"`
-	Signature SignatureInfo `json:"signature"`
+	Name      string        `json:"-"`
+	Digest    Digest        `json:"-"`
+	Signature SignatureInfo `json:"-"`
 }
 
 // SignatureInfo defines details of a signature.
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#signature-info
 // +k8s:deepcopy-gen=true
 type SignatureInfo struct {
-	Algorithm string `json:"algorithm"`
-	Value     string `json:"value"`
-	MediaType string `json:"mediaType"`
-	Issuer    string `json:"issuer,omitempty"`
+	Algorithm string `json:"-"`
+	Value     string `json:"-"`
+	MediaType string `json:"-"`
+	Issuer    string `json:"-"`
 }
 
 // Label that can be set on various objects in the Open Component Model domain.
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#labels
 // +k8s:deepcopy-gen=true
 type Label struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Name  string `json:"-"`
+	Value string `json:"-"`
 	// Signing describes whether the label should be included into the signature
-	Signing bool `json:"signing,omitempty"`
+	Signing bool `json:"-"`
 }
 
 // NewExcludeFromSignatureDigest returns the special digest notation to indicate the resource content should not be part of the signature.
@@ -273,45 +279,4 @@ func NewExcludeFromSignatureDigest() *Digest {
 		NormalisationAlgorithm: ExcludeFromSignature,
 		Value:                  NoDigest,
 	}
-}
-
-// Timestamp is time rounded to seconds.
-// +k8s:deepcopy-gen=true
-type Timestamp struct {
-	Time `json:",inline"`
-}
-
-// MarshalJSON implements the json.Marshaler interface.
-// The time is a quoted string in RFC 3339 format, with sub-second precision added if present.
-func (t *Timestamp) MarshalJSON() ([]byte, error) {
-	if y := t.Year(); y < 0 || y >= 10000 {
-		// RFC 3339 is clear that years are 4 digits exactly.
-		// See golang.org/issue/4556#c15 for more discussion.
-		return nil, errors.New("Time.MarshalJSON: year outside of range [0,9999]")
-	}
-
-	b := make([]byte, 0, len(time.RFC3339)+2)
-	b = append(b, '"')
-	b = t.AppendFormat(b, time.RFC3339)
-	b = append(b, '"')
-	return b, nil
-}
-
-// UnmarshalJSON implements the json.Unmarshaler interface.
-// The time is expected to be a quoted string in RFC 3339 format.
-func (t *Timestamp) UnmarshalJSON(data []byte) error {
-	// Ignore null, like in the main JSON package.
-	if string(data) == "null" {
-		return nil
-	}
-
-	// Fractional seconds are handled implicitly by Parse.
-	tt, err := time.Parse(`"`+time.RFC3339+`"`, string(data))
-	if err != nil {
-		return err
-	}
-	*t = Timestamp{
-		NewTime(tt.UTC().Round(time.Second)),
-	}
-	return err
 }

@@ -18,7 +18,9 @@ gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 h1:YR8cESwS4TdDjEe65xsg0ogR
 gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250401070708-ba195f4dacb0 h1:KnxqixCa5AzJ3dEmwg5hlKX6VqcIv90ZDG3UMtTtZr8=
-ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250401070708-ba195f4dacb0/go.mod h1:TUdxsRw+7VDPAF4prlaXM12WokgW6rUTejfuVr1ZBGQ=
+ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250401121637-f0142bcd519a h1:ZkjSDSqudU33t1UfzKEZHKr9dSP4b5GrtjHL437LJRw=
+ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250401121637-f0142bcd519a/go.mod h1:sj+3m/i7OvmClcVURwN1mSOVSd5gOEdzFHX77cZbz0M=
+ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250401121637-f0142bcd519a h1:4M6d+k4nrAP6ks2QhlUm4N3bK34ljZUpwJd8ZBYKzJY=
+ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250401121637-f0142bcd519a/go.mod h1:TUdxsRw+7VDPAF4prlaXM12WokgW6rUTejfuVr1ZBGQ=
 sigs.k8s.io/yaml v1.4.0 h1:Mk1wCc2gy/F0THH0TAp1QYyJNzRm2KCLy3o5ASXVI5E=
 sigs.k8s.io/yaml v1.4.0/go.mod h1:Ejl7/uTz7PSA4eKMyQCUTnhZYNmLIl+5c2lQPGR2BPY=
