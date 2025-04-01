@@ -46,7 +46,7 @@ tasks:
         task: bindings/go/{{.ITEM}}:test
 
   go_modules:
-    desc: ""
+    desc: "List all Go Modules available in this project"
     cmd: echo "{{ .GO_MODULES }}"
     silent: true
 
