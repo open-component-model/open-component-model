@@ -37,7 +37,12 @@ import (
 // Annotations for Manifes
 const (
 	AnnotationOCMComponentVersion = "software.ocm.componentversion"
-	AnnotationOCMCreator          = "software.ocm.creator"
+
+	// AnnotationOCMCreator is an annotation that indicates the creator of the component version.
+	// It is used historically by the OCM CLI to indicate the creator of the component version.
+	// It is usually only a meta information, and has no semantic meaning beyond identifying a creating
+	// process or user agent. as such it CAN be correlated to a user agent header in http.
+	AnnotationOCMCreator = "software.ocm.creator"
 )
 
 // Media type constants for component descriptors
