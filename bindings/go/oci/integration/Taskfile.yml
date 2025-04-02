@@ -4,13 +4,6 @@ vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
 
 tasks:
-  tmp:
-    cmds:
-      - mkdir -p tmp
-    status:
-      - test -d tmp
   test/integration:
     cmds:
-      - 'go test -run "{{ .INTEGRATION_TEST_IDENTIFIER }}" -v -coverprofile=tmp/coverage.out ./...'
-    deps:
-      - tmp
+      - 'go test -run "{{ .INTEGRATION_TEST_IDENTIFIER }}" -v ./...'

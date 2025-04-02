@@ -24,6 +24,7 @@ import (
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -455,12 +456,12 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 
 	target := tar.NewOCILayoutWriter(zippedBuf)
 	defer func() {
-		if err = target.Close(); err != nil {
-			err = errors.Join(err, fmt.Errorf("failed to close tar writer: %w", err))
+		if terr := target.Close(); terr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to close tar writer: %w", terr))
 			return
 		}
-		if err = zippedBuf.Close(); err != nil {
-			err = errors.Join(err, fmt.Errorf("failed to close gzip writer: %w", err))
+		if zerr := zippedBuf.Close(); zerr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to close gzip writer: %w", zerr))
 			return
 		}
 	}()
@@ -617,14 +618,29 @@ func copyResource(ctx context.Context, srcPath, srcRef, targetRef string, store 
 		return ociImageSpecV1.Descriptor{}, err
 	}
 
-	return oras.Copy(ctx, src, srcRef, store, targetRef, oras.CopyOptions{
+	// in some sources (such as OCI Layouts) we might have non-absolute reference names. In this case
+	// it is worthwile to try to resolve the reference relatively as well.
+	//
+	// E.g. ghcr.io/acme/helloworld:latest might be stored in an OCI Layout under "latest"
+	if _, err := src.Resolve(ctx, srcRef); err != nil {
+		parsedSrcRef, pErr := registry.ParseReference(srcRef)
+		if pErr != nil {
+			return ociImageSpecV1.Descriptor{}, errors.Join(err, pErr)
+		}
+		if _, rErr := src.Resolve(ctx, parsedSrcRef.Reference); rErr != nil {
+			return ociImageSpecV1.Descriptor{}, errors.Join(err, rErr)
+		}
+		srcRef = parsedSrcRef.Reference
+	}
+
+	desc, err := oras.Copy(ctx, src, srcRef, store, targetRef, oras.CopyOptions{
 		CopyGraphOptions: oras.CopyGraphOptions{
 			PreCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
 				slog.DebugContext(ctx, "uploading", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
 				return nil
 			},
 			PostCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.DebugContext(ctx, "uploaded", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
+				slog.InfoContext(ctx, "uploaded", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
 				return nil
 			},
 			OnCopySkipped: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
@@ -633,6 +649,11 @@ func copyResource(ctx context.Context, srcPath, srcRef, targetRef string, store 
 			},
 		},
 	})
+
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy resource from %q to %q: %w", srcRef, targetRef, err)
+	}
+	return desc, nil
 }
 
 // findMatchingLayer finds a layer in the manifest that matches the given identity.

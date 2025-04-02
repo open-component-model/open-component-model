@@ -2,14 +2,18 @@ package oci
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"slices"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -54,14 +58,16 @@ func (s *Store) ComponentVersionReference(component, version string) string {
 	return fmt.Sprintf("component-descriptors/%s:%s", component, version)
 }
 
-// parseReference splits a reference string into repository and tag parts.
-// Returns an error if the reference format is invalid.
-func parseReference(reference string) (repo, tag string, err error) {
-	parts := strings.SplitN(reference, ":", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid reference: %s", reference)
+// parseReference parses an OCI reference
+// It is a special form of registry.ParseReference which
+// adds a default registry prefix if the reference is missing a registry or repository.
+// This is because CTF stores do not necessarily need a registry URL context (as they are local archives).
+func parseReference(reference string) (resolved registry.Reference, err error) {
+	ref, err := registry.ParseReference(reference)
+	if err != nil && strings.Contains(err.Error(), "missing registry or repository") {
+		ref, err = registry.ParseReference(fmt.Sprintf("CTF/%s", reference))
 	}
-	return parts[0], parts[1], nil
+	return ref, err
 }
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
@@ -77,8 +83,14 @@ func (s *Store) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io
 // Exists checks if a blob exists in the CTF archive based on its descriptor.
 // Returns true if the blob exists, false otherwise.
 func (s *Store) Exists(ctx context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
-	b, err := s.archive.GetBlob(ctx, target.Digest.String())
-	return b != nil && err == nil, nil
+	blobs, err := s.archive.ListBlobs(ctx)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("unable to list blobs: %w", err)
+	}
+	return slices.Contains(blobs, target.Digest.String()), nil
 }
 
 // Push stores a new blob in the CTF archive with the expected descriptor.
@@ -88,13 +100,16 @@ func (s *Store) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, co
 }
 
 // Resolve resolves a reference string to its corresponding descriptor in the CTF archive.
-// The reference should be in the format "repository:tag".
+// The reference should be in the format "repository:tag" so it will be resolved against the index.
+// If a full reference is given, it will be resolved against the blob store immediately.
 // Returns the descriptor if found, or an error if the reference is invalid or not found.
 func (s *Store) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
-	repo, tag, err := parseReference(reference)
+	ref, err := parseReference(reference)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
+
+	var b blob.ReadOnlyBlob
 
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
@@ -102,19 +117,28 @@ func (s *Store) Resolve(ctx context.Context, reference string) (ociImageSpecV1.D
 	}
 
 	for _, artifact := range idx.GetArtifacts() {
-		if artifact.Repository != repo || artifact.Tag != tag {
+		if artifact.Repository != ref.Repository || artifact.Tag != ref.Reference {
 			continue
 		}
 
 		var size int64
-		if b, err := s.archive.GetBlob(ctx, artifact.Digest); err == nil {
+		if b, err = s.archive.GetBlob(ctx, artifact.Digest); err == nil {
 			if sizeAware, ok := b.(blob.SizeAware); ok {
 				size = sizeAware.Size()
 			}
+		} else {
+			return ociImageSpecV1.Descriptor{}, err
+		}
+
+		// old CTFs do not have a mediaType field set at all.
+		// we can thus assume that any CTF we encounter in the wild that does not have this media type field
+		// is actually a CTF generated with OCMv1. in this case we know it is an embedded ArtifactSet
+		if artifact.MediaType == "" {
+			artifact.MediaType = ctf.ArtifactSetMediaType
 		}
 
 		return ociImageSpecV1.Descriptor{
-			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			MediaType: artifact.MediaType,
 			Digest:    digest.Digest(artifact.Digest),
 			Size:      size,
 		}, nil
@@ -127,9 +151,13 @@ func (s *Store) Resolve(ctx context.Context, reference string) (ociImageSpecV1.D
 // The reference should be in the format "repository:tag".
 // This operation updates the index to maintain the mapping between references and their corresponding descriptors.
 func (s *Store) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
-	repo, tag, err := parseReference(reference)
+	ref, err := parseReference(reference)
 	if err != nil {
 		return err
+	}
+
+	if isTag := ref.ValidateReferenceAsTag() == nil; !isTag {
+		return fmt.Errorf("invalid reference, must be a valid taggable reference: %s", reference)
 	}
 
 	idx, err := s.archive.GetIndex(ctx)
@@ -138,9 +166,10 @@ func (s *Store) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, referen
 	}
 
 	meta := v1.ArtifactMetadata{
-		Repository: repo,
-		Tag:        tag,
+		Repository: ref.Repository,
+		Tag:        ref.Reference,
 		Digest:     desc.Digest.String(),
+		MediaType:  desc.MediaType,
 	}
 	slog.Info("tagging artifact in index", "meta", meta)
 
