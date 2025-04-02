@@ -35,9 +35,9 @@ type InMemoryLocalBlobMemory struct {
 	blobs map[string][]ociImageSpecV1.Descriptor
 }
 
-// NewLocalBlobMemory creates a new InMemoryLocalBlobMemory instance with an initialized
+// NewInMemoryLocalBlobMemory creates a new InMemoryLocalBlobMemory instance with an initialized
 // map for storing blobs. This is the recommended way to create a new instance.
-func NewLocalBlobMemory() *InMemoryLocalBlobMemory {
+func NewInMemoryLocalBlobMemory() *InMemoryLocalBlobMemory {
 	return &InMemoryLocalBlobMemory{
 		blobs: make(map[string][]ociImageSpecV1.Descriptor),
 	}

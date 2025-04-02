@@ -44,7 +44,7 @@
 // Usage Example:
 //
 //	resolver := NewResolver(...)
-//	memory := NewLocalBlobMemory()
+//	memory := NewInMemoryLocalBlobMemory()
 //	repo := RepositoryFromResolverAndMemory(resolver, memory)
 //
 //	// Add a component version

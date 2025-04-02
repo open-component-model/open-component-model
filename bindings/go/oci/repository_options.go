@@ -19,6 +19,10 @@ type RepositoryOptions struct {
 	// Resolver resolves component version references to OCI stores.
 	// This is required and must be provided.
 	Resolver Resolver
+
+	// Creator is the creator of new Component Versions.
+	// See AnnotationOCMCreator for details
+	Creator string
 }
 
 // RepositoryOption is a function that modifies RepositoryOptions.
@@ -63,7 +67,11 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	}
 
 	if options.LocalBlobMemory == nil {
-		options.LocalBlobMemory = NewLocalBlobMemory()
+		options.LocalBlobMemory = NewInMemoryLocalBlobMemory()
+	}
+
+	if options.Creator == "" {
+		options.Creator = "Open Component Model Go Reference Library"
 	}
 
 	return &Repository{

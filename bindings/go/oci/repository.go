@@ -34,8 +34,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Annotations for Manifes
+// Annotations for OCI Image Manifests
 const (
+	// AnnotationOCMComponentVersion is an annotation that indicates the component version.
+	// It is an annotation that is used by OCM for a long time and is mainly set for compatibility reasons.
+	// It does not serve any semantic meaning beyond declaring the component version with a fixed
+	// prefix.
 	AnnotationOCMComponentVersion = "software.ocm.componentversion"
 
 	// AnnotationOCMCreator is an annotation that indicates the creator of the component version.
@@ -150,19 +154,8 @@ type Repository struct {
 
 	// resolver resolves component version references to OCI stores.
 	resolver Resolver
-}
 
-// RepositoryFromResolverAndMemory creates a new Repository instance.
-// This is a convenience function that uses the new options pattern.
-func RepositoryFromResolverAndMemory(resolver Resolver, memory LocalBlobMemory) *Repository {
-	repo, err := NewRepository(
-		WithResolver(resolver),
-		WithLocalBlobMemory(memory),
-	)
-	if err != nil {
-		panic(err)
-	}
-	return repo
+	creatorAnnotation string
 }
 
 var _ ComponentVersionRepository = (*Repository)(nil)
@@ -322,7 +315,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		Config:    componentConfigDescriptor,
 		Annotations: map[string]string{
 			AnnotationOCMComponentVersion: fmt.Sprintf("component-descriptors/%s:%s", component, version),
-			AnnotationOCMCreator:          "OCM OCI Repository Plugin (POCM)",
+			AnnotationOCMCreator:          repo.creatorAnnotation,
 		},
 		Layers: append(
 			[]ociImageSpecV1.Descriptor{descriptorOCIDescriptor},

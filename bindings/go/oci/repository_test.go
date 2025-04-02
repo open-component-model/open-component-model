@@ -35,6 +35,12 @@ func init() {
 	v2.MustAddToScheme(testScheme)
 }
 
+func Repository(t *testing.T, options ...oci.RepositoryOption) *oci.Repository {
+	repo, err := oci.NewRepository(options...)
+	require.NoError(t, err, "Failed to create repository")
+	return repo
+}
+
 // MockResolver implements the Resolver interface for testing
 type MockResolver struct {
 	store *memory.Store
@@ -58,7 +64,7 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 	mockStore := memory.New()
 
 	mockResolver := &MockResolver{store: mockStore}
-	repo := oci.RepositoryFromResolverAndMemory(mockResolver, oci.NewLocalBlobMemory())
+	repo := Repository(t, oci.WithResolver(mockResolver), oci.WithLocalBlobMemory(oci.NewInMemoryLocalBlobMemory()))
 
 	// Create a test component descriptor
 	desc := &descriptor.Descriptor{
@@ -92,7 +98,7 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 	ctx := context.Background()
 	mockStore := memory.New()
 	mockResolver := &MockResolver{store: mockStore}
-	repo := oci.RepositoryFromResolverAndMemory(mockResolver, oci.NewLocalBlobMemory())
+	repo := Repository(t, oci.WithResolver(mockResolver), oci.WithLocalBlobMemory(oci.NewInMemoryLocalBlobMemory()))
 
 	// Test getting non-existent component version
 	desc, err := repo.GetComponentVersion(ctx, "test-component", "1.0.0")
@@ -268,7 +274,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			ctx := t.Context()
 			mockStore := memory.New()
 			mockResolver := &MockResolver{store: mockStore}
-			repo := oci.RepositoryFromResolverAndMemory(mockResolver, oci.NewLocalBlobMemory())
+			repo := Repository(t, oci.WithResolver(mockResolver), oci.WithLocalBlobMemory(oci.NewInMemoryLocalBlobMemory()))
 
 			// Create a test component descriptor
 			desc := &descriptor.Descriptor{
@@ -360,7 +366,7 @@ func TestRepository_DownloadResource(t *testing.T) {
 			mockResolver := &MockResolver{store: mockStore}
 
 			// Create a repository with the mock resolver
-			repo := oci.RepositoryFromResolverAndMemory(mockResolver, oci.NewLocalBlobMemory())
+			repo := Repository(t, oci.WithResolver(mockResolver), oci.WithLocalBlobMemory(oci.NewInMemoryLocalBlobMemory()))
 
 			// Create a temporary OCI store
 			buf := bytes.NewBuffer(nil)
