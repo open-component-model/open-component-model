@@ -167,7 +167,7 @@ func (repo *Repository) AddLocalResource(
 	component, version string,
 	resource *descriptor.Resource,
 	content blob.ReadOnlyBlob,
-) (newRes *descriptor.Resource, err error) {
+) (_ *descriptor.Resource, err error) {
 	done := logOperation(ctx, "add local resource",
 		slog.String("component", component),
 		slog.String("version", version),
@@ -187,12 +187,12 @@ func (repo *Repository) AddLocalResource(
 
 	contentSizeAware, ok := content.(blob.SizeAware)
 	if !ok {
-		return nil, fmt.Errorf("content does not implement blob.SizeAware interface, size cannot be inferred")
+		return nil, errors.New("content does not implement blob.SizeAware interface, size cannot be inferred")
 	}
 
 	size := contentSizeAware.Size()
 	if size == blob.SizeUnknown {
-		return nil, fmt.Errorf("content size is unknown")
+		return nil, errors.New("content size is unknown")
 	}
 
 	layer, err := layerFromResourceIdentityAndLocalBlob(access, size, resource)
@@ -230,10 +230,10 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	defer done(err)
 
 	if component == "" || version == "" {
-		return nil, fmt.Errorf("component and version must not be empty")
+		return nil, errors.New("component and version must not be empty")
 	}
 	if len(identity) == 0 {
-		return nil, fmt.Errorf("identity must not be empty")
+		return nil, errors.New("identity must not be empty")
 	}
 
 	reference := repo.resolver.ComponentVersionReference(component, version)
@@ -474,7 +474,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	describedBlob := NewDescriptorBlob(&buf, desc)
 	mediaType, ok := describedBlob.MediaType()
 	if !ok {
-		return nil, fmt.Errorf("failed to get media type")
+		return nil, errors.New("failed to get media type")
 	}
 	return NewResourceBlob(res, describedBlob, mediaType), nil
 }
@@ -527,7 +527,7 @@ func getOCIImageManifest(ctx context.Context, store Store, reference string) (ma
 // updateResourceAccess updates the resource access with the new layer information.
 func updateResourceAccess(resource *descriptor.Resource, layer ociImageSpecV1.Descriptor) error {
 	if resource == nil {
-		return fmt.Errorf("resource must not be nil")
+		return errors.New("resource must not be nil")
 	}
 
 	resource.Access = &descriptor.LocalBlob{
@@ -649,7 +649,6 @@ func copyResource(ctx context.Context, srcPath, srcRef, targetRef string, store 
 			},
 		},
 	})
-
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy resource from %q to %q: %w", srcRef, targetRef, err)
 	}
