@@ -28,15 +28,6 @@ func TestURLPathResolver_SetClient(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, store)
 }
-
-func TestURLPathResolver_BaseReference(t *testing.T) {
-	resolver := NewURLPathResolver("http://example.com")
-	component := "test-component"
-	expected := "http://example.com/component-descriptors/test-component"
-	result := resolver.BaseReference(component)
-	assert.Equal(t, expected, result)
-}
-
 func TestURLPathResolver_ComponentVersionReference(t *testing.T) {
 	resolver := NewURLPathResolver("http://example.com")
 	component := "test-component"

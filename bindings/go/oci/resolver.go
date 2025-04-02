@@ -3,7 +3,6 @@ package oci
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"oras.land/oras-go/v2/registry/remote"
 )
@@ -27,25 +26,8 @@ func (resolver *URLPathResolver) SetClient(client remote.Client) {
 	resolver.BaseClient = client
 }
 
-func (resolver *URLPathResolver) BaseReference(component string) string {
-	return fmt.Sprintf("%s/component-descriptors/%s", resolver.BaseURL, component)
-}
-
 func (resolver *URLPathResolver) ComponentVersionReference(component, version string) string {
-	if component == "" {
-		panic("component must not be empty")
-	}
-	if version == "" {
-		panic("version must not be empty")
-	}
-	// Validate that component and version don't contain invalid characters
-	if strings.ContainsAny(component, ":/") {
-		panic("component must not contain ':' or '/' characters")
-	}
-	if strings.ContainsAny(version, ":/") {
-		panic("version must not contain ':' or '/' characters")
-	}
-	return fmt.Sprintf("%s:%s", resolver.BaseReference(component), version)
+	return fmt.Sprintf("%s/component-descriptors/%s:%s", resolver.BaseURL, component, version)
 }
 
 func (resolver *URLPathResolver) StoreForReference(_ context.Context, reference string) (Store, error) {
