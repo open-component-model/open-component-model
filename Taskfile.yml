@@ -37,36 +37,38 @@ includes:
     optional: true
     taskfile: ./bindings/go/oci/integration/Taskfile.yml
     dir: ./bindings/go/oci/integration
-
+  cli:
+    optional: true
+    taskfile: ./cli/Taskfile.yml
+    dir: ./cli
 
 vars:
   GO_MODULES:
-    sh: find {{ .ROOT_DIR }}/bindings/go -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/bindings/go/||'
-  TESTABLE: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test\")) | .name | rtrimstr(\":test\")'"
-  INTEGRATION_TESTABLE: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test/integration\")) | .name | rtrimstr(\":test/integration\")'"
+    sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'
 
 
 tasks:
-  testable:
+  default:
+    deps: ["cli:build"]
+
+  go_modules:
+    desc: "List all Go Modules available in this project"
+    cmd: echo "{{ .GO_MODULES }}"
     silent: true
-    cmd: "{{ .TESTABLE }}"
+
   test:
     desc: "Run all tests in the project"
     vars:
       TASKS:
-        sh: "{{ .TESTABLE }}"
+        sh: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test\")) | .name | rtrimstr(\":test\")'"
     cmds:
       - for: { var: TASKS }
         task: '{{.ITEM}}:test'
-
-  testable/integration:
-    silent: true
-    cmd: "{{ .INTEGRATION_TESTABLE }}"
   test/integration:
     desc: "Run all integration tests in the project, possibly requiring external systems"
     vars:
       TASKS:
-        sh: "{{ .INTEGRATION_TESTABLE }}"
+        sh: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test/integration\")) | .name | rtrimstr(\":test/integration\")'"
     cmds:
       - for: { var: TASKS }
         task: '{{.ITEM}}:test/integration'
@@ -78,7 +80,7 @@ tasks:
     cmds:
       - go work init
       - for: { var: GO_MODULES }
-        cmd: 'go work use bindings/go/{{.ITEM}}'
+        cmd: 'go work use {{.ITEM}}'
       - go work sync
 
   generate:
@@ -86,3 +88,7 @@ tasks:
     cmds:
       - task: 'bindings/go/generator:ocmtypegen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
+      - task: 'cli:generate/docs'
+        vars:
+          CLI_DOCUMENTATION_MODE: "markdown"
+          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/docs/reference/cli'

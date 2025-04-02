@@ -24,29 +24,26 @@ jobs:
       integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
     env:
-      DIR: bindings/go
+      DIR: ${{ github.workspace }}
     steps:
-      - uses: actions/checkout@v4
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
       - name: Discover Go Modules
         id: discover
         run: |
-          MODULES="$(find ${{ env.DIR }} -name "go.mod" -exec dirname {} \;)"
-          
+          MODULES="$(task go_modules)"
           MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
           FILTERS="$(echo "$MODULES" | jq -rR -s -c 'split("\n") | map(select(. != "")) | map("\(.):\n - \"\(sub("^";""))/**\"") | join ("\n")')"
           
           echo "Detected modules: $MODULES"
           echo "Generated modules JSON: $MODULES_JSON"
-          echo "Testable modules JSON: $TEST_MODULES_JSON"
           echo "Generated filters: $FILTERS"
           
           echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT 
-          echo "test_modules_json=$TEST_MODULES_JSON" >> $GITHUB_OUTPUT 
           
           {
             echo 'filters<<EOF'
@@ -159,6 +156,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: golangci-lint ${{ matrix.modules }}
         uses: golangci/golangci-lint-action@v6
         with:
@@ -214,6 +212,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: Run Tests
         run: task ${{ matrix.module }}:test
 
@@ -260,11 +259,6 @@ jobs:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            ${{ matrix.project }}
-            bindings/go/generator
-            Taskfile.yml
       - name: Install Task
         uses: arduino/setup-task@v2
         with:

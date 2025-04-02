@@ -11,10 +11,10 @@ tasks:
     cmds:
       - for: { var: GO_MODULES }
         cmd: |
-          cd {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} && \
+          cd {{.ITEM}} && \
           {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }} \
           --output-file "zz_generated.deepcopy.go" \
-          {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
+          ./...
 
   deepcopy-gen/install:
     desc: "Install {{.PKG}} at {{ .DEEPCOPY_GEN_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
@@ -35,12 +35,12 @@ tasks:
     cmds:
       - for: { var: GO_MODULES }
         cmd: |
-          cd {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} && 
+          cd {{.ITEM}} && 
           {{ .ROOT_DIR }}/tmp/bin/golangci-lint run \
             --timeout 10m \
             --config={{ .ROOT_DIR }}/.github/config/golangci.yml \
-            --path-prefix {{ .ROOT_DIR }}/bindings/go/{{.ITEM}} \
-            {{ .CLI_ARGS }} {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}/...
+            --path-prefix {{.ITEM}} \
+            {{ .CLI_ARGS }} ./...          
             
 
   golangci-lint/install:
