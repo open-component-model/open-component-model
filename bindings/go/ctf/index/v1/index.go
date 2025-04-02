@@ -40,6 +40,8 @@ type ArtifactMetadata struct {
 	// The Digest of the artifact. This is the digest that is used to reference the artifact.
 	// Points to the blob in the CTF that contains the artifact.
 	Digest string `json:"digest,omitempty"`
+	// MediaType is the media type of the artifact. This is the media type that is used to reference the artifact.
+	MediaType string `json:"mediaType,omitempty"`
 }
 
 // DecodeIndex reads an Index from the provided reader.

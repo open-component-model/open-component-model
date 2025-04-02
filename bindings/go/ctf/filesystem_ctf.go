@@ -154,6 +154,14 @@ func (c *FileSystemCTF) GetBlob(_ context.Context, digest string) (blob.ReadOnly
 	if err != nil {
 		return nil, err
 	}
+	path := filepath.Join(BlobsDirectoryName, file)
+	if _, err := c.fs.Stat(path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("blob %s not found: %w", digest, err)
+		}
+		return nil, fmt.Errorf("unable to stat blob: %w", err)
+	}
+
 	b := NewCASFileBlob(c.fs, filepath.Join(BlobsDirectoryName, file))
 	b.SetPrecalculatedDigest(digest)
 	return b, nil
