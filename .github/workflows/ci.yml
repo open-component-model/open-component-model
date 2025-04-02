@@ -166,11 +166,6 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     name: "Code Generation"
-    needs: discover_modules
-    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
-    strategy:
-      matrix:
-        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Task
@@ -182,8 +177,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
-      - name: Initialize go.work
-        run: task init/go.work
       - name: Run Code Generation
         run: task generate
       - name: Ensure Clean Target Repository
