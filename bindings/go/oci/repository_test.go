@@ -194,10 +194,10 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				},
 				Type: "test-type",
 				Access: &runtime.Raw{
-					Type: runtime.NewType(v2.LocalBlobAccessTypeGroup, v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 					Data: []byte(fmt.Sprintf(
 						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
-						runtime.NewType(v2.LocalBlobAccessTypeGroup, v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 						digest.FromString("platform specific content").String(),
 					)),
 				},
