@@ -252,11 +252,6 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     name: "Code Generation"
-    needs: discover_modules
-    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
-    strategy:
-      matrix:
-        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Task

@@ -41,6 +41,8 @@ type ArtifactMetadata struct {
 	// Points to the blob in the CTF that contains the artifact.
 	Digest string `json:"digest,omitempty"`
 	// MediaType is the media type of the artifact. This is the media type that is used to reference the artifact.
+	// The MediaType is optionally added and can be left empty. In this case it is assumed that the artifact
+	// is of an arbitrary type.
 	MediaType string `json:"mediaType,omitempty"`
 }
 
