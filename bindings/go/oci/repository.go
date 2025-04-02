@@ -248,7 +248,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		return nil, fmt.Errorf("failed to get store for reference: %w", err)
 	}
 
-	manifest, err := getManifest(ctx, store, reference)
+	manifest, err := getOCIImageManifest(ctx, store, reference)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
@@ -366,7 +366,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 		return nil, fmt.Errorf("failed to get store for reference: %w", err)
 	}
 
-	manifest, err := getManifest(ctx, store, reference)
+	manifest, err := getOCIImageManifest(ctx, store, reference)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
@@ -384,7 +384,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	}
 
 	// Read component descriptor
-	descriptorRaw, err := store.Fetch(ctx, componentConfig.ComponentDescriptorLayer)
+	descriptorRaw, err := store.Fetch(ctx, *componentConfig.ComponentDescriptorLayer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
@@ -506,8 +506,8 @@ func copyResourceToOCILayout(ctx context.Context, store Store, srcRef string, st
 	})
 }
 
-// getManifest retrieves the manifest for a given reference from the store.
-func getManifest(ctx context.Context, store Store, reference string) (manifest ociImageSpecV1.Manifest, err error) {
+// getOCIImageManifest retrieves the manifest for a given reference from the store.
+func getOCIImageManifest(ctx context.Context, store Store, reference string) (manifest ociImageSpecV1.Manifest, err error) {
 	manifestDigest, err := store.Resolve(ctx, reference)
 	if err != nil {
 		return ociImageSpecV1.Manifest{}, fmt.Errorf("failed to resolve reference %q: %w", reference, err)

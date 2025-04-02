@@ -14,7 +14,7 @@ const MediaTypeComponentConfig = "application/vnd.ocm.software/ocm.component.con
 // ComponentConfig is a Component-Descriptor OCI configuration that is used to componentVersionStore the reference to the
 // (pseudo-)layer used to componentVersionStore the Component-Descriptor in.
 type ComponentConfig struct {
-	ComponentDescriptorLayer ociImageSpecV1.Descriptor `json:"componentDescriptorLayer,omitempty"`
+	ComponentDescriptorLayer *ociImageSpecV1.Descriptor `json:"componentDescriptorLayer,omitempty"`
 }
 
 // createComponentConfig creates a ComponentConfig from a ComponentDescriptorLayer descriptor.
@@ -22,7 +22,7 @@ type ComponentConfig struct {
 func createComponentConfig(componentDescriptorLayerOCIDescriptor ociImageSpecV1.Descriptor) (encoded []byte, descriptor ociImageSpecV1.Descriptor, err error) {
 	// Create and upload the component configuration.
 	componentConfig := ComponentConfig{
-		ComponentDescriptorLayer: componentDescriptorLayerOCIDescriptor,
+		ComponentDescriptorLayer: &componentDescriptorLayerOCIDescriptor,
 	}
 	componentConfigRaw, err := json.Marshal(componentConfig)
 	if err != nil {
