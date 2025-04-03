@@ -164,6 +164,7 @@ func TestResolve(t *testing.T) {
 		Repository: "test-repo",
 		Tag:        "test-tag",
 		Digest:     digestStr,
+		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
 	})
 	require.NoError(t, ctf.SetIndex(ctx, index))
 

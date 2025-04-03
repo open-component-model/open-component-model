@@ -19,6 +19,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"golang.org/x/crypto/bcrypt"
 	orasoci "oras.land/oras-go/v2/content/oci"
@@ -64,7 +65,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 			"REGISTRY_VALIDATION_DISABLED": "true",
 			"REGISTRY_LOG_LEVEL":           "debug",
 		}),
-		testcontainers.WithLogger(testcontainers.TestLogger(t)),
+		testcontainers.WithLogger(log.TestLogger(t)),
 	)
 	r.NoError(err)
 	t.Cleanup(func() {
