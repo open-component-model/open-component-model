@@ -90,7 +90,7 @@ func TestFetch(t *testing.T) {
 		reader, err := store.Fetch(ctx, nonExistentDesc)
 		assert.Error(t, err)
 		assert.Nil(t, reader)
-		assert.Contains(t, err.Error(), "unable to open file")
+		assert.Contains(t, err.Error(), "not found")
 	})
 }
 
