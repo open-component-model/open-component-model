@@ -235,7 +235,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # we have a self reference here because CodeQL does introspection on the step
           sparse-checkout: |
+            .github/workflows/ci.yml
             ${{ matrix.project }}
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
