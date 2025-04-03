@@ -100,14 +100,13 @@ func (c *closeableVerifyReader) Read(p []byte) (n int, err error) {
 }
 
 func (c *closeableVerifyReader) Close() error {
+	if err := c.reader.Verify(); err != nil {
+		return fmt.Errorf("failed to verify digest verification reader in descriptor blob: %w", err)
+	}
 	if c.close != nil {
 		if err := c.close(); err != nil {
 			return fmt.Errorf("failed to close digest verification reader in descriptor blob: %w", err)
 		}
 	}
-	if err := c.reader.Verify(); err != nil {
-		return fmt.Errorf("failed to verify digest verification reader in descriptor blob: %w", err)
-	}
-
 	return nil
 }

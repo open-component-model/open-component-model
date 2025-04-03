@@ -187,12 +187,12 @@ func (repo *Repository) AddLocalResource(
 	reference := repo.resolver.ComponentVersionReference(component, version)
 	store, err := repo.resolver.StoreForReference(ctx, reference)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get store for reference: %w", err)
 	}
 
 	access, err := getLocalBlobAccess(repo.scheme, resource)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get local blob access: %w", err)
 	}
 
 	contentSizeAware, ok := content.(blob.SizeAware)
@@ -212,19 +212,19 @@ func (repo *Repository) AddLocalResource(
 
 	layerData, err := content.ReadCloser()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get content reader: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, layerData.Close())
 	}()
 
 	if err := store.Push(ctx, layer, io.NopCloser(layerData)); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to push layer: %w", err)
 	}
 
 	repo.localBlobMemory.AddBlob(reference, layer)
 	if err := updateResourceAccess(resource, layer); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to update resource access: %w", err)
 	}
 
 	return resource, nil
@@ -259,7 +259,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 
 	layer, err := findMatchingLayer(manifest, identity)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to find matching layer: %w", err)
 	}
 
 	data, err := store.Fetch(ctx, layer)

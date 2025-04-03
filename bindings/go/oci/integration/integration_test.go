@@ -31,10 +31,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	v1 "ocm.software/open-component-model/bindings/go/oci/access/v1"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -81,10 +83,6 @@ func Test_Integration_OCIRepository(t *testing.T) {
 
 	client := createAuthClient(registryAddress, testUsername, password)
 
-	t.Run("basic connectivity and resolution failure", func(t *testing.T) {
-		testResolverConnectivity(t, registryAddress, reference("target:latest"), client)
-	})
-
 	resolver := oci.NewURLPathResolver(registryAddress)
 	resolver.SetClient(client)
 	resolver.PlainHTTP = true
@@ -92,11 +90,20 @@ func Test_Integration_OCIRepository(t *testing.T) {
 	repo, err := oci.NewRepository(oci.WithResolver(resolver))
 	r.NoError(err)
 
+	t.Run("basic connectivity and resolution failure", func(t *testing.T) {
+		testResolverConnectivity(t, registryAddress, reference("target:latest"), client)
+	})
+
 	t.Run("basic upload and download of a component version", func(t *testing.T) {
 		uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
 	})
+
 	t.Run("basic upload and download of a barebones resource that is compatible with OCI registries", func(t *testing.T) {
 		uploadDownloadBarebonesOCIImage(t, repo, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
+	})
+
+	t.Run("local resource upload and download", func(t *testing.T) {
+		uploadDownloadLocalResource(t, repo, "test-component", "v1.0.0")
 	})
 }
 
@@ -112,6 +119,14 @@ func Test_Integration_CTF(t *testing.T) {
 
 	t.Run("basic upload and download of a component version", func(t *testing.T) {
 		uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+	})
+
+	t.Run("basic upload and download of a barebones resource that is compatible with OCI registries", func(t *testing.T) {
+		uploadDownloadBarebonesOCIImage(t, repo, "ghcr.io/test:v1.0.0", "new-test:v1.0.0")
+	})
+
+	t.Run("local resource upload and download", func(t *testing.T) {
+		uploadDownloadLocalResource(t, repo, "test-component", "v1.0.0")
 	})
 }
 
@@ -305,4 +320,84 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref string) ([]byte, *
 	return buf.Bytes(), &v1.OCIImage{
 		ImageReference: ref,
 	}
+}
+
+func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	// Create a simple component descriptor
+	cd := &descriptor.Descriptor{
+		Meta: descriptor.Meta{
+			Version: "v2",
+		},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    name,
+					Version: version,
+				},
+			},
+		},
+	}
+
+	// Create test data
+	testData := []byte("test data")
+	testDataDigest := digest.FromBytes(testData)
+
+	// Create test resource
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource",
+				Version: "v1.0.0",
+			},
+			ExtraIdentity: map[string]string{
+				"type": "test.resource.type",
+			},
+		},
+		Type:     "test.resource.type",
+		Relation: descriptor.LocalRelation,
+		Access: &v2.LocalBlob{
+			Type: runtime.Type{
+				Name:    v2.LocalBlobAccessType,
+				Version: v2.LocalBlobAccessTypeVersion,
+			},
+			MediaType:      "application/json",
+			LocalReference: testDataDigest.String(),
+		},
+	}
+
+	// Add resource to component descriptor
+	cd.Component.Resources = append(cd.Component.Resources, *resource)
+
+	// Create blob from test data
+	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
+	testBlob.SetMediaType("application/json")
+
+	// Add local resource
+	newRes, err := repo.AddLocalResource(ctx, name, version, resource, testBlob)
+	r.NoError(err)
+	r.NotNil(newRes)
+
+	// Add component version after
+	err = repo.AddComponentVersion(ctx, cd)
+	r.NoError(err)
+
+	// Get local resource
+	downloadedBlob, err := repo.GetLocalResource(ctx, name, version, resource.ElementMeta.ToIdentity())
+	r.NoError(err)
+
+	// Read downloaded data
+	reader, err := downloadedBlob.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() {
+		r.NoError(reader.Close())
+	})
+
+	downloadedData, err := io.ReadAll(reader)
+	r.NoError(err)
+
+	// Verify data matches
+	r.Equal(testData, downloadedData)
 }

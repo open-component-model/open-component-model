@@ -330,7 +330,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 	}
 }
 
-func TestRepository_DownloadResource(t *testing.T) {
+func TestRepository_DownloadUploadResource(t *testing.T) {
 	tests := []struct {
 		name     string
 		resource *descriptor.Resource
