@@ -136,7 +136,7 @@ func ParseURLAndAllowNoScheme(urlToParse string) (*url.URL, error) {
 	}
 	parsedURL, err := url.Parse(urlToParse)
 	if err != nil {
-		return nil, err
+		return nil, err //nolint:wrapcheck // for url parsing we don't want to wrap here
 	}
 	if parsedURL.Scheme == dummyScheme {
 		parsedURL.Scheme = ""

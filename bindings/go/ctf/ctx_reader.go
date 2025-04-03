@@ -2,6 +2,7 @@ package ctf
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 )
@@ -17,13 +18,14 @@ func newCtxReader(ctx context.Context, r io.Reader) (io.Reader, error) {
 		}
 		if d, ok := r.(deadliner); ok {
 			if err := d.SetReadDeadline(deadline); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to set read deadline: %w", err)
 			}
 		}
 	}
 	return ctxReader{ctx, r}, nil
 }
 
+//nolint:containedctx // ctxReader is an io.Reader that checks the context for cancellation so a context is important
 type ctxReader struct {
 	ctx context.Context
 	r   io.Reader

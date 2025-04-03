@@ -19,7 +19,7 @@ import (
 // The zero value of FileFormat is FormatDirectory, and also the default.
 type FileFormat int
 
-var ErrUnsupportedFormat = fmt.Errorf("unsupported format")
+var ErrUnsupportedFormat = errors.New("unsupported format")
 
 const (
 	// FormatUnknown represents an unknown format.
@@ -40,6 +40,8 @@ func (f FileFormat) String() string {
 }
 
 // Flags to OpenCTF. They are not bound to a type because the underlying type changes based on syscall interfaces.
+//
+//nolint:stylecheck // ignore style error, as the flags replicating the os package mode
 const (
 	// O_RDONLY indicates that the CTF is opened in read-only mode.
 	O_RDONLY = os.O_RDONLY

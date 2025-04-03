@@ -84,7 +84,7 @@ func extractTARToFilesystemCTF(reader *tar.Reader, ctf *FileSystemCTF) (err erro
 			break
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to extract tar to filesystem ctf: %w", err)
 		}
 		if strings.Contains(header.Name, "..") {
 			return fmt.Errorf("invalid tar entry, contains %q: %s", "..", header.Name)
@@ -154,7 +154,7 @@ func ArchiveDirectory(ctx context.Context, ctf CTF, path string) error {
 		}
 
 		if err := group.Wait(); err != nil {
-			return err
+			return fmt.Errorf("unable to save blob group concurrently: %w", err)
 		}
 	}
 
@@ -237,7 +237,7 @@ func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format F
 		}
 		name := filepath.Join(BlobsDirectoryName, file)
 		if err := blob.ArchiveBlob(name, size.Size(), digest, b, tarWriter, copyBuffer); err != nil {
-			return err
+			return fmt.Errorf("unable to archive blob %s: %w", digest, err)
 		}
 	}
 

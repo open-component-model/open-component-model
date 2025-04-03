@@ -108,7 +108,7 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 	buf := make([]byte, 512)
 	n, err := raw.Read(buf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to read ahead blob to determine if it is a gzip: %w", err)
 	}
 
 	var reader io.Reader = raw
@@ -131,7 +131,7 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to create tarfs: %w", err)
 	}
-	fileSystem := fs.(fileSystem)
+	fileSystem := fs.(fileSystem) //nolint:forcetypeassert // we know it is a tarfs
 
 	idx := ociimagespec.Index{}
 	rawidx, err := fs.Open("index.json")
@@ -150,24 +150,8 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 	}, nil
 }
 
-// ConvertToOCIImageLayout converts an ArtifactSet to an OCI Image Layout in tar format.
-// It will write the index.json and all blobs to the writer.
-// It converts old blobs according to a given manifestNameFn.
-//
-// The manifestNameFn is used to convert the old name of the blob to the new name.
-// Example:
-//
-//	func manifestNameFn(digest digest.Digest, oldName string) (string, error) {
-//		return fmt.Sprintf("ghcr.io/open-component-model/%s", digest), nil
-//	}
-//
-// This is needed due to the lossy typing that requires the component descriptor (see ArtifactSet for information).
-func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Writer, manifestNameFn func(ctx context.Context, digest digest.Digest, oldName string) (string, error)) (err error) {
-	tw := tar.NewWriter(writer)
-	defer func() {
-		err = errors.Join(err, tw.Close())
-	}()
-
+// writeOCILayout writes the OCI layout file to the tar writer
+func writeOCILayout(tw *tar.Writer) error {
 	layout := ociimagespec.ImageLayout{Version: ociimagespec.ImageLayoutVersion}
 	layoutRaw, err := json.Marshal(layout)
 	if err != nil {
@@ -182,9 +166,61 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 	if _, err := tw.Write(layoutRaw); err != nil {
 		return fmt.Errorf("unable to write layout: %w", err)
 	}
+	return nil
+}
 
-	idx := as.GetIndex()
-	for _, manifest := range idx.Manifests {
+// writeIndexJSON writes the index.json file to the tar writer
+func writeIndexJSON(tw *tar.Writer, idx ociimagespec.Index) error {
+	idxJSON, err := json.Marshal(idx)
+	if err != nil {
+		return fmt.Errorf("unable to marshal index.json: %w", err)
+	}
+	if err := tw.WriteHeader(&tar.Header{
+		Name: ociimagespec.ImageIndexFile,
+		Size: int64(len(idxJSON)),
+	}); err != nil {
+		return fmt.Errorf("unable to write index.json header: %w", err)
+	}
+	if _, err := tw.Write(idxJSON); err != nil {
+		return fmt.Errorf("unable to write index.json: %w", err)
+	}
+	return nil
+}
+
+// writeBlob writes a single blob to the tar writer
+func writeBlob(tw *tar.Writer, b blob.ReadOnlyBlob, digestStr string) error {
+	dig, err := digest.Parse(digestStr)
+	if err != nil {
+		return fmt.Errorf("unable to parse digest %s: %w", digestStr, err)
+	}
+
+	bsizeAware, ok := b.(blob.SizeAware)
+	if !ok {
+		return fmt.Errorf("blob %s does not have a Size", digestStr)
+	}
+
+	if err := tw.WriteHeader(&tar.Header{
+		Name: filepath.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded()),
+		Size: bsizeAware.Size(),
+	}); err != nil {
+		return fmt.Errorf("unable to write header for blob %s: %w", digestStr, err)
+	}
+
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return fmt.Errorf("unable to read blob %s: %w", digestStr, err)
+	}
+	defer rc.Close()
+
+	if _, err := io.Copy(tw, rc); err != nil {
+		return fmt.Errorf("unable to copy blob %s: %w", digestStr, err)
+	}
+	return nil
+}
+
+// updateManifestNames updates the manifest names in the index using the provided function
+func updateManifestNames(ctx context.Context, idx ociimagespec.Index, manifestNameFn func(ctx context.Context, digest digest.Digest, oldName string) (string, error)) error {
+	for i, manifest := range idx.Manifests {
 		annotations := manifest.Annotations
 		if annotations == nil {
 			continue
@@ -193,24 +229,32 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		if !ok {
 			continue
 		}
-		name, err = manifestNameFn(ctx, manifest.Digest, name)
+		name, err := manifestNameFn(ctx, manifest.Digest, name)
 		if err != nil {
 			return fmt.Errorf("unable to generate manifest name: %w", err)
 		}
-		annotations[ociimagespec.AnnotationRefName] = name
+		idx.Manifests[i].Annotations[ociimagespec.AnnotationRefName] = name
 	}
-	idxJson, err := json.Marshal(idx)
-	if err != nil {
-		return fmt.Errorf("unable to marshal index.json: %w", err)
+	return nil
+}
+
+func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Writer, manifestNameFn func(ctx context.Context, digest digest.Digest, oldName string) (string, error)) (err error) {
+	tw := tar.NewWriter(writer)
+	defer func() {
+		err = errors.Join(err, tw.Close())
+	}()
+
+	if err := writeOCILayout(tw); err != nil {
+		return err
 	}
-	if err := tw.WriteHeader(&tar.Header{
-		Name: ociimagespec.ImageIndexFile,
-		Size: int64(len(idxJson)),
-	}); err != nil {
-		return fmt.Errorf("unable to write index.json header: %w", err)
+
+	idx := as.GetIndex()
+	if err := updateManifestNames(ctx, idx, manifestNameFn); err != nil {
+		return err
 	}
-	if _, err := tw.Write(idxJson); err != nil {
-		return fmt.Errorf("unable to write index.json: %w", err)
+
+	if err := writeIndexJSON(tw, idx); err != nil {
+		return err
 	}
 
 	blobs, err := as.ListBlobs(ctx)
@@ -219,32 +263,13 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 	}
 
 	for _, b := range blobs {
-		dig, err := digest.Parse(b)
-		if err != nil {
-			return fmt.Errorf("unable to parse digest %s: %w", b, err)
-		}
-		b, err := as.GetBlob(ctx, b)
+		blob, err := as.GetBlob(ctx, b)
 		if err != nil {
 			return fmt.Errorf("unable to get blob %s: %w", b, err)
 		}
-		bsizeAware, ok := b.(blob.SizeAware)
-		if !ok {
-			return fmt.Errorf("blob %s does not have a Size", b)
-		}
 
-		if err := tw.WriteHeader(&tar.Header{
-			Name: filepath.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded()),
-			Size: bsizeAware.Size(),
-		}); err != nil {
-			return fmt.Errorf("unable to write header for blob %s: %w", b, err)
-		}
-
-		rc, err := b.ReadCloser()
-		if err != nil {
-			return fmt.Errorf("unable to read blob %s: %w", b, err)
-		}
-		if _, err := io.Copy(tw, rc); err != nil {
-			return fmt.Errorf("unable to copy blob %s: %w", b, err)
+		if err := writeBlob(tw, blob, b); err != nil {
+			return err
 		}
 	}
 
@@ -329,5 +354,5 @@ func (a *ArtifactBlob) Digest() (digest string, known bool) {
 }
 
 func (a *ArtifactBlob) ReadCloser() (io.ReadCloser, error) {
-	return a.fs.Open(a.name)
+	return a.fs.Open(a.name) //nolint:wrapcheck // ignore wrapcheck, as this is a wrapper around the fs interface
 }

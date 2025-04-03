@@ -54,7 +54,7 @@ func (f *Blob) WriteCloser() (io.WriteCloser, error) {
 	}
 	file, err := f.fileSystem.OpenFile(f.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, mode)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to open file %q: %w", f.path, err)
 	}
 	writeable, ok := file.(io.WriteCloser)
 	if !ok {
