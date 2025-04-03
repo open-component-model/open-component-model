@@ -23,6 +23,7 @@ import (
 
 const socketPathFormat = "/tmp/ocm_plugin_%s.sock"
 
+// ImplementedPlugin contains information about a plugin that has been included via direct implementation.
 type ImplementedPlugin struct {
 	Base         PluginBase
 	Capabilities []Capability
@@ -30,9 +31,12 @@ type ImplementedPlugin struct {
 	ID           string
 }
 
+// implementedRegisteredPlugins will contain plugins that have been included via direct implementation for a
+// specific type and capability.
 var implementedRegisteredPlugins = map[string]map[string][]*ImplementedPlugin{}
 
 // RegisterPluginImplementationForTypeAndCapabilities can be called by actual implementations in the source.
+// It will register any implementations directly for a given type and capability.
 func RegisterPluginImplementationForTypeAndCapabilities(p *ImplementedPlugin) {
 	for _, capability := range p.Capabilities {
 		if _, ok := implementedRegisteredPlugins[p.Type]; !ok {
@@ -52,14 +56,14 @@ type Plugin struct {
 	cmd *exec.Cmd
 }
 
+// constructedPlugin is a plugin that has been created and stored before actually starting it.
 type constructedPlugin struct {
-	Plugin   any
-	Shutdown func(ctx context.Context) error
+	Plugin any
 
 	cmd *exec.Cmd
 }
 
-// PluginManager manages all connected plugins
+// PluginManager manages all connected plugins.
 type PluginManager struct {
 	// Stores plugins for each capability. Capabilities are determined
 	// through the plugins.
@@ -69,10 +73,7 @@ type PluginManager struct {
 	plugins map[string]map[string][]*Plugin
 	mu      sync.Mutex
 
-	// a list of sockets to delete for plugins
-	cleanupSockets []string
-
-	// This tracks plugins that are _started_ and have been requested.
+	// This tracks plugins that are not _started_ and have been requested.
 	// The number of used plugins can differ considerably compared to
 	// the actual registered plugins.
 	// This is separate from the plugins being registered because we don't want
@@ -83,7 +84,9 @@ type PluginManager struct {
 	logger             *slog.Logger
 
 	// baseCtx is the context that is used for all plugins.
-	// this is a different context than the one used for fetching plugins.
+	// This is a different context than the one used for fetching plugins because
+	// that context is done once fetching is done. The plugin context, however, must not
+	// be cancelled.
 	baseCtx context.Context
 }
 
@@ -112,8 +115,7 @@ func fetchPlugin[T PluginBase](
 	pluginsMap := make(map[string]T)
 
 	// Look for source implemented plugins as well.
-	implementedCaps, ok := implementedRegisteredPlugins[typ.GetType().String()]
-	if ok {
+	if implementedCaps, ok := implementedRegisteredPlugins[typ.GetType().String()]; ok {
 		// if we found registered plugins, add them to the map
 		plugins, ok := implementedCaps[requiredCapability]
 		if ok {
@@ -197,6 +199,10 @@ func fetchPlugin[T PluginBase](
 	}
 
 	return plugins, nil
+}
+
+func getDirectlyRegisteredPlugins() {
+
 }
 
 // only run validation if a schema exists.
