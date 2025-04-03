@@ -185,6 +185,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: Create Docker network for running Testcontainers
         run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
       - name: Run Tests
