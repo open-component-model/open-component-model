@@ -422,6 +422,13 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 	}
 
 	// Handle non-absolute reference names for OCI Layouts
+	// This is a workaround for the fact that some tools like ORAS CLI
+	// can generate OCI Layouts that contain relative reference names, aka only tags
+	// and not absolute references.
+	//
+	// An example would be ghcr.io/test:v1.0.0
+	// This could get stored in an OCI Layout as
+	// v1.0.0 only, assuming that it is the only repository in the OCI Layout.
 	srcRef := old.ImageReference
 	if _, err := ociStore.Resolve(ctx, srcRef); err != nil {
 		parsedSrcRef, pErr := registry.ParseReference(srcRef)
@@ -441,9 +448,11 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 	defer os.Remove(fileBufferPath)
 
 	res.Size = desc.Size
-	res.Digest = &descriptor.Digest{
-		HashAlgorithm: digest.SHA256.String(),
-		Value:         desc.Digest.Encoded(),
+	// TODO(jakobmoellerdev): This might not be ideal because this digest
+	//  is not representative of the entire OCI Layout, only of the descriptor.
+	//  Eventually we should think about switching this to a genericBlobDigest.
+	if err := ociDigestV1.ApplyToResource(res, desc.Digest); err != nil {
+		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 	res.Access = &access
 
@@ -467,6 +476,9 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	// any resource that gets downloaded is made available as a gzipped tar'ed OCI Layout archive.
 	mediaType := MediaTypeOCIImageLayoutV1 + "+tar" + "+gzip"
 
+	// TODO(jakobmoellerdev) we might need to determine if we download to a buffer or a file
+	//  based on the size of the blob. But that should be done with better settings and maybe
+	//  some helpers from the blob package.
 	var buf bytes.Buffer
 
 	h := sha256.New()
@@ -493,8 +505,10 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		}
 	}()
 
-	// for download we ignore the descriptor root that is returned from the copy
-	if _, err := oras.Copy(ctx, src, access.ImageReference, target, access.ImageReference, repo.resourceCopyOptions); err != nil {
+	// for download we ignore the descriptor root that is returned from the copy aside from using it for
+	// download verification
+	desc, err := oras.Copy(ctx, src, access.ImageReference, target, access.ImageReference, repo.resourceCopyOptions)
+	if err != nil {
 		return nil, fmt.Errorf("failed to copy resource: %w", err)
 	}
 
@@ -503,12 +517,46 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		return nil, fmt.Errorf("failed to close writers: %w", err)
 	}
 
-	describedBlob := blob.NewDirectReadOnlyBlob(&buf)
-	describedBlob.SetPrecalculatedSize(int64(buf.Len()))
-	describedBlob.SetMediaType(mediaType)
-	describedBlob.SetPrecalculatedDigest(digest.NewDigest(digest.SHA256, h).String())
+	downloaded := blob.NewDirectReadOnlyBlob(&buf)
 
-	return NewResourceBlob(res, describedBlob, mediaType), nil
+	downloaded.SetPrecalculatedSize(int64(buf.Len()))
+	downloaded.SetMediaType(mediaType)
+
+	blobDigest := digest.NewDigest(digest.SHA256, h)
+	downloaded.SetPrecalculatedDigest(blobDigest.String())
+
+	if err := validateDigest(res, desc, blobDigest); err != nil {
+		return nil, fmt.Errorf("failed to validate digest after download of resource: %w", err)
+	}
+
+	return NewResourceBlob(res, downloaded, mediaType), nil
+}
+
+func validateDigest(res *descriptor.Resource, desc ociImageSpecV1.Descriptor, blobDigest digest.Digest) error {
+	if res.Digest == nil {
+		// the resource does not have a digest, so we cannot validate it
+		return nil
+	}
+
+	expected := digest.NewDigestFromEncoded(ociDigestV1.SHAMapping[res.Digest.HashAlgorithm], res.Digest.Value)
+
+	var actual digest.Digest
+	switch res.Digest.NormalisationAlgorithm {
+	case ociDigestV1.OCIArtifactDigestAlgorithm:
+		// the digest is based on the leading descriptor
+		actual = desc.Digest
+	// TODO(jakobmoellerdev): we need to switch to a blob package digest eventually
+	case "genericBlobDigest/v1":
+		// the digest is based on the entire blob
+		actual = blobDigest
+	default:
+		return fmt.Errorf("unsupported digest algorithm: %s", res.Digest.NormalisationAlgorithm)
+	}
+	if expected != actual {
+		return fmt.Errorf("expected resource digest %q to equal downloaded descriptor digest %q", expected, actual)
+	}
+
+	return nil
 }
 
 // getOCIImageManifest retrieves the manifest for a given reference from the store.

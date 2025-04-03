@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	OCIArtifactDigestAlgorithm        = "ociArtifactDigest"
+	OCIArtifactDigestAlgorithmType    = "ociArtifactDigest"
 	OCIArtifactDigestAlgorithmVersion = "v1"
+	OCIArtifactDigestAlgorithm        = OCIArtifactDigestAlgorithmType + "/" + OCIArtifactDigestAlgorithmVersion
 )
 
 var SHAMapping = map[string]digest.Algorithm{
@@ -34,7 +35,7 @@ func ApplyToResource(resource *runtime.Resource, digest digest.Digest) error {
 	}
 	resource.Digest = &runtime.Digest{
 		HashAlgorithm:          algo,
-		NormalisationAlgorithm: fmt.Sprintf("%s/%s", OCIArtifactDigestAlgorithm, OCIArtifactDigestAlgorithmVersion),
+		NormalisationAlgorithm: OCIArtifactDigestAlgorithm,
 		Value:                  digest.Encoded(),
 	}
 

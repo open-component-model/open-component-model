@@ -34,7 +34,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	v1 "ocm.software/open-component-model/bindings/go/oci/access/v1"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	ociDigestV1 "ocm.software/open-component-model/bindings/go/oci/digest/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
@@ -124,7 +123,6 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, 
 
 	data, access := createSingleLayerOCIImage(t, originalData, from)
 
-	dataDigest := digest.FromBytes(data)
 	blob := blob.NewDirectReadOnlyBlob(bytes.NewReader(data))
 
 	resource := descriptor.Resource{
@@ -134,13 +132,8 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, 
 				Version: "v1.0.0",
 			},
 		},
-		Type:   "some-arbitrary-type-packed-in-image",
-		Access: access,
-		Digest: &descriptor.Digest{
-			HashAlgorithm:          oci.ReverseHashAlgorithmConversionTable[digest.Canonical],
-			NormalisationAlgorithm: ociDigestV1.OCIArtifactDigestAlgorithm,
-			Value:                  dataDigest.String(),
-		},
+		Type:         "some-arbitrary-type-packed-in-image",
+		Access:       access,
 		Size:         int64(len(data)),
 		CreationTime: descriptor.CreationTime(time.Now()),
 	}
