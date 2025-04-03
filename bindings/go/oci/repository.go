@@ -156,7 +156,13 @@ type Repository struct {
 	// resolver resolves component version references to OCI stores.
 	resolver Resolver
 
+	// creatorAnnotation is the annotation used to identify the creator of the component version.
+	// see AnnotationOCMCreator for more information.
 	creatorAnnotation string
+
+	// ResourceCopyOptions are the options used for copying resources between stores.
+	// These options are used in copyResource.
+	resourceCopyOptions oras.CopyOptions
 }
 
 var _ ComponentVersionRepository = (*Repository)(nil)
@@ -414,7 +420,26 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 		return err
 	}
 
-	desc, err := copyResource(ctx, fileBufferPath, old.ImageReference, access.ImageReference, store)
+	// If src is a string, it's a tar file path
+	ociStore, err := oci.NewFromTar(ctx, fileBufferPath)
+	if err != nil {
+		return err
+	}
+
+	// Handle non-absolute reference names for OCI Layouts
+	srcRef := old.ImageReference
+	if _, err := ociStore.Resolve(ctx, srcRef); err != nil {
+		parsedSrcRef, pErr := registry.ParseReference(srcRef)
+		if pErr != nil {
+			return errors.Join(err, pErr)
+		}
+		if _, rErr := ociStore.Resolve(ctx, parsedSrcRef.Reference); rErr != nil {
+			return errors.Join(err, rErr)
+		}
+		srcRef = parsedSrcRef.Reference
+	}
+
+	desc, err := oras.Copy(ctx, ociStore, srcRef, store, access.ImageReference, repo.resourceCopyOptions)
 	if err != nil {
 		return errors.Join(os.Remove(fileBufferPath), err)
 	}
@@ -466,7 +491,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		}
 	}()
 
-	desc, err := copyResourceToOCILayout(ctx, src, access.ImageReference, target)
+	desc, err := oras.Copy(ctx, src, access.ImageReference, target, access.ImageReference, repo.resourceCopyOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to copy resource: %w", err)
 	}
@@ -477,27 +502,6 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		return nil, errors.New("failed to get media type")
 	}
 	return NewResourceBlob(res, describedBlob, mediaType), nil
-}
-
-// copyResourceToOCILayout copies a resource from the store to a buffer.
-func copyResourceToOCILayout(ctx context.Context, store Store, srcRef string, storage *tar.OCILayoutWriter) (ociImageSpecV1.Descriptor, error) {
-	return oras.Copy(ctx, store, srcRef, storage, srcRef, oras.CopyOptions{
-		CopyGraphOptions: oras.CopyGraphOptions{
-			Concurrency: 8,
-			PreCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.DebugContext(ctx, "downloading", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
-				return nil
-			},
-			PostCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.InfoContext(ctx, "downloaded", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
-				return nil
-			},
-			OnCopySkipped: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.DebugContext(ctx, "skipped", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
-				return nil
-			},
-		},
-	})
 }
 
 // getOCIImageManifest retrieves the manifest for a given reference from the store.
@@ -609,50 +613,6 @@ func copyWithGzipDetection(src io.Reader, dst io.Writer) (err error) {
 	}
 
 	return nil
-}
-
-// copyResource copies a resource from the source to the target store.
-func copyResource(ctx context.Context, srcPath, srcRef, targetRef string, store Store) (ociImageSpecV1.Descriptor, error) {
-	src, err := oci.NewFromTar(ctx, srcPath)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, err
-	}
-
-	// in some sources (such as OCI Layouts) we might have non-absolute reference names. In this case
-	// it is worthwile to try to resolve the reference relatively as well.
-	//
-	// E.g. ghcr.io/acme/helloworld:latest might be stored in an OCI Layout under "latest"
-	if _, err := src.Resolve(ctx, srcRef); err != nil {
-		parsedSrcRef, pErr := registry.ParseReference(srcRef)
-		if pErr != nil {
-			return ociImageSpecV1.Descriptor{}, errors.Join(err, pErr)
-		}
-		if _, rErr := src.Resolve(ctx, parsedSrcRef.Reference); rErr != nil {
-			return ociImageSpecV1.Descriptor{}, errors.Join(err, rErr)
-		}
-		srcRef = parsedSrcRef.Reference
-	}
-
-	desc, err := oras.Copy(ctx, src, srcRef, store, targetRef, oras.CopyOptions{
-		CopyGraphOptions: oras.CopyGraphOptions{
-			PreCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.DebugContext(ctx, "uploading", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
-				return nil
-			},
-			PostCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.InfoContext(ctx, "uploaded", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
-				return nil
-			},
-			OnCopySkipped: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-				slog.DebugContext(ctx, "skipped", slog.String("descriptor", desc.Digest.String()), slog.String("mediaType", desc.MediaType))
-				return nil
-			},
-		},
-	})
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy resource from %q to %q: %w", srcRef, targetRef, err)
-	}
-	return desc, nil
 }
 
 // findMatchingLayer finds a layer in the manifest that matches the given identity.

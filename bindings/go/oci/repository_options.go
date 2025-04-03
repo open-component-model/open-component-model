@@ -1,7 +1,12 @@
 package oci
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/access"
@@ -23,6 +28,9 @@ type RepositoryOptions struct {
 	// Creator is the creator of new Component Versions.
 	// See AnnotationOCMCreator for details
 	Creator string
+
+	// CopyOptions are the options for copying resources between sources and targets
+	ResourceCopyOptions *oras.CopyOptions
 }
 
 // RepositoryOption is a function that modifies RepositoryOptions.
@@ -74,9 +82,30 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		options.Creator = "Open Component Model Go Reference Library"
 	}
 
+	if options.ResourceCopyOptions == nil {
+		options.ResourceCopyOptions = &oras.CopyOptions{
+			CopyGraphOptions: oras.CopyGraphOptions{
+				Concurrency: 8,
+				PreCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
+					slog.DebugContext(ctx, "copying", descriptorLogAttr(desc))
+					return nil
+				},
+				PostCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
+					slog.InfoContext(ctx, "copied", descriptorLogAttr(desc))
+					return nil
+				},
+				OnCopySkipped: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
+					slog.DebugContext(ctx, "skipped", descriptorLogAttr(desc))
+					return nil
+				},
+			},
+		}
+	}
+
 	return &Repository{
-		scheme:          options.Scheme,
-		localBlobMemory: options.LocalBlobMemory,
-		resolver:        options.Resolver,
+		scheme:              options.Scheme,
+		localBlobMemory:     options.LocalBlobMemory,
+		resolver:            options.Resolver,
+		resourceCopyOptions: *options.ResourceCopyOptions,
 	}, nil
 }
