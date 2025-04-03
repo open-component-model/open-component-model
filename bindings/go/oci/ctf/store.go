@@ -96,7 +96,11 @@ func (s *Store) Exists(ctx context.Context, target ociImageSpecV1.Descriptor) (b
 // Push stores a new blob in the CTF archive with the expected descriptor.
 // The content is read from the provided io.Reader.
 func (s *Store) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, content io.Reader) error {
-	return s.archive.SaveBlob(ctx, oci.NewDescriptorBlob(content, expected))
+	if err := s.archive.SaveBlob(ctx, oci.NewDescriptorBlob(content, expected)); err != nil {
+		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
+	}
+
+	return nil
 }
 
 // Resolve resolves a reference string to its corresponding descriptor in the CTF archive.

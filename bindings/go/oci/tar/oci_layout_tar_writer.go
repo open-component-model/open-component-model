@@ -41,17 +41,21 @@ func NewOCILayoutWriter(w io.Writer) *OCILayoutWriter {
 }
 
 type OCILayoutWriter struct {
-	writeLock sync.Mutex
-	writer    *tar.Writer
+	writerMu sync.Mutex // Protects tar writer operations
+	writer   *tar.Writer
 
-	indexSync sync.RWMutex
-	index     *ociImageSpecV1.Index
+	indexMu sync.RWMutex // Protects index access
+	index   *ociImageSpecV1.Index
 
 	tagResolver *memoryResolver
+
+	// Closing the Layout Writer is not concurrency safe.
+	// Once closed, it is impossible to reuse
+	closed bool
 }
 
 // Fetch is only implemented to satisfy the oras.Target interface.
-func (s *OCILayoutWriter) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+func (s *OCILayoutWriter) Fetch(_ context.Context, _ ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	return nil, errdef.ErrUnsupported
 }
 
@@ -60,8 +64,14 @@ func (s *OCILayoutWriter) Resolve(ctx context.Context, reference string) (ociIma
 }
 
 func (s *OCILayoutWriter) Close() error {
-	s.indexSync.Lock()
-	defer s.indexSync.Unlock()
+	s.writerMu.Lock()
+	defer s.writerMu.Unlock()
+	if s.closed {
+		return nil
+	}
+
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
 
 	var err error
 	defer func() {
@@ -102,7 +112,13 @@ func (s *OCILayoutWriter) Close() error {
 		return fmt.Errorf("failed to write layout file content to tar: %w", err)
 	}
 
-	return s.writer.Close()
+	if err := s.writer.Close(); err != nil {
+		return fmt.Errorf("failed to close tar writer: %w", err)
+	}
+
+	s.closed = true
+
+	return nil
 }
 
 func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
@@ -111,8 +127,8 @@ func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Desc
 		return err
 	}
 
-	s.writeLock.Lock()
-	defer s.writeLock.Unlock()
+	s.writerMu.Lock()
+	defer s.writerMu.Unlock()
 	if err := s.writer.WriteHeader(&tar.Header{
 		Name: blobPath,
 		Size: expected.Size,
@@ -134,8 +150,8 @@ func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Desc
 
 // Exists returns true if the described content Exists.
 func (s *OCILayoutWriter) Exists(_ context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
-	s.indexSync.RLock()
-	defer s.indexSync.RUnlock()
+	s.indexMu.RLock()
+	defer s.indexMu.RUnlock()
 	for _, manifest := range s.index.Manifests {
 		if manifest.Digest == target.Digest {
 			return true, nil
@@ -175,6 +191,9 @@ func (s *OCILayoutWriter) tag(ctx context.Context, desc ociImageSpecV1.Descripto
 }
 
 func (s *OCILayoutWriter) updateIndex() error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
 	var manifests []ociImageSpecV1.Descriptor
 	tagged := newSet[digest.Digest]()
 	refMap := s.tagResolver.Map()

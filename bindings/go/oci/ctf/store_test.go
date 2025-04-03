@@ -133,6 +133,7 @@ func TestPush(t *testing.T) {
 	content := "test"
 	desc := ociImageSpecV1.Descriptor{
 		Digest: digest.FromString(content),
+		Size:   int64(len(content)),
 	}
 
 	t.Run("successful push", func(t *testing.T) {

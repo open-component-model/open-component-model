@@ -1,10 +1,12 @@
 package oci
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 )
@@ -14,8 +16,15 @@ import (
 // The descriptor is used to report data such as a precalculated digest and size without having to introspect the data.
 // At the same time the data that is given is verified against the descriptor.
 func NewDescriptorBlob(data io.Reader, descriptor ociImageSpecV1.Descriptor) *DescriptorBlob {
+	var reader io.ReadCloser
+	if closer, ok := data.(io.ReadCloser); ok {
+		reader = closer
+	} else {
+		reader = io.NopCloser(data)
+	}
+
 	return &DescriptorBlob{
-		content:    data,
+		content:    reader,
 		descriptor: descriptor,
 	}
 }
@@ -28,7 +37,7 @@ var (
 )
 
 type DescriptorBlob struct {
-	content    io.Reader
+	content    io.ReadCloser
 	descriptor ociImageSpecV1.Descriptor
 }
 
@@ -69,8 +78,36 @@ func (c *DescriptorBlob) SetPrecalculatedSize(size int64) {
 
 // ReadCloser returns the data behind the content.
 func (c *DescriptorBlob) ReadCloser() (io.ReadCloser, error) {
-	if closer, ok := c.content.(io.ReadCloser); ok {
-		return closer, nil
+	return newCloseableVerifyReader(c.content, c.descriptor), nil
+}
+
+// closeableVerifyReader is a wrapper around content.VerifyReader that allows closing the underlying reader.
+// additionally it verifies the digest of the content when closing.
+type closeableVerifyReader struct {
+	reader *content.VerifyReader
+	close  func() error
+}
+
+func newCloseableVerifyReader(r io.ReadCloser, descriptor ociImageSpecV1.Descriptor) *closeableVerifyReader {
+	return &closeableVerifyReader{
+		reader: content.NewVerifyReader(r, descriptor),
+		close:  r.Close,
 	}
-	return io.NopCloser(c.content), nil
+}
+
+func (c *closeableVerifyReader) Read(p []byte) (n int, err error) {
+	return c.reader.Read(p)
+}
+
+func (c *closeableVerifyReader) Close() error {
+	if c.close != nil {
+		if err := c.close(); err != nil {
+			return fmt.Errorf("failed to close digest verification reader in descriptor blob: %w", err)
+		}
+	}
+	if err := c.reader.Verify(); err != nil {
+		return fmt.Errorf("failed to verify digest verification reader in descriptor blob: %w", err)
+	}
+
+	return nil
 }

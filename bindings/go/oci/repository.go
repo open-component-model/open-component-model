@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,9 +54,12 @@ const (
 // Media type constants for component descriptors
 const (
 	// MediaTypeComponentDescriptor is the base media type for OCM component descriptors
-	MediaTypeComponentDescriptor = "application/vnd.ocm.software/ocm.component-descriptor"
+	MediaTypeComponentDescriptor = "application/vnd.ocm.software.component-descriptor"
 	// MediaTypeComponentDescriptorV2 is the media type for version 2 of OCM component descriptors
 	MediaTypeComponentDescriptorV2 = MediaTypeComponentDescriptor + ".v2"
+
+	MediaTypeOCIImageLayout   = "application/vnd.ocm.software.oci.layout"
+	MediaTypeOCIImageLayoutV1 = MediaTypeOCIImageLayout + ".v1"
 )
 
 var logger = slog.With(slog.String("realm", "oci"))
@@ -293,10 +297,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		Size:      int64(len(descriptorBytes)),
 	}
 	logger.Log(ctx, slog.LevelDebug, "pushing descriptor", descriptorLogAttr(descriptorOCIDescriptor))
-	if err := store.Push(ctx, descriptorOCIDescriptor, content.NewVerifyReader(
-		bytes.NewReader(descriptorBytes),
-		descriptorOCIDescriptor,
-	)); err != nil {
+	if err := store.Push(ctx, descriptorOCIDescriptor, bytes.NewReader(descriptorBytes)); err != nil {
 		return fmt.Errorf("unable to push component descriptor: %w", err)
 	}
 
@@ -306,10 +307,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to marshal component config: %w", err)
 	}
 	logger.Log(ctx, slog.LevelDebug, "pushing descriptor", descriptorLogAttr(componentConfigDescriptor))
-	if err := store.Push(ctx, componentConfigDescriptor, content.NewVerifyReader(
-		bytes.NewReader(componentConfigRaw),
-		componentConfigDescriptor,
-	)); err != nil {
+	if err := store.Push(ctx, componentConfigDescriptor, bytes.NewReader(componentConfigRaw)); err != nil {
 		return fmt.Errorf("unable to push component config: %w", err)
 	}
 
@@ -340,10 +338,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		Annotations: manifest.Annotations,
 	}
 	logger.Log(ctx, slog.LevelInfo, "pushing descriptor", descriptorLogAttr(manifestDescriptor))
-	if err := store.Push(ctx, manifestDescriptor, content.NewVerifyReader(
-		bytes.NewReader(manifestRaw),
-		manifestDescriptor,
-	)); err != nil {
+	if err := store.Push(ctx, manifestDescriptor, bytes.NewReader(manifestRaw)); err != nil {
 		return fmt.Errorf("unable to push manifest: %w", err)
 	}
 
@@ -415,7 +410,7 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 		return err
 	}
 
-	fileBufferPath, err := prepareResourceFile(res, b)
+	fileBufferPath, err := prepOCILayoutFileBuffer(res, b)
 	if err != nil {
 		return err
 	}
@@ -469,8 +464,15 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		return nil, err
 	}
 
+	// any resource that gets downloaded is made available as a gzipped tar'ed OCI Layout archive.
+	mediaType := MediaTypeOCIImageLayoutV1 + "+tar" + "+gzip"
+
 	var buf bytes.Buffer
-	zippedBuf := gzip.NewWriter(&buf)
+
+	h := sha256.New()
+	writer := io.MultiWriter(&buf, h)
+
+	zippedBuf := gzip.NewWriter(writer)
 	defer func() {
 		if err != nil {
 			// Clean up resources if there was an error
@@ -491,16 +493,21 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		}
 	}()
 
-	desc, err := oras.Copy(ctx, src, access.ImageReference, target, access.ImageReference, repo.resourceCopyOptions)
-	if err != nil {
+	// for download we ignore the descriptor root that is returned from the copy
+	if _, err := oras.Copy(ctx, src, access.ImageReference, target, access.ImageReference, repo.resourceCopyOptions); err != nil {
 		return nil, fmt.Errorf("failed to copy resource: %w", err)
 	}
 
-	describedBlob := NewDescriptorBlob(&buf, desc)
-	mediaType, ok := describedBlob.MediaType()
-	if !ok {
-		return nil, errors.New("failed to get media type")
+	// now close prematurely so that the buf is fully filled before we set things like size and digest.
+	if err := errors.Join(target.Close(), zippedBuf.Close()); err != nil {
+		return nil, fmt.Errorf("failed to close writers: %w", err)
 	}
+
+	describedBlob := blob.NewDirectReadOnlyBlob(&buf)
+	describedBlob.SetPrecalculatedSize(int64(buf.Len()))
+	describedBlob.SetMediaType(mediaType)
+	describedBlob.SetPrecalculatedDigest(digest.NewDigest(digest.SHA256, h).String())
+
 	return NewResourceBlob(res, describedBlob, mediaType), nil
 }
 
@@ -552,8 +559,9 @@ func updateResourceAccess(resource *descriptor.Resource, layer ociImageSpecV1.De
 	return nil
 }
 
-// prepareResourceFile creates a temporary file with the resource content.
-func prepareResourceFile(resource *descriptor.Resource, content blob.ReadOnlyBlob) (path string, err error) {
+// prepOCILayoutFileBuffer creates a temporary file with the resource content that is expected
+// to be an OCI Layout. It handles gzip detection and writes the content to the file.
+func prepOCILayoutFileBuffer(resource *descriptor.Resource, content blob.ReadOnlyBlob) (path string, err error) {
 	filePath := filepath.Join(os.TempDir(), fmt.Sprintf("%s-%d", resource.Name, time.Now().UnixNano()))
 	tmpFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0o644)
 	if err != nil {
