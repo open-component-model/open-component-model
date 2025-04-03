@@ -59,7 +59,7 @@ func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) error {
 		err = errors.Join(err, file.Close())
 	}()
 
-	buf := ioBufPool.Get().(*[]byte)
+	buf := ioBufPool.Get().(*[]byte) //nolint:forcetypeassert // we know the type of the buffer
 	defer ioBufPool.Put(buf)
 	if _, err := io.CopyBuffer(file, data, *buf); err != nil {
 		return fmt.Errorf("failed to copy resource data: %w", err)

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -88,7 +89,7 @@ func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
 		}
 	}
 
-	return Type{}, fmt.Errorf("prototype not found in registry")
+	return Type{}, errors.New("prototype not found in registry")
 }
 
 func (r *Scheme) MustTypeForPrototype(prototype Typed) Type {
@@ -128,7 +129,7 @@ func (r *Scheme) NewObject(typ Type) (Typed, error) {
 		}
 		object = reflect.New(t).Interface()
 
-		return object.(Typed), nil
+		return object.(Typed), nil //nolint:forcetypeassert // we know the type of object
 	}
 
 	if r.allowUnknown {
@@ -166,14 +167,12 @@ func (r *Scheme) Decode(data io.Reader, into Typed) error {
 //   - A type is not registered in the Scheme (for Raw conversions).
 //   - A reflection-based assignment fails due to type mismatch.
 func (r *Scheme) Convert(from Typed, into Typed) error {
-	// Check for nil arguments.
 	if from == nil || into == nil {
-		return fmt.Errorf("both 'from' and 'into' must be non-nil")
+		return errors.New("both 'from' and 'into' must be non-nil")
 	}
 
-	// Ensure that from's type is populated. If its not, attempt to infer type information based on the scheme.
+	// Ensure that from's type is populated
 	if from.GetType().IsEmpty() {
-		// avoid mutating the original object
 		from = from.DeepCopyTyped()
 		typ, err := r.TypeForPrototype(from)
 		if err != nil && !r.allowUnknown {
@@ -183,46 +182,63 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 	}
 	fromType := from.GetType()
 
-	// Case 1: Raw -> Raw or Raw -> Typed
+	// Handle Raw conversions
 	if rawFrom, ok := from.(*Raw); ok {
-		// Raw → Raw: Deep copy the underlying data.
 		if rawInto, ok := into.(*Raw); ok {
-			rawFrom.DeepCopyInto(rawInto)
-			return nil
+			return r.convertRawToRaw(rawFrom, rawInto)
 		}
-
-		// Raw → Typed: Unmarshal the Raw.Data into the target.
-		if !r.IsRegistered(fromType) && !r.allowUnknown {
-			return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
-		}
-		if err := json.Unmarshal(rawFrom.Data, into); err != nil {
-			return fmt.Errorf("failed to unmarshal from raw: %w", err)
-		}
-		return nil
+		return r.convertRawToTyped(rawFrom, into, fromType)
 	}
 
-	// Case 2: Typed -> Raw
+	// Handle Typed to Raw conversion
 	if rawInto, ok := into.(*Raw); ok {
-		if !r.IsRegistered(fromType) && !r.allowUnknown {
-			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
-		}
-		data, err := json.Marshal(from)
-		if err != nil {
-			return fmt.Errorf("failed to marshal into raw: %w", err)
-		}
-		canonicalData, err := jsoncanonicalizer.Transform(data)
-		if err != nil {
-			return fmt.Errorf("could not canonicalize data: %w", err)
-		}
-		rawInto.Type = fromType
-		rawInto.Data = canonicalData
-		return nil
+		return r.convertTypedToRaw(from, rawInto, fromType)
 	}
 
-	// Case 3: Generic Typed -> Typed conversion using reflection.
+	// Handle Typed to Typed conversion
+	return r.convertTypedToTyped(from, into)
+}
+
+// convertRawToRaw handles Raw to Raw conversion
+func (r *Scheme) convertRawToRaw(from, into *Raw) error {
+	from.DeepCopyInto(into)
+	return nil
+}
+
+// convertRawToTyped handles Raw to Typed conversion
+func (r *Scheme) convertRawToTyped(from *Raw, into Typed, fromType Type) error {
+	if !r.IsRegistered(fromType) && !r.allowUnknown {
+		return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
+	}
+	if err := json.Unmarshal(from.Data, into); err != nil {
+		return fmt.Errorf("failed to unmarshal from raw: %w", err)
+	}
+	return nil
+}
+
+// convertTypedToRaw handles Typed to Raw conversion
+func (r *Scheme) convertTypedToRaw(from Typed, into *Raw, fromType Type) error {
+	if !r.IsRegistered(fromType) && !r.allowUnknown {
+		return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
+	}
+	data, err := json.Marshal(from)
+	if err != nil {
+		return fmt.Errorf("failed to marshal into raw: %w", err)
+	}
+	canonicalData, err := jsoncanonicalizer.Transform(data)
+	if err != nil {
+		return fmt.Errorf("could not canonicalize data: %w", err)
+	}
+	into.Type = fromType
+	into.Data = canonicalData
+	return nil
+}
+
+// convertTypedToTyped handles Typed to Typed conversion
+func (r *Scheme) convertTypedToTyped(from, into Typed) error {
 	intoVal := reflect.ValueOf(into)
 	if intoVal.Kind() != reflect.Ptr || intoVal.IsNil() {
-		return fmt.Errorf("'into' must be a non-nil pointer")
+		return errors.New("'into' must be a non-nil pointer")
 	}
 	copied := from.DeepCopyTyped()
 	copiedVal := reflect.ValueOf(copied)

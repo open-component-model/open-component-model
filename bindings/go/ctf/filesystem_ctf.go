@@ -126,7 +126,7 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader) (err error) {
 		return fmt.Errorf("file %s is read only and cannot be saved", name)
 	}
 
-	buf := ioBufPool.Get().(*[]byte)
+	buf := ioBufPool.Get().(*[]byte) //nolint:forcetypeassert // we know the type of the buffer
 	defer ioBufPool.Put(buf)
 	if _, err = io.CopyBuffer(writeable, raw, *buf); err != nil {
 		return fmt.Errorf("unable to write artifact index: %w", err)

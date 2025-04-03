@@ -24,6 +24,8 @@ import (
 // DeepCopyJSON deep copies the passed value, assuming it is a valid JSON representation i.e. only contains
 // types produced by json.Unmarshal() and also int64.
 // bool, int64, float64, string, []interface{}, map[string]interface{}, json.Number and nil
+//
+//nolint:forcetypeassert // we know that the value is a map[string]interface{}
 func DeepCopyJSON(x map[string]interface{}) map[string]interface{} {
 	return DeepCopyJSONValue(x).(map[string]interface{})
 }

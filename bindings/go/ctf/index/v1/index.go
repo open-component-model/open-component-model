@@ -54,7 +54,7 @@ func DecodeIndex(data io.Reader) (Index, error) {
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&d); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode index: %w", err)
 	}
 
 	if d.SchemaVersion != SchemaVersion {

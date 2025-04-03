@@ -77,7 +77,7 @@ func (i Identity) Match(o Identity, matchers ...ChainableIdentityMatcher) bool {
 
 // MatchAll is a convenience function that creates an AndMatcher that matches all provided matchers.
 // In other words, it returns true if all given ChainableIdentityMatcher.Match return true.
-func MatchAll(matchers ...ChainableIdentityMatcher) ChainableIdentityMatcher {
+func MatchAll(matchers ...ChainableIdentityMatcher) *AndMatcher {
 	return &AndMatcher{Matchers: matchers}
 }
 

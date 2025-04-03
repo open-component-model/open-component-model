@@ -95,6 +95,8 @@ func (t Time) Rfc3339Copy() Time {
 }
 
 // UnmarshalJSON implements the json.Unmarshaller interface.
+//
+//nolint:wrapcheck // copied from k8s codebase, part of contract
 func (t *Time) UnmarshalJSON(b []byte) error {
 	if len(b) == 4 && string(b) == "null" {
 		t.Time = time.Time{}

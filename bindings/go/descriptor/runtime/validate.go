@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -74,7 +75,7 @@ func findDuplicates(identities map[uint64][]indexedIdentity, elementType string)
 			// Create a list of indices for the duplicates
 			indices := make([]string, len(elements))
 			for i, elem := range elements {
-				indices[i] = fmt.Sprintf("%d", elem.index)
+				indices[i] = strconv.Itoa(elem.index)
 			}
 
 			duplicates = append(duplicates, fmt.Sprintf("identity '%v' appears %d times at %s indices [%s]",

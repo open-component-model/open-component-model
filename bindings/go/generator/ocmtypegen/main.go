@@ -72,7 +72,7 @@ func scanSinglePackage(folder string) (string, []string, error) {
 
 	files, err := os.ReadDir(folder)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("unable to read dir %s: %w", folder, err)
 	}
 
 	for _, f := range files {
@@ -83,7 +83,7 @@ func scanSinglePackage(folder string) (string, []string, error) {
 		fullPath := filepath.Join(folder, f.Name())
 		file, err := parser.ParseFile(fset, fullPath, nil, parser.ParseComments)
 		if err != nil {
-			return "", nil, err
+			return "", nil, fmt.Errorf("unable to parse file %s: %w", fullPath, err)
 		}
 
 		if packageName == "" {
@@ -126,7 +126,7 @@ func findGoPackages(root string) ([]string, error) {
 		}
 		files, err := os.ReadDir(path)
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to read dir %s: %w", path, err)
 		}
 		for _, file := range files {
 			if !file.IsDir() && isValidGoFile(file.Name()) {
@@ -136,7 +136,10 @@ func findGoPackages(root string) ([]string, error) {
 		}
 		return nil
 	})
-	return packages, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to walk directory %s: %w", root, err)
+	}
+	return packages, nil
 }
 
 // isValidGoFile checks if a file should be considered for parsing.
@@ -181,7 +184,7 @@ func hasRuntimeTypeField(s *ast.StructType) bool {
 func getImportPath(folder string) (string, error) {
 	absFolder, err := filepath.Abs(folder)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("unable to get abs folder %s: %w", folder, err)
 	}
 
 	dir := absFolder
@@ -194,7 +197,7 @@ func getImportPath(folder string) (string, error) {
 			}
 			relPath, err := filepath.Rel(dir, absFolder)
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("unable to get relative path of %s: %w", absFolder, err)
 			}
 			if relPath == "." {
 				return modulePath, nil
@@ -215,7 +218,7 @@ func getImportPath(folder string) (string, error) {
 func readModulePath(goModPath string) (string, error) {
 	file, err := os.Open(goModPath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("unable to open %s: %w", goModPath, err)
 	}
 	defer file.Close()
 
@@ -234,7 +237,7 @@ func generateCode(folder, pkg string, types []string) error {
 	outputPath := filepath.Join(folder, generatedFile)
 	out, err := os.Create(outputPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create %s: %w", outputPath, err)
 	}
 	defer out.Close()
 

@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -9,11 +10,11 @@ import (
 	"sync"
 )
 
-var ErrReadOnly = fmt.Errorf("read only file system")
+var ErrReadOnly = errors.New("read only file system")
 
 // FileSystem is an interface that needs to be fulfilled by any filesystem implementation
 // to be usable within the OCM Bindings.
-// The ComponentVersionReference Implementation is the osFileSystem which is backed by the os package.
+// The ComponentVersionReference Implementation is the OSFileSystem which is backed by the os package.
 type FileSystem interface {
 	Base() string
 	Open(name string) (fs.File, error)
@@ -35,7 +36,7 @@ type File interface {
 	io.Writer
 }
 
-func NewFS(base string, flag int) (FileSystem, error) {
+func NewFS(base string, flag int) (*OSFileSystem, error) {
 	base, err := filepath.Abs(base)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get absolute path: %w", err)
@@ -56,10 +57,10 @@ func NewFS(base string, flag int) (FileSystem, error) {
 	if fi != nil && !fi.IsDir() {
 		return nil, fmt.Errorf("path is not a directory: %s", base)
 	}
-	return &osFileSystem{base: base, flag: flag}, nil
+	return &OSFileSystem{base: base, flag: flag}, nil
 }
 
-type osFileSystem struct {
+type OSFileSystem struct {
 	// base is the base path of the filesystem
 	base string
 	// flagMu is a mutex to protect the flag read / write access
@@ -69,57 +70,64 @@ type osFileSystem struct {
 	flag int
 }
 
-func (s *osFileSystem) Base() string {
+func (s *OSFileSystem) Base() string {
 	return s.base
 }
 
-func (s *osFileSystem) Remove(name string) error {
+//nolint:wrapcheck // os.Remove should be propagated as is
+func (s *OSFileSystem) Remove(name string) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
 	return os.Remove(filepath.Join(s.base, name))
 }
 
-func (s *osFileSystem) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) {
+//nolint:wrapcheck // os.OpenFile should be propagated as is
+func (s *OSFileSystem) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) {
 	if s.ReadOnly() && !isFlagReadOnly(flag) {
 		return nil, ErrReadOnly
 	}
 	return os.OpenFile(filepath.Join(s.base, name), flag, perm)
 }
 
-func (s *osFileSystem) Open(name string) (fs.File, error) {
+//nolint:wrapcheck // os.Open should be propagated as is
+func (s *OSFileSystem) Open(name string) (fs.File, error) {
 	return os.Open(filepath.Join(s.base, name))
 }
 
-func (s *osFileSystem) ReadDir(name string) ([]fs.DirEntry, error) {
+//nolint:wrapcheck // os.ReadDir should be propagated as is
+func (s *OSFileSystem) ReadDir(name string) ([]fs.DirEntry, error) {
 	return os.ReadDir(filepath.Join(s.base, name))
 }
 
-func (s *osFileSystem) MkdirAll(name string, perm os.FileMode) error {
+//nolint:wrapcheck // os.MkdirAll should be propagated as is
+func (s *OSFileSystem) MkdirAll(name string, perm os.FileMode) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
 	return os.MkdirAll(filepath.Join(s.base, name), perm)
 }
 
-func (s *osFileSystem) RemoveAll(path string) error {
+//nolint:wrapcheck // os.RemoveAll should be propagated as is
+func (s *OSFileSystem) RemoveAll(path string) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
 	return os.RemoveAll(filepath.Join(s.base, path))
 }
 
-func (s *osFileSystem) Stat(name string) (fs.FileInfo, error) {
+//nolint:wrapcheck // os.Stat should be propagated as is
+func (s *OSFileSystem) Stat(name string) (fs.FileInfo, error) {
 	return os.Stat(filepath.Join(s.base, name))
 }
 
-func (s *osFileSystem) ReadOnly() bool {
+func (s *OSFileSystem) ReadOnly() bool {
 	s.flagMu.RLock()
 	defer s.flagMu.RUnlock()
 	return isFlagReadOnly(s.flag)
 }
 
-func (s *osFileSystem) ForceReadOnly() {
+func (s *OSFileSystem) ForceReadOnly() {
 	s.flagMu.Lock()
 	defer s.flagMu.Unlock()
 	s.flag &= os.O_RDONLY

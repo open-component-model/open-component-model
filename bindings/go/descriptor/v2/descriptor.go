@@ -299,6 +299,8 @@ func (t *Timestamp) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements the json.Unmarshaler interface.
 // The time is expected to be a quoted string in RFC 3339 format.
+//
+//nolint:wrapcheck // ignore because we want the error to be the same as the standard library
 func (t *Timestamp) UnmarshalJSON(data []byte) error {
 	// Ignore null, like in the main JSON package.
 	if string(data) == "null" {
