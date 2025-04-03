@@ -6,11 +6,11 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.10.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250402063009-867a2779a47c
-	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250328103548-5c0618932877
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250402063009-867a2779a47c
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250402063009-867a2779a47c
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250402063009-867a2779a47c
+	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250403065545-2a9dc8cae8ff
+	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250403065545-2a9dc8cae8ff
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250403065545-2a9dc8cae8ff
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250403065545-2a9dc8cae8ff
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250403065545-2a9dc8cae8ff
 	oras.land/oras-go/v2 v2.5.0
 	sigs.k8s.io/yaml v1.4.0
 )
