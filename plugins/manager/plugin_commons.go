@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -79,6 +80,7 @@ func connect(_ context.Context, id, location string, typ ConnectionType) (*http.
 	return client, nil
 }
 
+// CallOptions contains options for calling a plugin endpoint.
 type CallOptions struct {
 	Payload     any
 	Result      any
@@ -126,7 +128,7 @@ func WithQueryParams(queryParams []KV) CallOptionFn {
 
 // call will use the plugin's constructed connection client to make a call to the specified
 // endpoint. The result will be marshalled into the provided response if not nil.
-func call(ctx context.Context, client *http.Client, endpoint, method string, opts ...CallOptionFn) error {
+func call(ctx context.Context, client *http.Client, endpoint, method string, opts ...CallOptionFn) (err error) {
 	options := &CallOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -163,18 +165,23 @@ func call(ctx context.Context, client *http.Client, endpoint, method string, opt
 	if err != nil {
 		return fmt.Errorf("failed to send request to plugin: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		data, err := io.ReadAll(resp.Body)
 		if err == nil && len(data) > 0 {
 			return fmt.Errorf("plugin returned status code %d: %s", resp.StatusCode, data)
 		}
+
 		return fmt.Errorf("plugin returned status code: %d (no details were given)", resp.StatusCode)
 	}
 
 	if options.Result == nil {
-		// discard the body content otherwise some gibberish might remain in it
+		// Discard the body content otherwise some gibberish might remain in it
 		// that messes up further connections.
 		_, err = io.Copy(io.Discard, resp.Body)
 		if err != nil {
