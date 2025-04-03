@@ -175,11 +175,28 @@ func (s *Store) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, referen
 		Digest:     desc.Digest.String(),
 		MediaType:  desc.MediaType,
 	}
+
 	slog.Info("tagging artifact in index", "meta", meta)
 
-	idx.AddArtifact(meta)
+	addOrUpdateArtifactMetadataInIndex(idx, meta)
+
 	if err := s.archive.SetIndex(ctx, idx); err != nil {
 		return fmt.Errorf("unable to set index: %w", err)
 	}
 	return nil
+}
+
+func addOrUpdateArtifactMetadataInIndex(idx v1.Index, meta v1.ArtifactMetadata) {
+	arts := idx.GetArtifacts()
+	var found bool
+	for i, art := range arts {
+		if art.Repository == meta.Repository && art.Tag == meta.Tag {
+			arts[i] = meta
+			found = true
+			break
+		}
+	}
+	if !found {
+		idx.AddArtifact(meta)
+	}
 }
