@@ -10,9 +10,16 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestLayerFromResourceIdentityAndLocalBlob(t *testing.T) {
+	scheme := runtime.NewScheme()
+	v2.MustAddToScheme(scheme)
+
+	// Create a valid digest for testing
+	testDigest := digest.FromString("test").String()
+
 	tests := []struct {
 		name     string
 		access   *v2.LocalBlob
@@ -23,8 +30,12 @@ func TestLayerFromResourceIdentityAndLocalBlob(t *testing.T) {
 		{
 			name: "basic resource without platform",
 			access: &v2.LocalBlob{
+				Type: runtime.Type{
+					Name:    v2.LocalBlobAccessType,
+					Version: v2.LocalBlobAccessTypeVersion,
+				},
 				MediaType:      "application/octet-stream",
-				LocalReference: "sha256:1234",
+				LocalReference: testDigest,
 			},
 			size: 100,
 			resource: &descriptor.Resource{
@@ -34,10 +45,18 @@ func TestLayerFromResourceIdentityAndLocalBlob(t *testing.T) {
 						Version: "1.0.0",
 					},
 				},
+				Access: &v2.LocalBlob{
+					Type: runtime.Type{
+						Name:    v2.LocalBlobAccessType,
+						Version: v2.LocalBlobAccessTypeVersion,
+					},
+					MediaType:      "application/octet-stream",
+					LocalReference: testDigest,
+				},
 			},
 			want: func(t *testing.T, got ociImageSpecV1.Descriptor) {
 				assert.Equal(t, "application/octet-stream", got.MediaType)
-				assert.Equal(t, digest.Digest("sha256:1234"), got.Digest)
+				assert.Equal(t, digest.Digest(testDigest), got.Digest)
 				assert.Equal(t, int64(100), got.Size)
 				assert.Nil(t, got.Platform)
 			},
@@ -45,8 +64,12 @@ func TestLayerFromResourceIdentityAndLocalBlob(t *testing.T) {
 		{
 			name: "resource with platform attributes",
 			access: &v2.LocalBlob{
+				Type: runtime.Type{
+					Name:    v2.LocalBlobAccessType,
+					Version: v2.LocalBlobAccessTypeVersion,
+				},
 				MediaType:      "application/octet-stream",
-				LocalReference: "sha256:1234",
+				LocalReference: testDigest,
 			},
 			size: 100,
 			resource: &descriptor.Resource{
@@ -63,10 +86,18 @@ func TestLayerFromResourceIdentityAndLocalBlob(t *testing.T) {
 						"os.version":   "1.0",
 					},
 				},
+				Access: &v2.LocalBlob{
+					Type: runtime.Type{
+						Name:    v2.LocalBlobAccessType,
+						Version: v2.LocalBlobAccessTypeVersion,
+					},
+					MediaType:      "application/octet-stream",
+					LocalReference: testDigest,
+				},
 			},
 			want: func(t *testing.T, got ociImageSpecV1.Descriptor) {
 				assert.Equal(t, "application/octet-stream", got.MediaType)
-				assert.Equal(t, digest.Digest("sha256:1234"), got.Digest)
+				assert.Equal(t, digest.Digest(testDigest), got.Digest)
 				assert.Equal(t, int64(100), got.Size)
 				require.NotNil(t, got.Platform)
 				assert.Equal(t, "amd64", got.Platform.Architecture)
@@ -80,7 +111,7 @@ func TestLayerFromResourceIdentityAndLocalBlob(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := layerFromResourceIdentityAndLocalBlob(tt.access, tt.size, tt.resource)
+			got, err := newLocalResourceLayer(scheme, tt.size, tt.resource)
 			require.NoError(t, err)
 			tt.want(t, got)
 		})

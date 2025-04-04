@@ -62,7 +62,10 @@
 // Media Types:
 //
 // The package defines media types for OCM components:
-//   - MediaTypeComponentDescriptorV2: Media type for version 2 OCM component descriptors
+//   - MediaTypeComponentDescriptorV2: Media type for version 2 OCM component descriptors.
+//     Usually distributed with +tar+gzip.
+//   - MediaTypeOCIImageLayoutV1: A media type for a complete OCI Image Layout.
+//     Usually distributed with +tar+gzip.
 //
 // Annotations:
 //

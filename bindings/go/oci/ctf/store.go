@@ -58,15 +58,16 @@ func (s *Store) ComponentVersionReference(component, version string) string {
 	return fmt.Sprintf("component-descriptors/%s:%s", component, version)
 }
 
-// parseReference parses an OCI reference
+// ParseReference parses an OCI reference
 // It is a special form of registry.ParseReference which
 // adds a default registry prefix if the reference is missing a registry or repository.
 // This is because CTF stores do not necessarily need a registry URL context (as they are local archives).
-func parseReference(reference string) (resolved registry.Reference, err error) {
+func ParseReference(reference string) (resolved registry.Reference, err error) {
 	ref, err := registry.ParseReference(reference)
 	if err != nil && strings.Contains(err.Error(), "missing registry or repository") {
 		ref, err = registry.ParseReference(fmt.Sprintf("CTF/%s", reference))
 	}
+	ref.Registry = ""
 	return ref, err
 }
 
@@ -108,7 +109,7 @@ func (s *Store) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, co
 // If a full reference is given, it will be resolved against the blob store immediately.
 // Returns the descriptor if found, or an error if the reference is invalid or not found.
 func (s *Store) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
-	ref, err := parseReference(reference)
+	ref, err := ParseReference(reference)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
@@ -155,7 +156,7 @@ func (s *Store) Resolve(ctx context.Context, reference string) (ociImageSpecV1.D
 // The reference should be in the format "repository:tag".
 // This operation updates the index to maintain the mapping between references and their corresponding descriptors.
 func (s *Store) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
-	ref, err := parseReference(reference)
+	ref, err := ParseReference(reference)
 	if err != nil {
 		return err
 	}

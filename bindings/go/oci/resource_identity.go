@@ -8,7 +8,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // PlatformAttributeMapper defines the mapping between resource identity attributes and OCI platform fields
@@ -17,15 +17,23 @@ type PlatformAttributeMapper struct {
 	setter    func(platform *ociImageSpecV1.Platform, value string)
 }
 
-// layerFromResourceIdentityAndLocalBlob creates an OCI layer descriptor for a resource.
+// newLocalResourceLayer creates an OCI layer descriptor for a resource.
 // It maps resource identity attributes to OCI platform fields and adds appropriate annotations.
 // The function takes:
-// - access: The local blob access information
+// - scheme: The runtime scheme used for type conversion
 // - size: The size of the blob
 // - resource: The resource descriptor
 // Returns an OCI descriptor and any error that occurred during processing.
-func layerFromResourceIdentityAndLocalBlob(access *v2.LocalBlob, size int64, resource *descriptor.Resource) (ociImageSpecV1.Descriptor, error) {
+func newLocalResourceLayer(scheme *runtime.Scheme, size int64, resource *descriptor.Resource) (ociImageSpecV1.Descriptor, error) {
+	access, err := getLocalBlobAccess(scheme, resource)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to get local blob access: %w", err)
+	}
+
 	layer := ociImageSpecV1.Descriptor{
+		// TODO(jakobmoellerdev): We might need to think
+		//  about which mediaType we use, that of the blob or the resource
+		//  currently only the resource is respected.
 		MediaType: access.MediaType,
 		Digest:    digest.Digest(access.LocalReference),
 		Size:      size,
