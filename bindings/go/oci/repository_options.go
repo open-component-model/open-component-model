@@ -74,6 +74,13 @@ func WithLocalManifestBlobMemory(memory LocalBlobMemory) RepositoryOption {
 	}
 }
 
+// WithCreator sets the creator for the repository.
+func WithCreator(creator string) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.Creator = creator
+	}
+}
+
 // WithResolver sets the resolver for the repository.
 func WithResolver(resolver Resolver) RepositoryOption {
 	return func(o *RepositoryOptions) {

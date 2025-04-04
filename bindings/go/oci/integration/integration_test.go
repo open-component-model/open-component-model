@@ -10,6 +10,8 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,12 +42,36 @@ import (
 )
 
 const (
-	distributionRegistryImage = "registry:2.8.3"
+	distributionRegistryImage = "registry:3.0.0"
 	testUsername              = "ocm"
 	passwordLength            = 20
 	charset                   = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}<>?"
 	userAgent                 = "ocm.software"
 )
+
+func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
+	user, password := getUserAndPasswordWithGitHubCLIAndJQ(t)
+
+	r := require.New(t)
+	r.NotEmpty(user)
+	r.NotEmpty(password)
+
+	reg := "ghcr.io/open-component-model/ocm"
+
+	client := createAuthClient(reg, user, password)
+
+	resolver := oci.NewURLPathResolver(reg)
+	resolver.SetClient(client)
+
+	repo, err := oci.NewRepository(oci.WithResolver(resolver))
+	r.NoError(err)
+
+	t.Run("basic download of a component version", func(t *testing.T) {
+		retrievedDesc, err := repo.GetComponentVersion(t.Context(), "ocm.software/ocmcli", "0.22.1")
+		r.NoError(err)
+		r.NotEmpty(retrievedDesc)
+	})
+}
 
 func Test_Integration_OCIRepository(t *testing.T) {
 	t.Parallel()
@@ -397,4 +423,43 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 
 	// Verify data matches
 	r.Equal(testData, downloadedData)
+}
+
+func getUserAndPasswordWithGitHubCLIAndJQ(t *testing.T) (string, string) {
+	t.Helper()
+	gh, err := exec.LookPath("gh")
+	if err != nil {
+		t.Skip("gh CLI not found, skipping test")
+	}
+	jq, err := exec.LookPath("jq")
+	if err != nil {
+		t.Skip("jq CLI not found, skipping test")
+	}
+	out, err := exec.Command("sh", "-c", fmt.Sprintf("%s api user | %s -r .login", gh, jq)).CombinedOutput()
+	if err != nil {
+		t.Skipf("gh CLI for user failed: %v", err)
+	}
+	user := strings.TrimSpace(string(out))
+
+	tokenEnvs := []string{
+		"GH_TOKEN",
+		"GITHUB_TOKEN",
+	}
+
+	var password string
+	for _, tokenEnv := range tokenEnvs {
+		if password = os.Getenv(tokenEnv); password != "" {
+			break
+		}
+	}
+
+	if password == "" {
+		out, err = exec.Command("sh", "-c", fmt.Sprintf("%s auth token", gh)).CombinedOutput()
+		if err != nil {
+			t.Skipf("gh CLI for password failed: %v", err)
+		}
+		password = strings.TrimSpace(string(out))
+	}
+
+	return user, password
 }
