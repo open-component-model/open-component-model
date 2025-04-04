@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 
 	"github.com/nlepage/go-tarfs"
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -19,6 +21,7 @@ import (
 type CloseableReadOnlyStore struct {
 	*oci.ReadOnlyStore
 	close func() error
+	Index ociImageSpecV1.Index
 }
 
 func (s *CloseableReadOnlyStore) Close() error {
@@ -88,8 +91,21 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 		return nil, fmt.Errorf("failed to create OCI store: %w", err)
 	}
 
+	idxFile, err := tfs.Open(ociImageSpecV1.ImageIndexFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open index file: %w", err)
+	}
+	defer func() {
+		_ = idxFile.Close()
+	}()
+	idx := ociImageSpecV1.Index{}
+	if err := json.NewDecoder(idxFile).Decode(&idx); err != nil {
+		return nil, fmt.Errorf("failed to decode index file: %w", err)
+	}
+
 	return &CloseableReadOnlyStore{
 		ReadOnlyStore: store,
 		close:         closer,
+		Index:         idx,
 	}, nil
 }

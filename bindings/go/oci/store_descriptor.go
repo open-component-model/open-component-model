@@ -18,9 +18,10 @@ import (
 
 // storeDescriptorOptions defines the options for adding a component descriptor to a Store.
 type storeDescriptorOptions struct {
-	Scheme            *runtime.Scheme
-	CreatorAnnotation string
-	AdditionalLayers  []ociImageSpecV1.Descriptor
+	Scheme                        *runtime.Scheme
+	CreatorAnnotation             string
+	AdditionalDescriptorLayers    []ociImageSpecV1.Descriptor
+	AdditionalDescriptorManifests []ociImageSpecV1.Descriptor
 }
 
 // addDescriptorToStore uploads a component descriptor to any given Store.
@@ -69,7 +70,9 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		},
 		Layers: append(
 			[]ociImageSpecV1.Descriptor{descriptorOCIDescriptor},
-			opts.AdditionalLayers...,
+			// Add additional descriptor layers if provided
+			// These are stored within the main descriptor
+			opts.AdditionalDescriptorLayers...,
 		),
 	}
 	manifestRaw, err := json.Marshal(manifest)
@@ -87,36 +90,68 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		return nil, fmt.Errorf("unable to push manifest: %w", err)
 	}
 
-	return &manifestDescriptor, nil
+	idx := ociImageSpecV1.Index{
+		Versioned: specs.Versioned{
+			SchemaVersion: 2,
+		},
+		MediaType: ociImageSpecV1.MediaTypeImageIndex,
+		Manifests: append(
+			[]ociImageSpecV1.Descriptor{manifestDescriptor},
+			// Add additional descriptor manifests if provided
+			// These are stored within the main index
+			opts.AdditionalDescriptorManifests...,
+		),
+	}
+	idxRaw, err := json.Marshal(idx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal index: %w", err)
+	}
+	idxDescriptor := ociImageSpecV1.Descriptor{
+		MediaType:   idx.MediaType,
+		Digest:      digest.FromBytes(idxRaw),
+		Size:        int64(len(idxRaw)),
+		Annotations: idx.Annotations,
+	}
+	logger.Log(ctx, slog.LevelInfo, "pushing index", descriptorLogAttr(idxDescriptor))
+	if err := store.Push(ctx, idxDescriptor, bytes.NewReader(idxRaw)); err != nil {
+		return nil, fmt.Errorf("unable to push index: %w", err)
+	}
+
+	return &idxDescriptor, nil
 }
 
 // getDescriptorFromStore retrieves a component descriptor from a given Store using the provided reference.
-func getDescriptorFromStore(ctx context.Context, store Store, reference string) (*descriptor.Descriptor, error) {
-	manifest, err := getOCIImageManifest(ctx, store, reference)
+func getDescriptorFromStore(ctx context.Context, store Store, reference string) (*descriptor.Descriptor, *ociImageSpecV1.Manifest, *ociImageSpecV1.Index, error) {
+	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, reference)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get manifest: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
 
 	componentConfigRaw, err := store.Fetch(ctx, manifest.Config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get component config: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
 	}
 	defer func() {
 		_ = componentConfigRaw.Close()
 	}()
 	componentConfig := ComponentConfig{}
 	if err := json.NewDecoder(componentConfigRaw).Decode(&componentConfig); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	// Read component descriptor
 	descriptorRaw, err := store.Fetch(ctx, *componentConfig.ComponentDescriptorLayer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
 	defer func() {
 		_ = descriptorRaw.Close()
 	}()
 
-	return tar.SingleFileTARDecodeV2Descriptor(descriptorRaw)
+	desc, err := tar.SingleFileTARDecodeV2Descriptor(descriptorRaw)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
+	}
+
+	return desc, &manifest, index, nil
 }

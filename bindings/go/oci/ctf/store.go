@@ -21,13 +21,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 )
 
-// WithCTF is an OCI repository option that allows you to specify a CTF (Common Transport Format) archive as the resolver.
-func WithCTF(ctf ctf.CTF) oci.RepositoryOption {
-	return func(o *oci.RepositoryOptions) {
-		o.Resolver = NewFromCTF(ctf)
-	}
-}
-
 // NewFromCTF creates a new Store instance that wraps a CTF (Common Transport Format) archive.
 // This ctf.CTF archive acts as an OCI repository interface for component versions stored in the CTF.
 func NewFromCTF(store ctf.CTF) *Store {

@@ -15,32 +15,32 @@ const (
 	ArtifactKindResource ArtifactKind = "resource"
 )
 
-const ArtifactOCILayerAnnotationKey = "software.ocm.artifact"
+const ArtifactAnnotationKey = "software.ocm.artifact"
 
-var ErrArtifactOCILayerAnnotationDoesNotExist = fmt.Errorf("ocm artifact annotation %s does not exist", ArtifactOCILayerAnnotationKey)
+var ErrArtifactOCILayerAnnotationDoesNotExist = fmt.Errorf("ocm artifact annotation %s does not exist", ArtifactAnnotationKey)
 
-// ArtifactOCILayerAnnotation is an annotation that can be added to an OCI layer to store additional information about the layer.
+// ArtifactOCIAnnotation is an annotation that can be added to an OCI layer or manifest to store additional information about the layer.
 // It is used to store OCM Artifact information in the layer.
 // This is to differentiate Sources and Resources from each other based on their kind.
-type ArtifactOCILayerAnnotation struct {
+type ArtifactOCIAnnotation struct {
 	Identity map[string]string `json:"identity"`
 	Kind     ArtifactKind      `json:"kind"`
 }
 
-func GetArtifactOCILayerAnnotations(descriptor *ociImageSpecV1.Descriptor) ([]ArtifactOCILayerAnnotation, error) {
-	annotation, isOCMArtifact := descriptor.Annotations[ArtifactOCILayerAnnotationKey]
+func GetArtifactOCILayerAnnotations(descriptor *ociImageSpecV1.Descriptor) ([]ArtifactOCIAnnotation, error) {
+	annotation, isOCMArtifact := descriptor.Annotations[ArtifactAnnotationKey]
 	if !isOCMArtifact {
 		return nil, ErrArtifactOCILayerAnnotationDoesNotExist
 	}
-	var artifactAnnotations []ArtifactOCILayerAnnotation
+	var artifactAnnotations []ArtifactOCIAnnotation
 	if err := json.Unmarshal([]byte(annotation), &artifactAnnotations); err != nil {
 		return nil, err
 	}
 	return artifactAnnotations, nil
 }
 
-func (a ArtifactOCILayerAnnotation) AddToDescriptor(descriptor *ociImageSpecV1.Descriptor) error {
-	var annotations []ArtifactOCILayerAnnotation
+func (a ArtifactOCIAnnotation) AddToDescriptor(descriptor *ociImageSpecV1.Descriptor) error {
+	var annotations []ArtifactOCIAnnotation
 	if descriptor.Annotations == nil {
 		descriptor.Annotations = map[string]string{}
 	} else {
@@ -56,6 +56,6 @@ func (a ArtifactOCILayerAnnotation) AddToDescriptor(descriptor *ociImageSpecV1.D
 		return fmt.Errorf("could not marshal artifact annotations: %w", err)
 	}
 
-	descriptor.Annotations[ArtifactOCILayerAnnotationKey] = string(annotation)
+	descriptor.Annotations[ArtifactAnnotationKey] = string(annotation)
 	return nil
 }

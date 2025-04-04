@@ -13,16 +13,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// LocalResourceCreationMode defines how local resources should be accessed in the repository.
-type LocalResourceCreationMode string
+// LocalResourceLayerCreationMode defines how local resources should be accessed in the repository.
+type LocalResourceLayerCreationMode string
 
 const (
 	// LocalResourceCreationModeLocalBlobWithNestedGlobalAccess creates a local blob access for resources.
 	// It also embeds the global access information in the local blob.
-	LocalResourceCreationModeLocalBlobWithNestedGlobalAccess LocalResourceCreationMode = "localBlob"
+	LocalResourceCreationModeLocalBlobWithNestedGlobalAccess LocalResourceLayerCreationMode = "localBlob"
 	// LocalResourceCreationModeOCIImageLayer creates an OCI image layer access for resources.
 	// This mode is used when the resource is embedded without a local blob (only global access)
-	LocalResourceCreationModeOCIImageLayer LocalResourceCreationMode = "ociImageLayer"
+	LocalResourceCreationModeOCIImageLayer LocalResourceLayerCreationMode = "ociImageLayer"
 )
 
 // RepositoryOptions defines the options for creating a new Repository.
@@ -32,7 +32,8 @@ type RepositoryOptions struct {
 	Scheme *runtime.Scheme
 	// LocalBlobMemory is used to temporarily store local blobs until they are added to a component version.
 	// If not provided, a new memory will be created.
-	LocalBlobMemory LocalBlobMemory
+	LocalLayerBlobMemory    LocalBlobMemory
+	LocalManifestBlobMemory LocalBlobMemory
 	// Resolver resolves component version references to OCI stores.
 	// This is required and must be provided.
 	Resolver Resolver
@@ -46,7 +47,7 @@ type RepositoryOptions struct {
 
 	// LocalResourceCreationMode determines how resources should be accessed in the repository.
 	// Defaults to LocalResourceCreationModeLocalBlobWithNestedGlobalAccess.
-	LocalResourceCreationMode LocalResourceCreationMode
+	LocalResourceCreationMode LocalResourceLayerCreationMode
 }
 
 // RepositoryOption is a function that modifies RepositoryOptions.
@@ -59,10 +60,17 @@ func WithScheme(scheme *runtime.Scheme) RepositoryOption {
 	}
 }
 
-// WithLocalBlobMemory sets the local blob memory for the repository.
-func WithLocalBlobMemory(memory LocalBlobMemory) RepositoryOption {
+// WithLocalLayerBlobMemory sets the local blob memory for the repository.
+func WithLocalLayerBlobMemory(memory LocalBlobMemory) RepositoryOption {
 	return func(o *RepositoryOptions) {
-		o.LocalBlobMemory = memory
+		o.LocalLayerBlobMemory = memory
+	}
+}
+
+// WithLocalManifestBlobMemory sets the local blob memory for the repository.
+func WithLocalManifestBlobMemory(memory LocalBlobMemory) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.LocalManifestBlobMemory = memory
 	}
 }
 
@@ -74,7 +82,7 @@ func WithResolver(resolver Resolver) RepositoryOption {
 }
 
 // WithLocalResourceCreationMode sets the access mode for resources in the repository.
-func WithLocalResourceCreationMode(mode LocalResourceCreationMode) RepositoryOption {
+func WithLocalResourceCreationMode(mode LocalResourceLayerCreationMode) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.LocalResourceCreationMode = mode
 	}
@@ -99,8 +107,11 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		v2.MustAddToScheme(options.Scheme)
 	}
 
-	if options.LocalBlobMemory == nil {
-		options.LocalBlobMemory = NewInMemoryLocalBlobMemory()
+	if options.LocalLayerBlobMemory == nil {
+		options.LocalLayerBlobMemory = NewInMemoryLocalBlobMemory()
+	}
+	if options.LocalManifestBlobMemory == nil {
+		options.LocalManifestBlobMemory = NewInMemoryLocalBlobMemory()
 	}
 
 	if options.Creator == "" {
@@ -129,7 +140,8 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 
 	return &Repository{
 		scheme:                    options.Scheme,
-		localBlobMemory:           options.LocalBlobMemory,
+		localLayerBlobMemory:      options.LocalLayerBlobMemory,
+		localManifestBlobMemory:   options.LocalManifestBlobMemory,
 		resolver:                  options.Resolver,
 		creatorAnnotation:         options.Creator,
 		resourceCopyOptions:       *options.ResourceCopyOptions,
