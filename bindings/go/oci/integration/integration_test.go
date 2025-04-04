@@ -441,13 +441,12 @@ func getUserAndPasswordWithGitHubCLIAndJQ(t *testing.T) (string, string) {
 	}
 	user := strings.TrimSpace(string(out))
 
-	pw := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s auth token", gh))
-	forwarded := []string{"GH_TOKEN"}
-	for _, key := range forwarded {
-		pw.Env = append(pw.Env, fmt.Sprintf("%s=%s", key, os.Getenv(key)))
+	if token := os.Getenv("GH_TOKEN"); token != "" {
+		return user, token
 	}
-	out, err = pw.CombinedOutput()
-	if err != nil {
+
+	pw := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s auth token", gh))
+	if out, err = pw.CombinedOutput(); err != nil {
 		t.Skipf("gh CLI for password failed: %v", err)
 	}
 	password := strings.TrimSpace(string(out))
