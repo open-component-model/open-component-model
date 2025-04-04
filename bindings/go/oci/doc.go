@@ -41,6 +41,44 @@
 //     - ResourceBlob: For resource-specific operations (a blob described by an OCM resource)
 //     - DescriptorBlob: For OCI descriptor management (a blob described by an OCI descriptor)
 //
+// Core Interfaces:
+//
+//  1. ComponentVersionRepository:
+//     The main interface for managing component versions and their resources:
+//     - AddComponentVersion: Stores new component versions
+//     - GetComponentVersion: Retrieves existing component versions
+//     - AddLocalResource: Adds resources to components
+//     - GetLocalResource: Retrieves resources from components
+//
+//  2. ResourceRepository:
+//     Handles resource operations independently of component versions:
+//     - UploadResource: Uploads resources to the repository
+//     - DownloadResource: Downloads resources from the repository
+//
+//  3. Resolver:
+//     Maps component references to OCI stores:
+//     - StoreForReference: Resolves references to Store implementations
+//     - ComponentVersionReference: Generates unique references for components
+//
+//  4. Store:
+//     Provides low-level OCI operations:
+//     - Fetch/Push: Basic blob operations
+//     - Tag/Resolve: Reference management
+//
+// Resource Management:
+//
+// Resources in OCM can be managed in two modes:
+//
+//  1. LocalResourceCreationModeLocalBlobWithNestedGlobalAccess:
+//     - Creates a local blob access for resources
+//     - Embeds global access information in the local blob
+//     - Provides better isolation and control
+//
+//  2. LocalResourceCreationModeOCIImageLayer:
+//     - Creates an OCI image layer access for resources
+//     - Used when the resource is embedded without a local blob
+//     - More efficient for OCI-native resources
+//
 // Usage Example:
 //
 //	resolver := NewResolver(...)
@@ -59,6 +97,15 @@
 //	// Get a local resource
 //	blob, err := repo.GetLocalResource(ctx, "component", "v1", newRes.ElementMeta.ToIdentity())
 //
+// Configuration and Options:
+//
+// The package supports flexible configuration through RepositoryOptions:
+//   - WithLocalLayerBlobMemory: Temporary blob storage for OCI Image Layers
+//   - WithLocalManifestBlobMemory: Temporary blob storage for OCI Manifests attached to Component Version Index Files
+//   - WithResolver: Reference resolution strategy
+//   - WithCreator: Component version creator identification
+//   - WithLocalResourceCreationMode: Resource access mode, as LocalBlob or as OCI Image Layers
+//
 // Media Types:
 //
 // The package defines media types for OCM components:
@@ -73,17 +120,11 @@
 //   - AnnotationOCMComponentVersion: Identifies the component version
 //   - AnnotationOCMCreator: Identifies the creator of the OCM component
 //
-// Error Handling:
-//
-// The package provides detailed error information for various failure scenarios:
-//   - Invalid component versions or resources
-//   - OCI registry communication issues
-//   - Resource access and storage problems
-//
 // Dependencies:
 //
 // The package relies on several external packages:
 //   - github.com/opencontainers/go-digest: For content addressing
 //   - github.com/opencontainers/image-spec: For OCI image specifications
 //   - oras.land/oras-go: For OCI registry operations
+//   - golang.org/x/sync/errgroup: For concurrent operations
 package oci
