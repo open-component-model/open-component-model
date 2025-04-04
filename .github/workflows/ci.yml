@@ -173,6 +173,7 @@ jobs:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json) }}
     env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TESTCONTAINER_DOCKER_NETWORK: integration-testcontainers
     steps:
       - name: Install Task
