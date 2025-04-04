@@ -435,31 +435,22 @@ func getUserAndPasswordWithGitHubCLIAndJQ(t *testing.T) (string, string) {
 	if err != nil {
 		t.Skip("jq CLI not found, skipping test")
 	}
-	out, err := exec.Command("sh", "-c", fmt.Sprintf("%s api user | %s -r .login", gh, jq)).CombinedOutput()
+	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user | %s -r .login", gh, jq)).CombinedOutput()
 	if err != nil {
 		t.Skipf("gh CLI for user failed: %v", err)
 	}
 	user := strings.TrimSpace(string(out))
 
-	tokenEnvs := []string{
-		"GH_TOKEN",
-		"GITHUB_TOKEN",
+	pw := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s auth token", gh))
+	forwarded := []string{"GH_TOKEN"}
+	for _, key := range forwarded {
+		pw.Env = append(pw.Env, fmt.Sprintf("%s=%s", key, os.Getenv(key)))
 	}
-
-	var password string
-	for _, tokenEnv := range tokenEnvs {
-		if password = os.Getenv(tokenEnv); password != "" {
-			break
-		}
+	out, err = pw.CombinedOutput()
+	if err != nil {
+		t.Skipf("gh CLI for password failed: %v", err)
 	}
-
-	if password == "" {
-		out, err = exec.Command("sh", "-c", fmt.Sprintf("%s auth token", gh)).CombinedOutput()
-		if err != nil {
-			t.Skipf("gh CLI for password failed: %v", err)
-		}
-		password = strings.TrimSpace(string(out))
-	}
+	password := strings.TrimSpace(string(out))
 
 	return user, password
 }
