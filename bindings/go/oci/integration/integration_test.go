@@ -58,10 +58,8 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 
 	reg := "ghcr.io/open-component-model/ocm"
 
-	client := createAuthClient(reg, user, password)
-
 	resolver := oci.NewURLPathResolver(reg)
-	resolver.SetClient(client)
+	resolver.SetClient(createAuthClient(reg, user, password))
 
 	repo, err := oci.NewRepository(oci.WithResolver(resolver))
 	r.NoError(err)
@@ -128,8 +126,12 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		uploadDownloadBarebonesOCIImage(t, repo, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
 	})
 
-	t.Run("local resource upload and download", func(t *testing.T) {
+	t.Run("local resource blob upload and download", func(t *testing.T) {
 		uploadDownloadLocalResource(t, repo, "test-component", "v1.0.0")
+	})
+
+	t.Run("local resource oci layout upload and download", func(t *testing.T) {
+		uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v1.0.0")
 	})
 }
 
@@ -151,9 +153,76 @@ func Test_Integration_CTF(t *testing.T) {
 		uploadDownloadBarebonesOCIImage(t, repo, "ghcr.io/test:v1.0.0", "new-test:v1.0.0")
 	})
 
-	t.Run("local resource upload and download", func(t *testing.T) {
+	t.Run("local resource blob upload and download", func(t *testing.T) {
 		uploadDownloadLocalResource(t, repo, "test-component", "v1.0.0")
 	})
+
+	t.Run("local resource oci layout upload and download", func(t *testing.T) {
+		uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v1.0.0")
+	})
+}
+
+func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, component string, version string) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	originalData := []byte("foobar")
+
+	data, _ := createSingleLayerOCIImage(t, originalData)
+
+	blob := blob.NewDirectReadOnlyBlob(bytes.NewReader(data))
+
+	// Create a simple component descriptor
+	cd := &descriptor.Descriptor{
+		Meta: descriptor.Meta{
+			Version: "v2",
+		},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    component,
+					Version: version,
+				},
+			},
+		},
+	}
+
+	// Create test resource
+	resource := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource",
+				Version: "v1.0.0",
+			},
+			ExtraIdentity: map[string]string{
+				"type": "test.resource.type",
+			},
+		},
+		Type:     "test.resource.type",
+		Relation: descriptor.LocalRelation,
+		Access: &v2.LocalBlob{
+			Type: runtime.Type{
+				Name:    v2.LocalBlobAccessType,
+				Version: v2.LocalBlobAccessTypeVersion,
+			},
+			MediaType:      oci.MediaTypeOCIImageLayoutV1 + "+tar" + "+gzip",
+			LocalReference: digest.FromBytes(data).String(),
+		},
+	}
+
+	newRes, err := repo.AddLocalResource(ctx, component, version, resource, blob)
+	r.NoError(err)
+
+	// Add resource to component descriptor
+	cd.Component.Resources = append(cd.Component.Resources, *newRes)
+
+	// Add component version after
+	err = repo.AddComponentVersion(ctx, cd)
+	r.NoError(err)
+
+	downloaded, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
+	r.NoError(err)
+	r.NotNil(downloaded)
 }
 
 func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, from, to string) {
@@ -297,7 +366,7 @@ func generateRandomPassword(t *testing.T, length int) string {
 	return string(password)
 }
 
-func createSingleLayerOCIImage(t *testing.T, data []byte, ref string) ([]byte, *v1.OCIImage) {
+func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {
 	r := require.New(t)
 	var buf bytes.Buffer
 	w := tar.NewOCILayoutWriter(&buf)
@@ -336,13 +405,21 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref string) ([]byte, *
 	}
 	r.NoError(w.Push(t.Context(), manifestDesc, bytes.NewReader(manifestRaw)))
 
-	r.NoError(w.Tag(t.Context(), manifestDesc, ref))
+	for _, ref := range ref {
+		r.NoError(w.Tag(t.Context(), manifestDesc, ref))
+	}
 
 	r.NoError(w.Close())
 
-	return buf.Bytes(), &v1.OCIImage{
-		ImageReference: ref,
+	var access *v1.OCIImage
+
+	if len(ref) > 0 {
+		access = &v1.OCIImage{
+			ImageReference: ref[0],
+		}
 	}
+
+	return buf.Bytes(), access
 }
 
 func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {

@@ -278,20 +278,34 @@ func (repo *Repository) AddLocalResource(
 
 			var group errgroup.Group
 			for _, manifest := range ociStore.Index.Manifests {
-				if err := adoptDescriptorBasedOnResource(&manifest, resource); err != nil {
-					return nil, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
-				}
 				group.Go(func() error {
 					if err := oras.CopyGraph(ctx, ociStore, store, manifest, repo.resourceCopyOptions.CopyGraphOptions); err != nil {
 						return fmt.Errorf("failed to copy graph for manifest %v: %w", manifest, err)
 					}
-					repo.localManifestBlobMemory.AddBlob(reference, manifest)
 					return nil
 				})
 			}
 			if err := group.Wait(); err != nil {
 				return nil, fmt.Errorf("failed to copy oci layout: %w", err)
 			}
+
+			idxJSON, err := json.Marshal(ociStore.Index)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal index: %w", err)
+			}
+			layer := ociImageSpecV1.Descriptor{
+				MediaType: ociImageSpecV1.MediaTypeImageIndex,
+				Digest:    digest.FromBytes(idxJSON),
+				Size:      int64(len(idxJSON)),
+			}
+			if err := adoptDescriptorBasedOnResource(&layer, resource); err != nil {
+				return nil, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+			}
+			if err := store.Push(ctx, layer, bytes.NewReader(idxJSON)); err != nil {
+				return nil, fmt.Errorf("failed to push layer: %w", err)
+			}
+			repo.localManifestBlobMemory.AddBlob(reference, layer)
+
 		default:
 			// TODO(jakobmoellerdev): currently, by default all local blobs with undefined media types as well as
 			//  ociImageSpecV1.MediaTypeImageLayer, ociImageSpecV1.MediaTypeImageLayerGzip are treated as image layers
