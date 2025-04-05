@@ -98,7 +98,7 @@ type ComponentVersionRepository interface {
 
 	// GetLocalResource retrieves a local resource from the repository.
 	// The identity must match a resource in the component descriptor.
-	GetLocalResource(ctx context.Context, component, version string, identity map[string]string) (LocalBlob, error)
+	GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, error)
 }
 
 // ResourceRepository defines the interface for storing and retrieving OCM resources
@@ -345,7 +345,7 @@ func (repo *Repository) AddLocalResource(
 }
 
 // GetLocalResource retrieves a local resource from the repository.
-func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity map[string]string) (LocalBlob, error) {
+func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, error) {
 	var err error
 	done := logOperation(ctx, "get local resource",
 		slog.String("component", component),
@@ -366,7 +366,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 
 	var candidates []descriptor.Resource
 	for _, res := range desc.Component.Resources {
-		if res.ElementMeta.ToIdentity().Match(identity) {
+		if res.ElementMeta.ToIdentity().Match(identity, ídentitySubset) {
 			candidates = append(candidates, res)
 		}
 	}
@@ -766,4 +766,21 @@ func findMatchingDescriptor(manifests []ociImageSpecV1.Descriptor, identity runt
 	}
 
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf("no matching descriptor for identity %v (not matched other descriptors %v): %w", identity, notMatched, errdef.ErrNotFound)
+}
+
+// TODO: Contribute to identity runtime.
+var ídentitySubset = runtime.IdentityMatchingChainFn(func(a runtime.Identity, b runtime.Identity) bool {
+	return isMapSubset(a, b)
+})
+
+func isMapSubset[K, V comparable](m, sub map[K]V) bool {
+	if len(sub) > len(m) {
+		return false
+	}
+	for k, vsub := range sub {
+		if vm, found := m[k]; !found || vm != vsub {
+			return false
+		}
+	}
+	return true
 }

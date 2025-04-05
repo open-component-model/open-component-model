@@ -5,12 +5,15 @@ import (
 	"compress/gzip"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -35,10 +38,11 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
+	ocmoci "ocm.software/open-component-model/bindings/go/oci/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/access/v1"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
-	"ocm.software/open-component-model/bindings/go/runtime"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -50,6 +54,7 @@ const (
 )
 
 func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
+	t.Parallel()
 	user, password := getUserAndPasswordWithGitHubCLIAndJQ(t)
 
 	r := require.New(t)
@@ -61,13 +66,55 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 	resolver := oci.NewURLPathResolver(reg)
 	resolver.SetClient(createAuthClient(reg, user, password))
 
-	repo, err := oci.NewRepository(oci.WithResolver(resolver))
+	scheme := ocmruntime.NewScheme()
+	ocmoci.MustAddToScheme(scheme)
+	v2.MustAddToScheme(scheme)
+	scheme.MustRegisterWithAlias(&v2.LocalBlob{}, ocmruntime.NewUnversionedType(v2.LocalBlobAccessType))
+
+	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithScheme(scheme))
 	r.NoError(err)
 
 	t.Run("basic download of a component version", func(t *testing.T) {
-		retrievedDesc, err := repo.GetComponentVersion(t.Context(), "ocm.software/ocmcli", "0.22.1")
+		component, version := "ocm.software/ocmcli", "0.22.1"
+		retrievedDesc, err := repo.GetComponentVersion(t.Context(), component, version)
 		r.NoError(err)
 		r.NotEmpty(retrievedDesc)
+
+		cliIdentity := ocmruntime.Identity{
+			"name":         "ocmcli",
+			"os":           runtime.GOOS,
+			"architecture": runtime.GOARCH,
+		}
+
+		cliDataBlob, err := repo.GetLocalResource(t.Context(), component, version, cliIdentity)
+		r.NoError(err)
+		r.NotNil(cliIdentity)
+
+		cliPath := filepath.Join(t.TempDir(), "ocm")
+		cliFile, err := os.OpenFile(cliPath, os.O_CREATE|os.O_RDWR, 0755)
+		r.NoError(err)
+		t.Cleanup(func() {
+			err := cliFile.Close()
+			if errors.Is(err, os.ErrClosed) {
+				return
+			}
+			r.NoError(err)
+		})
+
+		cliDataStream, err := cliDataBlob.ReadCloser()
+		r.NoError(err)
+		t.Cleanup(func() {
+			r.NoError(cliDataStream.Close())
+		})
+
+		_, err = io.CopyN(cliFile, cliDataStream, cliDataBlob.Size())
+		r.NoError(err)
+
+		r.NoError(cliFile.Close())
+
+		out, err := exec.CommandContext(t.Context(), cliPath, "version").CombinedOutput()
+		r.NoError(err)
+		r.Contains(string(out), version)
 	})
 }
 
@@ -201,7 +248,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 		Type:     "test.resource.type",
 		Relation: descriptor.LocalRelation,
 		Access: &v2.LocalBlob{
-			Type: runtime.Type{
+			Type: ocmruntime.Type{
 				Name:    v2.LocalBlobAccessType,
 				Version: v2.LocalBlobAccessTypeVersion,
 			},
@@ -459,7 +506,7 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 		Type:     "test.resource.type",
 		Relation: descriptor.LocalRelation,
 		Access: &v2.LocalBlob{
-			Type: runtime.Type{
+			Type: ocmruntime.Type{
 				Name:    v2.LocalBlobAccessType,
 				Version: v2.LocalBlobAccessTypeVersion,
 			},
@@ -508,15 +555,16 @@ func getUserAndPasswordWithGitHubCLIAndJQ(t *testing.T) (string, string) {
 	if err != nil {
 		t.Skip("gh CLI not found, skipping test")
 	}
-	jq, err := exec.LookPath("jq")
-	if err != nil {
-		t.Skip("jq CLI not found, skipping test")
-	}
-	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user | %s -r .login", gh, jq)).CombinedOutput()
+
+	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
 	if err != nil {
 		t.Skipf("gh CLI for user failed: %v", err)
 	}
-	user := strings.TrimSpace(string(out))
+	structured := map[string]interface{}{}
+	if err := json.Unmarshal(out, &structured); err != nil {
+		t.Skipf("gh CLI for user failed: %v", err)
+	}
+	user := structured["login"].(string)
 
 	pw := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s auth token", gh))
 	if out, err = pw.CombinedOutput(); err != nil {

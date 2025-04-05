@@ -73,7 +73,7 @@ func (b *EagerBufferedReader) Loaded() bool {
 
 func (b *EagerBufferedReader) Read(p []byte) (n int, err error) {
 	if err := b.LoadEagerly(); err != nil {
-		return -1, err
+		return 0, err
 	}
 	return b.buf.Read(p)
 }
