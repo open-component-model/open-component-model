@@ -21,6 +21,8 @@ jobs:
     outputs:
       # useful for working directly with modules
       modules_json: ${{ steps.filtered.outputs.modules_json }}
+      integration_test_modules_json: ${{ steps.filtered_test.outputs.integration_test_modules_json }}
+      unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
     env:
       DIR: ${{ github.workspace }}
     steps:
@@ -74,6 +76,62 @@ jobs:
               console.log("check_only_changed is false, no filtering applied.");
               core.setOutput("modules_json", JSON.stringify(modulesJson));
             }
+      - name: Filter based on Testability
+        id: filtered_test
+        uses: actions/github-script@v7
+        env:
+          MODULES_JSON: ${{ steps.filtered.outputs.modules_json }}
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const modules = JSON.parse(process.env.MODULES_JSON || '[]');
+            
+            const unitTestModules = [];
+            const integrationTestModules = [];
+
+            for (const module of modules) {
+              try {
+                const output = execSync(`task -d ${module} -aj`, { encoding: 'utf-8' });
+                const parsed = JSON.parse(output);
+                const taskNames = parsed.tasks.map(task => task.name);
+
+                if (taskNames.includes('test')) {
+                  unitTestModules.push(module);
+                }
+                if (taskNames.includes('test/integration')) {
+                  integrationTestModules.push(module);
+                }
+              } catch (error) {
+                console.log(`Skipping module '${module}' due to error or no taskfile: ${error.message}`);
+              }
+            }
+
+            console.log(`Unit test modules: ${JSON.stringify(unitTestModules)}`);
+            console.log(`Integration test modules: ${JSON.stringify(integrationTestModules)}`);
+            
+            core.setOutput('unit_test_modules_json', JSON.stringify(unitTestModules));
+            core.setOutput('integration_test_modules_json', JSON.stringify(integrationTestModules));
+      - name: Generate Job Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const modules = JSON.parse(`${{ steps.discover.outputs.modules_json || '[]' }}`);
+            const filtered = JSON.parse(`${{ steps.filtered.outputs.modules_json || '[]' }}`);
+            const unitTests = JSON.parse(`${{ steps.filtered_test.outputs.unit_test_modules_json || '[]' }}`);
+            const integrationTests = JSON.parse(`${{ steps.filtered_test.outputs.integration_test_modules_json || '[]' }}`);
+            
+            function toMarkdownList(items) {
+              return items.length ? items.map(item => `- \`${item}\``).join('\n') : '_None_';
+            }
+            
+            let summary = `### 🧩 Go Module Discovery Summary\n\n`;
+            
+            summary += `**🔍 Discovered Modules (${modules.length}):**\n${toMarkdownList(modules)}\n\n`;
+            summary += `**🎯 Filtered Modules (${filtered.length}):**\n${toMarkdownList(filtered)}\n\n`;
+            summary += `**🧪 Unit Test Modules (${unitTests.length}):**\n${toMarkdownList(unitTests)}\n\n`;
+            summary += `**🧬 Integration Test Modules (${integrationTests.length}):**\n${toMarkdownList(integrationTests)}\n`;
+            
+            core.summary.addRaw(summary).write();
 
   golangci_lint:
     name: "golangci-lint"
@@ -105,14 +163,43 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
           args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml
+
+  run_integration_tests:
+    name: "Integration Tests"
+    needs: discover_modules
+    runs-on: large_runner
+    if: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json)[0] != null }} # skip if no modules are found
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json) }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TESTCONTAINER_DOCKER_NETWORK: integration-testcontainers
+    steps:
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v4
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
+      - name: Create Docker network for running Testcontainers
+        run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
+      - name: Run Tests
+        run: task ${{ matrix.module }}:test/integration
+
   run_unit_tests:
     name: "Unit Tests"
     needs: discover_modules
     runs-on: ubuntu-latest
-    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
+    if: ${{ fromJSON(needs.discover_modules.outputs.unit_test_modules_json)[0] != null }} # skip if no modules are found
     strategy:
       matrix:
-        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
+        module: ${{ fromJSON(needs.discover_modules.outputs.unit_test_modules_json) }}
     steps:
       - name: Install Task
         uses: arduino/setup-task@v2
@@ -130,6 +217,7 @@ jobs:
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: Run Tests
         run: task ${{ matrix.module }}:test
+
   analyze-go:
     name: "Analyze Go Modules"
     needs: discover_modules
@@ -148,7 +236,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # we have a self reference here because CodeQL does introspection on the step
           sparse-checkout: |
+            .github/workflows/ci.yml
             ${{ matrix.project }}
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -201,6 +291,7 @@ jobs:
       - generate
       - analyze-go
       - run_unit_tests
+      - run_integration_tests
       - golangci_lint
     if: failure()
     steps:

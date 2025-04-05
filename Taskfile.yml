@@ -29,6 +29,14 @@ includes:
     optional: true
     taskfile: ./bindings/go/ctf/Taskfile.yml
     dir: ./bindings/go/ctf
+  bindings/go/oci:
+    optional: true
+    taskfile: ./bindings/go/oci/Taskfile.yml
+    dir: ./bindings/go/oci
+  bindings/go/oci/integration:
+    optional: true
+    taskfile: ./bindings/go/oci/integration/Taskfile.yml
+    dir: ./bindings/go/oci/integration
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
@@ -38,21 +46,32 @@ vars:
   GO_MODULES:
     sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'
 
+
 tasks:
   default:
     deps: ["cli:build"]
-
-
-  test:
-    desc: "Run all tests in the project"
-    cmds:
-      - for: { var: GO_MODULES }
-        task: '{{.ITEM}}:test'
 
   go_modules:
     desc: "List all Go Modules available in this project"
     cmd: echo "{{ .GO_MODULES }}"
     silent: true
+
+  test:
+    desc: "Run all tests in the project"
+    vars:
+      TASKS:
+        sh: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test\")) | .name | rtrimstr(\":test\")'"
+    cmds:
+      - for: { var: TASKS }
+        task: '{{.ITEM}}:test'
+  test/integration:
+    desc: "Run all integration tests in the project, possibly requiring external systems"
+    vars:
+      TASKS:
+        sh: "task -aj | jq -r '.tasks[] | select(.name | endswith(\":test/integration\")) | .name | rtrimstr(\":test/integration\")'"
+    cmds:
+      - for: { var: TASKS }
+        task: '{{.ITEM}}:test/integration'
 
   init/go.work:
     desc: "Initialize the workspace environment"

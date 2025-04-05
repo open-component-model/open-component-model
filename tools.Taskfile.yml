@@ -32,6 +32,8 @@ tasks:
   golangci-lint/run:
     desc: "Run golangci-lint on all go modules"
     deps: [golangci-lint/install]
+    aliases:
+      - "lint"
     cmds:
       - for: { var: GO_MODULES }
         cmd: |
