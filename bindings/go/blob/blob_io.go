@@ -8,10 +8,27 @@ import (
 )
 
 // Copy copies the contents of a ReadOnlyBlob to a provided io.Writer, performing optional size and digest checks.
-// Copy can redirect to io.CopyN if the blob is SizeAware.
-// Copy can verify an open container digest if the blob is DigestAware.
+//
+// The function first checks if the source blob is SizeAware and retrieves its size if applicable.
+// It then reads the blob's data and ensures it is closed after the operation, even if an error occurs.
+//
+// If the source blob is DigestAware, the function verifies the blob's digest against the provided data.
+// It uses an io.TeeReader to read the data while simultaneously verifying the digest. If the verification fails,
+// an error is returned indicating the failure.
+//
+// Depending on whether the size is known, the function either uses io.CopyN to copy a specific number of bytes
+// or io.Copy to copy all available data. Thus, if the data is SizeAware, no buffering is necessary, reducing
+// allocations and improving performance.
+//
+// Parameters:
+// - dst: The destination io.Writer where the blob's contents will be copied.
+// - src: The ReadOnlyBlob source from which the contents will be read.
+//
+// Returns:
+//   - An error if the copy operation fails, including errors from reading the blob, closing the reader,
+//     or failing the digest verification. If the operation is successful, it returns nil.
 func Copy(dst io.Writer, src ReadOnlyBlob) (err error) {
-	var size int64 = SizeUnknown
+	size := SizeUnknown
 	if srcSizeAware, ok := src.(SizeAware); ok {
 		size = srcSizeAware.Size()
 	}
