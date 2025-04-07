@@ -10,6 +10,8 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/access"
+	"ocm.software/open-component-model/bindings/go/oci/internal/log"
+	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -32,8 +34,8 @@ type RepositoryOptions struct {
 	Scheme *runtime.Scheme
 	// LocalBlobMemory is used to temporarily store local blobs until they are added to a component version.
 	// If not provided, a new memory will be created.
-	LocalLayerBlobMemory    LocalBlobMemory
-	LocalManifestBlobMemory LocalBlobMemory
+	LocalLayerBlobMemory    memory.LocalBlobMemory
+	LocalManifestBlobMemory memory.LocalBlobMemory
 	// Resolver resolves component version references to OCI stores.
 	// This is required and must be provided.
 	Resolver Resolver
@@ -61,14 +63,14 @@ func WithScheme(scheme *runtime.Scheme) RepositoryOption {
 }
 
 // WithLocalLayerBlobMemory sets the local blob memory for the repository.
-func WithLocalLayerBlobMemory(memory LocalBlobMemory) RepositoryOption {
+func WithLocalLayerBlobMemory(memory memory.LocalBlobMemory) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.LocalLayerBlobMemory = memory
 	}
 }
 
 // WithLocalManifestBlobMemory sets the local blob memory for the repository.
-func WithLocalManifestBlobMemory(memory LocalBlobMemory) RepositoryOption {
+func WithLocalManifestBlobMemory(memory memory.LocalBlobMemory) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.LocalManifestBlobMemory = memory
 	}
@@ -115,10 +117,10 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	}
 
 	if options.LocalLayerBlobMemory == nil {
-		options.LocalLayerBlobMemory = NewInMemoryLocalBlobMemory()
+		options.LocalLayerBlobMemory = memory.NewInMemoryLocalBlobMemory()
 	}
 	if options.LocalManifestBlobMemory == nil {
-		options.LocalManifestBlobMemory = NewInMemoryLocalBlobMemory()
+		options.LocalManifestBlobMemory = memory.NewInMemoryLocalBlobMemory()
 	}
 
 	if options.Creator == "" {
@@ -130,15 +132,15 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 			CopyGraphOptions: oras.CopyGraphOptions{
 				Concurrency: 8,
 				PreCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-					slog.DebugContext(ctx, "copying", descriptorLogAttr(desc))
+					slog.DebugContext(ctx, "copying", log.DescriptorLogAttr(desc))
 					return nil
 				},
 				PostCopy: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-					slog.InfoContext(ctx, "copied", descriptorLogAttr(desc))
+					slog.InfoContext(ctx, "copied", log.DescriptorLogAttr(desc))
 					return nil
 				},
 				OnCopySkipped: func(ctx context.Context, desc ociImageSpecV1.Descriptor) error {
-					slog.DebugContext(ctx, "skipped", descriptorLogAttr(desc))
+					slog.DebugContext(ctx, "skipped", log.DescriptorLogAttr(desc))
 					return nil
 				},
 			},

@@ -1,4 +1,4 @@
-package oci
+package oci_test
 
 import (
 	"testing"
@@ -9,6 +9,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci"
 )
 
 // mockBlob implements blob.ReadOnlyBlob for testing purposes
@@ -27,10 +28,12 @@ func TestNewResourceBlob(t *testing.T) {
 	mock := &mockBlob{}
 	mediaType := "application/octet-stream"
 
-	rb := NewResourceBlob(resource, mock, mediaType)
+	rb := oci.NewResourceBlob(resource, mock, mediaType)
 	assert.NotNil(t, rb)
 	assert.Equal(t, resource, rb.Resource)
-	assert.Equal(t, mediaType, rb.mediaType)
+	got, ok := rb.MediaType()
+	assert.True(t, ok)
+	assert.Equal(t, mediaType, got)
 }
 
 func TestResourceBlob_MediaType(t *testing.T) {
@@ -38,7 +41,7 @@ func TestResourceBlob_MediaType(t *testing.T) {
 	mock := &mockBlob{}
 	mediaType := "application/octet-stream"
 
-	rb := NewResourceBlob(resource, mock, mediaType)
+	rb := oci.NewResourceBlob(resource, mock, mediaType)
 	mt, ok := rb.MediaType()
 	assert.True(t, ok)
 	assert.Equal(t, mediaType, mt)
@@ -117,7 +120,7 @@ func TestResourceBlob_Digest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := NewResourceBlob(tt.resource, mock, "application/octet-stream")
+			rb := oci.NewResourceBlob(tt.resource, mock, "application/octet-stream")
 			dig, ok := rb.Digest()
 			assert.Equal(t, tt.expectedOK, ok)
 			if tt.expectedOK {
@@ -163,7 +166,7 @@ func TestResourceBlob_HasPrecalculatedDigest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := NewResourceBlob(tt.resource, mock, "application/octet-stream")
+			rb := oci.NewResourceBlob(tt.resource, mock, "application/octet-stream")
 			assert.Equal(t, tt.expected, rb.HasPrecalculatedDigest())
 		})
 	}
@@ -187,7 +190,7 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 			},
 			newDigest: digest.FromString("test").String(),
 			expectedDigest: &descriptor.Digest{
-				HashAlgorithm: ReverseHashAlgorithmConversionTable[digest.FromString("test").Algorithm()],
+				HashAlgorithm: oci.ReverseHashAlgorithmConversionTable[digest.FromString("test").Algorithm()],
 				Value:         digest.FromString("test").Encoded(),
 			},
 			expectPanic: false,
@@ -209,7 +212,7 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := NewResourceBlob(tt.resource, mock, "application/octet-stream")
+			rb := oci.NewResourceBlob(tt.resource, mock, "application/octet-stream")
 
 			if tt.expectPanic {
 				assert.Panics(t, func() {
@@ -231,7 +234,7 @@ func TestResourceBlob_Size(t *testing.T) {
 	}
 	mock := &mockBlob{}
 
-	rb := NewResourceBlob(resource, mock, "application/octet-stream")
+	rb := oci.NewResourceBlob(resource, mock, "application/octet-stream")
 	assert.Equal(t, size, rb.Size())
 }
 
@@ -260,7 +263,7 @@ func TestResourceBlob_HasPrecalculatedSize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := NewResourceBlob(tt.resource, mock, "application/octet-stream")
+			rb := oci.NewResourceBlob(tt.resource, mock, "application/octet-stream")
 			assert.Equal(t, tt.expected, rb.HasPrecalculatedSize())
 		})
 	}
@@ -270,7 +273,7 @@ func TestResourceBlob_SetPrecalculatedSize(t *testing.T) {
 	resource := &descriptor.Resource{}
 	mock := &mockBlob{}
 
-	rb := NewResourceBlob(resource, mock, "application/octet-stream")
+	rb := oci.NewResourceBlob(resource, mock, "application/octet-stream")
 	newSize := int64(200)
 	rb.SetPrecalculatedSize(newSize)
 	assert.Equal(t, newSize, resource.Size)
@@ -311,7 +314,7 @@ func TestResourceBlob_OCIDescriptor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := NewResourceBlob(tt.resource, mock, tt.mediaType)
+			rb := oci.NewResourceBlob(tt.resource, mock, tt.mediaType)
 			desc := rb.OCIDescriptor()
 
 			assert.Equal(t, tt.mediaType, desc.MediaType)
@@ -335,7 +338,7 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	mock := &mockBlob{}
 	mediaType := "application/octet-stream"
 
-	rb := NewResourceBlob(resource, mock, mediaType)
+	rb := oci.NewResourceBlob(resource, mock, mediaType)
 
 	// Test all methods in sequence
 	mt, ok := rb.MediaType()

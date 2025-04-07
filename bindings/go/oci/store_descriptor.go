@@ -12,6 +12,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -42,7 +43,7 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		Digest:    digest.FromBytes(descriptorBytes),
 		Size:      int64(len(descriptorBytes)),
 	}
-	logger.Log(ctx, slog.LevelDebug, "pushing descriptor", descriptorLogAttr(descriptorOCIDescriptor))
+	log.Base.Log(ctx, slog.LevelDebug, "pushing descriptor", log.DescriptorLogAttr(descriptorOCIDescriptor))
 	if err := store.Push(ctx, descriptorOCIDescriptor, bytes.NewReader(descriptorBytes)); err != nil {
 		return nil, fmt.Errorf("unable to push component descriptor: %w", err)
 	}
@@ -52,7 +53,7 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal component config: %w", err)
 	}
-	logger.Log(ctx, slog.LevelDebug, "pushing descriptor", descriptorLogAttr(componentConfigDescriptor))
+	log.Base.Log(ctx, slog.LevelDebug, "pushing descriptor", log.DescriptorLogAttr(componentConfigDescriptor))
 	if err := store.Push(ctx, componentConfigDescriptor, bytes.NewReader(componentConfigRaw)); err != nil {
 		return nil, fmt.Errorf("unable to push component config: %w", err)
 	}
@@ -85,9 +86,14 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		Size:        int64(len(manifestRaw)),
 		Annotations: manifest.Annotations,
 	}
-	logger.Log(ctx, slog.LevelInfo, "pushing descriptor", descriptorLogAttr(manifestDescriptor))
+	log.Base.Log(ctx, slog.LevelInfo, "pushing descriptor", log.DescriptorLogAttr(manifestDescriptor))
 	if err := store.Push(ctx, manifestDescriptor, bytes.NewReader(manifestRaw)); err != nil {
 		return nil, fmt.Errorf("unable to push manifest: %w", err)
+	}
+
+	// Only create an index if additional descriptor manifests are provided
+	if len(opts.AdditionalDescriptorManifests) == 0 {
+		return &manifestDescriptor, nil
 	}
 
 	idx := ociImageSpecV1.Index{
@@ -112,7 +118,7 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		Size:        int64(len(idxRaw)),
 		Annotations: idx.Annotations,
 	}
-	logger.Log(ctx, slog.LevelInfo, "pushing index", descriptorLogAttr(idxDescriptor))
+	log.Base.Log(ctx, slog.LevelInfo, "pushing index", log.DescriptorLogAttr(idxDescriptor))
 	if err := store.Push(ctx, idxDescriptor, bytes.NewReader(idxRaw)); err != nil {
 		return nil, fmt.Errorf("unable to push index: %w", err)
 	}

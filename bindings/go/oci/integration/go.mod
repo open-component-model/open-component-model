@@ -9,13 +9,13 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.36.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.36.0
-	golang.org/x/crypto v0.36.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250403065545-2a9dc8cae8ff
-	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250403065545-2a9dc8cae8ff
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250403065545-2a9dc8cae8ff
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250403065545-2a9dc8cae8ff
+	golang.org/x/crypto v0.37.0
+	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250407070550-eea1df4793e3
+	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250407070550-eea1df4793e3
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250407070550-eea1df4793e3
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250407070550-eea1df4793e3
 	ocm.software/open-component-model/bindings/go/oci v0.0.0
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250403065545-2a9dc8cae8ff
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250407070550-eea1df4793e3
 	oras.land/oras-go/v2 v2.5.0
 )
 
@@ -51,7 +51,7 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
-	github.com/moby/sys/user v0.3.0 // indirect
+	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
@@ -68,8 +68,8 @@ require (
 	go.opentelemetry.io/otel v1.35.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sync v0.13.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
 	google.golang.org/grpc v1.71.1 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

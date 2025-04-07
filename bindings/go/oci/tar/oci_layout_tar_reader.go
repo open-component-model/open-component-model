@@ -47,7 +47,7 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 	}
 	closer = src.Close
 
-	size := int64(blob.SizeUnknown)
+	size := blob.SizeUnknown
 	if srcSizeAware, ok := src.(blob.SizeAware); ok {
 		if size = srcSizeAware.Size(); size < int64(len(header)) {
 			return nil, fmt.Errorf("source is too small for gzip detection: %d < %d", size, cap(header))

@@ -655,7 +655,7 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	t.Cleanup(func() {
 		r.NoError(layout.Close(), "Failed to close OCI layout")
 	})
-	r.Len(layout.Index.Manifests, 2)
+	r.Len(layout.Index.Manifests, 1)
 }
 
 func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {

@@ -1,6 +1,6 @@
 // Package oci provides functionality for working with Open Container Initiative (OCI) specifications
 // and handling local blob storage in memory.
-package oci
+package memory
 
 import (
 	"sync"

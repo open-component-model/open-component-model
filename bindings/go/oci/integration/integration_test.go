@@ -91,7 +91,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 		r.NotNil(cliIdentity)
 
 		cliPath := filepath.Join(t.TempDir(), "ocm")
-		cliFile, err := os.OpenFile(cliPath, os.O_CREATE|os.O_RDWR, 0755)
+		cliFile, err := os.OpenFile(cliPath, os.O_CREATE|os.O_RDWR, 0o744)
 		r.NoError(err)
 		t.Cleanup(func() {
 			err := cliFile.Close()
@@ -101,15 +101,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 			r.NoError(err)
 		})
 
-		cliDataStream, err := cliDataBlob.ReadCloser()
-		r.NoError(err)
-		t.Cleanup(func() {
-			r.NoError(cliDataStream.Close())
-		})
-
-		_, err = io.CopyN(cliFile, cliDataStream, cliDataBlob.Size())
-		r.NoError(err)
-
+		r.NoError(blob.Copy(cliFile, cliDataBlob))
 		r.NoError(cliFile.Close())
 
 		out, err := exec.CommandContext(t.Context(), cliPath, "version").CombinedOutput()

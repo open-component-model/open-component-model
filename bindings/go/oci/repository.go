@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	goruntime "runtime"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -28,6 +29,8 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/oci/access/v1"
 	ociDigestV1 "ocm.software/open-component-model/bindings/go/oci/digest/v1"
+	"ocm.software/open-component-model/bindings/go/oci/internal/log"
+	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -63,8 +66,6 @@ const (
 	// MediaTypeOCIImageLayoutV1 is the media type for version 1 of OCI image layouts
 	MediaTypeOCIImageLayoutV1 = MediaTypeOCIImageLayout + ".v1"
 )
-
-var logger = slog.With(slog.String("realm", "oci"))
 
 // LocalBlob represents a blob that is stored locally in the OCI repository.
 // It provides methods to access the blob's metadata and content.
@@ -149,16 +150,23 @@ type Store interface {
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
 // Each component version is stored in a separate OCI repository.
+//
+// This Repository implementation synchronizes OCI Manifests through the concepts of LocalBlobMemory.
+// Through this any local blob added with AddLocalResource will be added to the memory until
+// AddComponentVersion is called with a reference to that resource.
+// This allows the repository to associate newly added blobs with the component version and still upload them
+// when AddLocalResource is called.
+//
+// Note: Store implementations are expected to either allow orphaned local resources or
+// regularly issue an async garbage collection to remove them due to this behavior.
+// This however should not be an issue since all OCI registries implement such a garbage collection mechanism.
 type Repository struct {
 	scheme *runtime.Scheme
 
-	// localLayerBlobMemory temporarily stores local blobs until they are added to a component version.
-	// thus any local blob added with AddLocalResource will be added to the memory until
-	// AddComponentVersion is called with a reference to that resource.
-	// Note that Store implementations are expected to either allow orphaned LocalBlobs or
-	// regularly issue an async garbage collection to remove them.
-	localLayerBlobMemory    LocalBlobMemory
-	localManifestBlobMemory LocalBlobMemory
+	// localLayerBlobMemory temporarily stores local blobs intended as layers until they are added to a component version.
+	localLayerBlobMemory memory.LocalBlobMemory
+	// localManifestBlobMemory temporarily stores local blobs intended as manifests until they are added to a component version.
+	localManifestBlobMemory memory.LocalBlobMemory
 
 	// resolver resolves component version references to OCI stores.
 	resolver Resolver
@@ -180,13 +188,12 @@ var _ ComponentVersionRepository = (*Repository)(nil)
 // AddComponentVersion adds a new component version to the repository.
 func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) (err error) {
 	component, version := descriptor.Component.Name, descriptor.Component.Version
-	done := logOperation(ctx, "add component version", slog.String("component", component), slog.String("version", version))
+	done := log.Operation(ctx, "add component version", slog.String("component", component), slog.String("version", version))
 	defer done(err)
 
-	reference := repo.resolver.ComponentVersionReference(component, version)
-	store, err := repo.resolver.StoreForReference(ctx, reference)
+	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
-		return fmt.Errorf("failed to resolve store for reference: %w", err)
+		return err
 	}
 
 	manifest, err := addDescriptorToStore(ctx, store, descriptor, storeDescriptorOptions{
@@ -212,10 +219,9 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 
 // GetComponentVersion retrieves a component version from the repository.
 func (repo *Repository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
-	reference := repo.resolver.ComponentVersionReference(component, version)
-	store, err := repo.resolver.StoreForReference(ctx, reference)
+	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get store for reference: %w", err)
+		return nil, err
 	}
 
 	desc, _, _, err := getDescriptorFromStore(ctx, store, reference)
@@ -229,16 +235,15 @@ func (repo *Repository) AddLocalResource(
 	resource *descriptor.Resource,
 	content blob.ReadOnlyBlob,
 ) (_ *descriptor.Resource, err error) {
-	done := logOperation(ctx, "add local resource",
+	done := log.Operation(ctx, "add local resource",
 		slog.String("component", component),
 		slog.String("version", version),
 		slog.String("resource", resource.Name))
 	defer done(err)
 
-	reference := repo.resolver.ComponentVersionReference(component, version)
-	store, err := repo.resolver.StoreForReference(ctx, reference)
+	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get store for reference: %w", err)
+		return nil, err
 	}
 
 	contentSizeAware, ok := content.(blob.SizeAware)
@@ -277,6 +282,13 @@ func (repo *Repository) AddLocalResource(
 			}()
 
 			var group errgroup.Group
+			group.SetLimit(goruntime.NumCPU())
+			// TODO(jakobmoellerdev): Currently the behavior of an oci image layout adoption is the following
+			//  - All manifests from the index are interpreted as separate manifests attached to the component descriptor
+			//  - The index is not pushed to the store, but only the manifests
+			//  - every manifest is concurrently copied.
+			//  In theory we could also take the index (ociStore.Index) and serialize it and push that.
+			//  Still need to add more options to configure this.
 			for _, manifest := range ociStore.Index.Manifests {
 				group.Go(func() error {
 					if err := oras.CopyGraph(ctx, ociStore, store, manifest, repo.resourceCopyOptions.CopyGraphOptions); err != nil {
@@ -284,28 +296,14 @@ func (repo *Repository) AddLocalResource(
 					}
 					return nil
 				})
+				if err := adoptDescriptorBasedOnResource(&manifest, resource); err != nil {
+					return nil, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+				}
+				repo.localManifestBlobMemory.AddBlob(reference, manifest)
 			}
 			if err := group.Wait(); err != nil {
 				return nil, fmt.Errorf("failed to copy oci layout: %w", err)
 			}
-
-			idxJSON, err := json.Marshal(ociStore.Index)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal index: %w", err)
-			}
-			layer := ociImageSpecV1.Descriptor{
-				MediaType: ociImageSpecV1.MediaTypeImageIndex,
-				Digest:    digest.FromBytes(idxJSON),
-				Size:      int64(len(idxJSON)),
-			}
-			if err := adoptDescriptorBasedOnResource(&layer, resource); err != nil {
-				return nil, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
-			}
-			if err := store.Push(ctx, layer, bytes.NewReader(idxJSON)); err != nil {
-				return nil, fmt.Errorf("failed to push layer: %w", err)
-			}
-			repo.localManifestBlobMemory.AddBlob(reference, layer)
-
 		default:
 			// TODO(jakobmoellerdev): currently, by default all local blobs with undefined media types as well as
 			//  ociImageSpecV1.MediaTypeImageLayer, ociImageSpecV1.MediaTypeImageLayerGzip are treated as image layers
@@ -347,16 +345,15 @@ func (repo *Repository) AddLocalResource(
 // GetLocalResource retrieves a local resource from the repository.
 func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, error) {
 	var err error
-	done := logOperation(ctx, "get local resource",
+	done := log.Operation(ctx, "get local resource",
 		slog.String("component", component),
 		slog.String("version", version),
 		slog.Any("identity", identity))
 	defer done(err)
 
-	reference := repo.resolver.ComponentVersionReference(component, version)
-	store, err := repo.resolver.StoreForReference(ctx, reference)
+	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get store for reference: %w", err)
+		return nil, err
 	}
 
 	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference)
@@ -366,7 +363,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 
 	var candidates []descriptor.Resource
 	for _, res := range desc.Component.Resources {
-		if res.ElementMeta.ToIdentity().Match(identity, ídentitySubset) {
+		if identity.Match(res.ElementMeta.ToIdentity(), IdentitySubset) {
 			candidates = append(candidates, res)
 		}
 	}
@@ -415,7 +412,15 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	}
 }
 
-func getLocalBlob(ctx context.Context, manifest *ociImageSpecV1.Manifest, identity map[string]string, store Store) (LocalBlob, error) {
+func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store Store, err error) {
+	reference := repo.resolver.ComponentVersionReference(component, version)
+	if store, err = repo.resolver.StoreForReference(ctx, reference); err != nil {
+		return "", nil, fmt.Errorf("failed to get store for reference: %w", err)
+	}
+	return reference, store, nil
+}
+
+func getLocalBlob(ctx context.Context, manifest *ociImageSpecV1.Manifest, identity map[string]string, store oras.ReadOnlyTarget) (LocalBlob, error) {
 	layer, err := findMatchingDescriptor(manifest.Layers, identity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find matching layer: %w", err)
@@ -432,7 +437,7 @@ func getLocalBlob(ctx context.Context, manifest *ociImageSpecV1.Manifest, identi
 
 // UploadResource uploads a resource to the repository.
 func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed, res *descriptor.Resource, b blob.ReadOnlyBlob) (err error) {
-	done := logOperation(ctx, "upload resource", slog.String("resource", res.Name))
+	done := log.Operation(ctx, "upload resource", slog.String("resource", res.Name))
 	defer done(err)
 
 	var old v1.OCIImage
@@ -494,7 +499,7 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 
 // DownloadResource downloads a resource from the repository.
 func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Resource) (data blob.ReadOnlyBlob, err error) {
-	done := logOperation(ctx, "download resource", slog.String("resource", res.Name))
+	done := log.Operation(ctx, "download resource", slog.String("resource", res.Name))
 	defer done(err)
 
 	if res.Access.GetType().IsEmpty() {
@@ -652,12 +657,12 @@ func validateDigest(res *descriptor.Resource, desc ociImageSpecV1.Descriptor, bl
 // getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.
 // It handles both OCI image indexes and OCI image manifests.
 func getDescriptorOCIImageManifest(ctx context.Context, store Store, reference string) (manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
-	logger.Log(ctx, slog.LevelInfo, "resolving descriptor", slog.String("reference", reference))
+	log.Base.Log(ctx, slog.LevelInfo, "resolving descriptor", slog.String("reference", reference))
 	base, err := store.Resolve(ctx, reference)
 	if err != nil {
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
 	}
-	logger.Log(ctx, slog.LevelInfo, "fetching descriptor", descriptorLogAttr(base))
+	log.Base.Log(ctx, slog.LevelInfo, "fetching descriptor", log.DescriptorLogAttr(base))
 	manifestRaw, err := store.Fetch(ctx, ociImageSpecV1.Descriptor{
 		MediaType: base.MediaType,
 		Digest:    base.Digest,
@@ -768,19 +773,16 @@ func findMatchingDescriptor(manifests []ociImageSpecV1.Descriptor, identity runt
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf("no matching descriptor for identity %v (not matched other descriptors %v): %w", identity, notMatched, errdef.ErrNotFound)
 }
 
-// TODO: Contribute to identity runtime.
-var ídentitySubset = runtime.IdentityMatchingChainFn(func(a runtime.Identity, b runtime.Identity) bool {
-	return isMapSubset(a, b)
-})
-
-func isMapSubset[K, V comparable](m, sub map[K]V) bool {
-	if len(sub) > len(m) {
+// IdentitySubset matching
+// TODO(jakobmoellerdev): Contribute to identity runtime. see https://github.com/open-component-model/open-component-model/pull/58
+var IdentitySubset = runtime.IdentityMatchingChainFn(func(sub runtime.Identity, base runtime.Identity) bool {
+	if len(sub) > len(base) {
 		return false
 	}
 	for k, vsub := range sub {
-		if vm, found := m[k]; !found || vm != vsub {
+		if vm, found := base[k]; !found || vm != vsub {
 			return false
 		}
 	}
 	return true
-}
+})
