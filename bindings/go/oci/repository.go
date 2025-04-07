@@ -14,9 +14,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	goruntime "runtime"
+	"maps"
+	"slices"
+	"strings"
+	"sync"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2"
@@ -29,6 +34,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/oci/access/v1"
 	ociDigestV1 "ocm.software/open-component-model/bindings/go/oci/digest/v1"
+	indexv1 "ocm.software/open-component-model/bindings/go/oci/index/component/v1"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
@@ -89,6 +95,10 @@ type ComponentVersionRepository interface {
 	// GetComponentVersion retrieves a component version from the repository.
 	// Returns the descriptor from the most recent AddComponentVersion call for that component and version.
 	GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error)
+
+	// ListComponentVersions lists all component versions for a given component.
+	// Returns a list of version strings, sorted on best effort by loose semver specification.
+	ListComponentVersions(ctx context.Context, component string) ([]string, error)
 
 	// AddLocalResource adds a local resource to the repository.
 	// The resource must be referenced in the component descriptor.
@@ -163,8 +173,6 @@ type Store interface {
 type Repository struct {
 	scheme *runtime.Scheme
 
-	// localLayerBlobMemory temporarily stores local blobs intended as layers until they are added to a component version.
-	localLayerBlobMemory memory.LocalBlobMemory
 	// localManifestBlobMemory temporarily stores local blobs intended as manifests until they are added to a component version.
 	localManifestBlobMemory memory.LocalBlobMemory
 
@@ -199,7 +207,6 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	manifest, err := addDescriptorToStore(ctx, store, descriptor, storeDescriptorOptions{
 		Scheme:                        repo.scheme,
 		CreatorAnnotation:             repo.creatorAnnotation,
-		AdditionalDescriptorLayers:    repo.localLayerBlobMemory.GetBlobs(reference),
 		AdditionalDescriptorManifests: repo.localManifestBlobMemory.GetBlobs(reference),
 	})
 	if err != nil {
@@ -211,10 +218,106 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
 	// Cleanup local blob memory as all layers have been pushed
-	repo.localLayerBlobMemory.DeleteBlobs(reference)
 	repo.localManifestBlobMemory.DeleteBlobs(reference)
 
 	return nil
+}
+
+func (repo *Repository) ListComponentVersions(ctx context.Context, component string) (_ []string, err error) {
+	done := log.Operation(ctx, "list component versions",
+		slog.String("component", component))
+	defer done(err)
+
+	ref, store, err := repo.getStore(ctx, component, "latest")
+	if err != nil {
+		return nil, err
+	}
+
+	var tags []*semver.Version
+
+	tagLister, tok := store.(registry.TagLister)
+	if tok {
+		var tagMu sync.Mutex
+		pref, err := registry.ParseReference(ref)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse reference %q: %w", ref, err)
+		}
+		if err := tagLister.Tags(ctx, "", func(t []string) error {
+			var wg errgroup.Group
+			for _, tag := range t {
+				wg.Go(func() error {
+					pref.Reference = tag
+					desc, err := store.Resolve(ctx, pref.String())
+					if err != nil {
+						return fmt.Errorf("failed to resolve tag %q: %w", tag, err)
+					}
+					legacy := desc.MediaType == ociImageSpecV1.MediaTypeImageManifest && desc.ArtifactType == ""
+					current := desc.MediaType == ociImageSpecV1.MediaTypeImageManifest && desc.ArtifactType == MediaTypeComponentDescriptorV2 ||
+						desc.MediaType == ociImageSpecV1.MediaTypeImageIndex && desc.ArtifactType == MediaTypeComponentDescriptorV2
+					if !(legacy || current) {
+						return nil
+					}
+					v, err := semver.NewVersion(tag)
+					if err != nil {
+						return fmt.Errorf("failed to parse tag %q: %w", tag, err)
+					}
+					tagMu.Lock()
+					defer tagMu.Unlock()
+					tags = append(tags, v)
+					return nil
+				})
+			}
+			return wg.Wait()
+		}); err != nil {
+			return nil, fmt.Errorf("failed to list tags: %w", err)
+		}
+	}
+
+	lister, lok := store.(registry.ReferrerLister)
+	if lok {
+		list := func(referrers []ociImageSpecV1.Descriptor) error {
+			for _, referrer := range referrers {
+				if referrer.Annotations == nil {
+					continue
+				}
+				annotation, ok := referrer.Annotations[AnnotationOCMComponentVersion]
+				if !ok {
+					continue
+				}
+				annotation = strings.TrimPrefix(annotation, DefaultComponentDescriptorPathSuffix+"/")
+				split := strings.Split(annotation, ":")
+				if len(split) == 2 && split[0] == component {
+					tag, err := semver.NewVersion(split[1])
+					if err != nil {
+						return fmt.Errorf("failed to parse tag %q: %w", split[1], err)
+					}
+					tags = append(tags, tag)
+				}
+			}
+			return nil
+		}
+
+		if err := lister.Referrers(ctx, indexv1.Descriptor, MediaTypeComponentDescriptorV2, list); err != nil {
+			return nil, fmt.Errorf("failed to list referrers: %w", err)
+		}
+	}
+
+	if !tok && !lok {
+		return nil, fmt.Errorf("underlying store does not support listing tags or referrers which could be used to list component versions")
+	}
+
+	slices.SortFunc(tags, func(a *semver.Version, b *semver.Version) int {
+		return b.Compare(a)
+	})
+	// remove duplicates
+	slices.Compact(tags)
+
+	strTags := make([]string, len(tags))
+	for i, tag := range tags {
+		strTags[i] = tag.String()
+	}
+
+	return strTags, nil
 }
 
 // GetComponentVersion retrieves a component version from the repository.
@@ -233,7 +336,7 @@ func (repo *Repository) AddLocalResource(
 	ctx context.Context,
 	component, version string,
 	resource *descriptor.Resource,
-	content blob.ReadOnlyBlob,
+	b blob.ReadOnlyBlob,
 ) (_ *descriptor.Resource, err error) {
 	done := log.Operation(ctx, "add local resource",
 		slog.String("component", component),
@@ -246,14 +349,14 @@ func (repo *Repository) AddLocalResource(
 		return nil, err
 	}
 
-	contentSizeAware, ok := content.(blob.SizeAware)
+	contentSizeAware, ok := b.(blob.SizeAware)
 	if !ok {
-		return nil, errors.New("content does not implement blob.SizeAware interface, size cannot be inferred")
+		return nil, errors.New("b does not implement blob.SizeAware interface, size cannot be inferred")
 	}
 
 	size := contentSizeAware.Size()
 	if size == blob.SizeUnknown {
-		return nil, errors.New("content size is unknown")
+		return nil, errors.New("b size is unknown")
 	}
 
 	if resource.Access.GetType().IsEmpty() {
@@ -273,7 +376,7 @@ func (repo *Repository) AddLocalResource(
 		// for local blobs that are complete image layouts, we can directly push them as part of the
 		// descriptor index
 		case MediaTypeOCIImageLayoutV1 + "+tar", MediaTypeOCIImageLayoutV1 + "+tar+gzip":
-			ociStore, err := tar.ReadOCILayout(ctx, content)
+			ociStore, err := tar.ReadOCILayout(ctx, b)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read OCI layout: %w", err)
 			}
@@ -281,47 +384,51 @@ func (repo *Repository) AddLocalResource(
 				err = errors.Join(err, ociStore.Close())
 			}()
 
-			var group errgroup.Group
-			group.SetLimit(goruntime.NumCPU())
-			// TODO(jakobmoellerdev): Currently the behavior of an oci image layout adoption is the following
-			//  - All manifests from the index are interpreted as separate manifests attached to the component descriptor
-			//  - The index is not pushed to the store, but only the manifests
-			//  - every manifest is concurrently copied.
-			//  In theory we could also take the index (ociStore.Index) and serialize it and push that.
-			//  Still need to add more options to configure this.
-			//  Right now there can be conflicts
-			for _, manifest := range ociStore.Index.Manifests {
-				group.Go(func() error {
-					if err := oras.CopyGraph(ctx, ociStore, store, manifest, repo.resourceCopyOptions.CopyGraphOptions); err != nil {
-						return fmt.Errorf("failed to copy graph for manifest %v: %w", manifest, err)
-					}
-					return nil
-				})
-				if err := adoptDescriptorBasedOnResource(&manifest, resource); err != nil {
-					return nil, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+			indexJSON, err := json.Marshal(ociStore.Index)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal index: %w", err)
+			}
+			indexDescriptor := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexJSON)
+			if err := adoptDescriptorBasedOnResource(&indexDescriptor, resource); err != nil {
+				return nil, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+			}
+			opts := repo.resourceCopyOptions.CopyGraphOptions
+			//
+			proxy := &descriptorStoreProxy{
+				raw:             indexJSON,
+				desc:            indexDescriptor,
+				ReadOnlyStorage: ociStore,
+			}
+			opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+				if content.Equal(desc, indexDescriptor) {
+					return ociStore.Index.Manifests, nil
 				}
-				repo.localManifestBlobMemory.AddBlob(reference, manifest)
+				return content.Successors(ctx, ociStore, desc)
 			}
-			if err := group.Wait(); err != nil {
-				return nil, fmt.Errorf("failed to copy oci layout: %w", err)
+
+			if err := oras.CopyGraph(ctx, proxy, store, indexDescriptor, opts); err != nil {
+				return nil, fmt.Errorf("failed to copy graph for index from oci layout %v: %w", indexDescriptor, err)
 			}
+
+			if err := updateResourceAccessWithOCIDescriptor(repo.scheme, resource, indexDescriptor, reference, repo.localResourceCreationMode); err != nil {
+				return nil, fmt.Errorf("failed to update resource access: %w", err)
+			}
+
+			repo.localManifestBlobMemory.AddBlob(reference, indexDescriptor)
 		default:
-			// TODO(jakobmoellerdev): currently, by default all local blobs with undefined media types as well as
-			//  ociImageSpecV1.MediaTypeImageLayer, ociImageSpecV1.MediaTypeImageLayerGzip are treated as image layers
-			//  this is consistent with OCM v1.
-			//  alternatively, we could store them as single Layer OCI Artifacts.
 			layer := ociImageSpecV1.Descriptor{
-				MediaType: typed.MediaType,
-				Digest:    digest.Digest(typed.LocalReference),
-				Size:      size,
+				MediaType:   typed.MediaType,
+				Digest:      digest.Digest(typed.LocalReference),
+				Size:        size,
+				Annotations: map[string]string{},
 			}
 			if err := adoptDescriptorBasedOnResource(&layer, resource); err != nil {
 				return nil, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
 			}
 
-			layerData, err := content.ReadCloser()
+			layerData, err := b.ReadCloser()
 			if err != nil {
-				return nil, fmt.Errorf("failed to get content reader: %w", err)
+				return nil, fmt.Errorf("failed to get b reader: %w", err)
 			}
 			defer func() {
 				err = errors.Join(err, layerData.Close())
@@ -330,11 +437,43 @@ func (repo *Repository) AddLocalResource(
 			if err := store.Push(ctx, layer, io.NopCloser(layerData)); err != nil {
 				return nil, fmt.Errorf("failed to push layer: %w", err)
 			}
+			if exists, err := store.Exists(ctx, ociImageSpecV1.DescriptorEmptyJSON); err != nil {
+				if err != nil {
+					return nil, fmt.Errorf("failed to check if layer exists: %w", err)
+				}
+			} else if !exists {
+				if err := store.Push(ctx, ociImageSpecV1.DescriptorEmptyJSON, bytes.NewReader(ociImageSpecV1.DescriptorEmptyJSON.Data)); err != nil {
+					return nil, fmt.Errorf("failed to push empty layer: %w", err)
+				}
+			}
 
-			repo.localLayerBlobMemory.AddBlob(reference, layer)
-			if err := updateResourceAccessWithLayer(repo.scheme, resource, layer, reference, repo.localResourceCreationMode); err != nil {
+			manifest := ociImageSpecV1.Manifest{
+				Versioned: specs.Versioned{
+					SchemaVersion: 2,
+				},
+				MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+				ArtifactType: typed.MediaType,
+				Config:       ociImageSpecV1.DescriptorEmptyJSON,
+				Layers: []ociImageSpecV1.Descriptor{
+					layer,
+				},
+				Annotations: layer.Annotations,
+			}
+			manifestJSON, err := json.Marshal(manifest)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal manifest: %w", err)
+			}
+			manifestDescriptor := content.NewDescriptorFromBytes(manifest.MediaType, manifestJSON)
+			manifestDescriptor.Annotations = maps.Clone(manifest.Annotations)
+			if err := store.Push(ctx, manifestDescriptor, bytes.NewReader(manifestJSON)); err != nil {
+				return nil, fmt.Errorf("failed to push manifest: %w", err)
+			}
+
+			if err := updateResourceAccessWithOCIDescriptor(repo.scheme, resource, manifestDescriptor, reference, repo.localResourceCreationMode); err != nil {
 				return nil, fmt.Errorf("failed to update resource access: %w", err)
 			}
+
+			repo.localManifestBlobMemory.AddBlob(reference, manifestDescriptor)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -390,11 +529,11 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		if index == nil {
 			// if the index does not exist, we can only use the manifest
 			// and thus local blobs can only be available as image layers
-			blob, err := getLocalBlob(ctx, manifest, identity, store)
+			b, err := getLocalBlob(ctx, manifest, identity, store)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to get local blob: %w", err)
 			}
-			return blob, &resource, nil
+			return b, &resource, nil
 		}
 
 		// if the index exists, we can use it to find certain media types that are compatible with
@@ -402,23 +541,23 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		switch typed.MediaType {
 		// for local blobs that are complete image layouts, we can directly push them as part of the
 		// descriptor index
-		case MediaTypeOCIImageLayoutV1 + "+tar", MediaTypeOCIImageLayoutV1 + "+tar+gzip":
+		case MediaTypeOCIImageLayoutV1 + "+tar", MediaTypeOCIImageLayoutV1 + "+tar+gzip", ociImageSpecV1.MediaTypeImageIndex:
 			manifest, err := findMatchingDescriptor(index.Manifests, identity)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to find matching layer: %w", err)
 			}
-			blob, err := repo.ociLayoutFromStoreForDescriptor(ctx, &resource, store, manifest)
+			b, err := repo.ociLayoutFromStoreForDescriptor(ctx, &resource, store, manifest)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to get local blob: %w", err)
 			}
-			return blob, &resource, nil
-		// for anything else we cannot really do anything other than use a local blob
+			return b, &resource, nil
+		// for anything else we cannot really do anything other than use a local b
 		default:
-			blob, err := getLocalBlob(ctx, manifest, identity, store)
+			b, err := getSingleLayerManifestBlob(ctx, index, identity, store)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to get local blob: %w", err)
 			}
-			return blob, &resource, nil
+			return b, &resource, nil
 		}
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -431,6 +570,34 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 		return "", nil, fmt.Errorf("failed to get store for reference: %w", err)
 	}
 	return reference, store, nil
+}
+
+func getSingleLayerManifestBlob(ctx context.Context, index *ociImageSpecV1.Index, identity map[string]string, store oras.ReadOnlyTarget) (LocalBlob, error) {
+	layer, err := findMatchingDescriptor(index.Manifests, identity)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find matching layer: %w", err)
+	}
+	data, err := store.Fetch(ctx, layer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch layer data: %w", err)
+	}
+	defer func() {
+		_ = data.Close()
+	}()
+	manifest := ociImageSpecV1.Manifest{}
+	if err := json.NewDecoder(data).Decode(&manifest); err != nil {
+		return nil, fmt.Errorf("failed to decode manifest: %w", err)
+	}
+	if len(manifest.Layers) == 0 {
+		return nil, fmt.Errorf("manifest has no layers and cannot be used to get a local blob")
+	}
+	layer = manifest.Layers[0]
+	layerData, err := store.Fetch(ctx, layer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch layer data: %w", err)
+	}
+
+	return NewDescriptorBlob(layerData, layer), nil
 }
 
 func getLocalBlob(ctx context.Context, manifest *ociImageSpecV1.Manifest, identity map[string]string, store oras.ReadOnlyTarget) (LocalBlob, error) {
@@ -715,9 +882,9 @@ func getDescriptorOCIImageManifest(ctx context.Context, store Store, reference s
 	return manifest, index, nil
 }
 
-// updateResourceAccessWithLayer updates the resource access with the new layer information.
+// updateResourceAccessWithOCIDescriptor updates the resource access with the new layer information.
 // for setting a global access it uses the base reference given which must not already contain a digest.
-func updateResourceAccessWithLayer(scheme *runtime.Scheme, resource *descriptor.Resource, layer ociImageSpecV1.Descriptor, base string, mode LocalResourceLayerCreationMode) error {
+func updateResourceAccessWithOCIDescriptor(scheme *runtime.Scheme, resource *descriptor.Resource, desc ociImageSpecV1.Descriptor, base string, mode LocalResourceLayerCreationMode) error {
 	if resource == nil {
 		return errors.New("resource must not be nil")
 	}
@@ -725,9 +892,9 @@ func updateResourceAccessWithLayer(scheme *runtime.Scheme, resource *descriptor.
 	// Create OCI image layer access
 	access := &v1.OCIImageLayer{
 		Reference: base,
-		Digest:    layer.Digest,
-		MediaType: layer.MediaType,
-		Size:      layer.Size,
+		Digest:    desc.Digest,
+		MediaType: desc.MediaType,
+		Size:      desc.Size,
 	}
 
 	// Create access based on configured mode
@@ -738,8 +905,8 @@ func updateResourceAccessWithLayer(scheme *runtime.Scheme, resource *descriptor.
 		// Create local blob access
 		access, err := descriptor.ConvertToV2LocalBlob(scheme, &descriptor.LocalBlob{
 			Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-			LocalReference: layer.Digest.String(),
-			MediaType:      layer.MediaType,
+			LocalReference: desc.Digest.String(),
+			MediaType:      desc.MediaType,
 			GlobalAccess:   access,
 		})
 		if err != nil {
@@ -750,7 +917,7 @@ func updateResourceAccessWithLayer(scheme *runtime.Scheme, resource *descriptor.
 		return fmt.Errorf("unsupported access mode: %s", mode)
 	}
 
-	if err := ociDigestV1.ApplyToResource(resource, layer.Digest); err != nil {
+	if err := ociDigestV1.ApplyToResource(resource, desc.Digest); err != nil {
 		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 
@@ -799,3 +966,30 @@ var IdentitySubset = runtime.IdentityMatchingChainFn(func(sub runtime.Identity, 
 	}
 	return true
 })
+
+type descriptorStoreProxy struct {
+	raw  []byte
+	desc ociImageSpecV1.Descriptor
+	content.ReadOnlyStorage
+}
+
+func (p *descriptorStoreProxy) Exists(ctx context.Context, desc ociImageSpecV1.Descriptor) (bool, error) {
+	if p.desc.Digest.String() == desc.Digest.String() {
+		return true, nil
+	}
+	return p.ReadOnlyStorage.Exists(ctx, desc)
+}
+
+// func (p *descriptorStoreProxy) Resolve(ctx context.Context, ref string) (ociImageSpecV1.Descriptor, error) {
+// 	if p.desc.Digest.String() == ref {
+// 		return p.desc, nil
+// 	}
+// 	return p.Store.Resolve(ctx, ref)
+// }
+
+func (p *descriptorStoreProxy) Fetch(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	if p.desc.Digest.String() == desc.Digest.String() {
+		return io.NopCloser(bytes.NewReader(p.raw)), nil
+	}
+	return p.ReadOnlyStorage.Fetch(ctx, desc)
+}

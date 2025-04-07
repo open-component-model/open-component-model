@@ -5,19 +5,23 @@ import (
 	"fmt"
 	"sync"
 
+	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 )
 
-func NewURLPathResolver(baseURL string) *URLPathResolver {
-	return &URLPathResolver{
+const DefaultComponentDescriptorPathSuffix = "component-descriptors"
+
+func NewURLPathResolver(baseURL string) *CachingURLPathResolver {
+	return &CachingURLPathResolver{
 		BaseURL: baseURL,
 	}
 }
 
-// URLPathResolver is a Resolver that resolves references to URLs for Component Versions and Resources.
+// CachingURLPathResolver is a Resolver that resolves references to URLs for Component Versions and Resources.
 // It uses a BaseURL and a BaseClient to get a remote store for a reference.
+// each repository is only created once per reference.
 
-type URLPathResolver struct {
+type CachingURLPathResolver struct {
 	BaseURL    string
 	BaseClient remote.Client
 	PlainHTTP  bool
@@ -28,38 +32,44 @@ type URLPathResolver struct {
 	cache   map[string]Store
 }
 
-func (resolver *URLPathResolver) SetClient(client remote.Client) {
+func (resolver *CachingURLPathResolver) SetClient(client remote.Client) {
 	resolver.BaseClient = client
 }
 
-func (resolver *URLPathResolver) ComponentVersionReference(component, version string) string {
-	return fmt.Sprintf("%s/component-descriptors/%s:%s", resolver.BaseURL, component, version)
+func (resolver *CachingURLPathResolver) BasePath() string {
+	return resolver.BaseURL + "/" + DefaultComponentDescriptorPathSuffix
 }
 
-func (resolver *URLPathResolver) StoreForReference(_ context.Context, reference string) (Store, error) {
-	if store, ok := resolver.getFromCache(reference); ok {
-		return store, nil
-	}
+func (resolver *CachingURLPathResolver) ComponentVersionReference(component, version string) string {
+	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, version)
+}
 
-	var store Store
-	repo, err := remote.NewRepository(reference)
+func (resolver *CachingURLPathResolver) StoreForReference(_ context.Context, reference string) (Store, error) {
+	ref, err := registry.ParseReference(reference)
 	if err != nil {
 		return nil, err
 	}
+	key := fmt.Sprintf("%s/%s", ref.Registry, ref.Repository)
+
+	if store, ok := resolver.getFromCache(key); ok {
+		return store, nil
+	}
+
+	repo := &remote.Repository{Reference: ref}
+
 	if resolver.PlainHTTP {
 		repo.PlainHTTP = true
 	}
 	if resolver.BaseClient != nil {
 		repo.Client = resolver.BaseClient
 	}
-	store = repo
 
-	resolver.addToCache(reference, store)
+	resolver.addToCache(key, repo)
 
-	return store, nil
+	return repo, nil
 }
 
-func (resolver *URLPathResolver) addToCache(reference string, store Store) {
+func (resolver *CachingURLPathResolver) addToCache(reference string, store Store) {
 	resolver.cacheMu.Lock()
 	defer resolver.cacheMu.Unlock()
 	if resolver.cache == nil {
@@ -68,11 +78,11 @@ func (resolver *URLPathResolver) addToCache(reference string, store Store) {
 	resolver.cache[reference] = store
 }
 
-func (resolver *URLPathResolver) getFromCache(reference string) (Store, bool) {
+func (resolver *CachingURLPathResolver) getFromCache(reference string) (Store, bool) {
 	resolver.cacheMu.RLock()
 	defer resolver.cacheMu.RUnlock()
 	store, ok := resolver.cache[reference]
 	return store, ok
 }
 
-var _ Resolver = (*URLPathResolver)(nil)
+var _ Resolver = (*CachingURLPathResolver)(nil)

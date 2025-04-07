@@ -75,7 +75,15 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 	r.NoError(err)
 
 	t.Run("basic download of a component version", func(t *testing.T) {
-		component, version := "ocm.software/ocmcli", "0.22.1"
+		r := require.New(t)
+		component := "ocm.software/ocmcli"
+
+		vs, err := repo.ListComponentVersions(t.Context(), component)
+		r.NoError(err)
+		r.NotEmpty(vs)
+
+		version := vs[0]
+
 		retrievedDesc, err := repo.GetComponentVersion(t.Context(), component, version)
 		r.NoError(err)
 		r.NotEmpty(retrievedDesc)
@@ -356,6 +364,11 @@ func uploadDownloadBarebonesComponentVersion(t *testing.T, repo oci.ComponentVer
 	r.Equal(name, retrievedDesc.Component.Name)
 	r.Equal(version, retrievedDesc.Component.Version)
 	r.Len(retrievedDesc.Component.Labels, 1)
+
+	versions, err := repo.ListComponentVersions(ctx, name)
+	r.NoError(err)
+	r.Len(versions, 1)
+	r.Equal(version, versions[0])
 }
 
 func testResolverConnectivity(t *testing.T, address, reference string, client *auth.Client) {
@@ -375,12 +388,16 @@ func testResolverConnectivity(t *testing.T, address, reference string, client *a
 }
 
 func createAuthClient(address, username, password string) *auth.Client {
+	url, err := ocmruntime.ParseURLAndAllowNoScheme(address)
+	if err != nil {
+		panic(fmt.Sprintf("invalid address %q: %v", address, err))
+	}
 	return &auth.Client{
 		Client: retry.DefaultClient,
 		Header: http.Header{
 			"User-Agent": []string{userAgent},
 		},
-		Credential: auth.StaticCredential(address, auth.Credential{
+		Credential: auth.StaticCredential(url.Host, auth.Credential{
 			Username: username,
 			Password: password,
 		}),

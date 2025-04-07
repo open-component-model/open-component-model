@@ -190,6 +190,27 @@ func (s *OCILayoutWriter) tag(ctx context.Context, desc ociImageSpecV1.Descripto
 	return s.updateIndex()
 }
 
+func (s *OCILayoutWriter) Tags(_ context.Context, _ string, fn func(tags []string) error) error {
+	s.indexMu.RLock()
+	defer s.indexMu.RUnlock()
+
+	arts := s.index.Manifests
+	if len(arts) == 0 {
+		return nil
+	}
+
+	tags := make([]string, 0, len(arts))
+	for _, art := range arts {
+		if art.Annotations != nil {
+			if refName, ok := art.Annotations[ociImageSpecV1.AnnotationRefName]; ok {
+				tags = append(tags, refName)
+			}
+		}
+	}
+
+	return fn(tags)
+}
+
 func (s *OCILayoutWriter) updateIndex() error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()

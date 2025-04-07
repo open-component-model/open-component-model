@@ -12,6 +12,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	indexv1 "ocm.software/open-component-model/bindings/go/oci/index/component/v1"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -21,7 +22,6 @@ import (
 type storeDescriptorOptions struct {
 	Scheme                        *runtime.Scheme
 	CreatorAnnotation             string
-	AdditionalDescriptorLayers    []ociImageSpecV1.Descriptor
 	AdditionalDescriptorManifests []ociImageSpecV1.Descriptor
 }
 
@@ -31,6 +31,10 @@ type storeDescriptorOptions struct {
 // To persist the descriptor, the manifest still has to be tagged.
 func addDescriptorToStore(ctx context.Context, store Store, descriptor *descriptor.Descriptor, opts storeDescriptorOptions) (*ociImageSpecV1.Descriptor, error) {
 	component, version := descriptor.Component.Name, descriptor.Component.Version
+
+	if err := indexv1.CreateIfNotExists(ctx, store); err != nil {
+		return nil, fmt.Errorf("failed to create index: %w", err)
+	}
 
 	// Encode and upload the descriptor
 	descriptorEncoding, descriptorBuffer, err := tar.SingleFileTAREncodeV2Descriptor(opts.Scheme, descriptor)
@@ -63,19 +67,17 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		Versioned: specs.Versioned{
 			SchemaVersion: 2,
 		},
-		ArtifactType: MediaTypeComponentDescriptorV2 + descriptorEncoding,
+		ArtifactType: MediaTypeComponentDescriptorV2,
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
 		Config:       componentConfigDescriptor,
 		Annotations: map[string]string{
-			AnnotationOCMComponentVersion: fmt.Sprintf("component-descriptors/%s:%s", component, version),
+			AnnotationOCMComponentVersion: fmt.Sprintf("%s/%s:%s", DefaultComponentDescriptorPathSuffix, component, version),
 			AnnotationOCMCreator:          opts.CreatorAnnotation,
 		},
 		Layers: append(
 			[]ociImageSpecV1.Descriptor{descriptorOCIDescriptor},
-			// Add additional descriptor layers if provided
-			// These are stored within the main descriptor
-			opts.AdditionalDescriptorLayers...,
 		),
+		Subject: &indexv1.Descriptor,
 	}
 	manifestRaw, err := json.Marshal(manifest)
 	if err != nil {
@@ -98,28 +100,6 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		return &manifestDescriptor, nil
 	}
 
-	// TODO maybe we should use the referrers API here or not push the manifests in advance at all
-	//  That would be more efficient and we could even avoid using an index all together.
-	// for _, desc := range opts.AdditionalDescriptorManifests {
-	// 	man, err := content.FetchAll(ctx, store, desc)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to fetch additional manifest: %w", err)
-	// 	}
-	// 	var manifest ociImageSpecV1.Manifest
-	// 	if err := json.Unmarshal(man, &manifest); err != nil {
-	// 		return nil, fmt.Errorf("failed to unmarshal additional manifest: %w", err)
-	// 	}
-	// 	manifest.Subject = &manifestDescriptor
-	// 	if man, err = json.Marshal(manifest); err != nil {
-	// 		return nil, fmt.Errorf("failed to marshal additional manifest: %w", err)
-	// 	}
-	// 	desc.Digest = digest.FromBytes(man)
-	// 	desc.Size = int64(len(man))
-	// 	if err := store.Push(ctx, desc, bytes.NewReader(man)); err != nil {
-	// 		return nil, fmt.Errorf("unable to push additional manifest: %w", err)
-	// 	}
-	// }
-
 	idx := ociImageSpecV1.Index{
 		Versioned: specs.Versioned{
 			SchemaVersion: 2,
@@ -131,6 +111,7 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 			// These are stored within the main index
 			opts.AdditionalDescriptorManifests...,
 		),
+		Subject: &indexv1.Descriptor,
 	}
 	idxRaw, err := json.Marshal(idx)
 	if err != nil {

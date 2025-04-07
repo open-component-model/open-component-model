@@ -62,13 +62,6 @@ func WithScheme(scheme *runtime.Scheme) RepositoryOption {
 	}
 }
 
-// WithLocalLayerBlobMemory sets the local blob memory for the repository.
-func WithLocalLayerBlobMemory(memory memory.LocalBlobMemory) RepositoryOption {
-	return func(o *RepositoryOptions) {
-		o.LocalLayerBlobMemory = memory
-	}
-}
-
 // WithLocalManifestBlobMemory sets the local blob memory for the repository.
 func WithLocalManifestBlobMemory(memory memory.LocalBlobMemory) RepositoryOption {
 	return func(o *RepositoryOptions) {
@@ -149,7 +142,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 
 	return &Repository{
 		scheme:                    options.Scheme,
-		localLayerBlobMemory:      options.LocalLayerBlobMemory,
 		localManifestBlobMemory:   options.LocalManifestBlobMemory,
 		resolver:                  options.Resolver,
 		creatorAnnotation:         options.Creator,
