@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
@@ -192,4 +194,77 @@ func Test_FileSystemCTF_FileSystemOperations(t *testing.T) {
 	// Verify the file exists in the filesystem
 	_, err = os.Stat(filepath.Join(tmpDir, testFile))
 	r.NoError(err)
+}
+
+type mockBlob struct {
+	blob.ReadOnlyBlob
+	digest string
+	known  bool
+	size   int64
+	reader io.ReadCloser
+	err    error
+}
+
+func (m *mockBlob) Digest() (string, bool) {
+	return m.digest, m.known
+}
+
+func (m *mockBlob) Size() int64 {
+	return m.size
+}
+
+func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.reader, nil
+}
+
+func TestFileSystemCTF_SaveBlob_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		blob    *mockBlob
+		wantErr string
+	}{
+		{
+			name: "blob not digest aware",
+			blob: &mockBlob{
+				digest: "",
+				known:  false,
+			},
+			wantErr: "blob does not have a digest that can be used to save it",
+		},
+		{
+			name: "digest not known",
+			blob: &mockBlob{
+				digest: "sha256:123",
+				known:  false,
+			},
+			wantErr: "blob does not have a digest that can be used to save it",
+		},
+		{
+			name: "read error",
+			blob: &mockBlob{
+				digest: "sha256:123",
+				known:  true,
+				size:   100,
+				err:    fmt.Errorf("read error"),
+			},
+			wantErr: "unable to read blob: read error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a temporary directory for the test
+			dir := t.TempDir()
+			fs, err := filesystem.NewFS(dir, os.O_RDWR)
+			require.NoError(t, err)
+			ctf := ctf.NewFileSystemCTF(fs)
+
+			err = ctf.SaveBlob(t.Context(), tt.blob)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
 }
