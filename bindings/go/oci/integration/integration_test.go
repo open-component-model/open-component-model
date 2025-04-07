@@ -86,7 +86,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 			"architecture": runtime.GOARCH,
 		}
 
-		cliDataBlob, err := repo.GetLocalResource(t.Context(), component, version, cliIdentity)
+		cliDataBlob, _, err := repo.GetLocalResource(t.Context(), component, version, cliIdentity)
 		r.NoError(err)
 		r.NotNil(cliIdentity)
 
@@ -259,7 +259,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 	err = repo.AddComponentVersion(ctx, cd)
 	r.NoError(err)
 
-	downloaded, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
+	downloaded, _, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
 	r.NoError(err)
 	r.NotNil(downloaded)
 }
@@ -524,7 +524,7 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 	r.NoError(err)
 
 	// Get local resource
-	downloadedBlob, err := repo.GetLocalResource(ctx, name, version, resource.ElementMeta.ToIdentity())
+	downloadedBlob, _, err := repo.GetLocalResource(ctx, name, version, resource.ElementMeta.ToIdentity())
 	r.NoError(err)
 
 	// Read downloaded data

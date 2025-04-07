@@ -63,8 +63,9 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		Versioned: specs.Versioned{
 			SchemaVersion: 2,
 		},
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-		Config:    componentConfigDescriptor,
+		ArtifactType: MediaTypeComponentDescriptorV2 + descriptorEncoding,
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		Config:       componentConfigDescriptor,
 		Annotations: map[string]string{
 			AnnotationOCMComponentVersion: fmt.Sprintf("component-descriptors/%s:%s", component, version),
 			AnnotationOCMCreator:          opts.CreatorAnnotation,
@@ -81,10 +82,11 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 	}
 	manifestDescriptor := ociImageSpecV1.Descriptor{
-		MediaType:   manifest.MediaType,
-		Digest:      digest.FromBytes(manifestRaw),
-		Size:        int64(len(manifestRaw)),
-		Annotations: manifest.Annotations,
+		MediaType:    manifest.MediaType,
+		ArtifactType: manifest.ArtifactType,
+		Digest:       digest.FromBytes(manifestRaw),
+		Size:         int64(len(manifestRaw)),
+		Annotations:  manifest.Annotations,
 	}
 	log.Base.Log(ctx, slog.LevelInfo, "pushing descriptor", log.DescriptorLogAttr(manifestDescriptor))
 	if err := store.Push(ctx, manifestDescriptor, bytes.NewReader(manifestRaw)); err != nil {
@@ -95,6 +97,28 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 	if len(opts.AdditionalDescriptorManifests) == 0 {
 		return &manifestDescriptor, nil
 	}
+
+	// TODO maybe we should use the referrers API here or not push the manifests in advance at all
+	//  That would be more efficient and we could even avoid using an index all together.
+	// for _, desc := range opts.AdditionalDescriptorManifests {
+	// 	man, err := content.FetchAll(ctx, store, desc)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("failed to fetch additional manifest: %w", err)
+	// 	}
+	// 	var manifest ociImageSpecV1.Manifest
+	// 	if err := json.Unmarshal(man, &manifest); err != nil {
+	// 		return nil, fmt.Errorf("failed to unmarshal additional manifest: %w", err)
+	// 	}
+	// 	manifest.Subject = &manifestDescriptor
+	// 	if man, err = json.Marshal(manifest); err != nil {
+	// 		return nil, fmt.Errorf("failed to marshal additional manifest: %w", err)
+	// 	}
+	// 	desc.Digest = digest.FromBytes(man)
+	// 	desc.Size = int64(len(man))
+	// 	if err := store.Push(ctx, desc, bytes.NewReader(man)); err != nil {
+	// 		return nil, fmt.Errorf("unable to push additional manifest: %w", err)
+	// 	}
+	// }
 
 	idx := ociImageSpecV1.Index{
 		Versioned: specs.Versioned{

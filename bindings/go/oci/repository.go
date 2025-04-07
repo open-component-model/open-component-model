@@ -99,7 +99,7 @@ type ComponentVersionRepository interface {
 
 	// GetLocalResource retrieves a local resource from the repository.
 	// The identity must match a resource in the component descriptor.
-	GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, error)
+	GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Resource, error)
 }
 
 // ResourceRepository defines the interface for storing and retrieving OCM resources
@@ -289,6 +289,7 @@ func (repo *Repository) AddLocalResource(
 			//  - every manifest is concurrently copied.
 			//  In theory we could also take the index (ociStore.Index) and serialize it and push that.
 			//  Still need to add more options to configure this.
+			//  Right now there can be conflicts
 			for _, manifest := range ociStore.Index.Manifests {
 				group.Go(func() error {
 					if err := oras.CopyGraph(ctx, ociStore, store, manifest, repo.resourceCopyOptions.CopyGraphOptions); err != nil {
@@ -343,7 +344,7 @@ func (repo *Repository) AddLocalResource(
 }
 
 // GetLocalResource retrieves a local resource from the repository.
-func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, error) {
+func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Resource, error) {
 	var err error
 	done := log.Operation(ctx, "get local resource",
 		slog.String("component", component),
@@ -353,12 +354,12 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get component version: %w", err)
+		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
 	var candidates []descriptor.Resource
@@ -368,20 +369,20 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		}
 	}
 	if len(candidates) != 1 {
-		return nil, fmt.Errorf("found %d candidates while looking for resource %v, but expected exactly one", len(candidates), identity)
+		return nil, nil, fmt.Errorf("found %d candidates while looking for resource %v, but expected exactly one", len(candidates), identity)
 	}
-
 	resource := candidates[0]
+	log.Base.Info("found resource in descriptor", "resource", resource.ToIdentity())
 
 	if resource.Access.GetType().IsEmpty() {
-		return nil, fmt.Errorf("resource access type is empty")
+		return nil, nil, fmt.Errorf("resource access type is empty")
 	}
 	typed, err := repo.scheme.NewObject(resource.Access.GetType())
 	if err != nil {
-		return nil, fmt.Errorf("error creating resource access: %w", err)
+		return nil, nil, fmt.Errorf("error creating resource access: %w", err)
 	}
 	if err := repo.scheme.Convert(resource.Access, typed); err != nil {
-		return nil, fmt.Errorf("error converting resource access: %w", err)
+		return nil, nil, fmt.Errorf("error converting resource access: %w", err)
 	}
 
 	switch typed := typed.(type) {
@@ -389,7 +390,11 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		if index == nil {
 			// if the index does not exist, we can only use the manifest
 			// and thus local blobs can only be available as image layers
-			return getLocalBlob(ctx, manifest, identity, store)
+			blob, err := getLocalBlob(ctx, manifest, identity, store)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get local blob: %w", err)
+			}
+			return blob, &resource, nil
 		}
 
 		// if the index exists, we can use it to find certain media types that are compatible with
@@ -400,15 +405,23 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		case MediaTypeOCIImageLayoutV1 + "+tar", MediaTypeOCIImageLayoutV1 + "+tar+gzip":
 			manifest, err := findMatchingDescriptor(index.Manifests, identity)
 			if err != nil {
-				return nil, fmt.Errorf("failed to find matching layer: %w", err)
+				return nil, nil, fmt.Errorf("failed to find matching layer: %w", err)
 			}
-			return repo.ociLayoutFromStoreForDescriptor(ctx, &resource, store, manifest)
+			blob, err := repo.ociLayoutFromStoreForDescriptor(ctx, &resource, store, manifest)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get local blob: %w", err)
+			}
+			return blob, &resource, nil
 		// for anything else we cannot really do anything other than use a local blob
 		default:
-			return getLocalBlob(ctx, manifest, identity, store)
+			blob, err := getLocalBlob(ctx, manifest, identity, store)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get local blob: %w", err)
+			}
+			return blob, &resource, nil
 		}
 	default:
-		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
+		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
 }
 

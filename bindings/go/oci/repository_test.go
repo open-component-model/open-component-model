@@ -310,7 +310,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			}
 
 			// Test getting the resource
-			blob, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.identity)
+			blob, _, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.identity)
 
 			if tc.expectError {
 				r.Error(err, "Expected error but got none")
@@ -643,7 +643,7 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	r.NoError(err, "Failed to add component version")
 
 	// Try to get the resource back
-	blob, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, map[string]string{
+	blob, _, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, map[string]string{
 		"name":    "test-resource",
 		"version": "1.0.0",
 	})
@@ -718,7 +718,7 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	r.NoError(err, "Failed to add component version")
 
 	// Try to get the resource back
-	blob, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, map[string]string{
+	blob, _, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, map[string]string{
 		"name":    "test-layer-resource",
 		"version": "1.0.0",
 	})

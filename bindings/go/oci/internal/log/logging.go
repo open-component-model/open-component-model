@@ -31,9 +31,13 @@ func Operation(ctx context.Context, operation string, fields ...slog.Attr) func(
 
 // DescriptorLogAttr creates a log attribute for an OCI descriptor.
 func DescriptorLogAttr(descriptor ociImageSpecV1.Descriptor) slog.Attr {
-	return slog.Group("descriptor",
+	args := []any{
 		slog.String("mediaType", descriptor.MediaType),
 		slog.String("digest", descriptor.Digest.String()),
 		slog.Int64("size", descriptor.Size),
-	)
+	}
+	if descriptor.ArtifactType != "" {
+		args = append(args, slog.String("artifactType", descriptor.ArtifactType))
+	}
+	return slog.Group("descriptor", args...)
 }
