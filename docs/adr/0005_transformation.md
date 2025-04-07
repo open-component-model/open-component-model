@@ -179,6 +179,14 @@ We want to transfer the component to
 `ghcr.io/fabianburth/target-ocm-repository/*`  and the resources to `ghcr.
 io/fabianburth/target-*`. Thereby, we want to localize the helm chart.
 
+
+// 1) generator is traversing a graph internally to serialize the transfer 
+// specification
+// 2) postpone localization during transfer from localization inside 
+component version implementation until later UNDER THE ASSUMPTION that we 
+can localize with KRO.
+
+
 ```yaml
 type: operations.ocm./v1alpha1
 transformations:
@@ -204,6 +212,7 @@ transformations:
       name: myimage
   - type: uploader.resource.oci/v1alpha1
     id: resourceupload1
+    componentDescriptor: ${resourcedownload1.outputs.descriptor}
     imageReference: ghcr.io/fabianburth/target-image/myimage:6.7.1
     data: ${resourcedownload1.outputs.data}
 
@@ -243,18 +252,22 @@ transformations:
     resource:
       name: mylocalization
   - type: uploader.localblob.oci/v1alpha1
-    id: uploadresource3
+    id: resourceupload3
     componentDescriptor: ${downloadcomponent1.outputs.descriptor}
     imageReference: ${constants.spec.attributes.targetImageReference}
     data: ${downloadresource3.outputs.data}
 
-  - type: uploader.component.ctf/v1alpha1
+  - type: merge.component/v1alpha1
+    id: merge
+    merge:
+      base: ${downloadcomponent1.outputs.descriptor}
+      patches:
+        - ${resourceupload1.outputs.descriptor}
+        - ${resourceupload2.outputs.descriptor}
+        - ${resourceupload3.outputs.descriptor}
+  - type: uploader.component.oci/v1alpha1
     filePath: ${constants.spec.attributes.targetImageReference}
-    componentDescriptor: ${downloadcomponent1.outputs.descriptor}
-    dependencies:
-      - ${uploadresource1}
-      - ${uploadresource2}
-      - ${uploadresource3}
+    componentDescriptor: ${merge.outputs.descriptor}
 ```
 
 Internally, this would be represented as the following **directed acyclic graph
@@ -297,12 +310,12 @@ graph TD
 > **NOTES:** The _constants_ (the operation with the type
 `attributes.transformation/v1alpha1`)
 > is required to prevent a circular dependency between the upload of the
-> local blob (`uploadresource3`) and the upload of the component. To upload
+> local blob (`resourceupload3`) and the upload of the component. To upload
 > a `localBlob`, the upload location of the component is required. And the
 > component upload has to wait for the upload of the local blob as this
 > might change its resource specification in the component descriptor.
 >
-> Alternatively, the `uploadresource3` could also specify the target location
+> Alternatively, the `resourceupload3` could also specify the target location
 > itself. The component depends on the upload anyway.
 
 ### Contract
