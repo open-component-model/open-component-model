@@ -22,7 +22,7 @@ type CleanupFunc func(ctx context.Context) error
 type Plugin struct {
 	Config manager.Config
 
-	handlers    []Handler
+	handlers    []manager.Handler
 	server      *http.Server
 	cleanUpFunc CleanupFunc
 	mu          sync.Mutex
@@ -178,12 +178,12 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 	return nil
 }
 
-type Handler struct {
-	Location string
-	Handler  http.HandlerFunc
-}
+//type Handler struct {
+//	Location string
+//	Handler  http.HandlerFunc
+//}
 
-func (p *Plugin) RegisterHandlers(handlers ...Handler) error {
+func (p *Plugin) RegisterHandlers(handlers ...manager.Handler) error {
 	for _, h := range handlers {
 		if h.Handler == nil {
 			return fmt.Errorf("handler for %s is required", h.Location)

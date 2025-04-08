@@ -3,10 +3,8 @@ package manager
 import (
 	"encoding/json"
 
-	v1 "ocm.software/open-component-model/bindings/go/credentials/config/v1"
-	"ocm.software/open-component-model/bindings/go/descriptor"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	transfer "ocm.software/open-component-model/bindings/go/transfer/spec"
 )
 
 const (
@@ -15,7 +13,6 @@ const (
 	WriteComponentVersionRepositoryCapability     = "writeComponentVersionRepository"
 	ReadResourceRepositoryCapability              = "readResourceRepository"
 	WriteResourceRepositoryCapability             = "writeResourceRepository"
-	GenericRepositoryCapability                   = "generic"
 	CredentialPluginCapability                    = "credentialPlugin"
 	CredentialRepositoryPluginCapability          = "credentialRepositoryPlugin"
 	TransformerCapability                         = "transformer"
@@ -100,15 +97,29 @@ type PostLocalResourceRequest struct {
 	Resource         *descriptor.Resource `json:"resource"`
 }
 
-// Capability defines a capability and the schema it has to conform to.
-type Capability struct {
-	Capability string `json:"capability"`
-	Schema     []byte `json:"schema"`
+// Endpoint defines an access point like /cv/upload, /cv/download etc.
+type Endpoint struct {
+	// Path defines the access location of an endpoint.
+	Path string `json:"path"`
+	// Schema is optional as some endpoints don't define a schema.
+	Schema []byte `json:"scheme,omitempty"`
 }
 
+// Capability defines a capability which consists of an Access Type and several endpoints.
+type Capability struct {
+	// Capability is the name of the capability for example OCMComponentVersionRepository.
+	Capability string `json:"capability"`
+	// Endpoints defines a set of endpoints that optionally defines a schema for validation.
+	Type string `json:"type"`
+}
+
+// TODO: Keep the registration simple because the plugin will have the embedded type and the endpoint
+// during registration? I don't fucking know yet.
+// What are we looking for? A capability for a type or a type for a capability? I don't the later.
+// Capability contains a list of capabilities and the type of the Plugin.
 type Capabilities struct {
-	// Type is a map of types with capabilities.
-	Type map[runtime.Type][]Capability `json:"type"`
+	PluginType   PluginType   `json:"pluginType"`
+	Capabilities []Capability `json:"capabilities"` // is it multiple capabilities? Maybe.
 }
 
 type GetResourceRequest struct {
@@ -120,84 +131,84 @@ type GetResourceRequest struct {
 	TargetLocation Location `json:"targetLocation"`
 }
 
-type TransformResourceRequest struct {
-	TransformationMeta `json:"transformationMeta"`
-
-	// The resource specification to download
-	*descriptor.Resource `json:"resource"`
-
-	TransformationSpec *TransformationSpec `json:"transformSpec"`
-
-	// The Location of the resource that should be localized
-	ResourceLocation Location `json:"resourceLocation"`
-	// The Location of the transformed resource
-	TransformedResourceLocation Location `json:"transformedResourceLocation"`
-
-	Inputs map[string]string `json:"inputs"`
-
-	Credentials v1.Attributes `json:"credentials"`
-}
-
-type CredentialIdentityRequest struct {
-	// The transformation that should be interpreted
-	TransformResourceRequest `json:"transformResourceRequest"`
-}
-
-type CredentialIdentityResponse struct {
-	// The credential identities that can be used for transformation
-	Identities []v1.Identity `json:"identities"`
-}
-
-type TransformationMeta struct {
-	ComponentIdentity descriptor.ComponentIdentity
-	Source            *TransformationRepository `json:"source"`
-	Target            *TransformationRepository `json:"target"`
-}
-
-type TransformationRepository struct {
-	runtime.Typed `json:",inline"`
-}
-
-func (a *TransformationRepository) UnmarshalJSON(data []byte) error {
-	raw := &runtime.Raw{}
-	if err := json.Unmarshal(data, raw); err != nil {
-		return err
-	}
-	a.Typed = raw
-	return nil
-}
-
-func (a *TransformationRepository) MarshalJSON() ([]byte, error) {
-	return json.Marshal(a.Typed)
-}
-
-type TransformationSpec struct {
-	runtime.Typed `json:",inline"`
-}
-
-func (a *TransformationSpec) UnmarshalJSON(data []byte) error {
-	raw := &runtime.Raw{}
-	if err := json.Unmarshal(data, raw); err != nil {
-		return err
-	}
-	a.Typed = raw
-	return nil
-}
-
-func (a *TransformationSpec) MarshalJSON() ([]byte, error) {
-	return json.Marshal(a.Typed)
-}
-
-type TransformResourceResponse struct {
-	// The resource specification to download
-	*descriptor.Resource `json:"resource"`
-
-	Outputs map[string]string `json:"outputs"`
-}
-
-type PostResourceRequest struct {
-	TargetAccess *transfer.Access `json:"targetAccess"`
-	// The ResourceLocation of the Local Resource
-	ResourceLocation Location             `json:"resourceLocation"`
-	Resource         *descriptor.Resource `json:"resource"`
-}
+//type TransformResourceRequest struct {
+//	TransformationMeta `json:"transformationMeta"`
+//
+//	// The resource specification to download
+//	*descriptor.Resource `json:"resource"`
+//
+//	TransformationSpec *TransformationSpec `json:"transformSpec"`
+//
+//	// The Location of the resource that should be localized
+//	ResourceLocation Location `json:"resourceLocation"`
+//	// The Location of the transformed resource
+//	TransformedResourceLocation Location `json:"transformedResourceLocation"`
+//
+//	Inputs map[string]string `json:"inputs"`
+//
+//	Credentials v1.Attributes `json:"credentials"`
+//}
+//
+//type CredentialIdentityRequest struct {
+//	// The transformation that should be interpreted
+//	TransformResourceRequest `json:"transformResourceRequest"`
+//}
+//
+//type CredentialIdentityResponse struct {
+//	// The credential identities that can be used for transformation
+//	Identities []v1.Identity `json:"identities"`
+//}
+//
+//type TransformationMeta struct {
+//	ComponentIdentity descriptor.ComponentIdentity
+//	Source            *TransformationRepository `json:"source"`
+//	Target            *TransformationRepository `json:"target"`
+//}
+//
+//type TransformationRepository struct {
+//	runtime.Typed `json:",inline"`
+//}
+//
+//func (a *TransformationRepository) UnmarshalJSON(data []byte) error {
+//	raw := &runtime.Raw{}
+//	if err := json.Unmarshal(data, raw); err != nil {
+//		return err
+//	}
+//	a.Typed = raw
+//	return nil
+//}
+//
+//func (a *TransformationRepository) MarshalJSON() ([]byte, error) {
+//	return json.Marshal(a.Typed)
+//}
+//
+//type TransformationSpec struct {
+//	runtime.Typed `json:",inline"`
+//}
+//
+//func (a *TransformationSpec) UnmarshalJSON(data []byte) error {
+//	raw := &runtime.Raw{}
+//	if err := json.Unmarshal(data, raw); err != nil {
+//		return err
+//	}
+//	a.Typed = raw
+//	return nil
+//}
+//
+//func (a *TransformationSpec) MarshalJSON() ([]byte, error) {
+//	return json.Marshal(a.Typed)
+//}
+//
+//type TransformResourceResponse struct {
+//	// The resource specification to download
+//	*descriptor.Resource `json:"resource"`
+//
+//	Outputs map[string]string `json:"outputs"`
+//}
+//
+//type PostResourceRequest struct {
+//	TargetAccess *transfer.Access `json:"targetAccess"`
+//	// The ResourceLocation of the Local Resource
+//	ResourceLocation Location             `json:"resourceLocation"`
+//	Resource         *descriptor.Resource `json:"resource"`
+//}
