@@ -38,9 +38,11 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
-	ocmoci "ocm.software/open-component-model/bindings/go/oci/access"
-	v1 "ocm.software/open-component-model/bindings/go/oci/access/v1"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/internal/resolver"
+	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -54,6 +56,10 @@ const (
 )
 
 func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("skipping integration test as downloading from ghcr.io is taking too long!")
+	}
+
 	t.Parallel()
 	user, password := getUserAndPasswordWithGitHubCLIAndJQ(t)
 
@@ -63,7 +69,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 
 	reg := "ghcr.io/open-component-model/ocm"
 
-	resolver := oci.NewURLPathResolver(reg)
+	resolver := resolver.NewURLPathResolver(reg)
 	resolver.SetClient(createAuthClient(reg, user, password))
 
 	scheme := ocmruntime.NewScheme()
@@ -154,7 +160,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 
 	client := createAuthClient(registryAddress, testUsername, password)
 
-	resolver := oci.NewURLPathResolver(registryAddress)
+	resolver := resolver.NewURLPathResolver(registryAddress)
 	resolver.SetClient(client)
 	resolver.PlainHTTP = true
 
@@ -252,7 +258,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 				Name:    v2.LocalBlobAccessType,
 				Version: v2.LocalBlobAccessTypeVersion,
 			},
-			MediaType:      oci.MediaTypeOCIImageLayoutV1 + "+tar" + "+gzip",
+			MediaType:      layout.MediaTypeOCIImageLayoutV1 + "+tar" + "+gzip",
 			LocalReference: digest.FromBytes(data).String(),
 		},
 	}
@@ -375,7 +381,7 @@ func testResolverConnectivity(t *testing.T, address, reference string, client *a
 	ctx := t.Context()
 	r := require.New(t)
 
-	resolver := oci.NewURLPathResolver(address)
+	resolver := resolver.NewURLPathResolver(address)
 	resolver.SetClient(client)
 	resolver.PlainHTTP = true
 

@@ -1,4 +1,4 @@
-package oci
+package resolver
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 
 	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
+
+	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
 const DefaultComponentDescriptorPathSuffix = "component-descriptors"
@@ -20,7 +22,6 @@ func NewURLPathResolver(baseURL string) *CachingURLPathResolver {
 // CachingURLPathResolver is a Resolver that resolves references to URLs for Component Versions and Resources.
 // It uses a BaseURL and a BaseClient to get a remote store for a reference.
 // each repository is only created once per reference.
-
 type CachingURLPathResolver struct {
 	BaseURL    string
 	BaseClient remote.Client
@@ -29,7 +30,7 @@ type CachingURLPathResolver struct {
 	DisableCache bool
 
 	cacheMu sync.RWMutex
-	cache   map[string]Store
+	cache   map[string]spec.Store
 }
 
 func (resolver *CachingURLPathResolver) SetClient(client remote.Client) {
@@ -44,7 +45,7 @@ func (resolver *CachingURLPathResolver) ComponentVersionReference(component, ver
 	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, version)
 }
 
-func (resolver *CachingURLPathResolver) StoreForReference(_ context.Context, reference string) (Store, error) {
+func (resolver *CachingURLPathResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
 	ref, err := registry.ParseReference(reference)
 	if err != nil {
 		return nil, err
@@ -69,20 +70,18 @@ func (resolver *CachingURLPathResolver) StoreForReference(_ context.Context, ref
 	return repo, nil
 }
 
-func (resolver *CachingURLPathResolver) addToCache(reference string, store Store) {
+func (resolver *CachingURLPathResolver) addToCache(reference string, store spec.Store) {
 	resolver.cacheMu.Lock()
 	defer resolver.cacheMu.Unlock()
 	if resolver.cache == nil {
-		resolver.cache = make(map[string]Store)
+		resolver.cache = make(map[string]spec.Store)
 	}
 	resolver.cache[reference] = store
 }
 
-func (resolver *CachingURLPathResolver) getFromCache(reference string) (Store, bool) {
+func (resolver *CachingURLPathResolver) getFromCache(reference string) (spec.Store, bool) {
 	resolver.cacheMu.RLock()
 	defer resolver.cacheMu.RUnlock()
 	store, ok := resolver.cache[reference]
 	return store, ok
 }
-
-var _ Resolver = (*CachingURLPathResolver)(nil)

@@ -1,4 +1,4 @@
-package oci
+package blob
 
 import (
 	"github.com/opencontainers/go-digest"

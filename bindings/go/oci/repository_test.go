@@ -16,14 +16,16 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/content/memory"
-	oci2 "oras.land/oras-go/v2/content/oci"
+	orasoci "oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
-	ocmoci "ocm.software/open-component-model/bindings/go/oci/access"
-	v1 "ocm.software/open-component-model/bindings/go/oci/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
+	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	"ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -31,7 +33,7 @@ import (
 var testScheme = runtime.NewScheme()
 
 func init() {
-	ocmoci.MustAddToScheme(testScheme)
+	access.MustAddToScheme(testScheme)
 	v2.MustAddToScheme(testScheme)
 }
 
@@ -46,7 +48,7 @@ type MockResolver struct {
 	store *memory.Store
 }
 
-func (m *MockResolver) StoreForReference(ctx context.Context, reference string) (oci.Store, error) {
+func (m *MockResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
 	return m.store, nil
 }
 
@@ -574,7 +576,7 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 				_, err = io.Copy(f, unzipped)
 				r.NoError(err, "Failed to write downloaded content to file")
 
-				strg, err := oci2.NewFromTar(ctx, out)
+				strg, err := orasoci.NewFromTar(ctx, out)
 				r.NoError(err, "Failed to create new store from tar")
 				// Verify the content
 				_, err = strg.Resolve(ctx, "test-image:latest")
@@ -624,7 +626,7 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 				`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
 				runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 				digest.FromBytes(data).String(),
-				oci.MediaTypeOCIImageLayoutV1+"+tar",
+				layout.MediaTypeOCIImageLayoutV1+"+tar",
 			)),
 		},
 	}
@@ -655,7 +657,7 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	t.Cleanup(func() {
 		r.NoError(layout.Close(), "Failed to close OCI layout")
 	})
-	r.Len(layout.Index.Manifests, 1)
+	r.Len(layout.Index.Manifests, 2)
 }
 
 func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {

@@ -1,4 +1,4 @@
-package oci
+package component
 
 import (
 	"encoding/json"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestCreateComponentConfig(t *testing.T) {
-	// Create a test descriptor
+	// New a test descriptor
 	testDescriptor := v1.Descriptor{
 		MediaType: "application/vnd.ocm.software/component-descriptor",
 		Digest:    digest.FromString("test"),
@@ -19,17 +19,17 @@ func TestCreateComponentConfig(t *testing.T) {
 
 	// Test successful creation
 	t.Run("successful creation", func(t *testing.T) {
-		encoded, descriptor, err := createComponentConfig(testDescriptor)
+		encoded, descriptor, err := New(testDescriptor)
 		assert.NoError(t, err)
 		assert.NotNil(t, encoded)
 		assert.NotNil(t, descriptor)
 
 		// Verify descriptor properties
-		assert.Equal(t, MediaTypeComponentConfig, descriptor.MediaType)
+		assert.Equal(t, MediaType, descriptor.MediaType)
 		assert.Equal(t, int64(len(encoded)), descriptor.Size)
 
 		// Verify the encoded config can be unmarshaled
-		var config ComponentConfig
+		var config Config
 		err = json.Unmarshal(encoded, &config)
 		assert.NoError(t, err)
 		assert.Equal(t, &testDescriptor, config.ComponentDescriptorLayer)
@@ -37,17 +37,17 @@ func TestCreateComponentConfig(t *testing.T) {
 
 	// Test with empty descriptor
 	t.Run("empty descriptor", func(t *testing.T) {
-		encoded, descriptor, err := createComponentConfig(v1.Descriptor{})
+		encoded, descriptor, err := New(v1.Descriptor{})
 		assert.NoError(t, err)
 		assert.NotNil(t, encoded)
 		assert.NotNil(t, descriptor)
 
 		// Verify descriptor properties
-		assert.Equal(t, MediaTypeComponentConfig, descriptor.MediaType)
+		assert.Equal(t, MediaType, descriptor.MediaType)
 		assert.Equal(t, int64(len(encoded)), descriptor.Size)
 
 		// Verify the encoded config can be unmarshaled
-		var config ComponentConfig
+		var config Config
 		err = json.Unmarshal(encoded, &config)
 		assert.NoError(t, err)
 		assert.Equal(t, &v1.Descriptor{}, config.ComponentDescriptorLayer)

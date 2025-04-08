@@ -1,5 +1,5 @@
-// Package oci provides functionality for working with Open Container Initiative (OCI) specifications
-// and handling local blob storage in memory.
+// Package memory provides functionality for working with Open Container Initiative (OCI) specifications
+// and handling local descriptors saved for later use in memory.
 package memory
 
 import (
@@ -8,64 +8,55 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// LocalBlobMemory defines an interface for temporary storage of OCI blobs.
-// It provides methods to add, retrieve, and delete blobs associated with specific references.
-// This interface is designed to be used as a temporary storage mechanism before blobs are
+// LocalDescriptorMemory defines an interface for temporary storage of OCI descriptors.
+// It provides methods to add, retrieve, and delete descs associated with specific references.
+// This interface is designed to be used as a temporary storage mechanism before descs are
 // added to a component version.
-type LocalBlobMemory interface {
-	// AddBlob adds a new blob layer to the storage associated with the given reference.
-	// The reference is used as a key to group related blobs together.
-	AddBlob(reference string, layer ociImageSpecV1.Descriptor)
+type LocalDescriptorMemory interface {
+	// Add adds a new oci descriptor to the storage associated with the given reference.
+	// The reference is used as a key to group related manifests together.
+	Add(reference string, layer ociImageSpecV1.Descriptor)
 
-	// GetBlobs retrieves all blob layers associated with the given reference.
-	// Returns an empty slice if no blobs are found for the reference.
-	GetBlobs(reference string) []ociImageSpecV1.Descriptor
+	// Get retrieves all oci descriptors associated with the given reference.
+	// Returns an empty slice if no descriptors are found for the reference.
+	Get(reference string) []ociImageSpecV1.Descriptor
 
-	// DeleteBlobs removes all blob layers associated with the given reference.
+	// Delete removes all oci descriptors associated with the given reference.
 	// If the reference doesn't exist, this operation is a no-op.
-	DeleteBlobs(reference string)
+	Delete(reference string)
 }
 
-// InMemoryLocalBlobMemory implements the LocalBlobMemory interface using an in-memory map.
-// It provides thread-safe operations for managing OCI blobs in memory.
+// InMemory implements the LocalDescriptorMemory interface using an in-memory map.
+// It provides thread-safe operations for managing OCI descs in memory.
 // This implementation is suitable for temporary storage during component version creation
 // but should not be used for long-term persistence.
-type InMemoryLocalBlobMemory struct {
+type InMemory struct {
 	mu    sync.RWMutex
-	blobs map[string][]ociImageSpecV1.Descriptor
+	descs map[string][]ociImageSpecV1.Descriptor
 }
 
-// NewInMemoryLocalBlobMemory creates a new InMemoryLocalBlobMemory instance with an initialized
-// map for storing blobs. This is the recommended way to create a new instance.
-func NewInMemoryLocalBlobMemory() *InMemoryLocalBlobMemory {
-	return &InMemoryLocalBlobMemory{
-		blobs: make(map[string][]ociImageSpecV1.Descriptor),
+// NewInMemory creates a new InMemory instance with an initialized
+// map for storing descs. This is the recommended way to create a new instance.
+func NewInMemory() *InMemory {
+	return &InMemory{
+		descs: make(map[string][]ociImageSpecV1.Descriptor),
 	}
 }
 
-// AddBlob adds a blob layer to the memory store associated with the given reference.
-// The operation is thread-safe and will append the layer to any existing blobs
-// for the same reference.
-func (m *InMemoryLocalBlobMemory) AddBlob(reference string, layer ociImageSpecV1.Descriptor) {
+func (m *InMemory) Add(reference string, layer ociImageSpecV1.Descriptor) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.blobs[reference] = append(m.blobs[reference], layer)
+	m.descs[reference] = append(m.descs[reference], layer)
 }
 
-// GetBlobs retrieves all blob layers associated with the given reference.
-// The operation is thread-safe and returns a copy of the stored blobs.
-// Returns an empty slice if no blobs are found for the reference.
-func (m *InMemoryLocalBlobMemory) GetBlobs(reference string) []ociImageSpecV1.Descriptor {
+func (m *InMemory) Get(reference string) []ociImageSpecV1.Descriptor {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.blobs[reference]
+	return m.descs[reference]
 }
 
-// DeleteBlobs removes all blob layers associated with the given reference.
-// The operation is thread-safe and will remove the reference entry from the map.
-// If the reference doesn't exist, this operation is a no-op.
-func (m *InMemoryLocalBlobMemory) DeleteBlobs(reference string) {
+func (m *InMemory) Delete(reference string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.blobs, reference)
+	delete(m.descs, reference)
 }

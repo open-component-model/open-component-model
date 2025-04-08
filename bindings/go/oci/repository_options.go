@@ -9,22 +9,33 @@ import (
 	"oras.land/oras-go/v2"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	ocmoci "ocm.software/open-component-model/bindings/go/oci/access"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
+	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // LocalResourceLayerCreationMode defines how local resources should be accessed in the repository.
-type LocalResourceLayerCreationMode string
+type LocalResourceLayerCreationMode int
+
+func (l LocalResourceLayerCreationMode) String() string {
+	switch l {
+	case LocalResourceCreationModeLocalBlobWithNestedGlobalAccess:
+		return "localBlobWithNestedGlobalAccess"
+	case LocalResourceCreationModeOCIImage:
+		return "ociImage"
+	default:
+		return fmt.Sprintf("unknown (%d)", l)
+	}
+}
 
 const (
 	// LocalResourceCreationModeLocalBlobWithNestedGlobalAccess creates a local blob access for resources.
 	// It also embeds the global access information in the local blob.
-	LocalResourceCreationModeLocalBlobWithNestedGlobalAccess LocalResourceLayerCreationMode = "localBlob"
-	// LocalResourceCreationModeOCIImageLayer creates an OCI image layer access for resources.
+	LocalResourceCreationModeLocalBlobWithNestedGlobalAccess LocalResourceLayerCreationMode = iota
+	// LocalResourceCreationModeOCIImage creates an OCI image layer access for resources.
 	// This mode is used when the resource is embedded without a local blob (only global access)
-	LocalResourceCreationModeOCIImageLayer LocalResourceLayerCreationMode = "ociImageLayer"
+	LocalResourceCreationModeOCIImage LocalResourceLayerCreationMode = iota
 )
 
 // RepositoryOptions defines the options for creating a new Repository.
@@ -32,10 +43,9 @@ type RepositoryOptions struct {
 	// Scheme is the runtime scheme used for type conversion.
 	// If not provided, a new scheme will be created with default registrations.
 	Scheme *runtime.Scheme
-	// LocalBlobMemory is used to temporarily store local blobs until they are added to a component version.
+	// LocalDescriptorMemory is used to temporarily store local blobs until they are added to a component version.
 	// If not provided, a new memory will be created.
-	LocalLayerBlobMemory    memory.LocalBlobMemory
-	LocalManifestBlobMemory memory.LocalBlobMemory
+	LocalManifestMemory memory.LocalDescriptorMemory
 	// Resolver resolves component version references to OCI stores.
 	// This is required and must be provided.
 	Resolver Resolver
@@ -63,9 +73,9 @@ func WithScheme(scheme *runtime.Scheme) RepositoryOption {
 }
 
 // WithLocalManifestBlobMemory sets the local blob memory for the repository.
-func WithLocalManifestBlobMemory(memory memory.LocalBlobMemory) RepositoryOption {
+func WithLocalManifestBlobMemory(memory memory.LocalDescriptorMemory) RepositoryOption {
 	return func(o *RepositoryOptions) {
-		o.LocalManifestBlobMemory = memory
+		o.LocalManifestMemory = memory
 	}
 }
 
@@ -109,11 +119,8 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		v2.MustAddToScheme(options.Scheme)
 	}
 
-	if options.LocalLayerBlobMemory == nil {
-		options.LocalLayerBlobMemory = memory.NewInMemoryLocalBlobMemory()
-	}
-	if options.LocalManifestBlobMemory == nil {
-		options.LocalManifestBlobMemory = memory.NewInMemoryLocalBlobMemory()
+	if options.LocalManifestMemory == nil {
+		options.LocalManifestMemory = memory.NewInMemory()
 	}
 
 	if options.Creator == "" {
@@ -142,7 +149,7 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 
 	return &Repository{
 		scheme:                    options.Scheme,
-		localManifestBlobMemory:   options.LocalManifestBlobMemory,
+		localManifestMemory:       options.LocalManifestMemory,
 		resolver:                  options.Resolver,
 		creatorAnnotation:         options.Creator,
 		resourceCopyOptions:       *options.ResourceCopyOptions,

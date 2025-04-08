@@ -1,4 +1,4 @@
-package oci
+package annotations
 
 import (
 	"encoding/json"
@@ -6,6 +6,9 @@ import (
 	"fmt"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/errdef"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type ArtifactKind string
@@ -23,8 +26,8 @@ var ErrArtifactOCILayerAnnotationDoesNotExist = fmt.Errorf("ocm artifact annotat
 // It is used to store OCM Artifact information in the layer.
 // This is to differentiate Sources and Resources from each other based on their kind.
 type ArtifactOCIAnnotation struct {
-	Identity map[string]string `json:"identity"`
-	Kind     ArtifactKind      `json:"kind"`
+	Identity runtime.Identity `json:"identity"`
+	Kind     ArtifactKind     `json:"kind"`
 }
 
 func GetArtifactOCILayerAnnotations(descriptor *ociImageSpecV1.Descriptor) ([]ArtifactOCIAnnotation, error) {
@@ -58,4 +61,31 @@ func (a ArtifactOCIAnnotation) AddToDescriptor(descriptor *ociImageSpecV1.Descri
 
 	descriptor.Annotations[ArtifactAnnotationKey] = string(annotation)
 	return nil
+}
+
+func IsArtifactForResource(descriptor ociImageSpecV1.Descriptor, identity runtime.Identity, kind ArtifactKind, matchers ...runtime.ChainableIdentityMatcher) bool {
+	artifactAnnotations, err := GetArtifactOCILayerAnnotations(&descriptor)
+	if err != nil {
+		return false
+	}
+	for _, annotation := range artifactAnnotations {
+		if annotation.Kind == kind && annotation.Identity.Match(identity, matchers...) {
+			return true
+		}
+	}
+	return false
+}
+
+func FilterFirstMatchingArtifact(descriptors []ociImageSpecV1.Descriptor, identity runtime.Identity, kind ArtifactKind, matchers ...runtime.ChainableIdentityMatcher) (ociImageSpecV1.Descriptor, error) {
+	var notMatched []ociImageSpecV1.Descriptor
+
+	for _, desc := range descriptors {
+		if !IsArtifactForResource(desc, identity, kind, matchers...) {
+			notMatched = append(notMatched, desc)
+			continue
+		}
+		return desc, nil
+	}
+
+	return ociImageSpecV1.Descriptor{}, fmt.Errorf("no matching descriptor for identity %v (not matched other descriptors %v): %w", identity, notMatched, errdef.ErrNotFound)
 }

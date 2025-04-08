@@ -74,7 +74,7 @@
 //     - Embeds global access information in the local blob
 //     - Provides better isolation and control
 //
-//  2. LocalResourceCreationModeOCIImageLayer:
+//  2. LocalResourceCreationModeOCIImage:
 //     - Creates an OCI image layer access for resources
 //     - Used when the resource is embedded without a local blob
 //     - More efficient for OCI-native resources

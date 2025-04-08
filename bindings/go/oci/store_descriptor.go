@@ -12,8 +12,13 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	indexv1 "ocm.software/open-component-model/bindings/go/oci/index/component/v1"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
+	"ocm.software/open-component-model/bindings/go/oci/internal/resolver"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
+	descriptor2 "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
+	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -21,7 +26,7 @@ import (
 // storeDescriptorOptions defines the options for adding a component descriptor to a Store.
 type storeDescriptorOptions struct {
 	Scheme                        *runtime.Scheme
-	CreatorAnnotation             string
+	Author                        string
 	AdditionalDescriptorManifests []ociImageSpecV1.Descriptor
 }
 
@@ -29,7 +34,7 @@ type storeDescriptorOptions struct {
 // The returned descriptor is the manifest descriptor of the uploaded component.
 // It can be used to retrieve the component descriptor later.
 // To persist the descriptor, the manifest still has to be tagged.
-func addDescriptorToStore(ctx context.Context, store Store, descriptor *descriptor.Descriptor, opts storeDescriptorOptions) (*ociImageSpecV1.Descriptor, error) {
+func addDescriptorToStore(ctx context.Context, store spec.Store, descriptor *descriptor.Descriptor, opts storeDescriptorOptions) (*ociImageSpecV1.Descriptor, error) {
 	component, version := descriptor.Component.Name, descriptor.Component.Version
 
 	if err := indexv1.CreateIfNotExists(ctx, store); err != nil {
@@ -43,7 +48,7 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 	}
 	descriptorBytes := descriptorBuffer.Bytes()
 	descriptorOCIDescriptor := ociImageSpecV1.Descriptor{
-		MediaType: MediaTypeComponentDescriptorV2 + descriptorEncoding,
+		MediaType: descriptor2.MediaTypeComponentDescriptorV2 + descriptorEncoding,
 		Digest:    digest.FromBytes(descriptorBytes),
 		Size:      int64(len(descriptorBytes)),
 	}
@@ -52,8 +57,8 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		return nil, fmt.Errorf("unable to push component descriptor: %w", err)
 	}
 
-	// Create and upload the component configuration
-	componentConfigRaw, componentConfigDescriptor, err := createComponentConfig(descriptorOCIDescriptor)
+	// New and upload the component configuration
+	componentConfigRaw, componentConfigDescriptor, err := componentConfig.New(descriptorOCIDescriptor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal component config: %w", err)
 	}
@@ -62,21 +67,29 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 		return nil, fmt.Errorf("unable to push component config: %w", err)
 	}
 
-	// Create and upload the manifest
+	// New and upload the manifest
 	manifest := ociImageSpecV1.Manifest{
 		Versioned: specs.Versioned{
 			SchemaVersion: 2,
 		},
-		ArtifactType: MediaTypeComponentDescriptorV2,
+		ArtifactType: descriptor2.MediaTypeComponentDescriptorV2,
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
 		Config:       componentConfigDescriptor,
 		Annotations: map[string]string{
-			AnnotationOCMComponentVersion: fmt.Sprintf("%s/%s:%s", DefaultComponentDescriptorPathSuffix, component, version),
-			AnnotationOCMCreator:          opts.CreatorAnnotation,
+			annotations.OCMComponentVersion: fmt.Sprintf("%s/%s:%s", resolver.DefaultComponentDescriptorPathSuffix, component, version),
+			annotations.OCMCreator:          opts.Author,
+			ociImageSpecV1.AnnotationTitle:  fmt.Sprintf("OCM Component Descriptor OCI Artifact Manifest for %s in version %s", component, version),
+			ociImageSpecV1.AnnotationDescription: fmt.Sprintf(`
+This is an OCM OCI Artifact Manifest that contains the component descriptor for the component %[1]s.
+It is used to store the component descriptor in an OCI registry and can be referrenced by the official OCM Binding Library.
+`, component),
+			ociImageSpecV1.AnnotationAuthors:       opts.Author,
+			ociImageSpecV1.AnnotationURL:           "https://ocm.software",
+			ociImageSpecV1.AnnotationDocumentation: "https://ocm.software",
+			ociImageSpecV1.AnnotationSource:        "https://github.com/open-component-model/open-component-model",
+			ociImageSpecV1.AnnotationVersion:       version,
 		},
-		Layers: append(
-			[]ociImageSpecV1.Descriptor{descriptorOCIDescriptor},
-		),
+		Layers:  []ociImageSpecV1.Descriptor{descriptorOCIDescriptor},
 		Subject: &indexv1.Descriptor,
 	}
 	manifestRaw, err := json.Marshal(manifest)
@@ -112,6 +125,20 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 			opts.AdditionalDescriptorManifests...,
 		),
 		Subject: &indexv1.Descriptor,
+		Annotations: map[string]string{
+			annotations.OCMComponentVersion: fmt.Sprintf("%s/%s:%s", resolver.DefaultComponentDescriptorPathSuffix, component, version),
+			annotations.OCMCreator:          opts.Author,
+			ociImageSpecV1.AnnotationTitle:  fmt.Sprintf("OCM Component Descriptor OCI Artifact Manifest Index for %s in version %s", component, version),
+			ociImageSpecV1.AnnotationDescription: fmt.Sprintf(`
+This is an OCM OCI Artifact Manifest Index that contains the component descriptor manifest for the component %[1]s.
+It is used to store the component descriptor manifest and other related blob manifests in an OCI registry and can be referrenced by the official OCM Binding Library.
+`, component),
+			ociImageSpecV1.AnnotationAuthors:       opts.Author,
+			ociImageSpecV1.AnnotationURL:           "https://ocm.software",
+			ociImageSpecV1.AnnotationDocumentation: "https://ocm.software",
+			ociImageSpecV1.AnnotationSource:        "https://github.com/open-component-model/open-component-model",
+			ociImageSpecV1.AnnotationVersion:       version,
+		},
 	}
 	idxRaw, err := json.Marshal(idx)
 	if err != nil {
@@ -132,7 +159,7 @@ func addDescriptorToStore(ctx context.Context, store Store, descriptor *descript
 }
 
 // getDescriptorFromStore retrieves a component descriptor from a given Store using the provided reference.
-func getDescriptorFromStore(ctx context.Context, store Store, reference string) (*descriptor.Descriptor, *ociImageSpecV1.Manifest, *ociImageSpecV1.Index, error) {
+func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string) (*descriptor.Descriptor, *ociImageSpecV1.Manifest, *ociImageSpecV1.Index, error) {
 	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, reference)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
@@ -145,13 +172,13 @@ func getDescriptorFromStore(ctx context.Context, store Store, reference string) 
 	defer func() {
 		_ = componentConfigRaw.Close()
 	}()
-	componentConfig := ComponentConfig{}
-	if err := json.NewDecoder(componentConfigRaw).Decode(&componentConfig); err != nil {
+	cfg := componentConfig.Config{}
+	if err := json.NewDecoder(componentConfigRaw).Decode(&cfg); err != nil {
 		return nil, nil, nil, err
 	}
 
 	// Read component descriptor
-	descriptorRaw, err := store.Fetch(ctx, *componentConfig.ComponentDescriptorLayer)
+	descriptorRaw, err := store.Fetch(ctx, *cfg.ComponentDescriptorLayer)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}

@@ -1,7 +1,6 @@
 package oci
 
 import (
-	"context"
 	"io"
 	"os"
 	"strings"
@@ -45,10 +44,10 @@ func TestTargetResourceReference(t *testing.T) {
 
 func TestStoreForReference(t *testing.T) {
 	ctf := setupTestCTF(t)
-	store := NewFromCTF(ctf)
-	result, err := store.StoreForReference(context.Background(), "test:reference")
+	s := NewFromCTF(ctf)
+	result, err := s.StoreForReference(t.Context(), "test:reference")
 	assert.NoError(t, err)
-	assert.Equal(t, store, result)
+	assert.Equal(t, "ctf.ocm.software/test", result.(*repositoryStore).repo)
 }
 
 func TestComponentVersionReference(t *testing.T) {
@@ -60,7 +59,9 @@ func TestComponentVersionReference(t *testing.T) {
 
 func TestFetch(t *testing.T) {
 	ctf := setupTestCTF(t)
-	store := NewFromCTF(ctf)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
 
 	ctx := t.Context()
 	content := "test"
@@ -96,7 +97,9 @@ func TestFetch(t *testing.T) {
 
 func TestExists(t *testing.T) {
 	ctf := setupTestCTF(t)
-	store := NewFromCTF(ctf)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
 
 	ctx := t.Context()
 	content := "test"
@@ -127,7 +130,9 @@ func TestExists(t *testing.T) {
 
 func TestPush(t *testing.T) {
 	ctf := setupTestCTF(t)
-	store := NewFromCTF(ctf)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
 
 	ctx := t.Context()
 	content := "test"
@@ -149,7 +154,9 @@ func TestPush(t *testing.T) {
 
 func TestResolve(t *testing.T) {
 	ctf := setupTestCTF(t)
-	store := NewFromCTF(ctf)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
 
 	ctx := t.Context()
 	reference := "test-repo:test-tag"
@@ -191,7 +198,9 @@ func TestResolve(t *testing.T) {
 
 func TestTag(t *testing.T) {
 	ctf := setupTestCTF(t)
-	store := NewFromCTF(ctf)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
 
 	ctx := t.Context()
 	reference := "test-repo:test-tag"
