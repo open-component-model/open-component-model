@@ -23,6 +23,16 @@ import (
 
 const socketPathFormat = "/tmp/ocm_plugin_%s.sock"
 
+// PluginType defines the type of the plugin such as, Transfer, Transformation, Credential, Config plugin.
+type PluginType string
+
+var (
+	TransformationPlugin PluginType = "transformation"
+	TransferPlugin       PluginType = "transfer"
+	CredentialPlugin     PluginType = "credential"
+	ConfigPlugin         PluginType = "config"
+)
+
 // ImplementedPlugin contains information about a plugin that has been included via direct implementation.
 type ImplementedPlugin struct {
 	Base         PluginBase
@@ -65,6 +75,11 @@ type constructedPlugin struct {
 
 // PluginManager manages all connected plugins.
 type PluginManager struct {
+	// Repositories containing various typed plugins.
+	TransferRepository       Registry
+	TransformationRepository Registry
+	CredentialRepository     Registry
+
 	// Stores plugins for each capability. Capabilities are determined
 	// through the plugins.
 	// A plugin contains their capability. When looking for a plugin
@@ -354,6 +369,9 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 		}
 
+		// TODO: Switch here on what to use as a registry or rather plugin type and then add this plugin to that registry.
+		// Each registry has its own lookup -> But this cannot be generalized. And the plugin constructs are also
+		// all of a different type and parameter list.
 		caps := &Capabilities{}
 		if err := json.Unmarshal(output.Bytes(), caps); err != nil {
 			return fmt.Errorf("failed to unmarshal capabilities: %w", err)
