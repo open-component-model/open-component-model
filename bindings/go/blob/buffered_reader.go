@@ -40,6 +40,7 @@ var (
 	_ MediaTypeAware = &EagerBufferedReader{}
 )
 
+//nolint:wrapcheck // err should be propagated as is
 func (b *EagerBufferedReader) LoadEagerly() error {
 	if b.Loaded() {
 		return nil
@@ -71,6 +72,7 @@ func (b *EagerBufferedReader) Loaded() bool {
 	return b.loaded
 }
 
+//nolint:wrapcheck // read should be propagated as is
 func (b *EagerBufferedReader) Read(p []byte) (n int, err error) {
 	if err := b.LoadEagerly(); err != nil {
 		// return 0 and not SizeUnknown because readers that return negative size
@@ -80,6 +82,7 @@ func (b *EagerBufferedReader) Read(p []byte) (n int, err error) {
 	return b.buf.Read(p)
 }
 
+//nolint:wrapcheck // close should be propagated as is
 func (b *EagerBufferedReader) Close() error {
 	closeable, ok := b.reader.(io.Closer)
 	if !ok {

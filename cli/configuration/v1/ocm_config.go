@@ -97,7 +97,7 @@ func GetOCMConfig(additional ...string) (*Config, error) {
 func GetConfigFromPath(path string) (*Config, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to open %s: %w", path, err)
 	}
 	defer func() {
 		err = errors.Join(err, file.Close())
@@ -105,7 +105,7 @@ func GetConfigFromPath(path string) (*Config, error) {
 
 	var instance Config
 	if err := scheme.Decode(file, &instance); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to decode %s: %w", path, err)
 	}
 	return &instance, nil
 }

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -9,6 +10,15 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+var (
+	// ErrEmptyProvider is returned when a provider string is empty
+	ErrEmptyProvider = errors.New("empty provider string")
+	// ErrNilBlob is returned when a blob is nil
+	ErrNilBlob = errors.New("nil blob")
+	// ErrNilContexts is returned when repository contexts are nil
+	ErrNilContexts = errors.New("nil repository contexts")
 )
 
 // ConvertFromV2 converts a v2.Descriptor to the internal Descriptor format.
@@ -88,11 +98,11 @@ func ConvertToV2(scheme *runtime.Scheme, descriptor *Descriptor) (*v2.Descriptor
 // ConvertFromV2Provider parses a provider string to an Identity map or JSON structure.
 func ConvertFromV2Provider(provider string) (runtime.Identity, error) {
 	if provider == "" {
-		return nil, nil
+		return nil, ErrEmptyProvider
 	}
 	if strings.HasPrefix(strings.TrimSpace(provider), "{") {
 		if !json.Valid([]byte(provider)) {
-			return nil, fmt.Errorf("invalid JSON format")
+			return nil, errors.New("invalid JSON format")
 		}
 		id := runtime.Identity{}
 		if err := json.Unmarshal([]byte(provider), &id); err != nil {
@@ -253,18 +263,18 @@ func ConvertFromV2Signatures(signatures []v2.Signature) []Signature {
 // ConvertToV2Provider converts an internal provider identity to a string format expected by v2.
 func ConvertToV2Provider(provider runtime.Identity) (string, error) {
 	if provider == nil {
-		return "", nil
+		return "", ErrEmptyProvider
 	}
 	if name, ok := provider[v2.IdentityAttributeName]; ok {
 		return name, nil
 	}
-	return "", fmt.Errorf("provider name not found")
+	return "", errors.New("provider name not found")
 }
 
 // ConvertToV2RepositoryContexts deep copies internal repository contexts to v2 format.
 func ConvertToV2RepositoryContexts(scheme *runtime.Scheme, contexts []runtime.Typed) ([]*runtime.Raw, error) {
 	if contexts == nil {
-		return nil, nil
+		return nil, ErrNilContexts
 	}
 	n := make([]*runtime.Raw, len(contexts))
 	for i := range contexts {
@@ -403,7 +413,7 @@ func ConvertToV2Signatures(signatures []Signature) []v2.Signature {
 // ConvertFromV2LocalBlob converts a v2.LocalBlob to runtime.LocalBlob.
 func ConvertFromV2LocalBlob(scheme *runtime.Scheme, blob *v2.LocalBlob) (*LocalBlob, error) {
 	if blob == nil {
-		return nil, nil
+		return nil, ErrNilBlob
 	}
 	result := &LocalBlob{
 		Type:           blob.Type,
@@ -420,7 +430,7 @@ func ConvertFromV2LocalBlob(scheme *runtime.Scheme, blob *v2.LocalBlob) (*LocalB
 // ConvertToV2LocalBlob converts a runtime.LocalBlob to v2.LocalBlob.
 func ConvertToV2LocalBlob(scheme *runtime.Scheme, blob *LocalBlob) (*v2.LocalBlob, error) {
 	if blob == nil {
-		return nil, nil
+		return nil, ErrNilBlob
 	}
 	result := &v2.LocalBlob{
 		Type:           blob.Type,

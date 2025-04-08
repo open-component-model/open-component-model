@@ -36,11 +36,11 @@ var GenerateDocsCmd = &cobra.Command{
 		}
 		if dir == "" {
 			if dir, err = os.Getwd(); err != nil {
-				return err
+				return fmt.Errorf("unable to determine current directory: %w", err)
 			}
 		}
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-			return err
+			return fmt.Errorf("unable to create %s: %w", dir, err)
 		}
 
 		mode, err := enum.Get(cmd.Flags(), FlagMode)
