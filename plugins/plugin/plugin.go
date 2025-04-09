@@ -178,11 +178,6 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 	return nil
 }
 
-//type Handler struct {
-//	Location string
-//	Handler  http.HandlerFunc
-//}
-
 func (p *Plugin) RegisterHandlers(handlers ...manager.Handler) error {
 	for _, h := range handlers {
 		if h.Handler == nil {
@@ -223,17 +218,4 @@ func (p *Plugin) Shutdown(writer http.ResponseWriter, _ *http.Request) {
 	if err := p.GracefulShutdown(context.Background()); err != nil {
 		p.logger.Error("Error shutting down plugin", "error", err)
 	}
-}
-
-type Error struct {
-	Err    error `json:"error"`
-	Status int   `json:"status"`
-}
-
-func NewError(err error, status int) *Error {
-	return &Error{Err: err, Status: status}
-}
-
-func (e *Error) Write(w http.ResponseWriter) {
-	http.Error(w, e.Err.Error(), e.Status)
 }

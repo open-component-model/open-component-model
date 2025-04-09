@@ -281,23 +281,24 @@ func (r *RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, id
 	return resolved, nil
 }
 
-func (r *RepositoryPlugin) Transform(ctx context.Context, request TransformResourceRequest) (*TransformResourceResponse, error) {
-	response := TransformResourceResponse{}
-	if err := call(ctx, r.client, "resources/transform", http.MethodPost, WithPayload(request), WithResult(&response)); err != nil {
-		return nil, fmt.Errorf("failed to transform resource with plugin %s: %w", r.ID, err)
-	}
-
-	return &response, nil
-}
-
-func (r *RepositoryPlugin) CredentialIdentities(ctx context.Context, request CredentialIdentityRequest) (*CredentialIdentityResponse, error) {
-	response := CredentialIdentityResponse{}
-	if err := call(ctx, r.client, "resources/transform/credential-identities", http.MethodPost, WithPayload(request), WithResult(&response)); err != nil {
-		return nil, fmt.Errorf("failed to transform resource with plugin %s: %w", r.ID, err)
-	}
-
-	return &response, nil
-}
+//
+//func (r *RepositoryPlugin) Transform(ctx context.Context, request TransformResourceRequest) (*TransformResourceResponse, error) {
+//	response := TransformResourceResponse{}
+//	if err := call(ctx, r.client, "resources/transform", http.MethodPost, WithPayload(request), WithResult(&response)); err != nil {
+//		return nil, fmt.Errorf("failed to transform resource with plugin %s: %w", r.ID, err)
+//	}
+//
+//	return &response, nil
+//}
+//
+//func (r *RepositoryPlugin) CredentialIdentities(ctx context.Context, request CredentialIdentityRequest) (*CredentialIdentityResponse, error) {
+//	response := CredentialIdentityResponse{}
+//	if err := call(ctx, r.client, "resources/transform/credential-identities", http.MethodPost, WithPayload(request), WithResult(&response)); err != nil {
+//		return nil, fmt.Errorf("failed to transform resource with plugin %s: %w", r.ID, err)
+//	}
+//
+//	return &response, nil
+//}
 
 func toCredentials(credentials Attributes) (KV, error) {
 	rawCreds, err := json.Marshal(credentials)

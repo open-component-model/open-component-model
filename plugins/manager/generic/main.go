@@ -5,25 +5,80 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"os"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/plugins/manager"
 	"ocm.software/open-component-model/plugins/plugin"
 )
 
+// MyType assume this type lives in binding/go or some other place in OCM.
+type MyType struct {
+	runtime.Type `json:"type"`
+	BaseUrl      string `json:"baseUrl"`
+	SubPath      string `json:"subPath"`
+}
+
+func (o *MyType) GetType() runtime.Type {
+	return o.Type
+}
+
+func (o *MyType) SetType(t runtime.Type) {
+	o.Type = t
+}
+
+func (o *MyType) DeepCopyTyped() runtime.Typed {
+	return &MyType{}
+}
+
+// GetComponentVersion implements component version fetching.
+func GetComponentVersion[T runtime.Typed](ctx context.Context, name string, version string, registry T, credentials runtime.Identity, writer io.Writer) (err error) {
+	fmt.Printf("GetComponentVersion[%s %s]\n", name, version)
+
+	return nil
+}
+
+func DownloadResource[T runtime.Typed](ctx context.Context, request *manager.GetResourceRequest, credentials runtime.Identity, writer io.Writer) error {
+	fmt.Printf("DownloadResource[%s %s]\n", request.Name, request.Version)
+
+	return nil
+}
+
+func UploadResource[T runtime.Typed](ctx context.Context, request *manager.PostResourceRequest, credentials runtime.Identity, writer io.Writer) error {
+	fmt.Printf("UploadResource[%s %s]\n", request.Resource.Name, request.Resource.Version)
+
+	return nil
+}
+
+func UploadComponentVersion[T runtime.Typed](ctx context.Context, descriptor *descriptor.Descriptor, registry T, credentials runtime.Identity) error {
+	fmt.Printf("UploadComponentVersion[%s %s]\n", descriptor.Component.Name, descriptor.Component.Version)
+
+	return nil
+}
+
 func main() {
 	args := os.Args[1:]
 
-	handlers, content, err := manager.NewOCMComponentVersionRepository(
-		"CommonTransportFormat/v1",
+	typ := &MyType{
+		Type: runtime.Type{
+			Version: "v1",
+			Name:    "OCIRegistry",
+		},
+		BaseUrl: "url",
+		SubPath: "/path",
+	}
+	handlers, content, err := manager.NewReadWriteComponentVersionRepository(
+		typ,
 		manager.TransferPlugin,
-		manager.OCMComponentVersionRepositoryHandlersOpts{
-			UploadComponentVersion:   nil, // provide your handlers
-			DownloadComponentVersion: nil,
-			UploadResource:           nil,
-			DownloadResource:         nil,
+		manager.ReadWriteComponentVersionRepositoryHandlersOpts[*MyType]{
+			UploadComponentVersion: UploadComponentVersion[*MyType], // provide your handlers
+			GetComponentVersion:    GetComponentVersion[*MyType],
+			UploadResource:         UploadResource[*MyType],
+			DownloadResource:       DownloadResource[*MyType],
 		},
 	)
 	if err != nil {
