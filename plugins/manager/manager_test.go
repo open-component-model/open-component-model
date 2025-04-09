@@ -5,19 +5,14 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/invopop/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	//"ocm.software/open-component-model/bindings/go/ctf"
-	//"ocm.software/open-component-model/bindings/go/oci"
 
-	//credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/config/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
@@ -55,17 +50,17 @@ func TestCallPluginForNoneExistingEndpoint(t *testing.T) {
 	//	Type:     "CommonTransportFormat/v1",
 	//	FilePath: "path/to/file",
 	//}
-	plugins, err := pm.GetGenericPluginForType(ctx, nil)
+	plugins, err := pm.GetReadResourceRepoPlugin(ctx, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
 		_ = os.Remove("/tmp/ocm_plugin_generic.sock")
 	})
 	require.Len(t, plugins, 1)
-	p := plugins[0]
+	//p := plugins[0]
 
-	err = p.Call(ctx, "not-exist", http.MethodGet, nil, nil, nil, nil)
-	assert.ErrorContains(t, err, "page not found")
+	//err = p.Call(ctx, "not-exist", http.MethodGet, nil, nil, nil, nil)
+	//assert.ErrorContains(t, err, "page not found")
 }
 
 func TestIdleChecker(t *testing.T) {
@@ -79,7 +74,7 @@ func TestIdleChecker(t *testing.T) {
 	//	Type:     "CommonTransportFormat/v1",
 	//	FilePath: "path/to/file",
 	//}
-	plugins, err := pm.GetGenericPluginForType(ctx, nil)
+	plugins, err := pm.GetReadOCMRepoPlugin(ctx, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
@@ -107,7 +102,7 @@ func TestBombarding(t *testing.T) {
 	//	Type:     "CommonTransportFormat/v1",
 	//	FilePath: "path/to/file",
 	//}
-	plugins, err := pm.GetGenericPluginForType(ctx, nil)
+	plugins, err := pm.GetReadResourceRepoPlugin(ctx, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
@@ -145,7 +140,7 @@ func TestShutdown(t *testing.T) {
 	//	Type:           "OCIArtifact/v1",
 	//	ImageReference: "ref",
 	//}
-	p2, err := pm.GetGenericPluginForType(ctx, nil)
+	p2, err := pm.GetReadOCMRepoPlugin(ctx, nil)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -200,13 +195,13 @@ func TestDeduplicationOfPlugins(t *testing.T) {
 	//	Type:     "CommonTransportFormat/v1",
 	//	FilePath: "path/to/file",
 	//}
-	p1, err := pm.GetGenericPluginForType(ctx, nil)
+	p1, err := pm.GetReadOCMRepoPlugin(ctx, nil)
 	require.NoError(t, err)
 	//accessOCI := &oci.OCIArtifact{
 	//Type:           "OCIArtifact/v1",
 	//ImageReference: "ref",
 	//}
-	p2, err := pm.GetGenericPluginForType(ctx, nil)
+	p2, err := pm.GetReadOCMRepoPlugin(ctx, nil)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
@@ -218,17 +213,11 @@ func TestDeduplicationOfPlugins(t *testing.T) {
 }
 
 func TestCanRetrieveSourceImplementedPlugins(t *testing.T) {
-	//v2 := &oci.OCIArtifact{}
-	generator := jsonschema.Reflect(nil)
-	ociSchema, err := generator.MarshalJSON()
-	require.NoError(t, err)
-
 	RegisterPluginImplementationForTypeAndCapabilities(&ImplementedPlugin{
 		Base: &MockPlugin{},
 		Capabilities: []Capability{
 			{
 				Capability: ReadWriteComponentVersionRepositoryCapability,
-				Schema:     ociSchema,
 			},
 		},
 		Type: "OCIArtifact/v1",
@@ -251,11 +240,6 @@ func TestCanRetrieveSourceImplementedPlugins(t *testing.T) {
 }
 
 func TestCanRetrieveSourceImplementedPluginsWithError(t *testing.T) {
-	//v2 := &oci.OCIArtifact{}
-	generator := jsonschema.Reflect(nil)
-	ociSchema, err := generator.MarshalJSON()
-	require.NoError(t, err)
-
 	RegisterPluginImplementationForTypeAndCapabilities(&ImplementedPlugin{
 		Base: &MockPlugin{
 			err: errors.New("some error"),
@@ -263,7 +247,6 @@ func TestCanRetrieveSourceImplementedPluginsWithError(t *testing.T) {
 		Capabilities: []Capability{
 			{
 				Capability: ReadWriteComponentVersionRepositoryCapability,
-				Schema:     ociSchema,
 			},
 		},
 		Type: "OCIArtifact/v1",

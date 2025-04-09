@@ -13,9 +13,6 @@ const (
 	WriteComponentVersionRepositoryCapability     = "writeComponentVersionRepository"
 	ReadResourceRepositoryCapability              = "readResourceRepository"
 	WriteResourceRepositoryCapability             = "writeResourceRepository"
-	CredentialPluginCapability                    = "credentialPlugin"
-	CredentialRepositoryPluginCapability          = "credentialRepositoryPlugin"
-	TransformerCapability                         = "transformer"
 )
 
 type Location struct {
@@ -109,14 +106,10 @@ type Endpoint struct {
 type Capability struct {
 	// Capability is the name of the capability for example OCMComponentVersionRepository.
 	Capability string `json:"capability"`
-	// Endpoints defines a set of endpoints that optionally defines a schema for validation.
+	// Type defines the type name that this plugin supports.
 	Type string `json:"type"`
 }
 
-// TODO: Keep the registration simple because the plugin will have the embedded type and the endpoint
-// during registration? I don't fucking know yet.
-// What are we looking for? A capability for a type or a type for a capability? I don't the later.
-// Capability contains a list of capabilities and the type of the Plugin.
 type Capabilities struct {
 	PluginType   PluginType   `json:"pluginType"`
 	Capabilities []Capability `json:"capabilities"` // is it multiple capabilities? Maybe.
@@ -131,84 +124,9 @@ type GetResourceRequest struct {
 	TargetLocation Location `json:"targetLocation"`
 }
 
-//type TransformResourceRequest struct {
-//	TransformationMeta `json:"transformationMeta"`
-//
-//	// The resource specification to download
-//	*descriptor.Resource `json:"resource"`
-//
-//	TransformationSpec *TransformationSpec `json:"transformSpec"`
-//
-//	// The Location of the resource that should be localized
-//	ResourceLocation Location `json:"resourceLocation"`
-//	// The Location of the transformed resource
-//	TransformedResourceLocation Location `json:"transformedResourceLocation"`
-//
-//	Inputs map[string]string `json:"inputs"`
-//
-//	Credentials v1.Attributes `json:"credentials"`
-//}
-//
-//type CredentialIdentityRequest struct {
-//	// The transformation that should be interpreted
-//	TransformResourceRequest `json:"transformResourceRequest"`
-//}
-//
-//type CredentialIdentityResponse struct {
-//	// The credential identities that can be used for transformation
-//	Identities []v1.Identity `json:"identities"`
-//}
-//
-//type TransformationMeta struct {
-//	ComponentIdentity descriptor.ComponentIdentity
-//	Source            *TransformationRepository `json:"source"`
-//	Target            *TransformationRepository `json:"target"`
-//}
-//
-//type TransformationRepository struct {
-//	runtime.Typed `json:",inline"`
-//}
-//
-//func (a *TransformationRepository) UnmarshalJSON(data []byte) error {
-//	raw := &runtime.Raw{}
-//	if err := json.Unmarshal(data, raw); err != nil {
-//		return err
-//	}
-//	a.Typed = raw
-//	return nil
-//}
-//
-//func (a *TransformationRepository) MarshalJSON() ([]byte, error) {
-//	return json.Marshal(a.Typed)
-//}
-//
-//type TransformationSpec struct {
-//	runtime.Typed `json:",inline"`
-//}
-//
-//func (a *TransformationSpec) UnmarshalJSON(data []byte) error {
-//	raw := &runtime.Raw{}
-//	if err := json.Unmarshal(data, raw); err != nil {
-//		return err
-//	}
-//	a.Typed = raw
-//	return nil
-//}
-//
-//func (a *TransformationSpec) MarshalJSON() ([]byte, error) {
-//	return json.Marshal(a.Typed)
-//}
-//
-//type TransformResourceResponse struct {
-//	// The resource specification to download
-//	*descriptor.Resource `json:"resource"`
-//
-//	Outputs map[string]string `json:"outputs"`
-//}
-//
-//type PostResourceRequest struct {
-//	TargetAccess *transfer.Access `json:"targetAccess"`
-//	// The ResourceLocation of the Local Resource
-//	ResourceLocation Location             `json:"resourceLocation"`
-//	Resource         *descriptor.Resource `json:"resource"`
-//}
+type PostResourceRequest struct {
+	//TargetAccess *transfer.Access `json:"targetAccess"`
+	// The ResourceLocation of the Local Resource
+	ResourceLocation Location             `json:"resourceLocation"`
+	Resource         *descriptor.Resource `json:"resource"`
+}
