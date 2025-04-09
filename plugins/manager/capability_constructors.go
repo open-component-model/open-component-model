@@ -1,11 +1,16 @@
 package manager
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
+	"strings"
 
-	"github.com/invopop/jsonschema"
-
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -15,21 +20,27 @@ type Handler struct {
 	Schema   []byte           `json:"schema"`
 }
 
-type OCMComponentVersionRepositoryHandlers struct {
+type ReadWriteComponentVersionRepositoryHandlers struct {
 	UploadComponentVersion   Handler // maybe contain the type here?
 	DownloadComponentVersion Handler
 	UploadResource           Handler
 	DownloadResource         Handler
 }
 
-type OCMComponentVersionRepositoryHandlersOpts struct {
-	UploadComponentVersion   http.HandlerFunc
-	DownloadComponentVersion http.HandlerFunc
-	UploadResource           http.HandlerFunc
-	DownloadResource         http.HandlerFunc
+// GetComponentVersionFn these functions provide the structure that plugins need to implement.
+type GetComponentVersionFn[T runtime.Typed] func(ctx context.Context, name, version string, registry T, credentials runtime.Identity, writer io.Writer) (err error)
+type PostComponentVersionFn[T runtime.Typed] func(ctx context.Context, descriptor *descriptor.Descriptor, registry T, credentials runtime.Identity) error
+type GetResourceFn[T runtime.Typed] func(ctx context.Context, request *GetResourceRequest, credentials runtime.Identity, writer io.Writer) error
+type PostResourceFn[T runtime.Typed] func(ctx context.Context, request *PostResourceRequest, credentials runtime.Identity, writer io.Writer) error
+
+type ReadWriteComponentVersionRepositoryHandlersOpts[T runtime.Typed] struct {
+	UploadComponentVersion PostComponentVersionFn[T]
+	GetComponentVersion    GetComponentVersionFn[T]
+	UploadResource         PostResourceFn[T]
+	DownloadResource       GetResourceFn[T]
 }
 
-func (o *OCMComponentVersionRepositoryHandlers) GetHandlers() []Handler {
+func (o *ReadWriteComponentVersionRepositoryHandlers) GetHandlers() []Handler {
 	return []Handler{
 		o.UploadComponentVersion,
 		o.DownloadComponentVersion,
@@ -38,7 +49,7 @@ func (o *OCMComponentVersionRepositoryHandlers) GetHandlers() []Handler {
 	}
 }
 
-var _ CapabilityHandlerProvider = &OCMComponentVersionRepositoryHandlers{}
+var _ CapabilityHandlerProvider = &ReadWriteComponentVersionRepositoryHandlers{}
 
 // CapabilityHandlerProvider can be used to list handlers that the plugin SDK needs to register for a plugin.
 // This is used by the SDK as a convenience so users don't have to care about it.
@@ -46,49 +57,35 @@ type CapabilityHandlerProvider interface {
 	GetHandlers() []Handler
 }
 
-type OCMComponentVersionRepositoryOptions struct {
-	Handlers OCMComponentVersionRepositoryHandlers `json:"handlers"`
+type ReadWriteComponentVersionRepositoryOptions struct {
+	Handlers ReadWriteComponentVersionRepositoryHandlers `json:"handlers"`
 }
 
-// OCIRegistry assume this type lives in binding/go or some other place in OCM.
-type OCIRegistry struct {
-	runtime.Type `json:"type"`
-	BaseUrl      string `json:"baseUrl"`
-	SubPath      string `json:"subPath"`
-}
+func NewReadWriteComponentVersionRepository[T runtime.Typed](typ T, pluginType PluginType, handlers ReadWriteComponentVersionRepositoryHandlersOpts[T]) (CapabilityHandlerProvider, []byte, error) {
+	//ociRegistry := &OCIRegistry{} // Pretend this is defined in bindings.
+	//schemaOCIRegistry, err := jsonschema.Reflect(ociRegistry).MarshalJSON()
+	//if err != nil {
+	//	return nil, nil, err
+	//}
 
-var Type = "OCIArtifact/v1"
-
-// This should return something that the plugin then can use to register handlers.
-// Provides the handlers and also provides what to pass back to the plugin registration?
-// This has an opinionated parameter list for the handlers it needs. It will construct the
-// handlers including the location, send back a serialized format, and send back a struct
-// that might implement some kind of interface or something for the plugin SDK to start the plugin.
-func NewOCMComponentVersionRepository(typ string, pluginType PluginType, handlers OCMComponentVersionRepositoryHandlersOpts) (CapabilityHandlerProvider, []byte, error) {
-	ociRegistry := &OCIRegistry{}
-	schemaOCIRegistry, err := jsonschema.Reflect(ociRegistry).MarshalJSON()
-	if err != nil {
-		panic(err)
-	}
-
-	result := &OCMComponentVersionRepositoryHandlers{
+	result := &ReadWriteComponentVersionRepositoryHandlers{
 		UploadComponentVersion: Handler{
-			Handler:  handlers.UploadComponentVersion,
-			Location: "/cv/upload",
+			Handler:  UploadComponentVersionHandlerFunc(handlers.UploadComponentVersion, typ),
+			Location: "/cv/upload", // These should be coming from somewhere because we need to call them later.
 		},
 		DownloadComponentVersion: Handler{
-			Handler:  handlers.DownloadComponentVersion,
+			Handler:  DownloadComponentVersionHandlerFunc(handlers.GetComponentVersion, typ),
 			Location: "/cv/download",
 		},
 		UploadResource: Handler{
-			Handler:  handlers.UploadResource,
+			Handler:  PostResourceHandlerFunc[T](handlers.UploadResource),
 			Location: "/cv/upload/resource",
-			Schema:   schemaOCIRegistry,
+			//Schema:   schemaOCIRegistry,
 		},
 		DownloadResource: Handler{
-			Handler:  handlers.DownloadResource,
+			Handler:  GetResourceHandlerFunc[T](handlers.DownloadResource),
 			Location: "/cv/download/resource",
-			Schema:   schemaOCIRegistry,
+			//Schema:   schemaOCIRegistry,
 		},
 	}
 
@@ -97,8 +94,8 @@ func NewOCMComponentVersionRepository(typ string, pluginType PluginType, handler
 		Capabilities: []Capability{
 			{
 				// TODO: Need the endpoints here? Should the endpoints contain the type?
-				Capability: "OCMComponentVersionRepository",
-				Type:       typ, // which would be OCIRegistry for example. Could we infer this?
+				Capability: "ReadWriteComponentVersionRepository",
+				Type:       typ.GetType().String(),
 			},
 		},
 	}
@@ -108,20 +105,140 @@ func NewOCMComponentVersionRepository(typ string, pluginType PluginType, handler
 		return nil, nil, err
 	}
 
-	//str := &OCMComponentVersionRepositoryHandlers{
-	//
-	//}
-
-	// how do I turn that now into the right thing?
-	// maybe the other thing does that?
-	// what if we... provide the same struct for the capability constructor?
-
-	// what now...
-
-	// ask for the endpoints, but that's a list...
-	// ... construct the plugin with the given handlers and the schema the handlers need.
-	// we can be opinionated on the schema
-	// We know that information.
-
 	return result, content, nil
+}
+
+var Scheme = runtime.NewScheme()
+
+func DownloadComponentVersionHandlerFunc[T runtime.Typed](f GetComponentVersionFn[T], typ T) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		query := request.URL.Query()
+		name := query.Get("name")
+		version := query.Get("version")
+		rawCredentials := []byte(request.Header.Get("Authorization"))
+		credentials := runtime.Identity{}
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			NewError(err, http.StatusBadRequest).Write(writer)
+			return
+		}
+		if err := Scheme.Decode(strings.NewReader(request.Header.Get(XOCMRepositoryHeader)), typ); err != nil {
+			NewError(err, http.StatusBadRequest).Write(writer)
+			return
+		}
+
+		if err := f(request.Context(), name, version, typ, credentials, writer); err != nil {
+			NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+	}
+}
+
+func UploadComponentVersionHandlerFunc[T runtime.Typed](f PostComponentVersionFn[T], typ T) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		req, err := DecodeJSONRequestBody[PostComponentVersionRequest](writer, request)
+		if err != nil {
+			NewError(err, http.StatusBadRequest).Write(writer)
+			return
+		}
+		rawCredentials := []byte(request.Header.Get("Authorization"))
+		credentials := runtime.Identity{}
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			NewError(err, http.StatusBadRequest).Write(writer)
+			return
+		}
+		if err := Scheme.Convert(req.Repository.Typed, typ); err != nil {
+			NewError(err, http.StatusBadRequest).Write(writer)
+			return
+		}
+
+		if err := f(request.Context(), req.Descriptor, typ, credentials); err != nil {
+			NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+	}
+}
+
+func GetResourceHandlerFunc[T runtime.Typed](f GetResourceFn[T]) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		slog.Info("GET request")
+		query := request.URL.Query()
+		targetLocation := Location{
+			LocationType: LocationType(query.Get("target_location_type")),
+			Value:        query.Get("target_location_value"),
+		}
+
+		res := &descriptor.Resource{}
+		if v := query.Get("resource"); v != "" {
+			decodedResource, err := base64.StdEncoding.DecodeString(v)
+			if err != nil {
+				NewError(err, http.StatusBadRequest).Write(writer)
+				return
+			}
+
+			if err := json.Unmarshal(decodedResource, &res); err != nil {
+				NewError(err, http.StatusBadRequest).Write(writer)
+				return
+			}
+		}
+
+		req := &GetResourceRequest{
+			Resource:       res,
+			TargetLocation: targetLocation,
+		}
+
+		rawCredentials := []byte(request.Header.Get("Authorization"))
+		credentials := runtime.Identity{}
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			NewError(err, http.StatusBadRequest).Write(writer)
+			return
+		}
+
+		if err := f(request.Context(), req, credentials, writer); err != nil {
+			NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+	}
+}
+
+func PostResourceHandlerFunc[T runtime.Typed](f PostResourceFn[T]) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		body, err := DecodeJSONRequestBody[PostResourceRequest](writer, request)
+		if err != nil {
+			NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		rawCredentials := []byte(request.Header.Get("Authorization"))
+		credentials := runtime.Identity{}
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			NewError(err, http.StatusBadRequest).Write(writer)
+			return
+		}
+
+		if err := f(request.Context(), body, credentials, writer); err != nil {
+			NewError(err, http.StatusInternalServerError).Write(writer)
+		}
+	}
+}
+
+func DecodeJSONRequestBody[T any](writer http.ResponseWriter, request *http.Request) (*T, error) {
+	pRequest := new(T)
+	if err := json.NewDecoder(request.Body).Decode(pRequest); err != nil {
+		writer.WriteHeader(http.StatusBadRequest)
+		return nil, fmt.Errorf("failed to decode request: %w", err)
+	}
+	return pRequest, nil
+}
+
+type Error struct {
+	Err    error `json:"error"`
+	Status int   `json:"status"`
+}
+
+func NewError(err error, status int) *Error {
+	return &Error{Err: err, Status: status}
+}
+
+func (e *Error) Write(w http.ResponseWriter) {
+	http.Error(w, e.Err.Error(), e.Status)
 }
