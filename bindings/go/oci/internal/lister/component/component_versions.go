@@ -33,15 +33,15 @@ func ReferrerAnnotationVersionResolver(component string) lister.ReferrerVersionR
 		annotation = strings.TrimPrefix(annotation, resolver.DefaultComponentDescriptorPathSuffix+"/")
 		split := strings.Split(annotation, ":")
 		if len(split) != 2 {
-			return "", fmt.Errorf("skipping because not a valid semver tag: %q", annotation)
+			return "", fmt.Errorf("%q is not considered a valid %q annotation", annotation, annotations.OCMComponentVersion)
 		}
 		candidate := split[0]
 		if candidate != component {
-			return "", fmt.Errorf("skipping because component %q does not match %q", split[0], component)
+			return "", fmt.Errorf("component %q does not match %q: %w", split[0], component, lister.ErrSkip)
 		}
 		version := split[1]
 		if len(version) == 0 {
-			return "", fmt.Errorf("skipping because version is empty")
+			return "", fmt.Errorf("version parsed from %q in %q annotation is empty but should not be", annotation, annotations.OCMComponentVersion)
 		}
 
 		return version, nil
@@ -73,7 +73,7 @@ func ReferenceTagVersionResolver(ref string, store content.Resolver) (lister.Tag
 		current := desc.MediaType == ociImageSpecV1.MediaTypeImageManifest && desc.ArtifactType == descriptor.MediaTypeComponentDescriptorV2 ||
 			desc.MediaType == ociImageSpecV1.MediaTypeImageIndex && desc.ArtifactType == descriptor.MediaTypeComponentDescriptorV2
 		if !(legacy || current) {
-			return "", fmt.Errorf("skipping tag, not recognized as valid: %w", lister.ErrSkip)
+			return "", fmt.Errorf("not recognized as valid top level descriptor type: %w", lister.ErrSkip)
 		}
 
 		return tag, nil

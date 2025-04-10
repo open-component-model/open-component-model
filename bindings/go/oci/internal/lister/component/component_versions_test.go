@@ -69,7 +69,7 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 					annotations.OCMComponentVersion: "invalid-format",
 				},
 			},
-			expectedError: fmt.Errorf("skipping because not a valid semver tag: %q", "invalid-format"),
+			expectedError: fmt.Errorf("%q is not considered a valid %q annotation", "invalid-format", annotations.OCMComponentVersion),
 		},
 		{
 			name:      "component name mismatch",
@@ -79,7 +79,7 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 					annotations.OCMComponentVersion: "component-descriptor/other-component:v1.0.0",
 				},
 			},
-			expectedError: fmt.Errorf("skipping because component %q does not match %q", "component-descriptor/other-component", "test-component"),
+			expectedError: fmt.Errorf("component %q does not match %q: %w", "component-descriptor/other-component", "test-component", lister.ErrSkip),
 		},
 	}
 
