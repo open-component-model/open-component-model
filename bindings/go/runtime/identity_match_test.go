@@ -207,8 +207,8 @@ func TestIdentity_Match(t *testing.T) {
 
 func TestIdentitySubset(t *testing.T) {
 	type args struct {
-		b runtime.Identity
-		a runtime.Identity
+		base runtime.Identity
+		sub  runtime.Identity
 	}
 	tests := []struct {
 		name string
@@ -218,16 +218,16 @@ func TestIdentitySubset(t *testing.T) {
 		{
 			"empty subset of empty",
 			args{
-				a: runtime.Identity{},
-				b: runtime.Identity{},
+				sub:  runtime.Identity{},
+				base: runtime.Identity{},
 			},
 			true,
 		},
 		{
 			"empty subset of non-empty",
 			args{
-				a: runtime.Identity{},
-				b: runtime.Identity{
+				sub: runtime.Identity{},
+				base: runtime.Identity{
 					"key1": "value1",
 					"key2": "value2",
 				},
@@ -237,21 +237,21 @@ func TestIdentitySubset(t *testing.T) {
 		{
 			"non-empty subset of empty",
 			args{
-				a: runtime.Identity{
+				sub: runtime.Identity{
 					"key1": "value1",
 				},
-				b: runtime.Identity{},
+				base: runtime.Identity{},
 			},
 			false,
 		},
 		{
 			"exact match",
 			args{
-				a: runtime.Identity{
+				sub: runtime.Identity{
 					"key1": "value1",
 					"key2": "value2",
 				},
-				b: runtime.Identity{
+				base: runtime.Identity{
 					"key1": "value1",
 					"key2": "value2",
 				},
@@ -261,11 +261,11 @@ func TestIdentitySubset(t *testing.T) {
 		{
 			"proper subset",
 			args{
-				a: runtime.Identity{
+				sub: runtime.Identity{
 					"key1": "value1",
 					"key2": "value2",
 				},
-				b: runtime.Identity{
+				base: runtime.Identity{
 					"key1": "value1",
 					"key2": "value2",
 					"key3": "value3",
@@ -276,11 +276,11 @@ func TestIdentitySubset(t *testing.T) {
 		{
 			"subset with different value",
 			args{
-				a: runtime.Identity{
+				sub: runtime.Identity{
 					"key1": "value1",
 					"key2": "different-value",
 				},
-				b: runtime.Identity{
+				base: runtime.Identity{
 					"key1": "value1",
 					"key2": "value2",
 				},
@@ -290,12 +290,12 @@ func TestIdentitySubset(t *testing.T) {
 		{
 			"subset with extra key",
 			args{
-				a: runtime.Identity{
+				sub: runtime.Identity{
 					"key1": "value1",
 					"key2": "value2",
 					"key3": "value3",
 				},
-				b: runtime.Identity{
+				base: runtime.Identity{
 					"key1": "value1",
 					"key2": "value2",
 				},
@@ -305,11 +305,11 @@ func TestIdentitySubset(t *testing.T) {
 		{
 			"subset with non-existent key",
 			args{
-				a: runtime.Identity{
+				sub: runtime.Identity{
 					"key1": "value1",
 					"key3": "value3",
 				},
-				b: runtime.Identity{
+				base: runtime.Identity{
 					"key1": "value1",
 					"key2": "value2",
 				},
@@ -319,7 +319,7 @@ func TestIdentitySubset(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := runtime.IdentitySubset(tt.args.a, tt.args.b); got != tt.want {
+			if got := runtime.IdentitySubset(tt.args.sub, tt.args.base); got != tt.want {
 				t.Errorf("IdentitySubset() = %v, want %v", got, tt.want)
 			}
 		})

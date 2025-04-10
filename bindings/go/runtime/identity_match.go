@@ -65,8 +65,10 @@ func IdentitySubset(sub Identity, base Identity) bool {
 	if len(sub) > len(base) {
 		return false
 	}
-	for k, vsub := range sub {
-		if vm, found := base[k]; !found || vm != vsub {
+	for candidateKey, candidateValue := range sub {
+		valueInBase, found := base[candidateKey]
+		mismatch := !found || valueInBase != candidateValue
+		if mismatch {
 			return false
 		}
 	}
