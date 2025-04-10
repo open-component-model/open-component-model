@@ -9,11 +9,11 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.13.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250407070550-eea1df4793e3
-	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250407070550-eea1df4793e3
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250407070550-eea1df4793e3
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250407070550-eea1df4793e3
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250407070550-eea1df4793e3
+	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250410115029-6dcf800db82b
+	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250410115029-6dcf800db82b
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250410115029-6dcf800db82b
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250410115029-6dcf800db82b
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250410115029-6dcf800db82b
 	oras.land/oras-go/v2 v2.5.0
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -23,6 +23,5 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

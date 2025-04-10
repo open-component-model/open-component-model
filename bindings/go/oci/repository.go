@@ -360,7 +360,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 
 	var candidates []descriptor.Resource
 	for _, res := range desc.Component.Resources {
-		if identity.Match(res.ElementMeta.ToIdentity(), IdentitySubset) {
+		if identity.Match(res.ElementMeta.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
 			candidates = append(candidates, res)
 		}
 	}
@@ -763,17 +763,3 @@ func updateResourceAccessWithOCIDescriptor(scheme *runtime.Scheme, resource *des
 
 	return nil
 }
-
-// IdentitySubset matching
-// TODO(jakobmoellerdev): Contribute to identity runtime. see https://github.com/open-component-model/open-component-model/pull/58
-var IdentitySubset = runtime.IdentityMatchingChainFn(func(sub runtime.Identity, base runtime.Identity) bool {
-	if len(sub) > len(base) {
-		return false
-	}
-	for k, vsub := range sub {
-		if vm, found := base[k]; !found || vm != vsub {
-			return false
-		}
-	}
-	return true
-})
