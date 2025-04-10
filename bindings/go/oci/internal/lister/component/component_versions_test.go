@@ -170,7 +170,7 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 				},
 			},
 			expected:      "v1.0.0",
-			expectedError: fmt.Errorf("skipping tag, not recognized as valid: %w", lister.ErrSkip),
+			expectedError: lister.ErrSkip,
 		},
 	}
 
