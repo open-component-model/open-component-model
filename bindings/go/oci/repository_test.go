@@ -60,10 +60,6 @@ func (m *MockResolver) ComponentVersionReference(component, version string) stri
 	return fmt.Sprintf("%s:%s", component, version)
 }
 
-func (m *MockResolver) TargetResourceReference(srcReference string) (string, error) {
-	return fmt.Sprintf("test-registry.example.com/test-repo/%s", srcReference), nil
-}
-
 func TestRepository_AddComponentVersion(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()

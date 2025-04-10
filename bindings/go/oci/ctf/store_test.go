@@ -33,15 +33,6 @@ func TestNewCTFComponentVersionStore(t *testing.T) {
 	assert.Equal(t, ctf, store.archive)
 }
 
-func TestTargetResourceReference(t *testing.T) {
-	ctf := setupTestCTF(t)
-	store := NewFromCTF(ctf)
-	ref := "test:reference"
-	targetRef, err := store.TargetResourceReference(ref)
-	assert.NoError(t, err)
-	assert.Equal(t, ref, targetRef)
-}
-
 func TestStoreForReference(t *testing.T) {
 	ctf := setupTestCTF(t)
 	s := NewFromCTF(ctf)

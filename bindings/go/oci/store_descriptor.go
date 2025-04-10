@@ -52,7 +52,7 @@ func addDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 		Digest:    digest.FromBytes(descriptorBytes),
 		Size:      int64(len(descriptorBytes)),
 	}
-	log.Base.Log(ctx, slog.LevelDebug, "pushing descriptor", log.DescriptorLogAttr(descriptorOCIDescriptor))
+	log.Base.Log(ctx, slog.LevelDebug, "pushing component descriptor", log.DescriptorLogAttr(descriptorOCIDescriptor))
 	if err := store.Push(ctx, descriptorOCIDescriptor, bytes.NewReader(descriptorBytes)); err != nil {
 		return nil, fmt.Errorf("unable to push component descriptor: %w", err)
 	}
@@ -62,7 +62,7 @@ func addDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal component config: %w", err)
 	}
-	log.Base.Log(ctx, slog.LevelDebug, "pushing descriptor", log.DescriptorLogAttr(componentConfigDescriptor))
+	log.Base.Log(ctx, slog.LevelDebug, "pushing component config", log.DescriptorLogAttr(componentConfigDescriptor))
 	if err := store.Push(ctx, componentConfigDescriptor, bytes.NewReader(componentConfigRaw)); err != nil {
 		return nil, fmt.Errorf("unable to push component config: %w", err)
 	}
@@ -103,7 +103,7 @@ It is used to store the component descriptor in an OCI registry and can be refer
 		Size:         int64(len(manifestRaw)),
 		Annotations:  manifest.Annotations,
 	}
-	log.Base.Log(ctx, slog.LevelInfo, "pushing descriptor", log.DescriptorLogAttr(manifestDescriptor))
+	log.Base.Log(ctx, slog.LevelInfo, "pushing descriptor artifact manifest", log.DescriptorLogAttr(manifestDescriptor))
 	if err := store.Push(ctx, manifestDescriptor, bytes.NewReader(manifestRaw)); err != nil {
 		return nil, fmt.Errorf("unable to push manifest: %w", err)
 	}
@@ -150,7 +150,7 @@ It is used to store the component descriptor manifest and other related blob man
 		Size:        int64(len(idxRaw)),
 		Annotations: idx.Annotations,
 	}
-	log.Base.Log(ctx, slog.LevelInfo, "pushing index", log.DescriptorLogAttr(idxDescriptor))
+	log.Base.Log(ctx, slog.LevelInfo, "pushing descriptor artifact image index", log.DescriptorLogAttr(idxDescriptor))
 	if err := store.Push(ctx, idxDescriptor, bytes.NewReader(idxRaw)); err != nil {
 		return nil, fmt.Errorf("unable to push index: %w", err)
 	}

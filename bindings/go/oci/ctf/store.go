@@ -36,11 +36,6 @@ type Store struct {
 	archive ctf.CTF
 }
 
-// TargetResourceReference returns the source reference as-is, as this archive doesn't modify references.
-func (s *Store) TargetResourceReference(srcReference string) (string, error) {
-	return srcReference, nil
-}
-
 // StoreForReference returns a new Store instance for a specific repository within the CTF archive.
 func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
 	rawRef, err := s.Reference(reference)
@@ -111,17 +106,6 @@ func (s *repositoryStore) Push(ctx context.Context, expected ociImageSpecV1.Desc
 	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(data, expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
-
-	// switch expected.MediaType {
-	// case ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.MediaTypeImageIndex:
-	// 	manifestJSON, err := content.ReadAll(data, expected)
-	// 	if err != nil {
-	// 		return fmt.Errorf("unable to read manifest JSON: %w", err)
-	// 	}
-	// 	if err := s.indexReferrersForPush(ctx, expected, manifestJSON); err != nil {
-	// 		return fmt.Errorf("unable to index referrers for push: %w", err)
-	// 	}
-	// }
 
 	return nil
 }
