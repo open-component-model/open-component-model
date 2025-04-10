@@ -25,12 +25,11 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
-	"ocm.software/open-component-model/bindings/go/oci/internal/singlelayer"
+	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
@@ -101,7 +100,7 @@ type ResourceRepository interface {
 	// (e.g. digest, size, etc).
 	//
 	// The content of form blob.ReadOnlyBlob is expected to be a (optionally gzipped) tar archive that can be read with
-	// oci.NewFromTar, which interprets the blob as an OCILayout.
+	// tar.ReadOCILayout, which interprets the blob as an OCILayout.
 	//
 	// The given OCI Layout MUST contain the resource described in source with an v1.OCIImage specification,
 	// otherwise the upload will fail
@@ -160,9 +159,6 @@ type Repository struct {
 	// ResourceCopyOptions are the options used for copying resources between stores.
 	// These options are used in copyResource.
 	resourceCopyOptions oras.CopyOptions
-
-	// localResourceCreationMode determines how resources should be accessed in the repository.
-	localResourceCreationMode LocalResourceLayerCreationMode
 }
 
 var _ ComponentVersionRepository = (*Repository)(nil)
@@ -232,13 +228,18 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 }
 
 // GetComponentVersion retrieves a component version from the repository.
-func (repo *Repository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+func (repo *Repository) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
+	done := log.Operation(ctx, "add local resource",
+		slog.String("component", component),
+		slog.String("version", version))
+	defer done(err)
+
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
 		return nil, err
 	}
 
-	desc, _, _, err := getDescriptorFromStore(ctx, store, reference)
+	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
 	return desc, err
 }
 
@@ -252,7 +253,7 @@ func (repo *Repository) AddLocalResource(
 	done := log.Operation(ctx, "add local resource",
 		slog.String("component", component),
 		slog.String("version", version),
-		slog.String("resource", resource.Name))
+		log.IdentityLogAttr("resource", resource.ToIdentity()))
 	defer done(err)
 
 	reference, store, err := repo.getStore(ctx, component, version)
@@ -260,81 +261,19 @@ func (repo *Repository) AddLocalResource(
 		return nil, err
 	}
 
-	if resource.Access.GetType().IsEmpty() {
-		return nil, fmt.Errorf("resource access type is empty")
-	}
-	typed, err := repo.scheme.NewObject(resource.Access.GetType())
+	resourceBlob := ociblob.NewResourceBlob(resource, b)
+
+	desc, err := pack.ResourceBlob(ctx, store, resourceBlob, pack.Options{
+		AccessScheme:                   repo.scheme,
+		CopyGraphOptions:               repo.resourceCopyOptions.CopyGraphOptions,
+		LocalResourceLayerCreationMode: pack.LocalResourceCreationModeLocalBlobWithNestedGlobalAccess,
+		BaseReference:                  reference,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("error creating resource access: %w", err)
-	}
-	if err := repo.scheme.Convert(resource.Access, typed); err != nil {
-		return nil, fmt.Errorf("error converting resource access: %w", err)
+		return nil, fmt.Errorf("failed to pack resource blob: %w", err)
 	}
 
-	switch typed := typed.(type) {
-	case *v2.LocalBlob:
-		switch typed.MediaType {
-		// for local blobs that are complete image layouts, we can directly push them as part of the
-		// descriptor index
-		case layout.MediaTypeOCIImageLayoutV1 + "+tar", layout.MediaTypeOCIImageLayoutV1 + "+tar+gzip":
-			index, err := tar.CopyOCILayout(ctx, store, b, tar.CopyOCILayoutOptions{
-				CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-				MutateIndexFunc: func(idx *ociImageSpecV1.Descriptor) error {
-					return identity.AdoptAsResource(idx, resource)
-				},
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to copy OCI layout: %w", err)
-			}
-			if err := updateResourceAccessWithOCIDescriptor(repo.scheme, resource, index, reference, repo.localResourceCreationMode); err != nil {
-				return nil, fmt.Errorf("failed to update resource access: %w", err)
-			}
-
-			repo.localManifestMemory.Add(reference, index)
-		default:
-			contentSizeAware, ok := b.(blob.SizeAware)
-			if !ok {
-				return nil, errors.New("blob does not implement blob.SizeAware interface, size cannot be inferred")
-			}
-			size := contentSizeAware.Size()
-			if size == blob.SizeUnknown {
-				return nil, errors.New("blob size is unknown and cannot be packed into a single layer artifact")
-			}
-			mediaType := typed.MediaType
-			if mediaType == "" {
-				if mediaTypeFromBlob, ok := b.(blob.MediaTypeAware); ok {
-					if mediaTypeFromBlob, ok := mediaTypeFromBlob.MediaType(); ok {
-						mediaType = mediaTypeFromBlob
-					}
-				}
-			}
-
-			layer := ociImageSpecV1.Descriptor{
-				MediaType:   mediaType,
-				Digest:      digest.Digest(typed.LocalReference),
-				Size:        size,
-				Annotations: map[string]string{},
-			}
-			if err := identity.AdoptAsResource(&layer, resource); err != nil {
-				return nil, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
-			}
-			manifest, err := singlelayer.PackSingleLayerOCIArtifact(ctx, store, b, singlelayer.PackOptions{
-				Main:         layer,
-				ArtifactType: mediaType,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to pack single layer OCI artifact: %w", err)
-			}
-
-			if err := updateResourceAccessWithOCIDescriptor(repo.scheme, resource, manifest, reference, repo.localResourceCreationMode); err != nil {
-				return nil, fmt.Errorf("failed to update resource access: %w", err)
-			}
-
-			repo.localManifestMemory.Add(reference, manifest)
-		}
-	default:
-		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
-	}
+	repo.localManifestMemory.Add(reference, desc)
 
 	return resource, nil
 }
@@ -345,7 +284,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	done := log.Operation(ctx, "get local resource",
 		slog.String("component", component),
 		slog.String("version", version),
-		slog.Any("identity", identity))
+		log.IdentityLogAttr("resource", identity))
 	defer done(err)
 
 	reference, store, err := repo.getStore(ctx, component, version)
@@ -431,7 +370,7 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 
 // UploadResource uploads a resource to the repository.
 func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed, res *descriptor.Resource, b blob.ReadOnlyBlob) (err error) {
-	done := log.Operation(ctx, "upload resource", slog.String("resource", res.Name))
+	done := log.Operation(ctx, "upload resource", log.IdentityLogAttr("resource", res.ToIdentity()))
 	defer done(err)
 
 	var old accessv1.OCIImage
@@ -496,7 +435,7 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 
 // DownloadResource downloads a resource from the repository.
 func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Resource) (data blob.ReadOnlyBlob, err error) {
-	done := log.Operation(ctx, "download resource", slog.String("resource", res.Name))
+	done := log.Operation(ctx, "download resource", log.IdentityLogAttr("resource", res.ToIdentity()))
 	defer done(err)
 
 	if res.Access.GetType().IsEmpty() {
@@ -605,7 +544,9 @@ func (repo *Repository) generateOCILayout(ctx context.Context, res *descriptor.R
 		return nil, fmt.Errorf("digest validation failed: %w", err)
 	}
 
-	return ociblob.NewResourceBlob(res, downloaded, mediaType), nil
+	res.Size = downloaded.Size()
+
+	return ociblob.NewResourceBlobWithMediaType(res, downloaded, mediaType), nil
 }
 
 func validateDigest(res *descriptor.Resource, desc ociImageSpecV1.Descriptor, blobDigest digest.Digest) error {
@@ -724,42 +665,4 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		return ociImageSpecV1.Manifest{}, nil, err
 	}
 	return manifest, index, nil
-}
-
-// updateResourceAccessWithOCIDescriptor updates the resource access with the new layer information.
-// for setting a global access it uses the base reference given which must not already contain a digest.
-func updateResourceAccessWithOCIDescriptor(scheme *runtime.Scheme, resource *descriptor.Resource, desc ociImageSpecV1.Descriptor, base string, mode LocalResourceLayerCreationMode) error {
-	if resource == nil {
-		return errors.New("resource must not be nil")
-	}
-
-	access := &accessv1.OCIImage{
-		ImageReference: fmt.Sprintf("%s@%s", base, desc.Digest.String()),
-	}
-
-	// Create access based on configured mode
-	switch mode {
-	case LocalResourceCreationModeOCIImage:
-		resource.Access = access
-	case LocalResourceCreationModeLocalBlobWithNestedGlobalAccess:
-		// Create local blob access
-		access, err := descriptor.ConvertToV2LocalBlob(scheme, &descriptor.LocalBlob{
-			Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-			LocalReference: desc.Digest.String(),
-			MediaType:      desc.MediaType,
-			GlobalAccess:   access,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to convert access to local blob: %w", err)
-		}
-		resource.Access = access
-	default:
-		return fmt.Errorf("unsupported access mode: %s", mode)
-	}
-
-	if err := digestv1.ApplyToResource(resource, desc.Digest); err != nil {
-		return fmt.Errorf("failed to apply digest to resource: %w", err)
-	}
-
-	return nil
 }

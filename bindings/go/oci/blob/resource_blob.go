@@ -1,6 +1,8 @@
 package blob
 
 import (
+	"fmt"
+
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -38,15 +40,31 @@ type ResourceBlob struct {
 	mediaType string
 }
 
-// NewResourceBlob creates a new ResourceBlob instance with the given resource,
+// NewResourceBlobWithMediaType creates a new ResourceBlob instance with the given resource,
 // blob data, and media type. This constructor ensures that all necessary
 // information is properly initialized for the ResourceBlob to function correctly.
-func NewResourceBlob(resource *descriptor.Resource, blob blob.ReadOnlyBlob, mediaType string) *ResourceBlob {
+func NewResourceBlobWithMediaType(resource *descriptor.Resource, b blob.ReadOnlyBlob, mediaType string) *ResourceBlob {
+	if sizeAware, ok := b.(blob.SizeAware); ok {
+		if sizeFromBlob := sizeAware.Size(); sizeFromBlob > blob.SizeUnknown {
+			if resource.Size == 0 {
+				resource.Size = sizeFromBlob
+			}
+
+			if resource.Size != sizeFromBlob {
+				panic(fmt.Sprintf("resource blob size mismatch: %d vs %d", resource.Size, sizeFromBlob))
+			}
+		}
+	}
+
 	return &ResourceBlob{
-		ReadOnlyBlob: blob,
+		ReadOnlyBlob: b,
 		Resource:     resource,
 		mediaType:    mediaType,
 	}
+}
+
+func NewResourceBlob(resource *descriptor.Resource, blob blob.ReadOnlyBlob) *ResourceBlob {
+	return NewResourceBlobWithMediaType(resource, blob, "")
 }
 
 // MediaType returns the media type of the blob and a boolean indicating whether

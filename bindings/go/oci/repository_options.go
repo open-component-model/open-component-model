@@ -15,29 +15,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// LocalResourceLayerCreationMode defines how local resources should be accessed in the repository.
-type LocalResourceLayerCreationMode int
-
-func (l LocalResourceLayerCreationMode) String() string {
-	switch l {
-	case LocalResourceCreationModeLocalBlobWithNestedGlobalAccess:
-		return "localBlobWithNestedGlobalAccess"
-	case LocalResourceCreationModeOCIImage:
-		return "ociImage"
-	default:
-		return fmt.Sprintf("unknown (%d)", l)
-	}
-}
-
-const (
-	// LocalResourceCreationModeLocalBlobWithNestedGlobalAccess creates a local blob access for resources.
-	// It also embeds the global access information in the local blob.
-	LocalResourceCreationModeLocalBlobWithNestedGlobalAccess LocalResourceLayerCreationMode = iota
-	// LocalResourceCreationModeOCIImage creates an OCI image layer access for resources.
-	// This mode is used when the resource is embedded without a local blob (only global access)
-	LocalResourceCreationModeOCIImage LocalResourceLayerCreationMode = iota
-)
-
 // RepositoryOptions defines the options for creating a new Repository.
 type RepositoryOptions struct {
 	// Scheme is the runtime scheme used for type conversion.
@@ -56,10 +33,6 @@ type RepositoryOptions struct {
 
 	// CopyOptions are the options for copying resources between sources and targets
 	ResourceCopyOptions *oras.CopyOptions
-
-	// LocalResourceCreationMode determines how resources should be accessed in the repository.
-	// Defaults to LocalResourceCreationModeLocalBlobWithNestedGlobalAccess.
-	LocalResourceCreationMode LocalResourceLayerCreationMode
 }
 
 // RepositoryOption is a function that modifies RepositoryOptions.
@@ -93,18 +66,9 @@ func WithResolver(resolver Resolver) RepositoryOption {
 	}
 }
 
-// WithLocalResourceCreationMode sets the access mode for resources in the repository.
-func WithLocalResourceCreationMode(mode LocalResourceLayerCreationMode) RepositoryOption {
-	return func(o *RepositoryOptions) {
-		o.LocalResourceCreationMode = mode
-	}
-}
-
 // NewRepository creates a new Repository instance with the given options.
 func NewRepository(opts ...RepositoryOption) (*Repository, error) {
-	options := &RepositoryOptions{
-		LocalResourceCreationMode: LocalResourceCreationModeLocalBlobWithNestedGlobalAccess, // Set default access mode
-	}
+	options := &RepositoryOptions{}
 	for _, opt := range opts {
 		opt(options)
 	}
@@ -148,11 +112,10 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	}
 
 	return &Repository{
-		scheme:                    options.Scheme,
-		localManifestMemory:       options.LocalManifestMemory,
-		resolver:                  options.Resolver,
-		creatorAnnotation:         options.Creator,
-		resourceCopyOptions:       *options.ResourceCopyOptions,
-		localResourceCreationMode: options.LocalResourceCreationMode,
+		scheme:              options.Scheme,
+		localManifestMemory: options.LocalManifestMemory,
+		resolver:            options.Resolver,
+		creatorAnnotation:   options.Creator,
+		resourceCopyOptions: *options.ResourceCopyOptions,
 	}, nil
 }
