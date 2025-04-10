@@ -1,4 +1,4 @@
-package blob
+package blob_test
 
 import (
 	"archive/tar"
@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/blob"
 )
 
 type mockReadOnlyBlob struct {
@@ -33,7 +35,7 @@ func TestArchiveBlob(t *testing.T) {
 	var buf bytes.Buffer
 	tarWriter := tar.NewWriter(&buf)
 
-	err := ArchiveBlob(name, size, digest, mockBlob, tarWriter, nil)
+	err := blob.ArchiveBlob(name, size, digest, mockBlob, tarWriter, nil)
 	r.NoError(err, "unexpected error while archiving blob")
 	t.Cleanup(func() {
 		r.NoError(tarWriter.Close())
@@ -44,7 +46,7 @@ func TestArchiveBlob(t *testing.T) {
 	header, err := tr.Next()
 	r.NoError(err, "error reading tar header")
 	r.Equal(name, header.Name, "unexpected tar entry name")
-	r.Equal(size, int64(header.Size), "unexpected tar entry size")
+	r.Equal(size, header.Size, "unexpected tar entry size")
 
 	content := make([]byte, size)
 	n, err := tr.Read(content)
@@ -58,7 +60,7 @@ func TestArchiveBlob_ReadError(t *testing.T) {
 	var buf bytes.Buffer
 	tarWriter := tar.NewWriter(&buf)
 
-	err := ArchiveBlob("test-blob", 10, "test-digest", mockBlob, tarWriter, nil)
+	err := blob.ArchiveBlob("test-blob", 10, "test-digest", mockBlob, tarWriter, nil)
 	r.Error(err, "expected error, got nil")
 	r.Contains(err.Error(), "mock read error", "unexpected error message")
 }
