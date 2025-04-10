@@ -17,7 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	"ocm.software/open-component-model/bindings/go/oci/internal/ocireference"
+	"ocm.software/open-component-model/bindings/go/oci/internal/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
@@ -43,14 +43,14 @@ func (s *Store) TargetResourceReference(srcReference string) (string, error) {
 
 // StoreForReference returns a new Store instance for a specific repository within the CTF archive.
 func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
-	ref, err := ocireference.ParseCTFNormalizedNamed(reference)
+	ref, err := looseref.LooseParseReference(reference)
 	if err != nil {
 		return nil, err
 	}
 
 	return &repositoryStore{
 		archive: s.archive,
-		repo:    ocireference.TrimNamed(ref).String(),
+		repo:    ref.Repository,
 	}, nil
 }
 
@@ -126,17 +126,9 @@ func (s *repositoryStore) Push(ctx context.Context, expected ociImageSpecV1.Desc
 // If a full reference is given, it will be resolved against the blob repositoryStore immediately.
 // Returns the descriptor if found, or an error if the reference is invalid or not found.
 func (s *repositoryStore) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
-	ref, err := ocireference.ParseCTFNormalizedNamed(reference)
+	ref, err := looseref.LooseParseReference(reference)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
-	}
-	base := ocireference.TrimNamed(ref)
-	if base.String() != s.repo {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("tried to tag a reference that does not match the repository %q: %q", s.repo, base)
-	}
-	nt, tagged := ocireference.AsNamedTagged(ref)
-	if !tagged {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid reference, must be a valid taggable reference: %s", reference)
 	}
 
 	var b blob.ReadOnlyBlob
@@ -147,10 +139,10 @@ func (s *repositoryStore) Resolve(ctx context.Context, reference string) (ociIma
 	}
 
 	for _, artifact := range idx.GetArtifacts() {
-		if artifact.Repository != ocireference.FamiliarString(base) {
+		if artifact.Repository != ref.Repository {
 			continue
 		}
-		if artifact.Tag != nt.Tag() {
+		if artifact.Tag != ref.Tag {
 			continue
 		}
 
@@ -184,17 +176,9 @@ func (s *repositoryStore) Resolve(ctx context.Context, reference string) (ociIma
 // The reference should be in the format "repository:tag".
 // This operation updates the index to maintain the mapping between references and their corresponding descriptors.
 func (s *repositoryStore) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
-	ref, err := ocireference.ParseCTFNormalizedNamed(reference)
+	ref, err := looseref.LooseParseReference(reference)
 	if err != nil {
 		return err
-	}
-	if base := ocireference.TrimNamed(ref).String(); base != s.repo {
-		return fmt.Errorf("tried to tag a reference that does not match the repository %q: %q", s.repo, base)
-	}
-
-	nt, tagged := ocireference.AsNamedTagged(ref)
-	if !tagged {
-		return fmt.Errorf("invalid reference, must be a valid taggable reference: %s", reference)
 	}
 
 	idx, err := s.archive.GetIndex(ctx)
@@ -203,14 +187,14 @@ func (s *repositoryStore) Tag(ctx context.Context, desc ociImageSpecV1.Descripto
 	}
 
 	repo := s.repo
-	tag := nt.Tag()
-	if placeholderDomain := ocireference.Domain(nt) == "ctf.ocm.software"; placeholderDomain {
-		repo = ocireference.FamiliarName(nt)
+
+	if err := ref.ValidateReferenceAsTag(); err != nil {
+		return fmt.Errorf("invalid reference (should have a tag) %q: %w", reference, err)
 	}
 
 	meta := v1.ArtifactMetadata{
 		Repository: repo,
-		Tag:        tag,
+		Tag:        ref.Tag,
 		Digest:     desc.Digest.String(),
 		MediaType:  desc.MediaType,
 	}
@@ -236,15 +220,9 @@ func (s *repositoryStore) Tags(ctx context.Context, _ string, fn func(tags []str
 		return nil
 	}
 
-	ref, err := ocireference.ParseNamed(s.repo)
-	if err != nil {
-		return err
-	}
-	repo := ocireference.FamiliarName(ref)
-
 	tags := make([]string, 0, len(arts))
 	for _, art := range arts {
-		if art.Repository != repo {
+		if art.Repository != s.repo {
 			continue
 		}
 		tags = append(tags, art.Tag)

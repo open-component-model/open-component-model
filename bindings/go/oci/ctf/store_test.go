@@ -47,7 +47,7 @@ func TestStoreForReference(t *testing.T) {
 	s := NewFromCTF(ctf)
 	result, err := s.StoreForReference(t.Context(), "test:reference")
 	assert.NoError(t, err)
-	assert.Equal(t, "ctf.ocm.software/test", result.(*repositoryStore).repo)
+	assert.Equal(t, "test", result.(*repositoryStore).repo)
 }
 
 func TestComponentVersionReference(t *testing.T) {

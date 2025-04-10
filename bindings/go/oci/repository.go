@@ -507,7 +507,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 
 		desc, err := src.Resolve(ctx, typed.ImageReference)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve reference: %w", err)
+			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
 		}
 
 		return repo.generateOCILayout(ctx, res, src, desc, typed.ImageReference)
