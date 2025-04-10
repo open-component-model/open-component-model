@@ -14,8 +14,12 @@ const (
 	OCIArtifactDigestAlgorithm        = OCIArtifactDigestAlgorithmType + "/" + OCIArtifactDigestAlgorithmVersion
 )
 
+const (
+	HashAlgorithmSHA256 = "SHA-256"
+)
+
 var SHAMapping = map[string]digest.Algorithm{
-	"SHA-256": digest.SHA256,
+	HashAlgorithmSHA256: digest.SHA256,
 }
 
 var ReverseSHAMapping = reverseMap(SHAMapping)
@@ -25,7 +29,7 @@ var ReverseSHAMapping = reverseMap(SHAMapping)
 // with the specified hash algorithm and normalisation algorithm.
 // The Mappings are defined by OCM and are static.
 // They mainly differ in the algorithm name, but are semantically equivalent.
-func ApplyToResource(resource *runtime.Resource, digest digest.Digest) error {
+func ApplyToResource(resource *runtime.Resource, digest digest.Digest, algorithm string) error {
 	if resource == nil {
 		return fmt.Errorf("resource must not be nil")
 	}
@@ -35,7 +39,7 @@ func ApplyToResource(resource *runtime.Resource, digest digest.Digest) error {
 	}
 	resource.Digest = &runtime.Digest{
 		HashAlgorithm:          algo,
-		NormalisationAlgorithm: OCIArtifactDigestAlgorithm,
+		NormalisationAlgorithm: algorithm,
 		Value:                  digest.Encoded(),
 	}
 

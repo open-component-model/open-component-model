@@ -244,7 +244,7 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 		return fmt.Errorf("unsupported access mode: %s", opts.LocalResourceLayerCreationMode)
 	}
 
-	if err := digestv1.ApplyToResource(resource, desc.Digest); err != nil {
+	if err := digestv1.ApplyToResource(resource, desc.Digest, digestv1.OCIArtifactDigestAlgorithm); err != nil {
 		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 

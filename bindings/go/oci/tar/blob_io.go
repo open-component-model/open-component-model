@@ -44,6 +44,7 @@ func CopyOCILayout(ctx context.Context, dst content.Storage, src blob.ReadOnlyBl
 		}
 		return content.Successors(ctx, ociStore, desc)
 	}
+
 	proxy := &descriptorStoreProxy{
 		raw:             indexJSON,
 		desc:            index,

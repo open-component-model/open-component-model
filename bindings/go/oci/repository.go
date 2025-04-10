@@ -261,7 +261,10 @@ func (repo *Repository) AddLocalResource(
 		return nil, err
 	}
 
-	resourceBlob := ociblob.NewResourceBlob(resource, b)
+	resourceBlob, err := ociblob.NewResourceBlob(resource, b)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource blob: %w", err)
+	}
 
 	desc, err := pack.ResourceBlob(ctx, store, resourceBlob, pack.Options{
 		AccessScheme:                   repo.scheme,
@@ -327,7 +330,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 			// and thus local blobs can only be available as image layers
 			b, err := getLocalBlob(ctx, manifest, identity, store)
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to get local blob: %w", err)
+				return nil, nil, fmt.Errorf("failed to get local blob from manifest: %w", err)
 			}
 			return b, &resource, nil
 		}
@@ -344,14 +347,14 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 			}
 			b, err := repo.generateOCILayout(ctx, &resource, store, artifact)
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to get local blob: %w", err)
+				return nil, nil, fmt.Errorf("failed to get local blob from discovered image layout: %w", err)
 			}
 			return b, &resource, nil
 		// for anything else we cannot really do anything other than use a local blob
 		default:
 			b, err := getSingleLayerManifestBlob(ctx, index, identity, store)
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to get local blob: %w", err)
+				return nil, nil, fmt.Errorf("failed to get local blob from single layer manifest: %w", err)
 			}
 			return b, &resource, nil
 		}
@@ -425,7 +428,7 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 	// TODO(jakobmoellerdev): This might not be ideal because this digest
 	//  is not representative of the entire OCI Layout, only of the descriptor.
 	//  Eventually we should think about switching this to a genericBlobDigest.
-	if err := digestv1.ApplyToResource(res, desc.Digest); err != nil {
+	if err := digestv1.ApplyToResource(res, desc.Digest, digestv1.OCIArtifactDigestAlgorithm); err != nil {
 		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 	res.Access = &access
@@ -546,7 +549,18 @@ func (repo *Repository) generateOCILayout(ctx context.Context, res *descriptor.R
 
 	res.Size = downloaded.Size()
 
-	return ociblob.NewResourceBlobWithMediaType(res, downloaded, mediaType), nil
+	dc := res.DeepCopy()
+	dc.Digest = &descriptor.Digest{
+		NormalisationAlgorithm: "genericBlobDigest/v1",
+		HashAlgorithm:          digestv1.ReverseSHAMapping[blobDigest.Algorithm()],
+		Value:                  blobDigest.Encoded(),
+	}
+	b, err := ociblob.NewResourceBlobWithMediaType(dc, downloaded, mediaType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource blob from oci layout: %w", err)
+	}
+
+	return b, nil
 }
 
 func validateDigest(res *descriptor.Resource, desc ociImageSpecV1.Descriptor, blobDigest digest.Digest) error {

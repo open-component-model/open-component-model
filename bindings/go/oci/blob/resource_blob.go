@@ -8,26 +8,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/digest/v1"
 )
-
-// HashAlgorithmConversionTable maps OCM hash algorithm names to their corresponding
-// OCI digest algorithms. This table is used to convert between OCM and OCI digest formats.
-// If the hash algorithm is empty, it defaults to the canonical algorithm (SHA-256).
-var HashAlgorithmConversionTable = map[string]digest.Algorithm{
-	"sha256": digest.SHA256,
-	"sha384": digest.SHA384,
-	"sha512": digest.SHA512,
-	"":       digest.Canonical,
-}
-
-// ReverseHashAlgorithmConversionTable maps OCM digest algorithms to their
-// corresponding hash algorithm names. This is the reverse of HashAlgorithmConversionTable.
-// It is used to convert from OCI digest algorithms back to OCM hash algorithm names.
-var ReverseHashAlgorithmConversionTable = map[digest.Algorithm]string{
-	digest.SHA256: "sha256",
-	digest.SHA384: "sha384",
-	digest.SHA512: "sha512",
-}
 
 // ResourceBlob represents a blob of data that is associated with an OCM resource.
 // It implements various interfaces to provide blob-related functionality like
@@ -43,15 +25,43 @@ type ResourceBlob struct {
 // NewResourceBlobWithMediaType creates a new ResourceBlob instance with the given resource,
 // blob data, and media type. This constructor ensures that all necessary
 // information is properly initialized for the ResourceBlob to function correctly.
-func NewResourceBlobWithMediaType(resource *descriptor.Resource, b blob.ReadOnlyBlob, mediaType string) *ResourceBlob {
+func NewResourceBlobWithMediaType(resource *descriptor.Resource, b blob.ReadOnlyBlob, mediaType string) (*ResourceBlob, error) {
 	if sizeAware, ok := b.(blob.SizeAware); ok {
-		if sizeFromBlob := sizeAware.Size(); sizeFromBlob > blob.SizeUnknown {
-			if resource.Size == 0 {
-				resource.Size = sizeFromBlob
-			}
+		sizeFromBlob := sizeAware.Size()
+		if sizeFromBlob > blob.SizeUnknown && resource.Size == 0 {
+			resource.Size = sizeFromBlob
+		}
+		if resource.Size != sizeFromBlob {
+			return nil, fmt.Errorf("resource blob size mismatch: resource %d vs blob %d", resource.Size, sizeFromBlob)
+		}
+	}
 
-			if resource.Size != sizeFromBlob {
-				panic(fmt.Sprintf("resource blob size mismatch: %d vs %d", resource.Size, sizeFromBlob))
+	if mediaType == "" {
+		if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
+			mediaType, _ = mediaTypeAware.MediaType()
+		}
+	}
+
+	if resource.Digest == nil {
+		if digAware, ok := b.(blob.DigestAware); ok {
+			if dig, ok := digAware.Digest(); ok {
+				digSpec, err := digestSpec(dig)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse digest spec from blob: %w", err)
+				}
+				resource.Digest = digSpec
+			}
+		}
+	} else {
+		dig, err := digestSpecToDigest(resource.Digest)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse digest spec from resource: %w", err)
+		}
+		if digAware, ok := b.(blob.DigestAware); ok {
+			if blobDig, ok := digAware.Digest(); ok {
+				if dig != digest.Digest(blobDig) {
+					return nil, fmt.Errorf("resource blob digest mismatch: resource %s vs blob %s", resource.Digest.Value, blobDig)
+				}
 			}
 		}
 	}
@@ -60,10 +70,10 @@ func NewResourceBlobWithMediaType(resource *descriptor.Resource, b blob.ReadOnly
 		ReadOnlyBlob: b,
 		Resource:     resource,
 		mediaType:    mediaType,
-	}
+	}, nil
 }
 
-func NewResourceBlob(resource *descriptor.Resource, blob blob.ReadOnlyBlob) *ResourceBlob {
+func NewResourceBlob(resource *descriptor.Resource, blob blob.ReadOnlyBlob) (*ResourceBlob, error) {
 	return NewResourceBlobWithMediaType(resource, blob, "")
 }
 
@@ -71,7 +81,7 @@ func NewResourceBlob(resource *descriptor.Resource, blob blob.ReadOnlyBlob) *Res
 // the media type is available. This is important for OCI compatibility and
 // proper handling of different types of content.
 func (r *ResourceBlob) MediaType() (string, bool) {
-	return r.mediaType, true
+	return r.mediaType, r.mediaType != ""
 }
 
 // Digest returns the digest of the blob's content and a boolean indicating whether
@@ -83,13 +93,10 @@ func (r *ResourceBlob) Digest() (string, bool) {
 	if r.Resource.Digest == nil {
 		return "", false
 	}
-
-	algo, ok := HashAlgorithmConversionTable[r.Resource.Digest.HashAlgorithm]
-	if !ok {
+	dig, err := digestSpecToDigest(r.Resource.Digest)
+	if err != nil {
 		return "", false
 	}
-
-	dig := digest.NewDigestFromEncoded(algo, r.Resource.Digest.Value)
 	return dig.String(), true
 }
 
@@ -108,13 +115,38 @@ func (r *ResourceBlob) SetPrecalculatedDigest(dig string) {
 		r.Resource.Digest = &descriptor.Digest{}
 	}
 
-	d, err := digest.Parse(dig)
+	d, err := digestSpec(dig)
 	if err != nil {
 		panic(err)
 	}
+	r.Resource.Digest = d
+}
 
-	r.Resource.Digest.Value = d.Encoded()
-	r.Resource.Digest.HashAlgorithm = ReverseHashAlgorithmConversionTable[d.Algorithm()]
+func digestSpec(dig string) (*descriptor.Digest, error) {
+	if dig == "" {
+		return nil, nil
+	}
+	d, err := digest.Parse(dig)
+	if err != nil {
+		return nil, err
+	}
+	return digestSpecFromDigest(d), nil
+}
+
+func digestSpecFromDigest(dig digest.Digest) *descriptor.Digest {
+	return &descriptor.Digest{
+		Value:         dig.Encoded(),
+		HashAlgorithm: v1.ReverseSHAMapping[dig.Algorithm()],
+	}
+}
+
+func digestSpecToDigest(dig *descriptor.Digest) (digest.Digest, error) {
+	algo, ok := v1.SHAMapping[dig.HashAlgorithm]
+	if !ok {
+		return "", fmt.Errorf("invalid hash algorithm: %s", dig.HashAlgorithm)
+	}
+
+	return digest.NewDigestFromEncoded(algo, dig.Value), nil
 }
 
 // Size returns the size of the blob in bytes. This is obtained directly from

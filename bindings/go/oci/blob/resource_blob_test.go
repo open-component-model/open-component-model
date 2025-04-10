@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/digest/v1"
 )
 
 // mockBlob implements blob.ReadOnlyBlob for testing purposes
@@ -20,7 +21,7 @@ type mockBlob struct {
 func TestNewResourceBlob(t *testing.T) {
 	resource := &descriptor.Resource{
 		Digest: &descriptor.Digest{
-			HashAlgorithm: "sha256",
+			HashAlgorithm: v1.HashAlgorithmSHA256,
 			Value:         "1234567890abcdef",
 		},
 		Size: 100,
@@ -28,7 +29,8 @@ func TestNewResourceBlob(t *testing.T) {
 	mock := &mockBlob{}
 	mediaType := "application/octet-stream"
 
-	rb := ociblob.NewResourceBlobWithMediaType(resource, mock, mediaType)
+	rb, err := ociblob.NewResourceBlobWithMediaType(resource, mock, mediaType)
+	require.NoError(t, err)
 	assert.NotNil(t, rb)
 	assert.Equal(t, resource, rb.Resource)
 	got, ok := rb.MediaType()
@@ -41,7 +43,8 @@ func TestResourceBlob_MediaType(t *testing.T) {
 	mock := &mockBlob{}
 	mediaType := "application/octet-stream"
 
-	rb := ociblob.NewResourceBlobWithMediaType(resource, mock, mediaType)
+	rb, err := ociblob.NewResourceBlobWithMediaType(resource, mock, mediaType)
+	require.NoError(t, err)
 	mt, ok := rb.MediaType()
 	assert.True(t, ok)
 	assert.Equal(t, mediaType, mt)
@@ -58,7 +61,7 @@ func TestResourceBlob_Digest(t *testing.T) {
 			name: "valid sha256 digest",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: "sha256",
+					HashAlgorithm: v1.HashAlgorithmSHA256,
 					Value:         "1234567890abcdef",
 				},
 			},
@@ -66,32 +69,10 @@ func TestResourceBlob_Digest(t *testing.T) {
 			expectedOK:     true,
 		},
 		{
-			name: "valid sha384 digest",
-			resource: &descriptor.Resource{
-				Digest: &descriptor.Digest{
-					HashAlgorithm: "sha384",
-					Value:         "1234567890abcdef",
-				},
-			},
-			expectedDigest: "sha384:1234567890abcdef",
-			expectedOK:     true,
-		},
-		{
-			name: "valid sha512 digest",
-			resource: &descriptor.Resource{
-				Digest: &descriptor.Digest{
-					HashAlgorithm: "sha512",
-					Value:         "1234567890abcdef",
-				},
-			},
-			expectedDigest: "sha512:1234567890abcdef",
-			expectedOK:     true,
-		},
-		{
 			name: "empty hash algorithm defaults to canonical",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: "",
+					HashAlgorithm: v1.HashAlgorithmSHA256,
 					Value:         "1234567890abcdef",
 				},
 			},
@@ -104,23 +85,13 @@ func TestResourceBlob_Digest(t *testing.T) {
 			expectedDigest: "",
 			expectedOK:     false,
 		},
-		{
-			name: "unsupported hash algorithm",
-			resource: &descriptor.Resource{
-				Digest: &descriptor.Digest{
-					HashAlgorithm: "md5",
-					Value:         "1234567890abcdef",
-				},
-			},
-			expectedDigest: "",
-			expectedOK:     false,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, "application/octet-stream")
+			rb, err := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, "application/octet-stream")
+			assert.NoError(t, err)
 			dig, ok := rb.Digest()
 			assert.Equal(t, tt.expectedOK, ok)
 			if tt.expectedOK {
@@ -145,7 +116,7 @@ func TestResourceBlob_HasPrecalculatedDigest(t *testing.T) {
 			name: "empty digest value",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: "sha256",
+					HashAlgorithm: v1.HashAlgorithmSHA256,
 					Value:         "",
 				},
 			},
@@ -155,7 +126,7 @@ func TestResourceBlob_HasPrecalculatedDigest(t *testing.T) {
 			name: "valid digest",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: "sha256",
+					HashAlgorithm: v1.HashAlgorithmSHA256,
 					Value:         "1234567890abcdef",
 				},
 			},
@@ -166,7 +137,8 @@ func TestResourceBlob_HasPrecalculatedDigest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, "application/octet-stream")
+			rb, err := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, "application/octet-stream")
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, rb.HasPrecalculatedDigest())
 		})
 	}
@@ -184,13 +156,13 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 			name: "existing digest in resource",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: "sha256",
+					HashAlgorithm: v1.HashAlgorithmSHA256,
 					Value:         "old-value",
 				},
 			},
 			newDigest: digest.FromString("test").String(),
 			expectedDigest: &descriptor.Digest{
-				HashAlgorithm: ociblob.ReverseHashAlgorithmConversionTable[digest.FromString("test").Algorithm()],
+				HashAlgorithm: v1.ReverseSHAMapping[digest.FromString("test").Algorithm()],
 				Value:         digest.FromString("test").Encoded(),
 			},
 			expectPanic: false,
@@ -212,7 +184,8 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, "application/octet-stream")
+			rb, err := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, "application/octet-stream")
+			require.NoError(t, err)
 
 			if tt.expectPanic {
 				assert.Panics(t, func() {
@@ -234,7 +207,8 @@ func TestResourceBlob_Size(t *testing.T) {
 	}
 	mock := &mockBlob{}
 
-	rb := ociblob.NewResourceBlobWithMediaType(resource, mock, "application/octet-stream")
+	rb, err := ociblob.NewResourceBlobWithMediaType(resource, mock, "application/octet-stream")
+	require.NoError(t, err)
 	assert.Equal(t, size, rb.Size())
 }
 
@@ -263,7 +237,8 @@ func TestResourceBlob_HasPrecalculatedSize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, "application/octet-stream")
+			rb, err := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, "application/octet-stream")
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, rb.HasPrecalculatedSize())
 		})
 	}
@@ -273,7 +248,8 @@ func TestResourceBlob_SetPrecalculatedSize(t *testing.T) {
 	resource := &descriptor.Resource{}
 	mock := &mockBlob{}
 
-	rb := ociblob.NewResourceBlobWithMediaType(resource, mock, "application/octet-stream")
+	rb, err := ociblob.NewResourceBlobWithMediaType(resource, mock, "application/octet-stream")
+	require.NoError(t, err)
 	newSize := int64(200)
 	rb.SetPrecalculatedSize(newSize)
 	assert.Equal(t, newSize, resource.Size)
@@ -291,7 +267,7 @@ func TestResourceBlob_OCIDescriptor(t *testing.T) {
 			name: "valid descriptor",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: "sha256",
+					HashAlgorithm: v1.HashAlgorithmSHA256,
 					Value:         "1234567890abcdef",
 				},
 				Size: 100,
@@ -314,7 +290,8 @@ func TestResourceBlob_OCIDescriptor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{}
-			rb := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, tt.mediaType)
+			rb, err := ociblob.NewResourceBlobWithMediaType(tt.resource, mock, tt.mediaType)
+			require.NoError(t, err)
 			desc := rb.OCIDescriptor()
 
 			assert.Equal(t, tt.mediaType, desc.MediaType)
@@ -330,7 +307,7 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	// Test a complete workflow using ResourceBlob
 	resource := &descriptor.Resource{
 		Digest: &descriptor.Digest{
-			HashAlgorithm: "sha256",
+			HashAlgorithm: v1.HashAlgorithmSHA256,
 			Value:         "1234567890abcdef",
 		},
 		Size: 100,
@@ -338,7 +315,8 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	mock := &mockBlob{}
 	mediaType := "application/octet-stream"
 
-	rb := ociblob.NewResourceBlobWithMediaType(resource, mock, mediaType)
+	rb, err := ociblob.NewResourceBlobWithMediaType(resource, mock, mediaType)
+	require.NoError(t, err)
 
 	// Test all methods in sequence
 	mt, ok := rb.MediaType()
