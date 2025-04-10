@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -118,11 +119,17 @@ type ResourceRepository interface {
 // Resolver defines the interface for resolving references to OCI stores.
 type Resolver interface {
 	// StoreForReference resolves a reference to a Store.
-	// Each component version can resolve to a different store.
+	// Each reference can resolve to a different store.
+	// Note that multiple component versions might share the same store
 	StoreForReference(ctx context.Context, reference string) (spec.Store, error)
 
 	// ComponentVersionReference returns a unique reference for a component version.
 	ComponentVersionReference(component, version string) string
+
+	// Reference resolves a reference string to a fmt.Stringer whose "native"
+	// format represents a valid reference that can be used for a given store returned
+	// by StoreForReference.
+	Reference(reference string) (fmt.Stringer, error)
 }
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -293,8 +300,17 @@ func (repo *Repository) AddLocalResource(
 			if size == blob.SizeUnknown {
 				return nil, errors.New("blob size is unknown and cannot be packed into a single layer artifact")
 			}
+			mediaType := typed.MediaType
+			if mediaType == "" {
+				if mediaTypeFromBlob, ok := b.(blob.MediaTypeAware); ok {
+					if mediaTypeFromBlob, ok := mediaTypeFromBlob.MediaType(); ok {
+						mediaType = mediaTypeFromBlob
+					}
+				}
+			}
+
 			layer := ociImageSpecV1.Descriptor{
-				MediaType:   typed.MediaType,
+				MediaType:   mediaType,
 				Digest:      digest.Digest(typed.LocalReference),
 				Size:        size,
 				Annotations: map[string]string{},
@@ -303,7 +319,8 @@ func (repo *Repository) AddLocalResource(
 				return nil, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
 			}
 			manifest, err := singlelayer.PackSingleLayerOCIArtifact(ctx, store, b, singlelayer.PackOptions{
-				Main: layer,
+				Main:         layer,
+				ArtifactType: mediaType,
 			})
 			if err != nil {
 				return nil, fmt.Errorf("failed to pack single layer OCI artifact: %w", err)
@@ -461,6 +478,9 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 	}
 
 	desc, err := oras.Copy(ctx, ociStore, srcRef, store, access.ImageReference, repo.resourceCopyOptions)
+	if err != nil {
+		return fmt.Errorf("failed to upload resource via copy: %w", err)
+	}
 
 	res.Size = desc.Size
 	// TODO(jakobmoellerdev): This might not be ideal because this digest
@@ -505,7 +525,19 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 			return nil, err
 		}
 
-		desc, err := src.Resolve(ctx, typed.ImageReference)
+		resolved, err := repo.resolver.Reference(typed.ImageReference)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
+		}
+
+		reference := resolved.String()
+
+		// reference is not a FQDN
+		if index := strings.IndexByte(reference, '@'); index != -1 {
+			reference = reference[index+1:]
+		}
+
+		desc, err := src.Resolve(ctx, reference)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.ImageReference, err)
 		}

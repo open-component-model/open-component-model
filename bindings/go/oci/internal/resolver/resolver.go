@@ -45,11 +45,16 @@ func (resolver *CachingURLPathResolver) ComponentVersionReference(component, ver
 	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, version)
 }
 
+func (resolver *CachingURLPathResolver) Reference(reference string) (fmt.Stringer, error) {
+	return registry.ParseReference(reference)
+}
+
 func (resolver *CachingURLPathResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
-	ref, err := registry.ParseReference(reference)
+	rawRef, err := resolver.Reference(reference)
 	if err != nil {
 		return nil, err
 	}
+	ref := rawRef.(registry.Reference)
 	key := fmt.Sprintf("%s/%s", ref.Registry, ref.Repository)
 
 	if store, ok := resolver.getFromCache(key); ok {

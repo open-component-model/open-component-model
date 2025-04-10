@@ -43,15 +43,20 @@ func (s *Store) TargetResourceReference(srcReference string) (string, error) {
 
 // StoreForReference returns a new Store instance for a specific repository within the CTF archive.
 func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
-	ref, err := looseref.LooseParseReference(reference)
+	rawRef, err := s.Reference(reference)
 	if err != nil {
 		return nil, err
 	}
+	ref := rawRef.(looseref.LooseReference)
 
 	return &repositoryStore{
 		archive: s.archive,
 		repo:    ref.Repository,
 	}, nil
+}
+
+func (s *Store) Reference(reference string) (fmt.Stringer, error) {
+	return looseref.LooseParseReference(reference)
 }
 
 // ComponentVersionReference creates a reference string for a component version in the format "component-descriptors/component:version".

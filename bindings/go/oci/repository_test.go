@@ -2,19 +2,18 @@ package oci_test
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
 	orasoci "oras.land/oras-go/v2/content/oci"
 
@@ -22,6 +21,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/internal/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -45,11 +45,15 @@ func Repository(t *testing.T, options ...oci.RepositoryOption) *oci.Repository {
 
 // MockResolver implements the Resolver interface for testing
 type MockResolver struct {
-	store *memory.Store
+	store spec.Store
 }
 
 func (m *MockResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
 	return m.store, nil
+}
+
+func (m *MockResolver) Reference(reference string) (fmt.Stringer, error) {
+	return looseref.LooseParseReference(reference)
 }
 
 func (m *MockResolver) ComponentVersionReference(component, version string) string {
@@ -340,6 +344,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 }
 
 func TestRepository_DownloadUploadResource(t *testing.T) {
+	artifactMediaType := "application/custom"
 	tests := []struct {
 		name           string
 		resource       *descriptor.Resource
@@ -381,7 +386,7 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
 						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 						digest.FromString("test layer content").String(),
-						ociImageSpecV1.MediaTypeImageLayer,
+						artifactMediaType,
 					)),
 				},
 			},
@@ -397,7 +402,8 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 			ctx := context.Background()
 
 			// Create a mock resolver with a memory store
-			mockStore := memory.New()
+			mockStore, err := orasoci.NewWithContext(ctx, t.TempDir())
+			r.NoError(err, "Failed to create mock store")
 			mockResolver := &MockResolver{store: mockStore}
 
 			// Create a repository with the mock resolver
@@ -418,9 +424,9 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 			// Add the resource to the component descriptor
 			desc.Component.Resources = append(desc.Component.Resources, *tc.resource)
 
-			// Create a blob with the test content
 			b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
 
+			var downloadedRes blob.ReadOnlyBlob
 			if tc.useLocalUpload {
 				// Use AddLocalResource for local uploads
 				newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.resource, b)
@@ -432,93 +438,19 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 				r.NoError(err, "Failed to add component version")
 
 				// Try to get the resource back using GetResource with the global access
-				downloadedRes, err := repo.DownloadResource(ctx, newRes)
-				r.NoError(err, "Failed to get resource")
-				r.NotNil(downloadedRes, "Downloaded resource should not be nil")
-
-				// Verify the content
-				reader, err := downloadedRes.ReadCloser()
-				r.NoError(err, "Failed to get blob reader")
-				defer reader.Close()
-
-				downloadedContent, err := io.ReadAll(reader)
-				r.NoError(err, "Failed to read blob content")
-				r.Equal(tc.content, downloadedContent, "Downloaded content should match original content")
+				downloadedRes, err = repo.DownloadResource(ctx, newRes)
 			} else {
 				// Use UploadResource for global uploads
 				// Create a temporary OCI store
 				buf := bytes.NewBuffer(nil)
 				store := tar.NewOCILayoutWriter(buf)
 
-				// Create and write the OCI layout file
-				layout := ociImageSpecV1.ImageLayout{
-					Version: ociImageSpecV1.ImageLayoutVersion,
-				}
-				layoutBytes, err := json.Marshal(layout)
-				r.NoError(err, "Failed to marshal layout")
-				err = store.Push(ctx, ociImageSpecV1.Descriptor{
-					MediaType: "application/vnd.oci.image.layout.v1+json",
-					Size:      int64(len(layoutBytes)),
-					Digest:    digest.FromBytes(layoutBytes),
-				}, bytes.NewReader(layoutBytes))
-				r.NoError(err, "Failed to push layout")
-
-				// Create and write the index file
-				index := ociImageSpecV1.Index{
-					Versioned: specs.Versioned{
-						SchemaVersion: 2,
-					},
-					Manifests: []ociImageSpecV1.Descriptor{},
-				}
-				indexBytes, err := json.Marshal(index)
-				r.NoError(err, "Failed to marshal index")
-				err = store.Push(ctx, ociImageSpecV1.Descriptor{
-					MediaType: ociImageSpecV1.MediaTypeImageIndex,
-					Size:      int64(len(indexBytes)),
-					Digest:    digest.FromBytes(indexBytes),
-				}, bytes.NewReader(indexBytes))
-				r.NoError(err, "Failed to push index")
-
-				// Create the manifest
-				manifest := ociImageSpecV1.Manifest{
-					Versioned: specs.Versioned{
-						SchemaVersion: 2,
-					},
-					MediaType: ociImageSpecV1.MediaTypeImageManifest,
-					Config: ociImageSpecV1.Descriptor{
-						MediaType: "application/vnd.oci.image.config.v1+json",
-						Size:      2,
-						Digest:    digest.FromString("{}"),
-					},
-					Layers: []ociImageSpecV1.Descriptor{
-						{
-							MediaType: "application/vnd.oci.image.layer.v1.tar",
-							Size:      int64(len(tc.content)),
-							Digest:    digest.FromBytes(tc.content),
-						},
-					},
-				}
-				manifestBytes, err := json.Marshal(manifest)
-				r.NoError(err, "Failed to marshal manifest")
-				manifestDesc := ociImageSpecV1.Descriptor{
-					MediaType: ociImageSpecV1.MediaTypeImageManifest,
-					Digest:    digest.FromBytes(manifestBytes),
-					Size:      int64(len(manifestBytes)),
-				}
-
-				// Push the manifest
-				err = store.Push(ctx, manifestDesc, bytes.NewReader(manifestBytes))
-				r.NoError(err, "Failed to push manifest")
-
-				// Push the config
-				configDesc := manifest.Config
-				err = store.Push(ctx, configDesc, bytes.NewReader([]byte("{}")))
-				r.NoError(err, "Failed to push config")
-
-				// Push the content layer
-				layerDesc := manifest.Layers[0]
-				err = store.Push(ctx, layerDesc, bytes.NewReader(tc.content))
-				r.NoError(err, "Failed to push layer")
+				base := content.NewDescriptorFromBytes("", tc.content)
+				r.NoError(store.Push(ctx, base, bytes.NewReader(tc.content)), "Failed to push content to store")
+				manifestDesc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, artifactMediaType, oras.PackManifestOptions{
+					Layers: []ociImageSpecV1.Descriptor{base},
+				})
+				r.NoError(err, "Failed to create manifest descriptor")
 
 				// Tag the manifest
 				err = store.Tag(ctx, manifestDesc, "test-image:latest")
@@ -526,62 +458,53 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 
 				r.NoError(store.Close())
 
-				// Store all necessary content in the mock store for lookup
-				// Store the manifest
-				err = mockStore.Push(ctx, manifestDesc, bytes.NewReader(manifestBytes))
-				r.NoError(err, "Failed to push manifest to mock store")
-				err = mockStore.Tag(ctx, manifestDesc, "test-image:latest")
-				r.NoError(err, "Failed to tag manifest in mock store")
-
-				// Store the config
-				err = mockStore.Push(ctx, configDesc, bytes.NewReader([]byte("{}")))
-				r.NoError(err, "Failed to push config to mock store")
-
-				// Store the layer
-				err = mockStore.Push(ctx, layerDesc, bytes.NewReader(tc.content))
-				r.NoError(err, "Failed to push layer to mock store")
-
 				// Upload the resource with the store content
 				b := blob.NewDirectReadOnlyBlob(buf)
 				r.NoError(repo.UploadResource(ctx, tc.resource.Access, tc.resource, b), "Failed to upload test resource")
 				r.NotNil(tc.resource.Access, "Resource should not be nil after uploading")
 
 				// Download the resource
-				downloadedRes, err := repo.DownloadResource(ctx, tc.resource)
-				if tc.wantErr {
-					r.Error(err, "Expected error but got none")
-					return
-				}
-				r.NoError(err, "Failed to download resource")
-				r.NotNil(downloadedRes, "Downloaded resource should not be nil")
-
-				// Verify the downloaded content
-				reader, err := downloadedRes.ReadCloser()
-				r.NoError(err, "Failed to get blob reader")
-				defer reader.Close()
-
-				// create tmp file
-				out := filepath.Join(t.TempDir(), "test.tar")
-				f, err := os.Create(out)
-				r.NoError(err, "Failed to create temp file")
-				t.Cleanup(func() {
-					r.NoError(f.Close(), "Failed to close temp file")
-				})
-				unzipped, err := gzip.NewReader(reader)
-				r.NoError(err, "Failed to create gzip reader")
-				t.Cleanup(func() {
-					r.NoError(unzipped.Close(), "Failed to close gzip reader")
-				})
-				// write the content to the file
-				_, err = io.Copy(f, unzipped)
-				r.NoError(err, "Failed to write downloaded content to file")
-
-				strg, err := orasoci.NewFromTar(ctx, out)
-				r.NoError(err, "Failed to create new store from tar")
-				// Verify the content
-				_, err = strg.Resolve(ctx, "test-image:latest")
-				r.NoError(err, "Failed to resolve test-image:latest")
+				downloadedRes, err = repo.DownloadResource(ctx, tc.resource)
 			}
+
+			if tc.wantErr {
+				r.Error(err, "Expected error but got none")
+				return
+			}
+			r.NoError(err, "Failed to download resource")
+			r.NotNil(downloadedRes, "Downloaded resource should not be nil")
+
+			imageLayout, err := tar.ReadOCILayout(ctx, downloadedRes)
+			r.NoError(err, "Failed to read OCI layout")
+			t.Cleanup(func() {
+				r.NoError(imageLayout.Close(), "Failed to close blob reader")
+			})
+
+			r.Len(imageLayout.Index.Manifests, 1, "Expected one manifest in the OCI layout")
+			// Verify the downloaded content
+			manifestRaw, err := imageLayout.Fetch(ctx, imageLayout.Index.Manifests[0])
+			r.NoError(err, "Failed to fetch manifest")
+			t.Cleanup(func() {
+				r.NoError(manifestRaw.Close(), "Failed to close manifest reader")
+			})
+			var manifest ociImageSpecV1.Manifest
+			r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest), "Failed to unmarshal manifest")
+
+			r.Equal(manifest.ArtifactType, artifactMediaType)
+
+			r.Len(manifest.Layers, 1, "Expected one layer in the OCI layout")
+
+			layer := manifest.Layers[0]
+
+			layerRaw, err := imageLayout.Fetch(ctx, layer)
+			r.NoError(err, "Failed to fetch layer")
+			t.Cleanup(func() {
+				r.NoError(layerRaw.Close(), "Failed to close layer reader")
+			})
+
+			downloadedContent, err := io.ReadAll(layerRaw)
+			r.NoError(err, "Failed to read blob content")
+			r.Equal(tc.content, downloadedContent, "Downloaded content should match original content")
 		})
 	}
 }

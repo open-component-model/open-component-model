@@ -17,7 +17,8 @@ import (
 )
 
 type PackOptions struct {
-	Main ociImageSpecV1.Descriptor
+	Main         ociImageSpecV1.Descriptor
+	ArtifactType string
 }
 
 func PackSingleLayerOCIArtifact(ctx context.Context, storage content.Storage, b blob.ReadOnlyBlob, opts PackOptions) (desc ociImageSpecV1.Descriptor, err error) {
@@ -40,17 +41,12 @@ func PackSingleLayerOCIArtifact(ctx context.Context, storage content.Storage, b 
 		}
 	}
 
-	artifactType := opts.Main.ArtifactType
-	if artifactType == "" {
-		artifactType = opts.Main.MediaType
-	}
-
 	manifest := ociImageSpecV1.Manifest{
 		Versioned: specs.Versioned{
 			SchemaVersion: 2,
 		},
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
-		ArtifactType: artifactType,
+		ArtifactType: opts.ArtifactType,
 		Config:       ociImageSpecV1.DescriptorEmptyJSON,
 		Layers: []ociImageSpecV1.Descriptor{
 			opts.Main,

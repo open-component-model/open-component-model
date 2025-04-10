@@ -5,18 +5,16 @@ import (
 	"regexp"
 	"strings"
 
-	"oras.land/oras-go/v2/errdef"
 	. "oras.land/oras-go/v2/registry"
+
+	"oras.land/oras-go/v2/errdef"
 )
 
-var (
-
-	// tagRegexp checks the tag name.
-	// The docker and OCI spec have the same regular expression.
-	//
-	// Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.0/spec.md#pulling-manifests
-	tagRegexp = regexp.MustCompile(`^[\w][\w.-]{0,127}$`)
-)
+// tagRegexp checks the tag name.
+// The docker and OCI spec have the same regular expression.
+//
+// Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.0/spec.md#pulling-manifests
+var tagRegexp = regexp.MustCompile(`^[\w][\w.-]{0,127}$`)
 
 type LooseReference struct {
 	Reference
@@ -27,11 +25,13 @@ type LooseReference struct {
 // The resulted string is meaningful only if the reference is valid.
 func (r LooseReference) String() string {
 	var ref string
-	if r.Repository == "" && r.Registry != "" {
+
+	switch {
+	case r.Repository == "" && r.Registry != "":
 		ref = r.Registry
-	} else if r.Repository != "" && r.Registry == "" {
+	case r.Repository != "" && r.Registry == "":
 		ref = r.Repository
-	} else {
+	default:
 		ref = r.Registry + "/" + r.Repository
 	}
 
