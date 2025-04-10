@@ -11,6 +11,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// The registry has the right type to return so no need for the generic interfaces.
+// Meaning the Interface that declares the plugin's capabilities should be defined
+// in here and then just return the Plugin itself.
 type TransferRegistry struct {
 	mu                 sync.Mutex
 	registry           map[string]map[string]*Plugin
@@ -54,6 +57,9 @@ func (r *TransferRegistry) AddPlugin(plugin *Plugin, caps *Capabilities) error {
 	return nil
 }
 
+// Only external methods like the generatic ones like in POCM. -> get transfer plugin for type and then the
+// Like in POCM the type is the only input because the capability is specific to the plugin type to context/action.
+// Capability is not needed since we already have that from the context.
 func (r *TransferRegistry) GetPlugin(ctx context.Context, capability, typ string) (any, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -36,25 +36,25 @@ func (o *MyType) DeepCopyTyped() runtime.Typed {
 }
 
 // GetComponentVersion implements component version fetching.
-func GetComponentVersion[T runtime.Typed](ctx context.Context, name string, version string, registry T, credentials runtime.Identity, writer io.Writer) (err error) {
+func GetComponentVersion(ctx context.Context, name string, version string, registry runtime.Typed, credentials manager.Attributes, writer io.Writer) (err error) {
 	fmt.Printf("GetComponentVersion[%s %s]\n", name, version)
 
 	return nil
 }
 
-func DownloadResource[T runtime.Typed](ctx context.Context, request *manager.GetResourceRequest, credentials runtime.Identity, writer io.Writer) error {
+func DownloadResource(ctx context.Context, request *manager.GetResourceRequest, credentials manager.Attributes, writer io.Writer) error {
 	fmt.Printf("DownloadResource[%s %s]\n", request.Name, request.Version)
 
 	return nil
 }
 
-func UploadResource[T runtime.Typed](ctx context.Context, request *manager.PostResourceRequest, credentials runtime.Identity, writer io.Writer) error {
+func UploadResource(ctx context.Context, request *manager.PostResourceRequest, credentials manager.Attributes, writer io.Writer) error {
 	fmt.Printf("UploadResource[%s %s]\n", request.Resource.Name, request.Resource.Version)
 
 	return nil
 }
 
-func UploadComponentVersion[T runtime.Typed](ctx context.Context, descriptor *descriptor.Descriptor, registry T, credentials runtime.Identity) error {
+func UploadComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor, registry runtime.Typed, credentials manager.Attributes) error {
 	fmt.Printf("UploadComponentVersion[%s %s]\n", descriptor.Component.Name, descriptor.Component.Version)
 
 	return nil
@@ -63,6 +63,8 @@ func UploadComponentVersion[T runtime.Typed](ctx context.Context, descriptor *de
 func main() {
 	args := os.Args[1:]
 
+	// TEST
+	// this would be &MyType{}
 	typ := &MyType{
 		Type: runtime.Type{
 			Version: "v1",
@@ -71,22 +73,20 @@ func main() {
 		BaseUrl: "url",
 		SubPath: "/path",
 	}
-	handlers, content, err := manager.NewReadWriteComponentVersionRepository(
-		typ,
-		manager.TransferPlugin,
-		manager.ReadWriteComponentVersionRepositoryHandlersOpts[*MyType]{
-			UploadComponentVersion: UploadComponentVersion[*MyType], // provide your handlers
-			GetComponentVersion:    GetComponentVersion[*MyType],
-			UploadResource:         UploadResource[*MyType],
-			DownloadResource:       DownloadResource[*MyType],
-		},
-	)
-	if err != nil {
+
+	// The plugin type will be inferred from the capability. A single binary could implement MULTIPLE plugin types.
+	capabilityBuilder := manager.NewCapabilityBuilder(manager.TransferPlugin)
+	if err := capabilityBuilder.RegisterReadWriteComponentVersionRepositoryCapability(typ, manager.ReadWriteComponentVersionRepositoryHandlersOpts{
+		UploadComponentVersion: UploadComponentVersion, // provide your handlers
+		GetComponentVersion:    GetComponentVersion,
+		UploadResource:         UploadResource,
+		DownloadResource:       DownloadResource,
+	}); err != nil {
 		log.Fatal(err)
 	}
 
 	if len(args) > 0 && args[0] == "capabilities" {
-		if _, err := fmt.Fprintln(os.Stdout, string(content)); err != nil {
+		if err := capabilityBuilder.PrintCapabilities(); err != nil {
 			log.Fatal(err)
 		}
 
@@ -114,7 +114,7 @@ func main() {
 	r := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
 	ocmPlugin := plugin.NewPlugin(r, conf)
-	if err := ocmPlugin.RegisterHandlers(handlers.GetHandlers()...); err != nil {
+	if err := ocmPlugin.RegisterHandlers(capabilityBuilder.GetHandlers()...); err != nil {
 		log.Fatal(err)
 	}
 
