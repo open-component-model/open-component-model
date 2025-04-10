@@ -204,3 +204,124 @@ func TestIdentity_Match(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentitySubset(t *testing.T) {
+	type args struct {
+		base runtime.Identity
+		sub  runtime.Identity
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			"empty subset of empty",
+			args{
+				sub:  runtime.Identity{},
+				base: runtime.Identity{},
+			},
+			true,
+		},
+		{
+			"empty subset of non-empty",
+			args{
+				sub: runtime.Identity{},
+				base: runtime.Identity{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			true,
+		},
+		{
+			"non-empty subset of empty",
+			args{
+				sub: runtime.Identity{
+					"key1": "value1",
+				},
+				base: runtime.Identity{},
+			},
+			false,
+		},
+		{
+			"exact match",
+			args{
+				sub: runtime.Identity{
+					"key1": "value1",
+					"key2": "value2",
+				},
+				base: runtime.Identity{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			true,
+		},
+		{
+			"proper subset",
+			args{
+				sub: runtime.Identity{
+					"key1": "value1",
+					"key2": "value2",
+				},
+				base: runtime.Identity{
+					"key1": "value1",
+					"key2": "value2",
+					"key3": "value3",
+				},
+			},
+			true,
+		},
+		{
+			"subset with different value",
+			args{
+				sub: runtime.Identity{
+					"key1": "value1",
+					"key2": "different-value",
+				},
+				base: runtime.Identity{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			false,
+		},
+		{
+			"subset with extra key",
+			args{
+				sub: runtime.Identity{
+					"key1": "value1",
+					"key2": "value2",
+					"key3": "value3",
+				},
+				base: runtime.Identity{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			false,
+		},
+		{
+			"subset with non-existent key",
+			args{
+				sub: runtime.Identity{
+					"key1": "value1",
+					"key3": "value3",
+				},
+				base: runtime.Identity{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := runtime.IdentitySubset(tt.args.sub, tt.args.base); got != tt.want {
+				t.Errorf("IdentitySubset() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

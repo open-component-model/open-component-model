@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 
@@ -94,6 +95,18 @@ func (c *FileSystemCTF) SetIndex(_ context.Context, index v1.Index) (err error) 
 	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data), int64(len(data)))
 }
 
+// ioBufPool is a pool of byte buffers that can be reused for copying content
+// between i/o relevant data, such as files.
+var ioBufPool = sync.Pool{
+	New: func() interface{} {
+		// the buffer size should be larger than or equal to 128 KiB
+		// for performance considerations.
+		// we choose 1 MiB here so there will be less disk I/O.
+		buffer := make([]byte, blob.DefaultArchiveBlobBufferSize)
+		return &buffer
+	},
+}
+
 // writeFile writes the given raw data to the given name in the CTF.
 // If the directory does not exist, it will be created.
 func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err error) {
@@ -113,8 +126,16 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err e
 		return fmt.Errorf("file %s is read only and cannot be saved", name)
 	}
 
-	if _, err = io.CopyN(writeable, raw, size); err != nil {
-		return fmt.Errorf("unable to write artifact index: %w", err)
+	if size <= blob.SizeUnknown {
+		buf := ioBufPool.Get().(*[]byte)
+		defer ioBufPool.Put(buf)
+		if _, err = io.CopyBuffer(writeable, raw, *buf); err != nil {
+			return fmt.Errorf("unable to write artifact index: %w", err)
+		}
+	} else {
+		if _, err = io.CopyN(writeable, raw, size); err != nil {
+			return fmt.Errorf("unable to write artifact index: %w", err)
+		}
 	}
 
 	return nil
@@ -180,13 +201,9 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 		return errors.New("blob does not have a digest that can be used to save it")
 	}
 
-	sizeable, ok := b.(blob.SizeAware)
-	if !ok {
-		return errors.New("blob does not have a size that can be used to save it")
-	}
-	size := sizeable.Size()
-	if size <= blob.SizeUnknown {
-		return errors.New("blob does not have a size that can be used to save it")
+	size := blob.SizeUnknown
+	if sizeable, ok := b.(blob.SizeAware); ok {
+		size = sizeable.Size()
 	}
 
 	data, err := b.ReadCloser()
