@@ -1,148 +1,95 @@
 # A OCM Transformation Specification
 
-* Status: proposed
-* Deciders: Gergely Brautigam, Fabian Burth, Jakob Moeller
-* Date: 2025-02-17
+* **Status**: proposed
+* **Deciders**: Gergely Brautigam, Fabian Burth, Jakob Moeller
+* **Date**: 2025-02-17
 
-Technical Story: Design a specification that enables the transformation of ocm
-components and their resources.
+**Technical Story:** Design a specification that enables the transformation of ocm components and their resources.
 
-> **NOTE:** This proposal essentially introduces **OCM as K8S + KRO for
-> SBOMs**.  
-> The _operation plugins_ are analogous to _k8s controllers_ (without the
-> reconciliation). Their _types and the corresponding configuration schemas_ are
-> analogous to the _k8s resource definitions_.   
-> The analysis of CEL expressions to build up a directed
-> acyclic graph (DAG) of operations is analogous to KROs _resource graph
-> definition_.
+> **NOTE:** This proposal essentially introduces **OCM as K8S + KRO for SBOMs**.  
+> The _operation plugins_ are analogous to _k8s controllers_ (without reconciliation). Their _types and corresponding configuration schemas_ are analogous to the _k8s resource definitions_.  
+> The analysis of CEL expressions to build up a directed acyclic graph (DAG) of operations is analogous to KROs _resource graph definition_.
 >
-> The ideas in this proposal are heavily inspired by [kro](https://kro.run/).
-> The current proof-of-concept implementation even uses big parts of their code!
+> The ideas in this proposal are heavily inspired by [kro](https://kro.run/). The current proof-of-concept implementation even uses large parts of their code!
 
 ## Context and Problem Statement
 
-The core use case the specification is designed for is the **transfer of
-components and their resources**.
+The specification is primarily designed for the **transfer of components and their resources**.
 
 ### Requirements
 
-- **Transfer components and their resources from one or multiple source
-  repositories to one or multiple target repositories**
+- **Transfer components and their resources from one or multiple source repositories to one or multiple target repositories.**
 
   **Example:**
-  - root component `ocm.software/root-component:1.0.0` is stored at `ghcr.
-    io/ocm-component-model/transfer-source/ocm.software/root-component:1.0.0`
-  - root component references `ocm.software/leaf-component:1.0.0`
-  - leaf component is stored at
-    `quay.io/ocm-component-model/transfer-source/ocm.software/leaf-component:1.0.0`
+  - The root component `ocm.software/root-component:1.0.0` is stored at `ghcr.io/ocm-component-model/transfer-source/ocm.software/root-component:1.0.0`.
+  - The root component references `ocm.software/leaf-component:1.0.0`.
+  - The leaf component is stored at `quay.io/ocm-component-model/transfer-source/ocm.software/leaf-component:1.0.0`.
 
-  Both components should be transferred to
-  `ghcr.io/ocm-component-model/transfer-target`
-  and `quay.io/ocm-component-model/transfer-target` in a single transfer
-  process.
+  Both components should be transferred to `ghcr.io/ocm-component-model/transfer-target` and `quay.io/ocm-component-model/transfer-target` in a single transfer process.
 
-- **Transfer resources between different storage systems**
+- **Transfer resources between different storage systems.**
 
   **Example:**
-  - resource `ocm-cli:1.0.0` is stored as an oci artifact at
-    `ghcr.io/ocm-component-model/transfer-source/ocm-cli:1.0.0`
+  - The resource `ocm-cli:1.0.0` is stored as an OCI artifact at `ghcr.io/ocm-component-model/transfer-source/ocm-cli:1.0.0`.
 
-  As part of a component transfer, resource `ocm-cli:1.0.0` should be
-  transferred to the central maven repository
-  `https://repo1.maven.org/maven2` with the `GAV` `software.
-  ocm/ocm-cli/1.0.0`. Thereby, the resource has to be transformed to a maven
-  artifact.
+  As part of a component transfer, the resource `ocm-cli:1.0.0` should be transferred to the central Maven repository `https://repo1.maven.org/maven2` with the `GAV` `software.ocm/ocm-cli/1.0.0`. Consequently, the resource has to be transformed into a Maven artifact.
 
-- **Localize resources that are deployment instructions during transfer**
+- **Localize resources that are deployment instructions during transfer.**
 
   **Example:**
-  - component `ocm.software/root-component:1.0.0` contains a resource
-    `ghcr.io/ocm-component-model/transfer-source/ocm-controller-deployment-manifest:1.0.0`
-    and a resource
-    `ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0`
-  - resource `ocm-controller-deployment-manifest:1.0.0` is a k8s deployment and
-    specifies
-    `image: ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0`
-    in its pod template
-  - `ocm.software/root-component:1.0.0` and all its resources are transferred to
-    a registry in a private environment to
-    `private-registry.com/ocm-component-model/transfer-target/ocm-controller-deployment-manifest:1.0.0`
-  - and
-    `private-registry.com/ocm-component-model/transfer-target/ocm-controller:1.0.0`
+  - The component `ocm.software/root-component:1.0.0` contains a resource `ghcr.io/ocm-component-model/transfer-source/ocm-controller-deployment-manifest:1.0.0` and a resource `ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0`.
+  - The resource `ocm-controller-deployment-manifest:1.0.0` is a k8s deployment and specifies `image: ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0` in its pod template.
+  - Both `ocm.software/root-component:1.0.0` and its resources are transferred to a registry in a private environment:  
+    `private-registry.com/ocm-component-model/transfer-target/ocm-controller-deployment-manifest:1.0.0`  
+    and  
+    `private-registry.com/ocm-component-model/transfer-target/ocm-controller:1.0.0`.
 
-  To be able to consume the component in the private environment, the pod
-  template in the deployment manifest has to be adjusted from `image: 
-  ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0` to `image: 
-  private-registry.com/ocm-component-model/transfer-target/ocm-controller:1.0.0`
+  To enable consumption of the component in the private environment, the pod template in the deployment manifest must be adjusted from  
+  `image: ghcr.io/ocm-component-model/transfer-source/ocm-controller:1.0.0`  
+  to  
+  `image: private-registry.com/ocm-component-model/transfer-target/ocm-controller:1.0.0`.
 
-- **Hash and sign components (during transfer)**
+- **Hash and sign components (during transfer).**
 
   **Example:**
-  - component `ocm.software/root-component:1.0.0` references component
-    `ocm.software/leaf-component:1.0.0`
-  - therefore, the _hash_ of component `ocm.software/root-component:1.0.0`
-    incorporates the _hash_ of component `ocm.software/leaf-component:1.0.0`
+  - The component `ocm.software/root-component:1.0.0` references the component `ocm.software/leaf-component:1.0.0`.
+  - Therefore, the _hash_ of component `ocm.software/root-component:1.0.0` incorporates the _hash_ of component `ocm.software/leaf-component:1.0.0`.
 
-  Thus, the hash of `ocm.software/leaf-component:1.0.0` has to be calculated
-  before the hash of `ocm.software/root-component:1.0.0` can be calculated.
-  Since the hash of the resources content is part of the component hash,
-  _cross storage system transfers_ and _localization_ require the hash to be
-  recalculated during transfer.
+  Hence, the hash of `ocm.software/leaf-component:1.0.0` must be calculated before the hash of `ocm.software/root-component:1.0.0` can be computed. Since the hash of the resource content is part of the component hash, _cross storage system transfers_ and _localization_ require the hash to be recalculated during transfer.
 
-- **Parallelization of transfer operations**
+- **Parallelization of transfer operations.**
 
   **Example:**
-  - resource `myimageA` and resource `myimageB` both have to be transferred as
-    part of a component transfer
-  - while the download and upload of each resource depend on each other, there
-    are no dependencies between the two resources
-  - therefore, the download and upload of `myimageA` and `myimageB` can be
-    performed in parallel
+  - Resources `myimageA` and `myimageB` both need to be transferred as part of a component transfer.
+  - Although the download and upload of each resource depend on one another, there are no dependencies between the two resources.
+  - Therefore, the download and upload of `myimageA` and `myimageB` can be performed in parallel.
 
 ### Conclusion
 
-**Extensibility**: The **cross storage system transfer** and the
-**localization** require the transformation to be extensible.
+**Extensibility**: The **cross storage system transfer** and the **localization** require that the transformation is extensible.
 
-- the transformation logic for re-packaging for cross storage system transfers
-  depends on the source and target storage system (e.g. oci, maven, npm)
-- the transformation logic for localization depends on the deployment
-  description format (e.g. manifest, kustomization, helm)
+- The transformation logic for re-packaging during cross storage system transfers depends on the source and target storage systems (e.g., OCI, Maven, npm).
+- The transformation logic for localization depends on the deployment description format (e.g., manifest, kustomization, helm).
 
-**Ordering**: The **hash and sign** require the operations to be performed in a
-specific order (child before parent components). Besides, there are several
-other operations that either kind of **implicitly** depend on each other (data
-flow between download resource and upload resource) or **explicitly** depend on
-each other (localization needs the location of the image after transfer).
+**Ordering**: The **hash and sign** operations require that the operations be performed in a specific order (child components before parent components). Additionally, there are several other operations that either implicitly depend on each other (data flow between download and upload of a resource) or explicitly depend on each other (localization requires the location of the image after transfer).
 
-**Parallelization**: Operations such as download and upload of resources, but
-also hashing and localization of resources can be performed in parallel to
-significantly speed up the transfer process.
+**Parallelization**: Operations such as downloading and uploading of resources, as well as hashing and localization, can be performed in parallel to significantly speed up the transfer process.
 
-Also, users might want to incorporate their own operations:
+Users might also want to incorporate their own operations:
 
-- **filtering** image layers or entire resources based on target location of the
-  transfer (e.g. for customer deliveries)
+- **Filtering** image layers or entire resources based on the target location of the transfer (e.g., for customer deliveries).
 
 ## Solution Proposal
 
-An _ocm transformation specification_ is a formalized description of operations
-that have to be performed on components and their resources. It uses a **CEL
-expression syntax** to determine dependencies between operations. Based on the
-dependencies, a **directed acyclic graph (DAG)** is built up that determines the
-order of operations.
+An _ocm transformation specification_ is a formalized description of the operations that must be performed on components and their resources. It uses a **CEL expression syntax** to determine dependencies between operations. Based on these dependencies, a **directed acyclic graph (DAG)** is constructed to determine the order of operations.
 
-In fact, the description format is currently so generic that it can be used to
-orchestrate arbitrary operations on arbitrary data - essentially establishing is
-**general purpose CEL based pipeline language**.
+In fact, the description format is currently so generic that it can be used to orchestrate arbitrary operations on arbitrary data—essentially establishing a **general purpose CEL-based pipeline language**.
 
-This allows to prepare or enrich operations on components and resources with
-additional information.
+This approach allows for the preparation or enrichment of operations on components and resources with additional information.
 
-### Example: OCM transformation specification
+### Example: OCM Transformation Specification
 
-Assume, we have the following component stored in
-`ghcr.io/fabianburth/source-ocm-repository`:
+Assume we have the following component stored in `ghcr.io/fabianburth/source-ocm-repository`:
 
 ```yaml
 meta:
@@ -176,9 +123,7 @@ component:
       version: 6.7.1
 ```
 
-We want to transfer the component to
-`ghcr.io/fabianburth/target-ocm-repository/*`  and the resources to `ghcr.
-io/fabianburth/target-*`. Thereby, we want to localize the helm chart.
+We want to transfer the component to `ghcr.io/fabianburth/target-ocm-repository/*` and the resources to `ghcr.io/fabianburth/target-*`. In doing so, we want to localize the helm chart.
 
 ```yaml
 type: transformations.ocm./v1alpha1
@@ -186,16 +131,14 @@ transformations:
   - type: attributes.transformation/v1alpha1
     id: constants
     attributes:
-      targetImageReference: "ghcr.io/fabianburth/target-ocm-repository/ocm.
-        software/root-component:1.0.0"
+      targetImageReference: "ghcr.io/fabianburth/target-ocm-repository/ocm.software/root-component:1.0.0"
 
   # component 1
   - type: downloader.component.ctf/v1alpha1
     id: downloadcomponent1
     name: ocm.software/root-component
     version: 1.0.0
-    filePath: ghcr.io/fabianburth/source-ocm-repository/ocm.
-      software/root-component:1.0.0
+    filePath: ghcr.io/fabianburth/source-ocm-repository/ocm.software/root-component:1.0.0
 
   # resource 1
   - type: downloader.resource.oci/v1alpha1
@@ -212,7 +155,7 @@ transformations:
   # resource 2
   - type: downloader.resource.oci/v1alpha1
     id: resourcedownload2
-    componentDescriptor: ${downloadcomponent1.descriptor}
+    componentDescriptor: ${downloadcomponent1.outputs.descriptor}
     resource:
       name: mychart
   - type: oci.to.tar.transformer/v1alpha1
@@ -224,9 +167,7 @@ transformations:
     file: "*/values.yaml"
     mappings:
       - path: "image.repository"
-        value: "${resourceupload1.resource.access.imageReference.parseRef().
-      registry}/${resourceupload1.resource.access.imageReference.parseRef().
-      repository}"
+        value: "${resourceupload1.resource.access.imageReference.parseRef().registry}/${resourceupload1.resource.access.imageReference.parseRef().repository}"
   - type: tar.to.oci.transformer/v1alpha1
     id: tartooci1
     data: ${localization1.outputs.data}
@@ -264,8 +205,7 @@ transformations:
     componentDescriptor: ${merge.outputs.descriptor}
 ```
 
-Internally, this would be represented as the following **directed acyclic graph
-(DAG)**:
+Internally, this is represented as the following **directed acyclic graph (DAG)**:
 
 ```mermaid
 graph TD
@@ -299,44 +239,25 @@ graph TD
     P --> K
 ```
 
-**This enables efficient parallelization of the operations.**
+**This design enables efficient parallelization of the operations.**
 
-> **NOTES:** The _constants_ (the transformation with the type
-`attributes.transformation/v1alpha1`)
-> is required to prevent a circular dependency between the upload of the
-> local blob (`resourceupload3`) and the upload of the component. To upload
-> a `localBlob`, the upload location of the component is required. And the
-> component upload has to wait for the upload of the local blob as this
-> might change its resource specification in the component descriptor.
+> **NOTES:** The _constants_ transformation (of type `attributes.transformation/v1alpha1`) is required to prevent a circular dependency between the upload of the local blob (`resourceupload3`) and the upload of the component. Uploading a `localBlob` requires knowing the component’s upload location, and the component upload must wait for the local blob upload, as this may change its resource specification in the component descriptor.
 >
-> Alternatively, the `resourceupload3` could also specify the target location
-> itself. The component depends on the upload anyway.
+> Alternatively, `resourceupload3` could explicitly specify the target location. In either case, the component depends on the upload.
 
 ### Contract
 
-- **Transformations** provide a **JSON Schema** that defines their input
-  parameters. This json schema has to be provided during _transformation type
-  registration_  AND during _plugin registration_. This way, we don’t need an
-  additional endpoint at the plugins to validate the types but can do the type
-  checking statically with the json schemas.
+- **Transformations** provide a **JSON Schema** that defines their input parameters. This JSON Schema must be provided during _transformation type registration_ and during _plugin registration_. This approach removes the need for an additional validation endpoint in the plugins, as type checking can be performed statically using the JSON Schemas.
 
-- **Transformations** can use **CEL expressions** to refer to the **input and
-  output parameters** of other transformations. This references automatically
-  create a corresponding dependency in the **DAG**.
+- **Transformations** can use **CEL expressions** to refer to the **input and output parameters** of other transformations, which automatically creates a corresponding dependency in the **DAG**.
 
-**Transformations** can optionally either be compiled in as part of the core ocm
-cli or can be integrated as plugins.
+Transformations can optionally be compiled into the core ocm CLI or integrated as plugins.
 
 ### Issues
 
-Our current graph traversal requires buffering in between transformations. With
-a pipes architecture, all transformations that are connected to data stream
-(so, typically, all transformations on a single resource) would block all until
-the final transformation in that starts to run. In the graph shown above, i.e.
-`Download Resource 2` would block until `Upload Resource 2` starts.
+Our current graph traversal requires buffering between transformations. In a pipes architecture, all transformations connected by a data stream (typically, all transformations for a single resource) would block until the final transformation begins. In the above graph, for example, `Download Resource 2` would block until `Upload Resource 2` starts.
 
-Now, let's assume `Download Resource 1` requires inputs from `Download 
-Resource 2`. So, the directed acyclic graph (DAG) would look like this:
+Now, suppose `Download Resource 1` requires inputs from `Download Resource 2`. The DAG would then be:
 
 ```mermaid
 graph TD
@@ -371,70 +292,52 @@ graph TD
     P --> K
 ```
 
-With **buffering the data stream**, this is not a problem. We would process in
-the following order:
+With **buffering**, this issue can be mitigated by processing in the following order:
 
 - `Download Resource 2`
 - `Download Resource 1`
-- ...
+- …
 
-But considering **streaming the data stream**, we would be **deadlocked**.
+However, if we consider **streaming** the data, a **deadlock** would occur:
 
-- `Download Resource 2` blocks until `Upload Resource 2` starts
-- `Upload Resource 2` transitively depends on `Localization`, and thus, also
-  transitively depends on `Download Resource 1`
-- `Download Resource 1` blocks until `Download Resource 2` starts
+- `Download Resource 2` blocks until `Upload Resource 2` starts.
+- `Upload Resource 2` transitively depends on `Localization`, which in turn depends on `Download Resource 1`.
+- `Download Resource 1` blocks until `Download Resource 2` starts.
 
-Ideally, we would statically analyze the graph to determine that we have to
-buffer before `Localization`. Since that would be quite complex and
-time-consuming, we decided to postpone these efforts.
+Ideally, we would statically analyze the graph to determine where buffering is required before `Localization`. Since this analysis is complex and time-consuming, we decided to postpone this effort.
 
 ## Usage
 
 ### Backwards Compatibility
 
-Users will not be expected to write an **ocm transformation specification**
-for every of their transfers.
+Users will not be expected to write an **ocm transformation specification** for every transfer.
 
-The current commands (such as `ocm transfer component ...`) covering the common
-use cases will still be supported.
+Existing commands (such as `ocm transfer component ...`) covering common use cases will remain supported.
 
-The commands will be implemented through an **opinionated generation tool**,
-generating **ocm transformation specifications** representing the behaviour of
-the current commands.
+These commands will be implemented via an **opinionated generation tool** that produces **ocm transformation specifications** reflecting the behavior of the current commands.
 
 ### Users
 
-_With respect to transfer_, the expected user group of the **ocm transformation
-specification** are:
+_With respect to transfer_, the intended users of the **ocm transformation specification** are:
 
-- the users of the current ocm transfer command
-- so, the _SRE_ and _DevOps_ teams
+- Users of the current ocm transfer command,
+- _SRE_ and _DevOps_ teams responsible for product delivery.
 
-responsible for the delivery of their product.
+However, as noted above, the **ocm transformation specification** is a fully-fledged general purpose pipeline language. It is not limited to the transfer use case; other users might include:
 
-But as mentioned above, the **ocm transformation specification** is a fully
-fledged general purpose pipeline language. So, it is not limited to the transfer
-use case. So further users might be the
-
-- _product development teams_
-
-to perform modifications on already created components in their pipeline.
+- _Product development teams_, for performing modifications on already created components within their pipeline.
 
 ## Generator
 
-The generator is supposed to become a tool for generating **ocm transformation
-specifications** based on commands such as `ocm transfer component ...`.
+The generator is envisioned as a tool for creating **ocm transformation specifications** based on commands such as `ocm transfer component ...`.
 
-The generator will be covered in detail in a separate ADR.
+The generator will be detailed in a separate ADR.
 
-Internally, the generator will likely be traversing a graph to serialize the ocm
-transformation specification.
+Internally, the generator will likely traverse a graph to serialize the ocm transformation specification.
 
 ### Localization during Transfer
 
-Assuming this is the `localization-rule` contained in the component in the
-examples:
+Assume the following is the `localization-rule` contained within the component from the examples:
 
 ```yaml
 instructions:
@@ -443,89 +346,62 @@ instructions:
     mappings:
       - path: "image.repository"
         reference:
-        name: myimage
-        valueFrom: "${resource.access.imageReference}"
+          name: myimage
+          valueFrom: "${resource.access.imageReference}"
 ```
 
-The process to generate the part of the **ocm transformation specification**
-that handles the localization during transfer would roughly have to look like
-this:
+The process to generate the corresponding part of the **ocm transformation specification** that handles localization during transfer would roughly include:
 
-- search for resource of type `deployment-instruction`
-- search for a label `localizationFrom` on the `deployment-instruction` resource
-- find the resource that is referenced in the `localizationFrom` label
-- replace the placeholder `<resource>` with the actual resource id in the
-  transformation spec
+- Searching for a resource of type `deployment-instruction`.
+- Looking for a label `localizationFrom` on the `deployment-instruction` resource.
+- Finding the resource referenced by the `localizationFrom` label.
+- Replacing the placeholder `<resource>` with the actual resource ID in the transformation specification.
 
-Also, the conversions (`ocitotar` and `tartooci`) would have to be generated.
+Additionally, the conversions (`ocitotar` and `tartooci`) must be generated.
 
-Therefore, we might postpone the implementation of _localization during transfer
-from localization rules inside component version_ (maybe even _localization
-during transfer_ in general) until later UNDER THE ASSUMPTION that we can
-localize during deployment using KRO.
+Therefore, we might postpone the implementation of _localization during transfer_ from localization rules inside component versions (or even _localization during transfer_ in general) until later, under the assumption that we can localize during deployment using KRO.
 
 ## Pros and Cons
 
 **Pro**
 
-- **Reusable Graph Orchestration Logic**:  
-  As pointed out in the requirements, various operation in ocm require the
-  complex graph orchestration logic. The formalization through the **ocm
-  transformation specification** allows to reuse this complex logic for
-  arbitrary operations (kind of like CRDs and controllers in k8s).
+- **Reusable Graph Orchestration Logic:**  
+  As outlined in the requirements, various operations in ocm require complex graph orchestration. The formalization through the **ocm transformation specification** allows for reuse of this complexity for arbitrary operations (similar to CRDs and controllers in Kubernetes).
 
-- **Extensibility**:
-  The **ocm transformation specification** allows for incorporating arbitrary
-  operations.
+- **Extensibility:**  
+  The **ocm transformation specification** allows for the integration of arbitrary operations.
 
-- **Uniform Extension Interface**:
-  Through the **transformations** contract, ocm provides a **single clean
-  interface** for its core functionality as well as its extensions. This might
-  also enable us to provide additional command line tools or libraries.
-- (kind of like kubebuilder) to further improve the developer experience.
+- **Uniform Extension Interface:**  
+  Through the **transformations** contract, ocm provides a **single, clean interface** for both its core functionality and its extensions. This may also allow for additional command-line tools or libraries (similar to kubebuilder), thereby improving the developer experience.
 
-- **Ecosystem / Community Contributed Transformations**:
-  The value of ocm as a standard is highly dependent on its ecosystem. This
-  extensible system is a great starting point to enable the creation of an
-  actual ecosystem.
+- **Ecosystem / Community Contributed Transformations:**  
+  The value of ocm as a standard is highly dependent on its ecosystem. This extensible system is an excellent starting point for enabling a vibrant ecosystem.
 
 **Con**
 
-- **Complexity**:
-  The generic graph traversal logic introduces significant complexity that might
-  be hard to understand and debug.
+- **Complexity:**  
+  The generic graph traversal logic introduces significant complexity that may be difficult to understand and debug.
 
-> Although, the clear separation between algorithm and business logic
-> introduced through this formalization is a clear benefit.
+> Although the clear separation between algorithm and business logic introduced through this formalization is a definite advantage.
 
 **Further Considerations**
 
-- **Generic**:
-  - We decided to **omit any kind of implicit dependencies or data flow** in
-    this version of the specification.
-  - Instead of implicitly creating a dependency between each consecutive
-    resource transformation and passing a data stream between them, we
-    explicitly require the user (or the generator) to specify the dependency
-    through a CEL expression.
-  - **Pro**:
-    - Further improves the separation between algorithm and business logic.
-    - Requires less implicit knowledge
-  - **Con**:
-    - Requires a lot of boilerplate
-    - Requires to really understand the dependencies between the transformations
-    - Manual creation is quite difficult and error-prone
-    - Implementing the generator will be hard
+- **Generic:**
+  - We decided to **omit any form of implicit dependencies or data flow** in this version of the specification.
+  - Instead of automatically creating a dependency between each consecutive resource transformation and passing a data stream between them, we explicitly require the user (or generator) to specify the dependency via a CEL expression.
+  - **Pro:**
+    - This further enhances the separation between algorithm and business logic.
+    - It reduces implicit assumptions.
+  - **Con:**
+    - It introduces boilerplate code.
+    - It requires a thorough understanding of the dependencies between transformations.
+    - Manual creation is challenging and prone to errors.
+    - Implementing the generator will be complex.
 
 ## Conclusion
 
-The concept behind the **ocm transformation specification** is quite clean. The
-reusable graph orchestration logic provides significant value.
+The concept behind the **ocm transformation specification** is clean and well-defined. The reusable graph orchestration logic offers significant value.
 
-The main **disadvantage** is the complexity of the manual creation of a
-specification. We assume that the manual creation is a rare task. Either, the
-current commands which generate the specification will be sufficient for most
-users. Or a user will create a specification once and reuse it with different
-parameterization (kind of like the instance specification in KRO). Therefore, we
-think this is an acceptable trade-off.
+The primary disadvantage is the complexity involved in manually creating a specification. However, we assume this will be a rare task. Most users will either rely on the current commands, which auto-generate the specification, or create a specification once and then reuse it with different parameters (similar to the instance specification in KRO). Therefore, this is an acceptable trade-off.
 
 ## Links <!-- optional -->
