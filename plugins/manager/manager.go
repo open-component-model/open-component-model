@@ -56,9 +56,10 @@ func RegisterPluginImplementationForTypeAndCapabilities(p *ImplementedPlugin) {
 
 // Plugin represents a connected plugin
 type Plugin struct {
-	ID     string
-	path   string
-	config Config
+	ID           string
+	path         string
+	config       Config
+	capabilities []Capability
 
 	cmd *exec.Cmd
 }
@@ -392,8 +393,12 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 		//	Plugin: plugin,
 		//	cmd:    pluginCmd,
 		//}
-		plugin.config.PluginType = caps.PluginType
 
+		plugin.config.PluginType = caps.PluginType
+		plugin.capabilities = caps.Capabilities // store the endpoints
+
+		// TODO: you can declare multiple plugin types for a single binary
+		// Inbuilt stuff still needs to work. For example OCI one.
 		switch plugin.config.PluginType {
 		case TransferPlugin:
 			pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)

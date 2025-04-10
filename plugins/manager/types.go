@@ -108,6 +108,9 @@ type Capability struct {
 	Capability string `json:"capability"`
 	// Type defines the type name that this plugin supports.
 	Type string `json:"type"`
+	// Endpoints defines all endpoints and their corresponding schemas.
+	// TODO: Maybe this isn't needed after all.
+	//Endpoints []Endpoint `json:"endpoints"`
 }
 
 type Capabilities struct {
