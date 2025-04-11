@@ -62,9 +62,7 @@ func (resolver *CachingURLPathResolver) StoreForReference(_ context.Context, ref
 
 	repo := &remote.Repository{Reference: ref}
 
-	if resolver.PlainHTTP {
-		repo.PlainHTTP = true
-	}
+	repo.PlainHTTP = resolver.PlainHTTP
 	if resolver.BaseClient != nil {
 		repo.Client = resolver.BaseClient
 	}

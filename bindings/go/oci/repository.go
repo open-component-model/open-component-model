@@ -129,7 +129,7 @@ type Resolver interface {
 }
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
-// Each component version is stored in a separate OCI repository.
+// Each component may be stored in a separate OCI repository, but ultimately the storage is determined by the Resolver.
 //
 // This Repository implementation synchronizes OCI Manifests through the concepts of LocalDescriptorMemory.
 // Through this any local blob added with AddLocalResource will be added to the memory until
@@ -412,7 +412,7 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 		srcRef = parsedSrcRef.Reference
 	}
 
-	ref, err := looseref.LooseParseReference(access.ImageReference)
+	ref, err := looseref.ParseReference(access.ImageReference)
 	if err != nil {
 		return fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
 	}

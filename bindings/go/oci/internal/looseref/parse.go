@@ -5,9 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	. "oras.land/oras-go/v2/registry"
-
 	"oras.land/oras-go/v2/errdef"
+	oras "oras.land/oras-go/v2/registry"
 )
 
 // tagRegexp checks the tag name.
@@ -17,7 +16,7 @@ import (
 var tagRegexp = regexp.MustCompile(`^[\w][\w.-]{0,127}$`)
 
 type LooseReference struct {
-	Reference
+	oras.Reference
 	Tag string
 }
 
@@ -62,15 +61,15 @@ func (r LooseReference) ValidateReferenceAsTag() error {
 	return nil
 }
 
-// LooseParseReference parses a string (artifact) into an `artifact reference`.
+// ParseReference parses a string (artifact) into an `artifact reference`.
 // Corresponding cryptographic hash implementations are required to be imported
 // as specified by https://pkg.go.dev/github.com/opencontainers/go-digest#readme-usage
 // if the string contains a digest.
 // Compared to `ParseReference` from ORAS, this function is more lenient and allows for
-// no registry. This is useful for passing references to the `oras` Interfaces
+// no registry (Valid Form E). This is useful for passing references to the `oras` Interfaces
 // that do not have registries set. It also exposes the Tag (the tag in oras ParseReference gets
 // removed when a digest is present)
-func LooseParseReference(artifact string) (LooseReference, error) {
+func ParseReference(artifact string) (LooseReference, error) {
 	// Split the input artifact string into registry and path components.
 	parts := strings.SplitN(artifact, "/", 2)
 	var registry, path string
@@ -113,7 +112,7 @@ func LooseParseReference(artifact string) (LooseReference, error) {
 	}
 
 	ref := LooseReference{
-		Reference: Reference{
+		Reference: oras.Reference{
 			Registry:   registry,
 			Repository: repository,
 			Reference:  reference,

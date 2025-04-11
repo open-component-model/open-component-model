@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	. "oras.land/oras-go/v2/registry"
+	"oras.land/oras-go/v2/registry"
 )
 
 const ValidDigest = "sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
@@ -23,7 +23,7 @@ func TestParseReferenceGoodies(t *testing.T) {
 			name:  "digest reference (valid form A)",
 			image: fmt.Sprintf("hello-world@%s", ValidDigest),
 			wantTemplate: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Repository: "hello-world",
 					Reference:  ValidDigest,
 				},
@@ -33,7 +33,7 @@ func TestParseReferenceGoodies(t *testing.T) {
 			name:  "tag with digest (valid form B)",
 			image: fmt.Sprintf("hello-world:v2@%s", ValidDigest),
 			wantTemplate: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Repository: "hello-world",
 					Reference:  ValidDigest,
 				},
@@ -44,7 +44,7 @@ func TestParseReferenceGoodies(t *testing.T) {
 			name:  "empty tag with digest (valid form B)",
 			image: fmt.Sprintf("hello-world:@%s", ValidDigest),
 			wantTemplate: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Repository: "hello-world",
 					Reference:  ValidDigest,
 				},
@@ -54,7 +54,7 @@ func TestParseReferenceGoodies(t *testing.T) {
 			name:  "tag reference (valid form C)",
 			image: "hello-world:v1",
 			wantTemplate: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Repository: "hello-world",
 				},
 				Tag: "v1",
@@ -64,7 +64,7 @@ func TestParseReferenceGoodies(t *testing.T) {
 			name:  "basic reference (valid form D)",
 			image: "hello-world",
 			wantTemplate: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Repository: "hello-world",
 				},
 			},
@@ -89,7 +89,7 @@ func TestParseReferenceGoodies(t *testing.T) {
 				if registry == "" {
 					ref = tt.image
 				}
-				got, err := LooseParseReference(ref)
+				got, err := ParseReference(ref)
 				if err != nil {
 					t.Errorf("ParseReference() encountered unexpected error: %v", err)
 					return
@@ -112,7 +112,7 @@ func TestLooseParseReference(t *testing.T) {
 			name: "CTF style reference",
 			ref:  "component-descriptors/test-component:v1.0.0",
 			wantTemplate: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Registry:   "component-descriptors",
 					Repository: "test-component",
 				},
@@ -124,7 +124,7 @@ func TestLooseParseReference(t *testing.T) {
 	for _, tt := range tests {
 		want := tt.wantTemplate
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := LooseParseReference(tt.ref)
+			got, err := ParseReference(tt.ref)
 			if err != nil {
 				t.Errorf("ParseReference() encountered unexpected error: %v", err)
 				return
@@ -140,7 +140,7 @@ func TestParseReferenceUglies(t *testing.T) {
 	tests := []struct {
 		name string
 		raw  string
-		want Reference
+		want registry.Reference
 	}{
 		{
 			name: "invalid repo name",
@@ -170,7 +170,7 @@ func TestParseReferenceUglies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if ref, err := LooseParseReference(tt.raw); err == nil {
+			if ref, err := ParseReference(tt.raw); err == nil {
 				t.Errorf("ParseReference() expected an error, but got reg=%v,repo=%v,ref=%v", ref.Registry, ref.Repository, ref.Reference)
 				return
 			}
@@ -187,7 +187,7 @@ func TestLooseReferenceString(t *testing.T) {
 		{
 			name: "registry only",
 			ref: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Registry: "localhost:5000",
 				},
 			},
@@ -196,7 +196,7 @@ func TestLooseReferenceString(t *testing.T) {
 		{
 			name: "repository only",
 			ref: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Repository: "hello-world",
 				},
 			},
@@ -205,7 +205,7 @@ func TestLooseReferenceString(t *testing.T) {
 		{
 			name: "registry and repository",
 			ref: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Registry:   "localhost:5000",
 					Repository: "hello-world",
 				},
@@ -215,7 +215,7 @@ func TestLooseReferenceString(t *testing.T) {
 		{
 			name: "with tag",
 			ref: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Registry:   "localhost:5000",
 					Repository: "hello-world",
 				},
@@ -226,7 +226,7 @@ func TestLooseReferenceString(t *testing.T) {
 		{
 			name: "with digest",
 			ref: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Registry:   "localhost:5000",
 					Repository: "hello-world",
 					Reference:  ValidDigest,
@@ -237,7 +237,7 @@ func TestLooseReferenceString(t *testing.T) {
 		{
 			name: "with tag and digest",
 			ref: LooseReference{
-				Reference: Reference{
+				Reference: registry.Reference{
 					Registry:   "localhost:5000",
 					Repository: "hello-world",
 					Reference:  ValidDigest,
@@ -249,7 +249,7 @@ func TestLooseReferenceString(t *testing.T) {
 		{
 			name: "empty reference",
 			ref: LooseReference{
-				Reference: Reference{},
+				Reference: registry.Reference{},
 			},
 			expected: "",
 		},

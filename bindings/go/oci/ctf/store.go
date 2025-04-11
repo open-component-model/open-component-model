@@ -61,7 +61,7 @@ func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Sto
 }
 
 func (s *Store) Reference(reference string) (fmt.Stringer, error) {
-	return looseref.LooseParseReference(reference)
+	return looseref.ParseReference(reference)
 }
 
 // ComponentVersionReference creates a reference string for a component version in the format "component-descriptors/component:version".
