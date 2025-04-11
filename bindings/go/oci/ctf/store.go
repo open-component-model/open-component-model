@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -74,6 +75,7 @@ type repositoryStore struct {
 	archive  ctf.CTF
 	registry string
 	repo     string
+	indexMu  sync.RWMutex
 }
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
@@ -132,6 +134,9 @@ func (s *repositoryStore) Push(ctx context.Context, expected ociImageSpecV1.Desc
 // Returns the descriptor if found, or an error if the reference is invalid or not found.
 func (s *repositoryStore) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
 	var b blob.ReadOnlyBlob
+
+	s.indexMu.RLock()
+	defer s.indexMu.RUnlock()
 
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
@@ -192,6 +197,9 @@ func (s *repositoryStore) Resolve(ctx context.Context, reference string) (ociIma
 // The reference should be in the format "repository:tag".
 // This operation updates the index to maintain the mapping between references and their corresponding descriptors.
 func (s *repositoryStore) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to get index: %w", err)
@@ -232,6 +240,9 @@ func (s *repositoryStore) Tag(ctx context.Context, desc ociImageSpecV1.Descripto
 }
 
 func (s *repositoryStore) Tags(ctx context.Context, _ string, fn func(tags []string) error) error {
+	s.indexMu.RLock()
+	defer s.indexMu.RUnlock()
+
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to get index: %w", err)
