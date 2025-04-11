@@ -1,0 +1,5 @@
+secret:
+  ignored_matches:
+  - match: 4cfb3d73bbaa5bb1fbd89c6f105d85b81e0020a591d2ce95ec98caa6083b9a6e
+    name: Username Password - bindings/go/credentials/graph_test.go
+version: 2
