@@ -350,6 +350,11 @@ pluggable
 gz
 accessTypes
 kustomize
+kustomization
+KROs
+SBOMs
+schemas
 reproducibility
 subprocesses
+CRDs
 zsh
