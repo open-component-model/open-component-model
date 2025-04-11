@@ -214,3 +214,153 @@ func TestTag(t *testing.T) {
 		assert.Equal(t, desc.Digest, resolvedDesc.Digest)
 	})
 }
+
+func TestFetchReference(t *testing.T) {
+	ctf := setupTestCTF(t)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	content := "test"
+	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	digestStr, known := blob.Digest()
+	require.True(t, known)
+	require.NoError(t, ctf.SaveBlob(ctx, blob))
+
+	// Create and set up the index
+	index := v1.NewIndex()
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo",
+		Tag:        "test-tag",
+		Digest:     digestStr,
+		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
+	})
+	require.NoError(t, ctf.SetIndex(ctx, index))
+
+	t.Run("successful fetch reference", func(t *testing.T) {
+		desc, reader, err := store.(*repositoryStore).FetchReference(ctx, "test-tag")
+		assert.NoError(t, err)
+		assert.NotNil(t, reader)
+		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
+
+		readContent, err := io.ReadAll(reader)
+		assert.NoError(t, err)
+		assert.Equal(t, content, string(readContent))
+	})
+
+	t.Run("fetch reference not found", func(t *testing.T) {
+		desc, reader, err := store.(*repositoryStore).FetchReference(ctx, "nonexistent-tag")
+		assert.Error(t, err)
+		assert.Nil(t, reader)
+		assert.Empty(t, desc)
+	})
+}
+
+func TestTags(t *testing.T) {
+	ctf := setupTestCTF(t)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	content := "test"
+	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	digestStr, known := blob.Digest()
+	require.True(t, known)
+	require.NoError(t, ctf.SaveBlob(ctx, blob))
+
+	// Create and set up the index with multiple tags
+	index := v1.NewIndex()
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo",
+		Tag:        "tag1",
+		Digest:     digestStr,
+		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
+	})
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo",
+		Tag:        "tag2",
+		Digest:     digestStr,
+		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
+	})
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "other-repo",
+		Tag:        "other-tag",
+		Digest:     digestStr,
+		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
+	})
+	require.NoError(t, ctf.SetIndex(ctx, index))
+
+	t.Run("list tags for repository", func(t *testing.T) {
+		var tags []string
+		err := store.(*repositoryStore).Tags(ctx, "", func(t []string) error {
+			tags = t
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.ElementsMatch(t, []string{"tag1", "tag2"}, tags)
+	})
+}
+
+func TestPushWithManifest(t *testing.T) {
+	ctf := setupTestCTF(t)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	content := "test"
+	desc := ociImageSpecV1.Descriptor{
+		Digest:    digest.FromString(content),
+		Size:      int64(len(content)),
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+	}
+
+	t.Run("push manifest and verify tag", func(t *testing.T) {
+		err := store.Push(ctx, desc, strings.NewReader(content))
+		assert.NoError(t, err)
+
+		// Verify the blob was saved
+		exists, err := store.Exists(ctx, desc)
+		assert.NoError(t, err)
+		assert.True(t, exists)
+
+		// Verify the tag was created
+		resolvedDesc, err := store.Resolve(ctx, desc.Digest.String())
+		assert.NoError(t, err)
+		assert.Equal(t, desc.Digest, resolvedDesc.Digest)
+	})
+}
+
+func TestResolveWithRegistry(t *testing.T) {
+	ctf := setupTestCTF(t)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "registry.example.com/test-repo:test-tag")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	content := "test"
+	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	digestStr, known := blob.Digest()
+	require.True(t, known)
+	require.NoError(t, ctf.SaveBlob(ctx, blob))
+
+	// Create and set up the index
+	index := v1.NewIndex()
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "registry.example.com/test-repo",
+		Tag:        "test-tag",
+		Digest:     digestStr,
+		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
+	})
+	require.NoError(t, ctf.SetIndex(ctx, index))
+
+	t.Run("resolve with registry prefix", func(t *testing.T) {
+		desc, err := store.Resolve(ctx, "test-tag")
+		assert.NoError(t, err)
+		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
+	})
+}
