@@ -15,16 +15,9 @@ import (
 // This is a blob that is backed by a reader (with the content) as well as an OCI descriptor.
 // The descriptor is used to report data such as a precalculated digest and size without having to introspect the data.
 // At the same time the data that is given is verified against the descriptor.
-func NewDescriptorBlob(data io.Reader, descriptor ociImageSpecV1.Descriptor) *DescriptorBlob {
-	var reader io.ReadCloser
-	if closer, ok := data.(io.ReadCloser); ok {
-		reader = closer
-	} else {
-		reader = io.NopCloser(data)
-	}
-
+func NewDescriptorBlob(data io.ReadCloser, descriptor ociImageSpecV1.Descriptor) *DescriptorBlob {
 	return &DescriptorBlob{
-		content:    reader,
+		content:    data,
 		descriptor: descriptor,
 	}
 }

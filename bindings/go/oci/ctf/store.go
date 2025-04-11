@@ -116,7 +116,7 @@ func (s *repositoryStore) FetchReference(ctx context.Context, reference string) 
 // Push stores a new blob in the CTF archive with the expected descriptor.
 // The content is read from the provided io.Reader.
 func (s *repositoryStore) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
-	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(data, expected)); err != nil {
+	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
 	if isManifest(expected) {
