@@ -150,7 +150,6 @@ func TestResolve(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := t.Context()
-	reference := "test-repo:test-tag"
 	content := "test"
 	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
 	digestStr, known := blob.Digest()
@@ -168,7 +167,7 @@ func TestResolve(t *testing.T) {
 	require.NoError(t, ctf.SetIndex(ctx, index))
 
 	t.Run("successful resolve", func(t *testing.T) {
-		desc, err := store.Resolve(ctx, reference)
+		desc, err := store.Resolve(ctx, "test-tag")
 		assert.NoError(t, err)
 		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
 		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
@@ -194,7 +193,7 @@ func TestTag(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := t.Context()
-	reference := "test-repo:test-tag"
+	reference := "test-tag"
 	content := "test"
 	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
 	digestStr, known := blob.Digest()
@@ -213,10 +212,5 @@ func TestTag(t *testing.T) {
 		resolvedDesc, err := store.Resolve(ctx, reference)
 		assert.NoError(t, err)
 		assert.Equal(t, desc.Digest, resolvedDesc.Digest)
-	})
-
-	t.Run("invalid reference", func(t *testing.T) {
-		err := store.Tag(ctx, desc, "invalid")
-		assert.Error(t, err)
 	})
 }

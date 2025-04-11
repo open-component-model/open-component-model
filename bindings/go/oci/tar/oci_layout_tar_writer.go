@@ -52,6 +52,8 @@ type OCILayoutWriter struct {
 	// Closing the Layout Writer is not concurrency safe.
 	// Once closed, it is impossible to reuse
 	closed bool
+
+	written []ociImageSpecV1.Descriptor
 }
 
 // Fetch is only implemented to satisfy the oras.Target interface.
@@ -143,8 +145,11 @@ func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Desc
 		return fmt.Errorf("failed to verify content: %w", err)
 	}
 	if isManifest(expected) {
-		return s.tag(ctx, expected, expected.Digest.String())
+		if err := s.tag(ctx, expected, expected.Digest.String()); err != nil {
+			return fmt.Errorf("failed to tag manifest by digest: %w", err)
+		}
 	}
+	s.written = append(s.written, expected)
 	return nil
 }
 
@@ -152,8 +157,8 @@ func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Desc
 func (s *OCILayoutWriter) Exists(_ context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
 	s.indexMu.RLock()
 	defer s.indexMu.RUnlock()
-	for _, manifest := range s.index.Manifests {
-		if manifest.Digest == target.Digest {
+	for _, manifest := range s.written {
+		if content.Equal(manifest, target) {
 			return true, nil
 		}
 	}

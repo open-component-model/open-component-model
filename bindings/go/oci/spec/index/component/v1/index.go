@@ -34,7 +34,8 @@ var Manifest = ociImageSpecV1.Manifest{
 		ociImageSpecV1.DescriptorEmptyJSON,
 	},
 	Annotations: map[string]string{
-		"software.ocm.description": "This is an OCM component index. It is an empty json" +
+		ociImageSpecV1.AnnotationTitle: "OCM Component Index V1",
+		ociImageSpecV1.AnnotationDescription: "This is an OCM component index. It is an empty json" +
 			"that can be used as referrer for OCM component descriptors. It is used as a subject" +
 			"for all OCM Component Version Top-Level Manifests and can be used to reference back all" +
 			"OCM Component Versions",
@@ -46,8 +47,8 @@ var Manifest = ociImageSpecV1.Manifest{
 var Descriptor = ociImageSpecV1.Descriptor{
 	MediaType:    Manifest.MediaType,
 	ArtifactType: Manifest.ArtifactType,
-	Digest:       "sha256:03e3d2a4051bec7aef98dd78c26d8b1d9079161aa3d92ec9161669b45f6ea486",
-	Size:         767,
+	Digest:       "sha256:9717cda41c478af11cba7ed29f4aa3e4882bab769d006788169cbccafc0fcd05",
+	Size:         837,
 }
 
 // Store defines the interface for interacting with the OCI content store.

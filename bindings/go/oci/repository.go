@@ -5,14 +5,10 @@
 package oci
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 
@@ -28,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
+	"ocm.software/open-component-model/bindings/go/oci/internal/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
 	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
@@ -184,7 +181,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	}
 
 	// Tag the manifest with the reference
-	if err := store.Tag(ctx, *manifest, reference); err != nil {
+	if err := store.Tag(ctx, *manifest, version); err != nil {
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
 	// Cleanup local blob memory as all layers have been pushed
@@ -198,7 +195,7 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 		slog.String("component", component))
 	defer done(err)
 
-	ref, store, err := repo.getStore(ctx, component, "latest")
+	_, store, err := repo.getStore(ctx, component, "latest")
 	if err != nil {
 		return nil, err
 	}
@@ -208,16 +205,11 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 		return nil, fmt.Errorf("failed to create lister: %w", err)
 	}
 
-	tagResolver, err := complister.ReferenceTagVersionResolver(ref, store)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create tag resolver: %w", err)
-	}
-
 	return list.List(ctx, lister.Options{
 		SortPolicy:   lister.SortPolicyLooseSemverDescending,
 		LookupPolicy: lister.LookupPolicyReferrerWithTagFallback,
 		TagListerOptions: lister.TagListerOptions{
-			VersionResolver: tagResolver,
+			VersionResolver: complister.ReferenceTagVersionResolver(store),
 		},
 		ReferrerListerOptions: lister.ReferrerListerOptions{
 			ArtifactType:    descriptor2.MediaTypeComponentDescriptorV2,
@@ -267,10 +259,10 @@ func (repo *Repository) AddLocalResource(
 	}
 
 	desc, err := pack.ResourceBlob(ctx, store, resourceBlob, pack.Options{
-		AccessScheme:                   repo.scheme,
-		CopyGraphOptions:               repo.resourceCopyOptions.CopyGraphOptions,
-		LocalResourceLayerCreationMode: pack.LocalResourceCreationModeLocalBlobWithNestedGlobalAccess,
-		BaseReference:                  reference,
+		AccessScheme:              repo.scheme,
+		CopyGraphOptions:          repo.resourceCopyOptions.CopyGraphOptions,
+		LocalResourceAdoptionMode: pack.LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess,
+		BaseReference:             reference,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack resource blob: %w", err)
@@ -416,10 +408,21 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 		if _, rErr := ociStore.Resolve(ctx, parsedSrcRef.Reference); rErr != nil {
 			return errors.Join(err, rErr)
 		}
+		slog.Info("resolved non-absolute reference name from oci layout", "old", srcRef, "new", parsedSrcRef.Reference)
 		srcRef = parsedSrcRef.Reference
 	}
 
-	desc, err := oras.Copy(ctx, ociStore, srcRef, store, access.ImageReference, repo.resourceCopyOptions)
+	ref, err := looseref.LooseParseReference(access.ImageReference)
+	if err != nil {
+		return fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
+	}
+	if err := ref.ValidateReferenceAsTag(); err != nil {
+		return fmt.Errorf("can only copy %q if it is tagged: %w", access.ImageReference, err)
+	}
+
+	tag := ref.Tag
+
+	desc, err := oras.Copy(ctx, ociStore, srcRef, store, tag, repo.resourceCopyOptions)
 	if err != nil {
 		return fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
@@ -492,55 +495,22 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 
 // generateOCILayout creates an OCI layout from a store for a given descriptor.
 func (repo *Repository) generateOCILayout(ctx context.Context, res *descriptor.Resource, src spec.Store, desc ociImageSpecV1.Descriptor, tags ...string) (_ LocalBlob, err error) {
-	mediaType := layout.MediaTypeOCIImageLayoutV1 + "+tar" + "+gzip"
-	var buf bytes.Buffer
-
-	h := sha256.New()
-	writer := io.MultiWriter(&buf, h)
-
-	zippedBuf := gzip.NewWriter(writer)
-	defer func() {
-		if err != nil {
-			// Clean up resources if there was an error
-			zippedBuf.Close()
-			buf.Reset()
-		}
-	}()
-
-	target := tar.NewOCILayoutWriter(zippedBuf)
-	defer func() {
-		if terr := target.Close(); terr != nil {
-			err = errors.Join(err, fmt.Errorf("failed to close tar writer: %w", terr))
-			return
-		}
-		if zerr := zippedBuf.Close(); zerr != nil {
-			err = errors.Join(err, fmt.Errorf("failed to close gzip writer: %w", zerr))
-			return
-		}
-	}()
-
-	if err := oras.CopyGraph(ctx, src, target, desc, repo.resourceCopyOptions.CopyGraphOptions); err != nil {
-		return nil, fmt.Errorf("failed to copy graph for descriptor %v: %w", desc, err)
+	downloaded, err := tar.CopyToOCILayoutInMemory(ctx, src, desc, tar.CopyToOCILayoutOptions{
+		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+		Tags:             tags,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to copy to OCI layout: %w", err)
 	}
 
-	for _, tag := range tags {
-		if err := target.Tag(ctx, desc, tag); err != nil {
-			return nil, fmt.Errorf("failed to tag manifest: %w", err)
-		}
+	dig, ok := downloaded.Digest()
+	if !ok {
+		return nil, fmt.Errorf("failed to get digest from downloaded blob")
 	}
-
-	// now close prematurely so that the buf is fully filled before we set things like size and digest.
-	if err := errors.Join(target.Close(), zippedBuf.Close()); err != nil {
-		return nil, fmt.Errorf("failed to close writers: %w", err)
+	blobDigest, err := digest.Parse(dig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse digest: %w", err)
 	}
-
-	downloaded := blob.NewDirectReadOnlyBlob(&buf)
-
-	downloaded.SetPrecalculatedSize(int64(buf.Len()))
-	downloaded.SetMediaType(mediaType)
-
-	blobDigest := digest.NewDigest(digest.SHA256, h)
-	downloaded.SetPrecalculatedDigest(blobDigest.String())
 
 	// Validate the digest of the downloaded content matches what we expect
 	if err := validateDigest(res, desc, blobDigest); err != nil {
@@ -555,7 +525,7 @@ func (repo *Repository) generateOCILayout(ctx context.Context, res *descriptor.R
 		HashAlgorithm:          digestv1.ReverseSHAMapping[blobDigest.Algorithm()],
 		Value:                  blobDigest.Encoded(),
 	}
-	b, err := ociblob.NewResourceBlobWithMediaType(dc, downloaded, mediaType)
+	b, err := ociblob.NewResourceBlob(dc, downloaded)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create resource blob from oci layout: %w", err)
 	}

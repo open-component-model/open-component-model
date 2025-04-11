@@ -2,10 +2,10 @@ package oci_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -14,17 +14,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/content/memory"
-	orasoci "oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
-	"ocm.software/open-component-model/bindings/go/oci/internal/looseref"
-	"ocm.software/open-component-model/bindings/go/oci/spec"
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	"ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -43,30 +42,14 @@ func Repository(t *testing.T, options ...oci.RepositoryOption) *oci.Repository {
 	return repo
 }
 
-// MockResolver implements the Resolver interface for testing
-type MockResolver struct {
-	store spec.Store
-}
-
-func (m *MockResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
-	return m.store, nil
-}
-
-func (m *MockResolver) Reference(reference string) (fmt.Stringer, error) {
-	return looseref.LooseParseReference(reference)
-}
-
-func (m *MockResolver) ComponentVersionReference(component, version string) string {
-	return fmt.Sprintf("%s:%s", component, version)
-}
-
 func TestRepository_AddComponentVersion(t *testing.T) {
 	r := require.New(t)
-	ctx := context.Background()
-	mockStore := memory.New()
+	ctx := t.Context()
 
-	mockResolver := &MockResolver{store: mockStore}
-	repo := Repository(t, oci.WithResolver(mockResolver))
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
 
 	// Create a test component descriptor
 	desc := &descriptor.Descriptor{
@@ -81,12 +64,8 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 	}
 
 	// Test adding component version
-	err := repo.AddComponentVersion(ctx, desc)
+	err = repo.AddComponentVersion(ctx, desc)
 	r.NoError(err, "Failed to add component version when it should succeed")
-
-	resolved, err := mockStore.Resolve(ctx, mockResolver.ComponentVersionReference(desc.Component.Name, desc.Component.Version))
-	r.NoError(err, "Failed to resolve component version after adding it")
-	r.NotNil(resolved, "Resolved component version should not be nil")
 
 	desc2, err := repo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
 	r.NoError(err, "Failed to get component version after adding it")
@@ -97,10 +76,12 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 
 func TestRepository_GetComponentVersion(t *testing.T) {
 	r := require.New(t)
-	ctx := context.Background()
-	mockStore := memory.New()
-	mockResolver := &MockResolver{store: mockStore}
-	repo := Repository(t, oci.WithResolver(mockResolver))
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
 
 	// Test getting non-existent component version
 	desc, err := repo.GetComponentVersion(ctx, "test-component", "1.0.0")
@@ -280,9 +261,11 @@ func TestRepository_GetLocalResource(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			ctx := t.Context()
-			mockStore := memory.New()
-			mockResolver := &MockResolver{store: mockStore}
-			repo := Repository(t, oci.WithResolver(mockResolver))
+
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store))
 
 			// Create a test component descriptor
 			desc := &descriptor.Descriptor{
@@ -395,15 +378,13 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			// Create a mock resolver with a memory store
-			mockStore, err := orasoci.NewWithContext(ctx, t.TempDir())
-			r.NoError(err, "Failed to create mock store")
-			mockResolver := &MockResolver{store: mockStore}
-
-			// Create a repository with the mock resolver
-			repo := Repository(t, oci.WithResolver(mockResolver))
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store))
 
 			// Create a test component descriptor
 			desc := &descriptor.Descriptor{
@@ -425,7 +406,8 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 			var downloadedRes blob.ReadOnlyBlob
 			if tc.useLocalUpload {
 				// Use AddLocalResource for local uploads
-				newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.resource, b)
+				var newRes *descriptor.Resource
+				newRes, err = repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.resource, b)
 				r.NoError(err, "Failed to add local resource")
 				r.NotNil(newRes, "Resource should not be nil after adding")
 
@@ -443,7 +425,8 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 
 				base := content.NewDescriptorFromBytes("", tc.content)
 				r.NoError(store.Push(ctx, base, bytes.NewReader(tc.content)), "Failed to push content to store")
-				manifestDesc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, artifactMediaType, oras.PackManifestOptions{
+				var manifestDesc ociImageSpecV1.Descriptor
+				manifestDesc, err = oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, artifactMediaType, oras.PackManifestOptions{
 					Layers: []ociImageSpecV1.Descriptor{base},
 				})
 				r.NoError(err, "Failed to create manifest descriptor")
@@ -507,14 +490,12 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 
 func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	r := require.New(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	// Create a mock resolver with a memory store
-	mockStore := memory.New()
-	mockResolver := &MockResolver{store: mockStore}
-
-	// Create a repository with the mock resolver
-	repo := Repository(t, oci.WithResolver(mockResolver))
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
 
 	// Create a test component descriptor
 	desc := &descriptor.Descriptor{
@@ -581,14 +562,12 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 
 func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	r := require.New(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	// Create a mock resolver with a memory store
-	mockStore := memory.New()
-	mockResolver := &MockResolver{store: mockStore}
-
-	// Create a repository with the mock resolver
-	repo := Repository(t, oci.WithResolver(mockResolver))
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
 
 	// Create a test component descriptor
 	desc := &descriptor.Descriptor{
@@ -702,4 +681,45 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref string) ([]byte, *
 	return buf.Bytes(), &v1.OCIImage{
 		ImageReference: ref,
 	}
+}
+
+func TestRepository_ListComponentVersions(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	// Test listing versions for non-existent component
+	versions, err := repo.ListComponentVersions(ctx, "non-existent-component")
+	r.NoError(err, "Listing versions for non-existent component should not error")
+	r.Empty(versions, "Should return empty list for non-existent component")
+
+	// Add multiple component versions
+	versionsToAdd := []string{"1.0.0", "2.0.0", "1.1.0", "2.1.0"}
+	for _, version := range versionsToAdd {
+		desc := &descriptor.Descriptor{
+			Component: descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-component",
+						Version: version,
+					},
+				},
+			},
+		}
+		err := repo.AddComponentVersion(ctx, desc)
+		r.NoError(err, "Failed to add component version %s", version)
+	}
+
+	// Test listing versions
+	versions, err = repo.ListComponentVersions(ctx, "test-component")
+	r.NoError(err, "Failed to list component versions")
+	r.Len(versions, len(versionsToAdd), "Should return all added versions")
+
+	// Verify versions are sorted in descending order
+	expectedOrder := []string{"2.1.0", "2.0.0", "1.1.0", "1.0.0"}
+	r.Equal(expectedOrder, versions, "Versions should be sorted in descending order")
 }

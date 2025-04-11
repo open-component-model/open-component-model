@@ -127,4 +127,5 @@
 //   - github.com/opencontainers/image-spec: For OCI image specifications
 //   - oras.land/oras-go: For OCI registry operations
 //   - golang.org/x/sync/errgroup: For concurrent operations
+//   - github.com/Masterminds/semver/v3: For interpreting component version tags / referrers as semvers
 package oci

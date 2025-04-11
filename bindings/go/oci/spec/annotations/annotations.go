@@ -1,5 +1,12 @@
 package annotations
 
+import (
+	"fmt"
+	"strings"
+)
+
+const DefaultComponentDescriptorPath = "component-descriptors"
+
 // Annotations for OCI Image Manifests
 const (
 	// OCMComponentVersion is an annotation that indicates the component version.
@@ -13,3 +20,26 @@ const (
 	// process or user agent. as such it CAN be correlated to a user agent header in http.
 	OCMCreator = "software.ocm.creator"
 )
+
+func NewComponentVersionAnnotation(component, version string) string {
+	return fmt.Sprintf("%s/%s:%s", DefaultComponentDescriptorPath, component, version)
+}
+
+func ParseComponentVersionAnnotation(annotation string) (string, string, error) {
+	prefix := DefaultComponentDescriptorPath + "/"
+	if !strings.HasPrefix(annotation, prefix) {
+		return "", "", fmt.Errorf("%q is not considered a valid %q annotation because of a bad prefix, expected %q", annotation, OCMComponentVersion, prefix)
+	}
+	postTrim := strings.TrimPrefix(annotation, prefix)
+	split := strings.Split(postTrim, ":")
+	if len(split) != 2 {
+		return "", "", fmt.Errorf("%q is not considered a valid %q annotation", annotation, OCMComponentVersion)
+	}
+	candidate := split[0]
+	version := split[1]
+	if len(version) == 0 {
+		return "", "", fmt.Errorf("version parsed from %q in %q annotation is empty but should not be", annotation, OCMComponentVersion)
+	}
+
+	return candidate, version, nil
+}

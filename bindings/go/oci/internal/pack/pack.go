@@ -25,14 +25,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// LocalResourceLayerCreationMode defines how local resources should be accessed in the repository.
-type LocalResourceLayerCreationMode int
+// LocalResourceAdoptionMode defines how local resources should be accessed in the repository.
+type LocalResourceAdoptionMode int
 
-func (l LocalResourceLayerCreationMode) String() string {
+func (l LocalResourceAdoptionMode) String() string {
 	switch l {
-	case LocalResourceCreationModeLocalBlobWithNestedGlobalAccess:
+	case LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess:
 		return "localBlobWithNestedGlobalAccess"
-	case LocalResourceCreationModeOCIImage:
+	case LocalResourceAdoptionModeOCIImage:
 		return "ociImage"
 	default:
 		return fmt.Sprintf("unknown (%d)", l)
@@ -40,12 +40,12 @@ func (l LocalResourceLayerCreationMode) String() string {
 }
 
 const (
-	// LocalResourceCreationModeLocalBlobWithNestedGlobalAccess creates a local blob access for resources.
+	// LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess creates a local blob access for resources.
 	// It also embeds the global access information in the local blob.
-	LocalResourceCreationModeLocalBlobWithNestedGlobalAccess LocalResourceLayerCreationMode = iota
-	// LocalResourceCreationModeOCIImage creates an OCI image layer access for resources.
+	LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess LocalResourceAdoptionMode = iota
+	// LocalResourceAdoptionModeOCIImage creates an OCI image layer access for resources.
 	// This mode is used when the resource is embedded without a local blob (only global access)
-	LocalResourceCreationModeOCIImage LocalResourceLayerCreationMode = iota
+	LocalResourceAdoptionModeOCIImage LocalResourceAdoptionMode = iota
 )
 
 // Options defines the configuration options for packing a single-layer OCI artifact.
@@ -57,15 +57,21 @@ type Options struct {
 	CopyGraphOptions oras.CopyGraphOptions
 
 	// BaseReference is the base reference for the resource access that is used to update the resource.
-	BaseReference                  string
-	LocalResourceLayerCreationMode LocalResourceLayerCreationMode
+	BaseReference string
+
+	// LocalResourceAdoptionMode defines how local resources should be modified when packed.
+	LocalResourceAdoptionMode LocalResourceAdoptionMode
+
+	// ManifestAnnotations are annotations that will be added to single layer Artifacts
+	// They are not used for OCI Layouts.
+	ManifestAnnotations map[string]string
 }
 
-// ResourceBlob packs a Blob into an OCI Storage
+// ResourceBlob packs a resourceblob.ResourceBlob into an OCI Storage
 func ResourceBlob(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
 	access := b.Resource.Access
-	if access.GetType().IsEmpty() {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("resource access type is empty")
+	if access == nil || access.GetType().IsEmpty() {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("resource access or access type is empty")
 	}
 	typed, err := opts.AccessScheme.NewObject(access.GetType())
 	if err != nil {
@@ -77,13 +83,17 @@ func ResourceBlob(ctx context.Context, storage content.Storage, b *resourceblob.
 
 	switch access := typed.(type) {
 	case *v2.LocalBlob:
-		return ResourceLocalBlob(ctx, storage, b, access, opts)
+		internal, err := descriptor.ConvertFromV2LocalBlob(opts.AccessScheme, access)
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource local blob access in version 2 to internal representation: %w", err)
+		}
+		return ResourceLocalBlob(ctx, storage, b, internal, opts)
 	default:
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported access type: %T", access)
 	}
 }
 
-func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, access *v2.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
+func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, access *descriptor.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
 	switch mediaType := access.MediaType; mediaType {
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
 		return ResourceLocalBlobOCILayout(ctx, storage, b, opts)
@@ -92,7 +102,7 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *resource
 	}
 }
 
-func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, access *descriptor.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
 	layer, err := NewResourceBlobOCILayer(b, ResourceBlobOCILayerOptions{
 		BlobMediaType: access.MediaType,
 		BlobDigest:    digest.Digest(access.LocalReference),
@@ -105,9 +115,12 @@ func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage conten
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to push blob: %w", err)
 	}
 
+	annotations := maps.Clone(layer.Annotations)
+	maps.Copy(annotations, opts.ManifestAnnotations)
+
 	desc, err := oras.PackManifest(ctx, storage, oras.PackManifestVersion1_1, access.MediaType, oras.PackManifestOptions{
 		Layers:              []ociImageSpecV1.Descriptor{layer},
-		ManifestAnnotations: maps.Clone(layer.Annotations),
+		ManifestAnnotations: annotations,
 	})
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to pack manifest: %w", err)
@@ -121,7 +134,7 @@ func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage conten
 }
 
 func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
-	index, err := tar.CopyOCILayout(ctx, storage, b, tar.CopyOCILayoutOptions{
+	index, err := tar.CopyOCILayoutWithIndex(ctx, storage, b, tar.CopyOCILayoutWithIndexOptions{
 		CopyGraphOptions: opts.CopyGraphOptions,
 		MutateIndexFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			return identity.AdoptAsResource(idx, b.Resource)
@@ -159,6 +172,9 @@ func NewResourceBlobOCILayer(b *resourceblob.ResourceBlob, opts ResourceBlobOCIL
 	}
 	if mediaType == "" {
 		mediaType = opts.BlobMediaType
+	}
+	if mediaType == "" {
+		return ociImageSpecV1.Descriptor{}, errors.New("blob media type is unknown and cannot be packed into an oci blob")
 	}
 
 	var dig digest.Digest
@@ -216,6 +232,9 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 	}
 
 	access := &accessv1.OCIImage{
+		// This is the target image reference under which the resource will be accessible once
+		// added to the OCM Component Version Repository. Note that this reference will not work
+		// unless the component version is actually updated.
 		ImageReference: fmt.Sprintf("%s@%s", opts.BaseReference, desc.Digest.String()),
 	}
 
@@ -225,10 +244,10 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 	}
 
 	// Create access based on configured mode
-	switch opts.LocalResourceLayerCreationMode {
-	case LocalResourceCreationModeOCIImage:
+	switch opts.LocalResourceAdoptionMode {
+	case LocalResourceAdoptionModeOCIImage:
 		resource.Access = access
-	case LocalResourceCreationModeLocalBlobWithNestedGlobalAccess:
+	case LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess:
 		// Create local blob access
 		access, err := descriptor.ConvertToV2LocalBlob(opts.AccessScheme, &descriptor.LocalBlob{
 			Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
@@ -241,7 +260,7 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 		}
 		resource.Access = access
 	default:
-		return fmt.Errorf("unsupported access mode: %s", opts.LocalResourceLayerCreationMode)
+		return fmt.Errorf("unsupported access mode: %s", opts.LocalResourceAdoptionMode)
 	}
 
 	if err := digestv1.ApplyToResource(resource, desc.Digest, digestv1.OCIArtifactDigestAlgorithm); err != nil {

@@ -10,10 +10,10 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"golang.org/x/sync/errgroup"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
-	"ocm.software/open-component-model/bindings/go/oci/internal/resolver"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
@@ -37,9 +37,15 @@ type storeDescriptorOptions struct {
 func addDescriptorToStore(ctx context.Context, store spec.Store, descriptor *descriptor.Descriptor, opts storeDescriptorOptions) (*ociImageSpecV1.Descriptor, error) {
 	component, version := descriptor.Component.Name, descriptor.Component.Version
 
-	if err := indexv1.CreateIfNotExists(ctx, store); err != nil {
-		return nil, fmt.Errorf("failed to create index: %w", err)
-	}
+	// we can concurrently upload certain parts of the descriptor!
+	eg, egctx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		if err := indexv1.CreateIfNotExists(egctx, store); err != nil {
+			return fmt.Errorf("failed to create index: %w", err)
+		}
+		return nil
+	})
 
 	// Encode and upload the descriptor
 	descriptorEncoding, descriptorBuffer, err := tar.SingleFileTAREncodeV2Descriptor(opts.Scheme, descriptor)
@@ -52,19 +58,31 @@ func addDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 		Digest:    digest.FromBytes(descriptorBytes),
 		Size:      int64(len(descriptorBytes)),
 	}
-	log.Base.Log(ctx, slog.LevelDebug, "pushing component descriptor", log.DescriptorLogAttr(descriptorOCIDescriptor))
-	if err := store.Push(ctx, descriptorOCIDescriptor, bytes.NewReader(descriptorBytes)); err != nil {
-		return nil, fmt.Errorf("unable to push component descriptor: %w", err)
-	}
+
+	eg.Go(func() error {
+		log.Base.Log(egctx, slog.LevelDebug, "pushing component descriptor", log.DescriptorLogAttr(descriptorOCIDescriptor))
+		if err := store.Push(egctx, descriptorOCIDescriptor, bytes.NewReader(descriptorBytes)); err != nil {
+			return fmt.Errorf("unable to push component descriptor: %w", err)
+		}
+		return nil
+	})
 
 	// New and upload the component configuration
 	componentConfigRaw, componentConfigDescriptor, err := componentConfig.New(descriptorOCIDescriptor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal component config: %w", err)
 	}
-	log.Base.Log(ctx, slog.LevelDebug, "pushing component config", log.DescriptorLogAttr(componentConfigDescriptor))
-	if err := store.Push(ctx, componentConfigDescriptor, bytes.NewReader(componentConfigRaw)); err != nil {
-		return nil, fmt.Errorf("unable to push component config: %w", err)
+
+	eg.Go(func() error {
+		log.Base.Log(egctx, slog.LevelDebug, "pushing component config", log.DescriptorLogAttr(componentConfigDescriptor))
+		if err := store.Push(egctx, componentConfigDescriptor, bytes.NewReader(componentConfigRaw)); err != nil {
+			return fmt.Errorf("unable to push component config: %w", err)
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return nil, fmt.Errorf("failed to push meta layers for descriptor %s: %w", descriptor, err)
 	}
 
 	// New and upload the manifest
@@ -76,7 +94,7 @@ func addDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
 		Config:       componentConfigDescriptor,
 		Annotations: map[string]string{
-			annotations.OCMComponentVersion: fmt.Sprintf("%s/%s:%s", resolver.DefaultComponentDescriptorPathSuffix, component, version),
+			annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation(component, version),
 			annotations.OCMCreator:          opts.Author,
 			ociImageSpecV1.AnnotationTitle:  fmt.Sprintf("OCM Component Descriptor OCI Artifact Manifest for %s in version %s", component, version),
 			ociImageSpecV1.AnnotationDescription: fmt.Sprintf(`
@@ -126,7 +144,7 @@ It is used to store the component descriptor in an OCI registry and can be refer
 		),
 		Subject: &indexv1.Descriptor,
 		Annotations: map[string]string{
-			annotations.OCMComponentVersion: fmt.Sprintf("%s/%s:%s", resolver.DefaultComponentDescriptorPathSuffix, component, version),
+			annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation(component, version),
 			annotations.OCMCreator:          opts.Author,
 			ociImageSpecV1.AnnotationTitle:  fmt.Sprintf("OCM Component Descriptor OCI Artifact Manifest Index for %s in version %s", component, version),
 			ociImageSpecV1.AnnotationDescription: fmt.Sprintf(`

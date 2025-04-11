@@ -7,10 +7,8 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
-	"ocm.software/open-component-model/bindings/go/oci/internal/resolver"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 )
@@ -19,7 +17,8 @@ import (
 // from OCI referrer annotations. It validates that the component name matches the expected
 // component and returns the version from the annotation.
 //
-// The annotation format is expected to be: "component-descriptor/<component>:<version>"
+// The annotation format is expected to be: "annotations.DefaultComponentDescriptorPath/<component>:<version>".
+// The input format can be either annotations.DefaultComponentDescriptorPath/<component> or simply <component>.
 // Returns lister.ErrSkip if the annotation is not present or not in the correct format.
 func ReferrerAnnotationVersionResolver(component string) lister.ReferrerVersionResolver {
 	referrerResolver := func(ctx context.Context, descriptor ociImageSpecV1.Descriptor) (string, error) {
@@ -30,18 +29,18 @@ func ReferrerAnnotationVersionResolver(component string) lister.ReferrerVersionR
 		if !ok {
 			return "", lister.ErrSkip
 		}
-		annotation = strings.TrimPrefix(annotation, resolver.DefaultComponentDescriptorPathSuffix+"/")
-		split := strings.Split(annotation, ":")
-		if len(split) != 2 {
-			return "", fmt.Errorf("%q is not considered a valid %q annotation", annotation, annotations.OCMComponentVersion)
+
+		candidate, version, err := annotations.ParseComponentVersionAnnotation(annotation)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse component version annotation: %w", err)
 		}
-		candidate := split[0]
+
+		if redundantPrefix := annotations.DefaultComponentDescriptorPath + "/"; strings.HasPrefix(component, redundantPrefix) {
+			component = strings.TrimPrefix(component, redundantPrefix)
+		}
+
 		if candidate != component {
-			return "", fmt.Errorf("component %q does not match %q: %w", split[0], component, lister.ErrSkip)
-		}
-		version := split[1]
-		if len(version) == 0 {
-			return "", fmt.Errorf("version parsed from %q in %q annotation is empty but should not be", annotation, annotations.OCMComponentVersion)
+			return "", fmt.Errorf("component %q from annotation does not match %q: %w", candidate, component, lister.ErrSkip)
 		}
 
 		return version, nil
@@ -58,14 +57,9 @@ func ReferrerAnnotationVersionResolver(component string) lister.ReferrerVersionR
 // - Resolve the tag to a descriptor
 // - Validate the descriptor's media type and artifact type
 // - Return the tag if valid, or an error if invalid
-func ReferenceTagVersionResolver(ref string, store content.Resolver) (lister.TagVersionResolver, error) {
-	pref, err := registry.ParseReference(ref)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse reference for tag version resolution %q: %w", ref, err)
-	}
+func ReferenceTagVersionResolver(store content.Resolver) lister.TagVersionResolver {
 	tagResolver := func(ctx context.Context, tag string) (string, error) {
-		pref.Reference = tag
-		desc, err := store.Resolve(ctx, pref.String())
+		desc, err := store.Resolve(ctx, tag)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve tag %q: %w", tag, err)
 		}
@@ -78,5 +72,5 @@ func ReferenceTagVersionResolver(ref string, store content.Resolver) (lister.Tag
 
 		return tag, nil
 	}
-	return tagResolver, nil
+	return tagResolver
 }

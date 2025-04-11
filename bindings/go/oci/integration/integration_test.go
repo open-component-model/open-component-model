@@ -207,11 +207,11 @@ func Test_Integration_CTF(t *testing.T) {
 	})
 
 	t.Run("local resource blob upload and download", func(t *testing.T) {
-		uploadDownloadLocalResource(t, repo, "test-component", "v1.0.0")
+		uploadDownloadLocalResource(t, repo, "test-component", "v2.0.0")
 	})
 
 	t.Run("local resource oci layout upload and download", func(t *testing.T) {
-		uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v1.0.0")
+		uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v3.0.0")
 	})
 }
 

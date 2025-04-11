@@ -35,6 +35,10 @@ func (r LooseReference) String() string {
 		ref = r.Registry + "/" + r.Repository
 	}
 
+	if ref == "/" {
+		return ""
+	}
+
 	if r.Reference.Reference == "" && r.Tag == "" {
 		return ref
 	}

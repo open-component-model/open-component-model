@@ -9,9 +9,8 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 )
-
-const DefaultComponentDescriptorPathSuffix = "component-descriptors"
 
 func NewURLPathResolver(baseURL string) *CachingURLPathResolver {
 	return &CachingURLPathResolver{
@@ -38,7 +37,7 @@ func (resolver *CachingURLPathResolver) SetClient(client remote.Client) {
 }
 
 func (resolver *CachingURLPathResolver) BasePath() string {
-	return resolver.BaseURL + "/" + DefaultComponentDescriptorPathSuffix
+	return resolver.BaseURL + "/" + annotations.DefaultComponentDescriptorPath
 }
 
 func (resolver *CachingURLPathResolver) ComponentVersionReference(component, version string) string {

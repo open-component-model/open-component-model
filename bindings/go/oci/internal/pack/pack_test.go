@@ -2,7 +2,6 @@ package pack
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -118,7 +117,7 @@ func TestBlob(t *testing.T) {
 		require.NoError(t, store.Close())
 	})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	content := []byte("test content")
 	digest := digest.FromBytes(content)
 
@@ -187,8 +186,8 @@ func TestUpdateResourceAccess(t *testing.T) {
 				Digest:    digest.FromBytes([]byte("test")),
 			},
 			opts: Options{
-				BaseReference:                  "test-ref",
-				LocalResourceLayerCreationMode: LocalResourceCreationModeOCIImage,
+				BaseReference:             "test-ref",
+				LocalResourceAdoptionMode: LocalResourceAdoptionModeOCIImage,
 			},
 		},
 		{
@@ -199,8 +198,8 @@ func TestUpdateResourceAccess(t *testing.T) {
 				Digest:    digest.FromBytes([]byte("test")),
 			},
 			opts: Options{
-				BaseReference:                  "test-ref",
-				LocalResourceLayerCreationMode: LocalResourceCreationModeLocalBlobWithNestedGlobalAccess,
+				BaseReference:             "test-ref",
+				LocalResourceAdoptionMode: LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess,
 			},
 		},
 		{
@@ -239,7 +238,7 @@ func TestResourceBlob(t *testing.T) {
 		require.NoError(t, store.Close())
 	})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	content := []byte("test content")
 	digest := digest.FromBytes(content)
 
@@ -265,9 +264,9 @@ func TestResourceBlob(t *testing.T) {
 				},
 			},
 			opts: Options{
-				AccessScheme:                   runtime.NewScheme(),
-				BaseReference:                  "test-ref",
-				LocalResourceLayerCreationMode: LocalResourceCreationModeLocalBlobWithNestedGlobalAccess,
+				AccessScheme:              runtime.NewScheme(),
+				BaseReference:             "test-ref",
+				LocalResourceAdoptionMode: LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess,
 			},
 		},
 		{
@@ -285,7 +284,39 @@ func TestResourceBlob(t *testing.T) {
 			opts: Options{
 				AccessScheme: runtime.NewScheme(),
 			},
-			expectedError: "resource access type is empty",
+			expectedError: "resource access or access type is empty",
+		},
+		{
+			name: "error on nil access",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.test",
+				digest:    digest,
+			},
+			resource: &descriptor.Resource{
+				Access: nil,
+			},
+			opts: Options{
+				AccessScheme: runtime.NewScheme(),
+			},
+			expectedError: "resource access or access type is empty",
+		},
+		{
+			name: "error on unsupported access type",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.test",
+				digest:    digest,
+			},
+			resource: &descriptor.Resource{
+				Access: &v2.LocalBlob{
+					Type: runtime.NewVersionedType("unsupported", "v1"),
+				},
+			},
+			opts: Options{
+				AccessScheme: runtime.NewScheme(),
+			},
+			expectedError: "error creating resource access: unsupported type: unsupported/v1",
 		},
 	}
 
@@ -345,7 +376,7 @@ func TestResourceLocalBlob(t *testing.T) {
 		name          string
 		blob          *testBlob
 		resource      *descriptor.Resource
-		access        *v2.LocalBlob
+		access        *descriptor.LocalBlob
 		opts          Options
 		expectedError string
 	}{
@@ -357,7 +388,7 @@ func TestResourceLocalBlob(t *testing.T) {
 				digest:    dig,
 			},
 			resource: &descriptor.Resource{},
-			access: &v2.LocalBlob{
+			access: &descriptor.LocalBlob{
 				MediaType: "application/vnd.oci.image.layout.v1+tar",
 			},
 			opts: Options{
@@ -373,7 +404,7 @@ func TestResourceLocalBlob(t *testing.T) {
 				digest:    dig,
 			},
 			resource: &descriptor.Resource{},
-			access: &v2.LocalBlob{
+			access: &descriptor.LocalBlob{
 				MediaType: "application/vnd.test",
 			},
 			opts: Options{
@@ -437,7 +468,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 		name          string
 		blob          *testBlob
 		resource      *descriptor.Resource
-		access        *v2.LocalBlob
+		access        *descriptor.LocalBlob
 		opts          Options
 		expectedError string
 	}{
@@ -449,7 +480,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				digest:    digest,
 			},
 			resource: &descriptor.Resource{},
-			access: &v2.LocalBlob{
+			access: &descriptor.LocalBlob{
 				MediaType:      "application/vnd.test",
 				LocalReference: digest.String(),
 			},
@@ -468,7 +499,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 			resource: &descriptor.Resource{
 				Size: blob.SizeUnknown,
 			},
-			access: &v2.LocalBlob{
+			access: &descriptor.LocalBlob{
 				MediaType:      "application/vnd.test",
 				LocalReference: digest.String(),
 			},
@@ -477,6 +508,24 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				BaseReference: "test-ref",
 			},
 			expectedError: "failed to create resource layer based on blob",
+		},
+		{
+			name: "error on push blob failure",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.test",
+				digest:    digest,
+			},
+			resource: &descriptor.Resource{},
+			access: &descriptor.LocalBlob{
+				MediaType:      "application/vnd.test",
+				LocalReference: digest.String(),
+			},
+			opts: Options{
+				AccessScheme:  runtime.NewScheme(),
+				BaseReference: "test-ref",
+			},
+			expectedError: "failed to push blob",
 		},
 	}
 
@@ -526,7 +575,7 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 		require.NoError(t, store.Close())
 	})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	var buf bytes.Buffer
 	writer := tar.NewOCILayoutWriter(&buf)
 
@@ -555,6 +604,20 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 				AccessScheme:  runtime.NewScheme(),
 				BaseReference: "test-ref",
 			},
+		},
+		{
+			name: "error on invalid OCI layout",
+			blob: &testBlob{
+				content:   []byte("invalid layout"),
+				mediaType: "application/vnd.oci.image.layout.v1+tar",
+				digest:    digest.FromBytes([]byte("invalid layout")),
+			},
+			resource: &descriptor.Resource{},
+			opts: Options{
+				AccessScheme:  runtime.NewScheme(),
+				BaseReference: "test-ref",
+			},
+			expectedError: "failed to copy OCI layout",
 		},
 	}
 

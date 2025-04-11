@@ -2,13 +2,11 @@ package component_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
@@ -35,10 +33,10 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 	}{
 		{
 			name:      "valid component version",
-			component: "component-descriptor/test-component",
+			component: "component-descriptors/test-component",
 			descriptor: ociImageSpecV1.Descriptor{
 				Annotations: map[string]string{
-					annotations.OCMComponentVersion: "component-descriptor/test-component:v1.0.0",
+					annotations.OCMComponentVersion: "component-descriptors/test-component:v1.0.0",
 				},
 			},
 			expected: "v1.0.0",
@@ -69,17 +67,17 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 					annotations.OCMComponentVersion: "invalid-format",
 				},
 			},
-			expectedError: fmt.Errorf("%q is not considered a valid %q annotation", "invalid-format", annotations.OCMComponentVersion),
+			expectedError: fmt.Errorf("failed to parse component version annotation: %q is not considered a valid %q annotation because of a bad prefix, expected %q", "invalid-format", annotations.OCMComponentVersion, annotations.DefaultComponentDescriptorPath+"/"),
 		},
 		{
 			name:      "component name mismatch",
 			component: "test-component",
 			descriptor: ociImageSpecV1.Descriptor{
 				Annotations: map[string]string{
-					annotations.OCMComponentVersion: "component-descriptor/other-component:v1.0.0",
+					annotations.OCMComponentVersion: "component-descriptors/other-component:v1.0.0",
 				},
 			},
-			expectedError: fmt.Errorf("component %q does not match %q: %w", "component-descriptor/other-component", "test-component", lister.ErrSkip),
+			expectedError: fmt.Errorf("component %q from annotation does not match %q: %w", "other-component", "test-component", lister.ErrSkip),
 		},
 	}
 
@@ -107,7 +105,6 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 		store         content.Resolver
 		expected      string
 		expectedError error
-		initError     error
 	}{
 		{
 			name: "valid legacy manifest",
@@ -151,13 +148,6 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 			expected: "v1.0.0",
 		},
 		{
-			name:      "invalid reference",
-			ref:       "invalid:reference",
-			tag:       "v1.0.0",
-			store:     &mockStore{},
-			initError: fmt.Errorf("failed to parse reference for tag version resolution %q: %w", "invalid:reference", errors.New("invalid reference: missing registry or repository")),
-		},
-		{
 			name: "invalid media type",
 			ref:  "example.com/repo",
 			tag:  "v1.0.0",
@@ -176,13 +166,7 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolver, err := component.ReferenceTagVersionResolver(tt.ref, tt.store)
-			if tt.initError != nil {
-				assert.Error(t, err)
-				assert.Equal(t, tt.initError.Error(), err.Error())
-				return
-			}
-			require.NoError(t, err)
+			resolver := component.ReferenceTagVersionResolver(tt.store)
 
 			result, err := resolver(t.Context(), tt.tag)
 

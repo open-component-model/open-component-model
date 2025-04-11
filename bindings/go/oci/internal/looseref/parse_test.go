@@ -1,18 +1,3 @@
-/*
-Copyright The ORAS Authors.
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package looseref
 
 import (
@@ -188,6 +173,93 @@ func TestParseReferenceUglies(t *testing.T) {
 			if ref, err := LooseParseReference(tt.raw); err == nil {
 				t.Errorf("ParseReference() expected an error, but got reg=%v,repo=%v,ref=%v", ref.Registry, ref.Repository, ref.Reference)
 				return
+			}
+		})
+	}
+}
+
+func TestLooseReferenceString(t *testing.T) {
+	tests := []struct {
+		name     string
+		ref      LooseReference
+		expected string
+	}{
+		{
+			name: "registry only",
+			ref: LooseReference{
+				Reference: Reference{
+					Registry: "localhost:5000",
+				},
+			},
+			expected: "localhost:5000",
+		},
+		{
+			name: "repository only",
+			ref: LooseReference{
+				Reference: Reference{
+					Repository: "hello-world",
+				},
+			},
+			expected: "hello-world",
+		},
+		{
+			name: "registry and repository",
+			ref: LooseReference{
+				Reference: Reference{
+					Registry:   "localhost:5000",
+					Repository: "hello-world",
+				},
+			},
+			expected: "localhost:5000/hello-world",
+		},
+		{
+			name: "with tag",
+			ref: LooseReference{
+				Reference: Reference{
+					Registry:   "localhost:5000",
+					Repository: "hello-world",
+				},
+				Tag: "v1",
+			},
+			expected: "localhost:5000/hello-world:v1",
+		},
+		{
+			name: "with digest",
+			ref: LooseReference{
+				Reference: Reference{
+					Registry:   "localhost:5000",
+					Repository: "hello-world",
+					Reference:  ValidDigest,
+				},
+			},
+			expected: "localhost:5000/hello-world@" + ValidDigest,
+		},
+		{
+			name: "with tag and digest",
+			ref: LooseReference{
+				Reference: Reference{
+					Registry:   "localhost:5000",
+					Repository: "hello-world",
+					Reference:  ValidDigest,
+				},
+				Tag: "v1",
+			},
+			expected: "localhost:5000/hello-world:v1@" + ValidDigest,
+		},
+		{
+			name: "empty reference",
+			ref: LooseReference{
+				Reference: Reference{},
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.ref.String()
+			if got != tt.expected {
+				t.Errorf("String() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
