@@ -23,18 +23,6 @@ const (
 	BlobsDirectoryName = "blobs"
 )
 
-// ioBufPool is a pool of byte buffers that can be reused for copying content
-// between i/o relevant data, such as files.
-var ioBufPool = sync.Pool{
-	New: func() interface{} {
-		// the buffer size should be larger than or equal to 128 KiB
-		// for performance considerations.
-		// we choose 1 MiB here so there will be less disk I/O.
-		buffer := make([]byte, blob.DefaultArchiveBlobBufferSize)
-		return &buffer
-	},
-}
-
 // FileSystemCTF is a CTF implementation that uses any filesystem.FileSystem as the underlying storage.
 // It is used to read and write CTFs from a directory structure.
 // This is the canonical implementation of the CTF interface, accessing
@@ -104,12 +92,24 @@ func (c *FileSystemCTF) SetIndex(_ context.Context, index v1.Index) (err error) 
 		return fmt.Errorf("unable to encode artifact index: %w", err)
 	}
 
-	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data))
+	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data), int64(len(data)))
+}
+
+// ioBufPool is a pool of byte buffers that can be reused for copying content
+// between i/o relevant data, such as files.
+var ioBufPool = sync.Pool{
+	New: func() interface{} {
+		// the buffer size should be larger than or equal to 128 KiB
+		// for performance considerations.
+		// we choose 1 MiB here so there will be less disk I/O.
+		buffer := make([]byte, blob.DefaultArchiveBlobBufferSize)
+		return &buffer
+	},
 }
 
 // writeFile writes the given raw data to the given name in the CTF.
 // If the directory does not exist, it will be created.
-func (c *FileSystemCTF) writeFile(name string, raw io.Reader) (err error) {
+func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err error) {
 	if err := c.fs.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return fmt.Errorf("unable to create directory: %w", err)
 	}
@@ -126,10 +126,16 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader) (err error) {
 		return fmt.Errorf("file %s is read only and cannot be saved", name)
 	}
 
-	buf := ioBufPool.Get().(*[]byte)
-	defer ioBufPool.Put(buf)
-	if _, err = io.CopyBuffer(writeable, raw, *buf); err != nil {
-		return fmt.Errorf("unable to write artifact index: %w", err)
+	if size <= blob.SizeUnknown {
+		buf := ioBufPool.Get().(*[]byte)
+		defer ioBufPool.Put(buf)
+		if _, err = io.CopyBuffer(writeable, raw, *buf); err != nil {
+			return fmt.Errorf("unable to write artifact index: %w", err)
+		}
+	} else {
+		if _, err = io.CopyN(writeable, raw, size); err != nil {
+			return fmt.Errorf("unable to write artifact index: %w", err)
+		}
 	}
 
 	return nil
@@ -154,6 +160,14 @@ func (c *FileSystemCTF) GetBlob(_ context.Context, digest string) (blob.ReadOnly
 	if err != nil {
 		return nil, err
 	}
+	path := filepath.Join(BlobsDirectoryName, file)
+	if _, err := c.fs.Stat(path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("blob %s not found: %w", digest, err)
+		}
+		return nil, fmt.Errorf("unable to stat blob: %w", err)
+	}
+
 	b := NewCASFileBlob(c.fs, filepath.Join(BlobsDirectoryName, file))
 	b.SetPrecalculatedDigest(digest)
 	return b, nil
@@ -182,18 +196,29 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 		return errors.New("blob does not have a digest that can be used to save it")
 	}
 
+	dig, known := digestable.Digest()
+	if !known {
+		return errors.New("blob does not have a digest that can be used to save it")
+	}
+
+	size := blob.SizeUnknown
+	if sizeable, ok := b.(blob.SizeAware); ok {
+		size = sizeable.Size()
+	}
+
 	data, err := b.ReadCloser()
 	if err != nil {
 		return fmt.Errorf("unable to read blob: %w", err)
 	}
 	defer func() {
-		err = errors.Join(err, data.Close())
+		// first close the data stream, then delete the blob if closing fails
+		// this is important to avoid having a dangling possibly corrupt blob in the CTF
+		if err = errors.Join(err, data.Close()); err != nil {
+			// if closing the data stream fails, we need to delete the blob
+			// but we should use a background context as the original ctx might already be cancelled
+			err = errors.Join(err, c.DeleteBlob(context.Background(), dig))
+		}
 	}()
-
-	dig, known := digestable.Digest()
-	if !known {
-		return errors.New("blob does not have a digest that can be used to save it")
-	}
 
 	file, err := ToBlobFileName(dig)
 	if err != nil {
@@ -208,7 +233,7 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 	return c.writeFile(filepath.Join(
 		BlobsDirectoryName,
 		file,
-	), ctxRead)
+	), ctxRead, size)
 }
 
 // ToBlobFileName converts a digest to a blob file name by replacing the ":" with ".", which is the

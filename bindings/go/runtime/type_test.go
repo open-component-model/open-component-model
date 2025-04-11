@@ -18,18 +18,14 @@ func TestTypeFromString(t *testing.T) {
 	}{
 		// Unversioned types
 		{"OCIArtifact", runtime.Type{Name: "OCIArtifact"}, false},
-		{"software.ocm.accessType.OCIArtifact", runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact"}, false},
 
 		// Versioned types
 		{"OCIArtifact/v1", runtime.Type{Name: "OCIArtifact", Version: "v1"}, false},
-		{"software.ocm.accessType.OCIArtifact/v1", runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact", Version: "v1"}, false},
 
 		// Invalid formats
 		{"", runtime.Type{}, true},
-		{"software.ocm.accessType./v1", runtime.Type{}, true},
-		{"./v1", runtime.Type{}, true},
 		{"/v1", runtime.Type{}, true},
-		{"software.ocm.accessType.OCIArtifact/v1/extra", runtime.Type{}, true},
+		{"OCIArtifact/v1/extra", runtime.Type{}, true},
 	}
 
 	for _, tt := range tests {
@@ -52,8 +48,6 @@ func TestTypeString(t *testing.T) {
 	}{
 		{runtime.Type{Name: "OCIArtifact"}, "OCIArtifact"},
 		{runtime.Type{Name: "OCIArtifact", Version: "v1"}, "OCIArtifact/v1"},
-		{runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact"}, "software.ocm.accessType.OCIArtifact"},
-		{runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact", Version: "v1"}, "software.ocm.accessType.OCIArtifact/v1"},
 	}
 
 	for _, tt := range tests {
@@ -71,13 +65,10 @@ func TestTypeEqual(t *testing.T) {
 	}{
 		{runtime.Type{Name: "OCIArtifact"}, runtime.Type{Name: "OCIArtifact"}, true},
 		{runtime.Type{Name: "OCIArtifact", Version: "v1"}, runtime.Type{Name: "OCIArtifact", Version: "v1"}, true},
-		{runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact"}, runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact"}, true},
-		{runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact", Version: "v1"}, runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact", Version: "v1"}, true},
 
 		// Different cases
 		{runtime.Type{Name: "OCIArtifact"}, runtime.Type{Name: "Node"}, false},
 		{runtime.Type{Name: "OCIArtifact", Version: "v1"}, runtime.Type{Name: "OCIArtifact", Version: "v2"}, false},
-		{runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact"}, runtime.Type{Group: "apps", Name: "OCIArtifact"}, false},
 	}
 
 	for _, tt := range tests {
@@ -94,8 +85,6 @@ func TestJSONMarshalling(t *testing.T) {
 	}{
 		{runtime.Type{Name: "OCIArtifact"}, `"OCIArtifact"`},
 		{runtime.Type{Name: "OCIArtifact", Version: "v1"}, `"OCIArtifact/v1"`},
-		{runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact"}, `"software.ocm.accessType.OCIArtifact"`},
-		{runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact", Version: "v1"}, `"software.ocm.accessType.OCIArtifact/v1"`},
 	}
 
 	for _, tt := range tests {
@@ -115,14 +104,11 @@ func TestJSONUnmarshalling(t *testing.T) {
 	}{
 		{`"OCIArtifact"`, runtime.Type{Name: "OCIArtifact"}, false},
 		{`"OCIArtifact/v1"`, runtime.Type{Name: "OCIArtifact", Version: "v1"}, false},
-		{`"software.ocm.accessType.OCIArtifact"`, runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact"}, false},
-		{`"software.ocm.accessType.OCIArtifact/v1"`, runtime.Type{Group: "software.ocm.accessType", Name: "OCIArtifact", Version: "v1"}, false},
 
 		// Invalid JSON cases
 		{`""`, runtime.Type{}, true},
-		{`"software.ocm.accessType./v1"`, runtime.Type{}, true},
-		{`"./v1"`, runtime.Type{}, true},
-		{`"software.ocm.accessType.OCIArtifact/v1/extra"`, runtime.Type{}, true},
+		{`"/v1"`, runtime.Type{}, true},
+		{`"OCIArtifact/v1/extra"`, runtime.Type{}, true},
 		{`123`, runtime.Type{}, true}, // Not a string
 	}
 

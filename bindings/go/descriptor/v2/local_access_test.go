@@ -24,7 +24,6 @@ func TestLocalBlob_Struct(t *testing.T) {
 		Type: runtime.Type{
 			Name:    descriptorv2.LocalBlobAccessType,
 			Version: descriptorv2.LocalBlobAccessTypeVersion,
-			Group:   descriptorv2.LocalBlobAccessTypeGroup,
 		},
 		LocalReference: "sha256:abc123",
 		MediaType:      "application/octet-stream",
@@ -37,7 +36,7 @@ func TestLocalBlob_Struct(t *testing.T) {
 
 	// Assert
 	require.NoError(t, err)
-	assert.Contains(t, string(jsonData), `"type":"software.ocm.accessType.LocalBlob/v1"`)
+	assert.Contains(t, string(jsonData), `"type":"localBlob/v1"`)
 	assert.Contains(t, string(jsonData), `"localReference":"sha256:abc123"`)
 	assert.Contains(t, string(jsonData), `"mediaType":"application/octet-stream"`)
 	assert.Contains(t, string(jsonData), `"globalAccess":{"type":"ociArtifact","imageReference":"test/image:1.0"}`)
@@ -47,7 +46,7 @@ func TestLocalBlob_Struct(t *testing.T) {
 func TestLocalBlob_UnmarshalJSON(t *testing.T) {
 	// Setup
 	jsonData := `{
-		"type": "software.ocm.accessType.LocalBlob/v1",
+		"type": "localBlob/v1",
 		"localReference": "sha256:abc123",
 		"mediaType": "application/octet-stream",
 		"globalAccess": {
@@ -64,7 +63,6 @@ func TestLocalBlob_UnmarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, descriptorv2.LocalBlobAccessType, blob.Type.Name)
 	assert.Equal(t, descriptorv2.LocalBlobAccessTypeVersion, blob.Type.Version)
-	assert.Equal(t, descriptorv2.LocalBlobAccessTypeGroup, blob.Type.Group)
 	assert.Equal(t, "sha256:abc123", blob.LocalReference)
 	assert.Equal(t, "application/octet-stream", blob.MediaType)
 	assert.Equal(t, "test/repo:1.0", blob.ReferenceName)
@@ -75,7 +73,7 @@ func TestLocalBlob_UnmarshalJSON(t *testing.T) {
 func TestLocalBlob_UnmarshalJSON_Minimal(t *testing.T) {
 	// Setup
 	jsonData := `{
-		"type": "software.ocm.accessType.LocalBlob/v1",
+		"type": "localBlob/v1",
 		"localReference": "sha256:abc123",
 		"mediaType": "application/octet-stream"
 	}`
@@ -87,7 +85,6 @@ func TestLocalBlob_UnmarshalJSON_Minimal(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, descriptorv2.LocalBlobAccessType, blob.Type.Name)
 	assert.Equal(t, descriptorv2.LocalBlobAccessTypeVersion, blob.Type.Version)
-	assert.Equal(t, descriptorv2.LocalBlobAccessTypeGroup, blob.Type.Group)
 	assert.Equal(t, "sha256:abc123", blob.LocalReference)
 	assert.Equal(t, "application/octet-stream", blob.MediaType)
 	assert.Nil(t, blob.GlobalAccess)
@@ -96,7 +93,6 @@ func TestLocalBlob_UnmarshalJSON_Minimal(t *testing.T) {
 
 func TestLocalBlob_Constants(t *testing.T) {
 	// Test access type constants
-	assert.Equal(t, "LocalBlob", descriptorv2.LocalBlobAccessType)
+	assert.Equal(t, "localBlob", descriptorv2.LocalBlobAccessType)
 	assert.Equal(t, "v1", descriptorv2.LocalBlobAccessTypeVersion)
-	assert.Equal(t, "software.ocm.accessType", descriptorv2.LocalBlobAccessTypeGroup)
 }

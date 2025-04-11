@@ -26,12 +26,9 @@ tasks:
   ocmtypegen/generate:
     deps: ["ocmtypegen/install"]
     desc: "Run Type OCM Type Code Generation in the Project"
-    vars:
-      GO_MODULES:
-        sh: find {{ .ROOT_DIR }}/bindings/go -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/bindings/go/||'
     cmds:
       - for: { var: GO_MODULES }
-        cmd: '{{ .ROOT_DIR }}/tmp/bin/ocmtypegen {{ .ROOT_DIR }}/bindings/go/{{.ITEM}}'
+        cmd: '{{ .ROOT_DIR }}/tmp/bin/ocmtypegen {{ .ROOT_DIR }}/{{.ITEM}}'
 
   ocmtypegen/test:
     desc: "Run OCM Type Generation test"

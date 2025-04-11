@@ -14,7 +14,7 @@ func TestRaw_UnmarshalJSON_Success(t *testing.T) {
 	err := json.Unmarshal([]byte(input), &raw)
 
 	require.NoError(t, err)
-	require.Equal(t, NewUngroupedUnversionedType("example"), raw.Type)
+	require.Equal(t, NewUnversionedType("example"), raw.Type)
 	require.NotEmpty(t, raw.Data)
 
 	// Ensure data is canonicalized (e.g., keys are sorted)
@@ -36,7 +36,7 @@ func TestRaw_MarshalJSON(t *testing.T) {
 	original := []byte(`{"foo":"bar","type":"example"}`)
 
 	raw := Raw{
-		Type: NewUngroupedUnversionedType("example"),
+		Type: NewUnversionedType("example"),
 		Data: original,
 	}
 
@@ -48,9 +48,9 @@ func TestRaw_MarshalJSON(t *testing.T) {
 
 func TestRaw_GetSetType(t *testing.T) {
 	raw := &Raw{}
-	raw.SetType(NewUngroupedUnversionedType("testtype"))
+	raw.SetType(NewUnversionedType("testtype"))
 
-	require.Equal(t, NewUngroupedUnversionedType("testtype"), raw.GetType())
+	require.Equal(t, NewUnversionedType("testtype"), raw.GetType())
 }
 
 func TestRaw_String(t *testing.T) {

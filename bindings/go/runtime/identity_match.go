@@ -56,6 +56,25 @@ func IdentityEqual(a Identity, b Identity) bool {
 	return a.Equal(b)
 }
 
+// IdentitySubset is a ChainableIdentityMatcher that checks if the identity sub is a subset of the identity base.
+// It is useful to check if an identity is a subset of another identity, and thus can be considered
+// an IdentityEqual matcher on a subset of the identity.
+//
+// Note that giving an empty subset will always return true, as an empty identity is a subset of any identity.
+func IdentitySubset(sub Identity, base Identity) bool {
+	if len(sub) > len(base) {
+		return false
+	}
+	for candidateKey, candidateValue := range sub {
+		valueInBase, found := base[candidateKey]
+		mismatch := !found || valueInBase != candidateValue
+		if mismatch {
+			return false
+		}
+	}
+	return true
+}
+
 // Match returns true if the identity a matches the identity b.
 // It uses the provided Matchers to determine the match.
 // If no Matchers are provided, it uses IdentityMatchesPath and IdentityEqual in order.

@@ -15,6 +15,7 @@ artifactid
 attr
 aur
 auth
+autocompletion
 autoconfigure
 aws
 backend
@@ -219,6 +220,7 @@ pflag
 pkgs
 podinfo
 podman
+powershell
 pre
 preconfigure
 preconfigured
@@ -348,5 +350,11 @@ pluggable
 gz
 accessTypes
 kustomize
+kustomization
+KROs
+SBOMs
+schemas
 reproducibility
 subprocesses
+CRDs
+zsh

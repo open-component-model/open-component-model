@@ -67,12 +67,12 @@ func TestUnstructured(t *testing.T) {
 						"componentNameMapping": "urlPath",
 					},
 				}
-				un.SetType(runtime.NewType("group", "version", "name"))
+				un.SetType(runtime.NewVersionedType("name", "version"))
 				return &un
 			},
 			// comparing string so if there is a conflict it's easier to see
 			assertResult: func(t *testing.T, data []byte) {
-				assert.Equal(t, "{\"componentNameMapping\":\"urlPath\",\"type\":\"group.name/version\"}", string(data))
+				assert.Equal(t, "{\"componentNameMapping\":\"urlPath\",\"type\":\"name/version\"}", string(data))
 			},
 		},
 	}

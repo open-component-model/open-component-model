@@ -6,9 +6,8 @@ import (
 
 // LocalBlobAccessType is the access type of blob local to a component.
 const (
-	LocalBlobAccessType        = "LocalBlob"
+	LocalBlobAccessType        = "localBlob"
 	LocalBlobAccessTypeVersion = "v1"
-	LocalBlobAccessTypeGroup   = "software.ocm.accessType"
 )
 
 // LocalBlob describes the access for a local blob.

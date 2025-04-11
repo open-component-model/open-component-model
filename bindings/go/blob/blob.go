@@ -35,7 +35,7 @@ type ReadOnlyBlob interface {
 }
 
 // SizeUnknown is a constant that represents an unknown size of a blob.
-const SizeUnknown = -1
+const SizeUnknown int64 = -1
 
 // SizeAware is an interface that represents any arbitrary object that can be sized.
 //

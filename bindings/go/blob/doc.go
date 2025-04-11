@@ -15,6 +15,8 @@
 //   - EagerBufferedReader: A reader that eagerly buffers the data it reads, to make it easier to
 //     introspect the data. This is useful for cases where the size and digest of the data are not known
 //     in advance but still need to be computed (through buffering in-memory instead of directly streaming).
+//   - Copy: A function that copies data from a blob to any given io.Writer, while respecting SizeAware and
+//     DigestAware for open-container type digests.
 //
 // Note that filesystem-backed blobs are located in a separated sub-package.
 package blob
