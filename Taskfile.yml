@@ -5,6 +5,10 @@ dotenv: ['.env', '.env.local']
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
+  bindings/go/dag:
+    optional: true
+    taskfile: ./bindings/go/dag/Taskfile.yml
+    dir: ./bindings/go/dag
   bindings/go/descriptor/v2:
     optional: true
     taskfile: ./bindings/go/descriptor/v2/Taskfile.yml
@@ -33,7 +37,6 @@ includes:
     optional: true
     taskfile: ./cli/Taskfile.yml
     dir: ./cli
-
 vars:
   GO_MODULES:
     sh: find {{ .ROOT_DIR }} -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'

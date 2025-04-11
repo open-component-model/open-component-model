@@ -69,6 +69,31 @@ func (i Identity) CanonicalHashV1() uint64 {
 	return h.Sum64()
 }
 
+func (i Identity) String() string {
+	parts := make([]string, 0, len(i))
+	for key := range slices.Values(slices.Sorted(maps.Keys(i))) {
+		parts = append(parts, fmt.Sprintf("%s=%s", key, i[key]))
+	}
+	return strings.Join(parts, ",")
+}
+
+func ParseIdentity(s string) (Identity, error) {
+	parts := strings.Split(s, ",")
+	identity := make(Identity, len(parts))
+	for _, part := range parts {
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid identity part %q", part)
+		}
+		key, value := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
+		if key == "" || value == "" {
+			return nil, fmt.Errorf("invalid identity part %q", part)
+		}
+		identity[key] = value
+	}
+	return identity, nil
+}
+
 // GetType extracts the type or panics if failing.
 // It should only be used if the type is known to be present and valid.
 // For more information, check ParseType.
