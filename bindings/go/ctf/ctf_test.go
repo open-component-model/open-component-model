@@ -47,6 +47,7 @@ func Test_CTF_ReadWrite(t *testing.T) {
 					Repository: "test-repo",
 					Tag:        "latest",
 					Digest:     digest,
+					MediaType:  "application/json",
 				})
 				if err := ctf.SetIndex(ctx, idx); err != nil {
 					return err

@@ -1,0 +1,11 @@
+#yaml-language-server: $schema=https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/refs/heads/main/schema/markdownlint-cli2-config-schema.json
+config:
+  MD010: false # Hard tabs are used by cobra to generate indented blocks outside of code
+  MD041:
+    level: 2 # generated cobra commands start with heading 2
+  MD026:
+    punctuation: ".,;!。，；：！" # adjusted to allow : because cobra uses it in their reference generation
+  MD012:
+    maximum: 2 # cobra generates 2 blank lines between sections at times
+  MD040: false  # fenced code blocks are used by the cli without language specification
+  MD046: false # cobra uses both fenced and indented code block styles in different sections

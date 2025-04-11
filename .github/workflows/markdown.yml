@@ -13,13 +13,11 @@ jobs:
     name: Lint Markdown
     steps:
       - uses: actions/checkout@v4
-      - name: Markdown Linting
-        uses: nosborn/github-action-markdown-cli@v3
+      - uses: DavidAnson/markdownlint-cli2-action@v19
         with:
-          files: .
-          dot: true
-          config_file: .github/config/markdownlint.yml
-          ignore_path: .github/config/markdownignore
+          globs: '**/*.md'
+          separator: ","
+          config: .github/config/.markdownlint-cli2.yaml
   verify-links:
     name: Verify links
     runs-on: ubuntu-latest
