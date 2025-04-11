@@ -46,8 +46,8 @@ type Vertex[T cmp.Ordered] struct {
 type DirectedAcyclicGraph[T cmp.Ordered] struct {
 	// Vertices stores the nodes in the graph
 	Vertices  map[T]*Vertex[T]
-	OutDegree map[T]int // In-degree of each vertex (number of outgoing edges)
-	InDegree  map[T]int // Out-degree of each vertex (number of incoming edges)
+	OutDegree map[T]int // Out-degree of each vertex (number of outgoing edges)
+	InDegree  map[T]int // In-degree of each vertex (number of incoming edges)
 }
 
 // NewDirectedAcyclicGraph creates a new directed acyclic graph.
