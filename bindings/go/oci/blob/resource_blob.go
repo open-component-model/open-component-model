@@ -27,12 +27,12 @@ type ResourceBlob struct {
 // information is properly initialized for the ResourceBlob to function correctly.
 func NewResourceBlobWithMediaType(resource *descriptor.Resource, b blob.ReadOnlyBlob, mediaType string) (*ResourceBlob, error) {
 	if sizeAware, ok := b.(blob.SizeAware); ok {
-		sizeFromBlob := sizeAware.Size()
-		if sizeFromBlob > blob.SizeUnknown && resource.Size == 0 {
-			resource.Size = sizeFromBlob
+		blobSize := sizeAware.Size()
+		if resource.Size == 0 && blobSize > blob.SizeUnknown {
+			resource.Size = blobSize
 		}
-		if resource.Size != sizeFromBlob {
-			return nil, fmt.Errorf("resource blob size mismatch: resource %d vs blob %d", resource.Size, sizeFromBlob)
+		if resource.Size != blobSize && blobSize > blob.SizeUnknown {
+			return nil, fmt.Errorf("resource blob size mismatch: resource %d vs blob %d", resource.Size, blobSize)
 		}
 	}
 

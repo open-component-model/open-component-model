@@ -349,3 +349,182 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	assert.Equal(t, digest.Digest(newDigest), desc.Digest)
 	assert.Equal(t, newSize, desc.Size)
 }
+
+func TestNewResourceBlobWithMediaType_SizeValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		resourceSize  int64
+		blobSize      int64
+		expectedError bool
+	}{
+		{
+			name:          "matching sizes",
+			resourceSize:  100,
+			blobSize:      100,
+			expectedError: false,
+		},
+		{
+			name:          "mismatched sizes",
+			resourceSize:  100,
+			blobSize:      200,
+			expectedError: true,
+		},
+		{
+			name:          "zero resource size with valid blob size",
+			resourceSize:  0,
+			blobSize:      100,
+			expectedError: false,
+		},
+		{
+			name:          "unknown blob size",
+			resourceSize:  100,
+			blobSize:      blob.SizeUnknown,
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource := &descriptor.Resource{
+				Size: tt.resourceSize,
+			}
+
+			_, err := ociblob.NewResourceBlobWithMediaType(resource, &mockSizeAwareBlob{size: tt.blobSize}, "application/octet-stream")
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestNewResourceBlobWithMediaType_DigestValidation(t *testing.T) {
+	tests := []struct {
+		name           string
+		resourceDigest *descriptor.Digest
+		blobDigest     string
+		expectedError  bool
+	}{
+		{
+			name: "matching digests",
+			resourceDigest: &descriptor.Digest{
+				HashAlgorithm: v1.HashAlgorithmSHA256,
+				Value:         "1234567890abcdef",
+			},
+			blobDigest:    "sha256:1234567890abcdef",
+			expectedError: false,
+		},
+		{
+			name: "mismatched digests",
+			resourceDigest: &descriptor.Digest{
+				HashAlgorithm: v1.HashAlgorithmSHA256,
+				Value:         "1234567890abcdef",
+			},
+			blobDigest:    "sha256:differentdigest",
+			expectedError: true,
+		},
+		{
+			name:           "nil resource digest with valid blob digest",
+			resourceDigest: nil,
+			blobDigest:     "sha256:1234567890abcdef",
+			expectedError:  true,
+		},
+		{
+			name: "valid resource digest with empty blob digest",
+			resourceDigest: &descriptor.Digest{
+				HashAlgorithm: v1.HashAlgorithmSHA256,
+				Value:         "1234567890abcdef",
+			},
+			blobDigest:    "",
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource := &descriptor.Resource{
+				Digest: tt.resourceDigest,
+			}
+
+			_, err := ociblob.NewResourceBlobWithMediaType(resource, &mockDigestAwareBlob{digest: tt.blobDigest}, "application/octet-stream")
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestNewResourceBlobWithMediaType_MediaTypeHandling(t *testing.T) {
+	tests := []struct {
+		name         string
+		providedType string
+		blobType     string
+		expectedType string
+	}{
+		{
+			name:         "provided media type takes precedence",
+			providedType: "application/custom",
+			blobType:     "application/octet-stream",
+			expectedType: "application/custom",
+		},
+		{
+			name:         "use blob media type when none provided",
+			providedType: "",
+			blobType:     "application/octet-stream",
+			expectedType: "application/octet-stream",
+		},
+		{
+			name:         "empty media type when neither provided",
+			providedType: "",
+			blobType:     "",
+			expectedType: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resource := &descriptor.Resource{}
+
+			rb, err := ociblob.NewResourceBlobWithMediaType(resource, &mockMediaTypeAwareBlob{mediaType: tt.blobType}, tt.providedType)
+			require.NoError(t, err)
+			mt, ok := rb.MediaType()
+			if tt.expectedType == "" {
+				assert.False(t, ok)
+			} else {
+				assert.True(t, ok)
+				assert.Equal(t, tt.expectedType, mt)
+			}
+		})
+	}
+}
+
+// Helper types for testing
+type mockSizeAwareBlob struct {
+	blob.ReadOnlyBlob
+	size int64
+}
+
+func (m *mockSizeAwareBlob) Size() int64 {
+	return m.size
+}
+
+type mockDigestAwareBlob struct {
+	blob.ReadOnlyBlob
+	digest string
+}
+
+func (m *mockDigestAwareBlob) Digest() (string, bool) {
+	return m.digest, m.digest != ""
+}
+
+type mockMediaTypeAwareBlob struct {
+	blob.ReadOnlyBlob
+	mediaType string
+}
+
+func (m *mockMediaTypeAwareBlob) MediaType() (string, bool) {
+	return m.mediaType, m.mediaType != ""
+}
