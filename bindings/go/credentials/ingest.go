@@ -11,14 +11,47 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// ingest processes the credential configuration by:
+// 1. Extracting and processing direct credentials
+// 2. Creating edges for plugin-based credentials
+// 3. Processing repository configurations
+//
+// The function builds a graph where:
+// - Nodes represent identities (both consumer and credential identities)
+// - Edges represent relationships between identities
+// - Direct credentials are stored on their respective identity nodes inside the vertex
+// - Repository configurations are stored in the Graph for later use
 func ingest(ctx context.Context, g *Graph, config *Config, repoTypeScheme *runtime.Scheme) error {
 	directPerIdentity := make(map[string]map[string]string)
 	consumers := make([]Consumer, 0, len(config.Consumers))
 
-	// STEP 1: Extract direct credentials from the configuration.
-	// This step both precaches credentials and prunes consumers that do not require plugin-based resolution.
+	if err := processDirectCredentials(g, config, &directPerIdentity, &consumers); err != nil {
+		return err
+	}
+
+	if err := processPluginBasedEdges(ctx, g, consumers); err != nil {
+		return err
+	}
+
+	if err := processRepositoryConfigurations(g, config, repoTypeScheme); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// processDirectCredentials handles the first phase of credential processing:
+// 1. Extracts direct credentials from each consumer
+// 2. Separates direct credentials from those requiring plugin-based resolution
+// 3. Merges direct credentials for each identity
+// 4. Adds identity nodes to the graph
+// 5. Stores direct credentials on their respective identity nodes
+//
+// The function updates both the directPerIdentity map and the consumers slice:
+// - directPerIdentity: Maps identity strings to their direct credentials
+// - consumers: Contains only consumers that still have plugin-based credentials to process
+func processDirectCredentials(g *Graph, config *Config, directPerIdentity *map[string]map[string]string, consumers *[]Consumer) error {
 	for _, consumer := range config.Consumers {
-		// Extract direct credentials and separate out any plugin-based credentials.
 		direct, remaining, err := extractDirect(consumer.Credentials)
 		if err != nil {
 			return fmt.Errorf("extracting consumer credentials failed: %w", err)
@@ -28,33 +61,40 @@ func ingest(ctx context.Context, g *Graph, config *Config, repoTypeScheme *runti
 		if len(direct) > 0 {
 			for _, identity := range consumer.Identities {
 				node := identity.String()
-				// Merge credentials if the identity already exists.
-				if existing, ok := directPerIdentity[node]; ok {
+				if existing, ok := (*directPerIdentity)[node]; ok {
 					maps.Copy(existing, direct)
 				} else {
-					directPerIdentity[node] = direct
+					(*directPerIdentity)[node] = direct
 				}
 
-				// Add the node as a vertex in the graph if it does not already exist.
 				if err := g.addIdentity(identity); err != nil {
 					return err
 				}
 			}
 		}
 
-		// Retain consumers that still have plugin-based credentials for further processing.
 		if len(consumer.Credentials) > 0 {
-			consumers = append(consumers, consumer)
+			*consumers = append(*consumers, consumer)
 		}
 	}
 
-	for node, credentials := range directPerIdentity {
+	for node, credentials := range *directPerIdentity {
 		g.setCredentials(node, credentials)
 	}
 
-	// STEP 2: Process plugin-based edges.
-	// For each consumer identity, add an edge in the graph that links it to the identity
-	// obtained by processing its plugin-based credentials.
+	return nil
+}
+
+// processPluginBasedEdges handles the second phase of credential processing:
+// For each consumer identity that has plugin-based credentials:
+// 1. Adds the consumer identity as a node in the graph
+// 2. Resolves each plugin-based credential to get its identity
+// 3. Adds the credential identity as a node in the graph
+// 4. Creates an edge from the consumer identity to the credential identity
+//
+// This phase builds the relationships between identities that require
+// plugin-based resolution of credentials.
+func processPluginBasedEdges(ctx context.Context, g *Graph, consumers []Consumer) error {
 	for _, consumer := range consumers {
 		for _, identity := range consumer.Identities {
 			node := identity.String()
@@ -82,8 +122,18 @@ func ingest(ctx context.Context, g *Graph, config *Config, repoTypeScheme *runti
 			}
 		}
 	}
+	return nil
+}
 
-	// STEP 3: Process repositoryConfigurations
+// processRepositoryConfigurations handles the final phase of credential processing:
+// For each repository configuration:
+// 1. Creates a new typed object based on the repository type
+// 2. Converts the repository configuration to the typed object
+// 3. Stores the typed object in the graph's repository configurations
+//
+// This phase ensures that repository-specific configurations are properly
+// stored and can be accessed when needed.
+func processRepositoryConfigurations(g *Graph, config *Config, repoTypeScheme *runtime.Scheme) error {
 	for _, repository := range config.Repositories {
 		repository := repository.Repository
 		typed, err := repoTypeScheme.NewObject(repository.GetType())
@@ -97,7 +147,6 @@ func ingest(ctx context.Context, g *Graph, config *Config, repoTypeScheme *runti
 		g.repositoryConfigurations = append(g.repositoryConfigurations, typed)
 		g.repositoryConfigurationsMu.Unlock()
 	}
-
 	return nil
 }
 

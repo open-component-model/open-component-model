@@ -12,8 +12,7 @@ import (
 )
 
 // resolveIndirect is invoked when the DAG does not yield direct credentials.
-// The method ensures that only one resolution attempt is performed at a time, and that
-// successful resolutions are cached for subsequent calls.
+// The method ensures that successful resolutions are cached for subsequent calls.
 func (g *Graph) resolveIndirect(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
 	if credentials, cached := g.getCredentials(identity.String()); cached {
 		return credentials, nil
