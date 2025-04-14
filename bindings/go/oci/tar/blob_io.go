@@ -69,7 +69,7 @@ func CopyToOCILayoutInMemory(ctx context.Context, src content.ReadOnlyStorage, b
 	downloaded := blob.NewDirectReadOnlyBlob(&buf)
 
 	downloaded.SetPrecalculatedSize(int64(buf.Len()))
-	downloaded.SetMediaType(layout.MediaTypeOCIImageLayoutV1 + "+tar" + "+gzip")
+	downloaded.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
 
 	blobDigest := digest.NewDigest(digest.SHA256, h)
 	downloaded.SetPrecalculatedDigest(blobDigest.String())

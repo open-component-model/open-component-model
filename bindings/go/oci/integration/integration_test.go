@@ -102,7 +102,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 
 		cliDataBlob, _, err := repo.GetLocalResource(t.Context(), component, version, cliIdentity)
 		r.NoError(err)
-		r.NotNil(cliIdentity)
+		r.NotNil(cliDataBlob)
 
 		cliPath := filepath.Join(t.TempDir(), "ocm")
 		cliFile, err := os.OpenFile(cliPath, os.O_CREATE|os.O_RDWR, 0o744)
@@ -258,7 +258,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 				Name:    v2.LocalBlobAccessType,
 				Version: v2.LocalBlobAccessTypeVersion,
 			},
-			MediaType:      layout.MediaTypeOCIImageLayoutV1 + "+tar" + "+gzip",
+			MediaType:      layout.MediaTypeOCIImageLayoutTarGzipV1,
 			LocalReference: digest.FromBytes(data).String(),
 		},
 	}
@@ -369,7 +369,7 @@ func uploadDownloadBarebonesComponentVersion(t *testing.T, repo oci.ComponentVer
 
 	r.Equal(name, retrievedDesc.Component.Name)
 	r.Equal(version, retrievedDesc.Component.Version)
-	r.Len(retrievedDesc.Component.Labels, 1)
+	r.ElementsMatch(retrievedDesc.Component.Labels, desc.Component.Labels)
 
 	versions, err := repo.ListComponentVersions(ctx, name)
 	r.NoError(err)
