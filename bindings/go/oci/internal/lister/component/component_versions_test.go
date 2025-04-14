@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
 type mockStore struct {
@@ -67,7 +68,7 @@ func TestReferrerAnnotationVersionResolver(t *testing.T) {
 					annotations.OCMComponentVersion: "invalid-format",
 				},
 			},
-			expectedError: fmt.Errorf("failed to parse component version annotation: %q is not considered a valid %q annotation because of a bad prefix, expected %q", "invalid-format", annotations.OCMComponentVersion, annotations.DefaultComponentDescriptorPath+"/"),
+			expectedError: fmt.Errorf("failed to parse component version annotation: %q is not considered a valid %q annotation because of a bad prefix, expected %q", "invalid-format", annotations.OCMComponentVersion, path.DefaultComponentDescriptorPath+"/"),
 		},
 		{
 			name:      "component name mismatch",

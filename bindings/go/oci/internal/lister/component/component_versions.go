@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
 // ReferrerAnnotationVersionResolver creates a version resolver that extracts component versions
@@ -35,7 +36,7 @@ func ReferrerAnnotationVersionResolver(component string) lister.ReferrerVersionR
 			return "", fmt.Errorf("failed to parse component version annotation: %w", err)
 		}
 
-		if redundantPrefix := annotations.DefaultComponentDescriptorPath + "/"; strings.HasPrefix(component, redundantPrefix) {
+		if redundantPrefix := path.DefaultComponentDescriptorPath + "/"; strings.HasPrefix(component, redundantPrefix) {
 			component = strings.TrimPrefix(component, redundantPrefix)
 		}
 

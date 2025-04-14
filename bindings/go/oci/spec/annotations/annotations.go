@@ -3,9 +3,9 @@ package annotations
 import (
 	"fmt"
 	"strings"
-)
 
-const DefaultComponentDescriptorPath = "component-descriptors"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
+)
 
 // Annotations for OCI Image Manifests
 const (
@@ -22,11 +22,11 @@ const (
 )
 
 func NewComponentVersionAnnotation(component, version string) string {
-	return fmt.Sprintf("%s/%s:%s", DefaultComponentDescriptorPath, component, version)
+	return fmt.Sprintf("%s/%s:%s", path.DefaultComponentDescriptorPath, component, version)
 }
 
 func ParseComponentVersionAnnotation(annotation string) (string, string, error) {
-	prefix := DefaultComponentDescriptorPath + "/"
+	prefix := path.DefaultComponentDescriptorPath + "/"
 	if !strings.HasPrefix(annotation, prefix) {
 		return "", "", fmt.Errorf("%q is not considered a valid %q annotation because of a bad prefix, expected %q", annotation, OCMComponentVersion, prefix)
 	}

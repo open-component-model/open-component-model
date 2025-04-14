@@ -1,6 +1,7 @@
 package oci
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
 // setupTestCTF creates a temporary CTF directory and returns its path and CTF instance
@@ -45,7 +47,7 @@ func TestComponentVersionReference(t *testing.T) {
 	ctf := setupTestCTF(t)
 	store := NewFromCTF(ctf)
 	ref := store.ComponentVersionReference("test-component", "v1.0.0")
-	assert.Equal(t, "component-descriptors/test-component:v1.0.0", ref)
+	assert.Equal(t, fmt.Sprintf("%s/%s/test-component:v1.0.0", wellKnownRegistryCTF, path.DefaultComponentDescriptorPath), ref)
 }
 
 func TestFetch(t *testing.T) {
@@ -350,7 +352,7 @@ func TestResolveWithRegistry(t *testing.T) {
 	// Create and set up the index
 	index := v1.NewIndex()
 	index.AddArtifact(v1.ArtifactMetadata{
-		Repository: "registry.example.com/test-repo",
+		Repository: "test-repo",
 		Tag:        "test-tag",
 		Digest:     digestStr,
 		MediaType:  ociImageSpecV1.MediaTypeImageManifest,

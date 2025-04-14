@@ -25,6 +25,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
+// wellKnownRegistryCTF is the well-known registry for CTF archives that is set by default when resolving references.
+// it is a relative domain that is resolved in the context of the CTF archive and is equivalent to not setting a domain.
+// it can be used to differentiate multi-slash paths and registries. as an example
+//
+//   - ctf.ocm.software/component-descriptors/repo => registry:=ctf.ocm.software, repository=component-descriptors/repo
+//   - component-descriptors/repo:tag => registry=component-descriptors, repository=repo
+const wellKnownRegistryCTF = "ctf.ocm.software"
+
 func WithCTF(archive *Store) oci.RepositoryOption {
 	return func(options *oci.RepositoryOptions) {
 		options.Resolver = archive
@@ -55,9 +63,8 @@ func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Sto
 	ref := rawRef.(looseref.LooseReference)
 
 	return &repositoryStore{
-		archive:  s.archive,
-		registry: ref.Registry,
-		repo:     ref.Repository,
+		archive: s.archive,
+		repo:    ref.Repository,
 	}, nil
 }
 
@@ -67,15 +74,14 @@ func (s *Store) Reference(reference string) (fmt.Stringer, error) {
 
 // ComponentVersionReference creates a reference string for a component version in the format "component-descriptors/component:version".
 func (s *Store) ComponentVersionReference(component, version string) string {
-	return fmt.Sprintf("component-descriptors/%s:%s", component, version)
+	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, version)
 }
 
 // repositoryStore implements the spec.Store interface for a CTF archive specific to a repository.
 type repositoryStore struct {
-	archive  ctf.CTF
-	registry string
-	repo     string
-	indexMu  sync.RWMutex
+	archive ctf.CTF
+	repo    string
+	indexMu sync.RWMutex
 }
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
@@ -142,13 +148,14 @@ func (s *repositoryStore) Resolve(ctx context.Context, reference string) (ociIma
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unable to get index: %w", err)
 	}
-	repo := s.repo
-	if s.registry != "" {
-		repo = s.registry + "/" + repo
-	}
 
-	if strings.HasPrefix(reference, repo+":") {
-		reference = strings.TrimPrefix(reference, repo+":")
+	repo := s.repo
+
+	if prefix := wellKnownRegistryCTF + "/"; strings.HasPrefix(reference, prefix) {
+		reference = strings.TrimPrefix(reference, prefix)
+	}
+	if prefix := repo + ":"; strings.HasPrefix(reference, prefix) {
+		reference = strings.TrimPrefix(reference, prefix)
 	}
 
 	for _, artifact := range idx.GetArtifacts() {
@@ -206,9 +213,7 @@ func (s *repositoryStore) Tag(ctx context.Context, desc ociImageSpecV1.Descripto
 	}
 
 	repo := s.repo
-	if s.registry != "" {
-		repo = s.registry + "/" + repo
-	}
+
 	ref := registry.Reference{Reference: reference}
 
 	var meta v1.ArtifactMetadata
@@ -254,9 +259,6 @@ func (s *repositoryStore) Tags(ctx context.Context, _ string, fn func(tags []str
 	}
 
 	repo := s.repo
-	if s.registry != "" {
-		repo = s.registry + "/" + repo
-	}
 
 	tags := make([]string, 0, len(arts))
 	for _, art := range arts {
@@ -271,17 +273,19 @@ func (s *repositoryStore) Tags(ctx context.Context, _ string, fn func(tags []str
 
 func addOrUpdateArtifactMetadataInIndex(idx v1.Index, meta v1.ArtifactMetadata) {
 	arts := idx.GetArtifacts()
-	var found bool
+
+	// check if the tag already exists within the repository
+	// if it does, we need to nil out the old tag if the digest differs, (thats equivalent to a retag)
 	for i, art := range arts {
-		if art.Repository == meta.Repository && art.Digest == meta.Digest && art.MediaType == meta.MediaType {
-			arts[i] = meta
-			found = true
+		tagAlreadyExists := art.Repository == meta.Repository && art.Tag == meta.Tag
+		digestDiffers := art.Digest != meta.Digest
+		if tagAlreadyExists && digestDiffers {
+			arts[i].Tag = ""
 			break
 		}
 	}
-	if !found {
-		idx.AddArtifact(meta)
-	}
+
+	idx.AddArtifact(meta)
 }
 
 func isManifest(desc ociImageSpecV1.Descriptor) bool {
