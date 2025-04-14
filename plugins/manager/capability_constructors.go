@@ -19,10 +19,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// Handler contains the handling function, the location and the Schema for wrapping function calls with.
+// For example, a real function passed in from the plugin is wrapper into an HTTP HandlerFunc to be called
+// later. This handler will use the Schema in order to verify any access spec information that is passed in.
 type Handler struct {
-	Handler  http.HandlerFunc `json:"-"` // ignore the handler when marshalling
-	Location string           `json:"location"`
-	Schema   []byte           `json:"schema"`
+	Handler  http.HandlerFunc
+	Location string
+	Schema   []byte
 }
 
 // GetComponentVersionFn these functions provide the structure that plugins need to implement.
@@ -49,9 +52,7 @@ type CapabilityBuilder struct {
 }
 
 // NewCapabilityBuilder constructs a new builder for registering capabilities for the given plugin type.
-// TODO: We can derive the plugin type from the capability.
-// TODO: A single binary should be able to register multiple plugin types.
-func NewCapabilityBuilder(pluginType PluginType) *CapabilityBuilder {
+func NewCapabilityBuilder() *CapabilityBuilder {
 	return &CapabilityBuilder{
 		currentCapabilities: Capabilities{
 			Capabilities: map[PluginType][]Capability{},
@@ -78,7 +79,7 @@ func (c *CapabilityBuilder) GetHandlers() []Handler {
 }
 
 // RegisterReadWriteComponentVersionRepositoryCapability defines Transfer type plugin capability of reading or writing
-// to an OCI repository.
+// to an OCI repository. Calling this will automatically register the plugin for the type Transfer.
 func (c *CapabilityBuilder) RegisterReadWriteComponentVersionRepositoryCapability(
 	typ runtime.Typed,
 	handlers ReadWriteComponentVersionRepositoryHandlersOpts,
@@ -94,27 +95,27 @@ func (c *CapabilityBuilder) RegisterReadWriteComponentVersionRepositoryCapabilit
 
 	// Setup capabilities
 	c.currentCapabilities.Capabilities[TransferPlugin] = append(c.currentCapabilities.Capabilities[TransferPlugin], Capability{
-		Capability: "ReadWriteComponentVersionRepository",
+		Capability: ReadWriteComponentVersionRepositoryCapability,
 		Type:       typ.GetType().String(),
 	})
 
 	// Setup handlers
 	c.handlers = append(c.handlers, Handler{
 		Handler:  UploadComponentVersionHandlerFunc(handlers.UploadComponentVersion, typ),
-		Location: "/cv/upload", // These should be coming from somewhere because we need to call them later.
+		Location: UploadComponentVersion, // These should be coming from somewhere because we need to call them later.
 	},
 		Handler{
 			Handler:  DownloadComponentVersionHandlerFunc(handlers.GetComponentVersion, typ),
-			Location: "/cv/download",
+			Location: DownloadComponentVersion,
 		},
 		Handler{
 			Handler:  PostResourceHandlerFunc(handlers.UploadResource, schemaOCIRegistry),
-			Location: "/cv/upload/resource",
+			Location: UploadLocalResource,
 			Schema:   schemaOCIRegistry,
 		},
 		Handler{
 			Handler:  GetResourceHandlerFunc(handlers.DownloadResource, schemaOCIRegistry),
-			Location: "/cv/download/resource",
+			Location: DownloadLocalResource,
 			Schema:   schemaOCIRegistry,
 		})
 
@@ -139,9 +140,6 @@ func DownloadComponentVersionHandlerFunc(f GetComponentVersionFn, typ runtime.Ty
 			NewError(err, http.StatusBadRequest).Write(writer)
 			return
 		}
-
-		// TODO: Since this is the actual wrapper around the endpoint I could pass in the Schema here
-		// if it exists! THIS could be the location to actually verify the Schema.
 
 		if err := f(request.Context(), name, version, typ, credentials, writer); err != nil {
 			NewError(err, http.StatusInternalServerError).Write(writer)

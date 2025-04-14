@@ -13,6 +13,8 @@ const (
 	WriteComponentVersionRepositoryCapability     = "writeComponentVersionRepository"
 	ReadResourceRepositoryCapability              = "readResourceRepository"
 	WriteResourceRepositoryCapability             = "writeResourceRepository"
+	CredentialPluginCapability                    = "credentialPlugin"
+	CredentialRepositoryPluginCapability          = "credentialRepositoryPlugin"
 )
 
 type Location struct {

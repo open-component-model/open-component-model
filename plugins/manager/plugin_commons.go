@@ -48,6 +48,9 @@ func waitForPlugin(ctx context.Context, id, location string, typ ConnectionType)
 
 }
 
+// connect will create a client that sets up connection based on the plugin's connection type.
+// That is either a Unix socket or a TCP based connection. It does this by setting the `DialContext` using
+// the right network location.
 func connect(_ context.Context, id, location string, typ ConnectionType) (*http.Client, error) {
 	var network string
 	switch typ {

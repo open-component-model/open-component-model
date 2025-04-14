@@ -23,8 +23,4 @@ type Config struct {
 	Location string `json:"location"`
 	// IdleTimeout sets how long the plugin should sit around without work to do.
 	IdleTimeout *time.Duration `json:"idleTimeout,omitempty"`
-	//// AccessSchema represents the access spec that this plugin supports
-	//// AccessSchema is per type.
-	//// Schema is type/capability.
-	//AccessSpec map[string]map[string][]byte `json:"accessSpec"`
 }

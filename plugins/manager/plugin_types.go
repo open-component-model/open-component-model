@@ -21,11 +21,6 @@ type KV struct {
 	Value string
 }
 
-type GenericPluginContract interface {
-	PluginBase
-	Call(ctx context.Context, endpoint, method string, payload, response any, headers []KV, params []KV) error
-}
-
 // ReadRepositoryPluginContract is a plugin type that can deal with repositories
 type ReadRepositoryPluginContract interface {
 	PluginBase
