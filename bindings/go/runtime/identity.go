@@ -69,6 +69,9 @@ func (i Identity) CanonicalHashV1() uint64 {
 	return h.Sum64()
 }
 
+// String returns a stable fmt.Stringer "native" format representation of the identity.
+// It can be used for stable string comparison. For generation of unique identities as hashes
+// use CanonicalHashV1 instead.
 func (i Identity) String() string {
 	parts := make([]string, 0, len(i))
 	for key := range slices.Values(slices.Sorted(maps.Keys(i))) {
@@ -77,6 +80,8 @@ func (i Identity) String() string {
 	return strings.Join(parts, ",")
 }
 
+// ParseIdentity parses a string into an Identity, using the format "key=value,key2=value2".
+// ParseIdentity is able to parse all Identities returned from Identity.String.
 func ParseIdentity(s string) (Identity, error) {
 	parts := strings.Split(s, ",")
 	identity := make(Identity, len(parts))
