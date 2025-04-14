@@ -108,14 +108,12 @@ type Capability struct {
 	Capability string `json:"capability"`
 	// Type defines the type name that this plugin supports.
 	Type string `json:"type"`
-	// Endpoints defines all endpoints and their corresponding schemas.
-	// TODO: Maybe this isn't needed after all.
-	//Endpoints []Endpoint `json:"endpoints"`
 }
 
+// Capabilities are defined per plugin type. The plugin type is derived from the capability
+// and set during generation of the capability.
 type Capabilities struct {
-	PluginType   PluginType   `json:"pluginType"`
-	Capabilities []Capability `json:"capabilities"` // is it multiple capabilities? Maybe.
+	Capabilities map[PluginType][]Capability `json:"capabilities"`
 }
 
 type GetResourceRequest struct {

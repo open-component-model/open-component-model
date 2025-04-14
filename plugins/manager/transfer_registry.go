@@ -40,7 +40,8 @@ func (r *TransferRegistry) AddPlugin(plugin *Plugin, caps *Capabilities) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for _, c := range caps.Capabilities {
+	// This is a specific transfer plugin with a specific type we _know_.
+	for _, c := range caps.Capabilities[TransferPlugin] {
 		if r.registry[c.Capability] == nil {
 			r.registry[c.Capability] = make(map[string]*Plugin)
 		}
@@ -99,19 +100,13 @@ func (r *TransferRegistry) GetPlugin(ctx context.Context, capability, typ string
 }
 
 // GetTransferPlugin fetches a plugin from the transfer registry.
-func GetTransferPlugin[T PluginBase](ctx context.Context, pm *PluginManager, capability string, typ runtime.Typed) (T, error) {
-	var t T
+// TODO: I need an interface or a type that will define a transfer plugin. For now, that's fine.
+func GetTransferPlugin(ctx context.Context, pm *PluginManager, capability string, typ runtime.Typed) (PluginBase, error) {
 	p, err := pm.TransferRegistry.GetPlugin(ctx, capability, typ.GetType().String())
 	if err != nil {
-		return t, fmt.Errorf("error getting transfer plugin for capability %s with type %s: %w", capability, typ.GetType().String(), err)
+		return nil, fmt.Errorf("error getting transfer plugin for capability %s with type %s: %w", capability, typ.GetType().String(), err)
 	}
-
-	t, ok := p.(T)
-	if !ok {
-		return t, fmt.Errorf("transfer plugin for capability %s does not implement T interface", capability)
-	}
-
-	return t, nil
+	return p.(PluginBase), nil
 }
 
 func NewTransferRegistry() *TransferRegistry {
