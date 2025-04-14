@@ -63,19 +63,19 @@ func UploadComponentVersion(ctx context.Context, descriptor *descriptor.Descript
 func main() {
 	args := os.Args[1:]
 
-	// TEST
-	// this would be &MyType{}
-	typ := &MyType{
-		Type: runtime.Type{
-			Version: "v1",
-			Name:    "OCIRegistry",
-		},
-		BaseUrl: "url",
-		SubPath: "/path",
-	}
+	//// TEST
+	//// this would be &MyType{}
+	//typ := &MyType{
+	//	Type: runtime.Type{
+	//		Version: "v1",
+	//		Name:    "OCIRegistry",
+	//	},
+	//	BaseUrl: "url",
+	//	SubPath: "/path",
+	//}
 
 	// The plugin type will be inferred from the capability. A single binary could implement MULTIPLE plugin types.
-	capabilityBuilder := manager.NewCapabilityBuilder(manager.TransferPlugin)
+	capabilityBuilder := manager.NewCapabilityBuilder()
 	if err := capabilityBuilder.RegisterReadWriteComponentVersionRepositoryCapability(typ, manager.ReadWriteComponentVersionRepositoryHandlersOpts{
 		UploadComponentVersion: UploadComponentVersion, // provide your handlers
 		GetComponentVersion:    GetComponentVersion,

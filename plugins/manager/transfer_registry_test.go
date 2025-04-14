@@ -5,6 +5,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"log/slog"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"os"
 	"testing"
 	"time"
 )
@@ -34,11 +35,19 @@ func TestGetTransferPlugin(t *testing.T) {
 	pm := NewPluginManager(testctx, slog.New(slog.DiscardHandler))
 	err := pm.RegisterPluginsAtLocation(testctx, "testdata", WithIdleTimeout(10*time.Second))
 	r.NoError(err)
+	tmp, err := os.CreateTemp("", "test.file")
+	r.NoError(err)
 	t.Cleanup(func() {
 		r.NoError(pm.Shutdown(testctx))
+		r.NoError(tmp.Close())
+		r.NoError(os.Remove(tmp.Name()))
 	})
 
-	got, err := GetTransferPlugin(testctx, pm, "ReadWriteComponentVersionRepository", &mockType{})
+	got, err := GetReadWriteComponentVersionRepository(testctx, pm, &mockType{})
 	r.NoError(err)
-	r.NotNil(got)
+	r.NoError(got.GetLocalResource(testctx, GetLocalResourceRequest{
+		TargetLocation: Location{
+			Value: tmp.Name(),
+		},
+	}, nil))
 }

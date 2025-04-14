@@ -58,10 +58,11 @@ func (r *TransferRegistry) AddPlugin(plugin *Plugin, caps *Capabilities) error {
 	return nil
 }
 
-// Only external methods like the generatic ones like in POCM. -> get transfer plugin for type and then the
-// Like in POCM the type is the only input because the capability is specific to the plugin type to context/action.
-// Capability is not needed since we already have that from the context.
-func (r *TransferRegistry) GetPlugin(ctx context.Context, capability, typ string) (any, error) {
+// GetPlugin finds a specific plugin the registry. Taking a capability and a type for that capability
+// it will find and return a registered plugin.
+// On the first call, it will initialize and start the plugin. On any consecutive calls it will return the
+// existing plugin that has already been started.
+func (r *TransferRegistry) GetPlugin(ctx context.Context, capability, typ string) (*RepositoryPlugin, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -99,16 +100,17 @@ func (r *TransferRegistry) GetPlugin(ctx context.Context, capability, typ string
 	return repoPlugin, nil
 }
 
-// GetTransferPlugin fetches a plugin from the transfer registry.
-// TODO: I need an interface or a type that will define a transfer plugin. For now, that's fine.
-func GetTransferPlugin(ctx context.Context, pm *PluginManager, capability string, typ runtime.Typed) (PluginBase, error) {
-	p, err := pm.TransferRegistry.GetPlugin(ctx, capability, typ.GetType().String())
+// GetReadWriteComponentVersionRepository gets a plugin that registered for this given capability.
+func GetReadWriteComponentVersionRepository(ctx context.Context, pm *PluginManager, typ runtime.Typed) (ReadWriteRepositoryPluginContract, error) {
+	p, err := pm.TransferRegistry.GetPlugin(ctx, ReadWriteComponentVersionRepositoryCapability, typ.GetType().String())
 	if err != nil {
-		return nil, fmt.Errorf("error getting transfer plugin for capability %s with type %s: %w", capability, typ.GetType().String(), err)
+		return nil, fmt.Errorf("error getting transfer plugin for capability %s with type %s: %w", ReadWriteComponentVersionRepositoryCapability, typ.GetType().String(), err)
 	}
-	return p.(PluginBase), nil
+
+	return p, nil
 }
 
+// NewTransferRegistry creates a new registry and initializes maps.
 func NewTransferRegistry() *TransferRegistry {
 	return &TransferRegistry{
 		registry:           make(map[string]map[string]*Plugin),

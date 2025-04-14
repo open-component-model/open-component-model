@@ -7,16 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"sync"
 	"time"
-
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const socketPathFormat = "/tmp/ocm_plugin_%s.sock"
@@ -66,7 +62,7 @@ type Plugin struct {
 
 // constructedPlugin is a plugin that has been created and stored before actually starting it.
 type constructedPlugin struct {
-	Plugin any
+	Plugin *RepositoryPlugin
 
 	cmd *exec.Cmd
 }
@@ -117,106 +113,6 @@ func NewPluginManager(ctx context.Context, logger *slog.Logger) *PluginManager {
 		logger:             logger,
 		plugins:            make(map[string]map[string][]*Plugin),
 	}
-}
-
-// fetchPlugin has so many parameters because generics isn't allowed on receiver types
-// therefore we pass in everything from the plugin manager.
-func fetchPlugin[T PluginBase](
-	ctx context.Context,
-	typ runtime.Typed,
-	requiredCapability string,
-	pm *PluginManager,
-) ([]T, error) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	pluginsMap := make(map[string]T)
-
-	// Look for source implemented plugins as well.
-	if implementedCaps, ok := implementedRegisteredPlugins[typ.GetType().String()]; ok {
-		// if we found registered plugins, add them to the map
-		plugins, ok := implementedCaps[requiredCapability]
-		if ok {
-			for _, plugin := range plugins {
-				t, ok := plugin.Base.(T)
-				if !ok {
-					return nil, fmt.Errorf("expected type %T but got %T", t, plugin.Base)
-				}
-
-				pluginsMap[plugin.ID] = t
-			}
-
-			// Return any implementations that are registered and look no further.
-			var result []T
-			for plugin := range maps.Values(pluginsMap) {
-				result = append(result, plugin)
-			}
-
-			return result, nil
-		}
-	}
-
-	// anything after implemented plugins using the same ID may overwrite existing registrations.
-	caps, ok := pm.plugins[typ.GetType().String()]
-	if !ok {
-		return []T{}, fmt.Errorf("unknown plugin type: %s, known are %v", typ.GetType().String(), slices.Collect(maps.Keys(pm.plugins)))
-	}
-
-	foundPlugins, ok := caps[requiredCapability]
-	if !ok {
-		return []T{}, fmt.Errorf("required capability not found in capabilities: %s", requiredCapability)
-	}
-
-	for _, p := range foundPlugins {
-		// Call the right schema and call validate on it, and change the api on the type not being just a String.
-		//if validate, err := validatePlugin(p, typ, requiredCapability); validate && err != nil {
-		//	return nil, err
-		//}
-
-		// Check if we already constructed this plugin and return it.
-		if existingPlugin, ok := pm.constructedPlugins[p.ID]; ok {
-			t, ok := existingPlugin.Plugin.(T)
-			if !ok {
-				return nil, fmt.Errorf("expected type %T but got %T", t, p)
-			}
-
-			pluginsMap[p.ID] = t
-		} else {
-			if err := p.cmd.Start(); err != nil {
-				return nil, fmt.Errorf("failed to start plugin: %s, %w", p.ID, err)
-			}
-
-			client, err := waitForPlugin(ctx, p.ID, p.config.Location, p.config.Type)
-			if err != nil {
-				return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
-			}
-
-			// create the base plugin backed by a concrete implementation of plugin interfaces.
-			var plugin PluginBase = NewRepositoryPlugin(pm.baseCtx, pm.logger, client, p.ID, p.path, p.config)
-			t, ok := plugin.(T)
-			if !ok {
-				return nil, fmt.Errorf("expected type %T but got %T", t, p)
-			}
-
-			pluginsMap[p.ID] = t
-
-			pm.constructedPlugins[p.ID] = &constructedPlugin{
-				Plugin: t,
-				cmd:    p.cmd,
-			}
-		}
-	}
-
-	if len(pluginsMap) == 0 {
-		return nil, fmt.Errorf("no plugin(s) available for type %s with capability: %s", typ, requiredCapability)
-	}
-
-	var plugins []T
-	for plugin := range maps.Values(pluginsMap) {
-		plugins = append(plugins, plugin)
-	}
-
-	return plugins, nil
 }
 
 type RegistrationOptions struct {
