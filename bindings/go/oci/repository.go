@@ -332,7 +332,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		switch typed.MediaType {
 		// for local blobs that are complete image layouts, we can directly push them as part of the
 		// descriptor index
-		case layout.MediaTypeOCIImageLayoutV1 + "+tar", layout.MediaTypeOCIImageLayoutV1 + "+tar+gzip", ociImageSpecV1.MediaTypeImageIndex:
+		case layout.MediaTypeOCIImageLayoutV1 + "+tar", layout.MediaTypeOCIImageLayoutV1 + "+tar+gzip", ociImageSpecV1.MediaTypeImageIndex, ociImageSpecV1.MediaTypeImageManifest:
 			artifact, err := annotations.FilterFirstMatchingArtifact(index.Manifests, identity, annotations.ArtifactKindResource)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to find matching descriptor: %w", err)

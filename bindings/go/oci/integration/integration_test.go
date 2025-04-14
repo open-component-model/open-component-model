@@ -533,7 +533,6 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 	// Add resource to component descriptor
 	cd.Component.Resources = append(cd.Component.Resources, *resource)
 
-	// Create blob from test data
 	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
 	testBlob.SetMediaType("application/json")
 
@@ -541,27 +540,25 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 	newRes, err := repo.AddLocalResource(ctx, name, version, resource, testBlob)
 	r.NoError(err)
 	r.NotNil(newRes)
+	cd.Component.Resources[0] = *newRes
 
 	// Add component version after
 	err = repo.AddComponentVersion(ctx, cd)
 	r.NoError(err)
 
 	// Get local resource
-	downloadedBlob, _, err := repo.GetLocalResource(ctx, name, version, resource.ElementMeta.ToIdentity())
+	downloadedBlob, resFromGet, err := repo.GetLocalResource(ctx, name, version, resource.ElementMeta.ToIdentity())
 	r.NoError(err)
+	r.Equal(resFromGet.ElementMeta, newRes.ElementMeta)
 
-	// Read downloaded data
-	reader, err := downloadedBlob.ReadCloser()
+	store, err := tar.ReadOCILayout(t.Context(), downloadedBlob)
 	r.NoError(err)
 	t.Cleanup(func() {
-		r.NoError(reader.Close())
+		r.NoError(store.Close())
 	})
+	r.NotNil(store)
+	r.Len(store.Index.Manifests, 1)
 
-	downloadedData, err := io.ReadAll(reader)
-	r.NoError(err)
-
-	// Verify data matches
-	r.Equal(testData, downloadedData)
 }
 
 func getUserAndPasswordWithGitHubCLIAndJQ(t *testing.T) (string, string) {

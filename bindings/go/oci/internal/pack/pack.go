@@ -238,11 +238,6 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 		ImageReference: fmt.Sprintf("%s@%s", opts.BaseReference, desc.Digest.String()),
 	}
 
-	mediaType := desc.ArtifactType
-	if mediaType == "" {
-		mediaType = desc.MediaType
-	}
-
 	// Create access based on configured mode
 	switch opts.LocalResourceAdoptionMode {
 	case LocalResourceAdoptionModeOCIImage:
@@ -252,7 +247,7 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 		access, err := descriptor.ConvertToV2LocalBlob(opts.AccessScheme, &descriptor.LocalBlob{
 			Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 			LocalReference: desc.Digest.String(),
-			MediaType:      mediaType,
+			MediaType:      desc.MediaType,
 			GlobalAccess:   access,
 		})
 		if err != nil {
