@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -195,7 +196,7 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 		plugin.config = *conf
 
 		output := bytes.NewBuffer(nil)
-		cmd := exec.CommandContext(ctx, plugin.path, "capabilities")
+		cmd := exec.CommandContext(ctx, cleanPath(plugin.path), "capabilities") //nolint: gosec // G204 does not apply
 		cmd.Stdout = output
 		cmd.Stderr = os.Stderr
 
@@ -218,7 +219,7 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 		}
 
 		// Create a command that can then be managed.
-		pluginCmd := exec.CommandContext(ctx, plugin.path, "--config", string(serialized))
+		pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.path), "--config", string(serialized)) //nolint: gosec // G204 does not apply
 		pluginCmd.Stdout = os.Stdout
 		pluginCmd.Stderr = os.Stdout
 		pluginCmd.Cancel = func() error {
@@ -246,6 +247,10 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 	return nil
 }
 
+func cleanPath(path string) string {
+	return strings.Trim(path, `,;:'"|&*!@#$`)
+}
+
 // Shutdown is called to terminate all plugins.
 func (pm *PluginManager) Shutdown(ctx context.Context) error {
 	pm.mu.Lock()
@@ -261,7 +266,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 func determineConnectionLocation(plugin *Plugin) (_ string, err error) {
 	switch plugin.config.Type {
 	case TCP:
-		listener, err := net.Listen("tcp", ":0")
+		listener, err := net.Listen("tcp", ":0") //nolint: gosec // G102: only does it temporarily to find an empty address
 		if err != nil {
 			return "", err
 		}

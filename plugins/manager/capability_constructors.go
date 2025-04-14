@@ -15,6 +15,7 @@ import (
 
 	schemaconverter "github.com/invopop/jsonschema"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -29,10 +30,12 @@ type Handler struct {
 }
 
 // GetComponentVersionFn these functions provide the structure that plugins need to implement.
-type GetComponentVersionFn func(ctx context.Context, name, version string, registry runtime.Typed, credentials Attributes, writer io.Writer) (err error)
-type PostComponentVersionFn func(ctx context.Context, descriptor *descriptor.Descriptor, registry runtime.Typed, credentials Attributes) error
-type GetResourceFn func(ctx context.Context, request *GetResourceRequest, credentials Attributes, writer io.Writer) error
-type PostResourceFn func(ctx context.Context, request *PostResourceRequest, credentials Attributes, writer io.Writer) error
+type (
+	GetComponentVersionFn  func(ctx context.Context, name, version string, registry runtime.Typed, credentials Attributes, writer io.Writer) (err error)
+	PostComponentVersionFn func(ctx context.Context, descriptor *descriptor.Descriptor, registry runtime.Typed, credentials Attributes) error
+	GetResourceFn          func(ctx context.Context, request *GetResourceRequest, credentials Attributes, writer io.Writer) error
+	PostResourceFn         func(ctx context.Context, request *PostResourceRequest, credentials Attributes, writer io.Writer) error
+)
 
 // ReadWriteComponentVersionRepositoryHandlersOpts contains all the functions that the plugin choosing this
 // capability has to implement.
@@ -84,7 +87,6 @@ func (c *CapabilityBuilder) RegisterReadWriteComponentVersionRepositoryCapabilit
 	typ runtime.Typed,
 	handlers ReadWriteComponentVersionRepositoryHandlersOpts,
 ) error {
-
 	// Schema is derived from the passed in type and matched in the Rest Wrapper.
 	// The schema here is the setup from the plugin. The REST endpoint's match
 	// will come from the actual passed in Access Spec converted to a type.
@@ -208,8 +210,19 @@ func GetResourceHandlerFunc(f GetResourceFn, schema []byte) http.HandlerFunc {
 			return
 		}
 
-		// figure out where what accessspec do we verify here
-		//if err := validatePlugin()
+		if schema != nil {
+			// TODO: Figure out the type.
+			ok, err := validatePlugin(nil, schema)
+			if err != nil {
+				NewError(err, http.StatusBadRequest).Write(writer)
+				return
+			}
+
+			if !ok {
+				NewError(nil, http.StatusBadRequest).Write(writer)
+				return
+			}
+		}
 
 		if err := f(request.Context(), req, credentials, writer); err != nil {
 			NewError(err, http.StatusInternalServerError).Write(writer)
@@ -265,6 +278,10 @@ func (e *Error) Write(w http.ResponseWriter) {
 func validatePlugin(typ runtime.Typed, schema []byte) (bool, error) {
 	c := jsonschema.NewCompiler()
 	unmarshaler, err := jsonschema.UnmarshalJSON(bytes.NewReader(schema))
+	if err != nil {
+		return false, err
+	}
+
 	var v any
 	if err := json.Unmarshal(schema, &v); err != nil {
 		return true, err

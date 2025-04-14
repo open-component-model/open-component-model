@@ -54,19 +54,3 @@ type WriteResourcePluginContract interface {
 	PluginBase
 	AddGlobalResource(ctx context.Context, request PostResourceRequest, credentials Attributes) (*descriptor.Resource, error)
 }
-
-//type CredentialPluginContract interface {
-//	PluginBase
-//	credentials.CredentialPlugin
-//}
-//
-//type CredentialRepositoryPluginContract interface {
-//	PluginBase
-//	credentials.RepositoryPlugin
-//}
-//
-//type TransformerPluginContract interface {
-//	PluginBase
-//	CredentialIdentities(ctx context.Context, request CredentialIdentityRequest) (*CredentialIdentityResponse, error)
-//	Transform(ctx context.Context, request TransformResourceRequest) (*TransformResourceResponse, error)
-//}

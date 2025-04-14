@@ -8,14 +8,13 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
-	XOCMRepositoryHeader = "X-OCM-Repository"
+	XOCMRepositoryHeader = "X-Ocm-Repository"
 )
 
 // Endpoints
@@ -39,7 +38,6 @@ type RepositoryPlugin struct {
 
 	// config is used to start the plugin during a later phase.
 	config Config
-	mu     sync.Mutex
 	path   string
 	client *http.Client
 	logger *slog.Logger
@@ -53,8 +51,6 @@ var (
 	_ WriteRepositoryPluginContract = &RepositoryPlugin{}
 	_ ReadResourcePluginContract    = &RepositoryPlugin{}
 	_ WriteResourcePluginContract   = &RepositoryPlugin{}
-	//_ CredentialRepositoryPluginContract = &RepositoryPlugin{}
-	//_ TransformerPluginContract          = &RepositoryPlugin{}
 )
 
 func NewRepositoryPlugin(baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config Config) *RepositoryPlugin {
@@ -293,25 +289,6 @@ func (r *RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, id
 
 	return resolved, nil
 }
-
-//
-//func (r *RepositoryPlugin) Transform(ctx context.Context, request TransformResourceRequest) (*TransformResourceResponse, error) {
-//	response := TransformResourceResponse{}
-//	if err := call(ctx, r.client, "resources/transform", http.MethodPost, WithPayload(request), WithResult(&response)); err != nil {
-//		return nil, fmt.Errorf("failed to transform resource with plugin %s: %w", r.ID, err)
-//	}
-//
-//	return &response, nil
-//}
-//
-//func (r *RepositoryPlugin) CredentialIdentities(ctx context.Context, request CredentialIdentityRequest) (*CredentialIdentityResponse, error) {
-//	response := CredentialIdentityResponse{}
-//	if err := call(ctx, r.client, "resources/transform/credential-identities", http.MethodPost, WithPayload(request), WithResult(&response)); err != nil {
-//		return nil, fmt.Errorf("failed to transform resource with plugin %s: %w", r.ID, err)
-//	}
-//
-//	return &response, nil
-//}
 
 func toCredentials(credentials Attributes) (KV, error) {
 	rawCreds, err := json.Marshal(credentials)
