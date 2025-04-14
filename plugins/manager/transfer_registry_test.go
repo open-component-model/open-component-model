@@ -2,32 +2,14 @@ package manager
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"log/slog"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 )
-
-type mockType struct {
-	typ runtime.Type
-}
-
-func (m *mockType) GetType() runtime.Type {
-	return runtime.Type{
-		Version: "v1",
-		Name:    "OCIRegistry",
-	}
-}
-
-func (m *mockType) SetType(t runtime.Type) {
-	m.typ = t
-}
-
-func (m *mockType) DeepCopyTyped() runtime.Typed {
-	return m
-}
 
 func TestGetTransferPlugin(t *testing.T) {
 	r := require.New(t)
@@ -43,7 +25,7 @@ func TestGetTransferPlugin(t *testing.T) {
 		r.NoError(os.Remove(tmp.Name()))
 	})
 
-	got, err := GetReadWriteComponentVersionRepository(testctx, pm, &mockType{})
+	got, err := GetReadWriteComponentVersionRepository(testctx, pm, &v1.OCIImage{})
 	r.NoError(err)
 	r.NoError(got.GetLocalResource(testctx, GetLocalResourceRequest{
 		TargetLocation: Location{

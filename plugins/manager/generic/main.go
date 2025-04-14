@@ -11,29 +11,11 @@ import (
 	"os"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/plugins/manager"
 	"ocm.software/open-component-model/plugins/plugin"
 )
-
-// MyType assume this type lives in binding/go or some other place in OCM.
-type MyType struct {
-	runtime.Type `json:"type"`
-	BaseUrl      string `json:"baseUrl"`
-	SubPath      string `json:"subPath"`
-}
-
-func (o *MyType) GetType() runtime.Type {
-	return o.Type
-}
-
-func (o *MyType) SetType(t runtime.Type) {
-	o.Type = t
-}
-
-func (o *MyType) DeepCopyTyped() runtime.Typed {
-	return &MyType{}
-}
 
 // GetComponentVersion implements component version fetching.
 func GetComponentVersion(ctx context.Context, name string, version string, registry runtime.Typed, credentials manager.Attributes, writer io.Writer) (err error) {
@@ -63,20 +45,9 @@ func UploadComponentVersion(ctx context.Context, descriptor *descriptor.Descript
 func main() {
 	args := os.Args[1:]
 
-	//// TEST
-	//// this would be &MyType{}
-	//typ := &MyType{
-	//	Type: runtime.Type{
-	//		Version: "v1",
-	//		Name:    "OCIRegistry",
-	//	},
-	//	BaseUrl: "url",
-	//	SubPath: "/path",
-	//}
-
 	// The plugin type will be inferred from the capability. A single binary could implement MULTIPLE plugin types.
 	capabilityBuilder := manager.NewCapabilityBuilder()
-	if err := capabilityBuilder.RegisterReadWriteComponentVersionRepositoryCapability(typ, manager.ReadWriteComponentVersionRepositoryHandlersOpts{
+	if err := capabilityBuilder.RegisterReadWriteComponentVersionRepositoryCapability(&v1.OCIImage{}, manager.ReadWriteComponentVersionRepositoryHandlersOpts{
 		UploadComponentVersion: UploadComponentVersion, // provide your handlers
 		GetComponentVersion:    GetComponentVersion,
 		UploadResource:         UploadResource,
