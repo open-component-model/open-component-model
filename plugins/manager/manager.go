@@ -59,7 +59,7 @@ type Plugin struct {
 	ID           string
 	path         string
 	config       Config
-	capabilities []Capability
+	capabilities map[PluginType][]Capability
 
 	cmd *exec.Cmd
 }
@@ -219,65 +219,6 @@ func fetchPlugin[T PluginBase](
 	return plugins, nil
 }
 
-// only run validation if a schema exists.
-//func validatePlugin(p *Plugin, typ runtime.Typed, requiredCapability string) (bool, error) {
-//	c := jsonschema.NewCompiler()
-//	accessSpec, ok := p.config.AccessSpec[typ.GetType().String()]
-//	if !ok {
-//		// skip if no access spec is defined
-//		return false, nil
-//	}
-//
-//	schema, ok := accessSpec[requiredCapability]
-//	if !ok {
-//		// skip if there is no access spec for this capability
-//		return false, nil
-//	}
-//
-//	unmarshaler, err := jsonschema.UnmarshalJSON(bytes.NewReader(schema))
-//	var v any
-//	if err := json.Unmarshal(schema, &v); err != nil {
-//		return true, err
-//	}
-//
-//	if err := c.AddResource("schema.json", unmarshaler); err != nil {
-//		return true, fmt.Errorf("failed to add schema.json: %w", err)
-//	}
-//	sch, err := c.Compile("schema.json")
-//	if err != nil {
-//		return true, fmt.Errorf("failed to compile schema.json: %w", err)
-//	}
-//
-//	// need to marshal the interface into a JSON format.
-//	content, err := json.Marshal(typ)
-//	if err != nil {
-//		return true, fmt.Errorf("failed to marshal type: %w", err)
-//	}
-//	// once marshalled, we create a map[string]any representation of the marshaled content.
-//	unmarshalledType, err := jsonschema.UnmarshalJSON(bytes.NewReader(content))
-//	if err != nil {
-//		return true, fmt.Errorf("failed to unmarshal : %w", err)
-//	}
-//
-//	if _, ok := unmarshalledType.(string); ok {
-//		// TODO: In _not_ POC this should be either a type switch, or some kind of exclusion or we should change how
-//		// we register and look up plugins to avoid validating when listing or for certain plugins.
-//		// skip validation if the passed in type is of type string.
-//		return true, nil
-//	}
-//
-//	// finally, validate map[string]any against the loaded schema
-//	if err := sch.Validate(unmarshalledType); err != nil {
-//		var typRaw bytes.Buffer
-//		err = errors.Join(err, json.Indent(&typRaw, content, "", "  "))
-//		var schemaRaw bytes.Buffer
-//		err = errors.Join(err, json.Indent(&schemaRaw, schema, "", "  "))
-//		return true, fmt.Errorf("failed to validate schema for\n%s\n---SCHEMA---\n%s\n: %w", typRaw.String(), schemaRaw.String(), err)
-//	}
-//
-//	return true, nil
-//}
-
 type RegistrationOptions struct {
 	IdleTimeout time.Duration
 }
@@ -389,25 +330,20 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return cmd.Process.Kill()
 		}
 		plugin.cmd = pluginCmd
-		//pm.constructedPlugins[plugin.ID] = &constructedPlugin{
-		//	Plugin: plugin,
-		//	cmd:    pluginCmd,
-		//}
-
-		plugin.config.PluginType = caps.PluginType
 		plugin.capabilities = caps.Capabilities // store the endpoints
 
-		// TODO: you can declare multiple plugin types for a single binary
-		// Inbuilt stuff still needs to work. For example OCI one.
-		switch plugin.config.PluginType {
-		case TransferPlugin:
-			pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
-			if err := pm.TransferRegistry.AddPlugin(plugin, caps); err != nil {
-				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+		// TODO: Inbuilt stuff still needs to work. For example OCI one.
+		// For all plugin types of this binary, add the plugin to the right registry
+		for pType := range plugin.capabilities {
+			switch pType {
+			case TransferPlugin:
+				pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
+				if err := pm.TransferRegistry.AddPlugin(plugin, caps); err != nil {
+					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+				}
+			case CredentialPlugin:
+			case TransformationPlugin:
 			}
-		case CredentialPlugin:
-		case TransformationPlugin:
-
 		}
 	}
 

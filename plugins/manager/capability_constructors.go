@@ -1,17 +1,20 @@
 package manager
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/invopop/jsonschema"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 
+	schemaconverter "github.com/invopop/jsonschema"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -51,7 +54,7 @@ type CapabilityBuilder struct {
 func NewCapabilityBuilder(pluginType PluginType) *CapabilityBuilder {
 	return &CapabilityBuilder{
 		currentCapabilities: Capabilities{
-			PluginType: pluginType,
+			Capabilities: map[PluginType][]Capability{},
 		},
 	}
 }
@@ -74,17 +77,23 @@ func (c *CapabilityBuilder) GetHandlers() []Handler {
 	return c.handlers
 }
 
+// RegisterReadWriteComponentVersionRepositoryCapability defines Transfer type plugin capability of reading or writing
+// to an OCI repository.
 func (c *CapabilityBuilder) RegisterReadWriteComponentVersionRepositoryCapability(
 	typ runtime.Typed,
 	handlers ReadWriteComponentVersionRepositoryHandlersOpts,
 ) error {
-	schemaOCIRegistry, err := jsonschema.Reflect(typ).MarshalJSON()
+
+	// Schema is derived from the passed in type and matched in the Rest Wrapper.
+	// The schema here is the setup from the plugin. The REST endpoint's match
+	// will come from the actual passed in Access Spec converted to a type.
+	schemaOCIRegistry, err := schemaconverter.Reflect(typ).MarshalJSON()
 	if err != nil {
 		return err
 	}
 
 	// Setup capabilities
-	c.currentCapabilities.Capabilities = append(c.currentCapabilities.Capabilities, Capability{
+	c.currentCapabilities.Capabilities[TransferPlugin] = append(c.currentCapabilities.Capabilities[TransferPlugin], Capability{
 		Capability: "ReadWriteComponentVersionRepository",
 		Type:       typ.GetType().String(),
 	})
@@ -101,7 +110,7 @@ func (c *CapabilityBuilder) RegisterReadWriteComponentVersionRepositoryCapabilit
 		Handler{
 			Handler:  PostResourceHandlerFunc(handlers.UploadResource, schemaOCIRegistry),
 			Location: "/cv/upload/resource",
-			Schema:   schemaOCIRegistry, // Jakob: this would be derived from the passed in type?
+			Schema:   schemaOCIRegistry,
 		},
 		Handler{
 			Handler:  GetResourceHandlerFunc(handlers.DownloadResource, schemaOCIRegistry),
@@ -201,8 +210,9 @@ func GetResourceHandlerFunc(f GetResourceFn, schema []byte) http.HandlerFunc {
 			return
 		}
 
-		// TODO: Do the schema validation here?
-		// Yes, use the validation schema in here. -> jakob confirmed this
+		// figure out where what accessspec do we verify here
+		//if err := validatePlugin()
+
 		if err := f(request.Context(), req, credentials, writer); err != nil {
 			NewError(err, http.StatusInternalServerError).Write(writer)
 			return
@@ -251,4 +261,51 @@ func NewError(err error, status int) *Error {
 
 func (e *Error) Write(w http.ResponseWriter) {
 	http.Error(w, e.Err.Error(), e.Status)
+}
+
+// only run validation if a schema exists.
+func validatePlugin(typ runtime.Typed, schema []byte) (bool, error) {
+	c := jsonschema.NewCompiler()
+	unmarshaler, err := jsonschema.UnmarshalJSON(bytes.NewReader(schema))
+	var v any
+	if err := json.Unmarshal(schema, &v); err != nil {
+		return true, err
+	}
+
+	if err := c.AddResource("schema.json", unmarshaler); err != nil {
+		return true, fmt.Errorf("failed to add schema.json: %w", err)
+	}
+	sch, err := c.Compile("schema.json")
+	if err != nil {
+		return true, fmt.Errorf("failed to compile schema.json: %w", err)
+	}
+
+	// need to marshal the interface into a JSON format.
+	content, err := json.Marshal(typ)
+	if err != nil {
+		return true, fmt.Errorf("failed to marshal type: %w", err)
+	}
+	// once marshalled, we create a map[string]any representation of the marshaled content.
+	unmarshalledType, err := jsonschema.UnmarshalJSON(bytes.NewReader(content))
+	if err != nil {
+		return true, fmt.Errorf("failed to unmarshal : %w", err)
+	}
+
+	if _, ok := unmarshalledType.(string); ok {
+		// TODO: In _not_ POC this should be either a type switch, or some kind of exclusion or we should change how
+		// we register and look up plugins to avoid validating when listing or for certain plugins.
+		// skip validation if the passed in type is of type string.
+		return true, nil
+	}
+
+	// finally, validate map[string]any against the loaded schema
+	if err := sch.Validate(unmarshalledType); err != nil {
+		var typRaw bytes.Buffer
+		err = errors.Join(err, json.Indent(&typRaw, content, "", "  "))
+		var schemaRaw bytes.Buffer
+		err = errors.Join(err, json.Indent(&schemaRaw, schema, "", "  "))
+		return true, fmt.Errorf("failed to validate schema for\n%s\n---SCHEMA---\n%s\n: %w", typRaw.String(), schemaRaw.String(), err)
+	}
+
+	return true, nil
 }

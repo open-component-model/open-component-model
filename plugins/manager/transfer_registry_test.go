@@ -38,7 +38,7 @@ func TestGetTransferPlugin(t *testing.T) {
 		r.NoError(pm.Shutdown(testctx))
 	})
 
-	got, err := GetTransferPlugin[*RepositoryPlugin](testctx, pm, "ReadWriteComponentVersionRepository", &mockType{})
+	got, err := GetTransferPlugin(testctx, pm, "ReadWriteComponentVersionRepository", &mockType{})
 	r.NoError(err)
 	r.NotNil(got)
 }
