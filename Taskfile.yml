@@ -45,6 +45,10 @@ includes:
     optional: true
     taskfile: ./cli/Taskfile.yml
     dir: ./cli
+  plugins:
+    optional: true
+    taskfile: ./plugins/Taskfile.yml
+    dir: ./plugins
 
 vars:
   GO_MODULES:
