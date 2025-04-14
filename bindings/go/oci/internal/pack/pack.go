@@ -136,7 +136,7 @@ func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage conten
 func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
 	index, err := tar.CopyOCILayoutWithIndex(ctx, storage, b, tar.CopyOCILayoutWithIndexOptions{
 		CopyGraphOptions: opts.CopyGraphOptions,
-		MutateIndexFunc: func(idx *ociImageSpecV1.Descriptor) error {
+		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			return identity.AdoptAsResource(idx, b.Resource)
 		},
 	})

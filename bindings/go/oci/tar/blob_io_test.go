@@ -36,7 +36,7 @@ func TestCopyOCILayout(t *testing.T) {
 
 	// Copy the OCI layout with a tag
 	opts := CopyOCILayoutWithIndexOptions{
-		MutateIndexFunc: func(desc *ociImageSpecV1.Descriptor) error {
+		MutateParentFunc: func(desc *ociImageSpecV1.Descriptor) error {
 			desc.Annotations = map[string]string{
 				"some": "annotation",
 			}

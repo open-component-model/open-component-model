@@ -79,7 +79,7 @@ func CopyToOCILayoutInMemory(ctx context.Context, src content.ReadOnlyStorage, b
 
 type CopyOCILayoutWithIndexOptions struct {
 	oras.CopyGraphOptions
-	MutateIndexFunc func(*ociImageSpecV1.Descriptor) error
+	MutateParentFunc func(*ociImageSpecV1.Descriptor) error
 }
 
 func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.ReadOnlyBlob, opts CopyOCILayoutWithIndexOptions) (top ociImageSpecV1.Descriptor, err error) {
@@ -91,7 +91,7 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 		err = errors.Join(err, ociStore.Close())
 	}()
 
-	index, proxy, err := proxyOCIStoreWithIndex(ociStore, &opts)
+	index, proxy, err := proxyOCIStore(ctx, ociStore, &opts)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create proxy for OCI store: %w", err)
 	}
@@ -103,13 +103,24 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 	return index, nil
 }
 
+func proxyOCIStore(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
+	// if our store only has one single manifest, we dont need to copy the index, instead we can use the manifest as is.
+	if len(ociStore.Index.Manifests) == 1 {
+		return proxyOCIStoreWithManifest(ctx, ociStore, opts)
+	}
+	// if there is more than one manifest in the store, we are dealing with multiple artifacts, so in this case we should also copy the index
+	// TODO(jakobmoellerdev): It might make sense here to split this into multiple manifests without a top level index as well.
+	//  Currently the use cases are too unclear to decide here, but we can revisit this at any time and switch it quite easily.
+	return proxyOCIStoreWithIndex(ociStore, opts)
+}
+
 func proxyOCIStoreWithIndex(ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
 	indexJSON, err := json.Marshal(ociStore.Index)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to marshal index: %w", err)
 	}
 	index := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexJSON)
-	if err := opts.MutateIndexFunc(&index); err != nil {
+	if err := opts.MutateParentFunc(&index); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate index descriptor before copy: %w", err)
 	}
 
@@ -126,6 +137,37 @@ func proxyOCIStoreWithIndex(ociStore *CloseableReadOnlyStore, opts *CopyOCILayou
 		ReadOnlyStorage: ociStore,
 	}
 	return index, proxy, nil
+}
+
+func proxyOCIStoreWithManifest(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
+	manifestDesc := ociStore.Index.Manifests[0]
+	manifestRawStream, err := ociStore.Fetch(ctx, manifestDesc)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
+	}
+	manifestRaw, err := content.ReadAll(manifestRawStream, manifestDesc)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read manifest: %w", err)
+	}
+	var manifest ociImageSpecV1.Manifest
+	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
+	}
+	if err := opts.MutateParentFunc(&manifestDesc); err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate manifest descriptor before copy: %w", err)
+	}
+	opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+		if content.Equal(desc, manifestDesc) {
+			return append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), nil
+		}
+		return content.Successors(ctx, ociStore, desc)
+	}
+	proxy := &descriptorStoreProxy{
+		raw:             manifestRaw,
+		desc:            manifestDesc,
+		ReadOnlyStorage: ociStore,
+	}
+	return manifestDesc, proxy, nil
 }
 
 type descriptorStoreProxy struct {

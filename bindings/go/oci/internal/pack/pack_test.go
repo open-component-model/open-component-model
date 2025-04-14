@@ -637,7 +637,7 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 			}
 
 			assert.NoError(t, err)
-			assert.Equal(t, ociImageSpecV1.MediaTypeImageIndex, fromStore.MediaType)
+			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, fromStore.MediaType)
 			content.Equal(fromStore, desc)
 		})
 	}

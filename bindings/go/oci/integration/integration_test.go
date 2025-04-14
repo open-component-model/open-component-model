@@ -273,9 +273,17 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 	err = repo.AddComponentVersion(ctx, cd)
 	r.NoError(err)
 
-	downloaded, _, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
+	downloaded, newRes, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
 	r.NoError(err)
 	r.NotNil(downloaded)
+
+	store, err := tar.ReadOCILayout(t.Context(), downloaded)
+	r.NoError(err)
+	t.Cleanup(func() {
+		r.NoError(store.Close())
+	})
+	r.NotNil(store)
+	r.Len(store.Index.Manifests, 1)
 }
 
 func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, from, to string) {
