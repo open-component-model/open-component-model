@@ -4,10 +4,12 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 )
 
@@ -15,7 +17,11 @@ func TestGetTransferPlugin(t *testing.T) {
 	r := require.New(t)
 	testctx := context.Background()
 	pm := NewPluginManager(testctx, slog.New(slog.DiscardHandler))
-	err := pm.RegisterPluginsAtLocation(testctx, "testdata", WithIdleTimeout(10*time.Second))
+	location := "testdata/darwin"
+	if runtime.GOOS == "linux" {
+		location = "testdata/linux"
+	}
+	err := pm.RegisterPluginsAtLocation(testctx, location, WithIdleTimeout(10*time.Second))
 	r.NoError(err)
 	tmp, err := os.CreateTemp("", "test.file")
 	r.NoError(err)

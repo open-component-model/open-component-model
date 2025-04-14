@@ -13,8 +13,8 @@ const (
 	WriteComponentVersionRepositoryCapability     = "writeComponentVersionRepository"
 	ReadResourceRepositoryCapability              = "readResourceRepository"
 	WriteResourceRepositoryCapability             = "writeResourceRepository"
-	CredentialPluginCapability                    = "credentialPlugin"
-	CredentialRepositoryPluginCapability          = "credentialRepositoryPlugin"
+	CredentialPluginCapability                    = "credentialPlugin"           //nolint: gosec // isn't a hardcoded credential
+	CredentialRepositoryPluginCapability          = "credentialRepositoryPlugin" //nolint: gosec // isn't a hardcoded credential
 )
 
 type Location struct {
@@ -128,7 +128,6 @@ type GetResourceRequest struct {
 }
 
 type PostResourceRequest struct {
-	//TargetAccess *transfer.Access `json:"targetAccess"`
 	// The ResourceLocation of the Local Resource
 	ResourceLocation Location             `json:"resourceLocation"`
 	Resource         *descriptor.Resource `json:"resource"`

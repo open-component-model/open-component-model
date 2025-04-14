@@ -1,11 +1,7 @@
 package manager
 
-import "sync"
-
 type TransformationRegistry struct {
-	registry           map[string]map[string]map[string]any
-	constructedPlugins map[string]*Plugin
-	mu                 sync.Mutex
+	registry map[string]map[string]map[string]any
 }
 
 func NewTransformationRegistry() *TransformationRegistry {

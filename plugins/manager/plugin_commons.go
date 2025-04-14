@@ -45,7 +45,6 @@ func waitForPlugin(ctx context.Context, id, location string, typ ConnectionType)
 			return nil, fmt.Errorf("context was cancelled %s", id)
 		}
 	}
-
 }
 
 // connect will create a client that sets up connection based on the plugin's connection type.
@@ -72,7 +71,7 @@ func connect(_ context.Context, id, location string, typ ConnectionType) (*http.
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				conn, err := dialer.DialContext(ctx, network, location)
 				if err != nil {
-					return nil, fmt.Errorf("failed to connect to plugin %s: %v", id, err)
+					return nil, fmt.Errorf("failed to connect to plugin %s: %w", id, err)
 				}
 
 				return conn, nil

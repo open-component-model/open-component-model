@@ -19,25 +19,25 @@ import (
 
 // GetComponentVersion implements component version fetching.
 func GetComponentVersion(ctx context.Context, name string, version string, registry runtime.Typed, credentials manager.Attributes, writer io.Writer) (err error) {
-	fmt.Printf("GetComponentVersion[%s %s]\n", name, version)
+	_, _ = fmt.Fprintf(os.Stdout, "GetComponentVersion[%s %s]\n", name, version)
 
 	return nil
 }
 
 func DownloadResource(ctx context.Context, request *manager.GetResourceRequest, credentials manager.Attributes, writer io.Writer) error {
-	fmt.Printf("DownloadResource[%s %s]\n", request.Name, request.Version)
+	_, _ = fmt.Fprintf(os.Stdout, "DownloadResource[%s %s]\n", request.Name, request.Version)
 
 	return nil
 }
 
 func UploadResource(ctx context.Context, request *manager.PostResourceRequest, credentials manager.Attributes, writer io.Writer) error {
-	fmt.Printf("UploadResource[%s %s]\n", request.Resource.Name, request.Resource.Version)
+	_, _ = fmt.Fprintf(os.Stdout, "UploadResource[%s %s]\n", request.Resource.Name, request.Resource.Version)
 
 	return nil
 }
 
 func UploadComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor, registry runtime.Typed, credentials manager.Attributes) error {
-	fmt.Printf("UploadComponentVersion[%s %s]\n", descriptor.Component.Name, descriptor.Component.Version)
+	_, _ = fmt.Fprintf(os.Stdout, "UploadComponentVersion[%s %s]\n", descriptor.Component.Name, descriptor.Component.Version)
 
 	return nil
 }

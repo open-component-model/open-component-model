@@ -1,5 +1,9 @@
 version: '3'
 
+vars:
+  CLI_DOCUMENTATION_MODE: "markdown"
+  CLI_DOCUMENTATION_DIRECTORY: tmp/docs
+
 tasks:
   tmp:
     cmds:
@@ -15,3 +19,14 @@ tasks:
       - go test -v -coverprofile=tmp/coverage.out ./...
     deps:
       - tmp
+  build:
+    desc: "Build the CLI"
+    cmds:
+      - go build -o {{ .ROOT_DIR }}/tmp/bin/ocm
+
+  generate/docs:
+    desc: "Generate CLI Markdown documentation"
+    cmd: |
+      go run {{ .TASKFILE_DIR }}/main.go generate docs \
+        --directory {{ .CLI_DOCUMENTATION_DIRECTORY }} \
+        --mode {{ .CLI_DOCUMENTATION_MODE }}

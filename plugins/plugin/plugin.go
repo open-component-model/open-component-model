@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -25,7 +24,6 @@ type Plugin struct {
 	handlers    []manager.Handler
 	server      *http.Server
 	cleanUpFunc CleanupFunc
-	mu          sync.Mutex
 	// this channel is none blocking because it's created with a capability of 1
 	// and then immediately read by the idle checker.
 	interrupt     chan bool
@@ -163,10 +161,12 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 
 	switch p.Config.Type {
 	case manager.Socket:
-		p.logger.Info("Removing socket", "location", p.Config.Location)
+		p.logger.Info("removing socket", "location", p.Config.Location)
 		if err := os.Remove(p.Config.Location); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
+	case manager.TCP:
+		// empty case for now
 	}
 
 	if p.cleanUpFunc != nil {
