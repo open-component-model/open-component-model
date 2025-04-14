@@ -20,6 +20,7 @@
 package dag
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -148,7 +149,27 @@ func TestDAGHasCycle(t *testing.T) {
 	_, err := d.TopologicalSort()
 	r.Errorf(err, "expected error when sorting a cyclic graph, but got nil")
 	r.IsType(&CycleError{}, err, "expected CycleError, but got %T", err)
-	r.EqualValues(err.(*CycleError).Cycle, []string{"A", "B", "C", "A"}, "expected cycle to be [A B C], but got %v", err.(*CycleError).Cycle)
+
+	var cerr *CycleError
+	r.True(errors.As(err, &cerr))
+	cycle := cerr.Cycle
+
+	r.Len(cycle, 4)
+
+	possible := [][]string{
+		{"A", "B", "C", "A"},
+		{"B", "C", "A", "B"},
+		{"C", "A", "B", "C"},
+	}
+
+	match := false
+	for _, combination := range possible {
+		if slices.Equal(combination, cycle) {
+			match = true
+			break
+		}
+	}
+	r.Truef(match, "expected cyclic graph cycle, one of %v but got %v", possible, cycle)
 }
 
 func TestDAGTopologicalSort(t *testing.T) {

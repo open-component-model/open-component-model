@@ -118,3 +118,108 @@ func TestParseURLToIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestParseIdentity(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expected      runtime.Identity
+		expectedError string
+	}{
+		{
+			name:     "valid single key-value pair",
+			input:    "key=value",
+			expected: runtime.Identity{"key": "value"},
+		},
+		{
+			name:     "valid multiple key-value pairs",
+			input:    "key1=value1,key2=value2",
+			expected: runtime.Identity{"key1": "value1", "key2": "value2"},
+		},
+		{
+			name:     "valid with whitespace",
+			input:    " key1 = value1 , key2 = value2 ",
+			expected: runtime.Identity{"key1": "value1", "key2": "value2"},
+		},
+		{
+			name:          "empty input",
+			expectedError: "invalid identity part \"\"",
+		},
+		{
+			name:          "missing value",
+			input:         "key=",
+			expectedError: "invalid identity part \"key=\"",
+		},
+		{
+			name:          "missing key",
+			input:         "=value",
+			expectedError: "invalid identity part \"=value\"",
+		},
+		{
+			name:          "invalid format - no equals sign",
+			input:         "keyvalue",
+			expectedError: "invalid identity part \"keyvalue\"",
+		},
+		{
+			name:     "valid with multiple equals in value",
+			input:    "key=value=with=equals",
+			expected: runtime.Identity{"key": "value=with=equals"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := runtime.ParseIdentity(tt.input)
+
+			if tt.expectedError != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestIdentityString(t *testing.T) {
+	tests := []struct {
+		name     string
+		identity runtime.Identity
+		expected string
+	}{
+		{
+			name:     "empty identity",
+			identity: runtime.Identity{},
+			expected: "",
+		},
+		{
+			name:     "single key-value pair",
+			identity: runtime.Identity{"key": "value"},
+			expected: "key=value",
+		},
+		{
+			name:     "multiple key-value pairs",
+			identity: runtime.Identity{"b": "2", "a": "1", "c": "3"},
+			expected: "a=1,b=2,c=3",
+		},
+		{
+			name:     "special characters in values",
+			identity: runtime.Identity{"key1": "value,with,commas", "key2": "value=with=equals"},
+			expected: "key1=value,with,commas,key2=value=with=equals",
+		},
+		{
+			name:     "whitespace in values",
+			identity: runtime.Identity{"key": "value with spaces"},
+			expected: "key=value with spaces",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.identity.String()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
