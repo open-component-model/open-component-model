@@ -37,6 +37,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/oci/integration/Taskfile.yml
     dir: ./bindings/go/oci/integration
+  bindings/go/dag:
+    optional: true
+    taskfile: ./bindings/go/dag/Taskfile.yml
+    dir: ./bindings/go/dag
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
