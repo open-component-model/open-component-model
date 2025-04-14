@@ -1,6 +1,7 @@
 package log
 
 import (
+	"bytes"
 	"log/slog"
 	"testing"
 	"time"
@@ -13,16 +14,26 @@ import (
 
 func TestOperation(t *testing.T) {
 	ctx := t.Context()
+	def := slog.Default()
+	t.Cleanup(func() {
+		slog.SetDefault(def)
+	})
+	var buf bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == "time" {
+			return slog.Time("time", time.Time{})
+		}
+		return a
+	}})))
 
-	// Test successful operation
 	done := Operation(ctx, "test-operation", slog.String("test", "value"))
-	time.Sleep(10 * time.Millisecond) // Simulate some work
-	done(nil)                         // No error
-
-	// Test failed operation
-	done = Operation(ctx, "test-operation-failed", slog.String("test", "value"))
-	time.Sleep(10 * time.Millisecond) // Simulate some work
-	done(assert.AnError)              // With error
+	assert.Equal(t, "time=0001-01-01T00:00:00.000Z level=INFO msg=\"INFO starting operation realm=oci operation=test-operation test=value\"\n", buf.String())
+	buf.Reset()
+	done(nil) // No error
+	assert.Contains(t, buf.String(), "time=0001-01-01T00:00:00.000Z level=INFO msg=\"INFO operation completed realm=oci operation=test-operation test=value")
+	buf.Reset()
+	done(assert.AnError) // With error
+	assert.Contains(t, buf.String(), "time=0001-01-01T00:00:00.000Z level=INFO msg=\"ERROR operation failed realm=oci operation=test-operation test=value")
 }
 
 func TestDescriptorLogAttr(t *testing.T) {
