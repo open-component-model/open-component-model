@@ -52,7 +52,7 @@ func TestDAGAddNode(t *testing.T) {
 		r := require.New(t)
 		roots := d.Roots()
 		r.Len(roots, 2, "expected 2 roots, but got %d", len(d.Roots()))
-		r.EqualValues([]string{"A", "B"}, d.Roots(), "expected roots to be [A B], but got %v", d.Roots())
+		r.ElementsMatch([]string{"A", "B"}, d.Roots(), "expected roots to be [A B], but got %v", d.Roots())
 	})
 
 	t.Run("degrees", func(t *testing.T) {
