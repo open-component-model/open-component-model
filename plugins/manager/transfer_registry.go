@@ -11,9 +11,34 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// The registry has the right type to return so no need for the generic interfaces.
-// Meaning the Interface that declares the plugin's capabilities should be defined
-// in here and then just return the Plugin itself.
+// internalTransferPlugins contains all plugins that have been registered using internally import statement.
+var internalTransferPlugins map[string]map[string]PluginBase
+
+// RegisterInternalTransferPlugin can be called by actual implementations in the source.
+// It will register any implementations directly for a given type and capability.
+func RegisterInternalTransferPlugin(p PluginBase, caps []Capability) error {
+	if internalTransferPlugins == nil {
+		internalTransferPlugins = make(map[string]map[string]PluginBase)
+	}
+
+	for _, c := range caps {
+		if internalTransferPlugins[c.Capability] == nil {
+			internalTransferPlugins[c.Capability] = make(map[string]PluginBase)
+		}
+
+		if v, ok := internalTransferPlugins[c.Capability]; ok {
+			if _, ok := v[c.Type]; ok {
+				return fmt.Errorf("plugin for capability %s already has a type %s", c.Capability, c.Type)
+			}
+		}
+
+		internalTransferPlugins[c.Capability][c.Type] = p
+	}
+
+	return nil
+}
+
+// TransferRegistry holds all plugins that implement capabilities corresponding to transfer operations.
 type TransferRegistry struct {
 	mu                 sync.Mutex
 	registry           map[string]map[string]*Plugin
@@ -21,6 +46,9 @@ type TransferRegistry struct {
 	logger             *slog.Logger
 }
 
+// Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
+// All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
+// the plugin SDK.
 func (r *TransferRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -36,6 +64,9 @@ func (r *TransferRegistry) Shutdown(ctx context.Context) error {
 	return errs
 }
 
+// AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// This function will return an error if the given capability + type already has a registered plugin.
+// Multiple plugins for the same cap+typ is not allowed.
 func (r *TransferRegistry) AddPlugin(plugin *Plugin, caps *Capabilities) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -89,7 +120,7 @@ func (r *TransferRegistry) GetPlugin(ctx context.Context, capability, typ string
 	}
 
 	// create the base plugin backed by a concrete implementation of plugin interfaces.
-	// TODO: Figure out the right context here.
+	// TODO: Figure out the right context here. -> Should be the base context from the plugin manager.
 	repoPlugin := NewRepositoryPlugin(context.Background(), r.logger, client, plugin.ID, plugin.path, plugin.config)
 
 	r.constructedPlugins[repoPlugin.ID] = &constructedPlugin{
@@ -100,8 +131,31 @@ func (r *TransferRegistry) GetPlugin(ctx context.Context, capability, typ string
 	return repoPlugin, nil
 }
 
+// getInternalPlugin looks in the internally registered plugins first if we have any plugins that have
+// been added.
+func getInternalPlugin(capability string, typ string) (PluginBase, bool) {
+	if _, ok := internalTransferPlugins[capability]; !ok {
+		return nil, false
+	}
+
+	if _, ok := internalTransferPlugins[capability][typ]; !ok {
+		return nil, false
+	}
+
+	return internalTransferPlugins[capability][typ], true
+}
+
 // GetReadWriteComponentVersionRepository gets a plugin that registered for this given capability.
 func GetReadWriteComponentVersionRepository(ctx context.Context, pm *PluginManager, typ runtime.Typed) (ReadWriteRepositoryPluginContract, error) {
+	if v, ok := getInternalPlugin(ReadWriteComponentVersionRepositoryCapability, typ.GetType().String()); ok {
+		p, ok := v.(ReadWriteRepositoryPluginContract)
+		if !ok {
+			return nil, fmt.Errorf("read-write component version repository does not implement ReadWriteRepositoryPluginContract but was: %T", v)
+		}
+
+		return p, nil
+	}
+
 	p, err := pm.TransferRegistry.GetPlugin(ctx, ReadWriteComponentVersionRepositoryCapability, typ.GetType().String())
 	if err != nil {
 		return nil, fmt.Errorf("error getting transfer plugin for capability %s with type %s: %w", ReadWriteComponentVersionRepositoryCapability, typ.GetType().String(), err)

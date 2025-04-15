@@ -9,8 +9,23 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os/exec"
 	"time"
 )
+
+// constructedPlugin is a plugin that has been created and stored before actually starting it.
+// This tracks plugins that are not _started_ and have been requested.
+// The number of used plugins can differ considerably compared to
+// the actual registered plugins.
+// This is separate from the plugins being registered because we don't want
+// to always loop through all the registered plugins and check their state.
+// For example, during shutdown or during checking if we already have a started
+// plugin or not.
+type constructedPlugin struct {
+	Plugin *RepositoryPlugin
+
+	cmd *exec.Cmd
+}
 
 // Sets up the HTTP client for the plugin or returns it, based on how I'm going to extract this.
 func waitForPlugin(ctx context.Context, id, location string, typ ConnectionType) (*http.Client, error) {
