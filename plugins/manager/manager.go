@@ -27,43 +27,12 @@ var (
 	CredentialPlugin     PluginType = "credential"
 )
 
-// ImplementedPlugin contains information about a plugin that has been included via direct implementation.
-type ImplementedPlugin struct {
-	Base         PluginBase
-	Capabilities []Capability
-	Type         string
-	ID           string
-}
-
-// implementedRegisteredPlugins will contain plugins that have been included via direct implementation for a
-// specific type and capability.
-var implementedRegisteredPlugins = map[string]map[string][]*ImplementedPlugin{}
-
-// RegisterPluginImplementationForTypeAndCapabilities can be called by actual implementations in the source.
-// It will register any implementations directly for a given type and capability.
-func RegisterPluginImplementationForTypeAndCapabilities(p *ImplementedPlugin) {
-	for _, capability := range p.Capabilities {
-		if _, ok := implementedRegisteredPlugins[p.Type]; !ok {
-			implementedRegisteredPlugins[p.Type] = map[string][]*ImplementedPlugin{}
-		}
-
-		implementedRegisteredPlugins[p.Type][capability.Capability] = append(implementedRegisteredPlugins[p.Type][capability.Capability], p)
-	}
-}
-
 // Plugin represents a connected plugin
 type Plugin struct {
 	ID           string
 	path         string
 	config       Config
 	capabilities map[PluginType][]Capability
-
-	cmd *exec.Cmd
-}
-
-// constructedPlugin is a plugin that has been created and stored before actually starting it.
-type constructedPlugin struct {
-	Plugin *RepositoryPlugin
 
 	cmd *exec.Cmd
 }
@@ -76,23 +45,8 @@ type PluginManager struct {
 	TransformationRegistry *TransformationRegistry
 	CredentialRegistry     *CredentialRegistry
 
-	// Stores plugins for each capability. Capabilities are determined
-	// through the plugins.
-	// A plugin contains their capability. When looking for a plugin
-	// we loop through all types and see if a plugin supports the
-	// needed capability or all defined capabilities.
-	plugins map[string]map[string][]*Plugin
-	mu      sync.Mutex
-
-	// This tracks plugins that are not _started_ and have been requested.
-	// The number of used plugins can differ considerably compared to
-	// the actual registered plugins.
-	// This is separate from the plugins being registered because we don't want
-	// to always loop through all the registered plugins and check their state.
-	// For example, during shutdown or during checking if we already have a started
-	// plugin or not.
-	constructedPlugins map[string]*constructedPlugin
-	logger             *slog.Logger
+	mu     sync.Mutex
+	logger *slog.Logger
 
 	// baseCtx is the context that is used for all plugins.
 	// This is a different context than the one used for fetching plugins because
@@ -109,10 +63,8 @@ func NewPluginManager(ctx context.Context, logger *slog.Logger) *PluginManager {
 		TransferRegistry:       NewTransferRegistry(),
 		CredentialRegistry:     NewCredentialRegistry(),
 
-		baseCtx:            ctx,
-		constructedPlugins: make(map[string]*constructedPlugin),
-		logger:             logger,
-		plugins:            make(map[string]map[string][]*Plugin),
+		baseCtx: ctx,
+		logger:  logger,
 	}
 }
 
@@ -205,9 +157,6 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 		}
 
-		// TODO: Switch here on what to use as a registry or rather plugin type and then add this plugin to that registry.
-		// Each registry has its own lookup -> But this cannot be generalized. And the plugin constructs are also
-		// all of a different type and parameter list.
 		caps := &Capabilities{}
 		if err := json.Unmarshal(output.Bytes(), caps); err != nil {
 			return fmt.Errorf("failed to unmarshal capabilities: %w", err)
@@ -227,7 +176,7 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return cmd.Process.Kill()
 		}
 		plugin.cmd = pluginCmd
-		plugin.capabilities = caps.Capabilities // store the endpoints
+		plugin.capabilities = caps.Capabilities
 
 		// TODO: Inbuilt stuff still needs to work. For example OCI one.
 		// For all plugin types of this binary, add the plugin to the right registry
@@ -257,8 +206,11 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 	defer pm.mu.Unlock()
 	var errs error
 
-	// TODO: add the other registries.
-	errs = errors.Join(errs, pm.TransferRegistry.Shutdown(ctx))
+	errs = errors.Join(errs,
+		pm.TransferRegistry.Shutdown(ctx),
+		pm.TransformationRegistry.Shutdown(ctx),
+		pm.CredentialRegistry.Shutdown(ctx),
+	)
 
 	return errs
 }
