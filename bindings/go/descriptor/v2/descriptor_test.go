@@ -2,6 +2,7 @@ package v2_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -643,4 +644,494 @@ func TestComponentDeserialization(t *testing.T) {
 	assert.Equal(t, "example-reference", desc.Component.References[0].Name)
 	assert.Equal(t, "1.0.0", desc.Component.References[0].Version)
 	assert.Equal(t, "other-component", desc.Component.References[0].Component)
+}
+
+func TestSchemaConformance(t *testing.T) {
+	t.Run("RequiredFields", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			descriptor    descriptorv2.Descriptor
+			expectedError string
+		}{
+			{
+				name: "MissingMeta",
+				descriptor: descriptorv2.Descriptor{
+					Component: descriptorv2.Component{
+						ComponentMeta: descriptorv2.ComponentMeta{
+							ObjectMeta: descriptorv2.ObjectMeta{
+								Name:    "github.com/example/component",
+								Version: "1.0.0",
+							},
+						},
+						RepositoryContexts: []*runtime.Raw{},
+						Resources:          []descriptorv2.Resource{},
+						Sources:            []descriptorv2.Source{},
+						References:         []descriptorv2.Reference{},
+					},
+				},
+				expectedError: "/meta/schemaVersion': '' does not match pattern '^v2'",
+			},
+			{
+				name: "MissingComponent",
+				descriptor: descriptorv2.Descriptor{
+					Meta: descriptorv2.Meta{
+						Version: "v2",
+					},
+				},
+				expectedError: "'/component': validation failed",
+			},
+			{
+				name: "MissingSchemaVersion",
+				descriptor: descriptorv2.Descriptor{
+					Meta: descriptorv2.Meta{},
+					Component: descriptorv2.Component{
+						ComponentMeta: descriptorv2.ComponentMeta{
+							ObjectMeta: descriptorv2.ObjectMeta{
+								Name:    "github.com/example/component",
+								Version: "1.0.0",
+							},
+						},
+						RepositoryContexts: []*runtime.Raw{},
+						Resources:          []descriptorv2.Resource{},
+						Sources:            []descriptorv2.Source{},
+						References:         []descriptorv2.Reference{},
+					},
+				},
+				expectedError: "'/meta/schemaVersion': '' does not match pattern '^v2'",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := descriptorv2.Validate(&tt.descriptor)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			})
+		}
+	})
+
+	t.Run("ComponentNameValidation", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			componentName string
+			valid         assert.ErrorAssertionFunc
+		}{
+			{
+				name:          "ValidComponentName",
+				componentName: "github.com/example/component",
+				valid:         assert.NoError,
+			},
+			{
+				name:          "InvalidComponentName_NoDomain",
+				componentName: "component",
+				valid:         assert.Error,
+			},
+			{
+				name:          "InvalidComponentName_InvalidChars",
+				componentName: "github.com/example/component@1.0",
+				valid:         assert.Error,
+			},
+			{
+				name:          "InvalidComponentName_TooLong",
+				componentName: "github.com/" + strings.Repeat("a", 300),
+				valid:         assert.Error,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				desc := descriptorv2.Descriptor{
+					Meta: descriptorv2.Meta{
+						Version: "v2",
+					},
+					Component: descriptorv2.Component{
+						ComponentMeta: descriptorv2.ComponentMeta{
+							ObjectMeta: descriptorv2.ObjectMeta{
+								Name:    tt.componentName,
+								Version: "1.0.0",
+							},
+						},
+						RepositoryContexts: []*runtime.Raw{},
+						Resources:          []descriptorv2.Resource{},
+						Sources:            []descriptorv2.Source{},
+						References:         []descriptorv2.Reference{},
+					},
+				}
+				err := descriptorv2.Validate(&desc)
+				tt.valid(t, err)
+			})
+		}
+	})
+
+	t.Run("VersionValidation", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			version string
+			valid   bool
+		}{
+			{
+				name:    "ValidSemver",
+				version: "1.0.0",
+				valid:   true,
+			},
+			{
+				name:    "ValidSemverWithV",
+				version: "v1.0.0",
+				valid:   true,
+			},
+			{
+				name:    "ValidMajorOnly",
+				version: "1",
+				valid:   true,
+			},
+			{
+				name:    "ValidMajorMinor",
+				version: "1.0",
+				valid:   true,
+			},
+			{
+				name:    "InvalidVersion",
+				version: "invalid",
+				valid:   false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				desc := descriptorv2.Descriptor{
+					Meta: descriptorv2.Meta{
+						Version: "v2",
+					},
+					Component: descriptorv2.Component{
+						ComponentMeta: descriptorv2.ComponentMeta{
+							ObjectMeta: descriptorv2.ObjectMeta{
+								Name:    "github.com/example/component",
+								Version: tt.version,
+							},
+						},
+						RepositoryContexts: []*runtime.Raw{},
+						Resources:          []descriptorv2.Resource{},
+						Sources:            []descriptorv2.Source{},
+						References:         []descriptorv2.Reference{},
+					},
+				}
+				err := descriptorv2.Validate(&desc)
+				if tt.valid {
+					assert.NoError(t, err)
+				} else {
+					assert.Error(t, err)
+					assert.Contains(t, err.Error(), "does not match pattern")
+				}
+			})
+		}
+	})
+
+	t.Run("ResourceValidation", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			resource      descriptorv2.Resource
+			expectedError string
+		}{
+			{
+				name: "MissingRequiredFields",
+				resource: descriptorv2.Resource{
+					ElementMeta: descriptorv2.ElementMeta{
+						ObjectMeta: descriptorv2.ObjectMeta{
+							Name: "test-resource",
+						},
+					},
+				},
+				expectedError: "version",
+			},
+			{
+				name: "InvalidResourceRelation",
+				resource: descriptorv2.Resource{
+					ElementMeta: descriptorv2.ElementMeta{
+						ObjectMeta: descriptorv2.ObjectMeta{
+							Name:    "test-resource",
+							Version: "1.0.0",
+						},
+					},
+					Type:     "ociImage/v1",
+					Relation: "invalid",
+					Access: &runtime.Raw{
+						Type: runtime.Type{
+							Name: "ociArtifact",
+						},
+						Data: []byte(`{"type":"ociArtifact","imageReference":"test/image:1.0"}`),
+					},
+				},
+				expectedError: "value must be one of 'local', 'external'",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				desc := descriptorv2.Descriptor{
+					Meta: descriptorv2.Meta{
+						Version: "v2",
+					},
+					Component: descriptorv2.Component{
+						ComponentMeta: descriptorv2.ComponentMeta{
+							ObjectMeta: descriptorv2.ObjectMeta{
+								Name:    "github.com/example/component",
+								Version: "1.0.0",
+							},
+						},
+						RepositoryContexts: []*runtime.Raw{},
+						Resources:          []descriptorv2.Resource{tt.resource},
+						Sources:            []descriptorv2.Source{},
+						References:         []descriptorv2.Reference{},
+					},
+				}
+				err := descriptorv2.Validate(&desc)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			})
+		}
+	})
+
+	t.Run("SourceValidation", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			source        descriptorv2.Source
+			expectedError string
+		}{
+			{
+				name: "MissingRequiredFields",
+				source: descriptorv2.Source{
+					ElementMeta: descriptorv2.ElementMeta{
+						ObjectMeta: descriptorv2.ObjectMeta{
+							Name: "test-source",
+						},
+					},
+				},
+				expectedError: "version",
+			},
+			{
+				name: "MissingType",
+				source: descriptorv2.Source{
+					ElementMeta: descriptorv2.ElementMeta{
+						ObjectMeta: descriptorv2.ObjectMeta{
+							Name:    "test-source",
+							Version: "1.0.0",
+						},
+					},
+					Access: &runtime.Raw{
+						Type: runtime.Type{
+							Name: "gitHub",
+						},
+						Data: []byte(`{"type":"gitHub","repoUrl":"https://github.com/test/repo"}`),
+					},
+				},
+				expectedError: "type",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				desc := descriptorv2.Descriptor{
+					Meta: descriptorv2.Meta{
+						Version: "v2",
+					},
+					Component: descriptorv2.Component{
+						ComponentMeta: descriptorv2.ComponentMeta{
+							ObjectMeta: descriptorv2.ObjectMeta{
+								Name:    "github.com/example/component",
+								Version: "1.0.0",
+							},
+						},
+						RepositoryContexts: []*runtime.Raw{},
+						Resources:          []descriptorv2.Resource{},
+						Sources:            []descriptorv2.Source{tt.source},
+						References:         []descriptorv2.Reference{},
+					},
+				}
+				err := descriptorv2.Validate(&desc)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			})
+		}
+	})
+
+	t.Run("ReferenceValidation", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			reference     descriptorv2.Reference
+			expectedError string
+		}{
+			{
+				name: "MissingRequiredFields",
+				reference: descriptorv2.Reference{
+					ElementMeta: descriptorv2.ElementMeta{
+						ObjectMeta: descriptorv2.ObjectMeta{
+							Name: "test-reference",
+						},
+					},
+				},
+				expectedError: "version",
+			},
+			{
+				name: "MissingComponentName",
+				reference: descriptorv2.Reference{
+					ElementMeta: descriptorv2.ElementMeta{
+						ObjectMeta: descriptorv2.ObjectMeta{
+							Name:    "test-reference",
+							Version: "1.0.0",
+						},
+					},
+				},
+				expectedError: "componentName",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				desc := descriptorv2.Descriptor{
+					Meta: descriptorv2.Meta{
+						Version: "v2",
+					},
+					Component: descriptorv2.Component{
+						ComponentMeta: descriptorv2.ComponentMeta{
+							ObjectMeta: descriptorv2.ObjectMeta{
+								Name:    "github.com/example/component",
+								Version: "1.0.0",
+							},
+						},
+						RepositoryContexts: []*runtime.Raw{},
+						Resources:          []descriptorv2.Resource{},
+						Sources:            []descriptorv2.Source{},
+						References:         []descriptorv2.Reference{tt.reference},
+					},
+				}
+				err := descriptorv2.Validate(&desc)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			})
+		}
+	})
+
+	t.Run("LabelValidation", func(t *testing.T) {
+		tests := []struct {
+			name   string
+			label  descriptorv2.Label
+			expect assert.ErrorAssertionFunc
+		}{
+			{
+				name: "MissingName",
+				label: descriptorv2.Label{
+					Value: "test-value",
+				},
+				expect: assert.Error,
+			},
+			{
+				name: "MissingValue",
+				label: descriptorv2.Label{
+					Name: "test-label",
+				},
+				expect: assert.Error,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				desc := descriptorv2.Descriptor{
+					Meta: descriptorv2.Meta{
+						Version: "v2",
+					},
+					Component: descriptorv2.Component{
+						ComponentMeta: descriptorv2.ComponentMeta{
+							ObjectMeta: descriptorv2.ObjectMeta{
+								Name:    "github.com/example/component",
+								Version: "1.0.0",
+								Labels:  []descriptorv2.Label{tt.label},
+							},
+						},
+						RepositoryContexts: []*runtime.Raw{},
+						Resources:          []descriptorv2.Resource{},
+						Sources:            []descriptorv2.Source{},
+						References:         []descriptorv2.Reference{},
+					},
+				}
+				err := descriptorv2.Validate(&desc)
+				tt.expect(t, err)
+			})
+		}
+	})
+
+	t.Run("DigestValidation", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			digest        descriptorv2.Digest
+			expectedError string
+		}{
+			{
+				name: "MissingHashAlgorithm",
+				digest: descriptorv2.Digest{
+					NormalisationAlgorithm: "test",
+					Value:                  "test-value",
+				},
+				expectedError: "hashAlgorithm is required",
+			},
+			{
+				name: "MissingNormalisationAlgorithm",
+				digest: descriptorv2.Digest{
+					HashAlgorithm: "SHA-256",
+					Value:         "test-value",
+				},
+				expectedError: "normalisationAlgorithm is required",
+			},
+			{
+				name: "MissingValue",
+				digest: descriptorv2.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: "test",
+				},
+				expectedError: "value is required",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				desc := descriptorv2.Descriptor{
+					Meta: descriptorv2.Meta{
+						Version: "v2",
+					},
+					Component: descriptorv2.Component{
+						ComponentMeta: descriptorv2.ComponentMeta{
+							ObjectMeta: descriptorv2.ObjectMeta{
+								Name:    "github.com/example/component",
+								Version: "1.0.0",
+							},
+						},
+						RepositoryContexts: []*runtime.Raw{},
+						Resources: []descriptorv2.Resource{
+							{
+								ElementMeta: descriptorv2.ElementMeta{
+									ObjectMeta: descriptorv2.ObjectMeta{
+										Name:    "test-resource",
+										Version: "1.0.0",
+									},
+								},
+								Type:     "ociImage/v1",
+								Relation: descriptorv2.LocalRelation,
+								Access: &runtime.Raw{
+									Type: runtime.Type{
+										Name: "ociArtifact",
+									},
+									Data: []byte(`{"type":"ociArtifact","imageReference":"test/image:1.0"}`),
+								},
+								Digest: &tt.digest,
+							},
+						},
+						Sources:    []descriptorv2.Source{},
+						References: []descriptorv2.Reference{},
+					},
+				}
+				err := descriptorv2.Validate(&desc)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			})
+		}
+	})
 }

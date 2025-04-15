@@ -11,7 +11,8 @@
       "properties": {
         "schemaVersion": {
           "description": "Schema version of the component descriptor",
-          "type": "string"
+          "type": "string",
+          "pattern": "^v2"
         }
       }
     },

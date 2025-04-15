@@ -26,7 +26,7 @@ var getJSONSchema = sync.OnceValues[*jsonschema.Schema, error](func() (*jsonsche
 // compile takes raw JSON schema data and compiles it into a jsonschema.JSONSchema object.
 // It handles the compilation process including unmarshaling and resource registration.
 func compile(data []byte) (*jsonschema.Schema, error) {
-	const schemaFile = "schema.json"
+	const schemaFile = "resources/schema-2020-12.json"
 	c := jsonschema.NewCompiler()
 	unmarshaler, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
 	if err != nil {
