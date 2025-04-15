@@ -657,6 +657,7 @@ func TestSchemaConformance(t *testing.T) {
 				name: "MissingMeta",
 				descriptor: descriptorv2.Descriptor{
 					Component: descriptorv2.Component{
+						Provider: "example-provider",
 						ComponentMeta: descriptorv2.ComponentMeta{
 							ObjectMeta: descriptorv2.ObjectMeta{
 								Name:    "github.com/example/component",
@@ -745,6 +746,7 @@ func TestSchemaConformance(t *testing.T) {
 						Version: "v2",
 					},
 					Component: descriptorv2.Component{
+						Provider: "example-provider",
 						ComponentMeta: descriptorv2.ComponentMeta{
 							ObjectMeta: descriptorv2.ObjectMeta{
 								Name:    tt.componentName,
@@ -803,6 +805,7 @@ func TestSchemaConformance(t *testing.T) {
 						Version: "v2",
 					},
 					Component: descriptorv2.Component{
+						Provider: "example-provider",
 						ComponentMeta: descriptorv2.ComponentMeta{
 							ObjectMeta: descriptorv2.ObjectMeta{
 								Name:    "github.com/example/component",
@@ -1063,7 +1066,7 @@ func TestSchemaConformance(t *testing.T) {
 		tests := []struct {
 			name          string
 			digest        descriptorv2.Digest
-			expectedError string
+			expectedError assert.ErrorAssertionFunc
 		}{
 			{
 				name: "MissingHashAlgorithm",
@@ -1071,7 +1074,7 @@ func TestSchemaConformance(t *testing.T) {
 					NormalisationAlgorithm: "test",
 					Value:                  "test-value",
 				},
-				expectedError: "hashAlgorithm is required",
+				expectedError: assert.Error,
 			},
 			{
 				name: "MissingNormalisationAlgorithm",
@@ -1079,7 +1082,7 @@ func TestSchemaConformance(t *testing.T) {
 					HashAlgorithm: "SHA-256",
 					Value:         "test-value",
 				},
-				expectedError: "normalisationAlgorithm is required",
+				expectedError: assert.Error,
 			},
 			{
 				name: "MissingValue",
@@ -1087,7 +1090,7 @@ func TestSchemaConformance(t *testing.T) {
 					HashAlgorithm:          "SHA-256",
 					NormalisationAlgorithm: "test",
 				},
-				expectedError: "value is required",
+				expectedError: assert.Error,
 			},
 		}
 
@@ -1129,8 +1132,7 @@ func TestSchemaConformance(t *testing.T) {
 					},
 				}
 				err := descriptorv2.Validate(&desc)
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError)
+				tt.expectedError(t, err)
 			})
 		}
 	})

@@ -40,10 +40,11 @@
       "properties": {
         "name": {
           "description": "Name of the label",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         },
         "value": {
-          "description": "Value of the label"
+          "description": "Value of the label",
+          "$ref": "#/$defs/nonEmptyString"
         },
         "version": {
           "description": "Version of the label",
@@ -75,17 +76,22 @@
       "pattern": "^[v]?(0|[1-9]\\d*)(?:\\.(0|[1-9]\\d*))?(?:\\.(0|[1-9]\\d*))?(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
       "type": "string"
     },
+    "ocmType": {
+      "description": "Type identifier following the Open Component Model type format",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?",
+      "type": "string"
+    },
+    "nonEmptyString": {
+      "description": "A string that must not be empty",
+      "type": "string",
+      "minLength": 1
+    },
     "identityAttribute": {
       "type": "object",
       "description": "Additional identity attributes for element identification",
       "propertyNames": {
         "$ref": "#/$defs/identityAttributeKey"
       }
-    },
-    "ocmType": {
-      "description": "Type identifier following the Open Component Model type format",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?",
-      "type": "string"
     },
     "repositoryContext": {
       "type": "object",
@@ -158,15 +164,15 @@
       "properties": {
         "hashAlgorithm": {
           "description": "Algorithm used for hashing",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         },
         "normalisationAlgorithm": {
           "description": "Algorithm used for normalizing content before hashing",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         },
         "value": {
           "description": "The actual hash value",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         }
       }
     },
@@ -176,7 +182,7 @@
       "properties": {
         "value": {
           "description": "String representation of the timestamp",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         },
         "time": {
           "description": "RFC 3339 formatted date-time",
@@ -196,15 +202,15 @@
       "properties": {
         "algorithm": {
           "description": "Algorithm used for signing",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         },
         "value": {
           "description": "The actual signature value",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         },
         "mediaType": {
           "description": "Media type of the signature value",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         }
       }
     },
@@ -220,7 +226,7 @@
       "properties": {
         "name": {
           "description": "Name of the signature",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         },
         "digest": {
           "description": "Digest information for the signature",
@@ -245,7 +251,7 @@
       "properties": {
         "name": {
           "description": "Name of the nested component",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         },
         "version": {
           "description": "Version of the nested component",
@@ -460,7 +466,7 @@
         },
         "provider": {
           "description": "Provider type of the component in the origin's context",
-          "type": "string"
+          "$ref": "#/$defs/nonEmptyString"
         },
         "labels": {
           "description": "Labels associated with the component",
