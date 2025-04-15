@@ -1,0 +1,524 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Open Component Model v2 schema",
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "description": "component descriptor metadata",
+      "required": [
+        "schemaVersion"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "description": "Schema version of the component descriptor",
+          "type": "string"
+        }
+      }
+    },
+    "merge": {
+      "type": "object",
+      "description": "Configuration for merging labels",
+      "properties": {
+        "algorithm": {
+          "description": "Algorithm used for merging labels",
+          "pattern": "^[a-z][a-z0-9/_-]+$"
+        },
+        "config": {
+          "description": "Configuration specific to the merge algorithm"
+        }
+      },
+      "additionalProperties": false
+    },
+    "label": {
+      "type": "object",
+      "description": "Label that can be set on various objects in the Open Component Model domain",
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the label",
+          "type": "string"
+        },
+        "value": {
+          "description": "Value of the label"
+        },
+        "version": {
+          "description": "Version of the label",
+          "pattern": "^v[0-9]+$"
+        },
+        "signing": {
+          "description": "Indicates whether the label should be included in the signature",
+          "type": "boolean"
+        },
+        "merge": {
+          "description": "Configuration for merging this label",
+          "$ref": "#/$defs/merge"
+        }
+      }
+    },
+    "componentName": {
+      "type": "string",
+      "description": "Unique name of the component following the Open Component Model naming convention",
+      "maxLength": 255,
+      "pattern": "^[a-z][-a-z0-9]*([.][a-z][-a-z0-9]*)*[.][a-z]{2,}(/[a-z][-a-z0-9_]*([.][a-z][-a-z0-9_]*)*)+$"
+    },
+    "identityAttributeKey": {
+      "description": "Key for identity attributes used to identify elements in a component version",
+      "minLength": 2,
+      "pattern": "^[a-z0-9]([-_+a-z0-9]*[a-z0-9])?$"
+    },
+    "relaxedSemver": {
+      "description": "Relaxed Semver version that allows optional leading 'v', major-only, and major.minor only",
+      "pattern": "^[v]?(0|[1-9]\\d*)(?:\\.(0|[1-9]\\d*))?(?:\\.(0|[1-9]\\d*))?(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "type": "string"
+    },
+    "identityAttribute": {
+      "type": "object",
+      "description": "Additional identity attributes for element identification",
+      "propertyNames": {
+        "$ref": "#/$defs/identityAttributeKey"
+      }
+    },
+    "ocmType": {
+      "description": "Type identifier following the Open Component Model type format",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?",
+      "type": "string"
+    },
+    "repositoryContext": {
+      "type": "object",
+      "description": "Context information about the repository where the component is stored",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "description": "Type of the repository",
+          "$ref": "#/$defs/ocmType"
+        }
+      }
+    },
+    "access": {
+      "type": "object",
+      "description": "Base type for access specifications",
+      "required": [
+        "type"
+      ]
+    },
+    "sourceDefinition": {
+      "type": "object",
+      "description": "Definition of a source artifact used to generate resources",
+      "required": [
+        "name",
+        "version",
+        "type",
+        "access"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the source",
+          "type": "string",
+          "$ref": "#/$defs/identityAttributeKey"
+        },
+        "extraIdentity": {
+          "description": "Additional identity attributes for the source",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "version": {
+          "description": "Version of the source",
+          "$ref": "#/$defs/relaxedSemver"
+        },
+        "type": {
+          "description": "Type of the source",
+          "$ref": "#/$defs/ocmType"
+        },
+        "labels": {
+          "description": "Labels associated with the source",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        },
+        "access": {
+          "description": "Access specification for the source",
+          "$ref": "#/$defs/access"
+        }
+      }
+    },
+    "digestSpec": {
+      "type": "object",
+      "description": "Specification of digest information including hashing algorithm and value",
+      "required": [
+        "hashAlgorithm",
+        "normalisationAlgorithm",
+        "value"
+      ],
+      "properties": {
+        "hashAlgorithm": {
+          "description": "Algorithm used for hashing",
+          "type": "string"
+        },
+        "normalisationAlgorithm": {
+          "description": "Algorithm used for normalizing content before hashing",
+          "type": "string"
+        },
+        "value": {
+          "description": "The actual hash value",
+          "type": "string"
+        }
+      }
+    },
+    "timestampSpec": {
+      "type": "object",
+      "description": "Specification for timestamp information",
+      "properties": {
+        "value": {
+          "description": "String representation of the timestamp",
+          "type": "string"
+        },
+        "time": {
+          "description": "RFC 3339 formatted date-time",
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "signatureSpec": {
+      "type": "object",
+      "description": "Specification of signature information",
+      "required": [
+        "algorithm",
+        "value",
+        "mediaType"
+      ],
+      "properties": {
+        "algorithm": {
+          "description": "Algorithm used for signing",
+          "type": "string"
+        },
+        "value": {
+          "description": "The actual signature value",
+          "type": "string"
+        },
+        "mediaType": {
+          "description": "Media type of the signature value",
+          "type": "string"
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "description": "Signature information for verifying component validity",
+      "required": [
+        "name",
+        "digest",
+        "signature"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Name of the signature",
+          "type": "string"
+        },
+        "digest": {
+          "description": "Digest information for the signature",
+          "$ref": "#/$defs/digestSpec"
+        },
+        "signature": {
+          "description": "Signature details",
+          "$ref": "#/$defs/signatureSpec"
+        },
+        "timestamp": {
+          "description": "Timestamp information for the signature",
+          "$ref": "#/$defs/timestampSpec"
+        }
+      }
+    },
+    "nestedDigestSpec": {
+      "type": "object",
+      "description": "Specification for nested component digests",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the nested component",
+          "type": "string"
+        },
+        "version": {
+          "description": "Version of the nested component",
+          "type": "string"
+        },
+        "extraIdentity": {
+          "description": "Additional identity attributes for the nested component",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "digest": {
+          "description": "Digest information for the nested component",
+          "$ref": "#/$defs/digestSpec"
+        }
+      }
+    },
+    "nestedComponentDigests": {
+      "type": "object",
+      "description": "Digest information for nested components",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the component",
+          "$ref": "#/$defs/componentName"
+        },
+        "version": {
+          "description": "Version of the component",
+          "$ref": "#/$defs/relaxedSemver"
+        },
+        "digest": {
+          "description": "Digest information for the component",
+          "$ref": "#/$defs/digestSpec"
+        },
+        "resourceDigests": {
+          "description": "Digest information for resources in the component",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nestedDigestSpec"
+          }
+        }
+      }
+    },
+    "srcRef": {
+      "type": "object",
+      "description": "Reference to a component-local source",
+      "additionalProperties": false,
+      "properties": {
+        "identitySelector": {
+          "description": "Selector for identifying the source",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "labels": {
+          "description": "Labels for further identification of the source",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        }
+      }
+    },
+    "componentReference": {
+      "type": "object",
+      "description": "Reference to another component in the registry",
+      "required": [
+        "name",
+        "componentName",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "componentName": {
+          "description": "Name of the referenced component",
+          "$ref": "#/$defs/componentName"
+        },
+        "name": {
+          "description": "Local name of the reference",
+          "type": "string",
+          "$ref": "#/$defs/identityAttributeKey"
+        },
+        "extraIdentity": {
+          "description": "Additional identity attributes for the reference",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "version": {
+          "description": "Version of the referenced component",
+          "$ref": "#/$defs/relaxedSemver"
+        },
+        "labels": {
+          "description": "Labels associated with the reference",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        },
+        "digest": {
+          "description": "Optional digest of the referenced component",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/digestSpec"
+            }
+          ]
+        }
+      }
+    },
+    "resourceDefinition": {
+      "type": "object",
+      "description": "Base type for resources, which are delivery artifacts intended for deployment",
+      "required": [
+        "name",
+        "version",
+        "type",
+        "relation",
+        "access"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the resource",
+          "type": "string",
+          "$ref": "#/$defs/identityAttributeKey"
+        },
+        "extraIdentity": {
+          "description": "Additional identity attributes for the resource",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "version": {
+          "description": "Version of the resource",
+          "$ref": "#/$defs/relaxedSemver"
+        },
+        "type": {
+          "description": "Type of the resource",
+          "$ref": "#/$defs/ocmType"
+        },
+        "srcRefs": {
+          "description": "References to sources that produced this resource",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/srcRef"
+          }
+        },
+        "relation": {
+          "description": "Relation of the resource to the component (local or external)",
+          "type": "string",
+          "enum": [
+            "local",
+            "external"
+          ]
+        },
+        "labels": {
+          "description": "Labels associated with the resource",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        },
+        "access": {
+          "description": "Access specification for the resource",
+          "$ref": "#/$defs/access"
+        },
+        "digest": {
+          "description": "Optional digest of the resource",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/digestSpec"
+            }
+          ]
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "description": "A component containing sources, resources, and references to other components",
+      "required": [
+        "name",
+        "version",
+        "repositoryContexts",
+        "provider",
+        "sources",
+        "componentReferences",
+        "resources"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the component",
+          "$ref": "#/$defs/componentName"
+        },
+        "version": {
+          "description": "Version of the component",
+          "$ref": "#/$defs/relaxedSemver"
+        },
+        "creationTime": {
+          "description": "Creation time of the component version",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "repositoryContexts": {
+          "description": "Previous repositories of the component",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/repositoryContext"
+          }
+        },
+        "provider": {
+          "description": "Provider type of the component in the origin's context",
+          "type": "string"
+        },
+        "labels": {
+          "description": "Labels associated with the component",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        },
+        "sources": {
+          "description": "Sources that produced the component",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sourceDefinition"
+          }
+        },
+        "componentReferences": {
+          "description": "References to other component versions",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/componentReference"
+          }
+        },
+        "resources": {
+          "description": "Resources created by the component or third parties",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resourceDefinition"
+          }
+        }
+      }
+    }
+  },
+  "type": "object",
+  "required": [
+    "meta",
+    "component"
+  ],
+  "properties": {
+    "meta": {
+      "description": "Metadata of the component descriptor",
+      "$ref": "#/$defs/meta"
+    },
+    "component": {
+      "description": "The component specification",
+      "$ref": "#/$defs/component"
+    },
+    "signatures": {
+      "description": "Optional signing information for verifying component validity",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/signature"
+      }
+    },
+    "nestedDigests": {
+      "description": "Digest information for nested components",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nestedComponentDigests"
+      }
+    }
+  }
+}

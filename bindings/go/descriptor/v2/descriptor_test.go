@@ -157,22 +157,26 @@ func TestDescriptor_JSON(t *testing.T) {
 	desc := descriptorv2.Descriptor{}
 	err := json.Unmarshal([]byte(jsonData), &desc)
 	assert.Nil(t, err)
+	assert.NoError(t, descriptorv2.Validate(&desc))
 
 	assert.NotEmpty(t, desc.Component.Resources[0].ToIdentity())
 
 	descData, err := json.Marshal(desc)
 	assert.JSONEq(t, jsonData, string(descData))
 	assert.Nil(t, err)
+	assert.NoError(t, descriptorv2.ValidateRawJSON(descData))
 }
 
 func TestDescriptor_YAML(t *testing.T) {
-	desc := &descriptorv2.Descriptor{}
-	err := yaml.Unmarshal([]byte(yamlData), desc)
+	desc := descriptorv2.Descriptor{}
+	err := yaml.Unmarshal([]byte(yamlData), &desc)
 	assert.Nil(t, err)
+	assert.NoError(t, descriptorv2.Validate(&desc))
+
 	descData, err := yaml.Marshal(desc)
 	assert.YAMLEq(t, yamlData, string(descData))
 	assert.Nil(t, err)
-	_ = descData
+	assert.NoError(t, descriptorv2.ValidateRawYAML(descData))
 }
 
 func TestDescriptor_String(t *testing.T) {
