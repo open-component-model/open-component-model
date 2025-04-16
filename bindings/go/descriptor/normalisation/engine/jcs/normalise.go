@@ -2,7 +2,6 @@ package jcs
 
 import (
 	"bytes"
-	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
