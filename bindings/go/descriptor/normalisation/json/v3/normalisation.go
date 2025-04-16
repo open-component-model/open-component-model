@@ -320,6 +320,9 @@ func MapResourcesWithAccessType(test func(string) bool, mapper func(interface{})
 		return v
 	}
 	typ, ok := access.(map[string]interface{})["type"]
+	if !ok || typ == nil {
+		return v
+	}
 	if s, ok := typ.(string); ok && test(s) {
 		return mapper(v)
 	}
