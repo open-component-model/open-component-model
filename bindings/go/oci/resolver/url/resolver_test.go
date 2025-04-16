@@ -1,4 +1,4 @@
-package resolver_test
+package url_test
 
 import (
 	"context"
@@ -7,18 +7,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"oras.land/oras-go/v2/registry/remote"
 
-	"ocm.software/open-component-model/bindings/go/oci/internal/resolver"
+	"ocm.software/open-component-model/bindings/go/oci/resolver/url"
 )
 
 func TestNewURLPathResolver(t *testing.T) {
 	baseURL := "http://example.com"
-	resolver := resolver.NewURLPathResolver(baseURL)
+	resolver := url.New(baseURL)
 	assert.NotNil(t, resolver)
 	assert.Equal(t, baseURL, resolver.BaseURL)
 }
 
 func TestURLPathResolver_SetClient(t *testing.T) {
-	resolver := resolver.NewURLPathResolver("http://example.com")
+	resolver := url.New("http://example.com")
 	repo, err := remote.NewRepository("example.com/test")
 	assert.NoError(t, err)
 
@@ -31,7 +31,7 @@ func TestURLPathResolver_SetClient(t *testing.T) {
 	assert.NotNil(t, store)
 }
 func TestURLPathResolver_ComponentVersionReference(t *testing.T) {
-	resolver := resolver.NewURLPathResolver("http://example.com")
+	resolver := url.New("http://example.com")
 	component := "test-component"
 	version := "v1.0.0"
 	expected := "http://example.com/component-descriptors/test-component:v1.0.0"
@@ -59,7 +59,7 @@ func TestURLPathResolver_StoreForReference(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolver := resolver.NewURLPathResolver("http://example.com")
+			resolver := url.New("http://example.com")
 			store, err := resolver.StoreForReference(context.Background(), tt.reference)
 
 			if tt.expectError {

@@ -21,11 +21,11 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
+	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	"ocm.software/open-component-model/bindings/go/oci/internal/looseref"
-	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
 	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -131,7 +131,7 @@ type Resolver interface {
 // Repository implements the ComponentVersionRepository interface using OCI registries.
 // Each component may be stored in a separate OCI repository, but ultimately the storage is determined by the Resolver.
 //
-// This Repository implementation synchronizes OCI Manifests through the concepts of LocalDescriptorMemory.
+// This Repository implementation synchronizes OCI Manifests through the concepts of LocalResourceManifestCache.
 // Through this any local blob added with AddLocalResource will be added to the memory until
 // AddComponentVersion is called with a reference to that resource.
 // This allows the repository to associate newly added blobs with the component version and still upload them
@@ -143,8 +143,8 @@ type Resolver interface {
 type Repository struct {
 	scheme *runtime.Scheme
 
-	// localManifestMemory temporarily stores local blobs intended as manifests until they are added to a component version.
-	localManifestMemory memory.LocalDescriptorMemory
+	// localResourceManifestCache temporarily stores manifests for local resources until they are added to a component version.
+	localResourceManifestCache cache.OCIDescriptorCache
 
 	// resolver resolves component version references to OCI stores.
 	resolver Resolver
@@ -174,7 +174,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	manifest, err := addDescriptorToStore(ctx, store, descriptor, storeDescriptorOptions{
 		Scheme:                        repo.scheme,
 		Author:                        repo.creatorAnnotation,
-		AdditionalDescriptorManifests: repo.localManifestMemory.Get(reference),
+		AdditionalDescriptorManifests: repo.localResourceManifestCache.Get(reference),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
@@ -185,7 +185,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
 	// Cleanup local blob memory as all layers have been pushed
-	repo.localManifestMemory.Delete(reference)
+	repo.localResourceManifestCache.Delete(reference)
 
 	return nil
 }
@@ -268,7 +268,7 @@ func (repo *Repository) AddLocalResource(
 		return nil, fmt.Errorf("failed to pack resource blob: %w", err)
 	}
 
-	repo.localManifestMemory.Add(reference, desc)
+	repo.localResourceManifestCache.Add(reference, desc)
 
 	return resource, nil
 }

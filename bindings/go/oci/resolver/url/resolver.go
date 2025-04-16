@@ -1,4 +1,4 @@
-package resolver
+package url
 
 import (
 	"context"
@@ -12,43 +12,43 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
-func NewURLPathResolver(baseURL string) *CachingURLPathResolver {
-	return &CachingURLPathResolver{
+func New(baseURL string) *CachingResolver {
+	return &CachingResolver{
 		BaseURL: baseURL,
 	}
 }
 
-// CachingURLPathResolver is a Resolver that resolves references to URLs for Component Versions and Resources.
+// CachingResolver is a Resolver that resolves references to URLs for Component Versions and Resources.
 // It uses a BaseURL and a BaseClient to get a remote store for a reference.
 // each repository is only created once per reference.
-type CachingURLPathResolver struct {
+type CachingResolver struct {
 	BaseURL    string
 	BaseClient remote.Client
 	PlainHTTP  bool
 
-	DisableCache bool
+	DisableCacheProxy bool
 
 	cacheMu sync.RWMutex
 	cache   map[string]spec.Store
 }
 
-func (resolver *CachingURLPathResolver) SetClient(client remote.Client) {
+func (resolver *CachingResolver) SetClient(client remote.Client) {
 	resolver.BaseClient = client
 }
 
-func (resolver *CachingURLPathResolver) BasePath() string {
+func (resolver *CachingResolver) BasePath() string {
 	return resolver.BaseURL + "/" + path.DefaultComponentDescriptorPath
 }
 
-func (resolver *CachingURLPathResolver) ComponentVersionReference(component, version string) string {
+func (resolver *CachingResolver) ComponentVersionReference(component, version string) string {
 	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, version)
 }
 
-func (resolver *CachingURLPathResolver) Reference(reference string) (fmt.Stringer, error) {
+func (resolver *CachingResolver) Reference(reference string) (fmt.Stringer, error) {
 	return registry.ParseReference(reference)
 }
 
-func (resolver *CachingURLPathResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
+func (resolver *CachingResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
 	rawRef, err := resolver.Reference(reference)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (resolver *CachingURLPathResolver) StoreForReference(_ context.Context, ref
 	return repo, nil
 }
 
-func (resolver *CachingURLPathResolver) addToCache(reference string, store spec.Store) {
+func (resolver *CachingResolver) addToCache(reference string, store spec.Store) {
 	resolver.cacheMu.Lock()
 	defer resolver.cacheMu.Unlock()
 	if resolver.cache == nil {
@@ -81,7 +81,7 @@ func (resolver *CachingURLPathResolver) addToCache(reference string, store spec.
 	resolver.cache[reference] = store
 }
 
-func (resolver *CachingURLPathResolver) getFromCache(reference string) (spec.Store, bool) {
+func (resolver *CachingResolver) getFromCache(reference string) (spec.Store, bool) {
 	resolver.cacheMu.RLock()
 	defer resolver.cacheMu.RUnlock()
 	store, ok := resolver.cache[reference]

@@ -39,7 +39,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/internal/resolver"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -69,7 +69,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 
 	reg := "ghcr.io/open-component-model/ocm"
 
-	resolver := resolver.NewURLPathResolver(reg)
+	resolver := urlresolver.New(reg)
 	resolver.SetClient(createAuthClient(reg, user, password))
 
 	scheme := ocmruntime.NewScheme()
@@ -160,7 +160,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 
 	client := createAuthClient(registryAddress, testUsername, password)
 
-	resolver := resolver.NewURLPathResolver(registryAddress)
+	resolver := urlresolver.New(registryAddress)
 	resolver.SetClient(client)
 	resolver.PlainHTTP = true
 
@@ -389,7 +389,7 @@ func testResolverConnectivity(t *testing.T, address, reference string, client *a
 	ctx := t.Context()
 	r := require.New(t)
 
-	resolver := resolver.NewURLPathResolver(address)
+	resolver := urlresolver.New(address)
 	resolver.SetClient(client)
 	resolver.PlainHTTP = true
 

@@ -9,5 +9,4 @@ type Store interface {
 	content.ReadOnlyStorage
 	content.Pusher
 	content.TagResolver
-	content.Tagger
 }
