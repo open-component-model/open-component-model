@@ -19,8 +19,8 @@ import (
 //go:embed resources/schema-2020-12.json
 var JSONSchema []byte
 
-// getJSONSchema is a singleton that compiles the JSON schema once and caches it for reuse.
-var getJSONSchema = sync.OnceValues[*jsonschema.Schema, error](func() (*jsonschema.Schema, error) {
+// GetJSONSchema is a singleton that compiles the JSON schema once and caches it for reuse.
+var GetJSONSchema = sync.OnceValues[*jsonschema.Schema, error](func() (*jsonschema.Schema, error) {
 	return compile(JSONSchema)
 })
 
@@ -68,7 +68,7 @@ func ValidateRawJSON(raw []byte) error {
 		return fmt.Errorf("failed to unmarshal descriptor: %w", err)
 	}
 
-	schema, err := getJSONSchema()
+	schema, err := GetJSONSchema()
 	if err != nil {
 		return fmt.Errorf("failed to get schema: %w", err)
 	}
@@ -85,7 +85,7 @@ func ValidateRawYAML(raw []byte) error {
 		return fmt.Errorf("failed to unmarshal descriptor: %w", err)
 	}
 
-	schema, err := getJSONSchema()
+	schema, err := GetJSONSchema()
 	if err != nil {
 		return fmt.Errorf("failed to get schema: %w", err)
 	}
