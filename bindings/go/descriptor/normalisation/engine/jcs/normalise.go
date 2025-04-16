@@ -12,7 +12,16 @@ import (
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 )
 
-// Normalise is a helper that prepares and marshals a normalised value.
+// Normalise is a helper function that prepares and marshals a normalized value.
+// It takes an input value and exclusion rules, and returns the canonicalized JSON representation.
+//
+// Parameters:
+//   - v: The input value to normalize
+//   - ex: Exclusion rules to apply during normalization
+//
+// Returns:
+//   - []byte: The canonicalized JSON representation
+//   - error: Any error that occurred during normalization
 func Normalise(v interface{}, ex ExcludeRules) ([]byte, error) {
 	entries, err := PrepareNormalisation(Type, v, ex)
 	if err != nil {
@@ -21,28 +30,33 @@ func Normalise(v interface{}, ex ExcludeRules) ([]byte, error) {
 	return entries.Marshal("")
 }
 
-// Type is the default normalisation instance.
+// Type is the default normalisation instance implementing the JCS algorithm.
 var Type = normalisation{}
 
 // normalisation implements the Normalisation interface using JCS (RFC 8785).
+// It provides methods to create and work with normalized JSON structures.
 type normalisation struct{}
 
 // New returns a new normalisation instance.
+// This allows creating multiple independent normalisation instances if needed.
 func New() Normalisation {
 	return normalisation{}
 }
 
-// NewArray creates a new normalised array.
+// NewArray creates a new normalized array.
+// Returns a Normalised interface that can be used to build an array structure.
 func (_ normalisation) NewArray() Normalised {
 	return &normalised{value: make([]interface{}, 0)}
 }
 
-// NewMap creates a new normalised map.
+// NewMap creates a new normalized map.
+// Returns a Normalised interface that can be used to build a map structure.
 func (_ normalisation) NewMap() Normalised {
 	return &normalised{value: make(map[string]interface{})}
 }
 
-// NewValue wraps a basic value into a normalised value.
+// NewValue wraps a basic value into a normalized value.
+// This is used for primitive types that don't need special handling.
 func (_ normalisation) NewValue(v interface{}) Normalised {
 	return &normalised{value: v}
 }
@@ -53,16 +67,20 @@ func (_ normalisation) String() string {
 }
 
 // normalised is a wrapper for values undergoing normalisation.
+// It implements the Normalised interface and provides methods to work with
+// normalized JSON structures.
 type normalised struct {
 	value interface{}
 }
 
-// Value returns the underlying value.
+// Value returns the underlying value of the normalized structure.
 func (n *normalised) Value() interface{} {
 	return n.value
 }
 
-// IsEmpty checks whether the normalised value is empty (for maps and arrays).
+// IsEmpty checks whether the normalized value is empty.
+// For maps and arrays, it checks if they have no elements.
+// For other types, it always returns false.
 func (n *normalised) IsEmpty() bool {
 	switch v := n.value.(type) {
 	case map[string]interface{}:
@@ -74,17 +92,20 @@ func (n *normalised) IsEmpty() bool {
 	}
 }
 
-// Append adds an element to a normalised array.
+// Append adds an element to a normalized array.
+// Panics if called on a non-array value.
 func (n *normalised) Append(elem Normalised) {
 	n.value = append(n.value.([]interface{}), elem.Value())
 }
 
-// SetField sets a field in a normalised map.
+// SetField sets a field in a normalized map.
+// Panics if called on a non-map value.
 func (n *normalised) SetField(name string, value Normalised) {
 	n.value.(map[string]interface{})[name] = value.Value()
 }
 
 // toString recursively formats a value with indentation.
+// This is used for debugging and pretty-printing purposes.
 func toString(v interface{}, gap string) string {
 	if v == nil || v == Null {
 		return "null"
@@ -94,8 +115,7 @@ func toString(v interface{}, gap string) string {
 		ngap := gap + "  "
 		s := "{"
 		// Use ordered keys to ensure consistent output.
-		keys := OrderedKeys(casted)
-		for _, key := range keys {
+		for _, key := range slices.Sorted(maps.Keys(casted)) {
 			s += fmt.Sprintf("\n%s  %s: %s", gap, key, toString(casted[key], ngap))
 		}
 		return s + "\n" + gap + "}"
@@ -117,12 +137,12 @@ func toString(v interface{}, gap string) string {
 	}
 }
 
-// ToString returns a string representation of the normalised value with the given indentation.
+// ToString returns a string representation of the normalized value with the given indentation.
 func (n *normalised) ToString(gap string) string {
 	return toString(n.value, gap)
 }
 
-// String returns the JSON marshaled string of the normalised value.
+// String returns the JSON marshaled string of the normalized value.
 func (n *normalised) String() string {
 	data, err := json.Marshal(n.value)
 	if err != nil {
@@ -131,7 +151,7 @@ func (n *normalised) String() string {
 	return string(data)
 }
 
-// Formatted returns an indented JSON string of the normalised value.
+// Formatted returns an indented JSON string of the normalized value.
 func (n *normalised) Formatted() string {
 	data, err := json.MarshalIndent(n.value, "", "  ")
 	if err != nil {
@@ -140,8 +160,15 @@ func (n *normalised) Formatted() string {
 	return string(data)
 }
 
-// Marshal encodes the normalised value to JSON. If no indentation is requested,
-// it applies JSON canonicalization.
+// Marshal encodes the normalized value to JSON.
+// If no indentation is requested, it applies JSON canonicalization.
+//
+// Parameters:
+//   - gap: The indentation string to use. If empty, canonicalization is applied.
+//
+// Returns:
+//   - []byte: The encoded JSON data
+//   - error: Any error that occurred during encoding
 func (n *normalised) Marshal(gap string) ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	encoder := json.NewEncoder(buffer)
@@ -162,7 +189,8 @@ func (n *normalised) Marshal(gap string) ([]byte, error) {
 	return data, nil
 }
 
-// LabelExcludes defines exclusion rules for label entries during normalisation.
+// LabelExcludes defines exclusion rules for label entries during normalization.
+// It excludes labels that don't have a valid signature.
 var LabelExcludes = ExcludeEmpty{
 	ExcludeRules: DynamicArrayExcludes{
 		ValueChecker: IgnoreLabelsWithoutSignature,
@@ -176,6 +204,7 @@ var LabelExcludes = ExcludeEmpty{
 }
 
 // IgnoreLabelsWithoutSignature checks if a label lacks a valid signature and should be ignored.
+// Returns true if the label should be excluded from normalization.
 func IgnoreLabelsWithoutSignature(v interface{}) bool {
 	if m, ok := v.(map[string]interface{}); ok {
 		if sig, ok := m["signing"]; ok && sig != nil {
@@ -185,29 +214,6 @@ func IgnoreLabelsWithoutSignature(v interface{}) bool {
 	return true
 }
 
-// MapIncludes defines inclusion rules for a map. Only the listed fields are included.
-type MapIncludes map[string]ExcludeRules
-
-// Field returns the inclusion rule for the given field.
-func (r MapIncludes) Field(name string, value interface{}) (string, interface{}, ExcludeRules) {
-	if rule, ok := r[name]; ok {
-		if rule == nil {
-			rule = NoExcludes{}
-		}
-		return name, value, rule
-	}
-	return "", nil, nil
-}
-
-// Element is not supported for MapIncludes.
-func (r MapIncludes) Element(v interface{}) (bool, interface{}, ExcludeRules) {
-	panic("invalid exclude structure, require array but found struct rules")
-}
-
-func (r MapIncludes) Filter(v Normalised) (Normalised, error) {
-	return v, nil
-}
-
 // Constants for "none" access types.
 const (
 	NoneType       = "none"
@@ -215,6 +221,8 @@ const (
 )
 
 // MapResourcesWithNoneAccess maps resources with "none" access, removing the digest.
+// This is used to handle special cases where resources with no access type
+// should have their digest removed during normalization.
 func MapResourcesWithNoneAccess(v interface{}) interface{} {
 	return MapResourcesWithAccessType(
 		IsNoneAccessKind,
@@ -228,11 +236,13 @@ func MapResourcesWithNoneAccess(v interface{}) interface{} {
 }
 
 // IsNoneAccessKind checks if the given access type is "none".
+// Supports both current and legacy access type values.
 func IsNoneAccessKind(kind string) bool {
 	return kind == NoneType || kind == NoneLegacyType
 }
 
 // MapResourcesWithAccessType applies a mapper function if the access type matches.
+// This is used to transform resources based on their access type.
 func MapResourcesWithAccessType(test func(string) bool, mapper func(interface{}) interface{}, v interface{}) interface{} {
 	access, ok := v.(map[string]interface{})["access"]
 	if !ok || access == nil {
@@ -248,189 +258,8 @@ func MapResourcesWithAccessType(test func(string) bool, mapper func(interface{})
 	return v
 }
 
-type MapValue struct {
-	Mapping  ValueMapper
-	Continue ExcludeRules
-}
-
-func (m MapValue) MapValue(value interface{}) interface{} {
-	if m.Mapping != nil {
-		return m.Mapping(value)
-	}
-	return value
-}
-
-func (m MapValue) Field(name string, value interface{}) (string, interface{}, ExcludeRules) {
-	if m.Continue != nil {
-		return m.Continue.Field(name, value)
-	}
-	return name, value, NoExcludes{}
-}
-
-func (m MapValue) Element(value interface{}) (bool, interface{}, ExcludeRules) {
-	if m.Continue != nil {
-		return m.Continue.Element(value)
-	}
-	return true, value, NoExcludes{}
-}
-
-func (m MapValue) Filter(v Normalised) (Normalised, error) {
-	if m.Continue != nil {
-		return m.Continue.Filter(v)
-	}
-	return v, nil
-}
-
-// ExcludeEmpty wraps exclusion rules and filters out empty normalised values.
-type ExcludeEmpty struct {
-	ExcludeRules
-}
-
-var (
-	_ ExcludeRules        = ExcludeEmpty{}
-	_ NormalisationFilter = ExcludeEmpty{}
-)
-
-// Field applies exclusion to a field; if no rule is set and the value is nil, the field is excluded.
-func (e ExcludeEmpty) Field(name string, value interface{}) (string, interface{}, ExcludeRules) {
-	if e.ExcludeRules == nil {
-		if value == nil {
-			return "", nil, e
-		}
-		return name, value, e
-	}
-	return e.ExcludeRules.Field(name, value)
-}
-
-// Element applies exclusion to an array element.
-func (e ExcludeEmpty) Element(value interface{}) (bool, interface{}, ExcludeRules) {
-	if e.ExcludeRules == nil {
-		if value == nil {
-			return true, nil, e
-		}
-		return false, value, e
-	}
-	return e.ExcludeRules.Element(value)
-}
-
-// Filter removes a normalised value if it is empty.
-func (ExcludeEmpty) Filter(v Normalised) (Normalised, error) {
-	if v == nil || v.IsEmpty() {
-		return nil, nil
-	}
-	return v, nil
-}
-
-// DynamicArrayExcludes defines exclusion rules for arrays where each element is checked dynamically.
-type DynamicArrayExcludes struct {
-	ValueChecker ValueChecker // Checks if an element should be excluded.
-	ValueMapper  ValueMapper  // Maps an element before applying further rules.
-	Continue     ExcludeRules // Rules for further processing of the element.
-}
-
-type (
-	// ValueMapper transforms a value.
-	ValueMapper func(v interface{}) interface{}
-	// ValueChecker determines if a value should be excluded.
-	ValueChecker func(value interface{}) bool
-)
-
-var _ ExcludeRules = DynamicArrayExcludes{}
-
-// Field is not applicable for DynamicArrayExcludes.
-func (r DynamicArrayExcludes) Field(name string, value interface{}) (string, interface{}, ExcludeRules) {
-	panic("invalid exclude structure, require struct but found array rules")
-}
-
-// Element applies dynamic exclusion rules to an array element.
-func (r DynamicArrayExcludes) Element(value interface{}) (bool, interface{}, ExcludeRules) {
-	// First check if the element should be excluded based on the ValueChecker
-	exclude := r.ValueChecker != nil && r.ValueChecker(value)
-	if exclude {
-		return true, value, nil
-	}
-
-	// Apply value mapping if specified
-	if r.ValueMapper != nil {
-		value = r.ValueMapper(value)
-	}
-
-	// Return the processed value with continuation rules
-	return false, value, r.Continue
-}
-
-func (r DynamicArrayExcludes) Filter(v Normalised) (Normalised, error) {
-	return v, nil
-}
-
-// MapExcludes defines exclusion rules for map (struct) fields.
-type MapExcludes map[string]ExcludeRules
-
-var _ ExcludeRules = MapExcludes{}
-
-// Field returns the exclusion rule for a map field.
-func (r MapExcludes) Field(name string, value interface{}) (string, interface{}, ExcludeRules) {
-	if rule, ok := r[name]; ok {
-		if rule == nil {
-			return "", nil, nil
-		}
-		return name, value, rule
-	}
-	return name, value, NoExcludes{}
-}
-
-// Element is not applicable for MapExcludes.
-func (r MapExcludes) Element(value interface{}) (bool, interface{}, ExcludeRules) {
-	panic("invalid exclude structure, require array but found struct rules")
-}
-
-// Filter removes a normalised value if it is empty.
-func (r MapExcludes) Filter(v Normalised) (Normalised, error) {
-	return v, nil
-}
-
-// NoExcludes means no exclusion should be applied.
-type NoExcludes struct{}
-
-var _ ExcludeRules = NoExcludes{}
-
-// Field for NoExcludes returns the field unchanged.
-func (r NoExcludes) Field(name string, value interface{}) (string, interface{}, ExcludeRules) {
-	return name, value, r
-}
-
-// Element for NoExcludes returns the element unchanged.
-func (r NoExcludes) Element(value interface{}) (bool, interface{}, ExcludeRules) {
-	return false, value, r
-}
-
-// Filter removes a normalised value if it is empty.
-func (r NoExcludes) Filter(v Normalised) (Normalised, error) {
-	return v, nil
-}
-
-// ArrayExcludes defines exclusion rules for arrays.
-type ArrayExcludes struct {
-	Continue ExcludeRules // Rules to apply to each element.
-}
-
-var _ ExcludeRules = ArrayExcludes{}
-
-// Field is not applicable for ArrayExcludes.
-func (r ArrayExcludes) Field(name string, value interface{}) (string, interface{}, ExcludeRules) {
-	panic("invalid exclude structure, require struct but found array rules")
-}
-
-// Element applies the continuation rule to an array element.
-func (r ArrayExcludes) Element(value interface{}) (bool, interface{}, ExcludeRules) {
-	return false, value, r.Continue
-}
-
-func (r ArrayExcludes) Filter(v Normalised) (Normalised, error) {
-	return v, nil
-}
-
-// Normalisation defines methods to create normalised JSON structures.
+// Normalisation defines methods to create normalized JSON structures.
+// This interface is implemented by the normalisation type.
 type Normalisation interface {
 	NewArray() Normalised
 	NewMap() Normalised
@@ -438,30 +267,14 @@ type Normalisation interface {
 	String() string
 }
 
-// Normalised represents a normalised JSON structure.
+// Normalised represents a normalized JSON structure.
+// It provides methods to work with the normalized data.
 type Normalised interface {
 	Value() interface{}
 	IsEmpty() bool
 	Marshal(gap string) ([]byte, error)
 	Append(Normalised)
 	SetField(name string, value Normalised)
-}
-
-// ExcludeRules defines how to exclude fields or elements during normalisation.
-type ExcludeRules interface {
-	Field(name string, value interface{}) (string, interface{}, ExcludeRules)
-	Element(v interface{}) (bool, interface{}, ExcludeRules)
-	Filter(Normalised) (Normalised, error)
-}
-
-// ValueMappingRule allows a rule to transform a value before exclusion is applied.
-type ValueMappingRule interface {
-	MapValue(v interface{}) interface{}
-}
-
-// NormalisationFilter allows post-processing of a normalised structure.
-type NormalisationFilter interface {
-	Filter(Normalised) (Normalised, error)
 }
 
 // null implements Normalised for a null value.
@@ -476,11 +289,12 @@ func (n *null) Append(normalised Normalised)           { panic("append on null")
 func (n *null) Value() interface{}                     { return nil }
 func (n *null) SetField(name string, value Normalised) { panic("set field on null") }
 
-// Null represents a normalised null value.
+// Null represents a normalized null value.
 var Null Normalised = (*null)(nil)
 
-// PrepareNormalisation converts an input value into a normalised structure,
-// by marshalling it to JSON and then unmarshalling into a map or array.
+// PrepareNormalisation converts an input value into a normalized structure,
+// by marshaling it to JSON and then unmarshaling into a map or array.
+// This is the main entry point for the normalization process.
 func PrepareNormalisation(n Normalisation, v interface{}, excludes ExcludeRules) (Normalised, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -503,7 +317,7 @@ func PrepareNormalisation(n Normalisation, v interface{}, excludes ExcludeRules)
 	return n.NewValue(v), nil
 }
 
-// Prepare recursively converts an input value into a normalised structure,
+// Prepare recursively converts an input value into a normalized structure,
 // applying any exclusion rules along the way.
 func Prepare(n Normalisation, v interface{}, ex ExcludeRules) (Normalised, error) {
 	if v == nil {
@@ -518,6 +332,11 @@ func Prepare(n Normalisation, v interface{}, ex ExcludeRules) (Normalised, error
 	// If the exclusion rule supports value mapping, apply it.
 	if mapper, ok := ex.(ValueMappingRule); ok {
 		v = mapper.MapValue(v)
+	}
+
+	// Check if the value can be marshaled to JSON
+	if _, err := json.Marshal(v); err != nil {
+		return nil, fmt.Errorf("cannot marshal value: %w", err)
 	}
 
 	var result Normalised
@@ -540,7 +359,7 @@ func Prepare(n Normalisation, v interface{}, ex ExcludeRules) (Normalised, error
 	return result, nil
 }
 
-// prepareStruct normalises a map by applying exclusion rules to each field.
+// prepareStruct normalizes a map by applying exclusion rules to each field.
 func prepareStruct(n Normalisation, v map[string]interface{}, ex ExcludeRules) (Normalised, error) {
 	if v == nil {
 		return n.NewMap(), nil
@@ -578,7 +397,7 @@ func prepareStruct(n Normalisation, v map[string]interface{}, ex ExcludeRules) (
 	return entries, nil
 }
 
-// prepareArray normalises an array by applying exclusion rules to each element.
+// prepareArray normalizes an array by applying exclusion rules to each element.
 func prepareArray(n Normalisation, v []interface{}, ex ExcludeRules) (Normalised, error) {
 	if v == nil {
 		return n.NewArray(), nil
@@ -610,11 +429,4 @@ func prepareArray(n Normalisation, v []interface{}, ex ExcludeRules) (Normalised
 		}
 	}
 	return entries, nil
-}
-
-// OrderedKeys returns the sorted keys of a map for consistent ordering.
-func OrderedKeys[M ~map[K]V, K cmp.Ordered, V any](m M) []K {
-	keys := slices.Collect(maps.Keys(m))
-	slices.Sort(keys)
-	return keys
 }

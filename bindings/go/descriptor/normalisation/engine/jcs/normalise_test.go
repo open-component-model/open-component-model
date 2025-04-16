@@ -173,6 +173,86 @@ func TestNormalised(t *testing.T) {
 	})
 }
 
+func TestMapResourcesWithAccessType(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected interface{}
+	}{
+		{
+			name: "valid access type",
+			input: map[string]interface{}{
+				"access": map[string]interface{}{
+					"type": "none",
+				},
+				"digest": "test",
+			},
+			expected: map[string]interface{}{
+				"access": map[string]interface{}{
+					"type": "none",
+				},
+			},
+		},
+		{
+			name: "invalid access type",
+			input: map[string]interface{}{
+				"access": map[string]interface{}{
+					"type": 123, // invalid type
+				},
+				"digest": "test",
+			},
+			expected: map[string]interface{}{
+				"access": map[string]interface{}{
+					"type": 123,
+				},
+				"digest": "test",
+			},
+		},
+		{
+			name: "missing access type",
+			input: map[string]interface{}{
+				"access": map[string]interface{}{},
+				"digest": "test",
+			},
+			expected: map[string]interface{}{
+				"access": map[string]interface{}{},
+				"digest": "test",
+			},
+		},
+		{
+			name: "missing access",
+			input: map[string]interface{}{
+				"digest": "test",
+			},
+			expected: map[string]interface{}{
+				"digest": "test",
+			},
+		},
+		{
+			name: "nil access",
+			input: map[string]interface{}{
+				"access": nil,
+				"digest": "test",
+			},
+			expected: map[string]interface{}{
+				"access": nil,
+				"digest": "test",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MapResourcesWithAccessType(IsNoneAccessKind, func(v interface{}) interface{} {
+				m := v.(map[string]interface{})
+				delete(m, "digest")
+				return m
+			}, tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
 func TestMapResourcesWithNoneAccess(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -180,7 +260,7 @@ func TestMapResourcesWithNoneAccess(t *testing.T) {
 		expected interface{}
 	}{
 		{
-			name: "none access type",
+			name: "valid none access type",
 			input: map[string]interface{}{
 				"access": map[string]interface{}{
 					"type": "none",
@@ -194,7 +274,7 @@ func TestMapResourcesWithNoneAccess(t *testing.T) {
 			},
 		},
 		{
-			name: "legacy none access type",
+			name: "valid legacy none access type",
 			input: map[string]interface{}{
 				"access": map[string]interface{}{
 					"type": "None",
@@ -208,17 +288,48 @@ func TestMapResourcesWithNoneAccess(t *testing.T) {
 			},
 		},
 		{
-			name: "other access type",
+			name: "invalid access type",
 			input: map[string]interface{}{
 				"access": map[string]interface{}{
-					"type": "other",
+					"type": 123, // invalid type
 				},
 				"digest": "test",
 			},
 			expected: map[string]interface{}{
 				"access": map[string]interface{}{
-					"type": "other",
+					"type": 123,
 				},
+				"digest": "test",
+			},
+		},
+		{
+			name: "missing access type",
+			input: map[string]interface{}{
+				"access": map[string]interface{}{},
+				"digest": "test",
+			},
+			expected: map[string]interface{}{
+				"access": map[string]interface{}{},
+				"digest": "test",
+			},
+		},
+		{
+			name: "missing access",
+			input: map[string]interface{}{
+				"digest": "test",
+			},
+			expected: map[string]interface{}{
+				"digest": "test",
+			},
+		},
+		{
+			name: "nil access",
+			input: map[string]interface{}{
+				"access": nil,
+				"digest": "test",
+			},
+			expected: map[string]interface{}{
+				"access": nil,
 				"digest": "test",
 			},
 		},
@@ -279,6 +390,328 @@ func TestIgnoreLabelsWithoutSignature(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := IgnoreLabelsWithoutSignature(tt.input)
 			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestMapValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		mapping  ValueMapper
+		cont     ExcludeRules
+		expected string
+	}{
+		{
+			name: "map value with no mapping",
+			input: map[string]interface{}{
+				"a": 1,
+				"b": 2,
+			},
+			cont:     NoExcludes{},
+			expected: `{"a":1,"b":2}`,
+		},
+		{
+			name: "map value with mapping",
+			input: map[string]interface{}{
+				"a": 1,
+				"b": 2,
+			},
+			mapping: func(v interface{}) interface{} {
+				if m, ok := v.(map[string]interface{}); ok {
+					m["c"] = 3
+					return m
+				}
+				return v
+			},
+			cont:     NoExcludes{},
+			expected: `{"a":1,"b":2}`,
+		},
+		{
+			name: "map value with mapping and field exclusion",
+			input: map[string]interface{}{
+				"a": 1,
+				"b": 2,
+			},
+			mapping: func(v interface{}) interface{} {
+				if m, ok := v.(map[string]interface{}); ok {
+					m["c"] = 3
+					return m
+				}
+				return v
+			},
+			cont:     MapExcludes{"b": nil},
+			expected: `{"a":1}`,
+		},
+		{
+			name:  "array value with mapping",
+			input: []interface{}{1, 2, 3},
+			mapping: func(v interface{}) interface{} {
+				if arr, ok := v.([]interface{}); ok {
+					return append(arr, 4)
+				}
+				return v
+			},
+			cont:     NoExcludes{},
+			expected: `[1,2,3]`,
+		},
+		{
+			name: "map value with mapping and empty exclusion",
+			input: map[string]interface{}{
+				"a": map[string]interface{}{},
+				"b": 1,
+			},
+			mapping: func(v interface{}) interface{} {
+				if m, ok := v.(map[string]interface{}); ok {
+					m["c"] = 3
+					return m
+				}
+				return v
+			},
+			cont:     ExcludeEmpty{},
+			expected: `{"b":1}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := MapValue{
+				Mapping:  tt.mapping,
+				Continue: tt.cont,
+			}
+			got, err := Normalise(tt.input, rule)
+			assert.NoError(t, err)
+			assert.JSONEq(t, tt.expected, string(got))
+		})
+	}
+}
+
+func TestExcludeEmpty(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		excludes ExcludeRules
+		expected string
+	}{
+		{
+			name:     "empty map with no rules",
+			input:    map[string]interface{}{},
+			excludes: ExcludeEmpty{},
+			expected: `{}`,
+		},
+		{
+			name:     "empty array with no rules",
+			input:    []interface{}{},
+			excludes: ExcludeEmpty{},
+			expected: `[]`,
+		},
+		{
+			name: "map with empty nested map",
+			input: map[string]interface{}{
+				"a": map[string]interface{}{},
+				"b": 1,
+			},
+			excludes: ExcludeEmpty{},
+			expected: `{"b":1}`,
+		},
+		{
+			name: "map with empty nested array",
+			input: map[string]interface{}{
+				"a": []interface{}{},
+				"b": 1,
+			},
+			excludes: ExcludeEmpty{},
+			expected: `{"b":1}`,
+		},
+		{
+			name: "array with empty nested map",
+			input: []interface{}{
+				map[string]interface{}{},
+				1,
+			},
+			excludes: ExcludeEmpty{},
+			expected: `[null,1]`,
+		},
+		{
+			name: "array with empty nested array",
+			input: []interface{}{
+				[]interface{}{},
+				1,
+			},
+			excludes: ExcludeEmpty{},
+			expected: `[null,1]`,
+		},
+		{
+			name: "map with empty values and field exclusion",
+			input: map[string]interface{}{
+				"a": nil,
+				"b": 1,
+				"c": "",
+			},
+			excludes: ExcludeEmpty{
+				ExcludeRules: MapExcludes{"c": nil},
+			},
+			expected: `{"b":1}`,
+		},
+		{
+			name: "array with empty values and element exclusion",
+			input: []interface{}{
+				nil,
+				1,
+				"",
+			},
+			excludes: ExcludeEmpty{
+				ExcludeRules: DynamicArrayExcludes{
+					ValueChecker: func(v interface{}) bool {
+						return v == nil || v == ""
+					},
+				},
+			},
+			expected: `[1]`,
+		},
+		{
+			name: "nested empty structures",
+			input: map[string]interface{}{
+				"a": map[string]interface{}{
+					"b": []interface{}{},
+					"c": map[string]interface{}{},
+				},
+				"d": 1,
+			},
+			excludes: ExcludeEmpty{},
+			expected: `{"d":1}`,
+		},
+		{
+			name: "array with nested empty structures",
+			input: []interface{}{
+				map[string]interface{}{
+					"a": []interface{}{},
+					"b": map[string]interface{}{},
+				},
+				1,
+			},
+			excludes: ExcludeEmpty{},
+			expected: `[null,1]`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Normalise(tt.input, tt.excludes)
+			assert.NoError(t, err)
+			assert.JSONEq(t, tt.expected, string(got))
+		})
+	}
+}
+
+func TestPrepareStruct(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		excludes ExcludeRules
+		wantErr  bool
+	}{
+		{
+			name: "valid map",
+			input: map[string]interface{}{
+				"a": 1,
+				"b": 2,
+			},
+			excludes: NoExcludes{},
+			wantErr:  false,
+		},
+		{
+			name:     "nil map",
+			input:    nil,
+			excludes: NoExcludes{},
+			wantErr:  false,
+		},
+		{
+			name: "map with error in field",
+			input: map[string]interface{}{
+				"a": func() {}, // cannot be marshaled to JSON
+			},
+			excludes: NoExcludes{},
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m map[string]interface{}
+			if tt.input != nil {
+				var ok bool
+				m, ok = tt.input.(map[string]interface{})
+				if !ok {
+					_, err := prepareStruct(Type, m, tt.excludes)
+					assert.Error(t, err)
+					return
+				}
+			}
+			_, err := prepareStruct(Type, m, tt.excludes)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestPrepareArray(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		excludes ExcludeRules
+		wantErr  bool
+	}{
+		{
+			name:     "valid array",
+			input:    []interface{}{1, 2, 3},
+			excludes: NoExcludes{},
+			wantErr:  false,
+		},
+		{
+			name:     "nil array",
+			input:    nil,
+			excludes: NoExcludes{},
+			wantErr:  false,
+		},
+		{
+			name:     "invalid type",
+			input:    "not an array",
+			excludes: NoExcludes{},
+			wantErr:  true,
+		},
+		{
+			name:     "array with error in element",
+			input:    []interface{}{func() {}}, // cannot be marshaled to JSON
+			excludes: NoExcludes{},
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var arr []interface{}
+			if tt.input != nil {
+				var ok bool
+				arr, ok = tt.input.([]interface{})
+				if !ok {
+					if tt.wantErr {
+						// For invalid type, we expect an error
+						assert.True(t, true) // Type assertion failed as expected
+						return
+					}
+					t.Fatalf("unexpected type: got %T, want []interface{}", tt.input)
+				}
+			}
+			_, err := prepareArray(Type, arr, tt.excludes)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }

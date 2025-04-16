@@ -11,17 +11,32 @@ import (
 )
 
 // Algorithm is the registered name for this normalisation algorithm.
+// It is used to identify and retrieve this specific normalisation implementation
+// from the normalisation registry.
 const Algorithm = "jsonNormalisation/v3"
 
 // init registers the normalisation algorithm on package initialization.
+// This ensures the algorithm is available in the normalisation registry
+// when the package is imported.
 func init() {
 	norms.Normalisations.Register(Algorithm, algo{})
 }
 
 // algo implements the normalisation interface for JSON canonicalization.
+// It provides methods to normalize component descriptors into a standardized
+// JSON format.
 type algo struct{}
 
 // Normalise performs normalisation on the given descriptor using the default type and exclusion rules.
+// It converts the descriptor to v2 format, applies default values, and then normalizes
+// the JSON representation using the JCS (JSON Canonicalization Scheme) algorithm.
+//
+// Parameters:
+//   - cd: The component descriptor to normalize
+//
+// Returns:
+//   - []byte: The normalized JSON representation of the descriptor
+//   - error: Any error that occurred during normalization
 func (m algo) Normalise(cd *descruntime.Descriptor) ([]byte, error) {
 	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
 	desc, err := descruntime.ConvertToV2(scheme, cd)
@@ -32,6 +47,12 @@ func (m algo) Normalise(cd *descruntime.Descriptor) ([]byte, error) {
 	return jcs.Normalise(desc, CDExcludes)
 }
 
+// defaultComponent sets default values for various fields in the v2 descriptor
+// if they are not already set. This ensures consistent normalization output
+// regardless of whether optional fields are present in the input.
+//
+// Parameters:
+//   - d: The v2 descriptor to set defaults for
 func defaultComponent(d *v2.Descriptor) {
 	component := d.Component
 	if component.RepositoryContexts == nil {
@@ -56,6 +77,7 @@ func defaultComponent(d *v2.Descriptor) {
 }
 
 // CDExcludes defines which fields to exclude from the normalised output.
+// This map specifies the exclusion rules for different parts of the component descriptor.
 // IMPORTANT: If you change these, adjust the equivalent functions in the generic part.
 var CDExcludes = jcs.MapExcludes{
 	"meta": nil,
@@ -92,6 +114,9 @@ var CDExcludes = jcs.MapExcludes{
 	"nestedDigests": nil,
 }
 
+// providerMapper converts a provider string into a map structure if possible.
+// This function is used during normalization to handle provider information
+// in a standardized way.
 func providerMapper(v interface{}) interface{} {
 	var provider map[string]interface{}
 	err := json.Unmarshal([]byte(v.(string)), &provider)
