@@ -1,12 +1,11 @@
-package constructor
+package spec
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"sync"
-
-	_ "embed"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"sigs.k8s.io/yaml"

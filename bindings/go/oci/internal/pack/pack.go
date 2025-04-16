@@ -70,8 +70,15 @@ type Options struct {
 // ResourceBlob packs a resourceblob.ResourceBlob into an OCI Storage
 func ResourceBlob(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
 	access := b.Resource.Access
-	if access == nil || access.GetType().IsEmpty() {
+	if access == nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("resource access or access type is empty")
+	}
+	if access.GetType().IsEmpty() {
+		typ, err := opts.AccessScheme.TypeForPrototype(access)
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("error getting access type: %w", err)
+		}
+		access.SetType(typ)
 	}
 	typed, err := opts.AccessScheme.NewObject(access.GetType())
 	if err != nil {
@@ -118,7 +125,7 @@ func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage conten
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
 
-	desc, err := oras.PackManifest(ctx, storage, oras.PackManifestVersion1_1, access.MediaType, oras.PackManifestOptions{
+	desc, err := oras.PackManifest(ctx, storage, oras.PackManifestVersion1_1, layer.MediaType, oras.PackManifestOptions{
 		Layers:              []ociImageSpecV1.Descriptor{layer},
 		ManifestAnnotations: annotations,
 	})

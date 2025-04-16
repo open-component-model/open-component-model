@@ -1,0 +1,12 @@
+components:
+- name: github.com/acme.org/helloworld
+  version: 1.0.0
+  provider:
+    name: internal
+  resources:
+    - name: testdata
+      type: blob
+      relation: local
+      input:
+        type: file
+        path: ./testdata/text.txt

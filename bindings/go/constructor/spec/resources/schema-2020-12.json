@@ -1,5 +1,5 @@
 {
-  "$id": "https://ocm.software/schemas/component-configuration",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "OCM Configuration File Schema",
   "type": "object",
   "required": [
@@ -17,7 +17,8 @@
       "description": "list of specifications of the components to be created",
       "items": {
         "$ref": "#/$defs/component"
-      }
+      },
+      "minLength": 1
     },
     "component": {
       "type": "object",
@@ -45,7 +46,10 @@
           "$ref": "#/$defs/resources"
         },
         "sources": {
-          "$ref": "#/$defs/sources"
+          "oneOf": [
+            {"$ref": "#/$defs/sources"},
+            {"type":  "null"}
+          ]
         },
         "componentReferences": {
           "$ref": "#/$defs/componentReferences"
@@ -61,7 +65,7 @@
     },
     "resource": {
       "$ref": "#/$defs/defaultResource",
-      "allOf": [
+      "anyOf": [
         {
           "if": {
             "required": [
@@ -106,9 +110,6 @@
         },
         "extraIdentity": {
           "$ref": "#/$defs/elementExtraIdentity"
-        },
-        "version": {
-          "$ref": "#/$defs/version"
         },
         "relation": {
           "$ref": "#/$defs/relation"
@@ -316,7 +317,7 @@
               },
               "referenceName": {
                 "type": "string",
-                "description": "(optional) This property may contain identity information used by other repositories to restore a global access. For example, if the localBlob contains an OCI artifact (resource type is ociArtifact) and the component is transported to an OCI registry, then this localBlob may be uploaded as independent OCI artifact (thus, the access type changes to ociArtifact). Then, the referenceName is used as the artifact name.\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#localBlob)\n",
+                "description": "(optional) This property may contain identity information used by other repositories to restore a global access. For example, if the localBlob contains an OCI artifact (resource type is ociImage) and the component is transported to an OCI registry, then this localBlob may be uploaded as independent OCI artifact (thus, the access type changes to ociImage). Then, the referenceName is used as the artifact name.\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#localBlob)\n",
                 "default": "ocmcli-image",
                 "examples": [
                   "nginx",
@@ -326,7 +327,7 @@
               },
               "globalAccess": {
                 "$ref": "#/$defs/access",
-                "description": "(optional) If a resource blob is stored as localBlob, the repository implementation may decide to provide an external access information (usable by non-OCM-aware tools). For example, an OCI artifact stored as local blob can be additionally stored as a regular OCI artifact in an OCI registry. Then, the global access property would contain an entire access of type ociArtifact.\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#localBlob)\n"
+                "description": "(optional) If a resource blob is stored as localBlob, the repository implementation may decide to provide an external access information (usable by non-OCM-aware tools). For example, an OCI artifact stored as local blob can be additionally stored as a regular OCI artifact in an OCI registry. Then, the global access property would contain an entire access of type ociImage.\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#localBlob)\n"
               }
             }
           }
@@ -335,7 +336,7 @@
           "if": {
             "properties": {
               "type": {
-                "const": "ociArtifact"
+                "const": "ociImage"
               }
             }
           },
@@ -347,12 +348,12 @@
             "additionalProperties": false,
             "properties": {
               "type": {
-                "const": "ociArtifact",
-                "description": "\"ociArtifact\" specifies the access to an artifact stored in an OCI registry.\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#ociartifact)\n"
+                "const": "ociImage",
+                "description": "\"ociImage\" specifies the access to an artifact stored in an OCI registry.\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#ociImage)\n"
               },
               "imageReference": {
                 "type": "string",
-                "description": "OCI image/artifact reference.\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#ociartifact)\n",
+                "description": "OCI image/artifact reference.\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#ociImage)\n",
                 "default": "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.7.0",
                 "examples": [
                   "nginx:1.25.4",
@@ -386,7 +387,7 @@
             "properties": {
               "type": {
                 "const": "ociBlob",
-                "description": "\"ociBlob\" specifies the access to OCI blob stored in an OCI repository. Thus, while \"ociArtifact\" enables to access an entire OCI artifact, \"ociBlob\" enables to access a specific blob which is described by a layer within such an OCI artifact. (CAUTION: Due to blob size limitations of certain OCI registries, it might be necessary for the OCM tooling to split local blobs into multiple OCI blobs. Therefore, \"ociBlob\" might not be suitable to provide a global access for local blobs (blobs stored along with the component descriptor).)\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#ociblob)\n"
+                "description": "\"ociBlob\" specifies the access to OCI blob stored in an OCI repository. Thus, while \"ociImage\" enables to access an entire OCI artifact, \"ociBlob\" enables to access a specific blob which is described by a layer within such an OCI artifact. (CAUTION: Due to blob size limitations of certain OCI registries, it might be necessary for the OCM tooling to split local blobs into multiple OCI blobs. Therefore, \"ociBlob\" might not be suitable to provide a global access for local blobs (blobs stored along with the component descriptor).)\n[See the documentation](https://ocm.software/docs/guides/input_and_access/#ociblob)\n"
               },
               "imageReference": {
                 "type": "string",
@@ -853,7 +854,7 @@
           "if": {
             "properties": {
               "type": {
-                "const": "ociArtifact"
+                "const": "ociImage"
               }
             }
           },
@@ -865,7 +866,7 @@
             "additionalProperties": false,
             "properties": {
               "type": {
-                "const": "ociArtifact"
+                "const": "ociImage"
               },
               "path": {
                 "type": "string"
@@ -1132,10 +1133,17 @@
       }
     },
     "componentReferences": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/componentReference"
-      }
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/componentReference"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "componentReference": {
       "type": "object",
@@ -1295,7 +1303,7 @@
         "localBlob",
         "ociImage"
       ],
-      "default": "ociArtifact",
+      "default": "ociImage",
       "examples": [
         "localBlob",
         "ociImage"
@@ -1307,7 +1315,6 @@
         "binary",
         "dir",
         "file",
-        "helm",
         "ociImage",
         "utf8",
         "wget"
