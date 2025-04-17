@@ -183,13 +183,22 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 		plugin.cmd = pluginCmd
 		plugin.endpoints = endpoints.Endpoints
 
-		// TODO: Inbuilt stuff still needs to work. For example OCI one.
-		// For all plugin types of this binary, add the plugin to the right registry
 		for pType, eps := range plugin.endpoints {
 			switch pType {
 			case ComponentVersionRepositoryPlugin:
+				// we know that there is a single type.
+				// for others, this might be multiple types.
+				var t runtime.Type
+			loop:
+				for _, ep := range eps {
+					for _, v := range ep.Types {
+						t = v.Type
+						break loop
+					}
+				}
+
 				pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
-				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, eps); err != nil {
+				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, t); err != nil {
 					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 				}
 			case CredentialPlugin:

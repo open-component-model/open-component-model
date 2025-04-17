@@ -32,7 +32,7 @@ func TestGetTransferPlugin(t *testing.T) {
 		r.NoError(os.Remove(tmp.Name()))
 	})
 
-	got, err := GetReadComponentVersionRepositoryPluginForType(testctx, pm.ComponentVersionRepositoryRegistry, &v2.OCIRepository{})
+	got, err := GetReadWriteComponentVersionRepositoryPluginForType(testctx, pm.ComponentVersionRepositoryRegistry, &v2.OCIRepository{})
 	r.NoError(err)
 	r.NoError(got.GetLocalResource(testctx, GetLocalResourceRequest[*v2.OCIRepository]{
 		Repository: &v2.OCIRepository{
