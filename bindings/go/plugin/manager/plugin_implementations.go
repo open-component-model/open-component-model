@@ -36,7 +36,54 @@ const (
 	DownloadComponentVersion = "/component-version/download"
 )
 
-type RepositoryPlugin[T runtime.Typed] struct {
+func NewTypedRepositoryPlugin[T runtime.Typed](base *RepositoryPlugin) *TypedRepositoryPlugin[T] {
+	return &TypedRepositoryPlugin[T]{base}
+}
+
+type TypedRepositoryPlugin[T runtime.Typed] struct {
+	base *RepositoryPlugin
+}
+
+func (r *TypedRepositoryPlugin[T]) GetLocalResource(ctx context.Context, request GetLocalResourceRequest[T], credentials Attributes) error {
+	return r.base.GetLocalResource(ctx, GetLocalResourceRequest[runtime.Typed]{
+		Repository:     request.Repository,
+		Name:           request.Name,
+		Version:        request.Version,
+		Identity:       request.Identity,
+		TargetLocation: request.TargetLocation,
+	}, credentials)
+}
+
+func (r *TypedRepositoryPlugin[T]) AddLocalResource(ctx context.Context, request PostLocalResourceRequest[T], credentials Attributes) (*descriptor.Resource, error) {
+	return r.base.AddLocalResource(ctx, PostLocalResourceRequest[runtime.Typed]{
+		Repository:       request.Repository,
+		Name:             request.Name,
+		Version:          request.Version,
+		ResourceLocation: request.ResourceLocation,
+		Resource:         request.Resource,
+	}, credentials)
+}
+func (r *TypedRepositoryPlugin[T]) Ping(ctx context.Context) error {
+	return r.base.Ping(ctx)
+}
+
+func (r *TypedRepositoryPlugin[T]) AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[T], credentials Attributes) error {
+	return r.base.AddComponentVersion(ctx, PostComponentVersionRequest[runtime.Typed]{
+		Repository: request.Repository,
+		Descriptor: request.Descriptor,
+	}, credentials)
+}
+
+func (r *TypedRepositoryPlugin[T]) GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[T], credentials Attributes) (*descriptor.Descriptor, error) {
+	req := GetComponentVersionRequest[runtime.Typed]{
+		Name:       request.Name,
+		Version:    request.Version,
+		Repository: request.Repository,
+	}
+	return r.base.GetComponentVersion(ctx, req, credentials)
+}
+
+type RepositoryPlugin struct {
 	ID string
 
 	// config is used to start the plugin during a later phase.
@@ -53,14 +100,14 @@ type RepositoryPlugin[T runtime.Typed] struct {
 
 // This plugin implements all the given contracts.
 var (
-	_ ReadOCMRepositoryPluginContract[runtime.Typed]  = &RepositoryPlugin[runtime.Typed]{}
-	_ WriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin[runtime.Typed]{}
-	_ ReadResourcePluginContract                      = &RepositoryPlugin[runtime.Typed]{}
-	_ WriteResourcePluginContract                     = &RepositoryPlugin[runtime.Typed]{}
+	_ ReadOCMRepositoryPluginContract[runtime.Typed]  = &RepositoryPlugin{}
+	_ WriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
+	_ ReadResourcePluginContract                      = &RepositoryPlugin{}
+	_ WriteResourcePluginContract                     = &RepositoryPlugin{}
 )
 
-func NewRepositoryPlugin[T runtime.Typed](baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config Config, endpoints []Endpoint) *RepositoryPlugin[T] {
-	return &RepositoryPlugin[T]{
+func NewRepositoryPlugin(baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config Config, endpoints []Endpoint) *RepositoryPlugin {
+	return &RepositoryPlugin{
 		baseCtx:   baseCtx,
 		ID:        id,
 		path:      path,
@@ -71,7 +118,7 @@ func NewRepositoryPlugin[T runtime.Typed](baseCtx context.Context, logger *slog.
 	}
 }
 
-func (r *RepositoryPlugin[T]) Ping(ctx context.Context) error {
+func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	r.logger.Info("Pinging plugin", "id", r.ID)
 
 	if err := call(ctx, r.client, "healthz", http.MethodGet); err != nil {
@@ -81,7 +128,7 @@ func (r *RepositoryPlugin[T]) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin[T]) AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[T], credentials Attributes) error {
+func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[runtime.Typed], credentials Attributes) error {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
@@ -106,7 +153,7 @@ func (r *RepositoryPlugin[T]) AddComponentVersion(ctx context.Context, request P
 	return nil
 }
 
-func (r *RepositoryPlugin[T]) GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[T], credentials Attributes) (*descriptor.Descriptor, error) {
+func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[runtime.Typed], credentials Attributes) (*descriptor.Descriptor, error) {
 	response := &descriptor.Descriptor{}
 	var params []KV
 	addParam := func(k, v string) {
@@ -144,7 +191,7 @@ func (r *RepositoryPlugin[T]) GetComponentVersion(ctx context.Context, request G
 	return response, nil
 }
 
-func (r *RepositoryPlugin[T]) AddLocalResource(ctx context.Context, request PostLocalResourceRequest[T], credentials Attributes) (*descriptor.Resource, error) {
+func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request PostLocalResourceRequest[runtime.Typed], credentials Attributes) (*descriptor.Resource, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
@@ -170,7 +217,7 @@ func (r *RepositoryPlugin[T]) AddLocalResource(ctx context.Context, request Post
 	return response, nil
 }
 
-func (r *RepositoryPlugin[T]) GetLocalResource(ctx context.Context, request GetLocalResourceRequest[T], credentials Attributes) error {
+func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request GetLocalResourceRequest[runtime.Typed], credentials Attributes) error {
 	var params []KV
 	addParam := func(k, v string) {
 		params = append(params, KV{Key: k, Value: v})
@@ -220,7 +267,7 @@ func (r *RepositoryPlugin[T]) GetLocalResource(ctx context.Context, request GetL
 	return nil
 }
 
-func (r *RepositoryPlugin[T]) AddGlobalResource(ctx context.Context, request PostResourceRequest, credentials Attributes) (*descriptor.Resource, error) {
+func (r *RepositoryPlugin) AddGlobalResource(ctx context.Context, request PostResourceRequest, credentials Attributes) (*descriptor.Resource, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
@@ -246,7 +293,7 @@ func (r *RepositoryPlugin[T]) AddGlobalResource(ctx context.Context, request Pos
 	return response, nil
 }
 
-func (r *RepositoryPlugin[T]) GetGlobalResource(ctx context.Context, request GetResourceRequest, credentials Attributes) error {
+func (r *RepositoryPlugin) GetGlobalResource(ctx context.Context, request GetResourceRequest, credentials Attributes) error {
 	var params []KV
 	addParam := func(k, v string) {
 		params = append(params, KV{Key: k, Value: v})
@@ -291,7 +338,7 @@ func (r *RepositoryPlugin[T]) GetGlobalResource(ctx context.Context, request Get
 
 // Call will use the plugin's constructed connection client to make a call to the specified
 // endpoint. The result will be marshalled into the provided response if not nil.
-func (r *RepositoryPlugin[T]) Call(ctx context.Context, endpoint, method string, payload, response any, headers []KV, params []KV) error {
+func (r *RepositoryPlugin) Call(ctx context.Context, endpoint, method string, payload, response any, headers []KV, params []KV) error {
 	return call(
 		ctx,
 		r.client,
@@ -304,7 +351,7 @@ func (r *RepositoryPlugin[T]) Call(ctx context.Context, endpoint, method string,
 	)
 }
 
-func (r *RepositoryPlugin[T]) SupportedRepositoryConfigTypes(ctx context.Context) ([]runtime.Type, error) {
+func (r *RepositoryPlugin) SupportedRepositoryConfigTypes(ctx context.Context) ([]runtime.Type, error) {
 	var configTypes []runtime.Type
 
 	if err := call(ctx, r.client, "supported-credential-repository-config-types", http.MethodGet, WithResult(&configTypes)); err != nil {
@@ -314,7 +361,7 @@ func (r *RepositoryPlugin[T]) SupportedRepositoryConfigTypes(ctx context.Context
 	return configTypes, nil
 }
 
-func (r *RepositoryPlugin[T]) ConsumerIdentityForRepositoryConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error) {
+func (r *RepositoryPlugin) ConsumerIdentityForRepositoryConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error) {
 	var params []KV
 	addParam := func(k, v string) {
 		params = append(params, KV{Key: k, Value: v})
@@ -335,7 +382,7 @@ func (r *RepositoryPlugin[T]) ConsumerIdentityForRepositoryConfig(ctx context.Co
 	return identity, nil
 }
 
-func (r *RepositoryPlugin[T]) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials Attributes) (Attributes, error) {
+func (r *RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials Attributes) (Attributes, error) {
 	var params []KV
 	addParam := func(k, v string) {
 		params = append(params, KV{Key: k, Value: v})
@@ -369,7 +416,7 @@ func (r *RepositoryPlugin[T]) Resolve(ctx context.Context, config runtime.Typed,
 	return resolved, nil
 }
 
-func (r *RepositoryPlugin[T]) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
+func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
 	valid, err := validatePlugin(obj, jsonSchema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)

@@ -42,16 +42,6 @@ func main() {
 	repository.MustAddToScheme(scheme)
 	capabilityBuilder := manager.NewCapabilityBuilder(scheme)
 
-	//
-	//if err := manager.RegisterReadComponentVersionRepositoryCapability(capabilityBuilder, &v1.OCIRepository{}, manager.ReadComponentVersionRepositoryHandlersOpts[*v1.OCIRepository]{
-	//	GetComponentVersion: GetComponentVersion,
-	//	DownloadResource:    DownloadResource,
-	//}); err != nil {
-	//	log.Fatal(err)
-	//}
-
-	// &v1.OCIRepository{} -> infers the type for the implementation.
-	// The struct passed in here will implement the right interface.
 	if err := manager.RegisterSupportedForEndpoints(capabilityBuilder, &v1.OCIRepository{}, &OCIPlugin[*v1.OCIRepository]{}); err != nil {
 		log.Fatal(err)
 	}
