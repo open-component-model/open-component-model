@@ -25,6 +25,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// AnnotationSingleLayerArtifact is the annotation key used to identify single-layer artifacts.
+// If set, it contains the digest of the single layer packaged within the manifest.
+// It is set on the manifest and not on the layer itself.
+const AnnotationSingleLayerArtifact = "software.ocm.artifact.singlelayer"
+
 // LocalResourceAdoptionMode defines how local resources should be accessed in the repository.
 type LocalResourceAdoptionMode int
 
@@ -124,6 +129,7 @@ func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage conten
 
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
+	annotations[AnnotationSingleLayerArtifact] = layer.Digest.String()
 
 	desc, err := oras.PackManifest(ctx, storage, oras.PackManifestVersion1_1, layer.MediaType, oras.PackManifestOptions{
 		Layers:              []ociImageSpecV1.Descriptor{layer},
