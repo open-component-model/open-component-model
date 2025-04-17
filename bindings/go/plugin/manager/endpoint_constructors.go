@@ -23,27 +23,24 @@ type Handler struct {
 }
 
 // CapabilityBuilder constructs a capability for the plugin. Register*Capability will keep updating
-// an internal tracker. Once all capabilities have been declared, we call PrintCapabilities to
+// an internal tracker. Once all capabilities have been declared, we call FinalizeEndpoints to
 // return the registered capabilities to the plugin manager.
 type CapabilityBuilder struct {
-	currentCapabilities Capabilities // schema?
-	handlers            []Handler    // now I can gather all of these and the user just has to call `GetHandlers()` and that's it.
-	scheme              *runtime.Scheme
+	currentEndpoints Endpoints
+	handlers         []Handler
+	scheme           *runtime.Scheme
 }
 
 // NewCapabilityBuilder constructs a new builder for registering capabilities for the given plugin type.
 func NewCapabilityBuilder(scheme *runtime.Scheme) *CapabilityBuilder {
 	return &CapabilityBuilder{
-		currentCapabilities: Capabilities{
-			Capabilities: map[PluginType][]Capability{},
-		},
 		scheme: scheme,
 	}
 }
 
-// PrintCapabilities returns the accumulated capabilities during Register* calls.
-func (c *CapabilityBuilder) PrintCapabilities() error {
-	content, err := json.Marshal(c.currentCapabilities)
+// FinalizeEndpoints returns the accumulated endpoints during Register* calls.
+func (c *CapabilityBuilder) FinalizeEndpoints() error {
+	content, err := json.Marshal(c.currentEndpoints)
 	if err != nil {
 		return err
 	}
@@ -59,15 +56,19 @@ func (c *CapabilityBuilder) GetHandlers() []Handler {
 	return c.handlers
 }
 
-// RegisterCapability takes a plugin capability contract implementation and wraps them into an appropriate
-// http handler. Constructs a capability matrix from the type provided to the Register method and
-// determines the correct endpoints. Once the capabilities are built up, call PrintCapabilities to return
-// them to the plugin manager.
-func RegisterCapability[T runtime.Typed](
+// RegisterSupportedForEndpoints takes a builder and a handler and based on the handler's contract type
+// will construct a list of endpoint handlers that they will need. Once completed, PrintEndpoints can be
+// used to construct the supported endpoint list to give back to the plugin manager. This information is stored
+// about the plugin and then used for later lookup. The type is also saved with the endpoint, meaning
+// during lookup the right endpoint + type is used.
+func RegisterSupportedForEndpoints[T runtime.Typed](
 	c *CapabilityBuilder,
 	proto T,
 	handler PluginBase,
 ) error {
+	if c.currentEndpoints.Endpoints == nil {
+		c.currentEndpoints.Endpoints = map[PluginType][]Endpoint{}
+	}
 
 	typ, err := c.scheme.TypeForPrototype(proto)
 	if err != nil {
@@ -92,37 +93,27 @@ func RegisterCapability[T runtime.Typed](
 			return err
 		}
 
-		c.currentCapabilities.Capabilities[ComponentVersionRepositoryPlugin] = append(c.currentCapabilities.Capabilities[ComponentVersionRepositoryPlugin], Capability{
-			Name: ReadComponentVersionRepositoryCapability,
-			Endpoints: []Endpoint{
-				{
-					Location: DownloadComponentVersion,
-					Types: []Type{
-						{
-							Type:       typ,
-							JSONSchema: schemaOCIRegistry,
-						},
-					},
-				},
-				{
-					Location: DownloadLocalResource,
-					Types: []Type{
-						{
-							Type:       typ,
-							JSONSchema: schemaOCIRegistry,
-						},
+		c.currentEndpoints.Endpoints[ComponentVersionRepositoryPlugin] = append(c.currentEndpoints.Endpoints[ComponentVersionRepositoryPlugin],
+			Endpoint{
+				Location: DownloadComponentVersion,
+				Types: []Type{
+					{
+						Type:       typ,
+						JSONSchema: schemaOCIRegistry,
 					},
 				},
 			},
-		})
+			Endpoint{
+				Location: DownloadLocalResource,
+				Types: []Type{
+					{
+						Type:       typ,
+						JSONSchema: schemaOCIRegistry,
+					},
+				},
+			})
 	case WriteOCMRepositoryPluginContract[T]:
 	}
-
-	// Setup capabilities
-	//c.currentCapabilities.Capabilities[ComponentVersionRepositoryPlugin] = append(c.currentCapabilities.Capabilities[ComponentVersionRepositoryPlugin], Capability{
-	//	Capability: ReadComponentVersionRepositoryCapability,
-	//	Type:       typ,
-	//})
 
 	return nil
 }
