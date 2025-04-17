@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,10 +31,10 @@ var (
 
 // Plugin represents a connected plugin
 type Plugin struct {
-	ID           string
-	path         string
-	config       Config
-	capabilities map[PluginType][]Capability
+	ID        string
+	path      string
+	config    Config
+	endpoints map[PluginType][]Endpoint
 
 	cmd *exec.Cmd
 }
@@ -58,9 +60,12 @@ type PluginManager struct {
 // NewPluginManager initializes the PluginManager
 // the passed ctx is used for all plugins.
 func NewPluginManager(ctx context.Context, logger *slog.Logger) *PluginManager {
+	scheme := runtime.NewScheme()
+	repository.MustAddToScheme(scheme)
+
 	return &PluginManager{
 		TransformationRegistry:             NewTransformationRegistry(),
-		ComponentVersionRepositoryRegistry: NewComponentVersionRepositoryRegistry(),
+		ComponentVersionRepositoryRegistry: NewComponentVersionRepositoryRegistry(scheme),
 		CredentialRegistry:                 NewCredentialRegistry(),
 
 		baseCtx: ctx,
@@ -157,8 +162,8 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 		}
 
-		caps := &Capabilities{}
-		if err := json.Unmarshal(output.Bytes(), caps); err != nil {
+		endpoints := &Endpoints{}
+		if err := json.Unmarshal(output.Bytes(), endpoints); err != nil {
 			return fmt.Errorf("failed to unmarshal capabilities: %w", err)
 		}
 
@@ -176,15 +181,15 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return cmd.Process.Kill()
 		}
 		plugin.cmd = pluginCmd
-		plugin.capabilities = caps.Capabilities
+		plugin.endpoints = endpoints.Endpoints
 
 		// TODO: Inbuilt stuff still needs to work. For example OCI one.
 		// For all plugin types of this binary, add the plugin to the right registry
-		for pType := range plugin.capabilities {
+		for pType, eps := range plugin.endpoints {
 			switch pType {
 			case ComponentVersionRepositoryPlugin:
 				pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
-				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, caps); err != nil {
+				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, eps); err != nil {
 					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 				}
 			case CredentialPlugin:

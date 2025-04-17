@@ -22,7 +22,7 @@ import (
 // For example, during shutdown or during checking if we already have a started
 // plugin or not.
 type constructedPlugin struct {
-	Plugin *RepositoryPlugin
+	Plugin PluginBase
 
 	cmd *exec.Cmd
 }

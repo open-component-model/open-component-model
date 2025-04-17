@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"slices"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -44,9 +43,10 @@ func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](scheme *r
 // ComponentVersionRepositoryRegistry holds all plugins that implement capabilities corresponding to ComponentVersionRepositoryPlugin operations.
 type ComponentVersionRepositoryRegistry struct {
 	mu                 sync.Mutex
-	registry           map[runtime.Type]*Plugin
+	registry           map[runtime.Type][]*Plugin // store them based on the runtime Type and then figure out which endpoints they support?
 	constructedPlugins map[string]*constructedPlugin
 	logger             *slog.Logger
+	scheme             *runtime.Scheme
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
@@ -70,61 +70,81 @@ func (r *ComponentVersionRepositoryRegistry) Shutdown(ctx context.Context) error
 // AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.
-func (r *ComponentVersionRepositoryRegistry) AddPlugin(plugin *Plugin, caps *Capabilities) error {
+func (r *ComponentVersionRepositoryRegistry) AddPlugin(plugin *Plugin, endpoints []Endpoint) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var reads []runtime.Type
-	var writes []runtime.Type
-	for _, c := range caps.Capabilities[ComponentVersionRepositoryPlugin] {
-		if c.Name == ReadComponentVersionRepositoryCapability {
-			for _, e := range c.Endpoints {
-				for _, t := range e.Types {
-					reads = append(reads, t.Type)
-				}
-			}
-		}
-		if c.Name == WriteComponentVersionRepositoryCapability {
-			for _, e := range c.Endpoints {
-				for _, t := range e.Types {
-					writes = append(writes, t.Type)
-				}
-			}
-		}
-	}
-	candidates := make(map[runtime.Type]struct{}, len(reads))
-	for _, read := range reads {
-		if slices.Contains(writes, read) {
-			candidates[read] = struct{}{}
-		}
-	}
+	for _, e := range endpoints {
+		for _, t := range e.Types {
+			// TODO: maybe this is fine? think about it could there be the same type?
+			//if v, ok := r.registry[t.Type]; ok {
+			//	return fmt.Errorf("type %s already has a registered plugin %s", t.Type, v.ID)
+			//}
 
-	for candidate := range candidates {
-		if p, ok := r.registry[candidate]; ok {
-			return fmt.Errorf("plugin already has a type %s with plugin ID: %s", candidate, p.ID)
+			// We just append the plugin to the type it supports and then later look for a plugin
+			// that declared both endpoints.
+			r.registry[t.Type] = append(r.registry[t.Type], plugin)
 		}
-
-		r.registry[candidate] = plugin
 	}
 
 	return nil
 }
 
-// GetComponentVersionRegistryPlugin finds a specific plugin the registry. Taking a capability and a type for that capability
+func (r *ComponentVersionRepositoryRegistry) getPluginForEndpointsWithType(typ runtime.Type, endpoints ...string) (*Plugin, error) {
+	// TODO: This might get a plugin that implemented write TOO! This lookup isn't exclusive.
+	// We basically return the first plugin we find that has all the requested endpoints declared.
+	// This might be okay, since calling this again, should return the same plugin. Either way, the returned plugin
+	// will have the right type and the right endpoints.
+
+	for _, p := range r.registry[typ] {
+		found := true
+
+	loop:
+		for _, endpoint := range endpoints {
+			for _, e := range p.endpoints[ComponentVersionRepositoryPlugin] {
+				if e.Location == endpoint {
+					break loop
+				}
+			}
+
+			found = false
+			break
+		}
+
+		if found {
+			return p, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no plugin found for type %s", typ)
+}
+
+// GetReadComponentVersionRepositoryPluginForType finds a specific plugin the registry. Taking a capability and a type for that capability
 // it will find and return a registered plugin.
 // On the first call, it will initialize and start the plugin. On any consecutive calls it will return the
 // existing plugin that has already been started.
-func GetComponentVersionRegistryPlugin[T runtime.Typed](ctx context.Context, r *ComponentVersionRepositoryRegistry, typ T) (PluginBase, error) {
+func GetReadComponentVersionRepositoryPluginForType[T runtime.Typed](ctx context.Context, r *ComponentVersionRepositoryRegistry, proto T) (ReadOCMRepositoryPluginContract[T], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.registry[typ.GetType()]; !ok {
-		return nil, fmt.Errorf("ComponentVersionRepositoryPlugin plugin for typ %T not found", typ)
+	// TODO add internal lookup using the internal scheme registry instead
+
+	typ, err := r.scheme.TypeForPrototype(proto)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
 	}
 
-	plugin := r.registry[typ.GetType()]
+	plugin, err := r.getPluginForEndpointsWithType(typ, DownloadComponentVersion, DownloadLocalResource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin for typ %T %s: %w", typ, typ, err)
+	}
+
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
-		return existingPlugin.Plugin, nil
+		pt, ok := existingPlugin.Plugin.(ReadOCMRepositoryPluginContract[T])
+		if !ok {
+			return nil, fmt.Errorf("existing plugin for typ %T does not implement ReadOCMRepositoryPluginContract[T]", existingPlugin)
+		}
+		return pt, nil
 	}
 
 	if err := plugin.cmd.Start(); err != nil {
@@ -136,16 +156,10 @@ func GetComponentVersionRegistryPlugin[T runtime.Typed](ctx context.Context, r *
 		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
 	}
 
-	// Construct the capability endpoint map for schemas.
-	schemaMap := make(map[string][]Endpoint)
-	for _, c := range plugin.capabilities[ComponentVersionRepositoryPlugin] {
-		schemaMap[c.Name] = append(schemaMap[c.Name], c.Endpoints...)
-	}
-
 	// TODO: Figure out the right context here. -> Should be the base context from the plugin manager.
-	repoPlugin := NewRepositoryPlugin(context.Background(), r.logger, client, plugin.ID, plugin.path, plugin.config, schemaMap)
+	repoPlugin := NewRepositoryPlugin[T](context.Background(), r.logger, client, plugin.ID, plugin.path, plugin.config, plugin.endpoints[ComponentVersionRepositoryPlugin])
 
-	r.constructedPlugins[repoPlugin.ID] = &constructedPlugin{
+	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,
 		cmd:    plugin.cmd,
 	}
@@ -163,61 +177,11 @@ func getInternalComponentVersionRepositoryPlugin(typ runtime.Type) (PluginBase, 
 	return internalComponentVersionRepositoryPlugins[typ], true
 }
 
-type GetOpts struct {
-	pm *PluginManager
-}
-
-type GetOptsFunc func(opts *GetOpts)
-
-// WithPluginManager adds the plugin manager to the read write component version repository function.
-func WithPluginManager(pm *PluginManager, scheme ...*runtime.Scheme) GetOptsFunc {
-	return func(opts *GetOpts) {
-		opts.pm = pm
-	}
-}
-
-// GetReadWriteComponentVersionRepository gets a plugin that registered for this given capability.
-func GetReadWriteComponentVersionRepository[T runtime.Typed](ctx context.Context, prototype T, opts ...GetOptsFunc) (ReadWriteOCMRepositoryPluginContract[T], error) {
-	defaultOpts := &GetOpts{}
-	for _, opt := range opts {
-		opt(defaultOpts)
-	}
-
-	// if it errors that means we just don't have this type registered internally.
-	if typ, err := internalComponentVersionRepositoryScheme.TypeForPrototype(prototype); err == nil {
-		if v, ok := getInternalComponentVersionRepositoryPlugin(typ); ok {
-			p, ok := v.(ReadWriteOCMRepositoryPluginContract[T])
-			if !ok {
-				return nil, fmt.Errorf("read-write component version repository does not implement ReadWriteOCMRepositoryPluginContract but was: %T", v)
-			}
-
-			return p, nil
-		}
-
-		return nil, fmt.Errorf("type %T is registered internally, but no plugin was found for it", prototype)
-	}
-
-	if defaultOpts.pm == nil {
-		return nil, errors.New("plugin manager not found in options")
-	}
-
-	p, err := GetComponentVersionRegistryPlugin(ctx, defaultOpts.pm.ComponentVersionRepositoryRegistry, prototype)
-	if err != nil {
-		return nil, fmt.Errorf("error getting ComponentVersionRepositoryPlugin plugin for capability %s and %s with type %s: %w", ReadComponentVersionRepositoryCapability, WriteComponentVersionRepositoryCapability, prototype.GetType(), err)
-	}
-
-	pt, ok := p.(ReadWriteOCMRepositoryPluginContract[T])
-	if !ok {
-		return nil, fmt.Errorf("nope: %T", p)
-	}
-
-	return pt, nil
-}
-
 // NewComponentVersionRepositoryRegistry creates a new registry and initializes maps.
-func NewComponentVersionRepositoryRegistry() *ComponentVersionRepositoryRegistry {
+func NewComponentVersionRepositoryRegistry(scheme *runtime.Scheme) *ComponentVersionRepositoryRegistry {
 	return &ComponentVersionRepositoryRegistry{
-		registry:           make(map[runtime.Type]*Plugin),
+		scheme:             scheme,
+		registry:           make(map[runtime.Type][]*Plugin),
 		constructedPlugins: make(map[string]*constructedPlugin),
 	}
 }

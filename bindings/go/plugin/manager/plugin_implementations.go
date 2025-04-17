@@ -36,7 +36,7 @@ const (
 	DownloadComponentVersion = "/component-version/download"
 )
 
-type RepositoryPlugin struct {
+type RepositoryPlugin[T runtime.Typed] struct {
 	ID string
 
 	// config is used to start the plugin during a later phase.
@@ -48,30 +48,30 @@ type RepositoryPlugin struct {
 	baseCtx context.Context
 
 	// capabilities we know which endpoint we will call, so check the schema for it.
-	capabilities map[string][]Endpoint
+	endpoints []Endpoint
 }
 
 // This plugin implements all the given contracts.
 var (
-	_ ReadOCMRepositoryPluginContract[runtime.Typed]  = &RepositoryPlugin{}
-	_ WriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
-	_ ReadResourcePluginContract                      = &RepositoryPlugin{}
-	_ WriteResourcePluginContract                     = &RepositoryPlugin{}
+	_ ReadOCMRepositoryPluginContract[runtime.Typed]  = &RepositoryPlugin[runtime.Typed]{}
+	_ WriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin[runtime.Typed]{}
+	_ ReadResourcePluginContract                      = &RepositoryPlugin[runtime.Typed]{}
+	_ WriteResourcePluginContract                     = &RepositoryPlugin[runtime.Typed]{}
 )
 
-func NewRepositoryPlugin(baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config Config, capabilities map[string][]Endpoint) *RepositoryPlugin {
-	return &RepositoryPlugin{
-		baseCtx:      baseCtx,
-		ID:           id,
-		path:         path,
-		config:       config,
-		logger:       logger,
-		client:       client,
-		capabilities: capabilities,
+func NewRepositoryPlugin[T runtime.Typed](baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config Config, endpoints []Endpoint) *RepositoryPlugin[T] {
+	return &RepositoryPlugin[T]{
+		baseCtx:   baseCtx,
+		ID:        id,
+		path:      path,
+		config:    config,
+		logger:    logger,
+		client:    client,
+		endpoints: endpoints,
 	}
 }
 
-func (r *RepositoryPlugin) Ping(ctx context.Context) error {
+func (r *RepositoryPlugin[T]) Ping(ctx context.Context) error {
 	r.logger.Info("Pinging plugin", "id", r.ID)
 
 	if err := call(ctx, r.client, "healthz", http.MethodGet); err != nil {
@@ -81,13 +81,13 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[runtime.Typed], credentials Attributes) error {
+func (r *RepositoryPlugin[T]) AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[T], credentials Attributes) error {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
 	}
 
-	for _, e := range r.capabilities[WriteComponentVersionRepositoryCapability] {
+	for _, e := range r.endpoints {
 		if e.Location == UploadComponentVersion {
 			if len(e.Types) != 1 {
 				return fmt.Errorf("missing endpoint schema validation setup for AddComponentVersion; was len: %d", len(e.Types))
@@ -106,7 +106,7 @@ func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request Post
 	return nil
 }
 
-func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[runtime.Typed], credentials Attributes) (*descriptor.Descriptor, error) {
+func (r *RepositoryPlugin[T]) GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[T], credentials Attributes) (*descriptor.Descriptor, error) {
 	response := &descriptor.Descriptor{}
 	var params []KV
 	addParam := func(k, v string) {
@@ -125,7 +125,7 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request GetC
 		return nil, err
 	}
 
-	for _, e := range r.capabilities[ReadComponentVersionRepositoryCapability] {
+	for _, e := range r.endpoints {
 		if e.Location == DownloadComponentVersion {
 			if len(e.Types) != 1 {
 				return nil, fmt.Errorf("missing endpoint schema validation setup for AddComponentVersion; was len: %d", len(e.Types))
@@ -144,13 +144,13 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request GetC
 	return response, nil
 }
 
-func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request PostLocalResourceRequest[runtime.Typed], credentials Attributes) (*descriptor.Resource, error) {
+func (r *RepositoryPlugin[T]) AddLocalResource(ctx context.Context, request PostLocalResourceRequest[T], credentials Attributes) (*descriptor.Resource, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, e := range r.capabilities[ReadResourceRepositoryCapability] {
+	for _, e := range r.endpoints {
 		if e.Location == DownloadComponentVersion {
 			if len(e.Types) != 1 {
 				return nil, fmt.Errorf("missing endpoint schema validation setup for AddComponentVersion; was len: %d", len(e.Types))
@@ -170,7 +170,7 @@ func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request PostLoc
 	return response, nil
 }
 
-func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request GetLocalResourceRequest[runtime.Typed], credentials Attributes) error {
+func (r *RepositoryPlugin[T]) GetLocalResource(ctx context.Context, request GetLocalResourceRequest[T], credentials Attributes) error {
 	var params []KV
 	addParam := func(k, v string) {
 		params = append(params, KV{Key: k, Value: v})
@@ -196,17 +196,17 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request GetLoca
 		return err
 	}
 
-	for _, e := range r.capabilities[ReadResourceRepositoryCapability] {
-		if e.Location == DownloadLocalResource {
-			if len(e.Types) != 1 {
-				return fmt.Errorf("missing endpoint schema validation setup for GetLocalResource; was len: %d", len(e.Types))
-			}
-
-			if err := r.validateEndpoint(request.Repository, e.Types[0].JSONSchema); err != nil {
-				return err
-			}
-		}
-	}
+	//for _, e := range r.endpoints {
+	//	if e.Location == DownloadLocalResource {
+	//		if len(e.Types) != 1 {
+	//			return fmt.Errorf("missing endpoint schema validation setup for GetLocalResource; was len: %d", len(e.Types))
+	//		}
+	//
+	//		if err := r.validateEndpoint(request.Repository, e.Types[0].JSONSchema); err != nil {
+	//			return err
+	//		}
+	//	}
+	//}
 
 	if err := call(ctx, r.client, DownloadLocalResource, http.MethodGet, WithQueryParams(params), WithHeader(credHeader), WithHeader(repoHeader)); err != nil {
 		return fmt.Errorf("failed to get local resource %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
@@ -220,13 +220,13 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request GetLoca
 	return nil
 }
 
-func (r *RepositoryPlugin) AddGlobalResource(ctx context.Context, request PostResourceRequest, credentials Attributes) (*descriptor.Resource, error) {
+func (r *RepositoryPlugin[T]) AddGlobalResource(ctx context.Context, request PostResourceRequest, credentials Attributes) (*descriptor.Resource, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, e := range r.capabilities[WriteResourceRepositoryCapability] {
+	for _, e := range r.endpoints {
 		if e.Location == UploadResource {
 			if len(e.Types) != 1 {
 				return nil, fmt.Errorf("missing endpoint schema validation setup for GetLocalResource; was len: %d", len(e.Types))
@@ -246,7 +246,7 @@ func (r *RepositoryPlugin) AddGlobalResource(ctx context.Context, request PostRe
 	return response, nil
 }
 
-func (r *RepositoryPlugin) GetGlobalResource(ctx context.Context, request GetResourceRequest, credentials Attributes) error {
+func (r *RepositoryPlugin[T]) GetGlobalResource(ctx context.Context, request GetResourceRequest, credentials Attributes) error {
 	var params []KV
 	addParam := func(k, v string) {
 		params = append(params, KV{Key: k, Value: v})
@@ -265,7 +265,7 @@ func (r *RepositoryPlugin) GetGlobalResource(ctx context.Context, request GetRes
 		return err
 	}
 
-	for _, e := range r.capabilities[ReadResourceRepositoryCapability] {
+	for _, e := range r.endpoints {
 		if e.Location == DownloadResource {
 			if len(e.Types) != 1 {
 				return fmt.Errorf("missing endpoint schema validation setup for GetGlobalResource; was len: %d", len(e.Types))
@@ -291,7 +291,7 @@ func (r *RepositoryPlugin) GetGlobalResource(ctx context.Context, request GetRes
 
 // Call will use the plugin's constructed connection client to make a call to the specified
 // endpoint. The result will be marshalled into the provided response if not nil.
-func (r *RepositoryPlugin) Call(ctx context.Context, endpoint, method string, payload, response any, headers []KV, params []KV) error {
+func (r *RepositoryPlugin[T]) Call(ctx context.Context, endpoint, method string, payload, response any, headers []KV, params []KV) error {
 	return call(
 		ctx,
 		r.client,
@@ -304,7 +304,7 @@ func (r *RepositoryPlugin) Call(ctx context.Context, endpoint, method string, pa
 	)
 }
 
-func (r *RepositoryPlugin) SupportedRepositoryConfigTypes(ctx context.Context) ([]runtime.Type, error) {
+func (r *RepositoryPlugin[T]) SupportedRepositoryConfigTypes(ctx context.Context) ([]runtime.Type, error) {
 	var configTypes []runtime.Type
 
 	if err := call(ctx, r.client, "supported-credential-repository-config-types", http.MethodGet, WithResult(&configTypes)); err != nil {
@@ -314,7 +314,7 @@ func (r *RepositoryPlugin) SupportedRepositoryConfigTypes(ctx context.Context) (
 	return configTypes, nil
 }
 
-func (r *RepositoryPlugin) ConsumerIdentityForRepositoryConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error) {
+func (r *RepositoryPlugin[T]) ConsumerIdentityForRepositoryConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error) {
 	var params []KV
 	addParam := func(k, v string) {
 		params = append(params, KV{Key: k, Value: v})
@@ -335,7 +335,7 @@ func (r *RepositoryPlugin) ConsumerIdentityForRepositoryConfig(ctx context.Conte
 	return identity, nil
 }
 
-func (r *RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials Attributes) (Attributes, error) {
+func (r *RepositoryPlugin[T]) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials Attributes) (Attributes, error) {
 	var params []KV
 	addParam := func(k, v string) {
 		params = append(params, KV{Key: k, Value: v})
@@ -369,7 +369,7 @@ func (r *RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, id
 	return resolved, nil
 }
 
-func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
+func (r *RepositoryPlugin[T]) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
 	valid, err := validatePlugin(obj, jsonSchema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)

@@ -93,17 +93,10 @@ type Endpoint struct {
 	Types []Type `json:"types"`
 }
 
-// Capability defines a capability which consists of an Access Type and several endpoints.
-type Capability struct {
-	Name string `json:"name"` // or ID or something.
-	// Endpoints has a list of endpoints that belong to this capability.
-	Endpoints []Endpoint `json:"endpoints"`
-}
-
-// Capabilities are defined per plugin type. The plugin type is derived from the capability
-// and set during generation of the capability.
-type Capabilities struct {
-	Capabilities map[PluginType][]Capability `json:"capabilities"`
+type Endpoints struct {
+	// Maybe we don't even need the plugin type here?
+	// Does a binary implement multiple plugin types? Didn't we say we don't want to overstep that boundary?
+	Endpoints map[PluginType][]Endpoint `json:"endpoints"`
 }
 
 type GetResourceRequest struct {

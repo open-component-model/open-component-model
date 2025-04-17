@@ -52,12 +52,12 @@ func main() {
 
 	// &v1.OCIRepository{} -> infers the type for the implementation.
 	// The struct passed in here will implement the right interface.
-	if err := manager.RegisterCapability(capabilityBuilder, &v1.OCIRepository{}, &OCIPlugin[*v1.OCIRepository]{}); err != nil {
+	if err := manager.RegisterSupportedForEndpoints(capabilityBuilder, &v1.OCIRepository{}, &OCIPlugin[*v1.OCIRepository]{}); err != nil {
 		log.Fatal(err)
 	}
 
 	if len(args) > 0 && args[0] == "capabilities" {
-		if err := capabilityBuilder.PrintCapabilities(); err != nil {
+		if err := capabilityBuilder.FinalizeEndpoints(); err != nil {
 			log.Fatal(err)
 		}
 

@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"log/slog"
+	goruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"os"
 	"runtime"
 	"testing"
@@ -31,9 +32,18 @@ func TestGetTransferPlugin(t *testing.T) {
 		r.NoError(os.Remove(tmp.Name()))
 	})
 
-	got, err := GetReadWriteComponentVersionRepository(testctx, &v2.OCIRepository{}, WithPluginManager(pm))
+	got, err := GetReadComponentVersionRepositoryPluginForType(testctx, pm.ComponentVersionRepositoryRegistry, &v2.OCIRepository{})
 	r.NoError(err)
 	r.NoError(got.GetLocalResource(testctx, GetLocalResourceRequest[*v2.OCIRepository]{
+		Repository: &v2.OCIRepository{
+			Type: goruntime.Type{
+				Version: "OCIRepository",
+				Name:    "v2",
+			},
+			BaseUrl: "ghcr.io/open-component-model/ocm",
+		},
+		Name:    "name",
+		Version: "v1",
 		TargetLocation: Location{
 			Value: tmp.Name(),
 		},
