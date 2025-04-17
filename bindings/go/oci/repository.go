@@ -461,12 +461,15 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		image := accessv1.OCIImage{}
-		if err := repo.scheme.Convert(typed.GlobalAccess, &image); err != nil {
+		obj, err := repo.scheme.NewObject(typed.GlobalAccess.GetType())
+		if err != nil {
+			return nil, fmt.Errorf("error creating global blob access: %w", err)
+		}
+		if err := repo.scheme.Convert(typed.GlobalAccess, obj); err != nil {
 			return nil, fmt.Errorf("error converting global blob access: %w", err)
 		}
 		res := res.DeepCopy()
-		res.Access = &image
+		res.Access = obj
 		return repo.DownloadResource(ctx, res)
 	case *accessv1.OCIImage:
 		src, err := repo.resolver.StoreForReference(ctx, typed.ImageReference)
@@ -492,6 +495,35 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 		}
 
 		return generateOCILayout(ctx, res, src, desc, repo.resourceCopyOptions.CopyGraphOptions, typed.ImageReference)
+	case *accessv1.OCIImageLayer:
+		src, err := repo.resolver.StoreForReference(ctx, typed.Reference)
+		if err != nil {
+			return nil, err
+		}
+
+		resolved, err := repo.resolver.Reference(typed.Reference)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing layer reference %q: %w", typed.Type, err)
+		}
+
+		reference := resolved.String()
+
+		// reference is not a FQDN
+		if index := strings.IndexByte(reference, '@'); index != -1 {
+			reference = reference[index+1:]
+		}
+
+		desc, err := src.Resolve(ctx, reference)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve reference %q: %w", typed.Reference, err)
+		}
+
+		layerData, err := src.Fetch(ctx, desc)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch reference %q: %w", typed.Reference, err)
+		}
+
+		return ociblob.NewDescriptorBlob(layerData, desc), nil
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}

@@ -13,10 +13,10 @@ func init() {
 
 func MustAddToScheme(scheme *runtime.Scheme) {
 	ociImageLayer := &v2.OCIImageLayer{}
-	scheme.MustRegisterWithAlias(ociImageLayer, runtime.NewVersionedType(v2.Version, "OCIImageLayer"))
+	scheme.MustRegisterWithAlias(ociImageLayer, runtime.NewVersionedType("OCIImageLayer", v2.Version))
 
 	ociArtifact := &v2.OCIImage{}
-	scheme.MustRegisterWithAlias(ociArtifact, runtime.NewVersionedType(v2.Version, "OCIImage"))
+	scheme.MustRegisterWithAlias(ociArtifact, runtime.NewVersionedType("OCIImage", v2.Version))
 }
 
 func MustAddLegacyToScheme(scheme *runtime.Scheme) {

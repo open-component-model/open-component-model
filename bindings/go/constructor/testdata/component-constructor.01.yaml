@@ -1,0 +1,26 @@
+components:
+- name: github.com/acme.org/helloworld
+  version: 1.0.0
+  provider:
+    name: internal
+  resources:
+    - name: testdata
+      type: blob
+      relation: local
+      input:
+        type: file
+        path: ./testdata/text.txt
+    - name: teststring
+      type: blob
+      relation: local
+      input:
+        type: utf8
+        text: "Hello, world!"
+    - name: testobject
+      type: blob
+      relation: local
+      input:
+        type: utf8
+        objectFormat: json
+        object:
+          key: value

@@ -28,8 +28,10 @@ const (
 // +ocm:typegen=true
 type OCIImageLayer struct {
 	Type runtime.Type `json:"type"`
+	// ManifestReference is the reference to the manifest that contains this layer.
+	ManifestReference string `json:"manifest,omitempty"`
 	// Reference is the oci reference to the OCI repository
-	Reference string `json:"ref"`
+	Reference string `json:"reference"`
 	// MediaType is the media type of the object this schema refers to.
 	MediaType string `json:"mediaType,omitempty"`
 	// Digest is the digest of the targeted content.
