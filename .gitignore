@@ -40,3 +40,5 @@ output/
 go.work
 go.work.sum
 
+# gitguardian
+.cache_ggshield
