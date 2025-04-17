@@ -331,7 +331,7 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	assert.True(t, rb.HasPrecalculatedDigest())
 	assert.True(t, rb.HasPrecalculatedSize())
 
-	// Update values
+	// ProcessResource values
 	newDigest := digest.FromString("test")
 	newSize := int64(200)
 	rb.SetPrecalculatedDigest(newDigest.String())

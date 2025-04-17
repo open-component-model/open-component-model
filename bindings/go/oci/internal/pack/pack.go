@@ -49,7 +49,7 @@ const (
 	// It also embeds the global access information in the local blob.
 	LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess LocalResourceAdoptionMode = iota
 	// LocalResourceAdoptionModeOCIImage creates an OCI image layer access for resources.
-	// This mode is used when the resource is embedded without a local blob (only global access)
+	// This updateResourceMode is used when the resource is embedded without a local blob (only global access)
 	LocalResourceAdoptionModeOCIImage LocalResourceAdoptionMode = iota
 )
 
@@ -139,7 +139,13 @@ func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage conten
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to pack manifest: %w", err)
 	}
 
-	if err := updateResourceAccess(b.Resource, desc, opts); err != nil {
+	if err := updateResourceAccess(b.Resource, desc, updateResourceOptions{
+		baseReference:             opts.BaseReference,
+		accessScheme:              opts.AccessScheme,
+		localResourceAdoptionMode: opts.LocalResourceAdoptionMode,
+		updateResourceMode:        resourceAccessModeOCIImageLayer,
+		layer:                     layer,
+	}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 
@@ -156,7 +162,12 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
 	}
-	if err := updateResourceAccess(b.Resource, index, opts); err != nil {
+	if err := updateResourceAccess(b.Resource, index, updateResourceOptions{
+		baseReference:             opts.BaseReference,
+		accessScheme:              opts.AccessScheme,
+		localResourceAdoptionMode: opts.LocalResourceAdoptionMode,
+		updateResourceMode:        resourceAccessModeOCIImage,
+	}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 	return index, nil
@@ -237,27 +248,56 @@ func Blob(ctx context.Context, storage content.Pusher, b blob.ReadOnlyBlob, desc
 	return nil
 }
 
+// updateResourceMode defines the updateResourceMode for updating the resource access.
+type updateResourceMode int
+
+const (
+	resourceAccessModeOCIImageLayer updateResourceMode = iota
+	resourceAccessModeOCIImage
+)
+
+type updateResourceOptions struct {
+	baseReference             string
+	accessScheme              *runtime.Scheme
+	localResourceAdoptionMode LocalResourceAdoptionMode
+	updateResourceMode        updateResourceMode
+	layer                     ociImageSpecV1.Descriptor
+}
+
 // updateResourceAccess updates the resource access with the new layer information.
 // for setting a global access it uses the base reference given which must not already contain a digest.
-func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Descriptor, opts Options) error {
+func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Descriptor, opts updateResourceOptions) error {
 	if resource == nil {
 		return errors.New("resource must not be nil")
 	}
 
-	access := &accessv1.OCIImage{
+	base := &accessv1.OCIImage{
 		// This is the target image reference under which the resource will be accessible once
 		// added to the OCM Component Version Repository. Note that this reference will not work
 		// unless the component version is actually updated.
-		ImageReference: fmt.Sprintf("%s@%s", opts.BaseReference, desc.Digest.String()),
+		ImageReference: fmt.Sprintf("%s@%s", opts.baseReference, desc.Digest.String()),
 	}
 
-	// Create access based on configured mode
-	switch opts.LocalResourceAdoptionMode {
+	var access runtime.Typed = base
+	switch opts.updateResourceMode {
+	case resourceAccessModeOCIImage:
+	case resourceAccessModeOCIImageLayer:
+		access = &accessv1.OCIImageLayer{
+			ManifestReference: base.ImageReference,
+			Reference:         fmt.Sprintf("%s@%s", opts.baseReference, opts.layer.Digest.String()),
+			MediaType:         opts.layer.MediaType,
+			Digest:            opts.layer.Digest,
+			Size:              opts.layer.Size,
+		}
+	}
+
+	// Create access based on configured updateResourceMode
+	switch opts.localResourceAdoptionMode {
 	case LocalResourceAdoptionModeOCIImage:
 		resource.Access = access
 	case LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess:
 		// Create local blob access
-		access, err := descriptor.ConvertToV2LocalBlob(opts.AccessScheme, &descriptor.LocalBlob{
+		access, err := descriptor.ConvertToV2LocalBlob(opts.accessScheme, &descriptor.LocalBlob{
 			Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 			LocalReference: desc.Digest.String(),
 			MediaType:      desc.MediaType,
@@ -268,7 +308,7 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 		}
 		resource.Access = access
 	default:
-		return fmt.Errorf("unsupported access mode: %s", opts.LocalResourceAdoptionMode)
+		return fmt.Errorf("unsupported access updateResourceMode: %s", opts.localResourceAdoptionMode)
 	}
 
 	if err := digestv1.ApplyToResource(resource, desc.Digest, digestv1.OCIArtifactDigestAlgorithm); err != nil {

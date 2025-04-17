@@ -179,7 +179,7 @@ func TestUpdateResourceAccess(t *testing.T) {
 		expectedError string
 	}{
 		{
-			name:     "success with OCI image mode",
+			name:     "success with OCI image updateResourceMode",
 			resource: &descriptor.Resource{},
 			desc: ociImageSpecV1.Descriptor{
 				MediaType: "application/vnd.test",
@@ -191,7 +191,7 @@ func TestUpdateResourceAccess(t *testing.T) {
 			},
 		},
 		{
-			name:     "success with local blob mode",
+			name:     "success with local blob updateResourceMode",
 			resource: &descriptor.Resource{},
 			desc: ociImageSpecV1.Descriptor{
 				MediaType: "application/vnd.test",

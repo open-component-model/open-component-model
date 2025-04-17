@@ -70,4 +70,12 @@ func TestConstruct(t *testing.T) {
 	expected, err := testData.ReadFile("testdata/text.txt")
 	r.NoError(err)
 	r.Equal(expected, buf.Bytes())
+
+	global, err := repo.DownloadResource(t.Context(), &resource)
+	r.NoError(err)
+	r.NotNil(global)
+
+	buf.Reset()
+	r.NoError(blob.Copy(&buf, global))
+	r.Equal(expected, buf.Bytes())
 }
