@@ -1,10 +1,13 @@
 package manager
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"log/slog"
 	"net/http"
 	"os"
@@ -43,6 +46,9 @@ type RepositoryPlugin struct {
 	logger *slog.Logger
 
 	baseCtx context.Context
+
+	// capabilities we know which endpoint we will call, so check the schema for it.
+	capabilities map[string][]Endpoint
 }
 
 // This plugin implements all the given contracts.
@@ -53,14 +59,15 @@ var (
 	_ WriteResourcePluginContract                     = &RepositoryPlugin{}
 )
 
-func NewRepositoryPlugin(baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config Config) *RepositoryPlugin {
+func NewRepositoryPlugin(baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config Config, capabilities map[string][]Endpoint) *RepositoryPlugin {
 	return &RepositoryPlugin{
-		baseCtx: baseCtx,
-		ID:      id,
-		path:    path,
-		config:  config,
-		logger:  logger,
-		client:  client,
+		baseCtx:      baseCtx,
+		ID:           id,
+		path:         path,
+		config:       config,
+		logger:       logger,
+		client:       client,
+		capabilities: capabilities,
 	}
 }
 
@@ -78,6 +85,18 @@ func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request Post
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
+	}
+
+	for _, e := range r.capabilities[WriteComponentVersionRepositoryCapability] {
+		if e.Location == UploadComponentVersion {
+			if len(e.Types) != 1 {
+				return fmt.Errorf("missing endpoint schema validation setup for AddComponentVersion; was len: %d", len(e.Types))
+			}
+
+			if err := r.validateEndpoint(request.Repository, e.Types[0].JSONSchema); err != nil {
+				return err
+			}
+		}
 	}
 
 	if err := call(ctx, r.client, UploadComponentVersion, http.MethodPost, WithPayload(request), WithHeader(credHeader)); err != nil {
@@ -106,6 +125,18 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request GetC
 		return nil, err
 	}
 
+	for _, e := range r.capabilities[ReadComponentVersionRepositoryCapability] {
+		if e.Location == DownloadComponentVersion {
+			if len(e.Types) != 1 {
+				return nil, fmt.Errorf("missing endpoint schema validation setup for AddComponentVersion; was len: %d", len(e.Types))
+			}
+
+			if err := r.validateEndpoint(request.Repository, e.Types[0].JSONSchema); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	if err := call(ctx, r.client, DownloadComponentVersion, http.MethodGet, WithResult(response), WithQueryParams(params), WithHeader(credHeader), WithHeader(repoHeader)); err != nil {
 		return nil, fmt.Errorf("failed to get component version %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
 	}
@@ -117,6 +148,18 @@ func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request PostLoc
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, e := range r.capabilities[ReadResourceRepositoryCapability] {
+		if e.Location == DownloadComponentVersion {
+			if len(e.Types) != 1 {
+				return nil, fmt.Errorf("missing endpoint schema validation setup for AddComponentVersion; was len: %d", len(e.Types))
+			}
+
+			if err := r.validateEndpoint(request.Repository, e.Types[0].JSONSchema); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	response := &descriptor.Resource{}
@@ -143,7 +186,7 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request GetLoca
 	identityBase64 := base64.StdEncoding.EncodeToString(identityEncoded)
 	addParam("identity", identityBase64)
 
-	repoHeader, err := toOCMRepoHeader(request.Repository)
+	repoHeader, err := toOCMRepoHeader(request.Repository) // Raw
 	if err != nil {
 		return err
 	}
@@ -151,6 +194,18 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request GetLoca
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
+	}
+
+	for _, e := range r.capabilities[ReadResourceRepositoryCapability] {
+		if e.Location == DownloadLocalResource {
+			if len(e.Types) != 1 {
+				return fmt.Errorf("missing endpoint schema validation setup for GetLocalResource; was len: %d", len(e.Types))
+			}
+
+			if err := r.validateEndpoint(request.Repository, e.Types[0].JSONSchema); err != nil {
+				return err
+			}
+		}
 	}
 
 	if err := call(ctx, r.client, DownloadLocalResource, http.MethodGet, WithQueryParams(params), WithHeader(credHeader), WithHeader(repoHeader)); err != nil {
@@ -169,6 +224,18 @@ func (r *RepositoryPlugin) AddGlobalResource(ctx context.Context, request PostRe
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, e := range r.capabilities[WriteResourceRepositoryCapability] {
+		if e.Location == UploadResource {
+			if len(e.Types) != 1 {
+				return nil, fmt.Errorf("missing endpoint schema validation setup for GetLocalResource; was len: %d", len(e.Types))
+			}
+
+			if err := r.validateEndpoint(request.Resource.Access, e.Types[0].JSONSchema); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	response := &descriptor.Resource{}
@@ -196,6 +263,18 @@ func (r *RepositoryPlugin) GetGlobalResource(ctx context.Context, request GetRes
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
+	}
+
+	for _, e := range r.capabilities[ReadResourceRepositoryCapability] {
+		if e.Location == DownloadResource {
+			if len(e.Types) != 1 {
+				return fmt.Errorf("missing endpoint schema validation setup for GetGlobalResource; was len: %d", len(e.Types))
+			}
+
+			if err := r.validateEndpoint(request.Resource.Access, e.Types[0].JSONSchema); err != nil {
+				return err
+			}
+		}
 	}
 
 	if err := call(ctx, r.client, DownloadResource, http.MethodGet, WithQueryParams(params), WithHeader(credHeader)); err != nil {
@@ -290,6 +369,18 @@ func (r *RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, id
 	return resolved, nil
 }
 
+func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
+	valid, err := validatePlugin(obj, jsonSchema)
+	if err != nil {
+		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)
+	}
+	if !valid {
+		return fmt.Errorf("validation of plugin %q failed for get local resource", r.ID)
+	}
+
+	return nil
+}
+
 func toCredentials(credentials Attributes) (KV, error) {
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
@@ -310,4 +401,50 @@ func toOCMRepoHeader(repository runtime.Typed) (KV, error) {
 		Key:   XOCMRepositoryHeader,
 		Value: string(raw),
 	}, nil
+}
+
+func validatePlugin(typ runtime.Typed, jsonSchema []byte) (bool, error) {
+	c := jsonschema.NewCompiler()
+	unmarshaler, err := jsonschema.UnmarshalJSON(bytes.NewReader(jsonSchema))
+	var v any
+	if err := json.Unmarshal(jsonSchema, &v); err != nil {
+		return true, err
+	}
+
+	if err := c.AddResource("schema.json", unmarshaler); err != nil {
+		return true, fmt.Errorf("failed to add schema.json: %w", err)
+	}
+	sch, err := c.Compile("schema.json")
+	if err != nil {
+		return true, fmt.Errorf("failed to compile schema.json: %w", err)
+	}
+
+	// need to marshal the interface into a JSON format.
+	content, err := json.Marshal(typ)
+	if err != nil {
+		return true, fmt.Errorf("failed to marshal type: %w", err)
+	}
+	// once marshalled, we create a map[string]any representation of the marshaled content.
+	unmarshalledType, err := jsonschema.UnmarshalJSON(bytes.NewReader(content))
+	if err != nil {
+		return true, fmt.Errorf("failed to unmarshal : %w", err)
+	}
+
+	if _, ok := unmarshalledType.(string); ok {
+		// TODO: In _not_ POC this should be either a type switch, or some kind of exclusion or we should change how
+		// we register and look up plugins to avoid validating when listing or for certain plugins.
+		// skip validation if the passed in type is of type string.
+		return true, nil
+	}
+
+	// finally, validate map[string]any against the loaded schema
+	if err := sch.Validate(unmarshalledType); err != nil {
+		var typRaw bytes.Buffer
+		err = errors.Join(err, json.Indent(&typRaw, content, "", "  "))
+		var schemaRaw bytes.Buffer
+		err = errors.Join(err, json.Indent(&schemaRaw, jsonSchema, "", "  "))
+		return true, fmt.Errorf("failed to validate schema for\n%s\n---SCHEMA---\n%s\n: %w", typRaw.String(), schemaRaw.String(), err)
+	}
+
+	return true, nil
 }

@@ -76,22 +76,28 @@ type PostLocalResourceRequest[T runtime.Typed] struct {
 	Resource         *descriptor.Resource `json:"resource"`
 }
 
+// Type defines an endpoint's type and the scheme of the type.
 type Type struct {
 	// Type defines the type name that this plugin supports.
 	Type runtime.Type `json:"type"`
-	// Scheme holds the scheme for the type.
-	Scheme []byte `json:"scheme"`
+	// JSONScheme holds the scheme for the type. This scheme corresponds to the type.
+	JSONSchema []byte `json:"jsonSchema"`
 }
 
 // Endpoint defines a type and a scheme belonging to one of the N endpoints for a Capability.
 type Endpoint struct {
+	// Location of the endpoint. This location is used to identify which JsonSchema belongs
+	// to which endpoint.
+	Location string `json:"location"`
+	// Types and endpoints stored in this capability.
 	Types []Type `json:"types"`
 }
 
 // Capability defines a capability which consists of an Access Type and several endpoints.
 type Capability struct {
-	// Capability has a list of endpoints that belong to this capability.
-	Capability []Endpoint `json:"capability"`
+	Name string `json:"name"` // or ID or something.
+	// Endpoints has a list of endpoints that belong to this capability.
+	Endpoints []Endpoint `json:"endpoints"`
 }
 
 // Capabilities are defined per plugin type. The plugin type is derived from the capability

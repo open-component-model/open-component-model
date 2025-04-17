@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"log/slog"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"os"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
@@ -18,28 +17,27 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type MyShitThatImplementsTheRightCapabilityContract[T runtime.Typed] struct {
-	manager.EmptyBasePlugin
+type OCIPlugin[T runtime.Typed] struct{}
+
+func (m *OCIPlugin[T]) Ping(_ context.Context) error {
+	return nil
 }
 
-// This is what Jakob ment that the request here contains everything you need.
-func (m *MyShitThatImplementsTheRightCapabilityContract[T]) GetComponentVersion(ctx context.Context, request manager.GetComponentVersionRequest[*v1.OCIRepository], credentials manager.Attributes) (*descriptor.Descriptor, error) {
-	//TODO implement me
-	panic("implement me")
+func (m *OCIPlugin[T]) GetComponentVersion(ctx context.Context, request manager.GetComponentVersionRequest[*v1.OCIRepository], credentials manager.Attributes) (*descriptor.Descriptor, error) {
+	_, _ = fmt.Fprintf(os.Stdout, "Returning a descriptor: %+v\n", request.Name)
+	return nil, nil
 }
 
-func (m *MyShitThatImplementsTheRightCapabilityContract[T]) GetLocalResource(ctx context.Context, request manager.GetLocalResourceRequest[*v1.OCIRepository], credentials manager.Attributes) error {
-	//TODO implement me
-	panic("implement me")
+func (m *OCIPlugin[T]) GetLocalResource(ctx context.Context, request manager.GetLocalResourceRequest[*v1.OCIRepository], credentials manager.Attributes) error {
+	_, _ = fmt.Fprintf(os.Stdout, "Writing my local resource here to target: %+v\n", request.TargetLocation)
+	return nil
 }
 
-// Fuck. This contract is on the calling side... How would this implement stuff?
-var _ manager.ReadOCMRepositoryPluginContract = &MyShitThatImplementsTheRightCapabilityContract[*v1.OCIRepository]{}
+var _ manager.ReadOCMRepositoryPluginContract[*v1.OCIRepository] = &OCIPlugin[*v1.OCIRepository]{}
 
 func main() {
 	args := os.Args[1:]
 
-	// The plugin type will be inferred from the capability. A single binary could implement MULTIPLE plugin types.
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	capabilityBuilder := manager.NewCapabilityBuilder(scheme)
@@ -54,7 +52,7 @@ func main() {
 
 	// &v1.OCIRepository{} -> infers the type for the implementation.
 	// The struct passed in here will implement the right interface.
-	if err := manager.RegisterCapability(capabilityBuilder, &v1.OCIRepository{}, &MyShitThatImplementsTheRightCapabilityContract{}); err != nil {
+	if err := manager.RegisterCapability(capabilityBuilder, &v1.OCIRepository{}, &OCIPlugin[*v1.OCIRepository]{}); err != nil {
 		log.Fatal(err)
 	}
 
