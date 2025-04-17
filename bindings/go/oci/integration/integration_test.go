@@ -559,14 +559,10 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 	r.NoError(err)
 	r.Equal(resFromGet.ElementMeta, newRes.ElementMeta)
 
-	store, err := tar.ReadOCILayout(t.Context(), downloadedBlob)
-	r.NoError(err)
-	t.Cleanup(func() {
-		r.NoError(store.Close())
-	})
-	r.NotNil(store)
-	r.Len(store.Index.Manifests, 1)
+	var data bytes.Buffer
+	r.NoError(blob.Copy(&data, downloadedBlob))
 
+	r.Equal(testData, data.Bytes())
 }
 
 func getUserAndPasswordWithGitHubCLIAndJQ(t *testing.T) (string, string) {

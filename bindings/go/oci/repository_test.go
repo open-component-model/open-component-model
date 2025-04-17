@@ -2,6 +2,8 @@ package oci_test
 
 import (
 	"bytes"
+	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
@@ -21,6 +24,8 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -109,16 +114,21 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 }
 
 func TestRepository_GetLocalResource(t *testing.T) {
+	type getLocalResourceTestCase struct {
+		name                     string
+		resource                 *descriptor.Resource
+		content                  []byte
+		identity                 map[string]string
+		expectError              bool
+		errorContains            string
+		setupComponent           bool
+		setupComponentLikeOldOCM bool
+		setupManifest            func(t *testing.T, store spec.Store, ctx context.Context, content []byte, resource *descriptor.Resource) error
+		checkContent             func(t *testing.T, original []byte, actual []byte)
+	}
+
 	// Create test resources with different configurations
-	testCases := []struct {
-		name           string
-		resource       *descriptor.Resource
-		content        []byte
-		identity       map[string]string
-		expectError    bool
-		errorContains  string
-		setupComponent bool
-	}{
+	testCases := []getLocalResourceTestCase{
 		{
 			name: "non-existent component",
 			resource: &descriptor.Resource{
@@ -142,6 +152,9 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			},
 			expectError:    true,
 			setupComponent: false,
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				assert.Equal(t, string(original), string(actual))
+			},
 		},
 		{
 			name: "non-existent resource in existing component",
@@ -154,18 +167,22 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				},
 				Type: "test-type",
 				Access: &runtime.Raw{
-					Type: runtime.Type{
-						Name: "localBlob",
-					},
-					Data: []byte(`{"localReference":"sha256:1234567890","mediaType":"application/octet-stream"}`),
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Data: []byte(fmt.Sprintf(
+						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						digest.FromString("test content").String(),
+					)),
 				},
 			},
 			identity: map[string]string{
 				"name":    "test-resource",
 				"version": "1.0.0",
 			},
-			expectError:    true,
 			setupComponent: true,
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				assert.Equal(t, string(original), string(actual))
+			},
 		},
 		{
 			name: "resource with platform-specific identity",
@@ -197,31 +214,39 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				"architecture": "amd64",
 				"os":           "linux",
 			},
-			expectError:    false,
 			setupComponent: true,
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				assert.Equal(t, string(original), string(actual))
+			},
 		},
 		{
-			name: "resource with invalid identity",
+			name: "resource from legacy component version without top-level index",
 			resource: &descriptor.Resource{
 				ElementMeta: descriptor.ElementMeta{
 					ObjectMeta: descriptor.ObjectMeta{
-						Name:    "test-resource",
+						Name:    "legacy-resource",
 						Version: "1.0.0",
 					},
 				},
 				Type: "test-type",
 				Access: &runtime.Raw{
-					Type: runtime.Type{
-						Name: "localBlob",
-					},
-					Data: []byte(`{"localReference":"sha256:1234567890","mediaType":"application/octet-stream"}`),
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Data: []byte(fmt.Sprintf(
+						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						digest.FromString("legacy content").String(),
+					)),
 				},
 			},
+			content: []byte("legacy content"),
 			identity: map[string]string{
-				"invalid": "key",
+				"name":    "legacy-resource",
+				"version": "1.0.0",
 			},
-			expectError:    true,
-			setupComponent: true,
+			setupComponentLikeOldOCM: true,
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				assert.Equal(t, string(original), string(actual))
+			},
 		},
 		{
 			name: "resource with invalid identity",
@@ -254,6 +279,110 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			errorContains:  "found 0 candidates while looking for resource map[name:test-resource version:1.0.0], but expected exactly one",
 			setupComponent: true,
 		},
+		{
+			name: "single layer image manifest",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "single-layer-manifest",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &runtime.Raw{
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Data: []byte(fmt.Sprintf(
+						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						digest.FromString("single layer manifest content").String(),
+						ociImageSpecV1.MediaTypeImageManifest,
+					)),
+				},
+			},
+			content: []byte("single layer manifest content"),
+			identity: map[string]string{
+				"name":    "single-layer-manifest",
+				"version": "1.0.0",
+			},
+			setupComponent: true,
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				assert.Equal(t, string(original), string(actual))
+			},
+		},
+		{
+			name: "oci layout resource",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "oci-layout-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &runtime.Raw{
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Data: []byte(fmt.Sprintf(
+						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						digest.FromString("oci layout content").String(),
+						layout.MediaTypeOCIImageLayoutV1+"+tar+gzip",
+					)),
+				},
+			},
+			content: func() []byte {
+				// Create a buffer to hold the OCI layout
+				buf := bytes.NewBuffer(nil)
+				layout := tar.NewOCILayoutWriter(buf)
+
+				// Create a descriptor for our content
+				content := []byte("oci layout content")
+				desc := ociImageSpecV1.Descriptor{
+					MediaType: ociImageSpecV1.MediaTypeImageLayer,
+					Digest:    digest.FromBytes(content),
+					Size:      int64(len(content)),
+				}
+
+				// Push the content
+				if err := layout.Push(t.Context(), desc, bytes.NewReader(content)); err != nil {
+					panic(fmt.Sprintf("failed to push content: %v", err))
+				}
+
+				// Create a manifest
+				manifest, err := oras.PackManifest(t.Context(), layout, oras.PackManifestVersion1_1, ociImageSpecV1.MediaTypeImageManifest, oras.PackManifestOptions{
+					Layers: []ociImageSpecV1.Descriptor{desc},
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to create manifest: %v", err))
+				}
+
+				// Tag the manifest
+				if err := layout.Tag(t.Context(), manifest, "test-tag"); err != nil {
+					panic(fmt.Sprintf("failed to tag manifest: %v", err))
+				}
+
+				// Close the layout
+				if err := layout.Close(); err != nil {
+					panic(fmt.Sprintf("failed to close layout: %v", err))
+				}
+
+				return buf.Bytes()
+			}(),
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				r := require.New(t)
+				store, err := tar.ReadOCILayout(t.Context(), blob.NewDirectReadOnlyBlob(bytes.NewReader(original)))
+				r.NoError(err, "Failed to read OCI layout")
+				t.Cleanup(func() {
+					r.NoError(store.Close(), "Failed to close blob reader")
+				})
+				r.Len(store.Index.Manifests, 1, "Expected one manifest in the OCI layout")
+			},
+			identity: map[string]string{
+				"name":    "oci-layout-resource",
+				"version": "1.0.0",
+			},
+			expectError:    false,
+			setupComponent: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -279,18 +408,20 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			}
 			desc.Component.Resources = append(desc.Component.Resources, *tc.resource)
 
-			// Add resource if content is provided
-			if tc.content != nil {
+			// Setup component if needed
+			if tc.setupComponent {
+				// Add the resource first
 				b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
 				newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.resource, b)
 				r.NoError(err, "Failed to add test resource")
 				r.NotNil(newRes, "Resource should not be nil after adding")
-			}
 
-			// Setup component if needed
-			if tc.setupComponent {
-				err := repo.AddComponentVersion(ctx, desc)
+				// Then add the component version
+				err = repo.AddComponentVersion(ctx, desc)
 				r.NoError(err, "Failed to setup test component")
+			} else if tc.setupComponentLikeOldOCM {
+				// Setup legacy component version
+				setupLegacyComponentVersion(t, store, ctx, tc.content, tc.resource)
 			}
 
 			// Test getting the resource
@@ -314,7 +445,16 @@ func TestRepository_GetLocalResource(t *testing.T) {
 
 					content, err := io.ReadAll(reader)
 					r.NoError(err, "Failed to read blob content")
-					r.Equal(tc.content, content, "Blob content should match expected content")
+
+					// If the content is gzipped (starts with gzip magic number), decompress it
+					if len(content) >= 2 && content[0] == 0x1f && content[1] == 0x8b {
+						gzipReader, err := gzip.NewReader(bytes.NewReader(content))
+						r.NoError(err, "Failed to create gzip reader")
+						defer gzipReader.Close()
+						content, err = io.ReadAll(gzipReader)
+						r.NoError(err, "Failed to decompress content")
+					}
+					tc.checkContent(t, tc.content, content)
 				}
 			}
 		})
@@ -697,4 +837,42 @@ func TestRepository_ListComponentVersions(t *testing.T) {
 	// Verify versions are sorted in descending order
 	expectedOrder := []string{"2.1.0", "2.0.0", "1.1.0", "1.0.0"}
 	r.Equal(expectedOrder, versions, "Versions should be sorted in descending order")
+}
+
+func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, resource *descriptor.Resource) {
+	r := require.New(t)
+	// Get a repository store for the component
+	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference("test-component", "1.0.0"))
+	r.NoError(err)
+
+	// Create a descriptor for the component version
+	desc := &descriptor.Descriptor{
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-component",
+					Version: "1.0.0",
+				},
+			},
+		},
+	}
+	desc.Component.Resources = append(desc.Component.Resources, *resource)
+
+	// Create a layer descriptor for the component version
+	layerDesc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageLayer,
+		Digest:    digest.FromBytes(content),
+		Size:      int64(len(content)),
+	}
+	r.NoError(identity.AdoptAsResource(&layerDesc, resource))
+
+	// Push the component version as a layer
+	r.NoError(repoStore.Push(ctx, layerDesc, bytes.NewReader(content)))
+
+	topDesc, err := oci.AddDescriptorToStore(ctx, repoStore, desc, oci.AddDescriptorOptions{
+		Author:           "OLD OCM",
+		AdditionalLayers: []ociImageSpecV1.Descriptor{layerDesc},
+	})
+	r.NoError(err)
+	r.NoError(repoStore.Tag(ctx, *topDesc, "1.0.0"))
 }
