@@ -77,11 +77,19 @@ func (r *ComponentVersionRepositoryRegistry) AddPlugin(plugin *Plugin, caps *Cap
 	var reads []runtime.Type
 	var writes []runtime.Type
 	for _, c := range caps.Capabilities[ComponentVersionRepositoryPlugin] {
-		if c.Capability == ReadComponentVersionRepositoryCapability {
-			reads = append(reads, c.Type)
+		if c.Name == ReadComponentVersionRepositoryCapability {
+			for _, e := range c.Endpoints {
+				for _, t := range e.Types {
+					reads = append(reads, t.Type)
+				}
+			}
 		}
-		if c.Capability == WriteComponentVersionRepositoryCapability {
-			writes = append(reads, c.Type)
+		if c.Name == WriteComponentVersionRepositoryCapability {
+			for _, e := range c.Endpoints {
+				for _, t := range e.Types {
+					writes = append(writes, t.Type)
+				}
+			}
 		}
 	}
 	candidates := make(map[runtime.Type]struct{}, len(reads))
@@ -102,19 +110,19 @@ func (r *ComponentVersionRepositoryRegistry) AddPlugin(plugin *Plugin, caps *Cap
 	return nil
 }
 
-// GetPlugin finds a specific plugin the registry. Taking a capability and a type for that capability
+// GetComponentVersionRegistryPlugin finds a specific plugin the registry. Taking a capability and a type for that capability
 // it will find and return a registered plugin.
 // On the first call, it will initialize and start the plugin. On any consecutive calls it will return the
 // existing plugin that has already been started.
-func (r *ComponentVersionRepositoryRegistry) GetPlugin(ctx context.Context, typ runtime.Type) (PluginBase, error) {
+func GetComponentVersionRegistryPlugin[T runtime.Typed](ctx context.Context, r *ComponentVersionRepositoryRegistry, typ T) (PluginBase, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.registry[typ]; !ok {
-		return nil, fmt.Errorf("ComponentVersionRepositoryPlugin plugin for typ %s not found", typ)
+	if _, ok := r.registry[typ.GetType()]; !ok {
+		return nil, fmt.Errorf("ComponentVersionRepositoryPlugin plugin for typ %T not found", typ)
 	}
 
-	plugin := r.registry[typ]
+	plugin := r.registry[typ.GetType()]
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
 		return existingPlugin.Plugin, nil
 	}
@@ -128,9 +136,14 @@ func (r *ComponentVersionRepositoryRegistry) GetPlugin(ctx context.Context, typ 
 		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
 	}
 
-	// create the base plugin backed by a concrete implementation of plugin interfaces.
+	// Construct the capability endpoint map for schemas.
+	schemaMap := make(map[string][]Endpoint)
+	for _, c := range plugin.capabilities[ComponentVersionRepositoryPlugin] {
+		schemaMap[c.Name] = append(schemaMap[c.Name], c.Endpoints...)
+	}
+
 	// TODO: Figure out the right context here. -> Should be the base context from the plugin manager.
-	repoPlugin := NewRepositoryPlugin(context.Background(), r.logger, client, plugin.ID, plugin.path, plugin.config)
+	repoPlugin := NewRepositoryPlugin(context.Background(), r.logger, client, plugin.ID, plugin.path, plugin.config, schemaMap)
 
 	r.constructedPlugins[repoPlugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,
@@ -188,11 +201,7 @@ func GetReadWriteComponentVersionRepository[T runtime.Typed](ctx context.Context
 		return nil, errors.New("plugin manager not found in options")
 	}
 
-	// TODO adjust binary based plugin to be type safe
-	// this also needs a scheme...
-	// TODO: How do you store and use the Schemes.
-	// I need to figure out how I track known types.
-	p, err := defaultOpts.pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, prototype)
+	p, err := GetComponentVersionRegistryPlugin(ctx, defaultOpts.pm.ComponentVersionRepositoryRegistry, prototype)
 	if err != nil {
 		return nil, fmt.Errorf("error getting ComponentVersionRepositoryPlugin plugin for capability %s and %s with type %s: %w", ReadComponentVersionRepositoryCapability, WriteComponentVersionRepositoryCapability, prototype.GetType(), err)
 	}
