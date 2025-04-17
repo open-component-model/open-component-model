@@ -10,3 +10,17 @@ components:
       input:
         type: file
         path: ./testdata/text.txt
+    - name: teststring
+      type: blob
+      relation: local
+      input:
+        type: utf8
+        text: "Hello, world!"
+    - name: testobject
+      type: blob
+      relation: local
+      input:
+        type: utf8
+        objectFormat: json
+        object:
+          key: value

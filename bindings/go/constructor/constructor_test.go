@@ -1,16 +1,16 @@
 package constructor_test
 
 import (
+	"bytes"
 	"embed"
 	_ "embed"
-	"io"
 	"os"
 	"testing"
 
-	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
@@ -19,7 +19,6 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -52,48 +51,23 @@ func TestConstruct(t *testing.T) {
 	r.NoError(err)
 	r.NoError(v2.Validate(v2desc))
 
-	r.Len(desc.Component.Resources, 1)
+	descYAML, err := yaml.Marshal(v2desc)
+	r.NoError(err)
+	r.NotEmpty(descYAML)
+	t.Log(string(descYAML))
+
+	r.Len(desc.Component.Resources, 3)
 
 	resource := desc.Component.Resources[0]
 
-	b, err := repo.DownloadResource(t.Context(), &resource)
+	b, _, err := repo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, resource.ToIdentity())
 	r.NoError(err)
 	r.NotNil(b)
 
-	layout, err := tar.ReadOCILayout(t.Context(), b)
-	r.NoError(err)
-	t.Cleanup(func() {
-		r.NoError(layout.Close())
-	})
-	r.NotNil(layout)
-	r.Len(layout.Index.Manifests, 1)
-
-	manifest := layout.Index.Manifests[0]
-	manifestDataStream, err := layout.Fetch(t.Context(), manifest)
-	r.NoError(err)
-	t.Cleanup(func() {
-		r.NoError(manifestDataStream.Close())
-	})
-	manifestData, err := io.ReadAll(manifestDataStream)
-	r.NoError(err)
-
-	var manifestDesc ociImageSpecV1.Manifest
-	r.NoError(yaml.Unmarshal(manifestData, &manifestDesc))
-	r.NotEmpty(manifestDesc)
-	r.Len(manifestDesc.Layers, 1)
-
-	layer := manifestDesc.Layers[0]
-	layerDataStream, err := layout.Fetch(t.Context(), layer)
-	r.NoError(err)
-	t.Cleanup(func() {
-		r.NoError(layerDataStream.Close())
-	})
-
-	data, err = io.ReadAll(layerDataStream)
-	r.NoError(err)
-	r.NotEmpty(data)
+	var buf bytes.Buffer
+	r.NoError(blob.Copy(&buf, b))
 
 	expected, err := testData.ReadFile("testdata/text.txt")
 	r.NoError(err)
-	r.Equal(expected, data)
+	r.Equal(expected, buf.Bytes())
 }

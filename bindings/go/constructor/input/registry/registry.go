@@ -3,13 +3,16 @@ package registry
 import (
 	"ocm.software/open-component-model/bindings/go/constructor/input"
 	"ocm.software/open-component-model/bindings/go/constructor/input/file"
+	"ocm.software/open-component-model/bindings/go/constructor/input/utf8"
 	spec "ocm.software/open-component-model/bindings/go/constructor/spec/input"
 	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/input/v1"
+	"ocm.software/open-component-model/bindings/go/constructor/spec/input/v2alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func init() {
 	Default.MustRegisterMethod(&v1.File{}, &file.Method{})
+	Default.MustRegisterMethod(&v2alpha1.UTF8{}, &utf8.Method{})
 }
 
 var Default = New(spec.Scheme)

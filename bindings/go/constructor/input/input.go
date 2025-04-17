@@ -8,5 +8,5 @@ import (
 )
 
 type Method interface {
-	GetBlob(ctx context.Context, resource *spec.Resource) (data blob.ReadOnlyBlob, err error)
+	ProcessResource(ctx context.Context, resource *spec.Resource) (data blob.ReadOnlyBlob, err error)
 }

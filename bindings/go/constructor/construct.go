@@ -94,7 +94,7 @@ func construct(ctx context.Context, component spec.Component, opts Options) (*de
 		},
 	}
 
-	for _, resource := range component.Resources {
+	for i, resource := range component.Resources {
 		var data blob.ReadOnlyBlob
 		var access runtime.Typed
 		if resource.HasInput() {
@@ -103,23 +103,44 @@ func construct(ctx context.Context, component spec.Component, opts Options) (*de
 				return nil, fmt.Errorf("no input method found for input specification of type %q", resource.Input.GetType())
 			}
 			var err error
-			if data, err = method.GetBlob(ctx, &resource); err != nil {
+			if data, err = method.ProcessResource(ctx, &resource); err != nil {
 				return nil, fmt.Errorf("error getting blob from input method: %w", err)
 			}
-			access = &v2.LocalBlob{}
+			localBlob := &v2.LocalBlob{}
+
+			if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
+				localBlob.MediaType, _ = mediaTypeAware.MediaType()
+			}
+			access = localBlob
 		}
 		descResource := spec.ConvertToRuntimeResource(resource)
-		descResource.Relation = descriptor.LocalRelation
-		descResource.Version = component.Version
+
+		// if the resource doesn't have any information about its relation to the component
+		// default to a local resource.
+		if descResource.Relation == "" {
+			descResource.Relation = descriptor.LocalRelation
+		}
+
+		// if the resource doesn't have any information about its version,
+		// default to the component version.
+		if descResource.Version == "" {
+			descResource.Version = component.Version
+		}
+
+		// if the data is size aware, set the size in the resource
+		if sizeAware, ok := data.(blob.SizeAware); ok {
+			descResource.Size = sizeAware.Size()
+		}
 
 		if !resource.HasAccess() {
 			descResource.Access = access
 			uploaded, err := opts.Target.AddLocalResource(ctx, component.Name, component.Version, &descResource, data)
 			if err != nil {
-				return nil, fmt.Errorf("error adding local resource based on input to target: %w", err)
+				return nil, fmt.Errorf("error adding local resource at index %d based on input type %v to target: %w", i, resource.Input.GetType(), err)
 			}
 			descResource = *uploaded
 		}
+
 		desc.Component.Resources = append(desc.Component.Resources, descResource)
 	}
 

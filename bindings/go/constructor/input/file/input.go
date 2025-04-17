@@ -10,15 +10,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
 	inputSpec "ocm.software/open-component-model/bindings/go/constructor/spec/input"
 	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/input/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 var _ input.Method = &Method{}
 
 type Method struct{}
 
-func (i *Method) GetBlob(_ context.Context, resource *spec.Resource) (data blob.ReadOnlyBlob, err error) {
+func (i *Method) ProcessResource(_ context.Context, resource *spec.Resource) (data blob.ReadOnlyBlob, err error) {
+	return i.process(resource.Input, err, data)
+}
+
+func (i *Method) process(input runtime.Typed, err error, data blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
 	file := v1.File{}
-	if err := inputSpec.Scheme.Convert(resource.Input, &file); err != nil {
+	if err := inputSpec.Scheme.Convert(input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
@@ -34,7 +39,7 @@ func (i *Method) GetBlob(_ context.Context, resource *spec.Resource) (data blob.
 
 	data = &InputFileBlob{b, mediaType}
 
-	if file.CompressWithGzip {
+	if file.Compress {
 		data = NewCompressedBlob(data)
 	}
 

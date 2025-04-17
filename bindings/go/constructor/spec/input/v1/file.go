@@ -15,8 +15,8 @@ type File struct {
 	Path string `json:"path"`
 	// MediaType is the media type of the file.
 	MediaType string `json:"mediaType,omitempty"`
-	// CompressWithGzip indicates whether the file should be compressed with gzip.
-	CompressWithGzip bool `json:"compress,omitempty"`
+	// Compress indicates whether the file should be compressed with gzip.
+	Compress bool `json:"compress,omitempty"`
 }
 
 func (t *File) String() string {

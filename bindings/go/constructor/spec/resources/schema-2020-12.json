@@ -940,14 +940,15 @@
               "text": {
                 "type": "string"
               },
-              "json": {
+              "object": {
                 "type": "object"
               },
-              "formattedJson": {
-                "type": "object"
-              },
-              "yaml": {
-                "type": "object"
+              "objectFormat": {
+                "type": "string",
+                "enum": [
+                    "json",
+                    "yaml"
+                ]
               },
               "mediaType": {
                 "type": "string"
