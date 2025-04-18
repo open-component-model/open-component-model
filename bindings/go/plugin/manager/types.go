@@ -5,15 +5,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const (
-	ReadComponentVersionRepositoryCapability  = "readComponentVersionRepository"
-	WriteComponentVersionRepositoryCapability = "writeComponentVersionRepository"
-	ReadResourceRepositoryCapability          = "readResourceRepository"
-	WriteResourceRepositoryCapability         = "writeResourceRepository"
-	CredentialPluginCapability                = "credentialPlugin"           //nolint: gosec // isn't a hardcoded credential
-	CredentialRepositoryPluginCapability      = "credentialRepositoryPlugin" //nolint: gosec // isn't a hardcoded credential
-)
-
 type Location struct {
 	LocationType `json:"type"`
 	Value        string `json:"value"`
@@ -84,19 +75,11 @@ type Type struct {
 	JSONSchema []byte `json:"jsonSchema"`
 }
 
-// Endpoint defines a type and a scheme belonging to one of the N endpoints for a Capability.
-type Endpoint struct {
-	// Location of the endpoint. This location is used to identify which JsonSchema belongs
-	// to which endpoint.
-	Location string `json:"location"`
-	// Types and endpoints stored in this capability.
-	Types []Type `json:"types"`
-}
-
-type Endpoints struct {
+// We know which endpoints are required so there is no need to pass this back to the manager.
+type Types struct {
 	// Maybe we don't even need the plugin type here?
 	// Does a binary implement multiple plugin types? Didn't we say we don't want to overstep that boundary?
-	Endpoints map[PluginType][]Endpoint `json:"endpoints"`
+	Types map[PluginType][]Type `json:"types"`
 }
 
 type GetResourceRequest struct {

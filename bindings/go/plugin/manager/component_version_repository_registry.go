@@ -143,15 +143,25 @@ func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx co
 		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
 	}
 
+	// think about this better, we have a single json schema, maybe even have different maps for different types + schemas?
+	var jsonSchema []byte
+loop:
+	for _, tps := range plugin.types {
+		for _, tp := range tps {
+			jsonSchema = tp.JSONSchema
+			break loop
+		}
+	}
+
 	// TODO: Figure out the right context here. -> Should be the base context from the plugin manager.
-	repoPlugin := NewRepositoryPlugin(context.Background(), r.logger, client, plugin.ID, plugin.path, plugin.config, plugin.endpoints[ComponentVersionRepositoryPlugin])
+	repoPlugin := NewComponentVersionRepositoryPlugin(context.Background(), r.logger, client, plugin.ID, plugin.path, plugin.config, jsonSchema)
 
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,
 		cmd:    plugin.cmd,
 	}
 
-	pt := NewTypedRepositoryPlugin[T](repoPlugin)
+	pt := NewTypedComponentVersionRepositoryPluginImplementation[T](repoPlugin)
 
 	return pt, nil
 }

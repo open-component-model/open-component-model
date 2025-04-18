@@ -8,14 +8,15 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const socketPathFormat = "/tmp/ocm_plugin_%s.sock"
@@ -24,17 +25,17 @@ const socketPathFormat = "/tmp/ocm_plugin_%s.sock"
 type PluginType string
 
 var (
-	TransformationPlugin             PluginType = "transformation"
-	ComponentVersionRepositoryPlugin PluginType = "componentVersionRepository"
-	CredentialPlugin                 PluginType = "credential"
+	TransformationPluginType             PluginType = "transformation"
+	ComponentVersionRepositoryPluginType PluginType = "componentVersionRepository"
+	CredentialPluginType                 PluginType = "credential"
 )
 
 // Plugin represents a connected plugin
 type Plugin struct {
-	ID        string
-	path      string
-	config    Config
-	endpoints map[PluginType][]Endpoint
+	ID     string
+	path   string
+	config Config
+	types  map[PluginType][]Type
 
 	cmd *exec.Cmd
 }
@@ -162,8 +163,8 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 		}
 
-		endpoints := &Endpoints{}
-		if err := json.Unmarshal(output.Bytes(), endpoints); err != nil {
+		types := &Types{}
+		if err := json.Unmarshal(output.Bytes(), types); err != nil {
 			return fmt.Errorf("failed to unmarshal capabilities: %w", err)
 		}
 
@@ -181,28 +182,19 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return cmd.Process.Kill()
 		}
 		plugin.cmd = pluginCmd
-		plugin.endpoints = endpoints.Endpoints
+		plugin.types = types.Types
 
-		for pType, eps := range plugin.endpoints {
+		for pType, typs := range plugin.types {
 			switch pType {
-			case ComponentVersionRepositoryPlugin:
-				// we know that there is a single type.
-				// for others, this might be multiple types.
-				var t runtime.Type
-			loop:
-				for _, ep := range eps {
-					for _, v := range ep.Types {
-						t = v.Type
-						break loop
+			case ComponentVersionRepositoryPluginType:
+				for _, typ := range typs {
+					pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
+					if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, typ.Type); err != nil {
+						return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 					}
 				}
-
-				pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
-				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, t); err != nil {
-					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
-				}
-			case CredentialPlugin:
-			case TransformationPlugin:
+			case CredentialPluginType:
+			case TransformationPluginType:
 			}
 		}
 	}
