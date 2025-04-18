@@ -3,14 +3,15 @@ package manager
 import (
 	"context"
 	"log/slog"
-	goruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"os"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	v2 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	goruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestGetTransferPlugin(t *testing.T) {

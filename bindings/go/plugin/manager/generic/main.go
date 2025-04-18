@@ -33,7 +33,17 @@ func (m *OCIPlugin[T]) GetLocalResource(ctx context.Context, request manager.Get
 	return nil
 }
 
-var _ manager.ReadOCMRepositoryPluginContract[*v1.OCIRepository] = &OCIPlugin[*v1.OCIRepository]{}
+func (m *OCIPlugin[T]) AddLocalResource(ctx context.Context, request manager.PostLocalResourceRequest[T], credentials manager.Attributes) (*descriptor.Resource, error) {
+	_, _ = fmt.Fprintf(os.Stdout, "AddLocalResource: %+v\n", request.ResourceLocation)
+	return nil, nil
+}
+
+func (m *OCIPlugin[T]) AddComponentVersion(ctx context.Context, request manager.PostComponentVersionRequest[T], credentials manager.Attributes) error {
+	_, _ = fmt.Fprintf(os.Stdout, "AddComponentVersiont: %+v\n", request.Descriptor.Component.Name)
+	return nil
+}
+
+var _ manager.ReadWriteOCMRepositoryPluginContract[*v1.OCIRepository] = &OCIPlugin[*v1.OCIRepository]{}
 
 func main() {
 	args := os.Args[1:]

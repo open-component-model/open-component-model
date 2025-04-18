@@ -26,9 +26,9 @@ type Handler struct {
 // an internal tracker. Once all capabilities have been declared, we call FinalizeEndpoints to
 // return the registered capabilities to the plugin manager.
 type CapabilityBuilder struct {
-	currentEndpoints Endpoints
-	handlers         []Handler
-	scheme           *runtime.Scheme
+	currentTypes Types
+	handlers     []Handler
+	scheme       *runtime.Scheme
 }
 
 // NewCapabilityBuilder constructs a new builder for registering capabilities for the given plugin type.
@@ -40,7 +40,7 @@ func NewCapabilityBuilder(scheme *runtime.Scheme) *CapabilityBuilder {
 
 // FinalizeEndpoints returns the accumulated endpoints during Register* calls.
 func (c *CapabilityBuilder) FinalizeEndpoints() error {
-	content, err := json.Marshal(c.currentEndpoints)
+	content, err := json.Marshal(c.currentTypes)
 	if err != nil {
 		return err
 	}
@@ -66,8 +66,8 @@ func RegisterSupportedForEndpoints[T runtime.Typed](
 	proto T,
 	handler PluginBase,
 ) error {
-	if c.currentEndpoints.Endpoints == nil {
-		c.currentEndpoints.Endpoints = map[PluginType][]Endpoint{}
+	if c.currentTypes.Types == nil {
+		c.currentTypes.Types = map[PluginType][]Type{}
 	}
 
 	typ, err := c.scheme.TypeForPrototype(proto)
@@ -76,7 +76,7 @@ func RegisterSupportedForEndpoints[T runtime.Typed](
 	}
 
 	switch t := handler.(type) {
-	case ReadOCMRepositoryPluginContract[T]:
+	case ReadWriteOCMRepositoryPluginContract[T]:
 		// Setup handlers
 		c.handlers = append(c.handlers,
 			Handler{
@@ -93,24 +93,16 @@ func RegisterSupportedForEndpoints[T runtime.Typed](
 			return err
 		}
 
-		c.currentEndpoints.Endpoints[ComponentVersionRepositoryPlugin] = append(c.currentEndpoints.Endpoints[ComponentVersionRepositoryPlugin],
-			Endpoint{
-				Location: DownloadComponentVersion,
-				Types: []Type{
-					{
-						Type:       typ,
-						JSONSchema: schemaOCIRegistry,
-					},
-				},
-			},
-			Endpoint{
-				Location: DownloadLocalResource,
-				Types: []Type{
-					{
-						Type:       typ,
-						JSONSchema: schemaOCIRegistry,
-					},
-				},
+		c.currentTypes.Types[ComponentVersionRepositoryPluginType] = append(c.currentTypes.Types[ComponentVersionRepositoryPluginType],
+			// we only need ONE type because we have multiple endpoints, but those endpoints
+			// support the same type with the same schema... Figure out how to differentiate
+			// if there are multiple schemas and multiple types so which belongs to which?
+			// Maybe it's enough to have a convention where the first typee is the FROM and
+			// the second type is the TO part when we construct the type affiliation to the
+			// implementation.
+			Type{
+				Type:       typ,
+				JSONSchema: schemaOCIRegistry,
 			})
 	case WriteOCMRepositoryPluginContract[T]:
 	}

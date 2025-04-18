@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
