@@ -1,0 +1,17 @@
+version: '3'
+
+tasks:
+  tmp:
+    cmds:
+      - mkdir -p tmp
+    status:
+      - test -d tmp
+  test:
+    sources:
+      - ./**/*.go
+      - ./go.mod
+      - ./go.sum
+    cmds:
+      - go test -v -coverprofile=tmp/coverage.out ./...
+    deps:
+      - tmp
