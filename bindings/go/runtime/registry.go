@@ -139,17 +139,48 @@ func (r *Scheme) NewObject(typ Type) (Typed, error) {
 }
 
 func (r *Scheme) Decode(data io.Reader, into Typed) error {
-	if _, err := r.TypeForPrototype(into); err != nil && !r.allowUnknown {
-		return fmt.Errorf("%T is not a valid registered type and cannot be decoded: %w", into, err)
+	if _, err := r.TypeForPrototype(into); err != nil {
+		if !r.allowUnknown {
+			return fmt.Errorf("%T is not a valid registered type and cannot be decoded: %w", into, err)
+		}
 	}
+	oldType := into.GetType()
 	bytes, err := io.ReadAll(data)
 	if err != nil {
 		return fmt.Errorf("could not read data: %w", err)
 	}
+	if len(bytes) == 0 {
+		return fmt.Errorf("cannot decode empty input data")
+	}
 	if err := yaml.Unmarshal(bytes, into); err != nil {
 		return fmt.Errorf("failed to unmarshal raw: %w", err)
 	}
+	if !oldType.IsEmpty() && !oldType.Equal(into.GetType()) {
+		return fmt.Errorf("expected type %q after decoding but got %q", oldType, into.GetType())
+	}
 	return nil
+}
+
+// DefaultType sets the type of the Typed object to its registered type.
+// It returns true if the type was updated or an error in case an unknown type was found but
+// unknown types are forbidden.
+func (r *Scheme) DefaultType(typed Typed) (updated bool, err error) {
+	typ := typed.GetType()
+
+	fromType, err := r.TypeForPrototype(typed)
+	if err != nil {
+		if !r.allowUnknown {
+			return false, fmt.Errorf("%T is not a valid registered type and cannot be defaulted: %w", typed, err)
+		}
+		return false, nil
+	}
+
+	if typ.IsEmpty() || !r.IsRegistered(typ) {
+		typed.SetType(fromType)
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // Convert transforms one Typed object into another. Both 'from' and 'into' must be non-nil pointers.
