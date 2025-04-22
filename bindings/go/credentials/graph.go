@@ -69,12 +69,12 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 	}
 
 	// Attempt direct resolution via the DAG.
-	creds, err := g.resolveDirect(ctx, identity)
+	creds, err := g.resolveFromGraph(ctx, identity)
 
 	switch {
 	case errors.Is(err, ErrNoDirectCredentials):
 		// fall back to indirect resolution
-		return g.resolveIndirect(ctx, identity)
+		return g.resolveFromRepository(ctx, identity)
 	case err != nil:
 		return nil, err
 	}

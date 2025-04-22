@@ -116,7 +116,9 @@ func processPluginBasedEdges(ctx context.Context, g *Graph, consumers []Consumer
 				}
 
 				credentialNode := credentialIdentity.String()
-				if err := g.addEdge(node, credentialNode); err != nil {
+				if err := g.addEdge(node, credentialNode, map[string]any{
+					"kind": "resolution-relevant",
+				}); err != nil {
 					return fmt.Errorf("could not add edge from consumer identity %q to credential identity %q: %w", identity, credentialIdentity, err)
 				}
 			}

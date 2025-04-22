@@ -8,7 +8,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func (g *Graph) resolveDirect(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+// resolveFromGraph resolves credentials for a given identity by traversing the graph.
+func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
 	// Check for cancellation to exit early
 	select {
 	case <-ctx.Done():
@@ -22,8 +23,8 @@ func (g *Graph) resolveDirect(ctx context.Context, identity runtime.Identity) (m
 	}
 
 	// Leaf node: return the credentials directly.
-	creds, ok := g.getCredentials(vertex.ID)
-	if ok {
+	creds, cached := g.getCredentials(vertex.ID)
+	if cached {
 		return creds, nil
 	}
 
@@ -31,15 +32,12 @@ func (g *Graph) resolveDirect(ctx context.Context, identity runtime.Identity) (m
 	node := identity.String()
 
 	result := make(map[string]string)
-	if len(vertex.Edges) != 1 {
-		return nil, fmt.Errorf("failed to resolve credentials for node %q: multiple outgoing edges that would be candidates: %v", vertex.ID, vertex.Edges)
-	}
 	for id := range vertex.Edges {
 		childID, ok := g.getIdentity(id)
 		if !ok {
 			return nil, fmt.Errorf("failed to resolve credentials for node %q: child node %q not found", vertex.ID, id)
 		}
-		childCredentials, err := g.resolveDirect(ctx, childID)
+		childCredentials, err := g.resolveFromGraph(ctx, childID)
 		if err != nil {
 			return nil, err
 		}

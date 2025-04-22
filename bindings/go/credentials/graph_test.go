@@ -11,12 +11,69 @@ import (
 	"github.com/stretchr/testify/require"
 
 	credentials2 "ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/credentials/internal/static"
 	credentialruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+type CredentialPlugin struct {
+	ConsumerIdentityTypeAttributes map[runtime.Type]map[string]func(v any) (string, string)
+	CredentialFunc                 func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error)
+}
+
+func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.Typed) (runtime.Identity, error) {
+	attrs, ok := p.ConsumerIdentityTypeAttributes[typed.GetType()]
+	if !ok {
+		return nil, fmt.Errorf("unsupported credential type %v", typed.GetType())
+	}
+
+	data, err := json.Marshal(typed)
+	if err != nil {
+		return nil, err
+	}
+
+	mm := make(map[string]interface{})
+	if err := json.Unmarshal(data, &mm); err != nil {
+		return nil, err
+	}
+
+	identity := make(runtime.Identity)
+	identity[runtime.IdentityAttributeType] = typed.GetType().String()
+	for k, attr := range attrs {
+		if val, ok := mm[k]; ok {
+			newKey, newVal := attr(val)
+			identity[newKey] = newVal
+		}
+	}
+
+	return identity, nil
+}
+
+func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+	if p.CredentialFunc == nil {
+		return nil, fmt.Errorf("no credential function for %v", identity)
+	}
+	return p.CredentialFunc(ctx, identity, credentials)
+}
+
+type RepositoryPlugin struct {
+	RepositoryConfigTypes  []runtime.Type
+	RepositoryIdentityFunc func(config runtime.Typed) (runtime.Identity, error)
+	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+}
+
+func (s RepositoryPlugin) SupportedRepositoryConfigTypes() []runtime.Type {
+	return s.RepositoryConfigTypes
+}
+
+func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config runtime.Typed) (runtime.Identity, error) {
+	return s.RepositoryIdentityFunc(config)
+}
+
+func (s RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+	return s.ResolveFunc(ctx, config, identity, credentials)
+}
 
 // Sample YAML from your example
 const testYAML = `
@@ -44,7 +101,6 @@ consumers:
     credentials:
       - type: AWSSecretsManager
         secretId: "vault-access-creds"
-
   - identity:
       type: HashiCorpVault
       hostname: "other.vault.com"
@@ -113,7 +169,7 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 	getPluginRepositoryFn := func(ctx context.Context, repoType runtime.Typed) (credentials2.RepositoryPlugin, error) {
 		switch repoType.GetType().String() {
 		case "OCIRegistry":
-			return static.RepositoryPlugin{
+			return RepositoryPlugin{
 				RepositoryConfigTypes: []runtime.Type{runtime.NewVersionedType("DockerConfig", "v1")},
 				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
 					var mm map[string]interface{}
@@ -139,7 +195,7 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 				},
 			}, nil
 		case credentials2.AnyCredentialType.String():
-			return static.RepositoryPlugin{
+			return RepositoryPlugin{
 				RepositoryConfigTypes: []runtime.Type{runtime.NewUnversionedType("HashiCorpVault")},
 				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
 					var mm map[string]interface{}
@@ -179,7 +235,7 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 	getCredentialPluginsFn := func(ctx context.Context, repoType runtime.Typed) (credentials2.CredentialPlugin, error) {
 		switch repoType.GetType() {
 		case runtime.NewUnversionedType("RecursionTest"):
-			return static.CredentialPlugin{
+			return CredentialPlugin{
 				ConsumerIdentityTypeAttributes: map[runtime.Type]map[string]func(v any) (string, string){
 					runtime.NewUnversionedType("RecursionTest"): {
 						"path": func(v any) (string, string) {
@@ -189,7 +245,7 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 				},
 			}, nil
 		case runtime.NewUnversionedType("AWSSecretsManager"):
-			return static.CredentialPlugin{
+			return CredentialPlugin{
 				ConsumerIdentityTypeAttributes: map[runtime.Type]map[string]func(v any) (string, string){
 					runtime.NewUnversionedType("AWSSecretsManager"): {
 						"secretId": func(v any) (string, string) {
@@ -211,7 +267,7 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 				},
 			}, nil
 		case runtime.NewUnversionedType("HashiCorpVault"):
-			return static.CredentialPlugin{
+			return CredentialPlugin{
 				ConsumerIdentityTypeAttributes: map[runtime.Type]map[string]func(v any) (string, string){
 					runtime.NewUnversionedType("HashiCorpVault"): {
 						"serverURL": func(v any) (string, string) {
@@ -249,7 +305,7 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 			}, nil
 		}
 
-		return nil, nil
+		return nil, fmt.Errorf("unsupported repository type %q", repoType)
 	}
 
 	graph, err := credentials2.ToGraph(t.Context(), config, credentials2.Options{
@@ -325,7 +381,7 @@ func TestResolveCredentials(t *testing.T) {
 			graph, err := GetGraph(t, tc.yaml)
 			r.NoError(err)
 			credsByIdentity, err := graph.Resolve(t.Context(), tc.identity)
-			r.NoError(err, "Failed to resolveDirect credentials")
+			r.NoError(err, "Failed to resolveFromGraph credentials")
 			r.Equal(tc.expected, credsByIdentity)
 		})
 	}
@@ -387,6 +443,36 @@ consumers:
 `,
 			"adding an edge from path=recursive/path/b,type=RecursionTest to path=recursive/path/*,type=RecursionTest would create a cycle",
 		},
+		{
+			"recursive resolution through multiple edges leads to successful merged resolution",
+			`
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: RecursionTest
+      path: "recursive/path/abc"
+    credentials:
+      - type: RecursionTest
+        path: "recursive/path/a"
+      - type: RecursionTest
+        path: "recursive/path/b"
+  - identity:
+      type: RecursionTest
+      path: "recursive/path/a"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: "abc"
+  - identity:
+      type: RecursionTest
+      path: "recursive/path/b"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          password: "def"
+`,
+			"",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -395,7 +481,7 @@ consumers:
 				r.Errorf(err, "Expected error")
 				r.ErrorContains(err, tc.expectedErr)
 			} else {
-				r.NoError(err, "Failed to resolveDirect credentials")
+				r.NoError(err, "Failed to get graph")
 			}
 		})
 	}

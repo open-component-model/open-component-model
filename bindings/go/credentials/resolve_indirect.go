@@ -11,9 +11,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// resolveIndirect is invoked when the DAG does not yield direct credentials.
+// resolveFromRepository is invoked when the DAG does not yield direct credentials.
 // The method ensures that successful resolutions are cached for subsequent calls.
-func (g *Graph) resolveIndirect(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
 	if credentials, cached := g.getCredentials(identity.String()); cached {
 		return credentials, nil
 	}
@@ -50,7 +50,7 @@ func (g *Graph) resolveIndirect(ctx context.Context, identity runtime.Identity) 
 			// NOTE: This explicitly does not allow recursing from repository to another repository.
 			// This is because the usage of repository credentials resolved by other repository credentials
 			// would require dynamic recursion detection via stack and would make the code significantly more complex.
-			credentials, _ = g.resolveDirect(ctx, identity)
+			credentials, _ = g.resolveFromGraph(ctx, identity)
 		}
 		slog.InfoContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
 		credentials, err = plugin.Resolve(ctx, cfg, identity, credentials)

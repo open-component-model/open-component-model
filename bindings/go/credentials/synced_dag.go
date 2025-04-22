@@ -107,12 +107,16 @@ func (g *syncedDag) addIdentity(identity runtime.Identity) error {
 		}
 		existing := vertex.Attributes[attributeIdentity].(runtime.Identity)
 		if identity.Match(existing) {
-			if err := g.dag.AddEdge(vertex.ID, node); err != nil {
+			if err := g.dag.AddEdge(vertex.ID, node, map[string]any{
+				"kind": "cyclic-only",
+			}); err != nil {
 				return err
 			}
 		}
 		if existing.Match(identity) {
-			if err := g.dag.AddEdge(node, vertex.ID); err != nil {
+			if err := g.dag.AddEdge(node, vertex.ID, map[string]any{
+				"kind": "cyclic-only",
+			}); err != nil {
 				return err
 			}
 		}
