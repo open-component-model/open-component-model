@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/constructor/input"
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
@@ -40,7 +41,7 @@ func (i *Method) process(input runtime.Typed, err error, data blob.ReadOnlyBlob)
 	data = &InputFileBlob{b, mediaType}
 
 	if file.Compress {
-		data = NewCompressedBlob(data)
+		data = compression.Compress(data)
 	}
 
 	return data, nil
