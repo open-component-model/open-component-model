@@ -1,4 +1,4 @@
-package pack
+package pack_test
 
 import (
 	"bytes"
@@ -19,6 +19,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
+	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -170,67 +171,6 @@ func TestBlob(t *testing.T) {
 	}
 }
 
-func TestUpdateResourceAccess(t *testing.T) {
-	tests := []struct {
-		name          string
-		resource      *descriptor.Resource
-		desc          ociImageSpecV1.Descriptor
-		opts          Options
-		expectedError string
-	}{
-		{
-			name:     "success with OCI image mode",
-			resource: &descriptor.Resource{},
-			desc: ociImageSpecV1.Descriptor{
-				MediaType: "application/vnd.test",
-				Digest:    digest.FromBytes([]byte("test")),
-			},
-			opts: Options{
-				BaseReference:             "test-ref",
-				LocalResourceAdoptionMode: LocalResourceAdoptionModeOCIImage,
-			},
-		},
-		{
-			name:     "success with local blob mode",
-			resource: &descriptor.Resource{},
-			desc: ociImageSpecV1.Descriptor{
-				MediaType: "application/vnd.test",
-				Digest:    digest.FromBytes([]byte("test")),
-			},
-			opts: Options{
-				BaseReference:             "test-ref",
-				LocalResourceAdoptionMode: LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess,
-			},
-		},
-		{
-			name:          "error on nil resource",
-			resource:      nil,
-			desc:          ociImageSpecV1.Descriptor{},
-			opts:          Options{},
-			expectedError: "resource must not be nil",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.opts.AccessScheme = runtime.NewScheme()
-			v2.MustAddToScheme(tt.opts.AccessScheme)
-			oci.MustAddToScheme(tt.opts.AccessScheme)
-			err := updateResourceAccess(tt.resource, tt.desc, tt.opts)
-
-			if tt.expectedError != "" {
-				assert.ErrorContains(t, err, tt.expectedError)
-				return
-			}
-
-			assert.NoError(t, err)
-			if tt.resource != nil {
-				assert.NotNil(t, tt.resource.Access)
-			}
-		})
-	}
-}
-
 func TestResourceBlob(t *testing.T) {
 	store, err := file.New(t.TempDir())
 	require.NoError(t, err)
@@ -264,9 +204,8 @@ func TestResourceBlob(t *testing.T) {
 				},
 			},
 			opts: Options{
-				AccessScheme:              runtime.NewScheme(),
-				BaseReference:             "test-ref",
-				LocalResourceAdoptionMode: LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess,
+				AccessScheme:  runtime.NewScheme(),
+				BaseReference: "test-ref",
 			},
 		},
 		{

@@ -550,12 +550,19 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 				r.NoError(err, "Failed to add local resource")
 				r.NotNil(newRes, "Resource should not be nil after adding")
 
+				r.NotNil(newRes.Access)
+				r.IsType(&v2.LocalBlob{}, newRes.Access)
+				r.Nil(newRes.Access.(*v2.LocalBlob).GlobalAccess, "in CTF, there should not be any global access")
+
 				// Add the component version
 				err = repo.AddComponentVersion(ctx, desc)
 				r.NoError(err, "Failed to add component version")
 
 				// Try to get the resource back using GetResource with the global access
-				downloadedRes, err = repo.DownloadResource(ctx, newRes)
+				downloadedRes, newRes, err = repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, newRes.ToIdentity())
+				r.NoError(err, "Failed to download resource")
+				r.NotNil(newRes, "received resource should not be nil")
+				r.NotNil(downloadedRes, "downloaded resource blob should not be nil")
 			} else {
 				// Use UploadResource for global uploads
 				// Create a temporary OCI store
@@ -583,46 +590,56 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 
 				// Download the resource
 				downloadedRes, err = repo.DownloadResource(ctx, tc.resource)
+				r.NoError(err, "Failed to download resource")
+				r.NotNil(downloadedRes, "Downloaded resource should not be nil")
 			}
 
 			if tc.wantErr {
 				r.Error(err, "Expected error but got none")
 				return
 			}
-			r.NoError(err, "Failed to download resource")
-			r.NotNil(downloadedRes, "Downloaded resource should not be nil")
 
-			imageLayout, err := tar.ReadOCILayout(ctx, downloadedRes)
-			r.NoError(err, "Failed to read OCI layout")
-			t.Cleanup(func() {
-				r.NoError(imageLayout.Close(), "Failed to close blob reader")
-			})
+			if tc.useLocalUpload {
+				// for local resources, the resource is opinionated as single layer oci artifact, so we can directly
+				// use the data
+				var data bytes.Buffer
+				r.NoError(blob.Copy(&data, downloadedRes), "Failed to copy blob content")
+				r.Equal(tc.content, data.Bytes(), "Downloaded content should match original content")
+			} else {
+				// for global resources, the access is a generic oci layout that is not opinionated
+				imageLayout, err := tar.ReadOCILayout(ctx, downloadedRes)
+				r.NoError(err, "Failed to read OCI layout")
+				t.Cleanup(func() {
+					r.NoError(imageLayout.Close(), "Failed to close blob reader")
+				})
 
-			r.Len(imageLayout.Index.Manifests, 1, "Expected one manifest in the OCI layout")
-			// Verify the downloaded content
-			manifestRaw, err := imageLayout.Fetch(ctx, imageLayout.Index.Manifests[0])
-			r.NoError(err, "Failed to fetch manifest")
-			t.Cleanup(func() {
-				r.NoError(manifestRaw.Close(), "Failed to close manifest reader")
-			})
-			var manifest ociImageSpecV1.Manifest
-			r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest), "Failed to unmarshal manifest")
+				r.Len(imageLayout.Index.Manifests, 1, "Expected one manifest in the OCI layout")
+				// Verify the downloaded content
+				manifestRaw, err := imageLayout.Fetch(ctx, imageLayout.Index.Manifests[0])
+				r.NoError(err, "Failed to fetch manifest")
+				t.Cleanup(func() {
+					r.NoError(manifestRaw.Close(), "Failed to close manifest reader")
+				})
+				var manifest ociImageSpecV1.Manifest
+				r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest), "Failed to unmarshal manifest")
 
-			r.Equal(manifest.ArtifactType, artifactMediaType)
+				r.Equal(manifest.ArtifactType, artifactMediaType)
 
-			r.Len(manifest.Layers, 1, "Expected one layer in the OCI layout")
+				r.Len(manifest.Layers, 1, "Expected one layer in the OCI layout")
 
-			layer := manifest.Layers[0]
+				layer := manifest.Layers[0]
 
-			layerRaw, err := imageLayout.Fetch(ctx, layer)
-			r.NoError(err, "Failed to fetch layer")
-			t.Cleanup(func() {
-				r.NoError(layerRaw.Close(), "Failed to close layer reader")
-			})
+				layerRaw, err := imageLayout.Fetch(ctx, layer)
+				r.NoError(err, "Failed to fetch layer")
+				t.Cleanup(func() {
+					r.NoError(layerRaw.Close(), "Failed to close layer reader")
+				})
 
-			downloadedContent, err := io.ReadAll(layerRaw)
-			r.NoError(err, "Failed to read blob content")
-			r.Equal(tc.content, downloadedContent, "Downloaded content should match original content")
+				downloadedContent, err := io.ReadAll(layerRaw)
+				r.NoError(err, "Failed to read blob content")
+				r.Equal(tc.content, downloadedContent, "Downloaded content should match original content")
+			}
+
 		})
 	}
 }

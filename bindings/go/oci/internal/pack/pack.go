@@ -12,6 +12,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -30,29 +31,6 @@ import (
 // It is set on the manifest and not on the layer itself.
 const AnnotationSingleLayerArtifact = "software.ocm.artifact.singlelayer"
 
-// LocalResourceAdoptionMode defines how local resources should be accessed in the repository.
-type LocalResourceAdoptionMode int
-
-func (l LocalResourceAdoptionMode) String() string {
-	switch l {
-	case LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess:
-		return "localBlobWithNestedGlobalAccess"
-	case LocalResourceAdoptionModeOCIImage:
-		return "ociImage"
-	default:
-		return fmt.Sprintf("unknown (%d)", l)
-	}
-}
-
-const (
-	// LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess creates a local blob access for resources.
-	// It also embeds the global access information in the local blob.
-	LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess LocalResourceAdoptionMode = iota
-	// LocalResourceAdoptionModeOCIImage creates an OCI image layer access for resources.
-	// This mode is used when the resource is embedded without a local blob (only global access)
-	LocalResourceAdoptionModeOCIImage LocalResourceAdoptionMode = iota
-)
-
 // Options defines the configuration options for packing a single-layer OCI artifact.
 type Options struct {
 	// AccessScheme is the scheme used for converting resource access types.
@@ -63,9 +41,6 @@ type Options struct {
 
 	// BaseReference is the base reference for the resource access that is used to update the resource.
 	BaseReference string
-
-	// LocalResourceAdoptionMode defines how local resources should be modified when packed.
-	LocalResourceAdoptionMode LocalResourceAdoptionMode
 
 	// ManifestAnnotations are annotations that will be added to single layer Artifacts
 	// They are not used for OCI Layouts.
@@ -132,7 +107,9 @@ func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage conten
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to pack manifest: %w", err)
 	}
 
-	if err := updateResourceAccess(b.Resource, desc, opts); err != nil {
+	global := backedByGlobalStore(storage)
+
+	if err := updateResourceAccess(b.Resource, desc, updateResourceAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 
@@ -149,7 +126,8 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
 	}
-	if err := updateResourceAccess(b.Resource, index, opts); err != nil {
+	global := backedByGlobalStore(storage)
+	if err := updateResourceAccess(b.Resource, index, updateResourceAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 	return index, nil
@@ -230,43 +208,58 @@ func Blob(ctx context.Context, storage content.Pusher, b blob.ReadOnlyBlob, desc
 	return nil
 }
 
+type updateResourceAccessOptions struct {
+	Options
+	// BackedByGlobalStore indicates if the resource is backed by a global store.
+	// This is used to determine if the resource access should be updated with a global reference.
+	BackedByGlobalStore bool
+}
+
 // updateResourceAccess updates the resource access with the new layer information.
 // for setting a global access it uses the base reference given which must not already contain a digest.
-func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Descriptor, opts Options) error {
+func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Descriptor, opts updateResourceAccessOptions) error {
 	if resource == nil {
 		return errors.New("resource must not be nil")
 	}
 
-	access := &accessv1.OCIImage{
-		// This is the target image reference under which the resource will be accessible once
-		// added to the OCM Component Version Repository. Note that this reference will not work
-		// unless the component version is actually updated.
-		ImageReference: fmt.Sprintf("%s@%s", opts.BaseReference, desc.Digest.String()),
+	localBlob := &descriptor.LocalBlob{
+		Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+		LocalReference: desc.Digest.String(),
+		MediaType:      desc.MediaType,
 	}
 
-	// Create access based on configured mode
-	switch opts.LocalResourceAdoptionMode {
-	case LocalResourceAdoptionModeOCIImage:
-		resource.Access = access
-	case LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess:
-		// Create local blob access
-		access, err := descriptor.ConvertToV2LocalBlob(opts.AccessScheme, &descriptor.LocalBlob{
-			Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-			LocalReference: desc.Digest.String(),
-			MediaType:      desc.MediaType,
-			GlobalAccess:   access,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to convert access to local blob: %w", err)
+	if opts.BackedByGlobalStore {
+		localBlob.GlobalAccess = &accessv1.OCIImage{
+			// This is an absolute reference to the blob in the global store.
+			// It contains the base reference and the digest of the blob to form an absolute, pinned (by digest)
+			// OCI reference.
+			ImageReference: fmt.Sprintf("%s@%s", opts.BaseReference, desc.Digest.String()),
 		}
-		resource.Access = access
-	default:
-		return fmt.Errorf("unsupported access mode: %s", opts.LocalResourceAdoptionMode)
 	}
+
+	// convert to apply the access
+	access, err := descriptor.ConvertToV2LocalBlob(opts.AccessScheme, localBlob)
+	if err != nil {
+		return fmt.Errorf("failed to convert access to local blob: %w", err)
+	}
+	resource.Access = access
 
 	if err := digestv1.ApplyToResource(resource, desc.Digest, digestv1.OCIArtifactDigestAlgorithm); err != nil {
 		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 
 	return nil
+}
+
+// backedByGlobalStore checks if the given storage is backed by a globally reachable store
+//
+// TODO(jakobmoellerdev): Eventually we should find a smarter solution to determine if a store is global.
+func backedByGlobalStore(storage content.Storage) bool {
+	switch storage.(type) {
+	// for ORAS repositories, we know they are global if they are remote repositories.
+	case *remote.Repository:
+		return true
+	default:
+		return false
+	}
 }

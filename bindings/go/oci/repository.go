@@ -254,10 +254,9 @@ func (repo *Repository) AddLocalResource(
 	}
 
 	desc, err := pack.ResourceBlob(ctx, store, resourceBlob, pack.Options{
-		AccessScheme:              repo.scheme,
-		CopyGraphOptions:          repo.resourceCopyOptions.CopyGraphOptions,
-		LocalResourceAdoptionMode: pack.LocalResourceAdoptionModeLocalBlobWithNestedGlobalAccess,
-		BaseReference:             reference,
+		AccessScheme:     repo.scheme,
+		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
+		BaseReference:    reference,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack resource blob: %w", err)
@@ -461,12 +460,19 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		image := accessv1.OCIImage{}
-		if err := repo.scheme.Convert(typed.GlobalAccess, &image); err != nil {
+		if typed.GlobalAccess == nil {
+			return nil, fmt.Errorf("local blob access does not have a global access and cannot be used")
+		}
+
+		globalAccess, err := repo.scheme.NewObject(typed.GlobalAccess.GetType())
+		if err != nil {
+			return nil, fmt.Errorf("error creating typed global blob access with help of scheme: %w", err)
+		}
+		if err := repo.scheme.Convert(typed.GlobalAccess, globalAccess); err != nil {
 			return nil, fmt.Errorf("error converting global blob access: %w", err)
 		}
 		res := res.DeepCopy()
-		res.Access = &image
+		res.Access = globalAccess
 		return repo.DownloadResource(ctx, res)
 	case *accessv1.OCIImage:
 		src, err := repo.resolver.StoreForReference(ctx, typed.ImageReference)
