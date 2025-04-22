@@ -3,8 +3,6 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
-	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
@@ -12,9 +10,13 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
+	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -23,7 +25,7 @@ const PluginCreator = "OCI Repository Plugin"
 func init() {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
-	if err := manager.RegisterInternalComponentVersionRepositoryPlugin(
+	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		scheme,
 		&Plugin{scheme: scheme, memory: inmemory.New()},
 		&v1.OCIRepository{},
@@ -34,17 +36,17 @@ func init() {
 
 type Plugin struct {
 	// embed empty base plugin to skip Ping method.
-	manager.EmptyBasePlugin
+	contracts.EmptyBasePlugin
 
 	scheme *runtime.Scheme
 	memory cache.OCIDescriptorCache
 }
 
-func (p Plugin) AddLocalResource(ctx context.Context, request manager.PostLocalResourceRequest[*v1.OCIRepository], credentials manager.Attributes) (*descriptor.Resource, error) {
+func (p Plugin) AddLocalResource(ctx context.Context, request types.PostLocalResourceRequest[*v1.OCIRepository], credentials contracts.Attributes) (*descriptor.Resource, error) {
 	panic("implement me")
 }
 
-func clientCredentials(credentials manager.Attributes) auth.Credential {
+func clientCredentials(credentials contracts.Attributes) auth.Credential {
 	cred := auth.Credential{}
 	if username, ok := credentials["username"]; ok {
 		cred.Username = string(username)
@@ -61,12 +63,12 @@ func clientCredentials(credentials manager.Attributes) auth.Credential {
 	return cred
 }
 
-func (p Plugin) AddComponentVersion(ctx context.Context, request manager.PostComponentVersionRequest[*v1.OCIRepository], credentials manager.Attributes) error {
+func (p Plugin) AddComponentVersion(ctx context.Context, request types.PostComponentVersionRequest[*v1.OCIRepository], credentials contracts.Attributes) error {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (p Plugin) GetComponentVersion(ctx context.Context, request manager.GetComponentVersionRequest[*v1.OCIRepository], credentials manager.Attributes) (*descriptor.Descriptor, error) {
+func (p Plugin) GetComponentVersion(ctx context.Context, request types.GetComponentVersionRequest[*v1.OCIRepository], credentials contracts.Attributes) (*descriptor.Descriptor, error) {
 	repo, err := createRepository(request.Repository, credentials, p)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
@@ -74,17 +76,17 @@ func (p Plugin) GetComponentVersion(ctx context.Context, request manager.GetComp
 	return repo.GetComponentVersion(ctx, request.Name, request.Version)
 }
 
-func (p Plugin) GetLocalResource(ctx context.Context, request manager.GetLocalResourceRequest[*v1.OCIRepository], credentials manager.Attributes) error {
+func (p Plugin) GetLocalResource(ctx context.Context, request types.GetLocalResourceRequest[*v1.OCIRepository], credentials contracts.Attributes) error {
 	// TODO implement me
 	panic("implement me")
 }
 
 var (
-	_ manager.ReadOCMRepositoryPluginContract[*v1.OCIRepository]  = (*Plugin)(nil)
-	_ manager.WriteOCMRepositoryPluginContract[*v1.OCIRepository] = (*Plugin)(nil)
+	_ contracts.ReadOCMRepositoryPluginContract[*v1.OCIRepository]  = (*Plugin)(nil)
+	_ contracts.WriteOCMRepositoryPluginContract[*v1.OCIRepository] = (*Plugin)(nil)
 )
 
-func createRepository(spec *v1.OCIRepository, credentials manager.Attributes, p Plugin) (oci.ComponentVersionRepository, error) {
+func createRepository(spec *v1.OCIRepository, credentials contracts.Attributes, p Plugin) (oci.ComponentVersionRepository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL %q: %w", spec.BaseUrl, err)

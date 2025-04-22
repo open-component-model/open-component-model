@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
 func TestPlugin(t *testing.T) {
@@ -24,21 +26,21 @@ func TestPlugin(t *testing.T) {
 	// The schema doesn't matter here, but this registry is required because Lock/Unlock is being called.
 	// But that lock unlock will make for a poor lock since that will not work with multiple calls from
 	// DIFFERENT registries.
-	registry := manager.NewComponentVersionRepositoryRegistry(nil)
-	repo, err := manager.GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, &spec)
+	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(nil)
+	repo, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, &spec)
 	r.NoError(err)
 
 	user, pass := getUserAndPasswordWithGitHubCLIAndJQ(t)
 
-	request := manager.GetComponentVersionRequest[*v1.OCIRepository]{
+	request := types.GetComponentVersionRequest[*v1.OCIRepository]{
 		Repository: &spec,
 		Name:       "ocm.software/ocmcli",
 		Version:    "0.22.1",
 	}
 
-	desc, err := repo.GetComponentVersion(ctx, request, manager.Attributes{
-		"username": manager.Attribute(user),
-		"password": manager.Attribute(pass),
+	desc, err := repo.GetComponentVersion(ctx, request, contracts.Attributes{
+		"username": contracts.Attribute(user),
+		"password": contracts.Attribute(pass),
 	})
 
 	r.NoError(err)

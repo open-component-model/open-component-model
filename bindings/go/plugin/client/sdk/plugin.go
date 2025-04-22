@@ -14,12 +14,13 @@ import (
 	"time"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
 type CleanupFunc func(ctx context.Context) error
 
 type Plugin struct {
-	Config manager.Config
+	Config types.Config
 
 	handlers      []manager.Handler
 	server        *http.Server
@@ -35,7 +36,7 @@ type Plugin struct {
 // to every plugin.
 // TODO: Provide documentation for secure data flow with local certificate
 // setup and certificate generation. At least start a document / issue.
-func NewPlugin(logger *slog.Logger, conf manager.Config) *Plugin {
+func NewPlugin(logger *slog.Logger, conf types.Config) *Plugin {
 	l := logger
 	if l == nil {
 		l = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
@@ -158,12 +159,12 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 	}
 
 	switch p.Config.Type {
-	case manager.Socket:
+	case types.Socket:
 		p.logger.Info("removing socket", "location", p.Config.Location)
 		if err := os.Remove(p.Config.Location); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-	case manager.TCP:
+	case types.TCP:
 		// empty case for now
 	}
 

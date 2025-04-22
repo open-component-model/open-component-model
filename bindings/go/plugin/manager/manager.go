@@ -16,37 +16,21 @@ import (
 	"time"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const socketPathFormat = "/tmp/ocm_plugin_%s.sock"
 
-// PluginType defines the type of the plugin such as, ComponentVersionRepositoryPlugin, Transformation, Credential, Config plugin.
-type PluginType string
-
-var (
-	TransformationPluginType             PluginType = "transformation"
-	ComponentVersionRepositoryPluginType PluginType = "componentVersionRepository"
-	CredentialPluginType                 PluginType = "credential"
-)
-
-// Plugin represents a connected plugin
-type Plugin struct {
-	ID     string
-	path   string
-	config Config
-	types  map[PluginType][]Type
-
-	cmd *exec.Cmd
-}
-
 // PluginManager manages all connected plugins.
 type PluginManager struct {
 	// Registries containing various typed plugins. These should be called directly using the
 	// plugin manager to locate a required plugin.
-	ComponentVersionRepositoryRegistry *ComponentVersionRepositoryRegistry
-	TransformationRegistry             *TransformationRegistry
-	CredentialRegistry                 *CredentialRegistry
+	ComponentVersionRepositoryRegistry *componentversionrepository.RepositoryRegistry
+	// TODO: set these up later
+	// TransformationRegistry             *TransformationRegistry
+	// CredentialRegistry                 *credentials.CredentialRegistry
 
 	mu     sync.Mutex
 	logger *slog.Logger
@@ -65,9 +49,7 @@ func NewPluginManager(ctx context.Context, logger *slog.Logger) *PluginManager {
 	repository.MustAddToScheme(scheme)
 
 	return &PluginManager{
-		TransformationRegistry:             NewTransformationRegistry(),
-		ComponentVersionRepositoryRegistry: NewComponentVersionRepositoryRegistry(scheme),
-		CredentialRegistry:                 NewCredentialRegistry(),
+		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(scheme),
 
 		baseCtx: ctx,
 		logger:  logger,
@@ -101,7 +83,7 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 		opt(defaultOpts)
 	}
 
-	conf := &Config{
+	conf := &mtypes.Config{
 		IdleTimeout: &defaultOpts.IdleTimeout,
 	}
 
@@ -111,7 +93,7 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 	}
 	conf.Type = t
 
-	var plugins []*Plugin
+	var plugins []*mtypes.Plugin
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -129,10 +111,10 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 
 		id := filepath.Base(path)
 
-		p := &Plugin{
+		p := &mtypes.Plugin{
 			ID:     id,
-			path:   path,
-			config: *conf,
+			Path:   path,
+			Config: *conf,
 		}
 
 		pm.logger.DebugContext(ctx, "discovered plugin", "id", id, "path", path)
@@ -151,10 +133,10 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 		}
 		conf.Location = location
 		conf.ID = plugin.ID
-		plugin.config = *conf
+		plugin.Config = *conf
 
 		output := bytes.NewBuffer(nil)
-		cmd := exec.CommandContext(ctx, cleanPath(plugin.path), "capabilities") //nolint: gosec // G204 does not apply
+		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint: gosec // G204 does not apply
 		cmd.Stdout = output
 		cmd.Stderr = os.Stderr
 
@@ -163,38 +145,37 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 		}
 
-		types := &Types{}
+		types := &mtypes.Types{}
 		if err := json.Unmarshal(output.Bytes(), types); err != nil {
 			return fmt.Errorf("failed to unmarshal capabilities: %w", err)
 		}
 
-		serialized, err := json.Marshal(plugin.config)
+		serialized, err := json.Marshal(plugin.Config)
 		if err != nil {
 			return err
 		}
 
 		// Create a command that can then be managed.
-		pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.path), "--config", string(serialized)) //nolint: gosec // G204 does not apply
+		pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint: gosec // G204 does not apply
 		pluginCmd.Stdout = os.Stdout
 		pluginCmd.Stderr = os.Stdout
 		pluginCmd.Cancel = func() error {
 			slog.Info("killing plugin process because the parent context is cancelled", "id", plugin.ID)
 			return cmd.Process.Kill()
 		}
-		plugin.cmd = pluginCmd
-		plugin.types = types.Types
+		plugin.Cmd = pluginCmd
+		plugin.Types = types.Types
 
-		for pType, typs := range plugin.types {
+		for pType, typs := range plugin.Types {
+			//nolint:gocritic // will be extended later
 			switch pType {
-			case ComponentVersionRepositoryPluginType:
+			case mtypes.ComponentVersionRepositoryPluginType:
 				for _, typ := range typs {
 					pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
 					if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, typ.Type); err != nil {
 						return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 					}
 				}
-			case CredentialPluginType:
-			case TransformationPluginType:
 			}
 		}
 	}
@@ -214,16 +195,14 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 
 	errs = errors.Join(errs,
 		pm.ComponentVersionRepositoryRegistry.Shutdown(ctx),
-		pm.TransformationRegistry.Shutdown(ctx),
-		pm.CredentialRegistry.Shutdown(ctx),
 	)
 
 	return errs
 }
 
-func determineConnectionLocation(plugin *Plugin) (_ string, err error) {
-	switch plugin.config.Type {
-	case TCP:
+func determineConnectionLocation(plugin *mtypes.Plugin) (_ string, err error) {
+	switch plugin.Config.Type {
+	case mtypes.TCP:
 		listener, err := net.Listen("tcp", ":0") //nolint: gosec // G102: only does it temporarily to find an empty address
 		if err != nil {
 			return "", err
@@ -236,14 +215,14 @@ func determineConnectionLocation(plugin *Plugin) (_ string, err error) {
 		}()
 
 		return listener.Addr().String(), nil
-	case Socket:
+	case mtypes.Socket:
 		return fmt.Sprintf(socketPathFormat, plugin.ID), nil
 	}
 
-	return "", fmt.Errorf("unknown plugin connection type: %s", plugin.config.Type)
+	return "", fmt.Errorf("unknown plugin connection type: %s", plugin.Config.Type)
 }
 
-func determineConnectionType() (ConnectionType, error) {
+func determineConnectionType() (mtypes.ConnectionType, error) {
 	tmp, err := os.MkdirTemp("", "")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary directory: %w", err)
@@ -255,12 +234,12 @@ func determineConnectionType() (ConnectionType, error) {
 	socketPath := filepath.Join(tmp, "plugin.sock")
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return TCP, nil
+		return mtypes.TCP, nil
 	}
 
 	if err := listener.Close(); err != nil {
 		return "", fmt.Errorf("failed to close socket: %w", err)
 	}
 
-	return Socket, nil
+	return mtypes.Socket, nil
 }
