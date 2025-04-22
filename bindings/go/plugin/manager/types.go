@@ -67,6 +67,14 @@ type PostLocalResourceRequest[T runtime.Typed] struct {
 	Resource         *descriptor.Resource `json:"resource"`
 }
 
+type Endpoint struct {
+	// Endpoint defines the hardcoded location of the endpoint where this type
+	// is supported with the given JSON Schema.
+	Endpoint string `json:"endpoint"`
+
+	ParameterTypes []Type `json:"parameterTypes"`
+}
+
 // Type defines an endpoint's type and the scheme of the type.
 type Type struct {
 	// Type defines the type name that this plugin supports.

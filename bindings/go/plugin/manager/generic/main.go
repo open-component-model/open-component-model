@@ -17,47 +17,54 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type OCIPlugin[T runtime.Typed] struct{}
+type OCIPlugin struct{}
 
-func (m *OCIPlugin[T]) Ping(_ context.Context) error {
+func (m *OCIPlugin) Ping(_ context.Context) error {
 	return nil
 }
 
-func (m *OCIPlugin[T]) GetComponentVersion(ctx context.Context, request manager.GetComponentVersionRequest[*v1.OCIRepository], credentials manager.Attributes) (*descriptor.Descriptor, error) {
+func (m *OCIPlugin) GetComponentVersion(ctx context.Context, request manager.GetComponentVersionRequest[*v1.OCIRepository], credentials manager.Attributes) (*descriptor.Descriptor, error) {
 	_, _ = fmt.Fprintf(os.Stdout, "Returning a descriptor: %+v\n", request.Name)
 	return nil, nil
 }
 
-func (m *OCIPlugin[T]) GetLocalResource(ctx context.Context, request manager.GetLocalResourceRequest[*v1.OCIRepository], credentials manager.Attributes) error {
+func (m *OCIPlugin) GetLocalResource(ctx context.Context, request manager.GetLocalResourceRequest[*v1.OCIRepository], credentials manager.Attributes) error {
 	_, _ = fmt.Fprintf(os.Stdout, "Writing my local resource here to target: %+v\n", request.TargetLocation)
 	return nil
 }
 
-func (m *OCIPlugin[T]) AddLocalResource(ctx context.Context, request manager.PostLocalResourceRequest[T], credentials manager.Attributes) (*descriptor.Resource, error) {
+func (m *OCIPlugin) AddLocalResource(ctx context.Context, request manager.PostLocalResourceRequest[*v1.OCIRepository], credentials manager.Attributes) (*descriptor.Resource, error) {
 	_, _ = fmt.Fprintf(os.Stdout, "AddLocalResource: %+v\n", request.ResourceLocation)
 	return nil, nil
 }
 
-func (m *OCIPlugin[T]) AddComponentVersion(ctx context.Context, request manager.PostComponentVersionRequest[T], credentials manager.Attributes) error {
+func (m *OCIPlugin) AddComponentVersion(ctx context.Context, request manager.PostComponentVersionRequest[*v1.OCIRepository], credentials manager.Attributes) error {
 	_, _ = fmt.Fprintf(os.Stdout, "AddComponentVersiont: %+v\n", request.Descriptor.Component.Name)
 	return nil
 }
 
-var _ manager.ReadWriteOCMRepositoryPluginContract[*v1.OCIRepository] = &OCIPlugin[*v1.OCIRepository]{}
+var _ manager.ReadWriteOCMRepositoryPluginContract[*v1.OCIRepository] = &OCIPlugin{}
 
 func main() {
 	args := os.Args[1:]
 
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
-	capabilityBuilder := manager.NewCapabilityBuilder(scheme)
+	capabilities := manager.NewCapabilities(scheme)
 
-	if err := manager.RegisterSupportedForEndpoints(capabilityBuilder, &v1.OCIRepository{}, &OCIPlugin[*v1.OCIRepository]{}); err != nil {
+	if err := manager.RegisterComponentVersionRepository(&v1.OCIRepository{}, &OCIPlugin{}, capabilities); err != nil {
 		log.Fatal(err)
 	}
 
+	// TODO: ConsumerIdentityTypesForConfig endpoint
+
 	if len(args) > 0 && args[0] == "capabilities" {
-		if err := capabilityBuilder.FinalizeEndpoints(); err != nil {
+		content, err := json.Marshal(capabilities)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if _, err := fmt.Fprintln(os.Stdout, string(content)); err != nil {
 			log.Fatal(err)
 		}
 
@@ -85,7 +92,7 @@ func main() {
 	r := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
 	ocmPlugin := plugin.NewPlugin(r, conf)
-	if err := ocmPlugin.RegisterHandlers(capabilityBuilder.GetHandlers()...); err != nil {
+	if err := ocmPlugin.RegisterHandlers(capabilities.GetHandlers()...); err != nil {
 		log.Fatal(err)
 	}
 

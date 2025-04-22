@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/invopop/jsonschema"
 	"net/http"
-	"os"
 	"strings"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -23,7 +22,7 @@ type Handler struct {
 }
 
 // CapabilityBuilder constructs a capability for the plugin. Register*Capability will keep updating
-// an internal tracker. Once all capabilities have been declared, we call FinalizeEndpoints to
+// an internal tracker. Once all capabilities have been declared, we call Marshal to
 // return the registered capabilities to the plugin manager.
 type CapabilityBuilder struct {
 	currentTypes Types
@@ -31,24 +30,16 @@ type CapabilityBuilder struct {
 	scheme       *runtime.Scheme
 }
 
-// NewCapabilityBuilder constructs a new builder for registering capabilities for the given plugin type.
-func NewCapabilityBuilder(scheme *runtime.Scheme) *CapabilityBuilder {
+// NewCapabilities constructs a new builder for registering capabilities for the given plugin type.
+func NewCapabilities(scheme *runtime.Scheme) *CapabilityBuilder {
 	return &CapabilityBuilder{
 		scheme: scheme,
 	}
 }
 
-// FinalizeEndpoints returns the accumulated endpoints during Register* calls.
-func (c *CapabilityBuilder) FinalizeEndpoints() error {
-	content, err := json.Marshal(c.currentTypes)
-	if err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(os.Stdout, string(content)); err != nil {
-		return err
-	}
-
-	return nil
+// Marshal returns the accumulated endpoints during Register* calls.
+func (c *CapabilityBuilder) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.currentTypes)
 }
 
 // GetHandlers returns all the handlers that this plugin implemented during the registration of a capability.
@@ -61,10 +52,11 @@ func (c *CapabilityBuilder) GetHandlers() []Handler {
 // used to construct the supported endpoint list to give back to the plugin manager. This information is stored
 // about the plugin and then used for later lookup. The type is also saved with the endpoint, meaning
 // during lookup the right endpoint + type is used.
-func RegisterSupportedForEndpoints[T runtime.Typed](
-	c *CapabilityBuilder,
+// TODO: Add a new register function for every repository type.
+func RegisterComponentVersionRepository[T runtime.Typed](
 	proto T,
-	handler PluginBase,
+	handler ReadWriteOCMRepositoryPluginContract[T],
+	c *CapabilityBuilder,
 ) error {
 	if c.currentTypes.Types == nil {
 		c.currentTypes.Types = map[PluginType][]Type{}
@@ -75,37 +67,33 @@ func RegisterSupportedForEndpoints[T runtime.Typed](
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
 	}
 
-	switch t := handler.(type) {
-	case ReadWriteOCMRepositoryPluginContract[T]:
-		// Setup handlers
-		c.handlers = append(c.handlers,
-			Handler{
-				Handler:  GetComponentVersionHandlerFunc(t.GetComponentVersion, c.scheme, proto),
-				Location: DownloadComponentVersion,
-			},
-			Handler{
-				Handler:  GetLocalResourceHandlerFunc(t.GetLocalResource, c.scheme, proto),
-				Location: DownloadLocalResource,
-			})
-
-		schemaOCIRegistry, err := jsonschema.Reflect(proto).MarshalJSON()
-		if err != nil {
-			return err
-		}
-
-		c.currentTypes.Types[ComponentVersionRepositoryPluginType] = append(c.currentTypes.Types[ComponentVersionRepositoryPluginType],
-			// we only need ONE type because we have multiple endpoints, but those endpoints
-			// support the same type with the same schema... Figure out how to differentiate
-			// if there are multiple schemas and multiple types so which belongs to which?
-			// Maybe it's enough to have a convention where the first typee is the FROM and
-			// the second type is the TO part when we construct the type affiliation to the
-			// implementation.
-			Type{
-				Type:       typ,
-				JSONSchema: schemaOCIRegistry,
-			})
-	case WriteOCMRepositoryPluginContract[T]:
+	// Setup handlers
+	c.handlers = append(c.handlers,
+		Handler{
+			Handler:  GetComponentVersionHandlerFunc(handler.GetComponentVersion, c.scheme, proto),
+			Location: DownloadComponentVersion,
+		},
+		Handler{
+			Handler:  GetLocalResourceHandlerFunc(handler.GetLocalResource, c.scheme, proto),
+			Location: DownloadLocalResource,
+		})
+	// TODO Add missing handlers.
+	schemaOCIRegistry, err := jsonschema.Reflect(proto).MarshalJSON()
+	if err != nil {
+		return err
 	}
+
+	c.currentTypes.Types[ComponentVersionRepositoryPluginType] = append(c.currentTypes.Types[ComponentVersionRepositoryPluginType],
+		// we only need ONE type because we have multiple endpoints, but those endpoints
+		// support the same type with the same schema... Figure out how to differentiate
+		// if there are multiple schemas and multiple types so which belongs to which?
+		// Maybe it's enough to have a convention where the first typee is the FROM and
+		// the second type is the TO part when we construct the type affiliation to the
+		// implementation.
+		Type{
+			Type:       typ,
+			JSONSchema: schemaOCIRegistry,
+		})
 
 	return nil
 }

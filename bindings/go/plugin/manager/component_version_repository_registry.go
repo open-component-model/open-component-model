@@ -13,6 +13,7 @@ import (
 
 // internalComponentVersionRepositoryPlugins contains all plugins that have been registered using internally import statement.
 var internalComponentVersionRepositoryPlugins map[runtime.Type]PluginBase
+var internalLock sync.RWMutex // think about this
 
 // internalComponentVersionRepositoryScheme is the holder of schemes. This hold will contain the scheme required to
 // construct and understand the passed in types and what / how they need to look like. The passed in scheme during
@@ -78,6 +79,7 @@ func (r *ComponentVersionRepositoryRegistry) AddPlugin(plugin *Plugin, typ runti
 		return fmt.Errorf("plugin for type %v already registered", typ)
 	}
 
+	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
 	r.registry[typ] = plugin
 
 	return nil
@@ -98,9 +100,12 @@ func (r *ComponentVersionRepositoryRegistry) getPluginForEndpointsWithType(typ r
 // On the first call, it will initialize and start the plugin. On any consecutive calls it will return the
 // existing plugin that has already been started.
 func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx context.Context, r *ComponentVersionRepositoryRegistry, proto T) (ReadWriteOCMRepositoryPluginContract[T], error) {
+	// TODO: This should be required, however, the internal registration will require creating a componentversionrepositoryregistry then.
+	// Think about this.
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// we check for the type if it's registered.
 	if typ, err := internalComponentVersionRepositoryScheme.TypeForPrototype(proto); err == nil {
 		p, ok := getInternalComponentVersionRepositoryPlugin(typ)
 		if !ok {

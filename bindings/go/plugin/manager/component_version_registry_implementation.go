@@ -135,6 +135,7 @@ func (r *ComponentVersionRepositoryPlugin) AddComponentVersion(ctx context.Conte
 	}
 
 	if err := call(ctx, r.client, UploadComponentVersion, http.MethodPost, WithPayload(request), WithHeader(credHeader)); err != nil {
+		// TODO:
 		return fmt.Errorf("failed to add component version with plugin %q: %w", r.ID, err)
 	}
 

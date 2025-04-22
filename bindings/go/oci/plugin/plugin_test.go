@@ -21,7 +21,11 @@ func TestPlugin(t *testing.T) {
 		BaseUrl: "ghcr.io/open-component-model/ocm",
 	}
 
-	repo, err := manager.GetReadWriteComponentVersionRepository[*v1.OCIRepository](ctx, &spec)
+	// The schema doesn't matter here, but this registry is required because Lock/Unlock is being called.
+	// But that lock unlock will make for a poor lock since that will not work with multiple calls from
+	// DIFFERENT registries.
+	registry := manager.NewComponentVersionRepositoryRegistry(nil)
+	repo, err := manager.GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, &spec)
 	r.NoError(err)
 
 	user, pass := getUserAndPasswordWithGitHubCLIAndJQ(t)

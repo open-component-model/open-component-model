@@ -189,6 +189,7 @@ func call(ctx context.Context, client *http.Client, endpoint, method string, opt
 	}()
 
 	if resp.StatusCode != http.StatusOK {
+		// TODO: Unmarshal the error coming from the JSON.
 		data, err := io.ReadAll(resp.Body)
 		if err == nil && len(data) > 0 {
 			return fmt.Errorf("plugin returned status code %d: %s", resp.StatusCode, data)
