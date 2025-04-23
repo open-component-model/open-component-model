@@ -276,7 +276,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				"version": "1.0.0",
 			},
 			expectError:    true,
-			errorContains:  "found 0 candidates while looking for resource map[name:test-resource version:1.0.0], but expected exactly one",
+			errorContains:  "found 0 candidates while looking for resource \"name=test-resource,version=1.0.0\", but expected exactly one",
 			setupComponent: true,
 		},
 		{

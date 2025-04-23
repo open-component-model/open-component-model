@@ -2,7 +2,6 @@ package pack_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"testing"
@@ -274,26 +273,14 @@ func TestResourceBlob(t *testing.T) {
 			}
 
 			assert.NoError(t, err)
-			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+			assert.Equal(t, tt.blob.mediaType, desc.MediaType)
 
 			data, err := store.Fetch(t.Context(), desc)
 			require.NoError(t, err)
 			t.Cleanup(func() {
 				require.NoError(t, data.Close())
 			})
-			var manifest ociImageSpecV1.Manifest
-			require.NoError(t, json.NewDecoder(data).Decode(&manifest))
 
-			layer := manifest.Layers[0]
-			assert.Equal(t, tt.blob.mediaType, layer.MediaType)
-			assert.Equal(t, tt.blob.digest, layer.Digest)
-			assert.Equal(t, int64(len(tt.blob.content)), layer.Size)
-
-			data, err = store.Fetch(t.Context(), layer)
-			require.NoError(t, err)
-			t.Cleanup(func() {
-				require.NoError(t, data.Close())
-			})
 			layerData, err := io.ReadAll(data)
 			require.NoError(t, err)
 			assert.Equal(t, tt.blob.content, layerData)
@@ -373,19 +360,7 @@ func TestResourceLocalBlob(t *testing.T) {
 			t.Cleanup(func() {
 				require.NoError(t, data.Close())
 			})
-			var manifest ociImageSpecV1.Manifest
-			require.NoError(t, json.NewDecoder(data).Decode(&manifest))
 
-			layer := manifest.Layers[0]
-			assert.Equal(t, tt.blob.mediaType, layer.MediaType)
-			assert.Equal(t, tt.blob.digest, layer.Digest)
-			assert.Equal(t, int64(len(tt.blob.content)), layer.Size)
-
-			data, err = store.Fetch(t.Context(), layer)
-			require.NoError(t, err)
-			t.Cleanup(func() {
-				require.NoError(t, data.Close())
-			})
 			layerData, err := io.ReadAll(data)
 			require.NoError(t, err)
 			assert.Equal(t, tt.blob.content, layerData)
@@ -475,7 +450,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 
 			resourceBlob, err := resourceblob.NewResourceBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
-			desc, err := ResourceLocalBlobOCISingleLayerArtifact(t.Context(), store, resourceBlob, tt.access, tt.opts)
+			desc, err := ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, tt.access, tt.opts)
 
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError)
@@ -483,19 +458,6 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 			}
 
 			data, err := store.Fetch(t.Context(), desc)
-			require.NoError(t, err)
-			t.Cleanup(func() {
-				require.NoError(t, data.Close())
-			})
-			var manifest ociImageSpecV1.Manifest
-			require.NoError(t, json.NewDecoder(data).Decode(&manifest))
-
-			layer := manifest.Layers[0]
-			assert.Equal(t, tt.blob.mediaType, layer.MediaType)
-			assert.Equal(t, tt.blob.digest, layer.Digest)
-			assert.Equal(t, int64(len(tt.blob.content)), layer.Size)
-
-			data, err = store.Fetch(t.Context(), layer)
 			require.NoError(t, err)
 			t.Cleanup(func() {
 				require.NoError(t, data.Close())

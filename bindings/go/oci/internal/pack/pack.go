@@ -18,18 +18,13 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
+	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
-	digestv1 "ocm.software/open-component-model/bindings/go/oci/spec/digest/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-// AnnotationSingleLayerArtifact is the annotation key used to identify single-layer artifacts.
-// If set, it contains the digest of the single layer packaged within the manifest.
-// It is set on the manifest and not on the layer itself.
-const AnnotationSingleLayerArtifact = "software.ocm.artifact.singlelayer"
 
 // Options defines the configuration options for packing a single-layer OCI artifact.
 type Options struct {
@@ -78,11 +73,11 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *resource
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
 		return ResourceLocalBlobOCILayout(ctx, storage, b, opts)
 	default:
-		return ResourceLocalBlobOCISingleLayerArtifact(ctx, storage, b, access, opts)
+		return ResourceLocalBlobOCILayer(ctx, storage, b, access, opts)
 	}
 }
 
-func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, access *descriptor.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, access *descriptor.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
 	layer, err := NewResourceBlobOCILayer(b, ResourceBlobOCILayerOptions{
 		BlobMediaType: access.MediaType,
 		BlobDigest:    digest.Digest(access.LocalReference),
@@ -97,23 +92,14 @@ func ResourceLocalBlobOCISingleLayerArtifact(ctx context.Context, storage conten
 
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
-	annotations[AnnotationSingleLayerArtifact] = layer.Digest.String()
-
-	desc, err := oras.PackManifest(ctx, storage, oras.PackManifestVersion1_1, access.MediaType, oras.PackManifestOptions{
-		Layers:              []ociImageSpecV1.Descriptor{layer},
-		ManifestAnnotations: annotations,
-	})
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to pack manifest: %w", err)
-	}
 
 	global := backedByGlobalStore(storage)
 
-	if err := updateResourceAccess(b.Resource, desc, updateResourceAccessOptions{opts, global}); err != nil {
+	if err := updateResourceAccess(b.Resource, layer, updateResourceAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 
-	return desc, nil
+	return layer, nil
 }
 
 func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
@@ -244,7 +230,7 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 	}
 	resource.Access = access
 
-	if err := digestv1.ApplyToResource(resource, desc.Digest, digestv1.OCIArtifactDigestAlgorithm); err != nil {
+	if err := internaldigest.ApplyToResource(resource, desc.Digest); err != nil {
 		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 
