@@ -44,10 +44,11 @@ func ingest(ctx context.Context, g *Graph, config *Config, repoTypeScheme *runti
 // 3. Merges direct credentials for each identity
 // 4. Adds identity nodes to the graph
 // 5. Stores direct credentials on their respective identity nodes
+// 6. Returns the remaining consumers with plugin-based credentials that couldnt be processed yet
 //
 // The function returns
-// - directPerIdentity: Maps identity strings to their direct credentials
-// - consumers: Contains only consumers that still have plugin-based credentials to process
+//   - left-over consumers: Contains only consumers that still have plugin-based credentials to process, all direct
+//     credentials are already stored in the graph.
 func processDirectCredentials(g *Graph, config *Config) ([]Consumer, error) {
 	directPerIdentity := make(map[string]map[string]string)
 	consumers := make([]Consumer, 0, len(config.Consumers))
