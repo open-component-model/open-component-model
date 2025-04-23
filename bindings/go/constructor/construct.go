@@ -107,6 +107,9 @@ func construct(ctx context.Context, component spec.Component, opts Options) (*de
 				return nil, fmt.Errorf("error getting blob from input method: %w", err)
 			}
 			localBlob := &v2.LocalBlob{}
+			if _, err := v2.Scheme.DefaultType(localBlob); err != nil {
+				return nil, fmt.Errorf("error getting default type for local blob: %w", err)
+			}
 
 			if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
 				localBlob.MediaType, _ = mediaTypeAware.MediaType()
