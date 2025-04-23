@@ -18,7 +18,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	digestv1 "ocm.software/open-component-model/bindings/go/oci/internal/digest"
+	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -95,7 +95,7 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 
 	global := backedByGlobalStore(storage)
 
-	if err := updateResourceAccess(b.Resource, layer, updateResourceAccessOptions{opts, global, layer.MediaType}); err != nil {
+	if err := updateResourceAccess(b.Resource, layer, updateResourceAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 
@@ -113,7 +113,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
 	}
 	global := backedByGlobalStore(storage)
-	if err := updateResourceAccess(b.Resource, index, updateResourceAccessOptions{opts, global, index.MediaType}); err != nil {
+	if err := updateResourceAccess(b.Resource, index, updateResourceAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 	return index, nil
@@ -199,7 +199,6 @@ type updateResourceAccessOptions struct {
 	// BackedByGlobalStore indicates if the resource is backed by a global store.
 	// This is used to determine if the resource access should be updated with a global reference.
 	BackedByGlobalStore bool
-	MediaType           string
 }
 
 // updateResourceAccess updates the resource access with the new layer information.
@@ -231,7 +230,7 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 	}
 	resource.Access = access
 
-	if err := digestv1.ApplyToResource(resource, desc.Digest); err != nil {
+	if err := internaldigest.ApplyToResource(resource, desc.Digest); err != nil {
 		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 

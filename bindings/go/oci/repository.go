@@ -22,7 +22,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
-	digestv1 "ocm.software/open-component-model/bindings/go/oci/internal/digest"
+	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
@@ -443,7 +443,7 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 	}
 
 	res.Size = desc.Size
-	if err := digestv1.ApplyToResource(res, desc.Digest); err != nil {
+	if err := internaldigest.ApplyToResource(res, desc.Digest); err != nil {
 		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 	res.Access = &access
@@ -535,7 +535,7 @@ func validateDigest(res *descriptor.Resource, blobDigest digest.Digest) error {
 		return nil
 	}
 
-	expected := digest.NewDigestFromEncoded(digestv1.SHAMapping[res.Digest.HashAlgorithm], res.Digest.Value)
+	expected := digest.NewDigestFromEncoded(internaldigest.SHAMapping[res.Digest.HashAlgorithm], res.Digest.Value)
 
 	var actual digest.Digest
 	switch res.Digest.NormalisationAlgorithm {
