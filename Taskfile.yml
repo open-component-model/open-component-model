@@ -55,8 +55,8 @@ includes:
     dir: ./cli
   plugins:
     optional: true
-    taskfile: ./plugins/Taskfile.yml
-    dir: ./plugins
+    taskfile: ./bindings/go/plugins/Taskfile.yml
+    dir: ./bindings/go/plugins
 
 vars:
   GO_MODULES:

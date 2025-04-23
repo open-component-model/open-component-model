@@ -30,6 +30,8 @@ dist/
 output/
 /.project
 
+# OSX garbase
+.DS_Store
 
 # env files
 .env.local
