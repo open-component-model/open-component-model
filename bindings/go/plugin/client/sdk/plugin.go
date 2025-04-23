@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -22,7 +22,7 @@ type CleanupFunc func(ctx context.Context) error
 type Plugin struct {
 	Config types.Config
 
-	handlers      []manager.Handler
+	handlers      []endpoints.Handler
 	server        *http.Server
 	cleanUpFunc   CleanupFunc
 	interrupt     chan bool
@@ -177,7 +177,7 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 	return nil
 }
 
-func (p *Plugin) RegisterHandlers(handlers ...manager.Handler) error {
+func (p *Plugin) RegisterHandlers(handlers ...endpoints.Handler) error {
 	for _, h := range handlers {
 		if h.Handler == nil {
 			return fmt.Errorf("handler for %s is required", h.Location)

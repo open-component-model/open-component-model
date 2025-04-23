@@ -13,8 +13,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -52,9 +53,9 @@ func main() {
 
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
-	capabilities := manager.NewEndpoints(scheme)
+	capabilities := endpoints.NewEndpoints(scheme)
 
-	if err := manager.RegisterComponentVersionRepository(&v1.OCIRepository{}, &OCIPlugin{}, capabilities); err != nil {
+	if err := componentversionrepository.RegisterComponentVersionRepository(&v1.OCIRepository{}, &OCIPlugin{}, capabilities); err != nil {
 		log.Fatal(err)
 	}
 
