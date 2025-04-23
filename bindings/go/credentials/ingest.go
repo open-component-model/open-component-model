@@ -22,19 +22,17 @@ import (
 // - Direct credentials are stored on their respective identity nodes inside the vertex
 // - Repository configurations are stored in the Graph for later use
 func ingest(ctx context.Context, g *Graph, config *Config, repoTypeScheme *runtime.Scheme) error {
-	directPerIdentity := make(map[string]map[string]string)
-	consumers := make([]Consumer, 0, len(config.Consumers))
-
-	if err := processDirectCredentials(g, config, &directPerIdentity, &consumers); err != nil {
-		return err
+	consumers, err := processDirectCredentials(g, config)
+	if err != nil {
+		return fmt.Errorf("failed to process direct credentials: %w", err)
 	}
 
 	if err := processPluginBasedEdges(ctx, g, consumers); err != nil {
-		return err
+		return fmt.Errorf("failed to process edges based on plugins: %w", err)
 	}
 
 	if err := processRepositoryConfigurations(g, config, repoTypeScheme); err != nil {
-		return err
+		return fmt.Errorf("failed to process repository configurations: %w", err)
 	}
 
 	return nil
@@ -47,53 +45,49 @@ func ingest(ctx context.Context, g *Graph, config *Config, repoTypeScheme *runti
 // 4. Adds identity nodes to the graph
 // 5. Stores direct credentials on their respective identity nodes
 //
-// The function updates both the directPerIdentity map and the consumers slice:
+// The function returns
 // - directPerIdentity: Maps identity strings to their direct credentials
 // - consumers: Contains only consumers that still have plugin-based credentials to process
-func processDirectCredentials(g *Graph, config *Config, directPerIdentity *map[string]map[string]string, consumers *[]Consumer) error {
+func processDirectCredentials(g *Graph, config *Config) ([]Consumer, error) {
+	directPerIdentity := make(map[string]map[string]string)
+	consumers := make([]Consumer, 0, len(config.Consumers))
+
 	for _, consumer := range config.Consumers {
 		direct, remaining, err := extractDirect(consumer.Credentials)
 		if err != nil {
-			return fmt.Errorf("extracting consumer credentials failed: %w", err)
+			return nil, fmt.Errorf("extracting consumer credentials failed: %w", err)
 		}
 		consumer.Credentials = remaining
 
 		if len(direct) > 0 {
 			for _, identity := range consumer.Identities {
 				node := identity.String()
-				if existing, ok := (*directPerIdentity)[node]; ok {
+				if existing, ok := (directPerIdentity)[node]; ok {
 					maps.Copy(existing, direct)
 				} else {
-					(*directPerIdentity)[node] = direct
+					(directPerIdentity)[node] = direct
 				}
 
 				if err := g.addIdentity(identity); err != nil {
-					return err
+					return nil, err
 				}
 			}
 		}
 
 		if len(consumer.Credentials) > 0 {
-			*consumers = append(*consumers, consumer)
+			consumers = append(consumers, consumer)
 		}
 	}
 
-	for node, credentials := range *directPerIdentity {
+	for node, credentials := range directPerIdentity {
 		g.setCredentials(node, credentials)
 	}
 
-	return nil
+	return consumers, nil
 }
 
 // processPluginBasedEdges handles the second phase of credential processing:
-// For each consumer identity that has plugin-based credentials:
-// 1. Adds the consumer identity as a node in the graph
-// 2. Resolves each plugin-based credential to get its identity
-// 3. Adds the credential identity as a node in the graph
-// 4. Creates an edge from the consumer identity to the credential identity
-//
-// This phase builds the relationships between identities that require
-// plugin-based resolution of credentials.
+// For each consumer identity that has plugin-based credentials, call processConsumerCredential
 func processPluginBasedEdges(ctx context.Context, g *Graph, consumers []Consumer) error {
 	for _, consumer := range consumers {
 		for _, identity := range consumer.Identities {
@@ -101,28 +95,39 @@ func processPluginBasedEdges(ctx context.Context, g *Graph, consumers []Consumer
 			if err := g.addIdentity(identity); err != nil {
 				return err
 			}
-
 			for _, credential := range consumer.Credentials {
-				plugin, err := g.getCredentialPlugin(ctx, credential)
-				if err != nil {
-					return fmt.Errorf("getting credential plugin failed: %w", err)
-				}
-				credentialIdentity, err := plugin.GetConsumerIdentity(ctx, credential)
-				if err != nil {
-					return fmt.Errorf("could not get consumer identity for %v: %w", credential, err)
-				}
-				if err := g.addIdentity(credentialIdentity); err != nil {
-					return fmt.Errorf("could not add identity %q to graph: %w", credential, err)
-				}
-
-				credentialNode := credentialIdentity.String()
-				if err := g.addEdge(node, credentialNode, map[string]any{
-					"kind": "resolution-relevant",
-				}); err != nil {
-					return fmt.Errorf("could not add edge from consumer identity %q to credential identity %q: %w", identity, credentialIdentity, err)
+				if err := processConsumerCredential(ctx, g, credential, node, identity); err != nil {
+					return fmt.Errorf("failed to process consumer credential: %w", err)
 				}
 			}
 		}
+	}
+	return nil
+}
+
+// processConsumerCredential handles the processing of a single consumer credential:
+// 1. Retrieves the appropriate plugin for the credential type
+// 2. Resolves the consumer identity for the credential
+// 3. Adds the credential identity as a node in the graph
+// 4. Creates an edge from the consumer identity to the credential identity
+func processConsumerCredential(ctx context.Context, g *Graph, credential runtime.Typed, node string, identity runtime.Identity) error {
+	plugin, err := g.getCredentialPlugin(ctx, credential)
+	if err != nil {
+		return fmt.Errorf("getting credential plugin failed: %w", err)
+	}
+	credentialIdentity, err := plugin.GetConsumerIdentity(ctx, credential)
+	if err != nil {
+		return fmt.Errorf("could not get consumer identity for %v: %w", credential, err)
+	}
+	if err := g.addIdentity(credentialIdentity); err != nil {
+		return fmt.Errorf("could not add identity %q to graph: %w", credential, err)
+	}
+
+	credentialNode := credentialIdentity.String()
+	if err := g.addEdge(node, credentialNode, map[string]any{
+		"kind": "resolution-relevant",
+	}); err != nil {
+		return fmt.Errorf("could not add edge from consumer identity %q to credential identity %q: %w", identity, credentialIdentity, err)
 	}
 	return nil
 }
