@@ -10,7 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/digest/v1"
+	digest2 "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 )
 
 // mockBlob implements blob.ReadOnlyBlob for testing purposes
@@ -21,7 +21,7 @@ type mockBlob struct {
 func TestNewResourceBlob(t *testing.T) {
 	resource := &descriptor.Resource{
 		Digest: &descriptor.Digest{
-			HashAlgorithm: v1.HashAlgorithmSHA256,
+			HashAlgorithm: digest2.HashAlgorithmSHA256,
 			Value:         "1234567890abcdef",
 		},
 		Size: 100,
@@ -61,7 +61,7 @@ func TestResourceBlob_Digest(t *testing.T) {
 			name: "valid sha256 digest",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: v1.HashAlgorithmSHA256,
+					HashAlgorithm: digest2.HashAlgorithmSHA256,
 					Value:         "1234567890abcdef",
 				},
 			},
@@ -72,7 +72,7 @@ func TestResourceBlob_Digest(t *testing.T) {
 			name: "empty hash algorithm defaults to canonical",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: v1.HashAlgorithmSHA256,
+					HashAlgorithm: digest2.HashAlgorithmSHA256,
 					Value:         "1234567890abcdef",
 				},
 			},
@@ -116,7 +116,7 @@ func TestResourceBlob_HasPrecalculatedDigest(t *testing.T) {
 			name: "empty digest value",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: v1.HashAlgorithmSHA256,
+					HashAlgorithm: digest2.HashAlgorithmSHA256,
 					Value:         "",
 				},
 			},
@@ -126,7 +126,7 @@ func TestResourceBlob_HasPrecalculatedDigest(t *testing.T) {
 			name: "valid digest",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: v1.HashAlgorithmSHA256,
+					HashAlgorithm: digest2.HashAlgorithmSHA256,
 					Value:         "1234567890abcdef",
 				},
 			},
@@ -156,13 +156,13 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 			name: "existing digest in resource",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: v1.HashAlgorithmSHA256,
+					HashAlgorithm: digest2.HashAlgorithmSHA256,
 					Value:         "old-value",
 				},
 			},
 			newDigest: digest.FromString("test").String(),
 			expectedDigest: &descriptor.Digest{
-				HashAlgorithm: v1.ReverseSHAMapping[digest.FromString("test").Algorithm()],
+				HashAlgorithm: digest2.ReverseSHAMapping[digest.FromString("test").Algorithm()],
 				Value:         digest.FromString("test").Encoded(),
 			},
 			expectPanic: false,
@@ -267,7 +267,7 @@ func TestResourceBlob_OCIDescriptor(t *testing.T) {
 			name: "valid descriptor",
 			resource: &descriptor.Resource{
 				Digest: &descriptor.Digest{
-					HashAlgorithm: v1.HashAlgorithmSHA256,
+					HashAlgorithm: digest2.HashAlgorithmSHA256,
 					Value:         "1234567890abcdef",
 				},
 				Size: 100,
@@ -307,7 +307,7 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	// Test a complete workflow using ResourceBlob
 	resource := &descriptor.Resource{
 		Digest: &descriptor.Digest{
-			HashAlgorithm: v1.HashAlgorithmSHA256,
+			HashAlgorithm: digest2.HashAlgorithmSHA256,
 			Value:         "1234567890abcdef",
 		},
 		Size: 100,
@@ -409,7 +409,7 @@ func TestNewResourceBlobWithMediaType_DigestValidation(t *testing.T) {
 		{
 			name: "matching digests",
 			resourceDigest: &descriptor.Digest{
-				HashAlgorithm: v1.HashAlgorithmSHA256,
+				HashAlgorithm: digest2.HashAlgorithmSHA256,
 				Value:         "1234567890abcdef",
 			},
 			blobDigest:    "sha256:1234567890abcdef",
@@ -418,7 +418,7 @@ func TestNewResourceBlobWithMediaType_DigestValidation(t *testing.T) {
 		{
 			name: "mismatched digests",
 			resourceDigest: &descriptor.Digest{
-				HashAlgorithm: v1.HashAlgorithmSHA256,
+				HashAlgorithm: digest2.HashAlgorithmSHA256,
 				Value:         "1234567890abcdef",
 			},
 			blobDigest:    "sha256:differentdigest",
@@ -433,7 +433,7 @@ func TestNewResourceBlobWithMediaType_DigestValidation(t *testing.T) {
 		{
 			name: "valid resource digest with empty blob digest",
 			resourceDigest: &descriptor.Digest{
-				HashAlgorithm: v1.HashAlgorithmSHA256,
+				HashAlgorithm: digest2.HashAlgorithmSHA256,
 				Value:         "1234567890abcdef",
 			},
 			blobDigest:    "",

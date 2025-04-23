@@ -8,7 +8,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/digest/v1"
+	digest2 "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 )
 
 // ResourceBlob represents a blob of data that is associated with an OCM resource.
@@ -136,12 +136,12 @@ func digestSpec(dig string) (*descriptor.Digest, error) {
 func digestSpecFromDigest(dig digest.Digest) *descriptor.Digest {
 	return &descriptor.Digest{
 		Value:         dig.Encoded(),
-		HashAlgorithm: v1.ReverseSHAMapping[dig.Algorithm()],
+		HashAlgorithm: digest2.ReverseSHAMapping[dig.Algorithm()],
 	}
 }
 
 func digestSpecToDigest(dig *descriptor.Digest) (digest.Digest, error) {
-	algo, ok := v1.SHAMapping[dig.HashAlgorithm]
+	algo, ok := digest2.SHAMapping[dig.HashAlgorithm]
 	if !ok {
 		return "", fmt.Errorf("invalid hash algorithm: %s", dig.HashAlgorithm)
 	}

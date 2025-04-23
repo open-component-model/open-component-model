@@ -68,7 +68,7 @@ func SingleLayerManifestBlobFromIndex(ctx context.Context, store oras.ReadOnlyTa
 	if err != nil {
 		return nil, fmt.Errorf("failed to find matching layer: %w", err)
 	}
-	return SingleLayerManifestBlobFromManifestDescriptor(ctx, store, manifestDesc)
+	return SingleLayerManifestBlobFromManifestDescriptor(ctx, store, manifestDesc, string(annotations.ArtifactKindResource))
 }
 
 // SingleLayerManifestBlobFromManifestDescriptor retrieves the primary content layer from a manifest.
@@ -82,7 +82,7 @@ func SingleLayerManifestBlobFromIndex(ctx context.Context, store oras.ReadOnlyTa
 // Returns:
 //   - A LocalBlob representing the first layer of the manifest
 //   - An error if the manifest or its layer cannot be fetched
-func SingleLayerManifestBlobFromManifestDescriptor(ctx context.Context, store oras.ReadOnlyTarget, manifestDesc ociImageSpecV1.Descriptor) (LocalBlob, error) {
+func SingleLayerManifestBlobFromManifestDescriptor(ctx context.Context, store oras.ReadOnlyTarget, manifestDesc ociImageSpecV1.Descriptor, expectedKind string) (LocalBlob, error) {
 	manifest, err := Manifest(ctx, store, manifestDesc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch manifest data: %w", err)

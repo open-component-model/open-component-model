@@ -22,6 +22,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
+	digestv1 "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
@@ -32,7 +33,6 @@ import (
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	descriptor2 "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
-	digestv1 "ocm.software/open-component-model/bindings/go/oci/spec/digest/v1"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -140,6 +140,8 @@ type Repository struct {
 
 	// localResourceManifestCache temporarily stores manifests for local resources until they are added to a component version.
 	localResourceManifestCache cache.OCIDescriptorCache
+	// localResourceLayerCache temporarily stores layers for local resources until they are added to a component version.
+	localResourceLayerCache cache.OCIDescriptorCache
 
 	// resolver resolves component version references to OCI stores.
 	resolver Resolver
@@ -170,6 +172,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		Scheme:                        repo.scheme,
 		Author:                        repo.creatorAnnotation,
 		AdditionalDescriptorManifests: repo.localResourceManifestCache.Get(reference),
+		AdditionalLayers:              repo.localResourceLayerCache.Get(reference),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
@@ -181,6 +184,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	}
 	// Cleanup local blob memory as all layers have been pushed
 	repo.localResourceManifestCache.Delete(reference)
+	repo.localResourceLayerCache.Delete(reference)
 
 	return nil
 }
@@ -262,7 +266,11 @@ func (repo *Repository) AddLocalResource(
 		return nil, fmt.Errorf("failed to pack resource blob: %w", err)
 	}
 
-	repo.localResourceManifestCache.Add(reference, desc)
+	if isManifest(desc) {
+		repo.localResourceManifestCache.Add(reference, desc)
+	} else {
+		repo.localResourceLayerCache.Add(reference, desc)
+	}
 
 	return resource, nil
 }
@@ -293,7 +301,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		}
 	}
 	if len(candidates) != 1 {
-		return nil, nil, fmt.Errorf("found %d candidates while looking for resource %v, but expected exactly one", len(candidates), identity)
+		return nil, nil, fmt.Errorf("found %d candidates while looking for resource %q, but expected exactly one", len(candidates), identity)
 	}
 	resource := candidates[0]
 	log.Base.Info("found resource in descriptor", "resource", resource.ToIdentity())
@@ -333,19 +341,23 @@ func (repo *Repository) getLocalBlobResource(ctx context.Context, store spec.Sto
 		return nil, nil, fmt.Errorf("failed to find matching descriptor: %w", err)
 	}
 
-	// if we are a single layer OCM style Artifact, we can assume that we only care about a single layer
+	// if we are not a manifest compatible with OCI, we can assume that we only care about a single layer
 	// that means we can just return the blob that contains that exact layer and not the entire oci layout
-	if expectedSingleLayerDigest, ok := asOCMSingleLayerArtifact(artifact); ok {
+	if !isManifest(artifact) {
 		// Validate the digest of the downloaded content matches what we expect
-		if err := validateDigest(&resource, artifact, ""); err != nil {
+		if err := validateDigest(&resource, artifact.Digest); err != nil {
 			return nil, nil, fmt.Errorf("failed to validate digest: %w", err)
 		}
-		b, err := fetch.SingleLayerManifestBlobFromManifestDescriptor(ctx, store, artifact)
+
+		layerData, err := store.Fetch(ctx, artifact)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get local blob from single layer manifest: %w", err)
+			return nil, nil, fmt.Errorf("failed to fetch layer data: %w", err)
 		}
-		if actualDigest, _ := b.Digest(); actualDigest != expectedSingleLayerDigest {
-			return nil, nil, fmt.Errorf("expected single layer artifact digest %q but got %q", expectedSingleLayerDigest, actualDigest)
+
+		b := ociblob.NewDescriptorBlob(layerData, artifact)
+
+		if actualDigest, _ := b.Digest(); actualDigest != artifact.Digest.String() {
+			return nil, nil, fmt.Errorf("expected single layer artifact digest %q but got %q", artifact.Digest.String(), actualDigest)
 		}
 		return b, &resource, nil
 	}
@@ -431,10 +443,7 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 	}
 
 	res.Size = desc.Size
-	// TODO(jakobmoellerdev): This might not be ideal because this digest
-	//  is not representative of the entire OCI Layout, only of the descriptor.
-	//  Eventually we should think about switching this to a genericBlobDigest.
-	if err := digestv1.ApplyToResource(res, desc.Digest, digestv1.OCIArtifactDigestAlgorithm); err != nil {
+	if err := digestv1.ApplyToResource(res, desc.Digest); err != nil {
 		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 	res.Access = &access
@@ -513,51 +522,14 @@ func generateOCILayout(ctx context.Context, res *descriptor.Resource, src spec.S
 		return nil, fmt.Errorf("failed to copy to OCI layout: %w", err)
 	}
 
-	b, err := newValidatedResourceBlob(downloaded, res, desc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create validated resource blob from top level descriptor after copying OCI layout: %w", err)
-	}
-
-	return b, nil
-}
-
-func newValidatedResourceBlob(downloaded blob.ReadOnlyBlob, res *descriptor.Resource, desc ociImageSpecV1.Descriptor) (*ociblob.ResourceBlob, error) {
-	digestAware, ok := downloaded.(blob.DigestAware)
-	if !ok {
-		return nil, fmt.Errorf("downloaded blob does not implement digest awareness and cannot be validated")
-	}
-
-	dig, ok := digestAware.Digest()
-	if !ok {
-		return nil, fmt.Errorf("failed to get digest from downloaded blob")
-	}
-	blobDigest, err := digest.Parse(dig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse digest: %w", err)
-	}
-
-	// Validate the digest of the downloaded content matches what we expect
-	if err := validateDigest(res, desc, blobDigest); err != nil {
+	if err := validateDigest(res, desc.Digest); err != nil {
 		return nil, fmt.Errorf("digest validation failed: %w", err)
 	}
 
-	dc := res.DeepCopy()
-	if sizeAware, ok := downloaded.(blob.SizeAware); ok {
-		dc.Size = sizeAware.Size()
-	}
-	dc.Digest = &descriptor.Digest{
-		NormalisationAlgorithm: "genericBlobDigest/v1",
-		HashAlgorithm:          digestv1.ReverseSHAMapping[blobDigest.Algorithm()],
-		Value:                  blobDigest.Encoded(),
-	}
-	b, err := ociblob.NewResourceBlob(dc, downloaded)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create resource blob from oci layout: %w", err)
-	}
-	return b, nil
+	return downloaded, nil
 }
 
-func validateDigest(res *descriptor.Resource, desc ociImageSpecV1.Descriptor, blobDigest digest.Digest) error {
+func validateDigest(res *descriptor.Resource, blobDigest digest.Digest) error {
 	if res.Digest == nil {
 		// the resource does not have a digest, so we cannot validate it
 		return nil
@@ -567,10 +539,6 @@ func validateDigest(res *descriptor.Resource, desc ociImageSpecV1.Descriptor, bl
 
 	var actual digest.Digest
 	switch res.Digest.NormalisationAlgorithm {
-	case digestv1.OCIArtifactDigestAlgorithm:
-		// the digest is based on the leading descriptor
-		actual = desc.Digest
-	// TODO(jakobmoellerdev): we need to switch to a blob package digest eventually
 	case "genericBlobDigest/v1":
 		// the digest is based on the entire blob
 		actual = blobDigest
@@ -632,10 +600,7 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 	return manifest, index, nil
 }
 
-func asOCMSingleLayerArtifact(artifact ociImageSpecV1.Descriptor) (dig string, ok bool) {
-	if artifact.Annotations == nil {
-		return "", false
-	}
-	dig, ok = artifact.Annotations[pack.AnnotationSingleLayerArtifact]
-	return
+func isManifest(desc ociImageSpecV1.Descriptor) bool {
+	return desc.MediaType == ociImageSpecV1.MediaTypeImageManifest ||
+		desc.MediaType == ociImageSpecV1.MediaTypeImageIndex
 }
