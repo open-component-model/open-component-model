@@ -197,7 +197,7 @@
 //	creds, err := graph.Resolve(ctx, identity)
 //
 // The package is designed to be thread-safe and can be used concurrently from
-// multiple goroutines. The DAG used in includes synchronization primitives
+// multiple goroutines. The DAG used in this package includes synchronization primitives
 // to ensure safe concurrent access.
 //
 // The only Entrypoint to the graph is the [Graph.Resolve] method. This expects any identity and returns either an
