@@ -20,17 +20,20 @@ type ReadOCMRepositoryPluginContract[T runtime.Typed] interface {
 	GetLocalResource(ctx context.Context, request types.GetLocalResourceRequest[T], credentials Attributes) error
 }
 
+// WriteOCMRepositoryPluginContract defines the ability to upload ComponentVersions to a repository with a given Type.
 type WriteOCMRepositoryPluginContract[T runtime.Typed] interface {
 	PluginBase
 	AddLocalResource(ctx context.Context, request types.PostLocalResourceRequest[T], credentials Attributes) (*descriptor.Resource, error)
 	AddComponentVersion(ctx context.Context, request types.PostComponentVersionRequest[T], credentials Attributes) error
 }
 
+// ReadWriteOCMRepositoryPluginContract is a combination of Read and Write contract.
 type ReadWriteOCMRepositoryPluginContract[T runtime.Typed] interface {
 	ReadOCMRepositoryPluginContract[T]
 	WriteOCMRepositoryPluginContract[T]
 }
 
+// ResourcePluginContract is the contract defining Add and Get global resources.
 type ResourcePluginContract interface {
 	PluginBase
 	AddGlobalResource(ctx context.Context, request types.PostResourceRequest, credentials Attributes) (*descriptor.Resource, error)

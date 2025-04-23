@@ -72,13 +72,19 @@ type PostLocalResourceRequest[T runtime.Typed] struct {
 	Resource         *descriptor.Resource `json:"resource"`
 }
 
-// TODO: Contemplate the usefullness of this struct.
-type Endpoint struct {
-	// Endpoint defines the hardcoded location of the endpoint where this type
-	// is supported with the given JSON Schema.
-	Endpoint string `json:"endpoint"`
+type GetResourceRequest struct {
+	Location
+	// The resource specification to download
+	*descriptor.Resource `json:"resource"`
 
-	ParameterTypes []Type `json:"parameterTypes"`
+	// The Location of the Local Resource to download to
+	TargetLocation Location `json:"targetLocation"`
+}
+
+type PostResourceRequest struct {
+	// The ResourceLocation of the Local Resource
+	ResourceLocation Location             `json:"resourceLocation"`
+	Resource         *descriptor.Resource `json:"resource"`
 }
 
 // Type defines an endpoint's type and the scheme of the type.
@@ -94,19 +100,4 @@ type Types struct {
 	// Maybe we don't even need the plugin type here?
 	// Does a binary implement multiple plugin types? Didn't we say we don't want to overstep that boundary?
 	Types map[PluginType][]Type `json:"types"`
-}
-
-type GetResourceRequest struct {
-	Location
-	// The resource specification to download
-	*descriptor.Resource `json:"resource"`
-
-	// The Location of the Local Resource to download to
-	TargetLocation Location `json:"targetLocation"`
-}
-
-type PostResourceRequest struct {
-	// The ResourceLocation of the Local Resource
-	ResourceLocation Location             `json:"resourceLocation"`
-	Resource         *descriptor.Resource `json:"resource"`
 }

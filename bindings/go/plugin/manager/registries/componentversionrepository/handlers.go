@@ -15,6 +15,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// GetComponentVersionHandlerFunc is a wrapper around calling the interface method GetComponentVersion for the plugin.
+// This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
+// the plugin implementor.
 func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetComponentVersionRequest[T], credentials contracts.Attributes) (*descriptor.Descriptor, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		// Just put this shit into the SDK since it's type agnostic.
