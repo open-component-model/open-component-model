@@ -7,43 +7,33 @@ includes:
     taskfile: ./tools.Taskfile.yml
   bindings/go/descriptor/v2:
     optional: true
-    taskfile: ./bindings/go/descriptor/v2/Taskfile.yml
     dir: ./bindings/go/descriptor/v2
   bindings/go/descriptor/runtime:
     optional: true
-    taskfile: ./bindings/go/descriptor/runtime/Taskfile.yml
     dir: ./bindings/go/descriptor/runtime
   bindings/go/runtime:
     optional: true
-    taskfile: ./bindings/go/runtime/Taskfile.yml
     dir: ./bindings/go/runtime
   bindings/go/generator:
     optional: true
-    taskfile: ./bindings/go/generator/Taskfile.yml
     dir: ./bindings/go/generator
   bindings/go/blob:
     optional: true
-    taskfile: ./bindings/go/blob/Taskfile.yml
     dir: ./bindings/go/blob
   bindings/go/ctf:
     optional: true
-    taskfile: ./bindings/go/ctf/Taskfile.yml
     dir: ./bindings/go/ctf
   bindings/go/oci:
     optional: true
-    taskfile: ./bindings/go/oci/Taskfile.yml
     dir: ./bindings/go/oci
   bindings/go/oci/integration:
     optional: true
-    taskfile: ./bindings/go/oci/integration/Taskfile.yml
     dir: ./bindings/go/oci/integration
   bindings/go/dag:
     optional: true
-    taskfile: ./bindings/go/dag/Taskfile.yml
     dir: ./bindings/go/dag
   cli:
     optional: true
-    taskfile: ./cli/Taskfile.yml
     dir: ./cli
 
 vars:
