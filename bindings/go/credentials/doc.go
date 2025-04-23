@@ -185,10 +185,10 @@
 //
 // # Usage
 //
-//	config := &Config{...}
+//	config := &Config{...} // alternatively parse from yaml via serialization
 //	opts := Options{
-//	    GetRepositoryPluginFn: myRepoPluginResolver,
-//	    GetCredentialPluginFn: myCredPluginResolver,
+//	    GetCredentialPluginFn: myCredPluginResolver, // optional but needed if repository fallbacks are wanted
+//	    GetRepositoryPluginFn: myRepoPluginResolver, // optional but needed if type support other than DirectCredentials are needed
 //	}
 //	graph, err := ToGraph(ctx, config, opts)
 //	if err != nil {

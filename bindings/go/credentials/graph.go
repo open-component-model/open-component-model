@@ -51,13 +51,13 @@ func ToGraph(ctx context.Context, config *Config, opts Options) (*Graph, error) 
 // and provides functionality to resolve credentials for given identities.
 // It supports both direct credential resolution and plugin-based resolution.
 type Graph struct {
-	repositoryConfigurationsMu sync.RWMutex
-	repositoryConfigurations   []runtime.Typed
+	repositoryConfigurationsMu sync.RWMutex    // Mutex to protect access to repository configurations
+	repositoryConfigurations   []runtime.Typed // List of repository configurations parsed
 
-	*syncedDag
+	*syncedDag // The underlying DAG structure for managing dependencies
 
-	getRepositoryPlugin GetRepositoryPluginFn
-	getCredentialPlugin GetCredentialPluginFn
+	getRepositoryPlugin GetRepositoryPluginFn // injection for resolving custom repository types
+	getCredentialPlugin GetCredentialPluginFn // injection for resolving custom credential types
 }
 
 // Resolve attempts to resolve credentials for the given identity.
