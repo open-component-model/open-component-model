@@ -15,9 +15,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/constructor/input"
+	"ocm.software/open-component-model/bindings/go/constructor/input/utf8/spec/v2alpha1"
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
 	inputSpec "ocm.software/open-component-model/bindings/go/constructor/spec/input"
-	"ocm.software/open-component-model/bindings/go/constructor/spec/input/v2alpha1"
 )
 
 // MediaTypeTextPlain as per https://www.rfc-editor.org/rfc/rfc3676.html

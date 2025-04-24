@@ -3,10 +3,10 @@ package registry
 import (
 	"ocm.software/open-component-model/bindings/go/constructor/input"
 	"ocm.software/open-component-model/bindings/go/constructor/input/file"
+	"ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
 	"ocm.software/open-component-model/bindings/go/constructor/input/utf8"
+	"ocm.software/open-component-model/bindings/go/constructor/input/utf8/spec/v2alpha1"
 	spec "ocm.software/open-component-model/bindings/go/constructor/spec/input"
-	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/input/v1"
-	"ocm.software/open-component-model/bindings/go/constructor/spec/input/v2alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 

@@ -15,6 +15,7 @@ components:
       relation: local
       input:
         type: utf8
+        compress: true
         text: "Hello, world!"
     - name: testobject
       type: blob
