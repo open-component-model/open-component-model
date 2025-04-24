@@ -4,8 +4,8 @@ go 1.24.2
 
 require (
 	github.com/stretchr/testify v1.10.0
-	ocm.software/open-component-model/bindings/go/dag v0.0.0-20250414115417-bc063a2d4cca
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250414115417-bc063a2d4cca
+	ocm.software/open-component-model/bindings/go/dag v0.0.0-20250424074939-6e4c0e90b848
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250424074939-6e4c0e90b848
 )
 
 require (
