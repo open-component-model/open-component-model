@@ -21,8 +21,8 @@ import (
 // Returns:
 //   - []byte: The canonicalized JSON representation
 //   - error: Any error that occurred during normalization
-func Normalise(v interface{}, ex TransformationRules) ([]byte, error) {
-	entries, err := PrepareNormalisation(Type, v, ex)
+func Normalise(v interface{}, rules TransformationRules) ([]byte, error) {
+	entries, err := PrepareNormalisation(Type, v, rules)
 	if err != nil {
 		return nil, err
 	}
@@ -249,18 +249,18 @@ func PrepareNormalisation(n Normalisation, v interface{}, excludes Transformatio
 
 // Prepare recursively converts an input value into a normalized structure,
 // applying any exclusion rules along the way.
-func Prepare(n Normalisation, v interface{}, ex TransformationRules) (Normalised, error) {
+func Prepare(n Normalisation, v interface{}, rules TransformationRules) (Normalised, error) {
 	if v == nil {
 		return Null, nil
 	}
 
 	// Use NoExcludes if exclusion rules are nil
-	if ex == nil {
-		ex = NoExcludes{}
+	if rules == nil {
+		rules = NoExcludes{}
 	}
 
 	// If the exclusion rule supports value mapping, apply it.
-	if mapper, ok := ex.(ValueMappingRule); ok {
+	if mapper, ok := rules.(ValueMappingRule); ok {
 		v = mapper.MapValue(v)
 	}
 
@@ -273,9 +273,9 @@ func Prepare(n Normalisation, v interface{}, ex TransformationRules) (Normalised
 	var err error
 	switch typed := v.(type) {
 	case map[string]interface{}:
-		result, err = prepareStruct(n, typed, ex)
+		result, err = prepareStruct(n, typed, rules)
 	case []interface{}:
-		result, err = prepareArray(n, typed, ex)
+		result, err = prepareArray(n, typed, rules)
 	default:
 		return n.NewValue(v), nil
 	}
@@ -283,21 +283,21 @@ func Prepare(n Normalisation, v interface{}, ex TransformationRules) (Normalised
 		return nil, err
 	}
 	// Apply any normalisation filter if available.
-	if filter, ok := ex.(NormalisationFilter); ok {
+	if filter, ok := rules.(NormalisationFilter); ok {
 		return filter.Filter(result)
 	}
 	return result, nil
 }
 
 // prepareStruct normalizes a map by applying exclusion rules to each field.
-func prepareStruct(n Normalisation, v map[string]interface{}, ex TransformationRules) (Normalised, error) {
+func prepareStruct(n Normalisation, v map[string]interface{}, rules TransformationRules) (Normalised, error) {
 	if v == nil {
 		return n.NewMap(), nil
 	}
 
 	// Use NoExcludes if exclusion rules are nil
-	if ex == nil {
-		ex = NoExcludes{}
+	if rules == nil {
+		rules = NoExcludes{}
 	}
 
 	entries := n.NewMap()
@@ -309,7 +309,7 @@ func prepareStruct(n Normalisation, v map[string]interface{}, ex TransformationR
 		if value == nil {
 			continue
 		}
-		name, mapped, prop := ex.Field(key, value)
+		name, mapped, prop := rules.Field(key, value)
 		if name != "" {
 			nested, err := Prepare(n, mapped, prop)
 			if err != nil {
@@ -328,14 +328,14 @@ func prepareStruct(n Normalisation, v map[string]interface{}, ex TransformationR
 }
 
 // prepareArray normalizes an array by applying exclusion rules to each element.
-func prepareArray(n Normalisation, v []interface{}, ex TransformationRules) (Normalised, error) {
+func prepareArray(n Normalisation, v []interface{}, rules TransformationRules) (Normalised, error) {
 	if v == nil {
 		return n.NewArray(), nil
 	}
 
 	// Use NoExcludes if exclusion rules are nil
-	if ex == nil {
-		ex = NoExcludes{}
+	if rules == nil {
+		rules = NoExcludes{}
 	}
 
 	entries := n.NewArray()
@@ -344,7 +344,7 @@ func prepareArray(n Normalisation, v []interface{}, ex TransformationRules) (Nor
 	}
 
 	for index, value := range v {
-		exclude, mapped, prop := ex.Element(value)
+		exclude, mapped, prop := rules.Element(value)
 		if !exclude {
 			nested, err := Prepare(n, mapped, prop)
 			if err != nil {
