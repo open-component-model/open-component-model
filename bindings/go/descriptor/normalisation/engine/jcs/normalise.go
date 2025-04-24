@@ -21,7 +21,7 @@ import (
 // Returns:
 //   - []byte: The canonicalized JSON representation
 //   - error: Any error that occurred during normalization
-func Normalise(v interface{}, ex ExcludeRules) ([]byte, error) {
+func Normalise(v interface{}, ex TransformationRules) ([]byte, error) {
 	entries, err := PrepareNormalisation(Type, v, ex)
 	if err != nil {
 		return nil, err
@@ -225,7 +225,7 @@ var Null Normalised = (*null)(nil)
 // PrepareNormalisation converts an input value into a normalized structure,
 // by marshaling it to JSON and then unmarshaling into a map or array.
 // This is the main entry point for the normalization process.
-func PrepareNormalisation(n Normalisation, v interface{}, excludes ExcludeRules) (Normalised, error) {
+func PrepareNormalisation(n Normalisation, v interface{}, excludes TransformationRules) (Normalised, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
@@ -249,7 +249,7 @@ func PrepareNormalisation(n Normalisation, v interface{}, excludes ExcludeRules)
 
 // Prepare recursively converts an input value into a normalized structure,
 // applying any exclusion rules along the way.
-func Prepare(n Normalisation, v interface{}, ex ExcludeRules) (Normalised, error) {
+func Prepare(n Normalisation, v interface{}, ex TransformationRules) (Normalised, error) {
 	if v == nil {
 		return Null, nil
 	}
@@ -290,7 +290,7 @@ func Prepare(n Normalisation, v interface{}, ex ExcludeRules) (Normalised, error
 }
 
 // prepareStruct normalizes a map by applying exclusion rules to each field.
-func prepareStruct(n Normalisation, v map[string]interface{}, ex ExcludeRules) (Normalised, error) {
+func prepareStruct(n Normalisation, v map[string]interface{}, ex TransformationRules) (Normalised, error) {
 	if v == nil {
 		return n.NewMap(), nil
 	}
@@ -328,7 +328,7 @@ func prepareStruct(n Normalisation, v map[string]interface{}, ex ExcludeRules) (
 }
 
 // prepareArray normalizes an array by applying exclusion rules to each element.
-func prepareArray(n Normalisation, v []interface{}, ex ExcludeRules) (Normalised, error) {
+func prepareArray(n Normalisation, v []interface{}, ex TransformationRules) (Normalised, error) {
 	if v == nil {
 		return n.NewArray(), nil
 	}

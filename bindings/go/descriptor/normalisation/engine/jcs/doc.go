@@ -44,7 +44,7 @@
 //     }
 //
 //  5. ExcludeEmpty: Removes empty values (nil, empty maps, empty arrays)
-//     excludes := ExcludeEmpty{ExcludeRules: NoExcludes{}}
+//     excludes := ExcludeEmpty{TransformationRules: NoExcludes{}}
 //
 //  6. MapValue: Transforms values before applying exclusion rules
 //     mapper := MapValue{
@@ -81,7 +81,7 @@
 // The package implements several key interfaces:
 // - Normalisation: For creating normalized structures
 // - Normalised: For working with normalized values
-// - ExcludeRules: For defining exclusion behavior
+// - TransformationRules: For defining exclusion behavior
 // - ValueMappingRule: For custom value transformations
 // - NormalisationFilter: For post-processing normalized structures
 //

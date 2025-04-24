@@ -338,7 +338,7 @@ func TestNormalise(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    interface{}
-		excludes jcs.ExcludeRules
+		excludes jcs.TransformationRules
 		expected string
 		wantErr  bool
 	}{

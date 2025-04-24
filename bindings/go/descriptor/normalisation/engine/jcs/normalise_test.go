@@ -10,7 +10,7 @@ func TestNormalise(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    interface{}
-		excludes ExcludeRules
+		excludes TransformationRules
 		expected string
 		wantErr  bool
 	}{
@@ -161,7 +161,7 @@ func TestMapValue(t *testing.T) {
 		name     string
 		input    interface{}
 		mapping  ValueMapper
-		cont     ExcludeRules
+		cont     TransformationRules
 		expected string
 	}{
 		{
@@ -252,7 +252,7 @@ func TestExcludeEmpty(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    interface{}
-		excludes ExcludeRules
+		excludes TransformationRules
 		expected string
 	}{
 		{
@@ -311,7 +311,7 @@ func TestExcludeEmpty(t *testing.T) {
 				"c": "",
 			},
 			excludes: ExcludeEmpty{
-				ExcludeRules: MapExcludes{"c": nil},
+				TransformationRules: MapExcludes{"c": nil},
 			},
 			expected: `{"b":1}`,
 		},
@@ -323,7 +323,7 @@ func TestExcludeEmpty(t *testing.T) {
 				"",
 			},
 			excludes: ExcludeEmpty{
-				ExcludeRules: DynamicArrayExcludes{
+				TransformationRules: DynamicArrayExcludes{
 					ValueChecker: func(v interface{}) bool {
 						return v == nil || v == ""
 					},
@@ -370,7 +370,7 @@ func TestPrepareStruct(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    interface{}
-		excludes ExcludeRules
+		excludes TransformationRules
 		wantErr  bool
 	}{
 		{
@@ -424,7 +424,7 @@ func TestPrepareArray(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    interface{}
-		excludes ExcludeRules
+		excludes TransformationRules
 		wantErr  bool
 	}{
 		{

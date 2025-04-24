@@ -80,7 +80,7 @@ var ExclusionRules = jcs.MapExcludes{
 // LabelExcludes defines exclusion rules for label entries during normalization.
 // It excludes labels that don't have a valid signature.
 var LabelExcludes = jcs.ExcludeEmpty{
-	ExcludeRules: jcs.DynamicArrayExcludes{
+	TransformationRules: jcs.DynamicArrayExcludes{
 		ValueChecker: IgnoreLabelsWithoutSignature,
 		Continue: jcs.MapIncludes{
 			"name":    jcs.NoExcludes{},
