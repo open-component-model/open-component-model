@@ -52,6 +52,24 @@ type CredentialPlugin interface {
 // typed object. This function is used to dynamically load repository plugins at runtime.
 type GetRepositoryPluginFn func(ctx context.Context, typed runtime.Typed) (RepositoryPlugin, error)
 
+func (fn GetRepositoryPluginFn) GetRepositoryPlugin(ctx context.Context, typed runtime.Typed) (RepositoryPlugin, error) {
+	return fn(ctx, typed)
+}
+
+// RepositoryPluginProvider is any provider that can retrieve a RepositoryPlugin for a given typed object.
+type RepositoryPluginProvider interface {
+	GetRepositoryPlugin(ctx context.Context, typed runtime.Typed) (RepositoryPlugin, error)
+}
+
 // GetCredentialPluginFn is a function type that returns a CredentialPlugin for a given
 // typed object. This function is used to dynamically load credential plugins at runtime.
 type GetCredentialPluginFn func(ctx context.Context, typed runtime.Typed) (CredentialPlugin, error)
+
+func (fn GetCredentialPluginFn) GetCredentialPlugin(ctx context.Context, typed runtime.Typed) (CredentialPlugin, error) {
+	return fn(ctx, typed)
+}
+
+// CredentialPluginProvider is any provider that can retrieve a CredentialPlugin for a given typed object.
+type CredentialPluginProvider interface {
+	GetCredentialPlugin(ctx context.Context, typed runtime.Typed) (CredentialPlugin, error)
+}

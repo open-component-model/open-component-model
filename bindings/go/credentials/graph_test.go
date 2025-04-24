@@ -308,8 +308,8 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 	}
 
 	graph, err := credentials2.ToGraph(t.Context(), config, credentials2.Options{
-		GetRepositoryPluginFn:          getPluginRepositoryFn,
-		GetCredentialPluginFn:          getCredentialPluginsFn,
+		RepositoryPluginProvider:       credentials2.GetRepositoryPluginFn(getPluginRepositoryFn),
+		CredentialPluginProvider:       credentials2.GetCredentialPluginFn(getCredentialPluginsFn),
 		CredentialRepositoryTypeScheme: runtime.NewScheme(runtime.WithAllowUnknown()),
 	})
 	if err != nil {

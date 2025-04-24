@@ -41,7 +41,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		if err != nil {
 			return nil, err
 		}
-		plugin, err := g.getCredentialPlugin(ctx, childID)
+		plugin, err := g.credentialPluginProvider.GetCredentialPlugin(ctx, childID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve credentials for node %q: %w", childID, err)
 		}

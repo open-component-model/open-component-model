@@ -18,12 +18,12 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		return credentials, nil
 	}
 
-	plugin, err := g.getRepositoryPlugin(ctx, identity)
+	plugin, err := g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity)
 	if err != nil {
 		identity := identity.DeepCopy()
 		identity.SetType(AnyCredentialType)
 		var anyErr error
-		if plugin, anyErr = g.getRepositoryPlugin(ctx, identity); anyErr != nil {
+		if plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity); anyErr != nil {
 			return nil, errors.Join(err, anyErr)
 		}
 	}

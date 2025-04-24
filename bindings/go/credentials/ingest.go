@@ -112,7 +112,7 @@ func processPluginBasedEdges(ctx context.Context, g *Graph, consumers []Consumer
 // 3. Adds the credential identity as a node in the graph
 // 4. Creates an edge from the consumer identity to the credential identity
 func processConsumerCredential(ctx context.Context, g *Graph, credential runtime.Typed, node string, identity runtime.Identity) error {
-	plugin, err := g.getCredentialPlugin(ctx, credential)
+	plugin, err := g.credentialPluginProvider.GetCredentialPlugin(ctx, credential)
 	if err != nil {
 		return fmt.Errorf("getting credential plugin failed: %w", err)
 	}

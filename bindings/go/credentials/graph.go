@@ -25,8 +25,8 @@ func init() {
 
 // Options represents the configuration options for creating a credential graph.
 type Options struct {
-	GetRepositoryPluginFn
-	GetCredentialPluginFn
+	RepositoryPluginProvider
+	CredentialPluginProvider
 	CredentialRepositoryTypeScheme *runtime.Scheme
 }
 
@@ -35,9 +35,9 @@ type Options struct {
 // Returns an error if the configuration cannot be properly ingested.
 func ToGraph(ctx context.Context, config *Config, opts Options) (*Graph, error) {
 	g := &Graph{
-		syncedDag:           newSyncedDag(),
-		getCredentialPlugin: opts.GetCredentialPluginFn,
-		getRepositoryPlugin: opts.GetRepositoryPluginFn,
+		syncedDag:                newSyncedDag(),
+		credentialPluginProvider: opts.CredentialPluginProvider,
+		repositoryPluginProvider: opts.RepositoryPluginProvider,
 	}
 
 	if err := ingest(ctx, g, config, opts.CredentialRepositoryTypeScheme); err != nil {
@@ -56,8 +56,8 @@ type Graph struct {
 
 	*syncedDag // The underlying DAG structure for managing dependencies
 
-	getRepositoryPlugin GetRepositoryPluginFn // injection for resolving custom repository types
-	getCredentialPlugin GetCredentialPluginFn // injection for resolving custom credential types
+	repositoryPluginProvider RepositoryPluginProvider // injection for resolving custom repository types
+	credentialPluginProvider CredentialPluginProvider // injection for resolving custom credential types
 }
 
 // Resolve attempts to resolve credentials for the given identity.

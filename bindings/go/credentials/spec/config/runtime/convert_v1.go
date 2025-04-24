@@ -14,30 +14,38 @@ func ConvertFromV1(config *v1.Config) *Config {
 }
 
 func convertConsumers(consumers []v1.Consumer) []Consumer {
-	entries := make([]Consumer, 0, len(consumers))
-	for _, consumer := range consumers {
-		entries = append(entries, Consumer{
-			Identities:  consumer.Identities,
+	entries := make([]Consumer, len(consumers))
+	for i, consumer := range consumers {
+		entries[i] = Consumer{
+			Identities:  convertIdentities(consumer.Identities),
 			Credentials: convertCredentials(consumer.Credentials),
-		})
+		}
 	}
 	return entries
 }
 
+func convertIdentities(identities []runtime.Identity) []runtime.Identity {
+	nidentities := make([]runtime.Identity, len(identities))
+	for i, identity := range identities {
+		nidentities[i] = identity.DeepCopy()
+	}
+	return nidentities
+}
+
 func convertCredentials(credentials []*runtime.Raw) []runtime.Typed {
-	entries := make([]runtime.Typed, 0, len(credentials))
-	for _, cred := range credentials {
-		entries = append(entries, cred.DeepCopy())
+	entries := make([]runtime.Typed, len(credentials))
+	for i, cred := range credentials {
+		entries[i] = cred.DeepCopy()
 	}
 	return entries
 }
 
 func convertRepositories(repositories []v1.RepositoryConfigEntry) []RepositoryConfigEntry {
-	entries := make([]RepositoryConfigEntry, 0, len(repositories))
-	for _, repo := range repositories {
-		entries = append(entries, RepositoryConfigEntry{
+	entries := make([]RepositoryConfigEntry, len(repositories))
+	for i, repo := range repositories {
+		entries[i] = RepositoryConfigEntry{
 			Repository: repo.Repository.DeepCopy(),
-		})
+		}
 	}
 	return entries
 }
