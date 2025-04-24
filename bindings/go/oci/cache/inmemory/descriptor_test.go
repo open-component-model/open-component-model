@@ -1,4 +1,4 @@
-package memory
+package inmemory
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestInMemory_AddAndGet(t *testing.T) {
-	mem := NewInMemory()
+	mem := New()
 	ref := "test-ref"
 	desc := ociImageSpecV1.Descriptor{
 		MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
@@ -37,13 +37,13 @@ func TestInMemory_AddAndGet(t *testing.T) {
 }
 
 func TestInMemory_GetNonExistent(t *testing.T) {
-	mem := NewInMemory()
+	mem := New()
 	descs := mem.Get("non-existent")
 	assert.Empty(t, descs)
 }
 
 func TestInMemory_Delete(t *testing.T) {
-	mem := NewInMemory()
+	mem := New()
 	ref := "test-ref"
 	desc := ociImageSpecV1.Descriptor{
 		MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
@@ -66,7 +66,7 @@ func TestInMemory_Delete(t *testing.T) {
 }
 
 func TestInMemory_ConcurrentAccess(t *testing.T) {
-	mem := NewInMemory()
+	mem := New()
 	ref := "test-ref"
 	desc := ociImageSpecV1.Descriptor{
 		MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",

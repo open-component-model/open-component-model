@@ -9,8 +9,9 @@ import (
 	"oras.land/oras-go/v2"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci/cache"
+	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
-	"ocm.software/open-component-model/bindings/go/oci/internal/memory"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -20,9 +21,12 @@ type RepositoryOptions struct {
 	// Scheme is the runtime scheme used for type conversion.
 	// If not provided, a new scheme will be created with default registrations.
 	Scheme *runtime.Scheme
-	// LocalDescriptorMemory is used to temporarily store local blobs until they are added to a component version.
-	// If not provided, a new memory will be created.
-	LocalManifestMemory memory.LocalDescriptorMemory
+	// LocalResourceManifestCache is used to temporarily store local blobs until they are added to a component version.
+	// If not provided, a new memory based cache will be created.
+	LocalResourceManifestCache cache.OCIDescriptorCache
+	// LocalResourceLayerCache is used to temporarily store local blobs until they are added to a component version.
+	// If not provided, a new memory based cache will be created.
+	LocalResourceLayerCache cache.OCIDescriptorCache
 	// Resolver resolves component version references to OCI stores.
 	// This is required and must be provided.
 	Resolver Resolver
@@ -45,10 +49,10 @@ func WithScheme(scheme *runtime.Scheme) RepositoryOption {
 	}
 }
 
-// WithLocalManifestBlobMemory sets the local blob memory for the repository.
-func WithLocalManifestBlobMemory(memory memory.LocalDescriptorMemory) RepositoryOption {
+// WithOCIDescriptorCache sets the local oci descriptor cache for the repository.
+func WithOCIDescriptorCache(memory cache.OCIDescriptorCache) RepositoryOption {
 	return func(o *RepositoryOptions) {
-		o.LocalManifestMemory = memory
+		o.LocalResourceManifestCache = memory
 	}
 }
 
@@ -83,8 +87,11 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		v2.MustAddToScheme(options.Scheme)
 	}
 
-	if options.LocalManifestMemory == nil {
-		options.LocalManifestMemory = memory.NewInMemory()
+	if options.LocalResourceManifestCache == nil {
+		options.LocalResourceManifestCache = inmemory.New()
+	}
+	if options.LocalResourceLayerCache == nil {
+		options.LocalResourceLayerCache = inmemory.New()
 	}
 
 	if options.Creator == "" {
@@ -112,10 +119,11 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	}
 
 	return &Repository{
-		scheme:              options.Scheme,
-		localManifestMemory: options.LocalManifestMemory,
-		resolver:            options.Resolver,
-		creatorAnnotation:   options.Creator,
-		resourceCopyOptions: *options.ResourceCopyOptions,
+		scheme:                     options.Scheme,
+		localResourceManifestCache: options.LocalResourceManifestCache,
+		localResourceLayerCache:    options.LocalResourceManifestCache,
+		resolver:                   options.Resolver,
+		creatorAnnotation:          options.Creator,
+		resourceCopyOptions:        *options.ResourceCopyOptions,
 	}, nil
 }

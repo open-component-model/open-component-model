@@ -62,7 +62,7 @@ func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Sto
 	}
 	ref := rawRef.(looseref.LooseReference)
 
-	return &repositoryStore{
+	return &Repository{
 		archive: s.archive,
 		repo:    ref.Repository,
 	}, nil
@@ -77,8 +77,8 @@ func (s *Store) ComponentVersionReference(component, version string) string {
 	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, version)
 }
 
-// repositoryStore implements the spec.Store interface for a CTF archive specific to a repository.
-type repositoryStore struct {
+// Repository implements the spec.Store interface for a CTF OCI Repository.
+type Repository struct {
 	archive ctf.CTF
 	repo    string
 	indexMu sync.RWMutex
@@ -86,7 +86,7 @@ type repositoryStore struct {
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
-func (s *repositoryStore) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+func (s *Repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	b, err := s.archive.GetBlob(ctx, target.Digest.String())
 	if err != nil {
 		return nil, fmt.Errorf("unable to get blob: %w", err)
@@ -96,7 +96,7 @@ func (s *repositoryStore) Fetch(ctx context.Context, target ociImageSpecV1.Descr
 
 // Exists checks if a blob exists in the CTF archive based on its descriptor.
 // Returns true if the blob exists, false otherwise.
-func (s *repositoryStore) Exists(ctx context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
+func (s *Repository) Exists(ctx context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
 	blobs, err := s.archive.ListBlobs(ctx)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
@@ -107,7 +107,7 @@ func (s *repositoryStore) Exists(ctx context.Context, target ociImageSpecV1.Desc
 	return slices.Contains(blobs, target.Digest.String()), nil
 }
 
-func (s *repositoryStore) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
+func (s *Repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
 	desc, err := s.Resolve(ctx, reference)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, err
@@ -121,7 +121,7 @@ func (s *repositoryStore) FetchReference(ctx context.Context, reference string) 
 
 // Push stores a new blob in the CTF archive with the expected descriptor.
 // The content is read from the provided io.Reader.
-func (s *repositoryStore) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
+func (s *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
 	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
@@ -136,9 +136,9 @@ func (s *repositoryStore) Push(ctx context.Context, expected ociImageSpecV1.Desc
 
 // Resolve resolves a reference string to its corresponding descriptor in the CTF archive.
 // The reference should be in the format "repository:tag" so it will be resolved against the index.
-// If a full reference is given, it will be resolved against the blob repositoryStore immediately.
+// If a full reference is given, it will be resolved against the blob Repository immediately.
 // Returns the descriptor if found, or an error if the reference is invalid or not found.
-func (s *repositoryStore) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
+func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
 	var b blob.ReadOnlyBlob
 
 	s.indexMu.RLock()
@@ -203,7 +203,7 @@ func (s *repositoryStore) Resolve(ctx context.Context, reference string) (ociIma
 // Tag associates a descriptor with a reference in the CTF archive's index.
 // The reference should be in the format "repository:tag".
 // This operation updates the index to maintain the mapping between references and their corresponding descriptors.
-func (s *repositoryStore) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
+func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -244,7 +244,7 @@ func (s *repositoryStore) Tag(ctx context.Context, desc ociImageSpecV1.Descripto
 	return nil
 }
 
-func (s *repositoryStore) Tags(ctx context.Context, _ string, fn func(tags []string) error) error {
+func (s *Repository) Tags(ctx context.Context, _ string, fn func(tags []string) error) error {
 	s.indexMu.RLock()
 	defer s.indexMu.RUnlock()
 

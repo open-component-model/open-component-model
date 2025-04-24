@@ -23,18 +23,19 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// storeDescriptorOptions defines the options for adding a component descriptor to a Store.
-type storeDescriptorOptions struct {
+// AddDescriptorOptions defines the options for adding a component descriptor to a Store.
+type AddDescriptorOptions struct {
 	Scheme                        *runtime.Scheme
 	Author                        string
 	AdditionalDescriptorManifests []ociImageSpecV1.Descriptor
+	AdditionalLayers              []ociImageSpecV1.Descriptor
 }
 
-// addDescriptorToStore uploads a component descriptor to any given Store.
+// AddDescriptorToStore uploads a component descriptor to any given Store.
 // The returned descriptor is the manifest descriptor of the uploaded component.
 // It can be used to retrieve the component descriptor later.
 // To persist the descriptor, the manifest still has to be tagged.
-func addDescriptorToStore(ctx context.Context, store spec.Store, descriptor *descriptor.Descriptor, opts storeDescriptorOptions) (*ociImageSpecV1.Descriptor, error) {
+func AddDescriptorToStore(ctx context.Context, store spec.Store, descriptor *descriptor.Descriptor, opts AddDescriptorOptions) (*ociImageSpecV1.Descriptor, error) {
 	component, version := descriptor.Component.Name, descriptor.Component.Version
 
 	// we can concurrently upload certain parts of the descriptor!
@@ -107,7 +108,7 @@ It is used to store the component descriptor in an OCI registry and can be refer
 			ociImageSpecV1.AnnotationSource:        "https://github.com/open-component-model/open-component-model",
 			ociImageSpecV1.AnnotationVersion:       version,
 		},
-		Layers:  []ociImageSpecV1.Descriptor{descriptorOCIDescriptor},
+		Layers:  append([]ociImageSpecV1.Descriptor{descriptorOCIDescriptor}, opts.AdditionalLayers...),
 		Subject: &indexv1.Descriptor,
 	}
 	manifestRaw, err := json.Marshal(manifest)

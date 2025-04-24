@@ -13,6 +13,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/descriptor/v2/Taskfile.yml
     dir: ./bindings/go/descriptor/v2
+  bindings/go/descriptor/normalisation:
+    optional: true
+    taskfile: ./bindings/go/descriptor/normalisation/Taskfile.yml
+    dir: ./bindings/go/descriptor/normalisation
   bindings/go/descriptor/runtime:
     optional: true
     taskfile: ./bindings/go/descriptor/runtime/Taskfile.yml

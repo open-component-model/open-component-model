@@ -1,4 +1,4 @@
-package v1
+package digest
 
 import (
 	"fmt"
@@ -6,12 +6,6 @@ import (
 	"github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
-)
-
-const (
-	OCIArtifactDigestAlgorithmType    = "ociArtifactDigest"
-	OCIArtifactDigestAlgorithmVersion = "v1"
-	OCIArtifactDigestAlgorithm        = OCIArtifactDigestAlgorithmType + "/" + OCIArtifactDigestAlgorithmVersion
 )
 
 const (
@@ -29,7 +23,7 @@ var ReverseSHAMapping = reverseMap(SHAMapping)
 // with the specified hash algorithm and normalisation algorithm.
 // The Mappings are defined by OCM and are static.
 // They mainly differ in the algorithm name, but are semantically equivalent.
-func ApplyToResource(resource *runtime.Resource, digest digest.Digest, algorithm string) error {
+func ApplyToResource(resource *runtime.Resource, digest digest.Digest) error {
 	if resource == nil {
 		return fmt.Errorf("resource must not be nil")
 	}
@@ -39,7 +33,7 @@ func ApplyToResource(resource *runtime.Resource, digest digest.Digest, algorithm
 	}
 	resource.Digest = &runtime.Digest{
 		HashAlgorithm:          algo,
-		NormalisationAlgorithm: algorithm,
+		NormalisationAlgorithm: "genericBlobDigest/v1", // TODO use a constant from blob package for this
 		Value:                  digest.Encoded(),
 	}
 
