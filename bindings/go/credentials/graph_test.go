@@ -75,7 +75,6 @@ func (s RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, ide
 	return s.ResolveFunc(ctx, config, identity, credentials)
 }
 
-// Sample YAML from your example
 const testYAML = `
 type: credentials.config.ocm.software
 repositories:

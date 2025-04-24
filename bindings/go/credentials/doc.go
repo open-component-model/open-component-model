@@ -28,8 +28,9 @@
 //   - A Directed Acyclic Graph (DAG): This is a graph structure where each node represents a consumer identity
 //     and its associated credentials. The edges between nodes represent the dependencies between
 //     different consumer identities and their credentials.
-//   - The [ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime.Config] structure: This is the configuration structure that defines the
-//     both definitions containing the consumer identities and the credentials as well as relationships through them.
+//   - The [ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime.Config] structure:
+//     This is the configuration structure that defines both definitions containing the consumer identities,
+//     and the credentials as well as relationships through them.
 //
 // The most basic config example links one Consumer to one Credential:
 //
@@ -73,8 +74,9 @@
 //
 // In this example:
 //  1. A Docker registry (quay.io) receives credentials from a HashiCorp Vault Instance.
-//  3. To access Vault, we need role_id and secret_id credentials, which in turn come from the credentials
-//     defined in the second consumer identity.
+//  2. To access Vault, we need role_id and secret_id credentials, which in turn come from the credentials
+//     defined in the second consumer identity. Thus, the credential properties specified for the first consumer
+//     (the Docker registry) are themselves used to request credentials from the graph.
 //
 // The system can also handle multiple identities for the same consumer:
 //
@@ -152,11 +154,12 @@
 //   - The plugin is responsible for implementing the logic to resolve credentials for the custom type
 //   - The Graph will call the plugin to resolve credentials when it encounters a custom type and also passes it
 //     any credentials that are available for it. To determine which credentials are available, the plugin
-//     gets called with CredentialPlugin.GetConsumerIdentity, which returns the consumer identity for the custom type.
+//     gets called with CredentialPlugin.GetConsumerIdentity with the credential identity as input arguments.
+//     This returns the consumer identity for the custom type.
 //
 // # Fallback Resolution with Repositories
 //
-// While the Graph is useful for deterministic resolution and linking of credentials, it is not oftentimes not possible
+// While the Graph is useful for deterministic resolution and linking of credentials, oftentimes it is not possible
 // to know which credentials are needed exactly for a specific repository. This is where the RepositoryPlugin comes into play.
 // Inside the [ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime.Config] it is possible to define
 // a set of available credential repositories which act as fallback providers in case the graph does not yield any results.
@@ -181,6 +184,7 @@
 //
 // - The repository plugin can request credentials of its own via an identity provided with RepositoryPlugin.ConsumerIdentityForConfig
 // - The credentials for a repository plugin can ONLY be resolved from the Graph via CredentialPlugin or [ocm.software/open-component-model/bindings/go/credentials/spec/config/v1.DirectCredentials]
+// - The credentials required for a credential plugin CANNOT be resolved via a repository plugin
 // - A repository plugin may be called for ANY consumer identity (currently there is no filtering implemented, but this may change)
 //
 // # Usage
