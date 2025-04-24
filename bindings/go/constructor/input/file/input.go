@@ -10,13 +10,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/input"
 	"ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
-	inputSpec "ocm.software/open-component-model/bindings/go/constructor/spec/input"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 var _ input.Method = &Method{}
 
-type Method struct{}
+type Method struct{ Scheme *runtime.Scheme }
 
 func (i *Method) ProcessResource(_ context.Context, resource *spec.Resource) (data blob.ReadOnlyBlob, err error) {
 	return i.process(resource.Input, err, data)
@@ -24,7 +23,7 @@ func (i *Method) ProcessResource(_ context.Context, resource *spec.Resource) (da
 
 func (i *Method) process(input runtime.Typed, err error, data blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
 	file := v1.File{}
-	if err := inputSpec.Scheme.Convert(input, &file); err != nil {
+	if err := i.Scheme.Convert(input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 

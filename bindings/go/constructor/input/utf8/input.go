@@ -17,7 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/input"
 	"ocm.software/open-component-model/bindings/go/constructor/input/utf8/spec/v2alpha1"
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
-	inputSpec "ocm.software/open-component-model/bindings/go/constructor/spec/input"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // MediaTypeTextPlain as per https://www.rfc-editor.org/rfc/rfc3676.html
@@ -27,7 +27,7 @@ const MediaTypeYAML = "application/x-yaml"
 
 var _ input.Method = &Method{}
 
-type Method struct{}
+type Method struct{ Scheme *runtime.Scheme }
 
 func (i *Method) ProcessResource(_ context.Context, resource *spec.Resource) (data blob.ReadOnlyBlob, err error) {
 	return i.process(resource)
@@ -35,7 +35,7 @@ func (i *Method) ProcessResource(_ context.Context, resource *spec.Resource) (da
 
 func (i *Method) process(resource *spec.Resource) (blob.ReadOnlyBlob, error) {
 	utf8 := v2alpha1.UTF8{}
-	if err := inputSpec.Scheme.Convert(resource.Input, &utf8); err != nil {
+	if err := i.Scheme.Convert(resource.Input, &utf8); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 	if err := validate(utf8); err != nil {
@@ -53,11 +53,9 @@ func (i *Method) process(resource *spec.Resource) (blob.ReadOnlyBlob, error) {
 		case v2alpha1.UTF8ObjectFormatJSON:
 			fallthrough
 		case v2alpha1.UTF8ObjectFormatYAML:
-			data = &CachedBlob{
-				ReadOnlyBlob: &MarshalledBlob{
-					Object:           utf8.Object,
-					UTF8ObjectFormat: utf8.ObjectFormat,
-				},
+			data = &MarshalledBlob{
+				Object:           utf8.Object.Data,
+				UTF8ObjectFormat: utf8.ObjectFormat,
 			}
 		default:
 			return nil, fmt.Errorf("unsupported object format %q", utf8.ObjectFormat)
@@ -68,7 +66,11 @@ func (i *Method) process(resource *spec.Resource) (blob.ReadOnlyBlob, error) {
 		data = compression.Compress(data)
 	}
 
-	return data, nil
+	cached := &CachedBlob{
+		ReadOnlyBlob: data,
+	}
+
+	return cached, nil
 }
 
 func validate(t v2alpha1.UTF8) error {

@@ -12,11 +12,11 @@ import (
 type UTF8 struct {
 	Type runtime.Type `json:"type"`
 	// Path is the path to the file.
-	Text         string           `json:"text,omitempty"`
-	Object       any              `json:"object,omitempty"`
-	ObjectFormat UTF8ObjectFormat `json:"objectFormat,omitempty"`
-	Compress     bool             `json:"compress,omitempty"`
-	MediaType    string           `json:"mediaType,omitempty"`
+	Text         string                `json:"text,omitempty"`
+	Object       *runtime.Unstructured `json:"object,omitempty"`
+	ObjectFormat UTF8ObjectFormat      `json:"objectFormat,omitempty"`
+	Compress     bool                  `json:"compress,omitempty"`
+	MediaType    string                `json:"mediaType,omitempty"`
 }
 
 func (t *UTF8) HasText() bool {

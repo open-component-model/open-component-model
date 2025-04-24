@@ -680,6 +680,31 @@
           "if": {
             "properties": {
               "type": {
+                "const": "helmChart"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "const": "helmChart"
+              },
+              "path": {
+                "type": "string",
+                "description": "The path to the helm chart."
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
                 "const": "dir"
               }
             }
@@ -1288,14 +1313,16 @@
         "blob",
         "directoryTree",
         "ociImage",
-        "executable"
+        "executable",
+        "helmChart"
       ],
       "default": "blob",
       "examples": [
         "blob",
         "directoryTree",
         "ociImage",
-        "executable"
+        "executable",
+        "helmChart"
       ]
     },
     "accessType": {
@@ -1318,7 +1345,8 @@
         "file",
         "ociImage",
         "utf8",
-        "wget"
+        "wget",
+        "helmChart"
       ],
       "default": "binary",
       "examples": [
@@ -1327,7 +1355,8 @@
         "file",
         "ociImage",
         "utf8",
-        "wget"
+        "wget",
+        "helmChart"
       ]
     },
     "srcRefs": {

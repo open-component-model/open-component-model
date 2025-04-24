@@ -121,7 +121,7 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	return &Repository{
 		scheme:                     options.Scheme,
 		localResourceManifestCache: options.LocalResourceManifestCache,
-		localResourceLayerCache:    options.LocalResourceManifestCache,
+		localResourceLayerCache:    options.LocalResourceLayerCache,
 		resolver:                   options.Resolver,
 		creatorAnnotation:          options.Creator,
 		resourceCopyOptions:        *options.ResourceCopyOptions,

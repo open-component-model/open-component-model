@@ -15,7 +15,7 @@ components:
       relation: local
       input:
         type: utf8
-        compress: true
+        compress: false
         text: "Hello, world!"
     - name: testobject
       type: blob
@@ -25,3 +25,9 @@ components:
         objectFormat: json
         object:
           key: value
+    - name: chart
+      type: helmChart
+      relation: local
+      input:
+        type: helmChart
+        path: ./input/helm/testdata/chart

@@ -6,16 +6,25 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
 	"ocm.software/open-component-model/bindings/go/constructor/input/utf8"
 	"ocm.software/open-component-model/bindings/go/constructor/input/utf8/spec/v2alpha1"
-	spec "ocm.software/open-component-model/bindings/go/constructor/spec/input"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func init() {
-	Default.MustRegisterMethod(&v1.File{}, &file.Method{})
-	Default.MustRegisterMethod(&v2alpha1.UTF8{}, &utf8.Method{})
+var Scheme = runtime.NewScheme()
+var Default = New(Scheme)
+
+func MustAddToScheme(scheme *runtime.Scheme) {
+	scheme.MustRegisterWithAlias(&v1.File{}, runtime.NewVersionedType("file", v1.Version))
+	scheme.MustRegisterWithAlias(&v1.File{}, runtime.NewUnversionedType("file"))
+
+	scheme.MustRegisterWithAlias(&v2alpha1.UTF8{}, runtime.NewVersionedType("utf8", v2alpha1.Version))
+	scheme.MustRegisterWithAlias(&v2alpha1.UTF8{}, runtime.NewUnversionedType("utf8"))
 }
 
-var Default = New(spec.Scheme)
+func init() {
+	MustAddToScheme(Scheme)
+	Default.MustRegisterMethod(&v1.File{}, &file.Method{Scheme: Scheme})
+	Default.MustRegisterMethod(&v2alpha1.UTF8{}, &utf8.Method{Scheme: Scheme})
+}
 
 type Registry struct {
 	methods map[runtime.Type]input.Method
