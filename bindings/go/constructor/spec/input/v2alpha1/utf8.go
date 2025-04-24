@@ -15,7 +15,7 @@ type UTF8 struct {
 	Text         string           `json:"text,omitempty"`
 	Object       any              `json:"object,omitempty"`
 	ObjectFormat UTF8ObjectFormat `json:"objectFormat,omitempty"`
-	Compress     string           `json:"compress,omitempty"`
+	Compress     bool             `json:"compress,omitempty"`
 	MediaType    string           `json:"mediaType,omitempty"`
 }
 

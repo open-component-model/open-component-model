@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/constructor/input"
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
 	inputSpec "ocm.software/open-component-model/bindings/go/constructor/spec/input"
@@ -61,6 +62,10 @@ func (i *Method) process(resource *spec.Resource) (blob.ReadOnlyBlob, error) {
 		default:
 			return nil, fmt.Errorf("unsupported object format %q", utf8.ObjectFormat)
 		}
+	}
+
+	if utf8.Compress {
+		data = compression.Compress(data)
 	}
 
 	return data, nil
