@@ -40,7 +40,7 @@ func TestStoreForReference(t *testing.T) {
 	s := NewFromCTF(ctf)
 	result, err := s.StoreForReference(t.Context(), "test:reference")
 	assert.NoError(t, err)
-	assert.Equal(t, "test", result.(*repositoryStore).repo)
+	assert.Equal(t, "test", result.(*Repository).repo)
 }
 
 func TestComponentVersionReference(t *testing.T) {
@@ -241,7 +241,7 @@ func TestFetchReference(t *testing.T) {
 	require.NoError(t, ctf.SetIndex(ctx, index))
 
 	t.Run("successful fetch reference", func(t *testing.T) {
-		desc, reader, err := store.(*repositoryStore).FetchReference(ctx, "test-tag")
+		desc, reader, err := store.(*Repository).FetchReference(ctx, "test-tag")
 		assert.NoError(t, err)
 		assert.NotNil(t, reader)
 		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
@@ -253,7 +253,7 @@ func TestFetchReference(t *testing.T) {
 	})
 
 	t.Run("fetch reference not found", func(t *testing.T) {
-		desc, reader, err := store.(*repositoryStore).FetchReference(ctx, "nonexistent-tag")
+		desc, reader, err := store.(*Repository).FetchReference(ctx, "nonexistent-tag")
 		assert.Error(t, err)
 		assert.Nil(t, reader)
 		assert.Empty(t, desc)
@@ -297,7 +297,7 @@ func TestTags(t *testing.T) {
 
 	t.Run("list tags for repository", func(t *testing.T) {
 		var tags []string
-		err := store.(*repositoryStore).Tags(ctx, "", func(t []string) error {
+		err := store.(*Repository).Tags(ctx, "", func(t []string) error {
 			tags = t
 			return nil
 		})

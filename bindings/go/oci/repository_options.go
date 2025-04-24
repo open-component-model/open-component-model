@@ -24,6 +24,9 @@ type RepositoryOptions struct {
 	// LocalResourceManifestCache is used to temporarily store local blobs until they are added to a component version.
 	// If not provided, a new memory based cache will be created.
 	LocalResourceManifestCache cache.OCIDescriptorCache
+	// LocalResourceLayerCache is used to temporarily store local blobs until they are added to a component version.
+	// If not provided, a new memory based cache will be created.
+	LocalResourceLayerCache cache.OCIDescriptorCache
 	// Resolver resolves component version references to OCI stores.
 	// This is required and must be provided.
 	Resolver Resolver
@@ -87,6 +90,9 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	if options.LocalResourceManifestCache == nil {
 		options.LocalResourceManifestCache = inmemory.New()
 	}
+	if options.LocalResourceLayerCache == nil {
+		options.LocalResourceLayerCache = inmemory.New()
+	}
 
 	if options.Creator == "" {
 		options.Creator = "Open Component Model Go Reference Library"
@@ -115,6 +121,7 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	return &Repository{
 		scheme:                     options.Scheme,
 		localResourceManifestCache: options.LocalResourceManifestCache,
+		localResourceLayerCache:    options.LocalResourceManifestCache,
 		resolver:                   options.Resolver,
 		creatorAnnotation:          options.Creator,
 		resourceCopyOptions:        *options.ResourceCopyOptions,

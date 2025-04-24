@@ -102,3 +102,160 @@ func TestRegistry_Convert_WithAllowUnknown(t *testing.T) {
 	r.Equal(from.Value, to.Value)
 	r.Equal(from.Type, to.Type)
 }
+
+func TestRegistry_Decode_UnknownType(t *testing.T) {
+	r := require.New(t)
+	typ := NewVersionedType("unknown", "v1")
+	registry := NewScheme(WithAllowUnknown())
+	raw := &Raw{Type: typ, Data: []byte(`{"type": "unknown/v1", "value": "foo"}`)}
+
+	// Test decoding into a Raw object
+	parsed := &Raw{}
+	r.NoError(registry.Decode(bytes.NewReader(raw.Data), parsed))
+	r.Equal(parsed.Type, typ)
+	r.JSONEq(string(raw.Data), string(parsed.Data))
+
+	// Test decoding into a typed object with unknown type
+	typed := &TestType{}
+	r.NoError(registry.Decode(bytes.NewReader(raw.Data), typed))
+	r.Equal(typed.Type, typ)
+	r.Equal(typed.Value, "foo")
+}
+
+func TestRegistry_Decode_UnknownType_WithoutAllowUnknown(t *testing.T) {
+	r := require.New(t)
+	typ := NewVersionedType("unknown", "v1")
+	registry := NewScheme() // Without WithAllowUnknown()
+	raw := &Raw{Type: typ, Data: []byte(`{"type": "unknown/v1", "value": "foo"}`)}
+
+	// Test decoding into a Raw object
+	parsed := &Raw{}
+	r.Error(registry.Decode(bytes.NewReader(raw.Data), parsed))
+
+	// Test decoding into a typed object with unknown type
+	typed := &TestType{}
+	r.Error(registry.Decode(bytes.NewReader(raw.Data), typed))
+}
+
+func TestRegistry_Decode_ErrorCases(t *testing.T) {
+	r := require.New(t)
+	typ := NewVersionedType("test", "v1")
+	registry := NewScheme()
+	registry.MustRegisterWithAlias(&TestType{}, typ)
+
+	// Test empty input data
+	parsed := &TestType{}
+	err := registry.Decode(bytes.NewReader([]byte{}), parsed)
+	r.Error(err)
+	r.Contains(err.Error(), "cannot decode empty input data")
+
+	// Test invalid JSON input
+	invalidJSON := []byte(`{"type": "test/v1", "value": "foo"`) // Missing closing brace
+	err = registry.Decode(bytes.NewReader(invalidJSON), parsed)
+	r.Error(err)
+	r.Contains(err.Error(), "failed to unmarshal raw")
+
+	// Test invalid YAML input
+	invalidYAML := []byte("type: test/v1\nvalue: foo\n  extra: invalid") // Invalid indentation
+	err = registry.Decode(bytes.NewReader(invalidYAML), parsed)
+	r.Error(err)
+	r.Contains(err.Error(), "failed to unmarshal raw")
+
+	// Test type mismatch after decoding
+	validData := []byte(`{"type": "test/v2", "value": "foo"}`) // Different version than registered
+	parsed.SetType(typ)                                        // Set initial type
+	err = registry.Decode(bytes.NewReader(validData), parsed)
+	r.Error(err)
+	r.Contains(err.Error(), "expected type")
+}
+
+func TestRegistry_Default_UnknownType(t *testing.T) {
+	r := require.New(t)
+	typ := NewVersionedType("unknown", "v1")
+	registry := NewScheme(WithAllowUnknown())
+
+	// Test defaulting a Raw object
+	raw := &Raw{Type: typ}
+	updated, err := registry.DefaultType(raw)
+	r.NoError(err)
+	r.False(updated) // Type should not be updated since it's already set
+
+	// Test defaulting a typed object with unknown type
+	typed := &TestType{Type: typ}
+	updated, err = registry.DefaultType(typed)
+	r.NoError(err)
+	r.False(updated) // Type should not be updated since it's already set
+}
+
+func TestRegistry_Default_UnknownType_WithoutAllowUnknown(t *testing.T) {
+	r := require.New(t)
+	typ := NewVersionedType("unknown", "v1")
+	registry := NewScheme() // Without WithAllowUnknown()
+
+	// Test defaulting a Raw object
+	raw := &Raw{Type: typ}
+	_, err := registry.DefaultType(raw)
+	r.Error(err)
+
+	// Test defaulting a typed object with unknown type
+	typed := &TestType{Type: typ}
+	_, err = registry.DefaultType(typed)
+	r.Error(err)
+}
+
+func TestRegistry_Default_EmptyType(t *testing.T) {
+	r := require.New(t)
+	typ := NewVersionedType("test", "v1")
+	registry := NewScheme()
+	registry.MustRegisterWithAlias(&TestType{}, typ)
+
+	// Test defaulting a typed object with empty type
+	typed := &TestType{}
+	updated, err := registry.DefaultType(typed)
+	r.NoError(err)
+	r.True(updated) // Type should be updated since it was empty
+	r.Equal(typed.Type, typ)
+}
+
+func TestRegistry_Default_AlreadySet(t *testing.T) {
+	r := require.New(t)
+	typ := NewVersionedType("test", "v1")
+	registry := NewScheme()
+	registry.MustRegisterWithAlias(&TestType{}, typ)
+
+	// Test defaulting a typed object with correct type already set
+	typed := &TestType{Type: typ}
+	updated, err := registry.DefaultType(typed)
+	r.NoError(err)
+	r.False(updated) // Type should not be updated since it was already correct
+	r.Equal(typed.Type, typ)
+}
+
+func TestRegistry_Default_DifferentRegisteredType(t *testing.T) {
+	r := require.New(t)
+	typ1 := NewVersionedType("test1", "v1")
+	typ2 := NewVersionedType("test2", "v1")
+	registry := NewScheme()
+	registry.MustRegisterWithAlias(&TestType{}, typ1, typ2)
+
+	// Test defaulting a typed object with different registered type
+	typed := &TestType{Type: typ2}
+	updated, err := registry.DefaultType(typed)
+	r.NoError(err)
+	r.False(updated) // Type should not be updated since it's already a valid registered type
+	r.Equal(typed.Type, typ2)
+}
+
+func TestRegistry_Default_UnregisteredType(t *testing.T) {
+	r := require.New(t)
+	typ1 := NewVersionedType("test1", "v1")
+	typ2 := NewVersionedType("test2", "v1")
+	registry := NewScheme()
+	registry.MustRegisterWithAlias(&TestType{}, typ1)
+
+	// Test defaulting a typed object with unregistered type gets overwritten with the registered type
+	typed := &TestType{Type: typ2}
+	updated, err := registry.DefaultType(typed)
+	r.NoError(err)
+	r.True(updated) // Type should be updated since it was unregistered
+}
