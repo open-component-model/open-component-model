@@ -20,6 +20,7 @@ type NormalisationFilter interface {
 
 // MapExcludes defines exclusion rules for map (struct) fields.
 // It specifies which fields should be excluded from the normalized output.
+// Any field not listed in the map is included by default, but can also be included explicitly using NoExcludes.
 type MapExcludes map[string]ExcludeRules
 
 var _ ExcludeRules = MapExcludes{}

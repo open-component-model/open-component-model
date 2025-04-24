@@ -66,7 +66,6 @@
 //	// With exclusion rules
 //	excludes := jcs.MapExcludes{
 //	    "field1": nil,  // Exclude field1
-//	    "field2": jcs.NoExcludes{},  // Include field2
 //	}
 //	normalized, err := jcs.Normalise(input, excludes)
 //
