@@ -16,6 +16,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
+
+	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 )
 
 // NewOCILayoutWriter creates a new oras.Target that writes to the given writer an oci-layout in tar format.
@@ -144,7 +146,7 @@ func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Desc
 	if err := verify.Verify(); err != nil {
 		return fmt.Errorf("failed to verify content: %w", err)
 	}
-	if isManifest(expected) {
+	if introspection.IsOCICompliantManifest(expected) {
 		if err := s.tag(ctx, expected, expected.Digest.String()); err != nil {
 			return fmt.Errorf("failed to tag manifest by digest: %w", err)
 		}
@@ -258,20 +260,6 @@ func blobPath(dgst digest.Digest) (string, error) {
 			dgst.String(), errdef.ErrInvalidDigest, err)
 	}
 	return path.Join(ociImageSpecV1.ImageBlobsDir, dgst.Algorithm().String(), dgst.Encoded()), nil
-}
-
-// isManifest checks if a descriptor describes a manifest.
-func isManifest(desc ociImageSpecV1.Descriptor) bool {
-	switch desc.MediaType {
-	case "application/vnd.docker.distribution.manifest.v2+json",
-		"application/vnd.docker.distribution.manifest.list.v2+json",
-		"application/vnd.oci.artifact.manifest.v1+json",
-		ociImageSpecV1.MediaTypeImageManifest,
-		ociImageSpecV1.MediaTypeImageIndex:
-		return true
-	default:
-		return false
-	}
 }
 
 // memoryResolver is a memory based resolver.

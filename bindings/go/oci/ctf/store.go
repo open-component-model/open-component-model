@@ -21,6 +21,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
+	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/internal/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
@@ -125,7 +126,7 @@ func (s *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
-	if isManifest(expected) {
+	if introspection.IsOCICompliantManifest(expected) {
 		if err := s.Tag(ctx, expected, expected.Digest.String()); err != nil {
 			return fmt.Errorf("unable to save manifest for descriptor %v: %w", expected, err)
 		}
@@ -286,14 +287,4 @@ func addOrUpdateArtifactMetadataInIndex(idx v1.Index, meta v1.ArtifactMetadata) 
 	}
 
 	idx.AddArtifact(meta)
-}
-
-func isManifest(desc ociImageSpecV1.Descriptor) bool {
-	switch desc.MediaType {
-	case ociImageSpecV1.MediaTypeImageManifest,
-		ociImageSpecV1.MediaTypeImageIndex:
-		return true
-	default:
-		return false
-	}
 }

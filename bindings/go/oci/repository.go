@@ -24,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
+	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	complister "ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
@@ -266,7 +267,7 @@ func (repo *Repository) AddLocalResource(
 		return nil, fmt.Errorf("failed to pack resource blob: %w", err)
 	}
 
-	if isManifest(desc) {
+	if introspection.IsOCICompliantManifest(desc) {
 		repo.localResourceManifestCache.Add(reference, desc)
 	} else {
 		repo.localResourceLayerCache.Add(reference, desc)
@@ -344,7 +345,7 @@ func (repo *Repository) getLocalBlobResource(ctx context.Context, store spec.Sto
 
 	// if we are not a manifest compatible with OCI, we can assume that we only care about a single layer
 	// that means we can just return the blob that contains that exact layer and not the entire oci layout
-	if !isManifest(artifact) {
+	if !introspection.IsOCICompliantManifest(artifact) {
 		// Validate the digest of the downloaded content matches what we expect
 		if err := validateDigest(&resource, artifact.Digest); err != nil {
 			return nil, nil, fmt.Errorf("failed to validate digest: %w", err)
@@ -599,9 +600,4 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		return ociImageSpecV1.Manifest{}, nil, err
 	}
 	return manifest, index, nil
-}
-
-func isManifest(desc ociImageSpecV1.Descriptor) bool {
-	return desc.MediaType == ociImageSpecV1.MediaTypeImageManifest ||
-		desc.MediaType == ociImageSpecV1.MediaTypeImageIndex
 }
