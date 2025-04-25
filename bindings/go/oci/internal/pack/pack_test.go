@@ -3,6 +3,7 @@ package pack_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 
@@ -20,6 +21,7 @@ import (
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
 	oci "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -171,22 +173,17 @@ func TestBlob(t *testing.T) {
 }
 
 func TestResourceBlob(t *testing.T) {
-	store, err := file.New(t.TempDir())
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, store.Close())
-	})
-
 	ctx := t.Context()
 	content := []byte("test content")
 	digest := digest.FromBytes(content)
 
 	tests := []struct {
-		name          string
-		blob          *testBlob
-		resource      *descriptor.Resource
-		opts          Options
-		expectedError string
+		name              string
+		blob              *testBlob
+		resource          *descriptor.Resource
+		opts              Options
+		expectedError     string
+		checkGlobalAccess func(t *testing.T, resource *descriptor.Resource)
 	}{
 		{
 			name: "success with local blob access",
@@ -205,6 +202,52 @@ func TestResourceBlob(t *testing.T) {
 			opts: Options{
 				AccessScheme:  runtime.NewScheme(),
 				BaseReference: "test-ref",
+			},
+		},
+		{
+			name: "success with enforced global access",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.test",
+				digest:    digest,
+			},
+			resource: &descriptor.Resource{
+				Access: &v2.LocalBlob{
+					Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					LocalReference: digest.String(),
+					MediaType:      "application/vnd.test",
+				},
+			},
+			opts: Options{
+				AccessScheme:        runtime.NewScheme(),
+				BaseReference:       "test-ref",
+				EnforceGlobalAccess: true,
+			},
+			checkGlobalAccess: func(t *testing.T, resource *descriptor.Resource) {
+				access, ok := resource.Access.(*v2.LocalBlob)
+				require.True(t, ok, "access should be of type LocalBlob")
+				require.NotNil(t, access.GlobalAccess, "global access should be set")
+
+				// Convert the global access to the correct type
+				scheme := runtime.NewScheme()
+				v2.MustAddToScheme(scheme)
+				oci.MustAddToScheme(scheme)
+
+				globalAccess, err := scheme.NewObject(access.GlobalAccess.GetType())
+				require.NoError(t, err)
+				require.NoError(t, scheme.Convert(access.GlobalAccess, globalAccess))
+
+				switch typed := globalAccess.(type) {
+				case *accessv1.OCIImageLayer:
+					assert.Equal(t, fmt.Sprintf("test-ref@%s", digest.String()), typed.Reference)
+					assert.Equal(t, "application/vnd.test", typed.MediaType)
+					assert.Equal(t, digest, typed.Digest)
+					assert.Equal(t, int64(len(content)), typed.Size)
+				case *accessv1.OCIImage:
+					assert.Equal(t, fmt.Sprintf("test-ref@%s", digest.String()), typed.ImageReference)
+				default:
+					t.Fatalf("unexpected global access type: %T", globalAccess)
+				}
 			},
 		},
 		{
@@ -260,6 +303,12 @@ func TestResourceBlob(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			store, err := file.New(t.TempDir())
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				require.NoError(t, store.Close())
+			})
+
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
 
@@ -284,6 +333,10 @@ func TestResourceBlob(t *testing.T) {
 			layerData, err := io.ReadAll(data)
 			require.NoError(t, err)
 			assert.Equal(t, tt.blob.content, layerData)
+
+			if tt.checkGlobalAccess != nil {
+				tt.checkGlobalAccess(t, tt.resource)
+			}
 		})
 	}
 }

@@ -20,6 +20,7 @@ import (
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
+	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
@@ -40,6 +41,10 @@ type Options struct {
 	// ManifestAnnotations are annotations that will be added to single layer Artifacts
 	// They are not used for OCI Layouts.
 	ManifestAnnotations map[string]string
+
+	// EnforceGlobalAccess indicates if new resources should contain a global access regardless whether the
+	// access is guaranteed to be valid or not
+	EnforceGlobalAccess bool
 }
 
 // ResourceBlob packs a resourceblob.ResourceBlob into an OCI Storage
@@ -93,7 +98,7 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	annotations := maps.Clone(layer.Annotations)
 	maps.Copy(annotations, opts.ManifestAnnotations)
 
-	global := backedByGlobalStore(storage)
+	global := backedByGlobalStore(storage) || opts.EnforceGlobalAccess
 
 	if err := updateResourceAccess(b.Resource, layer, updateResourceAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
@@ -203,6 +208,10 @@ type updateResourceAccessOptions struct {
 
 // updateResourceAccess updates the resource access with the new layer information.
 // for setting a global access it uses the base reference given which must not already contain a digest.
+// It is assumed that the base reference is a valid OCI reference in the form of
+// <repository> or <repository>:<tag>, as the digest is added to pin the descriptor reference.
+// Note that a global reference is only set if the resource is backed by a globally reachable store,
+// as otherwise the reference would not be valid, e.g. in a CTF. See backedByGlobalStore for more information.
 func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Descriptor, opts updateResourceAccessOptions) error {
 	if resource == nil {
 		return errors.New("resource must not be nil")
@@ -215,12 +224,7 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 	}
 
 	if opts.BackedByGlobalStore {
-		localBlob.GlobalAccess = &accessv1.OCIImage{
-			// This is an absolute reference to the blob in the global store.
-			// It contains the base reference and the digest of the blob to form an absolute, pinned (by digest)
-			// OCI reference.
-			ImageReference: fmt.Sprintf("%s@%s", opts.BaseReference, desc.Digest.String()),
-		}
+		setGlobalAccess(opts.BaseReference, desc, localBlob)
 	}
 
 	// convert to apply the access
@@ -235,6 +239,33 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 	}
 
 	return nil
+}
+
+// setGlobalAccess sets the global access for the given local blob.
+// It creates an absolute reference to the blob in the global store
+// and assigns it to the [*descriptor.LocalBlob.GlobalAccess] field of the local blob.
+func setGlobalAccess(baseReference string, desc ociImageSpecV1.Descriptor, localBlob *descriptor.LocalBlob) {
+	globalRef := fmt.Sprintf("%s@%s", baseReference, desc.Digest.String())
+	if introspection.IsOCICompliantManifest(desc) {
+		localBlob.GlobalAccess = &accessv1.OCIImage{
+			// This is an absolute reference to the manifest in the global store.
+			// It contains the base reference and the digest of the blob to form an absolute, pinned (by digest)
+			// OCI reference. Because it is a manifest, we know it can be accessed as OCI Image.
+			// If the OCI Image is not a OCI runtime Image, it counts as an OCI Artifact instead, but
+			// for OCI references, we do not care about that.
+			ImageReference: globalRef,
+		}
+	} else {
+		// This is an absolute reference to the blob in the global store.
+		// Instead of an image reference, we use the OCIImageLayer type here because we do not have an OCI
+		// compliant manifest type. Instead we reference it purely as a layer.
+		localBlob.GlobalAccess = &accessv1.OCIImageLayer{
+			Reference: globalRef,
+			MediaType: desc.MediaType,
+			Digest:    desc.Digest,
+			Size:      desc.Size,
+		}
+	}
 }
 
 // backedByGlobalStore checks if the given storage is backed by a globally reachable store

@@ -319,55 +319,6 @@ func TestBlobPath(t *testing.T) {
 	}
 }
 
-func TestIsManifest(t *testing.T) {
-	tests := []struct {
-		name      string
-		mediaType string
-		expected  bool
-	}{
-		{
-			name:      "docker manifest v2",
-			mediaType: "application/vnd.docker.distribution.manifest.v2+json",
-			expected:  true,
-		},
-		{
-			name:      "docker manifest list v2",
-			mediaType: "application/vnd.docker.distribution.manifest.list.v2+json",
-			expected:  true,
-		},
-		{
-			name:      "oci artifact manifest v1",
-			mediaType: "application/vnd.oci.artifact.manifest.v1+json",
-			expected:  true,
-		},
-		{
-			name:      "oci image manifest",
-			mediaType: ociImageSpecV1.MediaTypeImageManifest,
-			expected:  true,
-		},
-		{
-			name:      "oci image index",
-			mediaType: ociImageSpecV1.MediaTypeImageIndex,
-			expected:  true,
-		},
-		{
-			name:      "non-manifest media type",
-			mediaType: "application/octet-stream",
-			expected:  false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			desc := ociImageSpecV1.Descriptor{
-				MediaType: tt.mediaType,
-			}
-			result := isManifest(desc)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestMemoryResolver(t *testing.T) {
 	resolver := newMemoryResolver()
 	desc := ociImageSpecV1.Descriptor{
