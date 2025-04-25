@@ -44,3 +44,5 @@ go.work.sum
 
 # gitguardian
 .cache_ggshield
+# ignore test binary
+bindings/go/plugin/manager/registries/componentversionrepository/testdata/test-plugin

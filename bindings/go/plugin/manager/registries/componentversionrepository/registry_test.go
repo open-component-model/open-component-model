@@ -3,7 +3,9 @@ package componentversionrepository
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,6 +16,9 @@ import (
 )
 
 func TestAddGetPlugin(t *testing.T) {
+	stat, err := os.Stat(filepath.Join("testdata", "test-plugin"))
+	require.NoError(t, err, "test plugin not found, please build the plugin under plugin/generic_plugin first")
+
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(scheme)
@@ -31,10 +36,10 @@ func TestAddGetPlugin(t *testing.T) {
 		Name:    "OCIRepository",
 	}
 
-	pluginCmd := exec.CommandContext(ctx, testEnv.pluginLocation, "--config", string(serialized))
+	pluginCmd := exec.CommandContext(ctx, stat.Name(), "--config", string(serialized))
 	plugin := &mtypes.Plugin{
 		ID:   "test-plugin",
-		Path: testEnv.pluginLocation,
+		Path: stat.Name(),
 		Config: mtypes.Config{
 			ID:         "test-plugin",
 			Type:       mtypes.Socket,
@@ -52,5 +57,4 @@ func TestAddGetPlugin(t *testing.T) {
 		Cmd: pluginCmd,
 	}
 	require.NoError(t, registry.AddPlugin(plugin, typ))
-
 }

@@ -42,8 +42,8 @@ func TestWaitForPlugin(t *testing.T) {
 	})
 
 	t.Run("successful connection to Unix socket plugin", func(t *testing.T) {
-		// Create a temporary socket file
-		tempDir := os.TempDir()
+		tempDir, err := os.MkdirTemp("", "test-unix-socket")
+		require.NoError(t, err)
 		defer os.RemoveAll(tempDir)
 
 		socketPath := filepath.Join(tempDir, "test.sock")

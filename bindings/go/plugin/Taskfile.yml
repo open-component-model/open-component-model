@@ -6,6 +6,9 @@ tasks:
       - mkdir -p tmp
     status:
       - test -d tmp
+  build:
+    cmds:
+      - go build -o manager/registries/componentversionrepository/testdata/test-plugin generic_plugin/main.go
   test:
     sources:
       - ./**/*.go
@@ -15,3 +18,4 @@ tasks:
       - go test -v -coverprofile=tmp/coverage.out ./...
     deps:
       - tmp
+      - build
