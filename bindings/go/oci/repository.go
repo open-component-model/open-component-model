@@ -336,7 +336,8 @@ func (repo *Repository) getLocalBlobResource(ctx context.Context, store spec.Sto
 		return b, &resource, nil
 	}
 
-	artifact, err := annotations.FilterFirstMatchingArtifact(index.Manifests, identity, annotations.ArtifactKindResource)
+	// lets lookup our artifact based on our annotation from either the index or the manifest layers.
+	artifact, err := annotations.FilterFirstMatchingArtifact(append(index.Manifests, manifest.Layers...), identity, annotations.ArtifactKindResource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to find matching descriptor: %w", err)
 	}
