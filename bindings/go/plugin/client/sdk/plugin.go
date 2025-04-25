@@ -64,8 +64,7 @@ func (p *Plugin) startIdleChecker() {
 
 			_ = p.GracefulShutdown(context.Background())
 			p.logger.Info("idle check timer expired for plugin", "id", p.Config.ID)
-			os.Exit(0)
-
+			return
 		case working := <-p.interrupt:
 			if !working && p.workerCounter.Load() == 0 {
 				// no longer working, start the idle timeout

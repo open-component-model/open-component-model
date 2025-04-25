@@ -45,7 +45,7 @@ func RegisterComponentVersionRepository[T runtime.Typed](
 			Location: UploadComponentVersion,
 		},
 		endpoints.Handler{
-			Handler:  AddLocalResourceHandlerFunc(handler.AddLocalResource),
+			Handler:  AddLocalResourceHandlerFunc(handler.AddLocalResource, c.Scheme),
 			Location: UploadLocalResource,
 		})
 	schemaOCIRegistry, err := jsonschema.Reflect(proto).MarshalJSON()

@@ -2,6 +2,4 @@ package manager
 
 import "testing"
 
-func TestPluginManager(t *testing.T) {
-	
-}
+func TestPluginManager(t *testing.T) {}

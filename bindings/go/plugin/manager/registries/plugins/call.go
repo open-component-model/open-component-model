@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
 // CallOptions contains options for calling a plugin endpoint.
@@ -58,7 +60,7 @@ func WithQueryParams(queryParams []KV) CallOptionFn {
 
 // Call will use the plugin's constructed connection client to make a call to the specified
 // endpoint. The result will be marshalled into the provided response if not nil.
-func Call(ctx context.Context, client *http.Client, endpoint, method string, opts ...CallOptionFn) (err error) {
+func Call(ctx context.Context, client *http.Client, locationType types.ConnectionType, location, endpoint, method string, opts ...CallOptionFn) (err error) {
 	options := &CallOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -74,7 +76,12 @@ func Call(ctx context.Context, client *http.Client, endpoint, method string, opt
 		body = bytes.NewReader(content)
 	}
 
-	request, err := http.NewRequestWithContext(ctx, method, "http://unix/"+endpoint, body)
+	base := "http://unix"
+	if locationType == types.TCP {
+		base = location
+	}
+
+	request, err := http.NewRequestWithContext(ctx, method, base+"/"+endpoint, body)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

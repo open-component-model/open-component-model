@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -25,7 +26,14 @@ func WaitForPlugin(ctx context.Context, id, location string, typ types.Connectio
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to plugin %s: %w", id, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://unix/healthz", nil)
+
+	base := "http://unix"
+	if typ == types.TCP {
+		// if the type is TCP the location will include the port
+		base = location
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/healthz", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to plugin %s: %w", id, err)
 	}
@@ -33,7 +41,8 @@ func WaitForPlugin(ctx context.Context, id, location string, typ types.Connectio
 	for {
 		// This is the main work of the loop that we want to execute at least once
 		// right away.
-		if resp, err := client.Do(req); err == nil {
+		resp, err := client.Do(req)
+		if err == nil {
 			_ = resp.Body.Close()
 
 			return client, nil
@@ -60,6 +69,9 @@ func connect(_ context.Context, id, location string, typ types.ConnectionType) (
 		network = "unix"
 	case types.TCP:
 		network = "tcp"
+		location = strings.TrimPrefix(location, "http://")
+	default:
+		return nil, fmt.Errorf("invalid connection type: %s", typ)
 	}
 
 	dialer := net.Dialer{

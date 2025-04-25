@@ -1,7 +1,7 @@
 package types
 
 import (
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -40,8 +40,8 @@ type GetComponentVersionRequest[T runtime.Typed] struct {
 }
 
 type PostComponentVersionRequest[T runtime.Typed] struct {
-	Repository T                      `json:"repository"`
-	Descriptor *descriptor.Descriptor `json:"descriptor"`
+	Repository T              `json:"repository"`
+	Descriptor *v2.Descriptor `json:"descriptor"`
 }
 
 type GetLocalResourceRequest[T runtime.Typed] struct {
@@ -68,14 +68,14 @@ type PostLocalResourceRequest[T runtime.Typed] struct {
 	Version string `json:"version"`
 
 	// The ResourceLocation of the Local Resource
-	ResourceLocation Location             `json:"resourceLocation"`
-	Resource         *descriptor.Resource `json:"resource"`
+	ResourceLocation Location     `json:"resourceLocation"`
+	Resource         *v2.Resource `json:"resource"`
 }
 
 type GetResourceRequest struct {
 	Location
 	// The resource specification to download
-	*descriptor.Resource `json:"resource"`
+	*v2.Resource `json:"resource"`
 
 	// The Location of the Local Resource to download to
 	TargetLocation Location `json:"targetLocation"`
@@ -83,8 +83,8 @@ type GetResourceRequest struct {
 
 type PostResourceRequest struct {
 	// The ResourceLocation of the Local Resource
-	ResourceLocation Location             `json:"resourceLocation"`
-	Resource         *descriptor.Resource `json:"resource"`
+	ResourceLocation Location     `json:"resourceLocation"`
+	Resource         *v2.Resource `json:"resource"`
 }
 
 // Type defines an endpoint's type and the scheme of the type.

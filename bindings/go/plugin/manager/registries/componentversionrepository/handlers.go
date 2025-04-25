@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -29,7 +31,7 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 		// TODO: Replace this with correct Credential Structure
 		credentials := contracts.Attributes{}
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(err, http.StatusBadRequest).Write(writer)
+			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
 			return
 		}
 
@@ -48,7 +50,14 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(desc); err != nil {
+		// _Note_: Eventually, this will use a versioned converter.
+		descV2, err := descriptor.ConvertToV2(scheme, desc)
+		if err != nil {
+			plugins.NewError(fmt.Errorf("failed to convert to v2 descriptor: %w", err), http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(descV2); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
@@ -57,16 +66,16 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 
 func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostComponentVersionRequest[T], credentials contracts.Attributes) error) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		body, err := plugins.DecodeJSONRequestBody[types.PostComponentVersionRequest[T]](writer, request)
-		if err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
-
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := contracts.Attributes{} // TODO: Change these to contracts.Attributes
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(err, http.StatusBadRequest).Write(writer)
+			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
+			return
+		}
+
+		body, err := plugins.DecodeJSONRequestBody[types.PostComponentVersionRequest[T]](writer, request)
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
 
@@ -78,6 +87,13 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 
 func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetLocalResourceRequest[T], credentials contracts.Attributes) error, scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
+		rawCredentials := []byte(request.Header.Get("Authorization"))
+		credentials := contracts.Attributes{}
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
+			return
+		}
+
 		query := request.URL.Query()
 		name := query.Get("name")
 		version := query.Get("version")
@@ -105,13 +121,6 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			return
 		}
 
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := contracts.Attributes{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(err, http.StatusBadRequest).Write(writer)
-			return
-		}
-
 		if err := f(request.Context(), types.GetLocalResourceRequest[T]{
 			Repository:     typ,
 			Name:           name,
@@ -125,27 +134,40 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 	}
 }
 
-func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostLocalResourceRequest[T], credentials contracts.Attributes) (*descriptor.Resource, error)) http.HandlerFunc {
+func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostLocalResourceRequest[T], credentials contracts.Attributes) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
+		rawCredentials := []byte(request.Header.Get("Authorization"))
+		credentials := contracts.Attributes{}
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
+			return
+		}
+
 		body, err := plugins.DecodeJSONRequestBody[types.PostLocalResourceRequest[T]](writer, request)
 		if err != nil {
 			slog.Error("failed to decode request body", "error", err)
 			return
 		}
-		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := contracts.Attributes{}
-		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
-			plugins.NewError(err, http.StatusBadRequest).Write(writer)
-			return
-		}
 
-		desc, err := f(request.Context(), *body, credentials)
+		resource, err := f(request.Context(), *body, credentials)
 		if err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(desc); err != nil {
+		// _Note_: Eventually, this will use a versioned converter.
+		resourceV2, err := descriptor.ConvertToV2Resources(scheme, []descriptor.Resource{*resource})
+		if err != nil {
+			plugins.NewError(fmt.Errorf("failed to convert to v2 resource: %w", err), http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if len(resourceV2) == 0 {
+			plugins.NewError(errors.New("no resources returned during conversion"), http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(resourceV2[0]); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
