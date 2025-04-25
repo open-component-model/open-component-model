@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	goruntime "runtime"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor/input/registry"
@@ -87,64 +91,77 @@ func construct(ctx context.Context, component spec.Component, opts Options) (*de
 			Provider: map[string]string{
 				"name": component.Provider.Name,
 			},
-			Resources:          make([]descriptor.Resource, 0, len(component.Resources)),
+			Resources:          make([]descriptor.Resource, len(component.Resources)),
 			Sources:            make([]descriptor.Source, 0),
 			References:         make([]descriptor.Reference, 0),
 			RepositoryContexts: make([]runtime.Typed, 0),
 		},
 	}
+	var descLock sync.Mutex
 
+	eg, egctx := errgroup.WithContext(ctx)
+	eg.SetLimit(goruntime.NumCPU())
 	for i, resource := range component.Resources {
-		var data blob.ReadOnlyBlob
-		var access runtime.Typed
-		if resource.HasInput() {
-			method, found := opts.InputMethodRegistry.GetFor(resource.Input)
-			if !found {
-				return nil, fmt.Errorf("no input method found for input specification of type %q", resource.Input.GetType())
+		eg.Go(func() error {
+			var data blob.ReadOnlyBlob
+			var access runtime.Typed
+			if resource.HasInput() {
+				method, found := opts.InputMethodRegistry.GetFor(resource.Input)
+				if !found {
+					return fmt.Errorf("no input method found for input specification of type %q", resource.Input.GetType())
+				}
+				var err error
+				if data, err = method.ProcessResource(egctx, &resource); err != nil {
+					return fmt.Errorf("error getting blob from input method: %w", err)
+				}
+				localBlob := &v2.LocalBlob{}
+				if _, err := v2.Scheme.DefaultType(localBlob); err != nil {
+					return fmt.Errorf("error getting default type for local blob: %w", err)
+				}
+
+				if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
+					localBlob.MediaType, _ = mediaTypeAware.MediaType()
+				}
+				access = localBlob
 			}
-			var err error
-			if data, err = method.ProcessResource(ctx, &resource); err != nil {
-				return nil, fmt.Errorf("error getting blob from input method: %w", err)
+			descResource := spec.ConvertToRuntimeResource(resource)
+
+			// if the resource doesn't have any information about its relation to the component
+			// default to a local resource.
+			if descResource.Relation == "" {
+				descResource.Relation = descriptor.LocalRelation
 			}
-			localBlob := &v2.LocalBlob{}
-			if _, err := v2.Scheme.DefaultType(localBlob); err != nil {
-				return nil, fmt.Errorf("error getting default type for local blob: %w", err)
+
+			// if the resource doesn't have any information about its version,
+			// default to the component version.
+			if descResource.Version == "" {
+				descResource.Version = component.Version
 			}
 
-			if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
-				localBlob.MediaType, _ = mediaTypeAware.MediaType()
+			// if the data is size aware, set the size in the resource
+			if sizeAware, ok := data.(blob.SizeAware); ok {
+				descResource.Size = sizeAware.Size()
 			}
-			access = localBlob
-		}
-		descResource := spec.ConvertToRuntimeResource(resource)
 
-		// if the resource doesn't have any information about its relation to the component
-		// default to a local resource.
-		if descResource.Relation == "" {
-			descResource.Relation = descriptor.LocalRelation
-		}
-
-		// if the resource doesn't have any information about its version,
-		// default to the component version.
-		if descResource.Version == "" {
-			descResource.Version = component.Version
-		}
-
-		// if the data is size aware, set the size in the resource
-		if sizeAware, ok := data.(blob.SizeAware); ok {
-			descResource.Size = sizeAware.Size()
-		}
-
-		if !resource.HasAccess() {
-			descResource.Access = access
-			uploaded, err := opts.Target.AddLocalResource(ctx, component.Name, component.Version, &descResource, data)
-			if err != nil {
-				return nil, fmt.Errorf("error adding local resource at index %d based on input type %v to target: %w", i, resource.Input.GetType(), err)
+			if !resource.HasAccess() {
+				descResource.Access = access
+				uploaded, err := opts.Target.AddLocalResource(ctx, component.Name, component.Version, &descResource, data)
+				if err != nil {
+					return fmt.Errorf("error adding local resource at index %d based on input type %v to target: %w", i, resource.Input.GetType(), err)
+				}
+				descResource = *uploaded
 			}
-			descResource = *uploaded
-		}
 
-		desc.Component.Resources = append(desc.Component.Resources, descResource)
+			descLock.Lock()
+			defer descLock.Unlock()
+			desc.Component.Resources[i] = descResource
+
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, fmt.Errorf("error constructing component: %w", err)
 	}
 
 	if err := opts.Target.AddComponentVersion(ctx, &desc); err != nil {

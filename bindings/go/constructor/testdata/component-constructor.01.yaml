@@ -15,7 +15,7 @@ components:
       relation: local
       input:
         type: utf8
-        compress: false
+        compress: true
         text: "Hello, world!"
     - name: testobject
       type: blob
@@ -31,3 +31,10 @@ components:
       input:
         type: helmChart
         path: ./input/helm/testdata/chart
+    - name: image
+      type: ociImage
+      relation: external
+      access:
+        type: ociImage
+        imageReference: ghcr.io/stefanprodan/podinfo:6.8.0
+      version: 6.8.0
