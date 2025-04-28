@@ -28,9 +28,6 @@ type PluginManager struct {
 	// Registries containing various typed plugins. These should be called directly using the
 	// plugin manager to locate a required plugin.
 	ComponentVersionRepositoryRegistry *componentversionrepository.RepositoryRegistry
-	// TODO: set these up later
-	// TransformationRegistry             *TransformationRegistry
-	// CredentialRegistry                 *credentials.CredentialRegistry
 
 	mu     sync.Mutex
 	logger *slog.Logger

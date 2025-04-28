@@ -9,14 +9,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func TestAddGetPlugin(t *testing.T) {
-	stat, err := os.Stat(filepath.Join("testdata", "test-plugin"))
+func TestPluginFlow(t *testing.T) {
+	path := filepath.Join("testdata", "test-plugin")
+	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under plugin/generic_plugin first")
 
 	scheme := runtime.NewScheme()
@@ -31,15 +34,18 @@ func TestAddGetPlugin(t *testing.T) {
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
-	typ := runtime.Type{
-		Version: "v1",
-		Name:    "OCIRepository",
-	}
 
-	pluginCmd := exec.CommandContext(ctx, stat.Name(), "--config", string(serialized))
+	proto := &v1.OCIRepository{}
+	typ, err := scheme.TypeForPrototype(proto)
+	require.NoError(t, err)
+	// TODO: This is failing.
+	//schemaOCIRegistry, err := jsonschema.Reflect(proto).MarshalJSON()
+	//require.NoError(t, err)
+
+	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	plugin := &mtypes.Plugin{
 		ID:   "test-plugin",
-		Path: stat.Name(),
+		Path: path,
 		Config: mtypes.Config{
 			ID:         "test-plugin",
 			Type:       mtypes.Socket,
@@ -50,11 +56,27 @@ func TestAddGetPlugin(t *testing.T) {
 			mtypes.ComponentVersionRepositoryPluginType: {
 				{
 					Type:       typ,
-					JSONSchema: nil,
+					JSONSchema: []byte(`{}`),
 				},
 			},
 		},
 		Cmd: pluginCmd,
 	}
 	require.NoError(t, registry.AddPlugin(plugin, typ))
+
+	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto)
+	require.NoError(t, err)
+	desc, err := retrievedPlugin.GetComponentVersion(ctx, mtypes.GetComponentVersionRequest[*v1.OCIRepository]{
+		Repository: &v1.OCIRepository{
+			Type: runtime.Type{
+				Name:    "OCIRepository",
+				Version: "v1",
+			},
+			BaseUrl: "base-url",
+		},
+		Name:    "test-component",
+		Version: "1.0.0",
+	}, contracts.Attributes{})
+	require.NoError(t, err)
+	require.Equal(t, "test-component:1.0.0", desc.String())
 }

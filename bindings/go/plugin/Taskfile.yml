@@ -9,6 +9,7 @@ tasks:
   build:
     cmds:
       - go build -o manager/registries/componentversionrepository/testdata/test-plugin generic_plugin/main.go
+      - go build -o manager/testdata/test-plugin generic_plugin/main.go
   test:
     sources:
       - ./**/*.go

@@ -99,6 +99,7 @@ type RepositoryPlugin struct {
 	// jsonSchema is the schema for all endpoints for this plugin.
 	jsonSchema []byte
 
+	// TODO: Not sure I need the scheme in here.
 	scheme *runtime.Scheme
 }
 
@@ -107,10 +108,7 @@ var (
 	_ contracts.ReadWriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
-func NewComponentVersionRepositoryPlugin(baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config types.Config, jsonSchema []byte) *RepositoryPlugin {
-	// TODO: Maybe this needs to be passed in?
-	scheme := runtime.NewScheme()
-
+func NewComponentVersionRepositoryPlugin(baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config types.Config, jsonSchema []byte, scheme *runtime.Scheme) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		baseCtx:    baseCtx,
 		ID:         id,
@@ -170,9 +168,9 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request type
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
-		return nil, err
-	}
+	// if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	//	 return nil, err
+	// }
 
 	descV2 := &v2.Descriptor{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, DownloadComponentVersion, http.MethodGet, plugins.WithResult(descV2), plugins.WithQueryParams(params), plugins.WithHeader(credHeader), plugins.WithHeader(repoHeader)); err != nil {

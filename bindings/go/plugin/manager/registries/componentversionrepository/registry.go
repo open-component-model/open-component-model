@@ -166,7 +166,7 @@ loop:
 	}
 
 	// TODO: Figure out the right context here. -> Should be the base context from the plugin manager.
-	repoPlugin := NewComponentVersionRepositoryPlugin(context.Background(), r.logger, client, plugin.ID, plugin.Path, plugin.Config, jsonSchema)
+	repoPlugin := NewComponentVersionRepositoryPlugin(context.Background(), r.logger, client, plugin.ID, plugin.Path, plugin.Config, jsonSchema, r.scheme)
 
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,

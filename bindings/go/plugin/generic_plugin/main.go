@@ -27,8 +27,44 @@ func (m *OCIPlugin) Ping(_ context.Context) error {
 }
 
 func (m *OCIPlugin) GetComponentVersion(ctx context.Context, request types.GetComponentVersionRequest[*v1.OCIRepository], credentials contracts.Attributes) (*descriptor.Descriptor, error) {
-	_, _ = fmt.Fprintf(os.Stdout, "Returning a descriptor: %+v\n", request.Name)
-	return nil, nil
+	return &descriptor.Descriptor{
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-component",
+					Version: "1.0.0",
+				},
+			},
+			Provider: runtime.Identity{
+				"name": "ocm.software",
+			},
+			Resources: []descriptor.Resource{
+				{
+					ElementMeta: descriptor.ElementMeta{
+						ObjectMeta: descriptor.ObjectMeta{
+							Name:    "test-resource",
+							Version: "1.0.0",
+						},
+					},
+					SourceRefs: nil,
+					Type:       "ociImage",
+					Relation:   "local",
+					Access: &runtime.Raw{
+						Type: runtime.Type{
+							Name: "ociArtifact",
+						},
+						Data: []byte(`{"type":"ociArtifact","imageReference":"test/image:1.0"}`),
+					},
+					Digest: &descriptor.Digest{
+						HashAlgorithm:          "SHA-256",
+						NormalisationAlgorithm: "OciArtifactDigest",
+						Value:                  "abcdef1234567890",
+					},
+					Size: 1024,
+				},
+			},
+		},
+	}, nil
 }
 
 func (m *OCIPlugin) GetLocalResource(ctx context.Context, request types.GetLocalResourceRequest[*v1.OCIRepository], credentials contracts.Attributes) error {

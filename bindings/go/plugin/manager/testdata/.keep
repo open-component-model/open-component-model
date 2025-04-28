@@ -1,0 +1,4 @@
+This is a placeholder folder that will contain the end-result of a build process during `task test` run.
+
+If you would like to manually run the test, please build the plugin under plugin/generic_plugin and put the
+binary here with the name `test-plugin`.

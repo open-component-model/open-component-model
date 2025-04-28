@@ -2,15 +2,22 @@ package componentversionrepository
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 
+	"github.com/invopop/jsonschema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestPing(t *testing.T) {
@@ -29,20 +36,12 @@ func TestPing(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(
-		context.Background(),
-		logger,
-		server.Client(),
-		"test-plugin",
-		server.URL,
-		types.Config{
-			ID:         "test-plugin",
-			Type:       types.TCP,
-			PluginType: types.ComponentVersionRepositoryPluginType,
-			Location:   server.URL,
-		},
-		[]byte(`{}`), // Empty schema for simplicity
-	)
+	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+		ID:         "test-plugin",
+		Type:       types.TCP,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+		Location:   server.URL,
+	}, []byte(`{}`), nil)
 
 	// Test successful ping
 	err := plugin.Ping(context.Background())
@@ -52,4 +51,236 @@ func TestPing(t *testing.T) {
 	server.Close()
 	err = plugin.Ping(context.Background())
 	assert.Error(t, err)
+}
+
+func TestAddComponentVersion(t *testing.T) {
+	// Setup test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/"+UploadComponentVersion && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Setup logger
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	// Create plugin
+	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+		ID:         "test-plugin",
+		Type:       types.TCP,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+		Location:   server.URL,
+	}, []byte(`{}`), nil)
+
+	ctx := context.Background()
+	err := plugin.AddComponentVersion(ctx, types.PostComponentVersionRequest[runtime.Typed]{
+		Repository: &v1.OCIRepository{
+			BaseUrl: "ocm.software",
+		},
+		Descriptor: defaultDescriptor(),
+	}, contracts.Attributes{})
+	assert.NoError(t, err)
+}
+
+func TestAddComponentVersionValidationFail(t *testing.T) {
+	// Setup test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/"+UploadComponentVersion && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Setup logger
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	repository := &v1.OCIRepository{
+		BaseUrl: "ocm.software",
+	}
+	schemaOCIRegistry, err := jsonschema.Reflect(repository).MarshalJSON()
+	require.NoError(t, err)
+	// Create plugin
+	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+		ID:         "test-plugin",
+		Type:       types.TCP,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+		Location:   server.URL,
+	}, schemaOCIRegistry, nil)
+
+	ctx := context.Background()
+
+	err = plugin.AddComponentVersion(ctx, types.PostComponentVersionRequest[runtime.Typed]{
+		Repository: repository,
+		Descriptor: defaultDescriptor(),
+	}, contracts.Attributes{})
+	assert.ErrorContains(t, err, "jsonschema validation failed")
+}
+
+func TestGetComponentVersion(t *testing.T) {
+	// Setup test server
+	response := defaultDescriptor()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/"+DownloadComponentVersion && r.Method == http.MethodGet {
+			err := json.NewEncoder(w).Encode(response)
+			require.NoError(t, err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Setup logger
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	// Create plugin
+	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+		ID:         "test-plugin",
+		Type:       types.TCP,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+		Location:   server.URL,
+	}, []byte(`{}`), nil)
+
+	ctx := context.Background()
+	desc, err := plugin.GetComponentVersion(ctx, types.GetComponentVersionRequest[runtime.Typed]{
+		Repository: &v1.OCIRepository{},
+		Name:       "test-plugin",
+		Version:    "v1.0.0",
+	}, contracts.Attributes{})
+	require.NoError(t, err)
+
+	require.Equal(t, response.String(), desc.String())
+}
+
+func TestAddLocalResource(t *testing.T) {
+	// Setup test server
+	desc := defaultDescriptor()
+	resource := desc.Component.Resources[0]
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/"+UploadLocalResource && r.Method == http.MethodPost {
+			err := json.NewEncoder(w).Encode(resource)
+			require.NoError(t, err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Setup logger
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	// Create plugin
+	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+		ID:         "test-plugin",
+		Type:       types.TCP,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+		Location:   server.URL,
+	}, []byte(`{}`), nil)
+
+	ctx := context.Background()
+	gotResource, err := plugin.AddLocalResource(ctx, types.PostLocalResourceRequest[runtime.Typed]{
+		Repository: &v1.OCIRepository{},
+		Name:       "test-plugin",
+		Version:    "v1.0.0",
+		Resource:   &resource,
+	}, contracts.Attributes{})
+	require.NoError(t, err)
+
+	require.Equal(t, resource.String(), gotResource.String())
+}
+
+func TestGetLocalResource(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/"+DownloadLocalResource && r.Method == http.MethodGet {
+			location := r.URL.Query().Get("target_location_value")
+			require.NoError(t, os.WriteFile(location, []byte(`test`), os.ModePerm))
+
+			w.WriteHeader(http.StatusOK)
+
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Setup logger
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	// Create plugin
+	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+		ID:         "test-plugin",
+		Type:       types.TCP,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+		Location:   server.URL,
+	}, []byte(`{}`), nil)
+
+	f, err := os.CreateTemp("", "temp_file")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, f.Close())
+		require.NoError(t, os.Remove(f.Name()))
+	})
+
+	ctx := context.Background()
+	err = plugin.GetLocalResource(ctx, types.GetLocalResourceRequest[runtime.Typed]{
+		Repository: &v1.OCIRepository{},
+		Name:       "test-plugin",
+		Version:    "v1.0.0",
+		TargetLocation: types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        f.Name(),
+		},
+	}, contracts.Attributes{})
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(f.Name())
+	require.NoError(t, err)
+	require.Equal(t, "test", string(content))
+}
+
+func defaultDescriptor() *v2.Descriptor {
+	return &v2.Descriptor{
+		Component: v2.Component{
+			ComponentMeta: v2.ComponentMeta{
+				ObjectMeta: v2.ObjectMeta{
+					Name:    "test-component",
+					Version: "1.0.0",
+				},
+			},
+			Provider: "ocm.software",
+			Resources: []v2.Resource{
+				{
+					ElementMeta: v2.ElementMeta{
+						ObjectMeta: v2.ObjectMeta{
+							Name:    "test-resource",
+							Version: "1.0.0",
+						},
+					},
+					SourceRefs: nil,
+					Type:       "ociImage",
+					Relation:   "local",
+					Access: &runtime.Raw{
+						Type: runtime.Type{
+							Name: "ociArtifact",
+						},
+						Data: []byte(`{"type":"ociArtifact","imageReference":"test/image:1.0"}`),
+					},
+					Digest: &v2.Digest{
+						HashAlgorithm:          "SHA-256",
+						NormalisationAlgorithm: "OciArtifactDigest",
+						Value:                  "abcdef1234567890",
+					},
+					Size: 1024,
+				},
+			},
+		},
+	}
 }
