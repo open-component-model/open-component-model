@@ -2,6 +2,10 @@ package runtime
 
 // Merge merges the provided configs into a single config.
 func Merge(configs ...*Config) *Config {
+	if len(configs) == 0 {
+		return nil
+	}
+
 	merged := new(Config)
 	merged.Type = configs[0].Type
 	merged.Repositories = make([]RepositoryConfigEntry, 0)

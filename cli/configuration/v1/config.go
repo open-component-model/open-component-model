@@ -4,15 +4,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var scheme = runtime.NewScheme()
+var Scheme = runtime.NewScheme()
 
 func init() {
-	scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, ConfigTypeV1))
+	Scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, ConfigTypeV1))
+	Scheme.MustRegisterWithAlias(&Config{}, runtime.NewUnversionedType(ConfigType))
 }
 
 const (
 	ConfigType   = "generic.config.ocm.software"
-	ConfigTypeV1 = "v1"
+	ConfigTypeV1 = Version
 )
 
 // Config holds configuration entities loaded through a configuration file.

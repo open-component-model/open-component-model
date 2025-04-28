@@ -104,7 +104,7 @@ func GetConfigFromPath(path string) (*Config, error) {
 	}()
 
 	var instance Config
-	if err := scheme.Decode(file, &instance); err != nil {
+	if err := Scheme.Decode(file, &instance); err != nil {
 		return nil, err
 	}
 	return &instance, nil

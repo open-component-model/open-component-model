@@ -7,6 +7,7 @@ import (
 const (
 	LegacyRegistryType  = "OCIRegistry"
 	LegacyRegistryType2 = "ociRegistry"
+	ShortType           = "oci"
 	Type                = "OCIRepository"
 )
 

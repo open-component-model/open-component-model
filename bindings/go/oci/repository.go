@@ -221,7 +221,7 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 
 // GetComponentVersion retrieves a component version from the repository.
 func (repo *Repository) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
-	done := log.Operation(ctx, "add local resource",
+	done := log.Operation(ctx, "get component version",
 		slog.String("component", component),
 		slog.String("version", version))
 	defer done(err)
