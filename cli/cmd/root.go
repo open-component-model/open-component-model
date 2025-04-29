@@ -1,26 +1,19 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
 
-	"ocm.software/open-component-model/bindings/go/runtime"
 	v1 "ocm.software/open-component-model/cli/configuration/v1"
 	"ocm.software/open-component-model/cli/log"
 )
 
 type OCM struct {
-	*cobra.Command                        // the root command
-	Configuration      *v1.Config         // the global ocm configuration
-	CredentialResolver CredentialResolver // the credential graph
-}
-
-type CredentialResolver interface {
-	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
+	*cobra.Command            // the root command
+	Configuration  *v1.Config // the global ocm configuration
 }
 
 // Root represents the base command when called without any subcommands
