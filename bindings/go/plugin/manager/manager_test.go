@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"testing"
@@ -17,7 +16,7 @@ import (
 )
 
 func TestPluginManager(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	pm := NewPluginManager(ctx, logger)
 	require.NoError(t, pm.RegisterPluginsAtLocation(ctx, "testdata"))

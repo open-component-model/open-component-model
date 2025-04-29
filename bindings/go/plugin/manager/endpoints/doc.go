@@ -41,7 +41,7 @@
 // In order to declare that a plugin supports a certain set of functionalities it will have to implement a given set of
 // functions. These functions have set requests and return types that the plugin will need to provide. The interfaces are
 // tightly coupled to these functionalities. For example, the above plugin implements the OCMComponentVersionRepository
-// functionality. Meaning, it can be used to download/upload component versions and local resources.
+// contract. Meaning, it can be used to download/upload component versions and local resources.
 //
 // A single binary can declare multiple of these functionalities but never multiple TYPES for the same functionality.
 // For example, it could provide being a credential provider of type OCI and a ComponentVersion repository of type OCI.

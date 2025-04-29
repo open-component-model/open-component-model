@@ -1,4 +1,4 @@
-// Package manager provides the Plugin Manager functionality for discovering, registering, and managing plugins.
+// Package manager provides functionality for discovering, registering, and managing plugins.
 // It supports registering plugins from a file system, loading them into appropriate registries, and managing their lifecycle.
 //
 // The Plugin Manager facilitates the use of plugins by:
