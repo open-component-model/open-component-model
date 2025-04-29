@@ -32,21 +32,7 @@ func init() {
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return cmd.Help()
 			},
-			PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-				logger, err := log.GetBaseLogger(cmd)
-				if err != nil {
-					return fmt.Errorf("could not retrieve logger: %w", err)
-				}
-				slog.SetDefault(logger)
-
-				cfg, err := v1.GetFlattenedOCMConfigForCommand(cmd)
-				if err != nil {
-					return fmt.Errorf("could not retrieve OCM configuration: %w", err)
-				}
-				Root.Configuration = cfg
-
-				return nil
-			},
+			PersistentPreRunE: setupRoot,
 			DisableAutoGenTag: true,
 		},
 	}
@@ -54,6 +40,23 @@ func init() {
 	v1.RegisterConfigFlag(Root.Command)
 	log.RegisterLoggingFlags(Root.Command.PersistentFlags())
 	Root.AddCommand(GenerateCmd)
+}
+
+// setupRoot sets up the root command with the necessary setup for all cli commands.
+func setupRoot(cmd *cobra.Command, _ []string) error {
+	logger, err := log.GetBaseLogger(cmd)
+	if err != nil {
+		return fmt.Errorf("could not retrieve logger: %w", err)
+	}
+	slog.SetDefault(logger)
+
+	if cfg, err := v1.GetFlattenedOCMConfigForCommand(cmd); err != nil {
+		logger.Debug("could not get configuration", slog.String("error", err.Error()))
+	} else {
+		Root.Configuration = cfg
+	}
+
+	return nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
