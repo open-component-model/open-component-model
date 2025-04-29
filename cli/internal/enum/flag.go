@@ -53,7 +53,7 @@ func Var(f *pflag.FlagSet, name string, options []string, usage string) {
 	flag := New(options...)
 	cloned := slices.Clone(options)
 	slices.Sort(cloned)
-	f.Var(flag, name, fmt.Sprintf("%s (must be one of %v)", usage, cloned))
+	f.Var(flag, name, fmt.Sprintf("%s\n(must be one of %v)", usage, cloned))
 }
 
 func get[T any](f *pflag.FlagSet, name string, ftype string, convFunc func(sval string) (T, error)) (T, error) {

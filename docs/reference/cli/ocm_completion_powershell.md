@@ -47,15 +47,18 @@ ocm completion powershell [flags]
                          Using the option, this configuration file be used instead of the lookup above.
       --logformat enum   set the log output format that is used to print individual logs
                             json: Output logs in JSON format, suitable for machine processing
-                            text: Output logs in human-readable text format, suitable for console output (must be one of [json text]) (default json)
+                            text: Output logs in human-readable text format, suitable for console output
+                         (must be one of [json text]) (default json)
       --loglevel enum    sets the logging level
                             debug: Show all logs including detailed debugging information
                             info:  Show informational messages and above
                             warn:  Show warnings and errors only (default)
-                            error: Show errors only (must be one of [debug error info warn]) (default warn)
+                            error: Show errors only
+                         (must be one of [debug error info warn]) (default warn)
       --logoutput enum   set the log output destination
                             stdout: Write logs to standard output (default)
-                            stderr: Write logs to standard error, useful for separating logs from normal output (must be one of [stderr stdout]) (default stdout)
+                            stderr: Write logs to standard error, useful for separating logs from normal output
+                         (must be one of [stderr stdout]) (default stdout)
 ```
 
 ### SEE ALSO
