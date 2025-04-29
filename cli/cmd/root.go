@@ -51,9 +51,9 @@ func init() {
 		},
 	}
 
-	Root.AddCommand(GenerateCmd)
 	v1.RegisterConfigFlag(Root.Command)
-	log.RegisterLoggingFlags(Root.Command)
+	log.RegisterLoggingFlags(Root.Command.PersistentFlags())
+	Root.AddCommand(GenerateCmd)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

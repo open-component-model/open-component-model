@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"ocm.software/open-component-model/cli/internal/enum"
 )
@@ -58,15 +59,15 @@ const (
 // These flags can be combined, for example:
 //
 //	--logformat json --loglevel debug --logoutput stderr
-func RegisterLoggingFlags(cmd *cobra.Command) {
-	enum.Var(cmd.PersistentFlags(), FormatFlagName, []string{
+func RegisterLoggingFlags(flagset *pflag.FlagSet) {
+	enum.Var(flagset, FormatFlagName, []string{
 		FormatJSON,
 		FormatText,
 	}, `set the log output format that is used to print individual logs
    json: Output logs in JSON format, suitable for machine processing
    text: Output logs in human-readable text format, suitable for console output`)
 
-	enum.Var(cmd.PersistentFlags(), LevelFlagName, []string{
+	enum.Var(flagset, LevelFlagName, []string{
 		LevelWarn,
 		LevelDebug,
 		LevelInfo,
@@ -77,7 +78,7 @@ func RegisterLoggingFlags(cmd *cobra.Command) {
    warn:  Show warnings and errors only (default)
    error: Show errors only`)
 
-	enum.Var(cmd.PersistentFlags(), OutputFlagName, []string{
+	enum.Var(flagset, OutputFlagName, []string{
 		OutputStdout,
 		OutputStderr,
 	}, `set the log output destination
@@ -95,12 +96,12 @@ func GetBaseLogger(cmd *cobra.Command) (*slog.Logger, error) {
 		return nil, fmt.Errorf("failed to get log level: %w", err)
 	}
 
-	format, err := enum.Get(cmd.PersistentFlags(), FormatFlagName)
+	format, err := enum.Get(cmd.Flags(), FormatFlagName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get the log format from the command flag: %w", err)
 	}
 
-	output, err := enum.Get(cmd.PersistentFlags(), OutputFlagName)
+	output, err := enum.Get(cmd.Flags(), OutputFlagName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get the log output from the command flag: %w", err)
 	}
@@ -134,7 +135,7 @@ func GetBaseLogger(cmd *cobra.Command) (*slog.Logger, error) {
 // to the corresponding slog.Level value. Returns an error if the log level
 // string is invalid.
 func loggerLevelFromCommand(cmd *cobra.Command) (slog.Level, error) {
-	logLevel, err := enum.Get(cmd.PersistentFlags(), LevelFlagName)
+	logLevel, err := enum.Get(cmd.Flags(), LevelFlagName)
 	if err != nil {
 		return slog.LevelWarn, err
 	}

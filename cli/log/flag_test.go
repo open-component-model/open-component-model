@@ -1,7 +1,6 @@
 package log
 
 import (
-	"bytes"
 	"log/slog"
 	"testing"
 
@@ -12,7 +11,7 @@ import (
 
 func TestRegisterLoggingFlags(t *testing.T) {
 	cmd := &cobra.Command{}
-	RegisterLoggingFlags(cmd)
+	RegisterLoggingFlags(cmd.PersistentFlags())
 
 	// Verify that all flags are registered
 	assert.NotNil(t, cmd.PersistentFlags().Lookup(FormatFlagName))
@@ -44,16 +43,12 @@ func TestGetBaseLogger(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := &cobra.Command{}
-			RegisterLoggingFlags(cmd)
+			RegisterLoggingFlags(cmd.Flags())
 
 			// Set the flags
-			require.NoError(t, cmd.PersistentFlags().Set(FormatFlagName, tt.format))
-			require.NoError(t, cmd.PersistentFlags().Set(LevelFlagName, tt.level))
-			require.NoError(t, cmd.PersistentFlags().Set(OutputFlagName, tt.output))
-
-			// Create a buffer for output
-			cmd.SetOut(&bytes.Buffer{})
-			cmd.SetErr(&bytes.Buffer{})
+			require.NoError(t, cmd.Flags().Set(FormatFlagName, tt.format))
+			require.NoError(t, cmd.Flags().Set(LevelFlagName, tt.level))
+			require.NoError(t, cmd.Flags().Set(OutputFlagName, tt.output))
 
 			logger, err := GetBaseLogger(cmd)
 			assert.NoError(t, err)
@@ -93,8 +88,8 @@ func TestLoggerLevelFromCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := &cobra.Command{}
-			RegisterLoggingFlags(cmd)
-			require.NoError(t, cmd.PersistentFlags().Set(LevelFlagName, tt.level))
+			RegisterLoggingFlags(cmd.Flags())
+			require.NoError(t, cmd.Flags().Set(LevelFlagName, tt.level))
 
 			level, err := loggerLevelFromCommand(cmd)
 			assert.NoError(t, err)
