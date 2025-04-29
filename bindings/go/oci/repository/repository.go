@@ -22,15 +22,6 @@ import (
 // work on a extracted filesystem version.
 // The path is cleaned to ensure it is a valid file path.
 // The access mode is converted to a bitmask for use with the CTF archive.
-//
-// Parameters:
-//   - ctx: Context for the operation
-//   - repository: The CTF repository specification containing path and access mode
-//   - options: Optional repository configuration options
-//
-// Returns:
-//   - A new OCI repository instance backed by the CTF archive
-//   - An error if the CTF archive cannot be opened or the repository cannot be created
 func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository, options ...oci.RepositoryOption) (*oci.Repository, error) {
 	path := repository.Path
 	if path == "" {
@@ -51,16 +42,6 @@ func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository,
 // NewFromOCIRepoV1 creates a new [*oci.Repository] instance from an OCI repository v1 specification.
 // It configures the repository with the provided base URL and client, and sets up the appropriate
 // resolver for handling OCI registry operations.
-//
-// Parameters:
-//   - ctx: Context for the operation
-//   - repository: The OCI repository specification containing the base URL
-//   - client: The OCI registry client to use for operations
-//   - options: Optional repository configuration options
-//
-// Returns:
-//   - A new OCI repository instance configured for the specified registry
-//   - An error if the repository specification is invalid or the repository cannot be created
 func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, client remote.Client, options ...oci.RepositoryOption) (*oci.Repository, error) {
 	if repository.BaseUrl == "" {
 		return nil, fmt.Errorf("a base url is required")
