@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	v1 "ocm.software/open-component-model/cli/configuration/v1"
+	"ocm.software/open-component-model/cli/configuration/v1"
 	"ocm.software/open-component-model/cli/log"
 )
 
@@ -27,8 +27,6 @@ func init() {
 			Long: `The Open Component Model command line client supports the work with OCM
   artifacts, like Component Archives, Common Transport Archive,
   Component Repositories, and Component Versions.`,
-			// Uncomment the following line if your bare application
-			// has an action associated with it:
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return cmd.Help()
 			},
