@@ -90,6 +90,7 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 			request: func(base string) *http.Request {
 				header := http.Header{}
 				header.Add("Authorization", `{"access_token": "abc"}`)
+				header.Add(XOCMRepositoryHeader, `{"type": "OCIRepository", "baseUrl": "ghcr.io/open-component-model"}`)
 				parse, _ := url.Parse(base)
 				query := parse.Query()
 				query.Add("version", "1.0.0")
@@ -173,6 +174,7 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 			request: func(base string) *http.Request {
 				header := http.Header{}
 				header.Add("Authorization", `{"access_token": "abc"}`)
+				header.Add(XOCMRepositoryHeader, `{"type": "OCIRepository", "baseUrl": "ghcr.io/open-component-model"}`)
 				parse, _ := url.Parse(base)
 				query := parse.Query()
 				query.Add("version", "1.0.0")

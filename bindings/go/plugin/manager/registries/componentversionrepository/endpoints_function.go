@@ -3,8 +3,6 @@ package componentversionrepository
 import (
 	"fmt"
 
-	"github.com/invopop/jsonschema"
-
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -49,9 +47,9 @@ func RegisterComponentVersionRepository[T runtime.Typed](
 			Location: UploadLocalResource,
 		})
 
-	schemaOCIRegistry, err := jsonschema.Reflect(proto).MarshalJSON()
+	schema, err := runtime.GenerateJSONSchemaForType(proto)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
 
 	c.CurrentTypes.Types[types.ComponentVersionRepositoryPluginType] = append(c.CurrentTypes.Types[types.ComponentVersionRepositoryPluginType],
@@ -63,7 +61,7 @@ func RegisterComponentVersionRepository[T runtime.Typed](
 		// implementation.
 		types.Type{
 			Type:       typ,
-			JSONSchema: schemaOCIRegistry,
+			JSONSchema: schema,
 		})
 
 	return nil

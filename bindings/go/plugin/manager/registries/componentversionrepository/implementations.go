@@ -168,9 +168,9 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request type
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	// if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
-	//	 return nil, err
-	// }
+	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+		return nil, err
+	}
 
 	descV2 := &v2.Descriptor{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, DownloadComponentVersion, http.MethodGet, plugins.WithResult(descV2), plugins.WithQueryParams(params), plugins.WithHeader(credHeader), plugins.WithHeader(repoHeader)); err != nil {

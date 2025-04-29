@@ -38,11 +38,12 @@ func TestPluginFlow(t *testing.T) {
 	proto := &v1.OCIRepository{}
 	typ, err := scheme.TypeForPrototype(proto)
 	require.NoError(t, err)
-	// TODO: This is failing.
-	//schemaOCIRegistry, err := jsonschema.Reflect(proto).MarshalJSON()
-	//require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
+	t.Cleanup(func() {
+		_ = pluginCmd.Process.Kill()
+		_ = os.Remove("/tmp/test-plugin.socket")
+	})
 	plugin := &mtypes.Plugin{
 		ID:   "test-plugin",
 		Path: path,

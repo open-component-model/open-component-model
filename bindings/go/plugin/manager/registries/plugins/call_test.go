@@ -178,8 +178,7 @@ func TestCall(t *testing.T) {
 	t.Run("handle non-200 response", func(t *testing.T) {
 		// Setup test server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("Invalid request"))
+			http.Error(w, `Invalid request`, http.StatusBadRequest)
 		}))
 		defer server.Close()
 

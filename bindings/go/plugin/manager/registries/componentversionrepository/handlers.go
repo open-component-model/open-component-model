@@ -22,8 +22,6 @@ import (
 // the plugin implementor.
 func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetComponentVersionRequest[T], credentials contracts.Attributes) (*descriptor.Descriptor, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		// Just put this shit into the SDK since it's type agnostic.
-		// It's once per contract.
 		query := request.URL.Query()
 		name := query.Get("name")
 		version := query.Get("version")
@@ -67,7 +65,7 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostComponentVersionRequest[T], credentials contracts.Attributes) error) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := contracts.Attributes{} // TODO: Change these to contracts.Attributes
+		credentials := contracts.Attributes{}
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
 			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
 			return

@@ -9,7 +9,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250410115029-6dcf800db82b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250410115029-6dcf800db82b
 	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250422074904-687ce2e13f13
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250410115029-6dcf800db82b
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250429070005-5beac9658d2b
 )
 
 require (
