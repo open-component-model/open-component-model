@@ -1,7 +1,7 @@
-// Package componentversionrepository provides the implementation for managing component versions and resources in a
-// repository system. It defines handlers, implementations, and a registry to interact with the repository.
-// The registry supports registering outside plugins backed by a binary implementation and internal components using
-// RegisterInternalComponentVersionRepositoryPlugin.
+// Package componentversionrepository provides an implementation for the OCMComponentVersionRepository contract.
+// It defines handlers, implementations, and a registry to interact with a repository.
+// The registry supports registering outside plugins backed by a binary implementation and internal plugins using
+// RegisterInternalComponentVersionRepositoryPlugin function. The usage of that function would look something like this:
 //
 //	scheme := runtime.NewScheme()
 //	repository.MustAddToScheme(scheme)

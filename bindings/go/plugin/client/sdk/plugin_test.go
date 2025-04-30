@@ -3,7 +3,6 @@ package sdk
 import (
 	"context"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -20,7 +19,8 @@ func TestPluginSDK(t *testing.T) {
 	r := require.New(t)
 
 	location := "/tmp/test-socket.socket"
-	p := NewPlugin(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{})), types.Config{
+	ctx := context.Background()
+	p := NewPlugin(types.Config{
 		ID:          "test-plugin",
 		Type:        types.Socket,
 		PluginType:  types.ComponentVersionRepositoryPluginType,
@@ -39,7 +39,6 @@ func TestPluginSDK(t *testing.T) {
 		Location: "/test-location",
 	}))
 
-	ctx := context.Background()
 	go func() {
 		_ = p.Start(ctx)
 	}()
@@ -67,7 +66,7 @@ func TestIdleChecker(t *testing.T) {
 	r := require.New(t)
 	location := "/tmp/test-socket.socket"
 	timeout := 10 * time.Millisecond
-	p := NewPlugin(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{})), types.Config{
+	p := NewPlugin(types.Config{
 		ID:          "test-plugin",
 		Type:        types.Socket,
 		PluginType:  types.ComponentVersionRepositoryPluginType,

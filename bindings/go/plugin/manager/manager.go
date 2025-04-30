@@ -60,10 +60,10 @@ func WithIdleTimeout(d time.Duration) RegistrationOptionFn {
 	}
 }
 
-// RegisterPluginsAtLocation walks through files in a folder and registers them
+// RegisterPlugins walks through files in a folder and registers them
 // as plugins if connection points can be established. This function doesn't support
 // concurrent access.
-func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir string, opts ...RegistrationOptionFn) error {
+func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts ...RegistrationOptionFn) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -85,6 +85,56 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 	}
 	conf.Type = t
 
+	plugins, err := pm.fetchPlugins(ctx, conf, dir)
+	if err != nil {
+		return fmt.Errorf("could not fetch plugins: %w", err)
+	}
+
+	for _, plugin := range plugins {
+		location, err := determineConnectionLocation(plugin)
+		if err != nil {
+			return fmt.Errorf("failed to determine connection location: %w", err)
+		}
+		conf.Location = location
+		conf.ID = plugin.ID
+		plugin.Config = *conf
+
+		output := bytes.NewBuffer(nil)
+		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint: gosec // G204 does not apply
+		cmd.Stdout = output
+		cmd.Stderr = os.Stderr
+
+		// Use Wait so we get the capabilities and make sure that the command exists and returns the values we need.
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
+		}
+
+		if err := pm.addPlugin(ctx, plugin, output); err != nil {
+			return fmt.Errorf("failed to add plugin %s: %w", plugin.ID, err)
+		}
+	}
+
+	return nil
+}
+
+func cleanPath(path string) string {
+	return strings.Trim(path, `,;:'"|&*!@#$`)
+}
+
+// Shutdown is called to terminate all plugins.
+func (pm *PluginManager) Shutdown(ctx context.Context) error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	var errs error
+
+	errs = errors.Join(errs,
+		pm.ComponentVersionRepositoryRegistry.Shutdown(ctx),
+	)
+
+	return errs
+}
+
+func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, dir string) ([]*mtypes.Plugin, error) {
 	var plugins []*mtypes.Plugin
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -115,58 +165,46 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 
 		return nil
 	}); err != nil {
-		return fmt.Errorf("failed to discover plugins: %w", err)
+		return nil, fmt.Errorf("failed to discover plugins: %w", err)
 	}
 
-	for _, plugin := range plugins {
-		location, err := determineConnectionLocation(plugin)
-		if err != nil {
-			return fmt.Errorf("failed to determine connection location: %w", err)
-		}
-		conf.Location = location
-		conf.ID = plugin.ID
-		plugin.Config = *conf
+	return plugins, nil
+}
 
-		output := bytes.NewBuffer(nil)
-		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint: gosec // G204 does not apply
-		cmd.Stdout = output
-		cmd.Stderr = os.Stderr
+func (pm *PluginManager) addPlugin(ctx context.Context, plugin *mtypes.Plugin, output *bytes.Buffer) error {
+	serialized, err := json.Marshal(plugin.Config)
+	if err != nil {
+		return err
+	}
 
-		// Use Wait so we get the capabilities and make sure that the command exists and returns the values we need.
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
-		}
+	// Create a command that can then be managed.
+	pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint: gosec // G204 does not apply
+	pluginCmd.Stdout = os.Stdout
+	pluginCmd.Cancel = func() error {
+		slog.Info("killing plugin process because the parent context is cancelled", "id", plugin.ID)
+		return pluginCmd.Process.Kill()
+	}
+	plugin.Cmd = pluginCmd
+	sdtErr, err := pluginCmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+	plugin.Stderr = sdtErr
 
-		types := &mtypes.Types{}
-		if err := json.Unmarshal(output.Bytes(), types); err != nil {
-			return fmt.Errorf("failed to unmarshal capabilities: %w", err)
-		}
+	types := &mtypes.Types{}
+	if err := json.Unmarshal(output.Bytes(), types); err != nil {
+		return fmt.Errorf("failed to unmarshal capabilities: %w", err)
+	}
+	plugin.Types = types.Types
 
-		serialized, err := json.Marshal(plugin.Config)
-		if err != nil {
-			return err
-		}
-
-		// Create a command that can then be managed.
-		pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint: gosec // G204 does not apply
-		pluginCmd.Stdout = os.Stdout
-		pluginCmd.Stderr = os.Stdout
-		pluginCmd.Cancel = func() error {
-			slog.Info("killing plugin process because the parent context is cancelled", "id", plugin.ID)
-			return cmd.Process.Kill()
-		}
-		plugin.Cmd = pluginCmd
-		plugin.Types = types.Types
-
-		for pType, typs := range plugin.Types {
-			//nolint:gocritic // will be extended later
-			switch pType {
-			case mtypes.ComponentVersionRepositoryPluginType:
-				for _, typ := range typs {
-					pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
-					if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, typ.Type); err != nil {
-						return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
-					}
+	for pType, typs := range plugin.Types {
+		//nolint:gocritic // will be extended later
+		switch pType {
+		case mtypes.ComponentVersionRepositoryPluginType:
+			for _, typ := range typs {
+				pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
+				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, typ.Type); err != nil {
+					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 				}
 			}
 		}
@@ -175,26 +213,12 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 	return nil
 }
 
-func cleanPath(path string) string {
-	return strings.Trim(path, `,;:'"|&*!@#$`)
-}
-
-// Shutdown is called to terminate all plugins.
-func (pm *PluginManager) Shutdown(ctx context.Context) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	var errs error
-
-	errs = errors.Join(errs,
-		pm.ComponentVersionRepositoryRegistry.Shutdown(ctx),
-	)
-
-	return errs
-}
-
 func determineConnectionLocation(plugin *mtypes.Plugin) (_ string, err error) {
 	switch plugin.Config.Type {
 	case mtypes.TCP:
+		// For TCP connections we need to find a port to work on. This port, aka. the location, is
+		// determined through this action. Listening on port 0 makes the network choose an empty port
+		// that is given to us. Since we don't immediately reserver the port, it's up the plugin
 		listener, err := net.Listen("tcp", ":0") //nolint: gosec // G102: only does it temporarily to find an empty address
 		if err != nil {
 			return "", err

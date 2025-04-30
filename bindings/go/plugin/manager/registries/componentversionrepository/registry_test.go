@@ -17,7 +17,8 @@ import (
 )
 
 func TestPluginFlow(t *testing.T) {
-	path := filepath.Join("testdata", "test-plugin")
+	// tmp
+	path := filepath.Join("..", "..", "..", "tmp", "test-plugin")
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under plugin/generic_plugin first")
 

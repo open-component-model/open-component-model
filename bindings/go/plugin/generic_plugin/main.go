@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"log/slog"
 	"os"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -128,9 +127,8 @@ func main() {
 	if conf.Location == "" {
 		log.Fatal("Plugin location is required.")
 	}
-	r := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 
-	ocmPlugin := plugin.NewPlugin(r, conf)
+	ocmPlugin := plugin.NewPlugin(conf)
 	if err := ocmPlugin.RegisterHandlers(capabilities.GetHandlers()...); err != nil {
 		log.Fatal(err)
 	}

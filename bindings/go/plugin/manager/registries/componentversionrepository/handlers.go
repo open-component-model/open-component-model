@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
@@ -29,11 +28,6 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 		credentials := map[string]string{}
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
 			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
-			return
-		}
-
-		if err := scheme.Decode(strings.NewReader(request.Header.Get(XOCMRepositoryHeader)), typ); err != nil {
-			plugins.NewError(err, http.StatusBadRequest).Write(writer)
 			return
 		}
 
@@ -82,7 +76,7 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	}
 }
 
-func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetLocalResourceRequest[T], credentials map[string]string) error, scheme *runtime.Scheme, typ T) http.HandlerFunc {
+func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetLocalResourceRequest[T], credentials map[string]string) error, scheme *runtime.Scheme, proto T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
@@ -113,13 +107,8 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			}
 		}
 
-		if err := scheme.Decode(strings.NewReader(request.Header.Get(XOCMRepositoryHeader)), typ); err != nil {
-			plugins.NewError(err, http.StatusBadRequest).Write(writer)
-			return
-		}
-
 		if err := f(request.Context(), types.GetLocalResourceRequest[T]{
-			Repository:     typ,
+			Repository:     proto,
 			Name:           name,
 			Version:        version,
 			Identity:       identity,

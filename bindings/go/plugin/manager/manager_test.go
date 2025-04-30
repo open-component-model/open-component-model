@@ -3,6 +3,7 @@ package manager
 import (
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ func TestPluginManager(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	pm := NewPluginManager(ctx, logger)
-	require.NoError(t, pm.RegisterPluginsAtLocation(ctx, "testdata"))
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp")))
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	proto := &v1.OCIRepository{}

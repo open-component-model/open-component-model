@@ -18,10 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const (
-	XOCMRepositoryHeader = "X-Ocm-Repository"
-)
-
 // Endpoints
 const (
 	// UploadLocalResource defines the endpoint to upload a local resource to.
@@ -155,18 +151,13 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request type
 		return nil, err
 	}
 
-	repoHeader, err := toOCMRepoHeader(request.Repository)
-	if err != nil {
-		return nil, err
-	}
-
 	// We know we only have this single schema for all endpoints which require validation.
 	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
 		return nil, err
 	}
 
 	descV2 := &v2.Descriptor{}
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, DownloadComponentVersion, http.MethodGet, plugins.WithResult(descV2), plugins.WithQueryParams(params), plugins.WithHeader(credHeader), plugins.WithHeader(repoHeader)); err != nil {
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, DownloadComponentVersion, http.MethodGet, plugins.WithResult(descV2), plugins.WithQueryParams(params), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to get component version %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
 	}
 
@@ -218,11 +209,6 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request types.G
 	identityBase64 := base64.StdEncoding.EncodeToString(identityEncoded)
 	addParam("identity", identityBase64)
 
-	repoHeader, err := toOCMRepoHeader(request.Repository) // Raw
-	if err != nil {
-		return err
-	}
-
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
@@ -233,7 +219,7 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request types.G
 		return err
 	}
 
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, DownloadLocalResource, http.MethodGet, plugins.WithQueryParams(params), plugins.WithHeader(credHeader), plugins.WithHeader(repoHeader)); err != nil {
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, DownloadLocalResource, http.MethodGet, plugins.WithQueryParams(params), plugins.WithHeader(credHeader)); err != nil {
 		return fmt.Errorf("failed to get local resource %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
 	}
 
@@ -265,16 +251,5 @@ func toCredentials(credentials map[string]string) (plugins.KV, error) {
 	return plugins.KV{
 		Key:   "Authorization",
 		Value: string(rawCreds),
-	}, nil
-}
-
-func toOCMRepoHeader(repository runtime.Typed) (plugins.KV, error) {
-	raw, err := json.Marshal(repository)
-	if err != nil {
-		return plugins.KV{}, err
-	}
-	return plugins.KV{
-		Key:   XOCMRepositoryHeader,
-		Value: string(raw),
 	}, nil
 }

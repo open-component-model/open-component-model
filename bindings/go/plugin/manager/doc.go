@@ -29,7 +29,7 @@
 //	    logger := slog.New(slog.NewTextHandler(os.Stdout))
 //	    pm := manager.NewPluginManager(ctx, logger)
 //
-//	    err := pm.RegisterPluginsAtLocation(ctx, "/path/to/plugins")
+//	    err := pm.RegisterPlugins(ctx, "/path/to/plugins")
 //	    if err != nil {
 //	        fmt.Println("Error registering plugins:", err)
 //	    }

@@ -17,6 +17,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
+// Plugin contains configuration for a single plugin and further details for life-cycle management.
+// These include the server that's running the plugin, the handlers which serve functionality, and tracking idle time.
+// Idle time tracks server work. If the server is not doing anything and not processing current requests and not getting
+// new requests it will shut down automatically after a configured amount of time. If a new request comes in
+// it will reset this timer.
 type Plugin struct {
 	Config types.Config
 
@@ -24,7 +29,6 @@ type Plugin struct {
 	server        *http.Server
 	interrupt     chan bool
 	workerCounter atomic.Int64
-	logger        *slog.Logger
 }
 
 // NewPlugin creates a new Go based plugin. After creation,
@@ -33,20 +37,14 @@ type Plugin struct {
 // to every plugin.
 // TODO(Skarlso): Provide documentation for secure data flow with local certificate
 // setup and certificate generation. At least start a document / issue.
-func NewPlugin(logger *slog.Logger, conf types.Config) *Plugin {
-	l := logger
-	if l == nil {
-		l = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
-	}
-
+func NewPlugin(conf types.Config) *Plugin {
 	return &Plugin{
 		Config:    conf,
-		logger:    l,
 		interrupt: make(chan bool, 1), // to not block any new work coming in
 	}
 }
 
-func (p *Plugin) startIdleChecker() {
+func (p *Plugin) startIdleChecker(ctx context.Context) {
 	interval := time.Hour
 	if p.Config.IdleTimeout != nil {
 		interval = *p.Config.IdleTimeout
@@ -60,7 +58,7 @@ func (p *Plugin) startIdleChecker() {
 			timer.Stop()
 
 			_ = p.GracefulShutdown(context.Background())
-			p.logger.Info("idle check timer expired for plugin", "id", p.Config.ID)
+			slog.InfoContext(ctx, "idle check timer expired for plugin", "id", p.Config.ID)
 			return
 		case working := <-p.interrupt:
 			if !working && p.workerCounter.Load() == 0 {
@@ -93,12 +91,12 @@ func (p *Plugin) Start(ctx context.Context) error {
 	go func(ctx context.Context) {
 		sig := <-sigs
 
-		p.logger.Info("Received signal. Shutting down.", "signal", sig)
+		slog.InfoContext(ctx, "Received signal. Shutting down.", "signal", sig)
 
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		if err := p.GracefulShutdown(ctx); err != nil {
-			p.logger.Error("Error shutting down plugin", "error", err)
+			slog.ErrorContext(ctx, "Error shutting down plugin", "error", err)
 		}
 	}(ctx)
 
@@ -119,7 +117,6 @@ func (p *Plugin) Healthz(w http.ResponseWriter, r *http.Request) {
 
 // listen starts listening for connections from the plugin manager.
 func (p *Plugin) listen(ctx context.Context) error {
-	p.logger.Info("Starting to listen at address", "type", p.Config.Type, "location", p.Config.Location)
 	conn, err := net.Listen(string(p.Config.Type), p.Config.Location)
 	if err != nil {
 		return fmt.Errorf("failed to connect to socket from client: %w", err)
@@ -130,7 +127,7 @@ func (p *Plugin) listen(ctx context.Context) error {
 		m.HandleFunc(h.Location, h.Handler)
 	}
 
-	m.HandleFunc("/shutdown", p.Shutdown)
+	m.HandleFunc("/shutdown", p.Shutdown(ctx))
 	m.HandleFunc("/healthz", p.Healthz)
 
 	server := &http.Server{
@@ -143,7 +140,7 @@ func (p *Plugin) listen(ctx context.Context) error {
 	}
 
 	// start idle checker.
-	go p.startIdleChecker()
+	go p.startIdleChecker(ctx)
 
 	p.server = server
 
@@ -161,7 +158,7 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 
 	switch p.Config.Type {
 	case types.Socket:
-		p.logger.Info("removing socket", "location", p.Config.Location)
+		slog.InfoContext(ctx, "removing socket", "location", p.Config.Location)
 		if err := os.Remove(p.Config.Location); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -199,10 +196,12 @@ func (p *Plugin) workerHandler(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (p *Plugin) Shutdown(writer http.ResponseWriter, _ *http.Request) {
-	p.logger.Info("Shutting down plugin", "id", p.Config.ID)
-	writer.WriteHeader(http.StatusOK)
-	if err := p.GracefulShutdown(context.Background()); err != nil {
-		p.logger.Error("Error shutting down plugin", "error", err)
+func (p *Plugin) Shutdown(ctx context.Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		slog.InfoContext(ctx, "Shutting down plugin", "id", p.Config.ID)
+		w.WriteHeader(http.StatusOK)
+		if err := p.GracefulShutdown(context.Background()); err != nil {
+			slog.ErrorContext(ctx, "Error shutting down plugin", "error", err)
+		}
 	}
 }
