@@ -44,9 +44,6 @@ func ValidatePlugin(typ runtime.Typed, jsonSchema []byte) (bool, error) {
 	}
 
 	if _, ok := unmarshalledType.(string); ok {
-		// TODO: In _not_ POC this should be either a type switch, or some kind of exclusion or we should change how
-		// we register and look up plugins to avoid validating when listing or for certain plugins.
-		// skip validation if the passed in type is of type string.
 		return true, nil
 	}
 

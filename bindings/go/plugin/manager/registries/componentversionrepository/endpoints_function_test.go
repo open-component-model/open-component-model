@@ -20,19 +20,19 @@ type mockPlugin struct {
 	contracts.EmptyBasePlugin
 }
 
-func (m *mockPlugin) AddLocalResource(_ context.Context, _ types.PostLocalResourceRequest[*v1.OCIRepository], _ contracts.Attributes) (*descriptor.Resource, error) {
+func (m *mockPlugin) AddLocalResource(_ context.Context, _ types.PostLocalResourceRequest[*v1.OCIRepository], _ map[string]string) (*descriptor.Resource, error) {
 	return &descriptor.Resource{}, nil
 }
 
-func (m *mockPlugin) AddComponentVersion(_ context.Context, _ types.PostComponentVersionRequest[*v1.OCIRepository], _ contracts.Attributes) error {
+func (m *mockPlugin) AddComponentVersion(_ context.Context, _ types.PostComponentVersionRequest[*v1.OCIRepository], _ map[string]string) error {
 	return nil
 }
 
-func (m *mockPlugin) GetComponentVersion(_ context.Context, _ types.GetComponentVersionRequest[*v1.OCIRepository], _ contracts.Attributes) (*descriptor.Descriptor, error) {
+func (m *mockPlugin) GetComponentVersion(_ context.Context, _ types.GetComponentVersionRequest[*v1.OCIRepository], _ map[string]string) (*descriptor.Descriptor, error) {
 	return &descriptor.Descriptor{}, nil
 }
 
-func (m *mockPlugin) GetLocalResource(_ context.Context, _ types.GetLocalResourceRequest[*v1.OCIRepository], _ contracts.Attributes) error {
+func (m *mockPlugin) GetLocalResource(_ context.Context, _ types.GetLocalResourceRequest[*v1.OCIRepository], _ map[string]string) error {
 	return nil
 }
 

@@ -56,7 +56,7 @@ type RepositoryRegistry struct {
 	registry           map[runtime.Type]*mtypes.Plugin // Have this as a single plugin for read/write
 	constructedPlugins map[string]*constructedPlugin   // running plugins
 	logger             *slog.Logger
-	scheme             *runtime.Scheme
+	ctx                context.Context
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
@@ -68,7 +68,7 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	var errs error
 	for _, p := range r.constructedPlugins {
 		// The plugins should handle the Interrupt signal for shutdowns.
-		// TODO: Use context to wait for the plugin to actually shut down.
+		// TODO(Skarlso): Use context to wait for the plugin to actually shut down.
 		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil {
 			errs = errors.Join(errs, perr)
 		}
@@ -108,7 +108,7 @@ func (r *RepositoryRegistry) getPluginForEndpointsWithType(typ runtime.Type) (*m
 // it will find and return a registered plugin.
 // On the first call, it will initialize and start the plugin. On any consecutive calls it will return the
 // existing plugin that has already been started.
-func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx context.Context, r *RepositoryRegistry, proto T) (contracts.ReadWriteOCMRepositoryPluginContract[T], error) {
+func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx context.Context, r *RepositoryRegistry, proto T, scheme *runtime.Scheme) (contracts.ReadWriteOCMRepositoryPluginContract[T], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -127,7 +127,7 @@ func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx co
 		return pt, nil
 	}
 
-	typ, err := r.scheme.TypeForPrototype(proto)
+	typ, err := scheme.TypeForPrototype(proto)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
 	}
@@ -165,8 +165,7 @@ loop:
 		}
 	}
 
-	// TODO: Figure out the right context here. -> Should be the base context from the plugin manager.
-	repoPlugin := NewComponentVersionRepositoryPlugin(context.Background(), r.logger, client, plugin.ID, plugin.Path, plugin.Config, jsonSchema, r.scheme)
+	repoPlugin := NewComponentVersionRepositoryPlugin(r.logger, client, plugin.ID, plugin.Path, plugin.Config, jsonSchema)
 
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,
@@ -189,10 +188,10 @@ func getInternalComponentVersionRepositoryPlugin(typ runtime.Type) (contracts.Pl
 }
 
 // NewComponentVersionRepositoryRegistry creates a new registry and initializes maps.
-func NewComponentVersionRepositoryRegistry(scheme *runtime.Scheme) *RepositoryRegistry {
+func NewComponentVersionRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
 		// scheme here contains all known types for this registry
-		scheme:             scheme,
+		ctx:                ctx,
 		registry:           make(map[runtime.Type]*mtypes.Plugin),
 		constructedPlugins: make(map[string]*constructedPlugin),
 	}

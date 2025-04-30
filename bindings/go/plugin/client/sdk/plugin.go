@@ -17,14 +17,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
-type CleanupFunc func(ctx context.Context) error
-
 type Plugin struct {
 	Config types.Config
 
 	handlers      []endpoints.Handler
 	server        *http.Server
-	cleanUpFunc   CleanupFunc
 	interrupt     chan bool
 	workerCounter atomic.Int64
 	logger        *slog.Logger
@@ -34,7 +31,7 @@ type Plugin struct {
 // call RegisterHandlers to register the handlers responsible for this
 // plugin's inner workings. A capabilities endpoint is automatically added
 // to every plugin.
-// TODO: Provide documentation for secure data flow with local certificate
+// TODO(Skarlso): Provide documentation for secure data flow with local certificate
 // setup and certificate generation. At least start a document / issue.
 func NewPlugin(logger *slog.Logger, conf types.Config) *Plugin {
 	l := logger
@@ -108,11 +105,16 @@ func (p *Plugin) Start(ctx context.Context) error {
 	return p.listen(ctx)
 }
 
-func (p *Plugin) Healthz(w http.ResponseWriter, _ *http.Request) {
+func (p *Plugin) Healthz(w http.ResponseWriter, r *http.Request) {
 	p.StartWork()
 	defer p.StopWork()
 
-	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	w.WriteHeader(http.StatusMethodNotAllowed)
 }
 
 // listen starts listening for connections from the plugin manager.
@@ -167,12 +169,6 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 		// empty case for now
 	}
 
-	if p.cleanUpFunc != nil {
-		if err := p.cleanUpFunc(ctx); err != nil {
-			return fmt.Errorf("failed to run custom cleanup function: %w", err)
-		}
-	}
-
 	return nil
 }
 
@@ -201,13 +197,6 @@ func (p *Plugin) workerHandler(h http.HandlerFunc) http.HandlerFunc {
 
 		h(w, r)
 	}
-}
-
-// RegisterCleanupFunc registers a function that is defined by the user and called
-// during graceful shutdown. This function needs to deal with a context that will
-// time out given a period of configured time.
-func (p *Plugin) RegisterCleanupFunc(f CleanupFunc) {
-	p.cleanUpFunc = f
 }
 
 func (p *Plugin) Shutdown(writer http.ResponseWriter, _ *http.Request) {

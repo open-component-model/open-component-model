@@ -8,17 +8,18 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Handler contains the handling function, the location and the Schema for wrapping function calls with.
+// Handler contains the handling function and location wrapping function calls with.
 // For example, a real function passed in from the plugin is wrapper into an HTTP HandlerFunc to be called
-// later. This handler will use the Schema in order to verify any access spec information that is passed in.
+// later with the appropriate parameters extracted from the http.Request.
 type Handler struct {
 	Handler  http.HandlerFunc
 	Location string
 }
 
-// EndpointBuilder constructs a capability for the plugin. Register*Endpoint will keep updating
-// an internal tracker. Once all capabilities have been declared, we call Marshal to
-// return the registered capabilities to the plugin manager.
+// EndpointBuilder constructs types for the plugin. Any Register functions that live in their respective package
+// will take this builder as a parameter. The function then, will keep updating a tracker that collects all types and
+// schemes declared by the plugin. Once all types have been declared, we call Marshal to return the registered types as
+// JSON to the plugin manager.
 type EndpointBuilder struct {
 	CurrentTypes types.Types
 	Handlers     []Handler

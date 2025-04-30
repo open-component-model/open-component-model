@@ -15,7 +15,6 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -36,12 +35,12 @@ func TestPing(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
 		Location:   server.URL,
-	}, []byte(`{}`), nil)
+	}, []byte(`{}`))
 
 	// Test successful ping
 	err := plugin.Ping(context.Background())
@@ -69,12 +68,12 @@ func TestAddComponentVersion(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
 		Location:   server.URL,
-	}, []byte(`{}`), nil)
+	}, []byte(`{}`))
 
 	ctx := context.Background()
 	err := plugin.AddComponentVersion(ctx, types.PostComponentVersionRequest[runtime.Typed]{
@@ -82,7 +81,7 @@ func TestAddComponentVersion(t *testing.T) {
 			BaseUrl: "ocm.software",
 		},
 		Descriptor: defaultDescriptor(),
-	}, contracts.Attributes{})
+	}, map[string]string{})
 	assert.NoError(t, err)
 }
 
@@ -106,19 +105,19 @@ func TestAddComponentVersionValidationFail(t *testing.T) {
 	schemaOCIRegistry, err := jsonschema.Reflect(repository).MarshalJSON()
 	require.NoError(t, err)
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
 		Location:   server.URL,
-	}, schemaOCIRegistry, nil)
+	}, schemaOCIRegistry)
 
 	ctx := context.Background()
 
 	err = plugin.AddComponentVersion(ctx, types.PostComponentVersionRequest[runtime.Typed]{
 		Repository: repository,
 		Descriptor: defaultDescriptor(),
-	}, contracts.Attributes{})
+	}, map[string]string{})
 	assert.ErrorContains(t, err, "jsonschema validation failed")
 }
 
@@ -140,19 +139,19 @@ func TestGetComponentVersion(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
 		Location:   server.URL,
-	}, []byte(`{}`), nil)
+	}, []byte(`{}`))
 
 	ctx := context.Background()
 	desc, err := plugin.GetComponentVersion(ctx, types.GetComponentVersionRequest[runtime.Typed]{
 		Repository: &v1.OCIRepository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
-	}, contracts.Attributes{})
+	}, map[string]string{})
 	require.NoError(t, err)
 
 	require.Equal(t, response.String(), desc.String())
@@ -177,12 +176,12 @@ func TestAddLocalResource(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
 		Location:   server.URL,
-	}, []byte(`{}`), nil)
+	}, []byte(`{}`))
 
 	ctx := context.Background()
 	gotResource, err := plugin.AddLocalResource(ctx, types.PostLocalResourceRequest[runtime.Typed]{
@@ -190,7 +189,7 @@ func TestAddLocalResource(t *testing.T) {
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 		Resource:   &resource,
-	}, contracts.Attributes{})
+	}, map[string]string{})
 	require.NoError(t, err)
 
 	require.Equal(t, resource.String(), gotResource.String())
@@ -215,12 +214,12 @@ func TestGetLocalResource(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(context.Background(), logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
 		Location:   server.URL,
-	}, []byte(`{}`), nil)
+	}, []byte(`{}`))
 
 	f, err := os.CreateTemp("", "temp_file")
 	require.NoError(t, err)
@@ -238,7 +237,7 @@ func TestGetLocalResource(t *testing.T) {
 			LocationType: types.LocationTypeLocalFile,
 			Value:        f.Name(),
 		},
-	}, contracts.Attributes{})
+	}, map[string]string{})
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(f.Name())

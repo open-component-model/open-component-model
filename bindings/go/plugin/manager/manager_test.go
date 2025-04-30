@@ -9,7 +9,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -30,7 +29,7 @@ func TestPluginManager(t *testing.T) {
 		require.NoError(t, os.Remove("/tmp/ocm_plugin_test-plugin.sock"))
 	})
 
-	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto)
+	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
 	require.NoError(t, err)
 	desc, err := plugin.GetComponentVersion(ctx, mtypes.GetComponentVersionRequest[*v1.OCIRepository]{
 		Repository: &v1.OCIRepository{
@@ -39,7 +38,7 @@ func TestPluginManager(t *testing.T) {
 		},
 		Name:    "test-component",
 		Version: "1.0.0",
-	}, contracts.Attributes{})
+	}, map[string]string{})
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
 }

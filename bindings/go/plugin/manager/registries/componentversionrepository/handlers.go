@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -20,14 +19,14 @@ import (
 // GetComponentVersionHandlerFunc is a wrapper around calling the interface method GetComponentVersion for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetComponentVersionRequest[T], credentials contracts.Attributes) (*descriptor.Descriptor, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
+func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		query := request.URL.Query()
 		name := query.Get("name")
 		version := query.Get("version")
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		// TODO: Replace this with correct Credential Structure
-		credentials := contracts.Attributes{}
+		// TODO(Skarlso): Replace this with correct Credential Structure
+		credentials := map[string]string{}
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
 			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
 			return
@@ -62,10 +61,10 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	}
 }
 
-func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostComponentVersionRequest[T], credentials contracts.Attributes) error) http.HandlerFunc {
+func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := contracts.Attributes{}
+		credentials := map[string]string{}
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
 			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
 			return
@@ -83,10 +82,10 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	}
 }
 
-func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetLocalResourceRequest[T], credentials contracts.Attributes) error, scheme *runtime.Scheme, typ T) http.HandlerFunc {
+func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetLocalResourceRequest[T], credentials map[string]string) error, scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := contracts.Attributes{}
+		credentials := map[string]string{}
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
 			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
 			return
@@ -132,10 +131,10 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 	}
 }
 
-func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostLocalResourceRequest[T], credentials contracts.Attributes) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
+func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		credentials := contracts.Attributes{}
+		credentials := map[string]string{}
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
 			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
 			return

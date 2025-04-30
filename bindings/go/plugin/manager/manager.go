@@ -15,10 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const socketPathFormat = "/tmp/ocm_plugin_%s.sock"
@@ -42,11 +40,8 @@ type PluginManager struct {
 // NewPluginManager initializes the PluginManager
 // the passed ctx is used for all plugins.
 func NewPluginManager(ctx context.Context, logger *slog.Logger) *PluginManager {
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-
 	return &PluginManager{
-		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(scheme),
+		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
 
 		baseCtx: ctx,
 		logger:  logger,
@@ -100,7 +95,7 @@ func (pm *PluginManager) RegisterPluginsAtLocation(ctx context.Context, dir stri
 			return nil
 		}
 
-		// TODO: Determine plugin extension.
+		// TODO(Skarlso): Determine plugin extension.
 		ext := filepath.Ext(info.Name())
 		if ext != "" {
 			return nil

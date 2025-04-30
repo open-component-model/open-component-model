@@ -9,10 +9,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -22,10 +21,10 @@ func TestPluginFlow(t *testing.T) {
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under plugin/generic_plugin first")
 
+	ctx := context.Background()
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
-	registry := NewComponentVersionRepositoryRegistry(scheme)
-	ctx := context.Background()
+	registry := NewComponentVersionRepositoryRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin",
 		Type:       mtypes.Socket,
@@ -65,7 +64,7 @@ func TestPluginFlow(t *testing.T) {
 	}
 	require.NoError(t, registry.AddPlugin(plugin, typ))
 
-	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto)
+	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
 	require.NoError(t, err)
 	desc, err := retrievedPlugin.GetComponentVersion(ctx, mtypes.GetComponentVersionRequest[*v1.OCIRepository]{
 		Repository: &v1.OCIRepository{
@@ -77,7 +76,7 @@ func TestPluginFlow(t *testing.T) {
 		},
 		Name:    "test-component",
 		Version: "1.0.0",
-	}, contracts.Attributes{})
+	}, map[string]string{})
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
 }

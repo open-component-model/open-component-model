@@ -45,7 +45,7 @@ type TypedComponentVersionRepositoryPlugin[T runtime.Typed] struct {
 	base *RepositoryPlugin
 }
 
-func (r *TypedComponentVersionRepositoryPlugin[T]) GetLocalResource(ctx context.Context, request types.GetLocalResourceRequest[T], credentials contracts.Attributes) error {
+func (r *TypedComponentVersionRepositoryPlugin[T]) GetLocalResource(ctx context.Context, request types.GetLocalResourceRequest[T], credentials map[string]string) error {
 	return r.base.GetLocalResource(ctx, types.GetLocalResourceRequest[runtime.Typed]{
 		Repository:     request.Repository,
 		Name:           request.Name,
@@ -55,7 +55,7 @@ func (r *TypedComponentVersionRepositoryPlugin[T]) GetLocalResource(ctx context.
 	}, credentials)
 }
 
-func (r *TypedComponentVersionRepositoryPlugin[T]) AddLocalResource(ctx context.Context, request types.PostLocalResourceRequest[T], credentials contracts.Attributes) (*descriptor.Resource, error) {
+func (r *TypedComponentVersionRepositoryPlugin[T]) AddLocalResource(ctx context.Context, request types.PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error) {
 	return r.base.AddLocalResource(ctx, types.PostLocalResourceRequest[runtime.Typed]{
 		Repository:       request.Repository,
 		Name:             request.Name,
@@ -69,14 +69,14 @@ func (r *TypedComponentVersionRepositoryPlugin[T]) Ping(ctx context.Context) err
 	return r.base.Ping(ctx)
 }
 
-func (r *TypedComponentVersionRepositoryPlugin[T]) AddComponentVersion(ctx context.Context, request types.PostComponentVersionRequest[T], credentials contracts.Attributes) error {
+func (r *TypedComponentVersionRepositoryPlugin[T]) AddComponentVersion(ctx context.Context, request types.PostComponentVersionRequest[T], credentials map[string]string) error {
 	return r.base.AddComponentVersion(ctx, types.PostComponentVersionRequest[runtime.Typed]{
 		Repository: request.Repository,
 		Descriptor: request.Descriptor,
 	}, credentials)
 }
 
-func (r *TypedComponentVersionRepositoryPlugin[T]) GetComponentVersion(ctx context.Context, request types.GetComponentVersionRequest[T], credentials contracts.Attributes) (*descriptor.Descriptor, error) {
+func (r *TypedComponentVersionRepositoryPlugin[T]) GetComponentVersion(ctx context.Context, request types.GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error) {
 	req := types.GetComponentVersionRequest[runtime.Typed]{
 		Name:       request.Name,
 		Version:    request.Version,
@@ -94,13 +94,8 @@ type RepositoryPlugin struct {
 	client *http.Client
 	logger *slog.Logger
 
-	baseCtx context.Context
-
 	// jsonSchema is the schema for all endpoints for this plugin.
 	jsonSchema []byte
-
-	// TODO: Not sure I need the scheme in here.
-	scheme *runtime.Scheme
 }
 
 // This plugin implements all the given contracts.
@@ -108,16 +103,14 @@ var (
 	_ contracts.ReadWriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
-func NewComponentVersionRepositoryPlugin(baseCtx context.Context, logger *slog.Logger, client *http.Client, id string, path string, config types.Config, jsonSchema []byte, scheme *runtime.Scheme) *RepositoryPlugin {
+func NewComponentVersionRepositoryPlugin(logger *slog.Logger, client *http.Client, id string, path string, config types.Config, jsonSchema []byte) *RepositoryPlugin {
 	return &RepositoryPlugin{
-		baseCtx:    baseCtx,
 		ID:         id,
 		path:       path,
 		config:     config,
 		logger:     logger,
 		client:     client,
 		jsonSchema: jsonSchema,
-		scheme:     scheme,
 	}
 }
 
@@ -131,7 +124,7 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request types.PostComponentVersionRequest[runtime.Typed], credentials contracts.Attributes) error {
+func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request types.PostComponentVersionRequest[runtime.Typed], credentials map[string]string) error {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
@@ -149,7 +142,7 @@ func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request type
 	return nil
 }
 
-func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request types.GetComponentVersionRequest[runtime.Typed], credentials contracts.Attributes) (*descriptor.Descriptor, error) {
+func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request types.GetComponentVersionRequest[runtime.Typed], credentials map[string]string) (*descriptor.Descriptor, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -185,7 +178,7 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request type
 	return desc, nil
 }
 
-func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request types.PostLocalResourceRequest[runtime.Typed], credentials contracts.Attributes) (*descriptor.Resource, error) {
+func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request types.PostLocalResourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Resource, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
@@ -209,7 +202,7 @@ func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request types.P
 	return &resources[0], nil
 }
 
-func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request types.GetLocalResourceRequest[runtime.Typed], credentials contracts.Attributes) error {
+func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request types.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) error {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -264,7 +257,7 @@ func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte
 	return nil
 }
 
-func toCredentials(credentials contracts.Attributes) (plugins.KV, error) {
+func toCredentials(credentials map[string]string) (plugins.KV, error) {
 	rawCreds, err := json.Marshal(credentials)
 	if err != nil {
 		return plugins.KV{}, err

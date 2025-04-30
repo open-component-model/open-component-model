@@ -11,7 +11,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
@@ -20,13 +20,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type OCIPlugin struct{}
+type Plugin struct{}
 
-func (m *OCIPlugin) Ping(_ context.Context) error {
+func (m *Plugin) Ping(_ context.Context) error {
 	return nil
 }
 
-func (m *OCIPlugin) GetComponentVersion(ctx context.Context, request types.GetComponentVersionRequest[*v1.OCIRepository], credentials contracts.Attributes) (*descriptor.Descriptor, error) {
+func (m *Plugin) GetComponentVersion(ctx context.Context, request types.GetComponentVersionRequest[*v1.OCIRepository], credentials map[string]string) (*descriptor.Descriptor, error) {
 	return &descriptor.Descriptor{
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
@@ -67,22 +67,22 @@ func (m *OCIPlugin) GetComponentVersion(ctx context.Context, request types.GetCo
 	}, nil
 }
 
-func (m *OCIPlugin) GetLocalResource(ctx context.Context, request types.GetLocalResourceRequest[*v1.OCIRepository], credentials contracts.Attributes) error {
+func (m *Plugin) GetLocalResource(ctx context.Context, request types.GetLocalResourceRequest[*v1.OCIRepository], credentials map[string]string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "Writing my local resource here to target: %+v\n", request.TargetLocation)
 	return nil
 }
 
-func (m *OCIPlugin) AddLocalResource(ctx context.Context, request types.PostLocalResourceRequest[*v1.OCIRepository], credentials contracts.Attributes) (*descriptor.Resource, error) {
+func (m *Plugin) AddLocalResource(ctx context.Context, request types.PostLocalResourceRequest[*v1.OCIRepository], credentials map[string]string) (*descriptor.Resource, error) {
 	_, _ = fmt.Fprintf(os.Stdout, "AddLocalResource: %+v\n", request.ResourceLocation)
 	return nil, nil
 }
 
-func (m *OCIPlugin) AddComponentVersion(ctx context.Context, request types.PostComponentVersionRequest[*v1.OCIRepository], credentials contracts.Attributes) error {
+func (m *Plugin) AddComponentVersion(ctx context.Context, request types.PostComponentVersionRequest[*v1.OCIRepository], credentials map[string]string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "AddComponentVersiont: %+v\n", request.Descriptor.Component.Name)
 	return nil
 }
 
-var _ contracts.ReadWriteOCMRepositoryPluginContract[*v1.OCIRepository] = &OCIPlugin{}
+var _ contracts.ReadWriteOCMRepositoryPluginContract[*v1.OCIRepository] = &Plugin{}
 
 func main() {
 	args := os.Args[1:]
@@ -91,11 +91,11 @@ func main() {
 	repository.MustAddToScheme(scheme)
 	capabilities := endpoints.NewEndpoints(scheme)
 
-	if err := componentversionrepository.RegisterComponentVersionRepository(&v1.OCIRepository{}, &OCIPlugin{}, capabilities); err != nil {
+	if err := componentversionrepository.RegisterComponentVersionRepository(&v1.OCIRepository{}, &Plugin{}, capabilities); err != nil {
 		log.Fatal(err)
 	}
 
-	// TODO: ConsumerIdentityTypesForConfig endpoint
+	// TODO(Skarlso): ConsumerIdentityTypesForConfig endpoint
 
 	if len(args) > 0 && args[0] == "capabilities" {
 		content, err := json.Marshal(capabilities)
