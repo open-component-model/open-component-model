@@ -27,8 +27,7 @@ type PluginManager struct {
 	// plugin manager to locate a required plugin.
 	ComponentVersionRepositoryRegistry *componentversionrepository.RepositoryRegistry
 
-	mu     sync.Mutex
-	logger *slog.Logger
+	mu sync.Mutex
 
 	// baseCtx is the context that is used for all plugins.
 	// This is a different context than the one used for fetching plugins because
@@ -39,12 +38,11 @@ type PluginManager struct {
 
 // NewPluginManager initializes the PluginManager
 // the passed ctx is used for all plugins.
-func NewPluginManager(ctx context.Context, logger *slog.Logger) *PluginManager {
+func NewPluginManager(ctx context.Context) *PluginManager {
 	return &PluginManager{
 		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
 
 		baseCtx: ctx,
-		logger:  logger,
 	}
 }
 
@@ -159,7 +157,7 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 			Config: *conf,
 		}
 
-		pm.logger.DebugContext(ctx, "discovered plugin", "id", id, "path", path)
+		slog.DebugContext(ctx, "discovered plugin", "id", id, "path", path)
 
 		plugins = append(plugins, p)
 
@@ -202,7 +200,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, plugin *mtypes.Plugin, o
 		switch pType {
 		case mtypes.ComponentVersionRepositoryPluginType:
 			for _, typ := range typs {
-				pm.logger.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
+				slog.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
 				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, typ.Type); err != nil {
 					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 				}

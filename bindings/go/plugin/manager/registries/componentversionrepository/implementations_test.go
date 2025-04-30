@@ -15,6 +15,7 @@ import (
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -76,7 +77,7 @@ func TestAddComponentVersion(t *testing.T) {
 	}, []byte(`{}`))
 
 	ctx := context.Background()
-	err := plugin.AddComponentVersion(ctx, types.PostComponentVersionRequest[runtime.Typed]{
+	err := plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
 		Repository: &v1.OCIRepository{
 			BaseUrl: "ocm.software",
 		},
@@ -114,7 +115,7 @@ func TestAddComponentVersionValidationFail(t *testing.T) {
 
 	ctx := context.Background()
 
-	err = plugin.AddComponentVersion(ctx, types.PostComponentVersionRequest[runtime.Typed]{
+	err = plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
 		Repository: repository,
 		Descriptor: defaultDescriptor(),
 	}, map[string]string{})
@@ -147,7 +148,7 @@ func TestGetComponentVersion(t *testing.T) {
 	}, []byte(`{}`))
 
 	ctx := context.Background()
-	desc, err := plugin.GetComponentVersion(ctx, types.GetComponentVersionRequest[runtime.Typed]{
+	desc, err := plugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
 		Repository: &v1.OCIRepository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
@@ -184,7 +185,7 @@ func TestAddLocalResource(t *testing.T) {
 	}, []byte(`{}`))
 
 	ctx := context.Background()
-	gotResource, err := plugin.AddLocalResource(ctx, types.PostLocalResourceRequest[runtime.Typed]{
+	gotResource, err := plugin.AddLocalResource(ctx, repov1.PostLocalResourceRequest[runtime.Typed]{
 		Repository: &v1.OCIRepository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
@@ -229,7 +230,7 @@ func TestGetLocalResource(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	err = plugin.GetLocalResource(ctx, types.GetLocalResourceRequest[runtime.Typed]{
+	err = plugin.GetLocalResource(ctx, repov1.GetLocalResourceRequest[runtime.Typed]{
 		Repository: &v1.OCIRepository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",

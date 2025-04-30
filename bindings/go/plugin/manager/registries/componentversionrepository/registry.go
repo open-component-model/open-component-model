@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -32,7 +33,7 @@ var internalComponentVersionRepositoryScheme = runtime.NewScheme()
 
 // RegisterInternalComponentVersionRepositoryPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
-func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](scheme *runtime.Scheme, p contracts.ReadWriteOCMRepositoryPluginContract[T], prototype T) error {
+func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](scheme *runtime.Scheme, p v1.ReadWriteOCMRepositoryPluginContract[T], prototype T) error {
 	if internalComponentVersionRepositoryPlugins == nil {
 		internalComponentVersionRepositoryPlugins = make(map[runtime.Type]contracts.PluginBase)
 	}
@@ -108,7 +109,7 @@ func (r *RepositoryRegistry) getPluginForEndpointsWithType(typ runtime.Type) (*m
 // it will find and return a registered plugin.
 // On the first call, it will initialize and start the plugin. On any consecutive calls it will return the
 // existing plugin that has already been started.
-func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx context.Context, r *RepositoryRegistry, proto T, scheme *runtime.Scheme) (contracts.ReadWriteOCMRepositoryPluginContract[T], error) {
+func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx context.Context, r *RepositoryRegistry, proto T, scheme *runtime.Scheme) (v1.ReadWriteOCMRepositoryPluginContract[T], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -119,7 +120,7 @@ func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx co
 			return nil, fmt.Errorf("type %v is registered but no plugin exists", typ)
 		}
 
-		pt, ok := p.(contracts.ReadWriteOCMRepositoryPluginContract[T])
+		pt, ok := p.(v1.ReadWriteOCMRepositoryPluginContract[T])
 		if !ok {
 			return nil, fmt.Errorf("type %v is not a ReadWriteOCMRepositoryPluginContract[T]", typ)
 		}
@@ -139,7 +140,7 @@ func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx co
 	}
 
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
-		pt, ok := existingPlugin.Plugin.(contracts.ReadWriteOCMRepositoryPluginContract[T])
+		pt, ok := existingPlugin.Plugin.(v1.ReadWriteOCMRepositoryPluginContract[T])
 		if !ok {
 			return nil, fmt.Errorf("existing plugin for typ %T does not implement ReadOCMRepositoryPluginContract[T]", existingPlugin)
 		}

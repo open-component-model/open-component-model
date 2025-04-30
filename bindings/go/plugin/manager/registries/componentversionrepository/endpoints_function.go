@@ -3,7 +3,7 @@ package componentversionrepository
 import (
 	"fmt"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -16,7 +16,7 @@ import (
 // during lookup the right endpoint + type is used.
 func RegisterComponentVersionRepository[T runtime.Typed](
 	proto T,
-	handler contracts.ReadWriteOCMRepositoryPluginContract[T],
+	handler v1.ReadWriteOCMRepositoryPluginContract[T],
 	c *endpoints.EndpointBuilder,
 ) error {
 	if c.CurrentTypes.Types == nil {

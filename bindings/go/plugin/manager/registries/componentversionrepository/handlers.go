@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -18,7 +19,7 @@ import (
 // GetComponentVersionHandlerFunc is a wrapper around calling the interface method GetComponentVersion for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
+func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		query := request.URL.Query()
 		name := query.Get("name")
@@ -31,7 +32,7 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			return
 		}
 
-		desc, err := f(request.Context(), types.GetComponentVersionRequest[T]{
+		desc, err := f(request.Context(), v1.GetComponentVersionRequest[T]{
 			Repository: typ,
 			Name:       name,
 			Version:    version,
@@ -55,7 +56,7 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	}
 }
 
-func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
+func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
@@ -64,7 +65,7 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			return
 		}
 
-		body, err := plugins.DecodeJSONRequestBody[types.PostComponentVersionRequest[T]](writer, request)
+		body, err := plugins.DecodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
 		if err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
@@ -76,7 +77,7 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	}
 }
 
-func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.GetLocalResourceRequest[T], credentials map[string]string) error, scheme *runtime.Scheme, proto T) http.HandlerFunc {
+func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalResourceRequest[T], credentials map[string]string) error, scheme *runtime.Scheme, proto T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
@@ -107,7 +108,7 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			}
 		}
 
-		if err := f(request.Context(), types.GetLocalResourceRequest[T]{
+		if err := f(request.Context(), v1.GetLocalResourceRequest[T]{
 			Repository:     proto,
 			Name:           name,
 			Version:        version,
@@ -120,7 +121,7 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 	}
 }
 
-func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request types.PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
+func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
@@ -129,7 +130,7 @@ func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			return
 		}
 
-		body, err := plugins.DecodeJSONRequestBody[types.PostLocalResourceRequest[T]](writer, request)
+		body, err := plugins.DecodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
 		if err != nil {
 			slog.Error("failed to decode request body", "error", err)
 			return

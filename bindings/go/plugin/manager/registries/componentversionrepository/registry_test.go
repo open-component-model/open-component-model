@@ -12,6 +12,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -67,7 +68,7 @@ func TestPluginFlow(t *testing.T) {
 
 	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
 	require.NoError(t, err)
-	desc, err := retrievedPlugin.GetComponentVersion(ctx, mtypes.GetComponentVersionRequest[*v1.OCIRepository]{
+	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*v1.OCIRepository]{
 		Repository: &v1.OCIRepository{
 			Type: runtime.Type{
 				Name:    "OCIRepository",
