@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2/registry/remote/auth"
@@ -26,6 +27,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/internal/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
@@ -79,13 +81,13 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 }
 
 func init() {
-	GetComponentVersionCmd.Flags().StringP("output", "o", "yaml", "output format of the component descriptors")
-	GetComponentVersionCmd.Flags().String("semver-constraint", "> 0.0.0", "semantic version constraint restricting which versions to output")
+	enum.Var(GetComponentVersionCmd.Flags(), "output", []string{"table", "yaml", "json"}, "output format of the component descriptors")
+	GetComponentVersionCmd.Flags().String("semver-constraint", "> 0.0.0-0", "semantic version constraint restricting which versions to output")
 	GetCmd.AddCommand(GetComponentVersionCmd)
 }
 
 func getComponentVersion(cmd *cobra.Command, args []string) error {
-	output, err := cmd.Flags().GetString("output")
+	output, err := enum.Get(cmd.Flags(), "output")
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
 	}
@@ -199,6 +201,8 @@ func encodeDescriptors(output string, descs []*descruntime.Descriptor) (io.Reade
 		data, err = encodeDescriptorsAsNDJSON(descs)
 	case "yaml":
 		data, err = encodeDescriptorsAsYAML(descs)
+	case "table":
+		data, err = encodeDescriptorsAsTable(descs)
 	default:
 		err = fmt.Errorf("unknown output format: %q", output)
 	}
@@ -242,6 +246,25 @@ func encodeDescriptorsAsYAML(descriptor []*descruntime.Descriptor) ([]byte, erro
 	}
 
 	return yaml.Marshal(v2List)
+}
+
+func encodeDescriptorsAsTable(descriptor []*descruntime.Descriptor) ([]byte, error) {
+	var buf bytes.Buffer
+	t := table.NewWriter()
+	t.SetOutputMirror(&buf)
+	t.AppendHeader(table.Row{"Component", "Version", "Provider"})
+	for _, desc := range descriptor {
+		t.AppendRow(table.Row{desc.Component.Name, desc.Component.Version, desc.Component.Provider.String()})
+	}
+	t.SetColumnConfigs([]table.ColumnConfig{
+		{Number: 1, AutoMerge: true},
+		{Number: 3, AutoMerge: true},
+	})
+	style := table.StyleLight
+	style.Options.DrawBorder = false
+	t.SetStyle(style)
+	t.Render()
+	return buf.Bytes(), nil
 }
 
 func componentVersionRepositoryForSpec(typed runtime.Typed) (oci.ComponentVersionRepository, error) {

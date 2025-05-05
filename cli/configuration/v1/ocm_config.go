@@ -81,6 +81,7 @@ func GetOCMConfig(additional ...string) (*Config, error) {
 			)
 			continue
 		}
+		slog.Debug("ocm config was loaded successfully", slog.String("path", path))
 		cfgs = append(cfgs, cfg)
 	}
 	return FlatMap(cfgs...), nil
