@@ -32,7 +32,7 @@ func WaitForPlugin(ctx context.Context, plugin *types.Plugin) (*http.Client, str
 		return nil, "", fmt.Errorf("failed to get plugin location: %w", err)
 	}
 
-	slog.InfoContext(ctx, "got plugin location", "location", location)
+	slog.DebugContext(ctx, "got plugin location", "location", location)
 
 	client, err := connect(ctx, plugin.ID, location, plugin.Config.Type)
 	if err != nil {
@@ -88,9 +88,9 @@ func getPluginLocation(ctx context.Context, plugin *types.Plugin) (string, error
 	go func() {
 		for scanner.Scan() {
 			line := scanner.Text()
-			slog.InfoContext(ctx, "server output:", "line", line)
+			slog.DebugContext(ctx, "server output:", "line", line)
 			if !strings.Contains(line, "|") {
-				slog.InfoContext(ctx, "skipping line; separator not present", "line", line)
+				slog.DebugContext(ctx, "skipping line; separator not present", "line", line)
 				continue
 			}
 
@@ -98,7 +98,7 @@ func getPluginLocation(ctx context.Context, plugin *types.Plugin) (string, error
 			// Adjust this regex to match your server's output format
 			split := strings.Split(line, "|")
 			if len(split) != 2 {
-				slog.InfoContext(ctx, "skipping line; separator not present", "line", line)
+				slog.DebugContext(ctx, "skipping line; separator not present", "line", line)
 				continue
 			}
 

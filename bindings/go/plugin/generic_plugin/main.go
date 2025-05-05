@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -91,7 +90,8 @@ func main() {
 	capabilities := endpoints.NewEndpoints(scheme)
 
 	if err := componentversionrepository.RegisterComponentVersionRepository(&v1.OCIRepository{}, &Plugin{}, capabilities); err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	// TODO(Skarlso): ConsumerIdentityTypesForConfig endpoint
@@ -99,11 +99,13 @@ func main() {
 	if len(args) > 0 && args[0] == "capabilities" {
 		content, err := json.Marshal(capabilities)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 
 		if _, err := fmt.Fprintln(os.Stdout, string(content)); err != nil {
-			log.Fatal(err)
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 
 		os.Exit(0)
@@ -113,24 +115,29 @@ func main() {
 	configData := flag.String("config", "", "Plugin config.")
 	flag.Parse()
 	if configData == nil || *configData == "" {
-		log.Fatal("Missing required flag --config")
+		fmt.Fprintln(os.Stderr, "Missing required flag --config")
+		os.Exit(1)
 	}
 
 	conf := types.Config{}
 	if err := json.Unmarshal([]byte(*configData), &conf); err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	if conf.ID == "" {
-		log.Fatal("Plugin ID is required.")
+		fmt.Fprintln(os.Stderr, "Plugin ID is required")
+		os.Exit(1)
 	}
 
 	ocmPlugin := plugin.NewPlugin(conf, os.Stdout)
 	if err := ocmPlugin.RegisterHandlers(capabilities.GetHandlers()...); err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	if err := ocmPlugin.Start(context.Background()); err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }

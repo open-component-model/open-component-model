@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,6 +17,7 @@ import (
 )
 
 func TestPluginManager(t *testing.T) {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 	ctx := t.Context()
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)

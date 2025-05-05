@@ -95,8 +95,8 @@ func (r *RepositoryRegistry) AddPlugin(plugin *mtypes.Plugin, typ runtime.Type) 
 	return nil
 }
 
-// We know that whatever is in that registry for that type HAS those endpoints because WE constructed them.
-func (r *RepositoryRegistry) getPluginForEndpointsWithType(typ runtime.Type) (*mtypes.Plugin, error) {
+// getPluginWithType returns the registered plugin with the given type.
+func (r *RepositoryRegistry) getPluginWithType(typ runtime.Type) (*mtypes.Plugin, error) {
 	p, ok := r.registry[typ]
 	if !ok {
 		return nil, fmt.Errorf("no plugin registered for type %v", typ)
@@ -105,27 +105,16 @@ func (r *RepositoryRegistry) getPluginForEndpointsWithType(typ runtime.Type) (*m
 	return p, nil
 }
 
-// GetReadWriteComponentVersionRepositoryPluginForType finds a specific plugin the registry. Taking a capability and a type for that capability
-// it will find and return a registered plugin.
+// GetReadWriteComponentVersionRepositoryPluginForType finds a specific plugin in the registry.
 // On the first call, it will initialize and start the plugin. On any consecutive calls it will return the
 // existing plugin that has already been started.
 func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx context.Context, r *RepositoryRegistry, proto T, scheme *runtime.Scheme) (v1.ReadWriteOCMRepositoryPluginContract[T], error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// we check for the type if it's registered.
+	// if we find the type has been registered internally, we look for internal plugins for it.
 	if typ, err := internalComponentVersionRepositoryScheme.TypeForPrototype(proto); err == nil {
-		p, ok := getInternalComponentVersionRepositoryPlugin(typ)
-		if !ok {
-			return nil, fmt.Errorf("type %v is registered but no plugin exists", typ)
-		}
-
-		pt, ok := p.(v1.ReadWriteOCMRepositoryPluginContract[T])
-		if !ok {
-			return nil, fmt.Errorf("type %v is not a ReadWriteOCMRepositoryPluginContract[T]", typ)
-		}
-
-		return pt, nil
+		return getInternalPlugin[T](typ)
 	}
 
 	typ, err := scheme.TypeForPrototype(proto)
@@ -133,8 +122,7 @@ func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx co
 		return nil, fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
 	}
 
-	// Note: No need for the endpoints at all, since we know what endpoints there should be. We only want the type.
-	plugin, err := r.getPluginForEndpointsWithType(typ)
+	plugin, err := r.getPluginWithType(typ)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plugin for typ %T %s: %w", typ, typ, err)
 	}
@@ -144,12 +132,34 @@ func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx co
 		if !ok {
 			return nil, fmt.Errorf("existing plugin for typ %T does not implement ReadOCMRepositoryPluginContract[T]", existingPlugin)
 		}
+
 		return pt, nil
 	}
 
+	return startAndReturnPlugin[T](ctx, r, plugin)
+}
+
+func getInternalPlugin[T runtime.Typed](typ runtime.Type) (v1.ReadWriteOCMRepositoryPluginContract[T], error) {
+	p, ok := getInternalComponentVersionRepositoryPlugin(typ)
+	if !ok {
+		return nil, fmt.Errorf("type %v is registered but no plugin exists", typ)
+	}
+
+	pt, ok := p.(v1.ReadWriteOCMRepositoryPluginContract[T])
+	if !ok {
+		return nil, fmt.Errorf("type %v is not a ReadWriteOCMRepositoryPluginContract[T]", typ)
+	}
+
+	return pt, nil
+}
+
+func startAndReturnPlugin[T runtime.Typed](ctx context.Context, r *RepositoryRegistry, plugin *mtypes.Plugin) (v1.ReadWriteOCMRepositoryPluginContract[T], error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
+
+	// TODO: This might be the wrong context here.
+	go plugins.StartLogStreamer(ctx, plugin)
 
 	client, loc, err := plugins.WaitForPlugin(ctx, plugin)
 	if err != nil {
@@ -172,9 +182,8 @@ loop:
 		cmd:    plugin.Cmd,
 	}
 
-	pt := NewTypedComponentVersionRepositoryPluginImplementation[T](repoPlugin)
-
-	return pt, nil
+	// wrap the untyped internal plugin into a typed representation.
+	return NewTypedComponentVersionRepositoryPluginImplementation[T](repoPlugin), nil
 }
 
 // getInternalComponentVersionRepositoryPlugin looks in the internally registered plugins first if we have any plugins that have
