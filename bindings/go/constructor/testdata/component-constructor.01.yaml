@@ -25,12 +25,6 @@ components:
         objectFormat: json
         object:
           key: value
-    - name: chart
-      type: helmChart
-      relation: local
-      input:
-        type: helmChart
-        path: ./input/helm/testdata/chart
     - name: image
       type: ociImage
       relation: external

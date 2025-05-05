@@ -9,8 +9,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var Scheme = runtime.NewScheme()
-var Default = New(Scheme)
+var (
+	Scheme  = runtime.NewScheme()
+	Default = New(Scheme)
+)
 
 func MustAddToScheme(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&v1.File{}, runtime.NewVersionedType("file", v1.Version))

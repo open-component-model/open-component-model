@@ -20,10 +20,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// MediaTypeTextPlain as per https://www.rfc-editor.org/rfc/rfc3676.html
-const MediaTypeTextPlain = "text/plain"
-const MediaTypeJSON = "application/json"
-const MediaTypeYAML = "application/x-yaml"
+const (
+	// MediaTypeTextPlain as per https://www.rfc-editor.org/rfc/rfc3676.html
+	MediaTypeTextPlain = "text/plain"
+	MediaTypeJSON      = "application/json"
+	MediaTypeYAML      = "application/x-yaml"
+)
 
 var _ input.Method = &Method{}
 
@@ -119,7 +121,7 @@ func (c *CachedBlob) Digest() (string, bool) {
 
 func (c *CachedBlob) getData() []byte {
 	c.mu.RLock()
-	c.mu.RUnlock()
+	defer c.mu.RUnlock()
 	return c.data
 }
 
@@ -181,7 +183,8 @@ func marshal(object any, writer *io.PipeWriter, format v2alpha1.UTF8ObjectFormat
 	case v2alpha1.UTF8ObjectFormatJSON:
 		err = json.NewEncoder(writer).Encode(object)
 	case v2alpha1.UTF8ObjectFormatYAML:
-		if data, err := yaml.Marshal(object); err == nil {
+		var data []byte
+		if data, err = yaml.Marshal(object); err == nil {
 			_, err = io.CopyN(writer, bytes.NewReader(data), int64(len(data)))
 		}
 	default:

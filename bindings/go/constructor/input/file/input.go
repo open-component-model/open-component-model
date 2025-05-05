@@ -17,11 +17,11 @@ var _ input.Method = &Method{}
 
 type Method struct{ Scheme *runtime.Scheme }
 
-func (i *Method) ProcessResource(_ context.Context, resource *spec.Resource) (data blob.ReadOnlyBlob, err error) {
-	return i.process(resource.Input, err, data)
+func (i *Method) ProcessResource(_ context.Context, resource *spec.Resource) (blob.ReadOnlyBlob, error) {
+	return i.process(resource.Input)
 }
 
-func (i *Method) process(input runtime.Typed, err error, data blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
+func (i *Method) process(input runtime.Typed) (blob.ReadOnlyBlob, error) {
 	file := v1.File{}
 	if err := i.Scheme.Convert(input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
@@ -37,7 +37,7 @@ func (i *Method) process(input runtime.Typed, err error, data blob.ReadOnlyBlob)
 		mediaType = "application/octet-stream"
 	}
 
-	data = &InputFileBlob{b, mediaType}
+	data := blob.ReadOnlyBlob(&InputFileBlob{b, mediaType})
 
 	if file.Compress {
 		data = compression.Compress(data)
