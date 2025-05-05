@@ -1,7 +1,9 @@
 package plugins
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +18,7 @@ import (
 
 func TestWaitForPlugin(t *testing.T) {
 	t.Run("successful connection to TCP plugin", func(t *testing.T) {
+		output := bytes.NewBuffer(nil)
 		// Start a test server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/healthz" {
@@ -23,9 +26,17 @@ func TestWaitForPlugin(t *testing.T) {
 			}
 		}))
 		defer server.Close()
+		p := &types.Plugin{
+			ID: "test-tcp-plugin",
+			Config: types.Config{
+				Type: types.TCP,
+			},
+			Stdout: io.NopCloser(output),
+		}
+		output.Write([]byte("tcp|" + server.URL))
 
 		ctx := context.Background()
-		client, err := WaitForPlugin(ctx, "test-tcp-plugin", server.URL, types.TCP)
+		client, _, err := WaitForPlugin(ctx, p)
 
 		require.NoError(t, err)
 		require.NotNil(t, client)
@@ -67,10 +78,18 @@ func TestWaitForPlugin(t *testing.T) {
 			_ = server.Serve(listener)
 		}()
 		defer server.Close()
-
+		output := bytes.NewBuffer(nil)
+		p := &types.Plugin{
+			ID: "test-socket-plugin",
+			Config: types.Config{
+				Type: types.Socket,
+			},
+			Stdout: io.NopCloser(output),
+		}
+		output.Write([]byte("unix|" + socketPath))
 		// Test the WaitForPlugin function
 		ctx := context.Background()
-		client, err := WaitForPlugin(ctx, "test-socket-plugin", socketPath, types.Socket)
+		client, _, err := WaitForPlugin(ctx, p)
 
 		require.NoError(t, err)
 		require.NotNil(t, client)
@@ -80,21 +99,35 @@ func TestWaitForPlugin(t *testing.T) {
 		// Create a context that's already canceled
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
+		p := &types.Plugin{
+			ID: "test-plugin",
+			Config: types.Config{
+				Type: types.Socket,
+			},
+			Stdout: io.NopCloser(bytes.NewBuffer(nil)),
+		}
 
 		// This should fail immediately due to context cancellation
-		client, err := WaitForPlugin(ctx, "test-plugin", "dummy-location", types.TCP)
+		client, _, err := WaitForPlugin(ctx, p)
 
 		assert.Error(t, err)
 		assert.Nil(t, client)
-		assert.Contains(t, err.Error(), "context was cancelled")
+		assert.Contains(t, err.Error(), "timed out waiting for server to start")
 	})
 
 	t.Run("invalid connection type", func(t *testing.T) {
 		ctx := context.Background()
 		// Use a connection type that's not handled
-		invalidType := types.ConnectionType("999")
-
-		client, err := WaitForPlugin(ctx, "test-invalid-plugin", "dummy-location", invalidType)
+		buffer := bytes.NewBuffer(nil)
+		p := &types.Plugin{
+			ID: "test-invalid-plugin",
+			Config: types.Config{
+				Type: types.ConnectionType("999"),
+			},
+			Stdout: io.NopCloser(buffer),
+		}
+		buffer.Write([]byte("tcp|dummy"))
+		client, _, err := WaitForPlugin(ctx, p)
 
 		assert.Error(t, err)
 		assert.Nil(t, client)

@@ -124,11 +124,8 @@ func main() {
 	if conf.ID == "" {
 		log.Fatal("Plugin ID is required.")
 	}
-	if conf.Location == "" {
-		log.Fatal("Plugin location is required.")
-	}
 
-	ocmPlugin := plugin.NewPlugin(conf)
+	ocmPlugin := plugin.NewPlugin(conf, os.Stdout)
 	if err := ocmPlugin.RegisterHandlers(capabilities.GetHandlers()...); err != nil {
 		log.Fatal(err)
 	}

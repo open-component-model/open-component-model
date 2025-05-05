@@ -151,7 +151,7 @@ func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx co
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
 
-	client, err := plugins.WaitForPlugin(ctx, plugin.ID, plugin.Config.Location, plugin.Config.Type)
+	client, loc, err := plugins.WaitForPlugin(ctx, plugin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
 	}
@@ -166,8 +166,7 @@ loop:
 		}
 	}
 
-	repoPlugin := NewComponentVersionRepositoryPlugin(r.logger, client, plugin.ID, plugin.Path, plugin.Config, jsonSchema)
-
+	repoPlugin := NewComponentVersionRepositoryPlugin(r.logger, client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,
 		cmd:    plugin.Cmd,

@@ -1,8 +1,11 @@
 package plugins
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -11,31 +14,40 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
+const connectionTimeout = 30 * time.Second
+
 type KV struct {
 	Key   string
 	Value string
 }
 
 // WaitForPlugin sets up the HTTP client for the plugin or returns it, based on how I'm going to extract this.
-func WaitForPlugin(ctx context.Context, id, location string, typ types.ConnectionType) (*http.Client, error) {
+func WaitForPlugin(ctx context.Context, plugin *types.Plugin) (*http.Client, string, error) {
 	interval := 100 * time.Millisecond
 	timer := time.NewTicker(interval)
 	timeout := 5 * time.Second
 
-	client, err := connect(ctx, id, location, typ)
+	location, err := getPluginLocation(ctx, plugin)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to plugin %s: %w", id, err)
+		return nil, "", fmt.Errorf("failed to get plugin location: %w", err)
+	}
+
+	slog.InfoContext(ctx, "got plugin location", "location", location)
+
+	client, err := connect(ctx, plugin.ID, location, plugin.Config.Type)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to connect to plugin %s: %w", plugin.ID, err)
 	}
 
 	base := "http://unix"
-	if typ == types.TCP {
+	if plugin.Config.Type == types.TCP {
 		// if the type is TCP the location will include the port
 		base = location
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/healthz", nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to plugin %s: %w", id, err)
+		return nil, "", fmt.Errorf("failed to connect to plugin %s: %w", plugin.ID, err)
 	}
 
 	for {
@@ -45,17 +57,69 @@ func WaitForPlugin(ctx context.Context, id, location string, typ types.Connectio
 		if err == nil {
 			_ = resp.Body.Close()
 
-			return client, nil
+			return client, location, nil
 		}
 
 		select {
 		case <-timer.C:
 			// tick the loop and repeat the main loop body every set interval
 		case <-time.After(timeout):
-			return nil, fmt.Errorf("timed out waiting for plugin %s", id)
+			return nil, "", fmt.Errorf("timed out waiting for plugin %s", plugin.ID)
 		case <-ctx.Done():
-			return nil, fmt.Errorf("context was cancelled %s", id)
+			return nil, "", fmt.Errorf("context was cancelled %s", plugin.ID)
 		}
+	}
+}
+
+func getPluginLocation(ctx context.Context, plugin *types.Plugin) (string, error) {
+	if plugin.Stdout == nil {
+		return "", errors.New("communication channel with the plugin is not set up; stdout is nil")
+	}
+
+	location := make(chan string, 1)
+	errChan := make(chan error, 1)
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, connectionTimeout)
+	defer cancel()
+
+	// Create a scanner to read output line by line
+	scanner := bufio.NewScanner(plugin.Stdout)
+
+	go func() {
+		for scanner.Scan() {
+			line := scanner.Text()
+			slog.InfoContext(ctx, "server output:", "line", line)
+			if !strings.Contains(line, "|") {
+				slog.InfoContext(ctx, "skipping line; separator not present", "line", line)
+				continue
+			}
+
+			// Pattern matching to extract the port
+			// Adjust this regex to match your server's output format
+			split := strings.Split(line, "|")
+			if len(split) != 2 {
+				slog.InfoContext(ctx, "skipping line; separator not present", "line", line)
+				continue
+			}
+
+			location <- split[1]
+			// stop the go routine, we have what we came for
+			return
+		}
+
+		if err := scanner.Err(); err != nil {
+			errChan <- fmt.Errorf("error reading server output: %w", err)
+		}
+	}()
+
+	// Wait for either the location, an error, or timeout
+	select {
+	case loc := <-location:
+		return loc, nil
+	case err := <-errChan:
+		return "", err
+	case <-timeoutCtx.Done():
+		return "", fmt.Errorf("timed out waiting for server to start")
 	}
 }
 

@@ -19,8 +19,6 @@ import (
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
-const socketPathFormat = "/tmp/ocm_plugin_%s.sock"
-
 // PluginManager manages all connected plugins.
 type PluginManager struct {
 	// Registries containing various typed plugins. These should be called directly using the
@@ -89,11 +87,6 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 	}
 
 	for _, plugin := range plugins {
-		location, err := determineConnectionLocation(plugin)
-		if err != nil {
-			return fmt.Errorf("failed to determine connection location: %w", err)
-		}
-		conf.Location = location
 		conf.ID = plugin.ID
 		plugin.Config = *conf
 
@@ -107,7 +100,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 		}
 
-		if err := pm.addPlugin(ctx, plugin, output); err != nil {
+		if err := pm.addPlugin(pm.baseCtx, plugin, output); err != nil {
 			return fmt.Errorf("failed to add plugin %s: %w", plugin.ID, err)
 		}
 	}
@@ -125,9 +118,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 	defer pm.mu.Unlock()
 	var errs error
 
-	errs = errors.Join(errs,
-		pm.ComponentVersionRepositoryRegistry.Shutdown(ctx),
-	)
+	errs = errors.Join(errs, pm.ComponentVersionRepositoryRegistry.Shutdown(ctx))
 
 	return errs
 }
@@ -177,17 +168,23 @@ func (pm *PluginManager) addPlugin(ctx context.Context, plugin *mtypes.Plugin, o
 
 	// Create a command that can then be managed.
 	pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint: gosec // G204 does not apply
-	pluginCmd.Stdout = os.Stdout
 	pluginCmd.Cancel = func() error {
 		slog.Info("killing plugin process because the parent context is cancelled", "id", plugin.ID)
 		return pluginCmd.Process.Kill()
 	}
+
+	// Set up communication pipes.
 	plugin.Cmd = pluginCmd
 	sdtErr, err := pluginCmd.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
 	plugin.Stderr = sdtErr
+	sdtOut, err := pluginCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+	plugin.Stdout = sdtOut
 
 	types := &mtypes.Types{}
 	if err := json.Unmarshal(output.Bytes(), types); err != nil {
@@ -209,31 +206,6 @@ func (pm *PluginManager) addPlugin(ctx context.Context, plugin *mtypes.Plugin, o
 	}
 
 	return nil
-}
-
-func determineConnectionLocation(plugin *mtypes.Plugin) (_ string, err error) {
-	switch plugin.Config.Type {
-	case mtypes.TCP:
-		// For TCP connections we need to find a port to work on. This port, aka. the location, is
-		// determined through this action. Listening on port 0 makes the network choose an empty port
-		// that is given to us. Since we don't immediately reserver the port, it's up the plugin
-		listener, err := net.Listen("tcp", ":0") //nolint: gosec // G102: only does it temporarily to find an empty address
-		if err != nil {
-			return "", err
-		}
-
-		defer func() {
-			if lerr := listener.Close(); lerr != nil {
-				err = errors.Join(err, lerr)
-			}
-		}()
-
-		return listener.Addr().String(), nil
-	case mtypes.Socket:
-		return fmt.Sprintf(socketPathFormat, plugin.ID), nil
-	}
-
-	return "", fmt.Errorf("unknown plugin connection type: %s", plugin.Config.Type)
 }
 
 func determineConnectionType() (mtypes.ConnectionType, error) {

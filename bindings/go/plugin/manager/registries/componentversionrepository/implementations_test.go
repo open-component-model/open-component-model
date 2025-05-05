@@ -40,8 +40,7 @@ func TestPing(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
-		Location:   server.URL,
-	}, []byte(`{}`))
+	}, server.URL, []byte(`{}`))
 
 	// Test successful ping
 	err := plugin.Ping(context.Background())
@@ -73,8 +72,7 @@ func TestAddComponentVersion(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
-		Location:   server.URL,
-	}, []byte(`{}`))
+	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
 	err := plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
@@ -110,8 +108,7 @@ func TestAddComponentVersionValidationFail(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
-		Location:   server.URL,
-	}, schemaOCIRegistry)
+	}, server.URL, schemaOCIRegistry)
 
 	ctx := context.Background()
 
@@ -144,8 +141,7 @@ func TestGetComponentVersion(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
-		Location:   server.URL,
-	}, []byte(`{}`))
+	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
 	desc, err := plugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
@@ -181,8 +177,7 @@ func TestAddLocalResource(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
-		Location:   server.URL,
-	}, []byte(`{}`))
+	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
 	gotResource, err := plugin.AddLocalResource(ctx, repov1.PostLocalResourceRequest[runtime.Typed]{
@@ -219,8 +214,7 @@ func TestGetLocalResource(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
-		Location:   server.URL,
-	}, []byte(`{}`))
+	}, server.URL, []byte(`{}`))
 
 	f, err := os.CreateTemp("", "temp_file")
 	require.NoError(t, err)

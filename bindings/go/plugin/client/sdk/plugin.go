@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -17,6 +18,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
+// OutputFormat defines an unequivocal format in which to report back the location of the plugin startup.
+// The format is as follows: ConnectionType|Location. For example: unix|/tmp/plugin.socket or tcp|127.0.0.1:12345
+// The line-break at the end is important, because of how the text scanner works per line.
+var OutputFormat = "%s|%s\n"
+
 // Plugin contains configuration for a single plugin and further details for life-cycle management.
 // These include the server that's running the plugin, the handlers which serve functionality, and tracking idle time.
 // Idle time tracks server work. If the server is not doing anything and not processing current requests and not getting
@@ -29,18 +35,22 @@ type Plugin struct {
 	server        *http.Server
 	interrupt     chan bool
 	workerCounter atomic.Int64
+	location      string
+	output        io.Writer
 }
 
 // NewPlugin creates a new Go based plugin. After creation,
 // call RegisterHandlers to register the handlers responsible for this
 // plugin's inner workings. A capabilities endpoint is automatically added
-// to every plugin.
+// to every plugin. Takes an output device to print out the configure location
+// for the plugin to so that the manager can pick it up.
 // TODO(Skarlso): Provide documentation for secure data flow with local certificate
 // setup and certificate generation. At least start a document / issue.
-func NewPlugin(conf types.Config) *Plugin {
+func NewPlugin(conf types.Config, output io.Writer) *Plugin {
 	return &Plugin{
 		Config:    conf,
 		interrupt: make(chan bool, 1), // to not block any new work coming in
+		output:    output,
 	}
 }
 
@@ -117,7 +127,13 @@ func (p *Plugin) Healthz(w http.ResponseWriter, r *http.Request) {
 
 // listen starts listening for connections from the plugin manager.
 func (p *Plugin) listen(ctx context.Context) error {
-	conn, err := net.Listen(string(p.Config.Type), p.Config.Location)
+	loc, err := p.determineLocation()
+	if err != nil {
+		return fmt.Errorf("could not determine location: %w", err)
+	}
+	p.location = loc
+
+	conn, err := net.Listen(string(p.Config.Type), loc)
 	if err != nil {
 		return fmt.Errorf("failed to connect to socket from client: %w", err)
 	}
@@ -144,7 +160,38 @@ func (p *Plugin) listen(ctx context.Context) error {
 
 	p.server = server
 
+	// output the location before starting the server
+	if _, err := fmt.Fprintf(p.output, OutputFormat, p.Config.Type, loc); err != nil {
+		return fmt.Errorf("failed to write location to output writer: %w", err)
+	}
+
 	return server.Serve(conn)
+}
+
+func (p *Plugin) determineLocation() (_ string, err error) {
+	switch p.Config.Type {
+	case types.Socket:
+		loc := "/tmp/" + p.Config.ID + "-plugin.socket"
+		if _, err := os.Stat(loc); err == nil {
+			return "", fmt.Errorf("plugin location already exists: %s", loc)
+		}
+
+		return loc, nil
+	case types.TCP:
+		loc, err := net.Listen("tcp", ":0") //nolint: gosec // G102: only does it temporarily to find an empty address
+		if err != nil {
+			return "", fmt.Errorf("failed to start tcp listener: %w", err)
+		}
+
+		// Close the listener and return the address to be specific.
+		defer func() {
+			err = errors.Join(err, loc.Close())
+		}()
+
+		return loc.Addr().String(), nil
+	}
+
+	return "", fmt.Errorf("unknown plugin type: %s", p.Config.Type)
 }
 
 // GracefulShutdown will stop the server and do cleanup if necessary.
@@ -158,8 +205,8 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 
 	switch p.Config.Type {
 	case types.Socket:
-		slog.InfoContext(ctx, "removing socket", "location", p.Config.Location)
-		if err := os.Remove(p.Config.Location); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.InfoContext(ctx, "removing socket", "location", p.location)
+		if err := os.Remove(p.location); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	case types.TCP:

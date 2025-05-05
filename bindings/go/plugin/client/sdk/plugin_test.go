@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net"
@@ -18,15 +19,14 @@ import (
 func TestPluginSDK(t *testing.T) {
 	r := require.New(t)
 
-	location := "/tmp/test-socket.socket"
+	output := bytes.NewBuffer(nil)
+	location := "/tmp/test-plugin-plugin.socket"
 	ctx := context.Background()
 	p := NewPlugin(types.Config{
-		ID:          "test-plugin",
-		Type:        types.Socket,
-		PluginType:  types.ComponentVersionRepositoryPluginType,
-		Location:    location,
-		IdleTimeout: nil,
-	})
+		ID:         "test-plugin",
+		Type:       types.Socket,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+	}, output)
 
 	t.Cleanup(func() {
 		r.NoError(os.RemoveAll(location))
@@ -65,14 +65,14 @@ func TestPluginSDK(t *testing.T) {
 func TestIdleChecker(t *testing.T) {
 	r := require.New(t)
 	location := "/tmp/test-socket.socket"
+	output := bytes.NewBuffer(nil)
 	timeout := 10 * time.Millisecond
 	p := NewPlugin(types.Config{
 		ID:          "test-plugin",
 		Type:        types.Socket,
 		PluginType:  types.ComponentVersionRepositoryPluginType,
-		Location:    location,
 		IdleTimeout: &timeout,
-	})
+	}, output)
 
 	t.Cleanup(func() {
 		r.NoError(os.RemoveAll(location))

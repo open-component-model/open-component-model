@@ -31,7 +31,6 @@ func TestPluginFlow(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       mtypes.Socket,
 		PluginType: mtypes.ComponentVersionRepositoryPluginType,
-		Location:   "/tmp/test-plugin.socket",
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -43,8 +42,10 @@ func TestPluginFlow(t *testing.T) {
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	t.Cleanup(func() {
 		_ = pluginCmd.Process.Kill()
-		_ = os.Remove("/tmp/test-plugin.socket")
+		_ = os.Remove("/tmp/test-plugin-plugin.socket")
 	})
+	pipe, err := pluginCmd.StdoutPipe()
+	require.NoError(t, err)
 	plugin := &mtypes.Plugin{
 		ID:   "test-plugin",
 		Path: path,
@@ -52,7 +53,6 @@ func TestPluginFlow(t *testing.T) {
 			ID:         "test-plugin",
 			Type:       mtypes.Socket,
 			PluginType: mtypes.ComponentVersionRepositoryPluginType,
-			Location:   "/tmp/test-plugin.socket",
 		},
 		Types: map[mtypes.PluginType][]mtypes.Type{
 			mtypes.ComponentVersionRepositoryPluginType: {
@@ -62,7 +62,8 @@ func TestPluginFlow(t *testing.T) {
 				},
 			},
 		},
-		Cmd: pluginCmd,
+		Cmd:    pluginCmd,
+		Stdout: pipe,
 	}
 	require.NoError(t, registry.AddPlugin(plugin, typ))
 

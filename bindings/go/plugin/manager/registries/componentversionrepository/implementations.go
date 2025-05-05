@@ -92,6 +92,8 @@ type RepositoryPlugin struct {
 
 	// jsonSchema is the schema for all endpoints for this plugin.
 	jsonSchema []byte
+	// location is where the plugin started listening.
+	location string
 }
 
 // This plugin implements all the given contracts.
@@ -99,7 +101,7 @@ var (
 	_ v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
-func NewComponentVersionRepositoryPlugin(logger *slog.Logger, client *http.Client, id string, path string, config types.Config, jsonSchema []byte) *RepositoryPlugin {
+func NewComponentVersionRepositoryPlugin(logger *slog.Logger, client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
 		path:       path,
@@ -107,13 +109,14 @@ func NewComponentVersionRepositoryPlugin(logger *slog.Logger, client *http.Clien
 		logger:     logger,
 		client:     client,
 		jsonSchema: jsonSchema,
+		location:   loc,
 	}
 }
 
 func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	r.logger.Info("Pinging plugin", "id", r.ID)
 
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, "healthz", http.MethodGet); err != nil {
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, "healthz", http.MethodGet); err != nil {
 		return fmt.Errorf("failed to ping plugin %s: %w", r.ID, err)
 	}
 
@@ -131,7 +134,7 @@ func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request v1.P
 		return err
 	}
 
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, UploadComponentVersion, http.MethodPost, plugins.WithPayload(request), plugins.WithHeader(credHeader)); err != nil {
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, UploadComponentVersion, http.MethodPost, plugins.WithPayload(request), plugins.WithHeader(credHeader)); err != nil {
 		return fmt.Errorf("failed to add component version with plugin %q: %w", r.ID, err)
 	}
 
@@ -157,7 +160,7 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request v1.G
 	}
 
 	descV2 := &v2.Descriptor{}
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, DownloadComponentVersion, http.MethodGet, plugins.WithResult(descV2), plugins.WithQueryParams(params), plugins.WithHeader(credHeader)); err != nil {
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, DownloadComponentVersion, http.MethodGet, plugins.WithResult(descV2), plugins.WithQueryParams(params), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to get component version %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
 	}
 
@@ -181,7 +184,7 @@ func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request v1.Post
 	}
 
 	resourceV2 := &v2.Resource{}
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, UploadLocalResource, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(resourceV2), plugins.WithHeader(credHeader)); err != nil {
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, UploadLocalResource, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(resourceV2), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to add local resource %s: %w", r.ID, err)
 	}
 
@@ -219,7 +222,7 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetL
 		return err
 	}
 
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.config.Location, DownloadLocalResource, http.MethodGet, plugins.WithQueryParams(params), plugins.WithHeader(credHeader)); err != nil {
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, DownloadLocalResource, http.MethodGet, plugins.WithQueryParams(params), plugins.WithHeader(credHeader)); err != nil {
 		return fmt.Errorf("failed to get local resource %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
 	}
 

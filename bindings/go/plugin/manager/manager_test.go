@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,8 @@ import (
 
 func TestPluginManager(t *testing.T) {
 	ctx := t.Context()
-	pm := NewPluginManager(ctx)
+	baseContext := context.Background()
+	pm := NewPluginManager(baseContext)
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp")))
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
@@ -25,7 +27,7 @@ func TestPluginManager(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
-		require.NoError(t, os.Remove("/tmp/ocm_plugin_test-plugin.sock"))
+		require.NoError(t, os.Remove("/tmp/test-plugin-plugin.socket"))
 	})
 
 	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
