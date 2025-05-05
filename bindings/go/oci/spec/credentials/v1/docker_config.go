@@ -27,12 +27,12 @@ type DockerConfig struct {
 }
 
 func (c *DockerConfig) String() string {
-	base := fmt.Sprintf("%s", c.GetType())
+	base := c.GetType().String()
 	if c.DockerConfigFile != "" {
 		base += fmt.Sprintf("(%s)", c.DockerConfigFile)
 	}
 	if c.DockerConfig != "" {
-		base += fmt.Sprintf("(inline)")
+		base += "(inline)"
 	}
 	return base
 }

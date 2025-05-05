@@ -1,10 +1,3 @@
-// Package credentials provides functionality for managing and resolving Docker credentials
-// in the context of the Open Component Model (OCM). It supports various credential types
-// including username/password authentication and token-based authentication.
-//
-// The package integrates with Docker's credential store system and provides a flexible
-// way to handle credentials for container registries. It supports both file-based and
-// in-memory credential configurations.
 package credentials
 
 import (
@@ -100,7 +93,7 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (map[string]string, error) {
 	credStore, err := getStore(ctx, dockerConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve credentials store: %v", err)
+		return nil, fmt.Errorf("failed to retrieve credentials store: %w", err)
 	}
 
 	hostname := identity[runtime.IdentityAttributeHostname]
@@ -110,7 +103,7 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 
 	cred, err := credStore.Get(ctx, hostname)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get credentials for %q: %v", hostname, err)
+		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
 	}
 	credentialMap := map[string]string{}
 	if v := cred.Username; v != "" {
@@ -150,15 +143,15 @@ func getStore(ctx context.Context, dockerConfig credentialsv1.DockerConfig) (rem
 		})
 	case dockerConfig.DockerConfig != "":
 		slog.InfoContext(ctx, "using docker config from inline config")
-		tmp, err := os.CreateTemp("", "docker-config-*.json")
-		if err != nil {
+		var tmp *os.File
+		if tmp, err = os.CreateTemp("", "docker-config-*.json"); err != nil {
 			return nil, fmt.Errorf("failed to create temporary file: %w", err)
 		}
 		defer func() {
 			_ = tmp.Close()
 			_ = os.Remove(tmp.Name()) // we can safely remove the temp file because the store is loaded into memory
 		}()
-		if err := os.WriteFile(tmp.Name(), []byte(dockerConfig.DockerConfig), 0644); err != nil {
+		if err := os.WriteFile(tmp.Name(), []byte(dockerConfig.DockerConfig), 0o600); err != nil {
 			return nil, fmt.Errorf("failed to write temporary file: %w", err)
 		}
 		store, err = remotecredentials.NewStore(tmp.Name(), remotecredentials.StoreOptions{})
