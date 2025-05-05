@@ -188,11 +188,11 @@ func TestGetStore(t *testing.T) {
 			wantErr: assert.NoError,
 		},
 		{
-			name: "invalid docker config content will only print warning but succeed",
+			name: "invalid docker config content will fail parsing",
 			dockerConfig: credentialsv1.DockerConfig{
 				DockerConfig: "invalid json content",
 			},
-			wantErr: assert.NoError,
+			wantErr: assert.Error,
 		},
 	}
 
