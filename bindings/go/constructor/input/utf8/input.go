@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/input"
 	"ocm.software/open-component-model/bindings/go/constructor/input/utf8/spec/v2alpha1"
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -27,15 +28,15 @@ const (
 	MediaTypeYAML      = "application/x-yaml"
 )
 
-var _ input.Method = &Method{}
+var _ input.ResourceInputMethod = &Method{}
 
 type Method struct{ Scheme *runtime.Scheme }
 
-func (i *Method) ProcessResource(_ context.Context, resource *spec.Resource) (data blob.ReadOnlyBlob, err error) {
-	return i.process(resource)
+func (i *Method) ProcessResource(ctx context.Context, resource *spec.Resource, opts input.Options) (processed *descriptor.Resource, err error) {
+	return i.process(ctx, resource, opts)
 }
 
-func (i *Method) process(resource *spec.Resource) (blob.ReadOnlyBlob, error) {
+func (i *Method) process(ctx context.Context, resource *spec.Resource, opts input.Options) (processed *descriptor.Resource, err error) {
 	utf8 := v2alpha1.UTF8{}
 	if err := i.Scheme.Convert(resource.Input, &utf8); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
@@ -72,7 +73,7 @@ func (i *Method) process(resource *spec.Resource) (blob.ReadOnlyBlob, error) {
 		ReadOnlyBlob: data,
 	}
 
-	return cached, nil
+	return input.AddColocatedLocalBlob(ctx, opts.Target, opts.Component, opts.Version, resource, cached)
 }
 
 func validate(t v2alpha1.UTF8) error {

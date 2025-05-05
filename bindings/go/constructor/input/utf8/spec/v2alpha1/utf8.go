@@ -11,12 +11,18 @@ import (
 // +ocm:typegen=true
 type UTF8 struct {
 	Type runtime.Type `json:"type"`
-	// Path is the path to the file.
-	Text         string                `json:"text,omitempty"`
-	Object       *runtime.Unstructured `json:"object,omitempty"`
-	ObjectFormat UTF8ObjectFormat      `json:"objectFormat,omitempty"`
-	Compress     bool                  `json:"compress,omitempty"`
-	MediaType    string                `json:"mediaType,omitempty"`
+	// Text is the UTF8 encoded text.
+	Text string `json:"text,omitempty"`
+	// Object is the object to be marshalled to UTF8, mutually exclusive with Text.
+	Object *runtime.Unstructured `json:"object,omitempty"`
+	// ObjectFormat is the format to use when marshalling Object to UTF8, mutually exclusive with Text.
+	ObjectFormat UTF8ObjectFormat `json:"objectFormat,omitempty"`
+	// Compress indicates whether the UTF8 encoded text should be compressed with gzip.
+	Compress bool `json:"compress,omitempty"`
+	// MediaType is the media type of the UTF8 encoded text. If not specified and ObjectFormat is set,
+	// the media type will be defaulted to either application/json (UTF8ObjectFormatJSON) or application/x-yaml (UTF8ObjectFormatYAML).
+	// If not specified and Text is set, the media type will be default to text/plain.
+	MediaType string `json:"mediaType,omitempty"`
 }
 
 func (t *UTF8) HasText() bool {

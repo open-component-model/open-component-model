@@ -29,22 +29,22 @@ func init() {
 }
 
 type Registry struct {
-	methods map[runtime.Type]input.Method
+	methods map[runtime.Type]input.ResourceInputMethod
 	scheme  *runtime.Scheme
 }
 
 func New(scheme *runtime.Scheme) *Registry {
 	return &Registry{
 		scheme:  scheme,
-		methods: make(map[runtime.Type]input.Method),
+		methods: make(map[runtime.Type]input.ResourceInputMethod),
 	}
 }
 
-func (r *Registry) MustRegisterMethod(prototype runtime.Typed, method input.Method) {
+func (r *Registry) MustRegisterMethod(prototype runtime.Typed, method input.ResourceInputMethod) {
 	r.methods[r.scheme.MustTypeForPrototype(prototype)] = method
 }
 
-func (r *Registry) GetFor(t runtime.Typed) (input.Method, bool) {
+func (r *Registry) GetFor(t runtime.Typed) (input.ResourceInputMethod, bool) {
 	typed, err := r.scheme.NewObject(t.GetType())
 	if err != nil {
 		return nil, false
