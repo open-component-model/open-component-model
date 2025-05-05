@@ -228,6 +228,12 @@ func Parse(input string) (*Ref, error) {
 // GuessType tries to guess the repository type ("ctf" or "oci")
 // from an untyped repository specification string.
 //
+// You may ask yourself why this is needed.
+// The reason is that there are some repository strings that are indistinguishable from being either
+// a CTF or OCI repository. For example,
+// "github.com/organization/repository" could be an OCI repository without a Scheme,
+// but it could also be a file path to a CTF in the subfolders "github.com", "organization" and "repository".
+//
 // It uses a practical set of heuristics:
 //   - If it has a URL scheme ("file://"), assume CTF
 //   - If it's an absolute filesystem path, assume CTF
