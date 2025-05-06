@@ -7,27 +7,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
-//
-// func ConvertToRuntimeResource(resource *Resource) (*descriptor.Resource, error) {
-// 	descriptor.Resource{
-// 		ElementMeta: descriptor.ElementMeta{
-// 			ObjectMeta: descriptor.ObjectMeta{
-// 				Name:    "",
-// 				Version: "",
-// 				Labels:  nil,
-// 			},
-// 			ExtraIdentity: nil,
-// 		},
-// 		SourceRefs:   nil,
-// 		Type:         "",
-// 		Relation:     "",
-// 		Access:       nil,
-// 		Digest:       nil,
-// 		Size:         0,
-// 		CreationTime: descriptor.CreationTime{},
-// 	}
-// }
-
 // ConvertToRuntimeResource converts Resource's to internal representation.
 func ConvertToRuntimeResource(resource Resource) descriptor.Resource {
 	var target descriptor.Resource
