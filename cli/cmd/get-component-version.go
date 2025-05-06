@@ -25,7 +25,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
@@ -54,8 +55,8 @@ For known types, currently only {%[2]s} are supported, which can be shortened to
 If no type is given, the repository path is interpreted based on introspection and heuristics.
 `,
 		compref.DefaultPrefix,
-		strings.Join([]string{v1.Type, v1.TypeCTF}, "|"),
-		strings.Join([]string{v1.ShortType, v1.ShortTypeCTF}, "|"),
+		strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
+		strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
 	),
 	Example: strings.TrimSpace(`
 Getting a single component version:
@@ -81,7 +82,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 }
 
 func init() {
-	enum.Var(GetComponentVersionCmd.Flags(), "output", []string{"table", "yaml", "json"}, "output format of the component descriptors")
+	enum.VarP(GetComponentVersionCmd.Flags(), "output", "o", []string{"table", "yaml", "json"}, "output format of the component descriptors")
 	GetComponentVersionCmd.Flags().String("semver-constraint", "> 0.0.0-0", "semantic version constraint restricting which versions to output")
 	GetCmd.AddCommand(GetComponentVersionCmd)
 }
@@ -271,7 +272,7 @@ func componentVersionRepositoryForSpec(typed runtime.Typed) (oci.ComponentVersio
 	// TODO(jakobmoellerdev): switch to plugin system to allow arbitrary repository selection.
 	var opts []oci.RepositoryOption
 	switch typed := typed.(type) {
-	case *v1.OCIRepository:
+	case *ociv1.Repository:
 		resolver := urlresolver.New(typed.BaseUrl)
 		resolver.SetClient(&auth.Client{
 			Credential: func(ctx context.Context, hostport string) (auth.Credential, error) {
@@ -284,14 +285,16 @@ func componentVersionRepositoryForSpec(typed runtime.Typed) (oci.ComponentVersio
 					return auth.Credential{}, fmt.Errorf("splitting host and port failed: %w", err)
 				}
 				identity := runtime.Identity{}
-				identity.SetType(runtime.NewVersionedType(v1.Type, v1.Version))
+				identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
 				if host != "" {
 					identity[runtime.IdentityAttributeHostname] = host
 				}
 				if port != "" {
 					identity[runtime.IdentityAttributePort] = port
 				}
-				credentialMap, err := Root.CredentialResolver.Resolve(ctx, identity)
+				// TODO add credentials back once resolver is present
+				credentialMap := map[string]string{}
+				// credentialMap, err := Root.CredentialResolver.Resolve(ctx, identity)
 
 				// TODO(jakobmoellerdev): add support for other credential types such as token
 				cred := auth.Credential{}
@@ -307,7 +310,7 @@ func componentVersionRepositoryForSpec(typed runtime.Typed) (oci.ComponentVersio
 			Cache: auth.NewCache(),
 		})
 		opts = append(opts, oci.WithResolver(resolver))
-	case *v1.CTFRepository:
+	case *ctfv1.Repository:
 		archive, err := ctf.OpenCTFFromOSPath(typed.Path, ctf.O_RDONLY)
 		if err != nil {
 			return nil, fmt.Errorf("opening ctf component version repository failed: %w", err)

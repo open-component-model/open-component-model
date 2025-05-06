@@ -1,4 +1,4 @@
-package v1
+package oci
 
 import (
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -7,11 +7,12 @@ import (
 const (
 	LegacyRegistryType  = "OCIRegistry"
 	LegacyRegistryType2 = "ociRegistry"
-	ShortType           = "oci"
+	ShortType           = "OCI"
+	ShortType2          = "oci"
 	Type                = "OCIRepository"
 )
 
-// OCIRepository is a type that represents an OCI repository as per
+// Repository is a type that represents an OCI repository as per
 // https://github.com/opencontainers/distribution-spec
 //
 // It is not only used to specify the full OCI compliant repository namespace, but also contains
@@ -22,7 +23,7 @@ const (
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
-type OCIRepository struct {
+type Repository struct {
 	Type runtime.Type `json:"type"`
 	// BaseURL is the base url of the repository to resolve artifacts.
 	//
@@ -35,6 +36,6 @@ type OCIRepository struct {
 	BaseUrl string `json:"baseUrl"`
 }
 
-func (spec *OCIRepository) String() string {
+func (spec *Repository) String() string {
 	return spec.BaseUrl
 }

@@ -1,7 +1,8 @@
 package repository
 
 import (
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -12,19 +13,27 @@ func init() {
 }
 
 func MustAddToScheme(scheme *runtime.Scheme) {
-	ociRepository := &v1.OCIRepository{}
-	scheme.MustRegisterWithAlias(ociRepository, runtime.NewVersionedType(v1.Type, v1.Version))
-	scheme.MustRegisterWithAlias(ociRepository, runtime.NewVersionedType(v1.ShortType, v1.Version))
-	scheme.MustRegisterWithAlias(ociRepository, runtime.NewUnversionedType(v1.ShortType))
+	scheme.MustRegisterWithAlias(&oci.Repository{},
+		runtime.NewVersionedType(oci.Type, oci.Version),
+		runtime.NewUnversionedType(oci.Type),
+		runtime.NewVersionedType(oci.ShortType, oci.Version),
+		runtime.NewUnversionedType(oci.ShortType),
+		runtime.NewVersionedType(oci.ShortType2, oci.Version),
+		runtime.NewUnversionedType(oci.ShortType2),
+	)
 
-	ctfRepository := &v1.CTFRepository{}
-	scheme.MustRegisterWithAlias(ctfRepository, runtime.NewVersionedType(v1.TypeCTF, v1.Version))
-	scheme.MustRegisterWithAlias(ctfRepository, runtime.NewVersionedType(v1.ShortTypeCTF, v1.Version))
-	scheme.MustRegisterWithAlias(ctfRepository, runtime.NewUnversionedType(v1.ShortTypeCTF))
+	scheme.MustRegisterWithAlias(&ctf.Repository{},
+		runtime.NewVersionedType(ctf.Type, ctf.Version),
+		runtime.NewUnversionedType(ctf.Type),
+		runtime.NewVersionedType(ctf.ShortType, ctf.Version),
+		runtime.NewUnversionedType(ctf.ShortType),
+		runtime.NewVersionedType(ctf.ShortType2, ctf.Version),
+		runtime.NewUnversionedType(ctf.ShortType2),
+	)
 }
 
 func MustAddLegacyToScheme(scheme *runtime.Scheme) {
-	ociRepository := &v1.OCIRepository{}
-	scheme.MustRegisterWithAlias(ociRepository, runtime.NewVersionedType(v1.LegacyRegistryType, v1.Version))
-	scheme.MustRegisterWithAlias(ociRepository, runtime.NewVersionedType(v1.LegacyRegistryType2, v1.Version))
+	ociRepository := &oci.Repository{}
+	scheme.MustRegisterWithAlias(ociRepository, runtime.NewVersionedType(oci.LegacyRegistryType, oci.Version))
+	scheme.MustRegisterWithAlias(ociRepository, runtime.NewVersionedType(oci.LegacyRegistryType2, oci.Version))
 }

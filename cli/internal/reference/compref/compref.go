@@ -11,7 +11,8 @@ import (
 	"unicode"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -25,11 +26,14 @@ const (
 	// It allows for optional "v" prefix, and supports pre-release and build metadata.
 	// The regex is based on the semantic versioning specification (https://semver.org/spec/v2.0.0.html).
 	VersionRegex = `^[v]?(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:\.(0|[1-9]\d*))?(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`
+	// DigestRegex is the regular expression used to validate digests as part of a component reference.
+	DigestRegex = `[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][[:xdigit:]]{32,}`
 )
 
 var (
 	componentRegex = regexp.MustCompile(ComponentRegex)
 	versionRegex   = regexp.MustCompile(VersionRegex)
+	digestRegex    = regexp.MustCompile(DigestRegex)
 )
 
 // DefaultPrefix is the default prefix used for component descriptors.
@@ -53,10 +57,12 @@ func init() {
 //
 // The format of a component reference is:
 //
-//	[<type>::]<repository>/[<valid-prefix>]/<component>[:<version>]
+//	[<type>::]<repository>/[<valid-prefix>]/<component>[:<version>][@<digest>]
 //
 // For valid prefixes, see ValidPrefixes.
+// For valid components, see ComponentRegex.
 // For valid versions, see VersionRegex.
+// For valid digests, see DigestRegex.
 type Ref struct {
 	// Type represents the repository type (e.g., "oci", "ctf")
 	Type string
@@ -68,11 +74,21 @@ type Ref struct {
 	// It can only be one of ValidPrefixes.
 	Prefix string
 
-	// Component is the name of the component
+	// Component is the name of the component.
+	// Validated as per ComponentRegex.
 	Component string
 
-	// Version is the semantic version of the component
+	// Version is the semantic version of the component. It can be specified without Digest,
+	// in which case it is a "soft" version pinning in that the content behind the version
+	// can change without the specification becoming invalid.
+	// Validated as per VersionRegex.
 	Version string
+
+	// Digest is an optional content-addressable identifier for a pinned component version (e.g., sha256:abcd...)
+	// if present, it indicates a specific version of the component MUST be present with this digest.
+	// Thus, the Digest is more authoritative than the Version.
+	// Validates as per DigestRegex.
+	Digest string
 }
 
 func (ref *Ref) String() string {
@@ -84,24 +100,25 @@ func (ref *Ref) String() string {
 	if ref.Version != "" {
 		sb.WriteString(":" + ref.Version)
 	}
+	if ref.Digest != "" {
+		sb.WriteString("@" + ref.Digest)
+	}
 	return sb.String()
 }
 
 // Parse parses an input string into a Ref.
 // Accepted inputs are of the forms
 //
-//   - [ctf::][<file path>/[<DefaultPrefix>]/<component id>[:<version>]
-//   - [oci::][<registry>/<repository>/[<DefaultPrefix>]/<component id>[:<version>]
+//   - [ctf::][<file path>/[<DefaultPrefix>]/<component id>[:<version>][@<digest>]
+//   - [oci::][<registry>/<repository>/[<DefaultPrefix>]/<component id>[:<version>][@<digest>]
+//   - localhost[:<port>]/[<DefaultPrefix>]/<component id>[:<version>] - localhost special cases
 //
 // Not accepted cases that were valid in old OCM:
 //
 //   - [type::][<repositorySpecJSON>/[<DefaultPrefix>]/<component id>[:<version>] - arbitrary repository definitions
-//   - [oci::][<registry>/<repository>/[<DefaultPrefix>]/<component id>[:<version>][@<digest>] - pinned component versions
 //   - <repositoryAlias>//[<DefaultPrefix>]/<component id>[:<version>] - repository aliases for the ocm configuration
-//   - localhost[:<port>]/[<DefaultPrefix>]/<component id>[:<version>] - localhost special cases
 //
 // All non-supported special cases are currently under review of being accepted forms.
-// TODO(jakobmoellerdev): Add support for component version pinning via digest.
 //
 // This code roughly resembles
 // https://github.com/open-component-model/ocm/blob/2ea69c7ecca1e8be7e9d9f94dfdcac6090f1c69d/api/oci/ref_test.go
@@ -116,7 +133,19 @@ func Parse(input string) (*Ref, error) {
 		input = input[idx+2:]
 	}
 
-	// Step 2: Extract optional version
+	// Step 2: Extract optional digest (e.g., @sha256:...)
+	var digestPart string
+	if idx := strings.LastIndex(input, "@"); idx != -1 && !strings.Contains(input[idx:], "/") {
+		digestPart = input[idx+1:]
+		input = input[:idx]
+
+		if !digestRegex.MatchString(digestPart) {
+			return nil, fmt.Errorf("invalid digest %q in %q, must match %q", digestPart, originalInput, DigestRegex)
+		}
+		ref.Digest = digestPart
+	}
+
+	// Step 3: Extract optional version (e.g., :1.2.3)
 	var versionPart string
 	if idx := strings.LastIndex(input, ":"); idx != -1 && !strings.Contains(input[idx:], "/") {
 		versionPart = input[idx+1:]
@@ -128,11 +157,11 @@ func Parse(input string) (*Ref, error) {
 		ref.Version = versionPart
 	}
 
-	// Step 3: Find prefix
+	// Step 4: Find prefix
 	foundPrefix := false
 	for _, prefix := range ValidPrefixes {
 		token := "/" + prefix + "/"
-		if idx := strings.Index(input, token); idx != -1 {
+		if idx := strings.LastIndex(input, token); idx != -1 {
 			repoSpec := input[:idx]
 			rest := input[idx+len(token):]
 
@@ -152,12 +181,12 @@ func Parse(input string) (*Ref, error) {
 		return nil, fmt.Errorf("no valid descriptor prefix found in %q (expected one of: %v)", originalInput, ValidPrefixes)
 	}
 
-	// Step 4: Validate component name
+	// Step 5: Validate component name
 	if !componentRegex.MatchString(ref.Component) {
 		return nil, fmt.Errorf("invalid component name %q in %q, must match %q", ref.Component, originalInput, ComponentRegex)
 	}
 
-	// Step 5: Resolve type if not explicitly given
+	// Step 6: Resolve type if not explicitly given
 	if ref.Type == "" {
 		t, err := GuessType(input)
 		if err != nil {
@@ -167,7 +196,7 @@ func Parse(input string) (*Ref, error) {
 		ref.Type = t
 	}
 
-	// Step 6: Build repository object
+	// Step 7: Build repository object
 	rtyp, err := runtime.TypeFromString(ref.Type)
 	if err != nil {
 		return nil, fmt.Errorf("unknown type %q in %q: %w", ref.Type, originalInput, err)
@@ -179,9 +208,13 @@ func Parse(input string) (*Ref, error) {
 	}
 
 	switch t := typed.(type) {
-	case *v1.OCIRepository:
-		t.BaseUrl = input
-	case *v1.CTFRepository:
+	case *ociv1.Repository:
+		uri, err := url.Parse(input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse repository URI %q: %w", input, err)
+		}
+		t.BaseUrl = uri.String()
+	case *ctfv1.Repository:
 		t.Path = input
 	default:
 		return nil, fmt.Errorf("unsupported repository type: %q", ref.Type)
@@ -195,6 +228,12 @@ func Parse(input string) (*Ref, error) {
 // GuessType tries to guess the repository type ("ctf" or "oci")
 // from an untyped repository specification string.
 //
+// You may ask yourself why this is needed.
+// The reason is that there are some repository strings that are indistinguishable from being either
+// a CTF or OCI repository. For example,
+// "github.com/organization/repository" could be an OCI repository without a Scheme,
+// but it could also be a file path to a CTF in the subfolders "github.com", "organization" and "repository".
+//
 // It uses a practical set of heuristics:
 //   - If it has a URL scheme ("file://"), assume CTF
 //   - If it's an absolute filesystem path, assume CTF
@@ -205,11 +244,11 @@ func GuessType(repository string) (string, error) {
 	// Try parsing as URL first
 	if u, err := url.Parse(repository); err == nil {
 		if u.Scheme == "file" {
-			return runtime.NewVersionedType(v1.TypeCTF, v1.Version).String(), nil
+			return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
 		}
 		if u.Scheme != "" {
 			// Any other scheme (e.g., https) implies OCI
-			return runtime.NewVersionedType(v1.Type, v1.Version).String(), nil
+			return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
 		}
 	}
 
@@ -217,21 +256,21 @@ func GuessType(repository string) (string, error) {
 
 	// Absolute filesystem path → assume CTF
 	if filepath.IsAbs(cleaned) {
-		return runtime.NewVersionedType(v1.TypeCTF, v1.Version).String(), nil
+		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
 	}
 
 	// Contains colon (e.g., localhost:5000), or is localhost without port → assume OCI
 	if strings.Contains(cleaned, ":") || cleaned == "localhost" {
-		return runtime.NewVersionedType(v1.Type, v1.Version).String(), nil
+		return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
 	}
 
 	// Contains domain-looking part (e.g., github.com, ghcr.io) → assume OCI
 	if looksLikeDomain(cleaned) {
-		return runtime.NewVersionedType(v1.Type, v1.Version).String(), nil
+		return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
 	}
 
 	// Default fallback: assume CTF
-	return runtime.NewVersionedType(v1.TypeCTF, v1.Version).String(), nil
+	return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
 }
 
 // looksLikeDomain checks if the string contains a dot with non-numeric parts (heuristic).
