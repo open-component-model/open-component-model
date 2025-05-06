@@ -16,8 +16,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// Repository defines the interface for a target repository that can store component versions but also
+// act as a target for the constructor to add resources to.
+type Repository interface {
+	input.TargetRepository
+	// AddComponentVersion adds a new component version to the repository.
+	// If a component version already exists, it will be updated with the new descriptor.
+	// The descriptor internally will be serialized via the runtime package.
+	// The descriptor MUST have its target Name and Version already set as they are used to identify the target
+	// Location in the Store.
+	AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error
+}
+
 type Options struct {
-	Target              input.ComponentVersionRepository
+	Target              Repository
 	InputMethodRegistry *registry.Registry
 }
 
