@@ -5,5 +5,4 @@
 //   - **Types**: The struct that will be Marshalled and sent back to plugin manager. This struct is used to track the
 //     types a plugin supports. Plural because, for example, a Transformation plugin would support at least two. The
 //     incoming type and the output type. The format is PluginType/list of types.
-//   - **Request structs**: There are several structs tracking what type of request an endpoint can have.
 package types

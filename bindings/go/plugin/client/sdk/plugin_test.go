@@ -64,7 +64,7 @@ func TestPluginSDK(t *testing.T) {
 
 func TestIdleChecker(t *testing.T) {
 	r := require.New(t)
-	location := "/tmp/test-socket.socket"
+	location := "/tmp/test-plugin-plugin.socket"
 	output := bytes.NewBuffer(nil)
 	timeout := 10 * time.Millisecond
 	p := NewPlugin(types.Config{
@@ -99,10 +99,42 @@ func TestIdleChecker(t *testing.T) {
 			return false
 		}
 
-		r.ErrorContains(err, "dial unix /tmp/test-socket.socket: connect: no such file or directory")
+		r.ErrorContains(err, "dial unix /tmp/test-plugin-plugin.socket: connect: no such file or directory")
 
 		return true
 	}, 5*time.Second, 20*time.Millisecond)
+}
+
+func TestHealthCheckInvalidMethod(t *testing.T) {
+	r := require.New(t)
+	location := "/tmp/test-plugin-plugin.socket"
+	output := bytes.NewBuffer(nil)
+	p := NewPlugin(types.Config{
+		ID:         "test-plugin",
+		Type:       types.Socket,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+	}, output)
+
+	t.Cleanup(func() {
+		r.NoError(os.RemoveAll(location))
+	})
+	ctx := context.Background()
+	go func() {
+		_ = p.Start(ctx)
+	}()
+	// wait until the plugin starts up
+	httpClient := createHttpClient(location)
+
+	// Health check endpoint should be added automatically.
+	waitForPlugin(r, httpClient)
+
+	// idle timeout should kill the plugin and remove the socket prematurely.
+	resp, err := httpClient.Post("http://unix/healthz", "application/json", bytes.NewBufferString("hello"))
+	r.NoError(err)
+	r.Equal(http.StatusMethodNotAllowed, resp.StatusCode)
+	content, err := io.ReadAll(resp.Body)
+	r.NoError(err)
+	r.Contains(string(content), "this endpoint may only be called with either HEAD or GET method")
 }
 
 func waitForPlugin(r *require.Assertions, httpClient *http.Client) {

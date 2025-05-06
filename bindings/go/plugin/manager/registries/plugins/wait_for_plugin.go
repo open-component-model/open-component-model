@@ -89,22 +89,20 @@ func getPluginLocation(ctx context.Context, plugin *types.Plugin) (string, error
 		for scanner.Scan() {
 			line := scanner.Text()
 			slog.DebugContext(ctx, "server output:", "line", line)
-			if !strings.Contains(line, "|") {
-				slog.DebugContext(ctx, "skipping line; separator not present", "line", line)
-				continue
-			}
+			switch {
+			case strings.HasPrefix(line, "http://"):
+				location <- line
 
-			// Pattern matching to extract the port
-			// Adjust this regex to match your server's output format
-			split := strings.Split(line, "|")
-			if len(split) != 2 {
-				slog.DebugContext(ctx, "skipping line; separator not present", "line", line)
-				continue
-			}
+				// stop the go routine, we have what we came for
+				return
+			case strings.HasPrefix(line, "http+unix://"):
+				location <- strings.TrimPrefix(line, "http+unix://")
 
-			location <- split[1]
-			// stop the go routine, we have what we came for
-			return
+				// stop the go routine, we have what we came for
+				return
+			default:
+				slog.DebugContext(ctx, "skipping line with unknown scheme", "line", line)
+			}
 		}
 
 		if err := scanner.Err(); err != nil {

@@ -15,13 +15,9 @@ import (
 	"time"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
-
-// OutputFormat defines an unequivocal format in which to report back the location of the plugin startup.
-// The format is as follows: ConnectionType|Location. For example: unix|/tmp/plugin.socket or tcp|127.0.0.1:12345
-// The line-break at the end is important, because of how the text scanner works per line.
-var OutputFormat = "%s|%s\n"
 
 // Plugin contains configuration for a single plugin and further details for life-cycle management.
 // These include the server that's running the plugin, the handlers which serve functionality, and tracking idle time.
@@ -67,7 +63,7 @@ func (p *Plugin) startIdleChecker(ctx context.Context) {
 		case <-timer.C:
 			timer.Stop()
 
-			_ = p.GracefulShutdown(context.Background())
+			_ = p.GracefulShutdown(ctx)
 			slog.InfoContext(ctx, "idle check timer expired for plugin", "id", p.Config.ID)
 			return
 		case working := <-p.interrupt:
@@ -122,7 +118,11 @@ func (p *Plugin) Healthz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusMethodNotAllowed)
+	plugins.NewError(
+		errors.New(
+			"this endpoint may only be called with either HEAD or GET method"),
+		http.StatusMethodNotAllowed).
+		Write(w)
 }
 
 // listen starts listening for connections from the plugin manager.
@@ -161,7 +161,15 @@ func (p *Plugin) listen(ctx context.Context) error {
 	p.server = server
 
 	// output the location before starting the server
-	if _, err := fmt.Fprintf(p.output, OutputFormat, p.Config.Type, loc); err != nil {
+	var schemedLocation string
+	switch p.Config.Type {
+	case types.TCP:
+		schemedLocation = loc // http is already included in tcp output
+	case types.Socket:
+		schemedLocation = "http+unix://" + loc
+	}
+
+	if _, err := fmt.Fprintln(p.output, schemedLocation); err != nil {
 		return fmt.Errorf("failed to write location to output writer: %w", err)
 	}
 
@@ -250,7 +258,7 @@ func (p *Plugin) Shutdown(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(ctx, "Shutting down plugin", "id", p.Config.ID)
 		w.WriteHeader(http.StatusOK)
-		if err := p.GracefulShutdown(context.Background()); err != nil {
+		if err := p.GracefulShutdown(ctx); err != nil {
 			slog.ErrorContext(ctx, "Error shutting down plugin", "error", err)
 		}
 	}

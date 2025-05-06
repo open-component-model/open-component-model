@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,10 +14,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
 func TestWaitForPlugin(t *testing.T) {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 	t.Run("successful connection to TCP plugin", func(t *testing.T) {
 		output := bytes.NewBuffer(nil)
 		// Start a test server
@@ -33,7 +36,7 @@ func TestWaitForPlugin(t *testing.T) {
 			},
 			Stdout: io.NopCloser(output),
 		}
-		output.Write([]byte("tcp|" + server.URL))
+		output.Write([]byte(server.URL))
 
 		ctx := context.Background()
 		client, _, err := WaitForPlugin(ctx, p)
@@ -86,7 +89,7 @@ func TestWaitForPlugin(t *testing.T) {
 			},
 			Stdout: io.NopCloser(output),
 		}
-		output.Write([]byte("unix|" + socketPath))
+		output.Write([]byte("http+unix://" + socketPath))
 		// Test the WaitForPlugin function
 		ctx := context.Background()
 		client, _, err := WaitForPlugin(ctx, p)
@@ -126,7 +129,7 @@ func TestWaitForPlugin(t *testing.T) {
 			},
 			Stdout: io.NopCloser(buffer),
 		}
-		buffer.Write([]byte("tcp|dummy"))
+		buffer.Write([]byte("http+unix://dummy"))
 		client, _, err := WaitForPlugin(ctx, p)
 
 		assert.Error(t, err)

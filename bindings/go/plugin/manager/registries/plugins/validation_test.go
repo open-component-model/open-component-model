@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
