@@ -22,29 +22,20 @@ type constructedPlugin struct {
 	cmd *exec.Cmd
 }
 
-// internalComponentVersionRepositoryPlugins contains all plugins that have been registered using internally import statement.
-var internalComponentVersionRepositoryPlugins map[runtime.Type]contracts.PluginBase
-
-// internalComponentVersionRepositoryScheme is the holder of schemes. This hold will contain the scheme required to
-// construct and understand the passed in types and what / how they need to look like. The passed in scheme during
-// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
-// that their type is registered or not.
-var internalComponentVersionRepositoryScheme = runtime.NewScheme()
-
 // RegisterInternalComponentVersionRepositoryPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
-func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](scheme *runtime.Scheme, p v1.ReadWriteOCMRepositoryPluginContract[T], prototype T) error {
-	if internalComponentVersionRepositoryPlugins == nil {
-		internalComponentVersionRepositoryPlugins = make(map[runtime.Type]contracts.PluginBase)
-	}
+func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](scheme *runtime.Scheme, r *RepositoryRegistry, p v1.ReadWriteOCMRepositoryPluginContract[T], prototype T) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	typ, err := scheme.TypeForPrototype(prototype)
 	if err != nil {
 		return fmt.Errorf("failed to get type for prototype %T: %w", prototype, err)
 	}
 
-	internalComponentVersionRepositoryPlugins[typ] = p
+	r.internalComponentVersionRepositoryPlugins[typ] = p
 
-	if err := internalComponentVersionRepositoryScheme.RegisterWithAlias(prototype, typ); err != nil {
+	if err := r.internalComponentVersionRepositoryScheme.RegisterWithAlias(prototype, typ); err != nil {
 		return fmt.Errorf("failed to register prototype %T: %w", prototype, err)
 	}
 
@@ -53,11 +44,19 @@ func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](scheme *r
 
 // RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
 type RepositoryRegistry struct {
-	mu                 sync.Mutex
-	registry           map[runtime.Type]*mtypes.Plugin // Have this as a single plugin for read/write
-	constructedPlugins map[string]*constructedPlugin   // running plugins
-	logger             *slog.Logger
 	ctx                context.Context
+	mu                 sync.Mutex
+	registry           map[runtime.Type]mtypes.Plugin // Have this as a single plugin for read/write
+	constructedPlugins map[string]*constructedPlugin  // running plugins
+	logger             *slog.Logger
+
+	// internalComponentVersionRepositoryPlugins contains all plugins that have been registered using internally import statement.
+	internalComponentVersionRepositoryPlugins map[runtime.Type]contracts.PluginBase
+	// internalComponentVersionRepositoryScheme is the holder of schemes. This hold will contain the scheme required to
+	// construct and understand the passed in types and what / how they need to look like. The passed in scheme during
+	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
+	// that their type is registered or not.
+	internalComponentVersionRepositoryScheme *runtime.Scheme
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
@@ -81,12 +80,12 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 // AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.
-func (r *RepositoryRegistry) AddPlugin(plugin *mtypes.Plugin, typ runtime.Type) error {
+func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, typ runtime.Type) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.registry[typ]; ok {
-		return fmt.Errorf("plugin for type %v already registered", typ)
+	if v, ok := r.registry[typ]; ok {
+		return fmt.Errorf("plugin for type %v already registered with ID: %s", typ, v.ID)
 	}
 
 	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
@@ -102,7 +101,7 @@ func (r *RepositoryRegistry) getPluginWithType(typ runtime.Type) (*mtypes.Plugin
 		return nil, fmt.Errorf("no plugin registered for type %v", typ)
 	}
 
-	return p, nil
+	return &p, nil
 }
 
 // GetReadWriteComponentVersionRepositoryPluginForType finds a specific plugin in the registry.
@@ -113,8 +112,8 @@ func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx co
 	defer r.mu.Unlock()
 
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := internalComponentVersionRepositoryScheme.TypeForPrototype(proto); err == nil {
-		return getInternalPlugin[T](typ)
+	if typ, err := r.internalComponentVersionRepositoryScheme.TypeForPrototype(proto); err == nil {
+		return getInternalPlugin[T](r, typ)
 	}
 
 	typ, err := scheme.TypeForPrototype(proto)
@@ -139,8 +138,8 @@ func GetReadWriteComponentVersionRepositoryPluginForType[T runtime.Typed](ctx co
 	return startAndReturnPlugin[T](ctx, r, plugin)
 }
 
-func getInternalPlugin[T runtime.Typed](typ runtime.Type) (v1.ReadWriteOCMRepositoryPluginContract[T], error) {
-	p, ok := getInternalComponentVersionRepositoryPlugin(typ)
+func getInternalPlugin[T runtime.Typed](r *RepositoryRegistry, typ runtime.Type) (v1.ReadWriteOCMRepositoryPluginContract[T], error) {
+	p, ok := r.getInternalComponentVersionRepositoryPlugin(typ)
 	if !ok {
 		return nil, fmt.Errorf("type %v is registered but no plugin exists", typ)
 	}
@@ -188,20 +187,21 @@ loop:
 
 // getInternalComponentVersionRepositoryPlugin looks in the internally registered plugins first if we have any plugins that have
 // been added.
-func getInternalComponentVersionRepositoryPlugin(typ runtime.Type) (contracts.PluginBase, bool) {
-	if _, ok := internalComponentVersionRepositoryPlugins[typ]; !ok {
+func (r *RepositoryRegistry) getInternalComponentVersionRepositoryPlugin(typ runtime.Type) (contracts.PluginBase, bool) {
+	if _, ok := r.internalComponentVersionRepositoryPlugins[typ]; !ok {
 		return nil, false
 	}
 
-	return internalComponentVersionRepositoryPlugins[typ], true
+	return r.internalComponentVersionRepositoryPlugins[typ], true
 }
 
 // NewComponentVersionRepositoryRegistry creates a new registry and initializes maps.
 func NewComponentVersionRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
-		// scheme here contains all known types for this registry
 		ctx:                ctx,
-		registry:           make(map[runtime.Type]*mtypes.Plugin),
+		registry:           make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins: make(map[string]*constructedPlugin),
+		internalComponentVersionRepositoryPlugins: make(map[runtime.Type]contracts.PluginBase),
+		internalComponentVersionRepositoryScheme:  runtime.NewScheme(),
 	}
 }

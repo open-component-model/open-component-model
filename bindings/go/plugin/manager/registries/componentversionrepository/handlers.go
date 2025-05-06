@@ -65,7 +65,7 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			return
 		}
 
-		body, err := plugins.DecodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
+		body, err := decodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
 		if err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
@@ -130,7 +130,7 @@ func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			return
 		}
 
-		body, err := plugins.DecodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
+		body, err := decodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
 		if err != nil {
 			slog.Error("failed to decode request body", "error", err)
 			return

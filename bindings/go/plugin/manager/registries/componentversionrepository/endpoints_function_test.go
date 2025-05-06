@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
+	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -29,7 +29,19 @@ func (m *mockPlugin) AddComponentVersion(_ context.Context, _ repov1.PostCompone
 }
 
 func (m *mockPlugin) GetComponentVersion(_ context.Context, _ repov1.GetComponentVersionRequest[*v1.OCIRepository], _ map[string]string) (*descriptor.Descriptor, error) {
-	return &descriptor.Descriptor{}, nil
+	return &descriptor.Descriptor{
+		Meta: descriptor.Meta{
+			Version: "1.0.0",
+		},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-mock-component",
+					Version: "v1.0.0",
+				},
+			},
+		},
+	}, nil
 }
 
 func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResourceRequest[*v1.OCIRepository], _ map[string]string) error {

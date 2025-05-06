@@ -4,7 +4,8 @@ import "context"
 
 // EmptyBasePlugin can be used by internal implementations to skip having to implement
 // the Ping method which will not be called. Ping is only required for external plugins
-// in which case it is used as a health check. Internally, only the implementation is needed
+// in which case it is used as a health check to see that a binary based plugin ( that uses
+// a web server implementation ) is up and running. Internally, only the implementation is needed
 // therefore, there is nothing to "ping".
 type EmptyBasePlugin struct{}
 

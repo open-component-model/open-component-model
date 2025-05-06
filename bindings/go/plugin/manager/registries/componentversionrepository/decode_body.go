@@ -1,4 +1,4 @@
-package plugins
+package componentversionrepository
 
 import (
 	"encoding/json"
@@ -6,9 +6,9 @@ import (
 	"net/http"
 )
 
-// DecodeJSONRequestBody takes a request and any type and decodes the request's body into that type
+// decodeJSONRequestBody takes a request and any type and decodes the request's body into that type
 // and returns the result.
-func DecodeJSONRequestBody[T any](writer http.ResponseWriter, request *http.Request) (*T, error) {
+func decodeJSONRequestBody[T any](writer http.ResponseWriter, request *http.Request) (*T, error) {
 	pRequest := new(T)
 	if err := json.NewDecoder(request.Body).Decode(pRequest); err != nil {
 		writer.WriteHeader(http.StatusBadRequest)

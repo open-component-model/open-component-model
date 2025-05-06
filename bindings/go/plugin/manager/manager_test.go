@@ -1,7 +1,9 @@
 package manager
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,6 +15,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -21,7 +24,7 @@ func TestPluginManager(t *testing.T) {
 	ctx := t.Context()
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
-	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp")))
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata")))
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	proto := &v1.OCIRepository{}
@@ -44,4 +47,51 @@ func TestPluginManager(t *testing.T) {
 	}, map[string]string{})
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
+}
+
+func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+	ctx := t.Context()
+	baseContext := context.Background()
+	pm := NewPluginManager(baseContext)
+	pluginTypes := types.Types{
+		Types: map[types.PluginType][]types.Type{
+			types.ComponentVersionRepositoryPluginType: {
+				{
+					Type: runtime.Type{
+						Name:    "OCIRepository",
+						Version: "v1",
+					},
+				},
+			},
+		},
+	}
+	testPlugin := types.Plugin{
+		ID:   "test-id",
+		Path: "/tmp/test-plugin-plugin.socket",
+		Config: types.Config{
+			ID:         "test-id",
+			Type:       "unix",
+			PluginType: types.ComponentVersionRepositoryPluginType,
+		},
+	}
+	serialized, err := json.Marshal(pluginTypes)
+	require.NoError(t, err)
+
+	require.NoError(t, pm.addPlugin(ctx, testPlugin, bytes.NewBuffer(serialized)))
+	// trying to add the same plugin again for the same type but with different id
+	// this way of testing actually showed a horrible flaw. We were passing around a pointer
+	// which meant if we weren't very careful and overwrote the plugin AFTER we added it,
+	// the plugin inside the map of the registry was also changed. That is really, really not desired.
+	testPlugin.ID = "test-other"
+	testPlugin.Path = "/tmp/test-other-plugin-plugin.socket"
+	testPlugin.Config.ID = "test-other"
+	testPlugin.Config.Type = "tcp"
+	testPlugin.Types = nil
+	require.ErrorContains(t, pm.addPlugin(ctx, testPlugin, bytes.NewBuffer(serialized)), "failed to register plugin test-other: plugin for type OCIRepository/v1 already registered with ID: test-id")
+}
+
+func TestPluginManagerWithNoPlugins(t *testing.T) {
+	pm := NewPluginManager(context.Background())
+	require.ErrorContains(t, pm.RegisterPlugins(context.Background(), filepath.Join(".")), "no plugins found")
 }

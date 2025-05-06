@@ -21,30 +21,30 @@ func ValidatePlugin(typ runtime.Typed, jsonSchema []byte) (bool, error) {
 
 	var v any
 	if err := json.Unmarshal(jsonSchema, &v); err != nil {
-		return true, err
+		return false, err
 	}
 
 	if err := c.AddResource("schema.json", unmarshaler); err != nil {
-		return true, fmt.Errorf("failed to add schema.json: %w", err)
+		return false, fmt.Errorf("failed to add schema.json: %w", err)
 	}
 	sch, err := c.Compile("schema.json")
 	if err != nil {
-		return true, fmt.Errorf("failed to compile schema.json: %w", err)
+		return false, fmt.Errorf("failed to compile schema.json: %w", err)
 	}
 
 	// need to marshal the interface into a JSON format.
 	content, err := json.Marshal(typ)
 	if err != nil {
-		return true, fmt.Errorf("failed to marshal type: %w", err)
+		return false, fmt.Errorf("failed to marshal type: %w", err)
 	}
 	// once marshalled, we create a map[string]any representation of the marshaled content.
 	unmarshalledType, err := jsonschema.UnmarshalJSON(bytes.NewReader(content))
 	if err != nil {
-		return true, fmt.Errorf("failed to unmarshal : %w", err)
+		return false, fmt.Errorf("failed to unmarshal : %w", err)
 	}
 
 	if _, ok := unmarshalledType.(string); ok {
-		return true, nil
+		return false, nil
 	}
 
 	// finally, validate map[string]any against the loaded schema
@@ -53,7 +53,7 @@ func ValidatePlugin(typ runtime.Typed, jsonSchema []byte) (bool, error) {
 		err = errors.Join(err, json.Indent(&typRaw, content, "", "  "))
 		var schemaRaw bytes.Buffer
 		err = errors.Join(err, json.Indent(&schemaRaw, jsonSchema, "", "  "))
-		return true, fmt.Errorf("failed to validate schema for\n%s\n---SCHEMA---\n%s\n: %w", typRaw.String(), schemaRaw.String(), err)
+		return false, fmt.Errorf("failed to validate schema for\n%s\n---SCHEMA---\n%s\n: %w", typRaw.String(), schemaRaw.String(), err)
 	}
 
 	return true, nil

@@ -178,6 +178,9 @@ func (p *Plugin) determineLocation() (_ string, err error) {
 
 		return loc, nil
 	case types.TCP:
+		// Listen `:0` gives back a random _free_ port for the plugin to listen on.
+		// Once we have this port, this listener is immediately closed and a purpose listener
+		// will be opened with the specific port.
 		loc, err := net.Listen("tcp", ":0") //nolint: gosec // G102: only does it temporarily to find an empty address
 		if err != nil {
 			return "", fmt.Errorf("failed to start tcp listener: %w", err)

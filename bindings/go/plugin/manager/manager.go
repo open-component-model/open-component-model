@@ -86,6 +86,10 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		return fmt.Errorf("could not fetch plugins: %w", err)
 	}
 
+	if len(plugins) == 0 {
+		return errors.New("no plugins found")
+	}
+
 	for _, plugin := range plugins {
 		conf.ID = plugin.ID
 		plugin.Config = *conf
@@ -100,7 +104,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 		}
 
-		if err := pm.addPlugin(pm.baseCtx, plugin, output); err != nil {
+		if err := pm.addPlugin(pm.baseCtx, *plugin, output); err != nil {
 			return fmt.Errorf("failed to add plugin %s: %w", plugin.ID, err)
 		}
 	}
@@ -160,7 +164,7 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 	return plugins, nil
 }
 
-func (pm *PluginManager) addPlugin(ctx context.Context, plugin *mtypes.Plugin, output *bytes.Buffer) error {
+func (pm *PluginManager) addPlugin(ctx context.Context, plugin mtypes.Plugin, output *bytes.Buffer) error {
 	serialized, err := json.Marshal(plugin.Config)
 	if err != nil {
 		return err

@@ -1,17 +1,10 @@
-// Package sdk is a package providing a SDK compatible with the plugin manager for writing your own OCM plugins in go.
-// It contains several useful features to build a Go based plugin that is accepted by the manager.
-// The SDK handles the communication protocol, lifecycle management, and health checks.
-// Key concepts in this package:
-//   - HTTP-based communication over TCP or Unix sockets (Unix sockets preferred)
-//   - Automatic idle timeout management
-//   - Graceful shutdown handling
-//   - Health checking endpoints
-//   - Custom handler registration
-//   - Custom cleanup functionality
-//
-// This package is expected to be used together with one of the plugin registries and the endpoint builder package.
-// Those packages provide all the necessary setup code to construct the right handlers. Further, during RegisterHandlers
-// call, this package will set up idle timeout management.
+// Package sdk is a package providing an SDK compatible with the plugin manager for writing your own OCM plugins in go.
+// It helps to manage a plugin's life-cycle and general behavior needs. These are the following:
+//   - starting a plugin
+//   - graceful shutdown of a plugin
+//   - registering handlers
+//   - idle check ( after a configured amount of times being without a task will automatically shut down the plugin to prevent resource usage )
+//   - determine listening address ( for tcp: get a free port and listen on it; unix: create a name of the socket )
 //
 // GracefulShutdown will handle interrupts and will clean up any created unix domain sockets if any were created.
 // The following code is an example on how to use this package:
@@ -44,6 +37,7 @@
 //	if conf.ID == "" {
 //		log.Fatal("Plugin ID is required.")
 //	}
+//
 //	if conf.Location == "" {
 //		log.Fatal("Plugin location is required.")
 //	}
