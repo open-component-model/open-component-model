@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// Base returns a base logger for OCI operations with a default RealmKey.
 func Base() *slog.Logger {
 	return slog.With(slog.String("realm", "oci"))
 }
@@ -20,13 +21,21 @@ func Base() *slog.Logger {
 func Operation(ctx context.Context, operation string, fields ...slog.Attr) func(error) {
 	start := time.Now()
 	logger := Base().With(slog.String("operation", operation))
-	logger.LogAttrs(ctx, slog.LevelInfo, "starting operation", fields...)
+	logger.LogAttrs(ctx, slog.LevelInfo, "operation starting", fields...)
+
 	return func(err error) {
+		duration := slog.Duration("duration", time.Since(start))
+
+		var level slog.Level
+		var msg string
 		if err != nil {
-			logger.LogAttrs(ctx, slog.LevelError, "operation failed", slog.Duration("duration", time.Since(start)), slog.String("error", err.Error()))
+			level, msg = slog.LevelError, "operation failed"
+			fields = append(fields, slog.String("error", err.Error()))
 		} else {
-			logger.LogAttrs(ctx, slog.LevelInfo, "operation completed", slog.Duration("duration", time.Since(start)))
+			level, msg = slog.LevelInfo, "operation completed"
 		}
+
+		logger.LogAttrs(ctx, level, msg, append([]slog.Attr{duration}, fields...)...)
 	}
 }
 
