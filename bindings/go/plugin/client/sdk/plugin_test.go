@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,13 +19,14 @@ import (
 )
 
 func TestPluginSDK(t *testing.T) {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 	r := require.New(t)
 
 	output := bytes.NewBuffer(nil)
-	location := "/tmp/test-plugin-plugin.socket"
+	location := "/tmp/test-plugin-flow-plugin.socket"
 	ctx := context.Background()
 	p := NewPlugin(ctx, types.Config{
-		ID:         "test-plugin",
+		ID:         "test-plugin-flow",
 		Type:       types.Socket,
 		PluginType: types.ComponentVersionRepositoryPluginType,
 	}, output)
@@ -67,11 +69,11 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 	r := require.New(t)
 
 	output := bytes.NewBuffer(nil)
-	location := "/tmp/test-plugin-plugin.socket"
+	location := "/tmp/test-plugin-force-plugin.socket"
 	ctx := context.Background()
 	baseCtx := context.Background()
 	p := NewPlugin(baseCtx, types.Config{
-		ID:         "test-plugin",
+		ID:         "test-plugin-force",
 		Type:       types.Socket,
 		PluginType: types.ComponentVersionRepositoryPluginType,
 	}, output)
@@ -125,12 +127,12 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 
 func TestIdleChecker(t *testing.T) {
 	r := require.New(t)
-	location := "/tmp/test-plugin-plugin.socket"
+	location := "/tmp/test-plugin-idle-plugin.socket"
 	output := bytes.NewBuffer(nil)
 	timeout := 10 * time.Millisecond
 	ctx := context.Background()
 	p := NewPlugin(ctx, types.Config{
-		ID:          "test-plugin",
+		ID:          "test-plugin-idle",
 		Type:        types.Socket,
 		PluginType:  types.ComponentVersionRepositoryPluginType,
 		IdleTimeout: &timeout,
@@ -161,7 +163,7 @@ func TestIdleChecker(t *testing.T) {
 			return false
 		}
 
-		r.ErrorContains(err, "dial unix /tmp/test-plugin-plugin.socket: connect: no such file or directory")
+		r.ErrorContains(err, "dial unix /tmp/test-plugin-idle-plugin.socket: connect: no such file or directory")
 
 		return true
 	}, 5*time.Second, 20*time.Millisecond)
@@ -169,11 +171,11 @@ func TestIdleChecker(t *testing.T) {
 
 func TestHealthCheckInvalidMethod(t *testing.T) {
 	r := require.New(t)
-	location := "/tmp/test-plugin-plugin.socket"
+	location := "/tmp/test-plugin-invalid-plugin.socket"
 	output := bytes.NewBuffer(nil)
 	ctx := context.Background()
 	p := NewPlugin(ctx, types.Config{
-		ID:         "test-plugin",
+		ID:         "test-plugin-invalid",
 		Type:       types.Socket,
 		PluginType: types.ComponentVersionRepositoryPluginType,
 	}, output)
