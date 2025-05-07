@@ -140,17 +140,18 @@ func (r *ArtifactBlob) HasPrecalculatedDigest() bool {
 // Note that this method only updates the digest value and assumes the normalisation algorithm
 // is already set correctly in the resource.
 func (r *ArtifactBlob) SetPrecalculatedDigest(dig string) {
-	switch typed := r.Artifact.(type) {
-	case *descriptor.Resource:
-		if typed.Digest == nil {
-			typed.Digest = &descriptor.Digest{}
-		}
-		d, err := digestSpec(dig)
-		if err != nil {
-			panic(err)
-		}
-		typed.Digest = d
+	resource, ok := r.Artifact.(*descriptor.Resource)
+	if !ok {
+		return
 	}
+	if resource.Digest == nil {
+		resource.Digest = &descriptor.Digest{}
+	}
+	d, err := digestSpec(dig)
+	if err != nil {
+		panic(err)
+	}
+	resource.Digest = d
 }
 
 func digestSpec(dig string) (*descriptor.Digest, error) {
@@ -195,9 +196,8 @@ func (r *ArtifactBlob) HasPrecalculatedSize() bool {
 // SetPrecalculatedSize sets the pre-calculated size value for the resource.
 // This method allows updating the size value when it's known beforehand.
 func (r *ArtifactBlob) SetPrecalculatedSize(size int64) {
-	switch typed := r.Artifact.(type) {
-	case *descriptor.Resource:
-		typed.Size = size
+	if resource, ok := r.Artifact.(*descriptor.Resource); ok {
+		resource.Size = size
 	}
 	r.size = size
 }

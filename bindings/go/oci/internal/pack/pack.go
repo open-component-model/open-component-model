@@ -72,6 +72,7 @@ func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.Artif
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported access type: %T", access)
 	}
 }
+
 func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *descriptor.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
 	switch mediaType := access.MediaType; mediaType {
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:

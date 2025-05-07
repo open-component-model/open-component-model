@@ -512,14 +512,14 @@ func (repo *Repository) UploadSource(ctx context.Context, target runtime.Typed, 
 	return nil
 }
 
-func (repo *Repository) uploadOCIImage(ctx context.Context, old, new runtime.Typed, b blob.ReadOnlyBlob) (ociImageSpecV1.Descriptor, *accessv1.OCIImage, error) {
+func (repo *Repository) uploadOCIImage(ctx context.Context, oldAccess, newAccess runtime.Typed, b blob.ReadOnlyBlob) (ociImageSpecV1.Descriptor, *accessv1.OCIImage, error) {
 	var oldTyped accessv1.OCIImage
-	if err := repo.scheme.Convert(old, &oldTyped); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource old to OCI image: %w", err)
+	if err := repo.scheme.Convert(oldAccess, &oldTyped); err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource oldAccess to OCI image: %w", err)
 	}
 
 	var access accessv1.OCIImage
-	if err := repo.scheme.Convert(new, &access); err != nil {
+	if err := repo.scheme.Convert(newAccess, &access); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
 	}
 
@@ -553,7 +553,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, old, new runtime.Typ
 		if _, rErr := ociStore.Resolve(ctx, parsedSrcRef.Reference); rErr != nil {
 			return ociImageSpecV1.Descriptor{}, nil, errors.Join(err, rErr)
 		}
-		slog.Info("resolved non-absolute reference name from oci layout", "old", srcRef, "new", parsedSrcRef.Reference)
+		slog.Info("resolved non-absolute reference name from oci layout", "oldAccess", srcRef, "newAccess", parsedSrcRef.Reference)
 		srcRef = parsedSrcRef.Reference
 	}
 
