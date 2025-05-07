@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/registry"
@@ -292,29 +291,8 @@ func (repo *Repository) AddLocalResource(
 		log.IdentityLogAttr("resource", resource.ToIdentity()))
 	defer done(err)
 
-	reference, store, err := repo.getStore(ctx, component, version)
-	if err != nil {
+	if err := repo.addLocalArtifact(ctx, component, version, resource, b); err != nil {
 		return nil, err
-	}
-
-	resourceBlob, err := ociblob.NewResourceBlob(resource, b)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create resource blob: %w", err)
-	}
-
-	desc, err := pack.ResourceBlob(ctx, store, resourceBlob, pack.Options{
-		AccessScheme:     repo.scheme,
-		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
-		BaseReference:    reference,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to pack resource blob: %w", err)
-	}
-
-	if introspection.IsOCICompliantManifest(desc) {
-		repo.localArtifactManifestCache.Add(reference, desc)
-	} else {
-		repo.localArtifactLayerCache.Add(reference, desc)
 	}
 
 	return resource, nil
@@ -327,23 +305,31 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 		log.IdentityLogAttr("source", source.ToIdentity()))
 	defer done(err)
 
-	reference, store, err := repo.getStore(ctx, component, version)
-	if err != nil {
+	if err := repo.addLocalArtifact(ctx, component, version, source, content); err != nil {
 		return nil, err
 	}
 
-	sourceBlob, err := ociblob.NewSourceBlob(source, content)
+	return source, nil
+}
+
+func (repo *Repository) addLocalArtifact(ctx context.Context, component string, version string, artifact descriptor.Artifact, b blob.ReadOnlyBlob) error {
+	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create resource blob: %w", err)
+		return err
 	}
 
-	desc, err := pack.SourceBlob(ctx, store, sourceBlob, pack.Options{
+	artifactBlob, err := ociblob.NewArtifactBlob(artifact, b)
+	if err != nil {
+		return fmt.Errorf("failed to create resource blob: %w", err)
+	}
+
+	desc, err := pack.ArtifactBlob(ctx, store, artifactBlob, pack.Options{
 		AccessScheme:     repo.scheme,
 		CopyGraphOptions: repo.resourceCopyOptions.CopyGraphOptions,
 		BaseReference:    reference,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to pack resource blob: %w", err)
+		return fmt.Errorf("failed to pack resource blob: %w", err)
 	}
 
 	if introspection.IsOCICompliantManifest(desc) {
@@ -352,7 +338,7 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 		repo.localArtifactLayerCache.Add(reference, desc)
 	}
 
-	return source, nil
+	return nil
 }
 
 // GetLocalResource retrieves a local resource from the repository.
@@ -364,46 +350,12 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		log.IdentityLogAttr("resource", identity))
 	defer done(err)
 
-	reference, store, err := repo.getStore(ctx, component, version)
-	if err != nil {
+	var b LocalBlob
+	var artifact descriptor.Artifact
+	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindResource); err != nil {
 		return nil, nil, err
 	}
-
-	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
-	}
-
-	var candidates []descriptor.Resource
-	for _, res := range desc.Component.Resources {
-		if identity.Match(res.ElementMeta.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
-			candidates = append(candidates, res)
-		}
-	}
-	if len(candidates) != 1 {
-		return nil, nil, fmt.Errorf("found %d candidates while looking for resource %q, but expected exactly one", len(candidates), identity)
-	}
-	resource := candidates[0]
-	log.Base().Info("found resource in descriptor", "resource", resource.ToIdentity())
-
-	if resource.Access.GetType().IsEmpty() {
-		return nil, nil, fmt.Errorf("resource access type is empty")
-	}
-	typed, err := repo.scheme.NewObject(resource.Access.GetType())
-	if err != nil {
-		return nil, nil, fmt.Errorf("error creating resource access: %w", err)
-	}
-	if err := repo.scheme.Convert(resource.Access, typed); err != nil {
-		return nil, nil, fmt.Errorf("error converting resource access: %w", err)
-	}
-
-	switch typed := typed.(type) {
-	case *v2.LocalBlob:
-		b, err := repo.getLocalBlob(ctx, store, index, manifest, resource.Access, identity, annotations.ArtifactKindResource)
-		return b, &resource, err
-	default:
-		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
-	}
+	return b, artifact.(*descriptor.Resource), nil
 }
 
 func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Source, error) {
@@ -411,48 +363,65 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 	done := log.Operation(ctx, "get local source",
 		slog.String("component", component),
 		slog.String("version", version),
-		log.IdentityLogAttr("source", identity))
+		log.IdentityLogAttr("resource", identity))
 	defer done(err)
 
+	var b LocalBlob
+	var artifact descriptor.Artifact
+	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindSource); err != nil {
+		return nil, nil, err
+	}
+	return b, artifact.(*descriptor.Source), nil
+}
+
+func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (LocalBlob, descriptor.Artifact, error) {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	desc, manifest, index, err := getDescriptorFromStore(ctx, store, reference)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	var candidates []descriptor.Source
-	for _, src := range desc.Component.Sources {
-		if identity.Match(src.ElementMeta.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
-			candidates = append(candidates, src)
+	var candidates []descriptor.Artifact
+	switch kind {
+	case annotations.ArtifactKindResource:
+		for _, res := range desc.Component.Resources {
+			if identity.Match(res.ElementMeta.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
+				candidates = append(candidates, &res)
+			}
+		}
+	case annotations.ArtifactKindSource:
+		for _, src := range desc.Component.Sources {
+			if identity.Match(src.ElementMeta.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
+				candidates = append(candidates, &src)
+			}
 		}
 	}
 	if len(candidates) != 1 {
-		return nil, nil, fmt.Errorf("found %d candidates while looking for source %q, but expected exactly one", len(candidates), identity)
+		return nil, nil, fmt.Errorf("found %d candidates while looking for %s %q, but expected exactly one", len(candidates), kind, identity)
 	}
-	source := candidates[0]
-	log.Base().Info("found source in descriptor", "source", source.ToIdentity())
+	artifact := candidates[0]
+	meta := artifact.GetElementMeta()
+	log.Base().Info("found artifact in descriptor", "artifact", meta.ToIdentity())
 
-	if source.Access.GetType().IsEmpty() {
-		return nil, nil, fmt.Errorf("source access type is empty")
-	}
-	typed, err := repo.scheme.NewObject(source.Access.GetType())
+	access := artifact.GetAccess()
+
+	typed, err := repo.scheme.NewObject(access.GetType())
 	if err != nil {
-		return nil, nil, fmt.Errorf("error creating source access: %w", err)
+		return nil, nil, fmt.Errorf("error creating resource access: %w", err)
 	}
-	if err := repo.scheme.Convert(source.Access, typed); err != nil {
-		return nil, nil, fmt.Errorf("error converting source access: %w", err)
+	if err := repo.scheme.Convert(access, typed); err != nil {
+		return nil, nil, fmt.Errorf("error converting resource access: %w", err)
 	}
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		b, err := repo.getLocalBlob(ctx, store, index, manifest, source.Access, identity, annotations.ArtifactKindSource)
-		return b, &source, err
+		b, err := repo.getLocalBlob(ctx, store, index, manifest, access, identity, kind)
+		return b, artifact, err
 	default:
-		return nil, nil, fmt.Errorf("unsupported source access type: %T", typed)
+		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
 }
 
@@ -690,29 +659,6 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed) (dat
 	default:
 		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
-}
-
-func validateDigest(dig *descriptor.Digest, blobDigest digest.Digest) error {
-	if dig == nil {
-		// the resource does not have a digest, so we cannot validate it
-		return nil
-	}
-
-	expected := digest.NewDigestFromEncoded(internaldigest.SHAMapping[dig.HashAlgorithm], dig.Value)
-
-	var actual digest.Digest
-	switch dig.NormalisationAlgorithm {
-	case "genericBlobDigest/v1":
-		// the digest is based on the entire blob
-		actual = blobDigest
-	default:
-		return fmt.Errorf("unsupported digest algorithm: %s", dig.NormalisationAlgorithm)
-	}
-	if expected != actual {
-		return fmt.Errorf("expected resource digest %q to equal downloaded descriptor digest %q", expected, actual)
-	}
-
-	return nil
 }
 
 // getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.

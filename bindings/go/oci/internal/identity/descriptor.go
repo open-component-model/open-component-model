@@ -49,47 +49,35 @@ var mappings = []platformAttributeMapper{
 	},
 }
 
-// AdoptAsResource modifies the provided OCI descriptor to represent a resource.
+// Adopt modifies the provided OCI descriptor to represent an artifact.
 // It sets the platform fields based on the resource's extra identity attributes
 // and adds a annotations.ArtifactOCIAnnotation to indicate that the descriptor
 // is a annotations.ArtifactKindResource.
-func AdoptAsResource(desc *ociImageSpecV1.Descriptor, resource *descriptor.Resource) error {
+func Adopt(desc *ociImageSpecV1.Descriptor, src descriptor.Artifact) error {
+	var kind annotations.ArtifactKind
+	switch src.(type) {
+	case *descriptor.Resource:
+		kind = annotations.ArtifactKindResource
+	case *descriptor.Source:
+		kind = annotations.ArtifactKindSource
+	default:
+		return fmt.Errorf("unsupported artifact type: %T", src)
+	}
+
+	meta := src.GetElementMeta()
 	// Apply platform mappings
 	for _, mapping := range mappings {
-		if value, exists := resource.ExtraIdentity[mapping.attribute]; exists {
+		if value, exists := meta.ExtraIdentity[mapping.attribute]; exists {
 			if desc.Platform == nil {
 				desc.Platform = &ociImageSpecV1.Platform{}
 			}
 			mapping.setter(desc.Platform, value)
 		}
 	}
-	if err := (&annotations.ArtifactOCIAnnotation{
-		Identity: resource.ToIdentity(),
-		Kind:     annotations.ArtifactKindResource,
-	}).AddToDescriptor(desc); err != nil {
-		return fmt.Errorf("failed to add resource artifact annotation to manifest: %w", err)
-	}
 
-	return nil
-}
-
-// AdoptAsSource modifies the provided OCI descriptor to represent a source.
-// It sets the platform fields based on the resource's extra identity attributes
-// and adds a annotations.ArtifactOCIAnnotation to indicate that the descriptor
-// is a annotations.ArtifactKindResource.
-func AdoptAsSource(desc *ociImageSpecV1.Descriptor, src *descriptor.Source) error {
-	// Apply platform mappings
-	for _, mapping := range mappings {
-		if value, exists := src.ExtraIdentity[mapping.attribute]; exists {
-			if desc.Platform == nil {
-				desc.Platform = &ociImageSpecV1.Platform{}
-			}
-			mapping.setter(desc.Platform, value)
-		}
-	}
 	if err := (&annotations.ArtifactOCIAnnotation{
-		Identity: src.ToIdentity(),
-		Kind:     annotations.ArtifactKindSource,
+		Identity: meta.ToIdentity(),
+		Kind:     kind,
 	}).AddToDescriptor(desc); err != nil {
 		return fmt.Errorf("failed to add resource artifact annotation to manifest: %w", err)
 	}
