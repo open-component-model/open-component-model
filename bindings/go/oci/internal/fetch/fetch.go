@@ -36,8 +36,8 @@ type LocalBlob interface {
 // Returns:
 //   - A LocalBlob representing the matching layer
 //   - An error if the layer cannot be found or fetched
-func SingleLayerLocalBlobFromManifestByIdentity(ctx context.Context, store oras.ReadOnlyTarget, manifest *ociImageSpecV1.Manifest, identity map[string]string) (LocalBlob, error) {
-	layer, err := annotations.FilterFirstMatchingArtifact(manifest.Layers, identity, annotations.ArtifactKindResource)
+func SingleLayerLocalBlobFromManifestByIdentity(ctx context.Context, store oras.ReadOnlyTarget, manifest *ociImageSpecV1.Manifest, identity map[string]string, artifactKind annotations.ArtifactKind) (LocalBlob, error) {
+	layer, err := annotations.FilterFirstMatchingArtifact(manifest.Layers, identity, artifactKind)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find matching layer: %w", err)
 	}
@@ -63,8 +63,8 @@ func SingleLayerLocalBlobFromManifestByIdentity(ctx context.Context, store oras.
 // Returns:
 //   - A LocalBlob representing the first layer of the matching manifest
 //   - An error if the manifest cannot be found or its layer cannot be fetched
-func SingleLayerManifestBlobFromIndex(ctx context.Context, store oras.ReadOnlyTarget, index *ociImageSpecV1.Index, identity map[string]string) (LocalBlob, error) {
-	manifestDesc, err := annotations.FilterFirstMatchingArtifact(index.Manifests, identity, annotations.ArtifactKindResource)
+func SingleLayerManifestBlobFromIndex(ctx context.Context, store oras.ReadOnlyTarget, index *ociImageSpecV1.Index, identity map[string]string, artifactKind annotations.ArtifactKind) (LocalBlob, error) {
+	manifestDesc, err := annotations.FilterFirstMatchingArtifact(index.Manifests, identity, artifactKind)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find matching layer: %w", err)
 	}
