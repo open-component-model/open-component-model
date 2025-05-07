@@ -133,47 +133,96 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 //   - Temporary file creation for inline configurations
 //   - Integration with the native host credential store
 func getStore(ctx context.Context, dockerConfig credentialsv1.DockerConfig) (remotecredentials.Store, error) {
-	var store remotecredentials.Store
-	var err error
+	// Determine which store creation strategy to use based on the provided configuration
 	switch {
 	case dockerConfig.DockerConfigFile == "" && dockerConfig.DockerConfig == "":
-		slog.InfoContext(ctx, "attempting to load docker config from default locations or native host store")
-		store, err = remotecredentials.NewStoreFromDocker(remotecredentials.StoreOptions{
-			DetectDefaultNativeStore: true,
-		})
+		return createDefaultStore(ctx)
 	case dockerConfig.DockerConfig != "":
-		slog.InfoContext(ctx, "using docker config from inline config")
-		var tmp *os.File
-		if tmp, err = os.CreateTemp("", "docker-config-*.json"); err != nil {
-			return nil, fmt.Errorf("failed to create temporary file: %w", err)
-		}
-		defer func() {
-			_ = tmp.Close()
-			_ = os.Remove(tmp.Name()) // we can safely remove the temp file because the store is loaded into memory
-		}()
-		if err := os.WriteFile(tmp.Name(), []byte(dockerConfig.DockerConfig), 0o600); err != nil {
-			return nil, fmt.Errorf("failed to write temporary file: %w", err)
-		}
-		store, err = remotecredentials.NewStore(tmp.Name(), remotecredentials.StoreOptions{})
+		return createInlineConfigStore(ctx, dockerConfig.DockerConfig)
 	case dockerConfig.DockerConfigFile != "":
-		slog.InfoContext(ctx, "using docker config from file", "file", dockerConfig.DockerConfigFile)
-		path := dockerConfig.DockerConfigFile
-		// old OCM versions did unclean shell expansion...
-		// simple shell expansion for legacy compatibility, does not support cross user expansion
-		if idx := strings.Index(path, "~"); idx != -1 {
-			dirname, err := os.UserHomeDir()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get user home directory: %w", err)
-			}
-			path = strings.ReplaceAll(path, "~", dirname)
-		}
-		if _, err := os.Stat(path); err != nil {
-			slog.WarnContext(ctx, "failed to find docker config file, thus the config will not offer any credentials", "path", path)
-		}
-		store, err = remotecredentials.NewStore(path, remotecredentials.StoreOptions{})
+		return createFileBasedStore(ctx, dockerConfig.DockerConfigFile)
+	default:
+		return nil, fmt.Errorf("invalid docker config: neither default, inline config, nor config file specified")
 	}
+}
+
+// createDefaultStore creates a credential store using system default Docker config locations
+// and attempts to use the native host credential store if available.
+func createDefaultStore(ctx context.Context) (remotecredentials.Store, error) {
+	slog.InfoContext(ctx, "attempting to load docker config from default locations or native host store")
+	store, err := remotecredentials.NewStoreFromDocker(remotecredentials.StoreOptions{
+		DetectDefaultNativeStore: true,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create docker config store: %w", err)
+		return nil, fmt.Errorf("failed to create default docker config store: %w", err)
 	}
 	return wrapWithLogging(store, slog.Default()), nil
+}
+
+// createInlineConfigStore creates a credential store from an inline JSON configuration.
+// It creates a temporary file to store the configuration and loads it into memory.
+func createInlineConfigStore(ctx context.Context, config string) (remotecredentials.Store, error) {
+	slog.InfoContext(ctx, "using docker config from inline config")
+
+	// Create a temporary file to store the configuration
+	tmp, err := os.CreateTemp("", "docker-config-*.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temporary file: %w", err)
+	}
+
+	// Ensure cleanup of the temporary file
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name()) // Safe to remove as store is loaded into memory
+	}()
+
+	// Write the configuration to the temporary file
+	if err := os.WriteFile(tmp.Name(), []byte(config), 0o600); err != nil {
+		return nil, fmt.Errorf("failed to write temporary file: %w", err)
+	}
+
+	// Create and return the store
+	store, err := remotecredentials.NewStore(tmp.Name(), remotecredentials.StoreOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create inline config store: %w", err)
+	}
+	return wrapWithLogging(store, slog.Default()), nil
+}
+
+// createFileBasedStore creates a credential store from a specified Docker config file.
+// It handles shell expansion for the file path and validates the file's existence.
+func createFileBasedStore(ctx context.Context, configPath string) (remotecredentials.Store, error) {
+	slog.InfoContext(ctx, "using docker config from file", "file", configPath)
+
+	// Handle shell expansion for the config path
+	expandedPath, err := expandConfigPath(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := os.Stat(expandedPath); err != nil {
+		slog.WarnContext(ctx, "failed to find docker config file, thus the config will not offer any credentials", "path", expandedPath)
+	}
+
+	// Create and return the store
+	// For file-based stores, if the file does not exist,
+	// it counts as an empty store and will not fail here!
+	store, err := remotecredentials.NewStore(expandedPath, remotecredentials.StoreOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file-based config store: %w", err)
+	}
+	return wrapWithLogging(store, slog.Default()), nil
+}
+
+// expandConfigPath handles shell expansion for the config file path.
+// Currently supports basic home directory expansion (~).
+func expandConfigPath(path string) (string, error) {
+	if idx := strings.Index(path, "~"); idx != -1 {
+		dirname, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		return strings.ReplaceAll(path, "~", dirname), nil
+	}
+	return path, nil
 }
