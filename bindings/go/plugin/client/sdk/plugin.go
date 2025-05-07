@@ -33,6 +33,7 @@ type Plugin struct {
 	workerCounter atomic.Int64
 	location      string
 	output        io.Writer
+	baseCtx       context.Context
 }
 
 // NewPlugin creates a new Go based plugin. After creation,
@@ -42,11 +43,12 @@ type Plugin struct {
 // for the plugin to so that the manager can pick it up.
 // TODO(Skarlso): Provide documentation for secure data flow with local certificate
 // setup and certificate generation. At least start a document / issue.
-func NewPlugin(conf types.Config, output io.Writer) *Plugin {
+func NewPlugin(ctx context.Context, conf types.Config, output io.Writer) *Plugin {
 	return &Plugin{
 		Config:    conf,
 		interrupt: make(chan bool, 1), // to not block any new work coming in
 		output:    output,
+		baseCtx:   ctx, // base context is used for graceful shutdown operation to finish properly
 	}
 }
 
@@ -245,7 +247,7 @@ func (p *Plugin) RegisterHandlers(handlers ...endpoints.Handler) error {
 	return nil
 }
 
-// CreateHandler will create a working handler. It will signal the plugin that it started to
+// workerHandler will create a working handler. It will signal the plugin that it started to
 // work on something and set the plugin to working. This is important, because the plugin is
 // constantly checking that if it's idle and hasn't heard from the manager in a set time
 // it will exit. As soon as it gets a signal that it is doing something its internal check
@@ -259,10 +261,14 @@ func (p *Plugin) workerHandler(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (p *Plugin) Shutdown(w http.ResponseWriter, r *http.Request) {
-	slog.InfoContext(r.Context(), "Shutting down plugin", "id", p.Config.ID)
+// Shutdown is using attempting to gracefully shut down the server. Note that this endpoint
+// needs to use baseContext that is provided during plugin creation instead of request context
+// because otherwise, the shutdown is interrupted by the request context being cancelled mid-shutdown
+// resulting in a context cancelled error instead of properly closing connection to the server.
+func (p *Plugin) Shutdown(w http.ResponseWriter, _ *http.Request) {
+	slog.InfoContext(p.baseCtx, "Shutting down plugin", "id", p.Config.ID)
 	w.WriteHeader(http.StatusOK)
-	if err := p.GracefulShutdown(r.Context()); err != nil {
-		slog.ErrorContext(r.Context(), "Error shutting down plugin", "error", err)
+	if err := p.GracefulShutdown(p.baseCtx); err != nil {
+		slog.ErrorContext(p.baseCtx, "Error shutting down plugin", "error", err)
 	}
 }

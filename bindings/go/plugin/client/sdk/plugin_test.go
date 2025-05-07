@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ func TestPluginSDK(t *testing.T) {
 	output := bytes.NewBuffer(nil)
 	location := "/tmp/test-plugin-plugin.socket"
 	ctx := context.Background()
-	p := NewPlugin(types.Config{
+	p := NewPlugin(ctx, types.Config{
 		ID:         "test-plugin",
 		Type:       types.Socket,
 		PluginType: types.ComponentVersionRepositoryPluginType,
@@ -62,12 +63,73 @@ func TestPluginSDK(t *testing.T) {
 	r.True(os.IsNotExist(err))
 }
 
+func TestPluginSDKForceShutdownContext(t *testing.T) {
+	r := require.New(t)
+
+	output := bytes.NewBuffer(nil)
+	location := "/tmp/test-plugin-plugin.socket"
+	ctx := context.Background()
+	baseCtx := context.Background()
+	p := NewPlugin(baseCtx, types.Config{
+		ID:         "test-plugin",
+		Type:       types.Socket,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+	}, output)
+
+	t.Cleanup(func() {
+		r.NoError(os.RemoveAll(location))
+	})
+
+	r.NoError(p.RegisterHandlers(endpoints.Handler{
+		Handler: func(writer http.ResponseWriter, request *http.Request) {
+			_, _ = writer.Write([]byte("hello"))
+		},
+		Location: "/test-location",
+	}))
+
+	go func() {
+		_ = p.Start(ctx)
+	}()
+
+	httpClient := createHttpClient(location)
+
+	// Health check endpoint should be added automatically.
+	waitForPlugin(r, httpClient)
+
+	resp, err := httpClient.Get("http://unix/test-location")
+	r.NoError(err)
+	content, err := io.ReadAll(resp.Body)
+	r.NoError(err)
+	r.Equal("hello", string(content))
+
+	// Shutdown endpoint should be added automatically.
+	forceCTX, cancel := context.WithTimeout(context.Background(), time.Second)
+	parse, err := url.Parse("http://unix/shutdown")
+	r.NoError(err)
+	req := &http.Request{
+		Method: "GET",
+		URL:    parse,
+	}
+	req = req.WithContext(forceCTX)
+
+	_, err = httpClient.Do(req)
+	// The above cancel doesn't kill the shutdown process
+	r.Error(err)
+	cancel()
+	r.Eventually(func() bool {
+		_, err := httpClient.Get("http://unix/healthz")
+
+		return err != nil
+	}, 10*time.Second, 5*time.Millisecond)
+}
+
 func TestIdleChecker(t *testing.T) {
 	r := require.New(t)
 	location := "/tmp/test-plugin-plugin.socket"
 	output := bytes.NewBuffer(nil)
 	timeout := 10 * time.Millisecond
-	p := NewPlugin(types.Config{
+	ctx := context.Background()
+	p := NewPlugin(ctx, types.Config{
 		ID:          "test-plugin",
 		Type:        types.Socket,
 		PluginType:  types.ComponentVersionRepositoryPluginType,
@@ -77,7 +139,7 @@ func TestIdleChecker(t *testing.T) {
 	t.Cleanup(func() {
 		r.NoError(os.RemoveAll(location))
 	})
-	ctx := context.Background()
+
 	go func() {
 		_ = p.Start(ctx)
 	}()
@@ -109,7 +171,8 @@ func TestHealthCheckInvalidMethod(t *testing.T) {
 	r := require.New(t)
 	location := "/tmp/test-plugin-plugin.socket"
 	output := bytes.NewBuffer(nil)
-	p := NewPlugin(types.Config{
+	ctx := context.Background()
+	p := NewPlugin(ctx, types.Config{
 		ID:         "test-plugin",
 		Type:       types.Socket,
 		PluginType: types.ComponentVersionRepositoryPluginType,
@@ -118,7 +181,6 @@ func TestHealthCheckInvalidMethod(t *testing.T) {
 	t.Cleanup(func() {
 		r.NoError(os.RemoveAll(location))
 	})
-	ctx := context.Background()
 	go func() {
 		_ = p.Start(ctx)
 	}()

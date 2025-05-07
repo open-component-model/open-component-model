@@ -130,7 +130,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	ocmPlugin := plugin.NewPlugin(conf, os.Stdout)
+	separateContext := context.Background()
+	ocmPlugin := plugin.NewPlugin(separateContext, conf, os.Stdout)
 	if err := ocmPlugin.RegisterHandlers(capabilities.GetHandlers()...); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
