@@ -17,7 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
+	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
@@ -47,8 +47,33 @@ type Options struct {
 	EnforceGlobalAccess bool
 }
 
-// ResourceBlob packs a resourceblob.ResourceBlob into an OCI Storage
-func ResourceBlob(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
+func SourceBlob(ctx context.Context, storage content.Storage, b *ociblob.SourceBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
+	access := b.Source.Access
+	if access == nil || access.GetType().IsEmpty() {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("source access or access type is empty")
+	}
+	typed, err := opts.AccessScheme.NewObject(access.GetType())
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("error creating source access: %w", err)
+	}
+	if err := opts.AccessScheme.Convert(access, typed); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting source access: %w", err)
+	}
+
+	switch access := typed.(type) {
+	case *v2.LocalBlob:
+		internal, err := descriptor.ConvertFromV2LocalBlob(opts.AccessScheme, access)
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting source local blob access in version 2 to internal representation: %w", err)
+		}
+		return SourceLocalBlob(ctx, storage, b, internal, opts)
+	default:
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported access type: %T", access)
+	}
+}
+
+// ResourceBlob packs a [ociblob.ResourceBlob] into an OCI Storage
+func ResourceBlob(ctx context.Context, storage content.Storage, b *ociblob.ResourceBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
 	access := b.Resource.Access
 	if access == nil || access.GetType().IsEmpty() {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("resource access or access type is empty")
@@ -73,7 +98,15 @@ func ResourceBlob(ctx context.Context, storage content.Storage, b *resourceblob.
 	}
 }
 
-func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, access *descriptor.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
+func SourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.SourceBlob, internal *descriptor.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+	switch mediaType := internal.MediaType; mediaType {
+	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
+		return SourceLocalBlobOCILayout(ctx, storage, b, opts)
+	default:
+		return SourceLocalBlobOCILayer(ctx, storage, b, internal, opts)
+	}
+}
+func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.ResourceBlob, access *descriptor.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
 	switch mediaType := access.MediaType; mediaType {
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
 		return ResourceLocalBlobOCILayout(ctx, storage, b, opts)
@@ -82,8 +115,8 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *resource
 	}
 }
 
-func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, access *descriptor.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
-	layer, err := NewResourceBlobOCILayer(b, ResourceBlobOCILayerOptions{
+func SourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.SourceBlob, access *descriptor.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+	layer, err := NewBlobOCILayer(b, ResourceBlobOCILayerOptions{
 		BlobMediaType: access.MediaType,
 		BlobDigest:    digest.Digest(access.LocalReference),
 	})
@@ -100,14 +133,56 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 
 	global := backedByGlobalStore(storage) || opts.EnforceGlobalAccess
 
-	if err := updateResourceAccess(b.Resource, layer, updateResourceAccessOptions{opts, global}); err != nil {
+	if err := updateSourceAccess(b.Source, layer, updateAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 
 	return layer, nil
 }
 
-func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *resourceblob.ResourceBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.ResourceBlob, access *descriptor.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+	layer, err := NewBlobOCILayer(b, ResourceBlobOCILayerOptions{
+		BlobMediaType: access.MediaType,
+		BlobDigest:    digest.Digest(access.LocalReference),
+	})
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create resource layer based on blob: %w", err)
+	}
+
+	if err := Blob(ctx, storage, b, layer); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to push blob: %w", err)
+	}
+
+	annotations := maps.Clone(layer.Annotations)
+	maps.Copy(annotations, opts.ManifestAnnotations)
+
+	global := backedByGlobalStore(storage) || opts.EnforceGlobalAccess
+
+	if err := updateResourceAccess(b.Resource, layer, updateAccessOptions{opts, global}); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
+	}
+
+	return layer, nil
+}
+
+func SourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *ociblob.SourceBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+	index, err := tar.CopyOCILayoutWithIndex(ctx, storage, b, tar.CopyOCILayoutWithIndexOptions{
+		CopyGraphOptions: opts.CopyGraphOptions,
+		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
+			return identity.AdoptAsSource(idx, b.Source)
+		},
+	})
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
+	}
+	global := backedByGlobalStore(storage)
+	if err := updateSourceAccess(b.Source, index, updateAccessOptions{opts, global}); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
+	}
+	return index, nil
+}
+
+func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *ociblob.ResourceBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
 	index, err := tar.CopyOCILayoutWithIndex(ctx, storage, b, tar.CopyOCILayoutWithIndexOptions{
 		CopyGraphOptions: opts.CopyGraphOptions,
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
@@ -118,7 +193,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
 	}
 	global := backedByGlobalStore(storage)
-	if err := updateResourceAccess(b.Resource, index, updateResourceAccessOptions{opts, global}); err != nil {
+	if err := updateResourceAccess(b.Resource, index, updateAccessOptions{opts, global}); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to update resource access: %w", err)
 	}
 	return index, nil
@@ -134,8 +209,14 @@ type ResourceBlobOCILayerOptions struct {
 	BlobLayerAnnotations map[string]string
 }
 
-// NewResourceBlobOCILayer creates a new OCI layer descriptor for a resource blob.
-func NewResourceBlobOCILayer(b *resourceblob.ResourceBlob, opts ResourceBlobOCILayerOptions) (ociImageSpecV1.Descriptor, error) {
+type OCILayerConvertableBlob interface {
+	blob.SizeAware
+	blob.MediaTypeAware
+	blob.DigestAware
+}
+
+// NewBlobOCILayer creates a new OCI layer descriptor for a OCILayerConvertableBlob.
+func NewBlobOCILayer(b OCILayerConvertableBlob, opts ResourceBlobOCILayerOptions) (ociImageSpecV1.Descriptor, error) {
 	size := b.Size()
 	if size == blob.SizeUnknown {
 		return ociImageSpecV1.Descriptor{}, errors.New("blob size is unknown and cannot be packed into a single layer artifact")
@@ -173,8 +254,15 @@ func NewResourceBlobOCILayer(b *resourceblob.ResourceBlob, opts ResourceBlobOCIL
 		Size:        size,
 	}
 
-	if err := identity.AdoptAsResource(&layer, b.Resource); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+	switch typed := b.(type) {
+	case *ociblob.SourceBlob:
+		if err := identity.AdoptAsSource(&layer, typed.Source); err != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+		}
+	case *ociblob.ResourceBlob:
+		if err := identity.AdoptAsResource(&layer, typed.Resource); err != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+		}
 	}
 
 	return layer, nil
@@ -199,7 +287,7 @@ func Blob(ctx context.Context, storage content.Pusher, b blob.ReadOnlyBlob, desc
 	return nil
 }
 
-type updateResourceAccessOptions struct {
+type updateAccessOptions struct {
 	Options
 	// BackedByGlobalStore indicates if the resource is backed by a global store.
 	// This is used to determine if the resource access should be updated with a global reference.
@@ -212,7 +300,7 @@ type updateResourceAccessOptions struct {
 // <repository> or <repository>:<tag>, as the digest is added to pin the descriptor reference.
 // Note that a global reference is only set if the resource is backed by a globally reachable store,
 // as otherwise the reference would not be valid, e.g. in a CTF. See backedByGlobalStore for more information.
-func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Descriptor, opts updateResourceAccessOptions) error {
+func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Descriptor, opts updateAccessOptions) error {
 	if resource == nil {
 		return errors.New("resource must not be nil")
 	}
@@ -234,9 +322,40 @@ func updateResourceAccess(resource *descriptor.Resource, desc ociImageSpecV1.Des
 	}
 	resource.Access = access
 
-	if err := internaldigest.ApplyToResource(resource, desc.Digest); err != nil {
+	if err := internaldigest.Apply(resource.Digest, desc.Digest); err != nil {
 		return fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
+
+	return nil
+}
+
+// updateSourceAccess updates the source access with the new layer information.
+// for setting a global access it uses the base reference given which must not already contain a digest.
+// It is assumed that the base reference is a valid OCI reference in the form of
+// <repository> or <repository>:<tag>, as the digest is added to pin the descriptor reference.
+// Note that a global reference is only set if the resource is backed by a globally reachable store,
+// as otherwise the reference would not be valid, e.g. in a CTF. See backedByGlobalStore for more information.
+func updateSourceAccess(source *descriptor.Source, desc ociImageSpecV1.Descriptor, opts updateAccessOptions) error {
+	if source == nil {
+		return errors.New("source must not be nil")
+	}
+
+	localBlob := &descriptor.LocalBlob{
+		Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+		LocalReference: desc.Digest.String(),
+		MediaType:      desc.MediaType,
+	}
+
+	if opts.BackedByGlobalStore {
+		setGlobalAccess(opts.BaseReference, desc, localBlob)
+	}
+
+	// convert to apply the access
+	access, err := descriptor.ConvertToV2LocalBlob(opts.AccessScheme, localBlob)
+	if err != nil {
+		return fmt.Errorf("failed to convert access to local blob: %w", err)
+	}
+	source.Access = access
 
 	return nil
 }

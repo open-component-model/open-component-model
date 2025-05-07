@@ -55,7 +55,7 @@ func TestSingleLayerLocalBlobFromManifestByIdentity(t *testing.T) {
 	identity := map[string]string{
 		"test": "value",
 	}
-	blob, err := SingleLayerLocalBlobFromManifestByIdentity(ctx, store, manifest, identity)
+	blob, err := SingleLayerLocalBlobFromManifestByIdentity(ctx, store, manifest, identity, annotations.ArtifactKindResource)
 	require.NoError(t, err)
 	assert.NotNil(t, blob)
 	digest, _ := blob.Digest()
@@ -69,7 +69,7 @@ func TestSingleLayerLocalBlobFromManifestByIdentity(t *testing.T) {
 	identity = map[string]string{
 		"nonexistent": "value",
 	}
-	_, err = SingleLayerLocalBlobFromManifestByIdentity(ctx, store, manifest, identity)
+	_, err = SingleLayerLocalBlobFromManifestByIdentity(ctx, store, manifest, identity, annotations.ArtifactKindResource)
 	assert.Error(t, err)
 }
 
@@ -128,7 +128,7 @@ func TestSingleLayerManifestBlobFromIndex(t *testing.T) {
 	identity := map[string]string{
 		"test": "value",
 	}
-	blob, err := SingleLayerManifestBlobFromIndex(ctx, store, index, identity)
+	blob, err := SingleLayerManifestBlobFromIndex(ctx, store, index, identity, annotations.ArtifactKindResource)
 	require.NoError(t, err)
 	assert.NotNil(t, blob)
 
@@ -136,7 +136,7 @@ func TestSingleLayerManifestBlobFromIndex(t *testing.T) {
 	identity = map[string]string{
 		"nonexistent": "value",
 	}
-	_, err = SingleLayerManifestBlobFromIndex(ctx, store, index, identity)
+	_, err = SingleLayerManifestBlobFromIndex(ctx, store, index, identity, annotations.ArtifactKindResource)
 	assert.Error(t, err)
 }
 

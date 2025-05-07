@@ -72,3 +72,27 @@ func AdoptAsResource(desc *ociImageSpecV1.Descriptor, resource *descriptor.Resou
 
 	return nil
 }
+
+// AdoptAsSource modifies the provided OCI descriptor to represent a source.
+// It sets the platform fields based on the resource's extra identity attributes
+// and adds a annotations.ArtifactOCIAnnotation to indicate that the descriptor
+// is a annotations.ArtifactKindResource.
+func AdoptAsSource(desc *ociImageSpecV1.Descriptor, src *descriptor.Source) error {
+	// Apply platform mappings
+	for _, mapping := range mappings {
+		if value, exists := src.ExtraIdentity[mapping.attribute]; exists {
+			if desc.Platform == nil {
+				desc.Platform = &ociImageSpecV1.Platform{}
+			}
+			mapping.setter(desc.Platform, value)
+		}
+	}
+	if err := (&annotations.ArtifactOCIAnnotation{
+		Identity: src.ToIdentity(),
+		Kind:     annotations.ArtifactKindSource,
+	}).AddToDescriptor(desc); err != nil {
+		return fmt.Errorf("failed to add resource artifact annotation to manifest: %w", err)
+	}
+
+	return nil
+}

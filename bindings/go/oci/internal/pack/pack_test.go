@@ -97,7 +97,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 			resourceBlob, err := resourceblob.NewResourceBlob(tt.res, tt.blob)
 			require.NoError(t, err)
 
-			desc, err := NewResourceBlobOCILayer(resourceBlob, tt.opts)
+			desc, err := NewBlobOCILayer(resourceBlob, tt.opts)
 
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError)
