@@ -40,6 +40,7 @@ cncf
 codeowners
 codeql
 commontransportarchive
+commontransportformat
 componentaccess
 componentaccessimpl
 componentarchive
@@ -199,6 +200,7 @@ oci
 ociartifact
 ocireg
 ociregistry
+ocirepository
 ocm
 ocmbot
 ocmcli
