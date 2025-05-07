@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -47,6 +49,105 @@ func TestPluginManager(t *testing.T) {
 	}, map[string]string{})
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
+}
+
+func TestPluginManagerCancelContext(t *testing.T) {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+	ctx, cancel := context.WithCancel(context.Background())
+	baseContext, baseCancel := context.WithCancel(context.Background()) // a different context
+	pm := NewPluginManager(baseContext)
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata")))
+	scheme := runtime.NewScheme()
+	repository.MustAddToScheme(scheme)
+	proto := &v1.OCIRepository{}
+	t.Cleanup(func() {
+		require.NoError(t, pm.Shutdown(ctx))
+		require.NoError(t, os.Remove("/tmp/test-plugin-plugin.socket"))
+	})
+
+	// start the plugin
+	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
+	require.NoError(t, err)
+	require.NoError(t, plugin.Ping(ctx))
+
+	// cancelling the outer context should not shut down the plugin only the ongoing request.
+	t.Log("cancelling outer context")
+	cancel()
+	require.NoError(t, plugin.Ping(context.Background()))
+	t.Log("plugin is still alive, cancelling plugin context")
+	baseCancel()
+	require.Eventually(t, func() bool {
+		err := plugin.Ping(context.Background())
+		return err != nil
+	}, 1*time.Second, 100*time.Millisecond)
+	t.Log("plugin is stopped")
+}
+
+func TestPluginManagerShutdownPlugin(t *testing.T) {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+	ctx := context.Background()
+	baseContext := context.Background() // a different context
+	pm := NewPluginManager(baseContext)
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata")))
+	scheme := runtime.NewScheme()
+	repository.MustAddToScheme(scheme)
+	proto := &v1.OCIRepository{}
+	t.Cleanup(func() {
+		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
+		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+	})
+
+	// start the plugin
+	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
+	require.NoError(t, err)
+	require.NoError(t, plugin.Ping(ctx))
+
+	// cancelling the outer context should not shut down the plugin only the ongoing request.
+	require.NoError(t, pm.Shutdown(ctx))
+	require.Eventually(t, func() bool {
+		err := plugin.Ping(ctx)
+		return err != nil
+	}, 1*time.Second, 100*time.Millisecond)
+	_, err = os.Stat("/tmp/test-plugin-plugin.socket")
+	require.Error(t, err)
+}
+
+func TestPluginManagerShutdownWithoutWait(t *testing.T) {
+	writer := bytes.NewBuffer(nil)
+	slog.SetDefault(slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})))
+	ctx, cancel := context.WithCancel(context.Background())
+	baseContext := context.Background() // a different context
+	pm := NewPluginManager(baseContext)
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata")))
+	scheme := runtime.NewScheme()
+	repository.MustAddToScheme(scheme)
+	proto := &v1.OCIRepository{}
+	t.Cleanup(func() {
+		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
+		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+	})
+
+	// start the plugin
+	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
+	require.NoError(t, err)
+	require.NoError(t, plugin.Ping(ctx))
+
+	// Cancelling the shutdown context still should allow a graceful shutdown of the plugin because
+	// that context is outside of this. This shutdown will just send an interrupt signal to the
+	// underlying command.
+	require.NoError(t, pm.Shutdown(ctx))
+	cancel()
+
+	require.Eventually(t, func() bool {
+		err := plugin.Ping(ctx)
+		return err != nil
+	}, 1*time.Second, 100*time.Millisecond)
+
+	content, err := io.ReadAll(writer)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "Gracefully shutting down plugin id=test-plugin")
 }
 
 func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {

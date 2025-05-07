@@ -3,7 +3,6 @@ package componentversionrepository
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -32,11 +31,8 @@ func TestPing(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Setup logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
@@ -64,11 +60,8 @@ func TestAddComponentVersion(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Setup logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
@@ -97,14 +90,13 @@ func TestAddComponentVersionValidationFail(t *testing.T) {
 	defer server.Close()
 
 	// Setup logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	repository := &v1.OCIRepository{
 		BaseUrl: "ocm.software",
 	}
 	schemaOCIRegistry, err := jsonschema.Reflect(repository).MarshalJSON()
 	require.NoError(t, err)
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
@@ -133,11 +125,8 @@ func TestGetComponentVersion(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Setup logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
@@ -169,11 +158,8 @@ func TestAddLocalResource(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Setup logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
@@ -206,11 +192,8 @@ func TestGetLocalResource(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Setup logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
 	// Create plugin
-	plugin := NewComponentVersionRepositoryPlugin(logger, server.Client(), "test-plugin", server.URL, types.Config{
+	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,

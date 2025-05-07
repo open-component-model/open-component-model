@@ -88,7 +88,6 @@ type RepositoryPlugin struct {
 	config types.Config
 	path   string
 	client *http.Client
-	logger *slog.Logger
 
 	// jsonSchema is the schema for all endpoints for this plugin.
 	jsonSchema []byte
@@ -101,12 +100,11 @@ var (
 	_ v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
-func NewComponentVersionRepositoryPlugin(logger *slog.Logger, client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
+func NewComponentVersionRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
 		path:       path,
 		config:     config,
-		logger:     logger,
 		client:     client,
 		jsonSchema: jsonSchema,
 		location:   loc,
@@ -114,7 +112,7 @@ func NewComponentVersionRepositoryPlugin(logger *slog.Logger, client *http.Clien
 }
 
 func (r *RepositoryPlugin) Ping(ctx context.Context) error {
-	r.logger.Info("Pinging plugin", "id", r.ID)
+	slog.InfoContext(ctx, "Pinging plugin", "id", r.ID)
 
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, "healthz", http.MethodGet); err != nil {
 		return fmt.Errorf("failed to ping plugin %s: %w", r.ID, err)

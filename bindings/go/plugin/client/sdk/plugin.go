@@ -63,7 +63,10 @@ func (p *Plugin) startIdleChecker(ctx context.Context) {
 		case <-timer.C:
 			timer.Stop()
 
-			_ = p.GracefulShutdown(ctx)
+			if err := p.GracefulShutdown(ctx); err != nil {
+				slog.ErrorContext(ctx, "failed to gracefully shutdown plugin", "error", err)
+			}
+
 			slog.InfoContext(ctx, "idle check timer expired for plugin", "id", p.Config.ID)
 			return
 		case working := <-p.interrupt:
@@ -89,6 +92,8 @@ func (p *Plugin) StopWork() {
 	p.workerCounter.Add(-1)
 }
 
+// Start starts the plugin and sets up a graceful shutdown catch for interrupts.
+// The Context here is created in the plugin binary.
 func (p *Plugin) Start(ctx context.Context) error {
 	// Handle graceful shutdown on SIGINT/SIGTERM
 	sigs := make(chan os.Signal, 1)
@@ -143,7 +148,7 @@ func (p *Plugin) listen(ctx context.Context) error {
 		m.HandleFunc(h.Location, h.Handler)
 	}
 
-	m.HandleFunc("/shutdown", p.Shutdown(ctx))
+	m.HandleFunc("/shutdown", p.Shutdown)
 	m.HandleFunc("/healthz", p.Healthz)
 
 	server := &http.Server{
@@ -254,12 +259,10 @@ func (p *Plugin) workerHandler(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (p *Plugin) Shutdown(ctx context.Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		slog.InfoContext(ctx, "Shutting down plugin", "id", p.Config.ID)
-		w.WriteHeader(http.StatusOK)
-		if err := p.GracefulShutdown(ctx); err != nil {
-			slog.ErrorContext(ctx, "Error shutting down plugin", "error", err)
-		}
+func (p *Plugin) Shutdown(w http.ResponseWriter, r *http.Request) {
+	slog.InfoContext(r.Context(), "Shutting down plugin", "id", p.Config.ID)
+	w.WriteHeader(http.StatusOK)
+	if err := p.GracefulShutdown(r.Context()); err != nil {
+		slog.ErrorContext(r.Context(), "Error shutting down plugin", "error", err)
 	}
 }

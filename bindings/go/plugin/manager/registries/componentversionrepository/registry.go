@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"sync"
@@ -48,7 +47,6 @@ type RepositoryRegistry struct {
 	mu                 sync.Mutex
 	registry           map[runtime.Type]mtypes.Plugin // Have this as a single plugin for read/write
 	constructedPlugins map[string]*constructedPlugin  // running plugins
-	logger             *slog.Logger
 
 	// internalComponentVersionRepositoryPlugins contains all plugins that have been registered using internally import statement.
 	internalComponentVersionRepositoryPlugins map[runtime.Type]contracts.PluginBase
@@ -157,13 +155,14 @@ func startAndReturnPlugin[T runtime.Typed](ctx context.Context, r *RepositoryReg
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
 
-	// TODO: This might be the wrong context here.
-	go plugins.StartLogStreamer(ctx, plugin)
-
 	client, loc, err := plugins.WaitForPlugin(ctx, plugin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
 	}
+
+	// start log streaming once the plugin is up and running.
+	// use the baseCtx here from the manager here so the streaming isn't stopped when the request is stopped.
+	go plugins.StartLogStreamer(r.ctx, plugin)
 
 	// think about this better, we have a single json schema, maybe even have different maps for different types + schemas?
 	var jsonSchema []byte
@@ -175,7 +174,7 @@ loop:
 		}
 	}
 
-	repoPlugin := NewComponentVersionRepositoryPlugin(r.logger, client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
+	repoPlugin := NewComponentVersionRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,
 		cmd:    plugin.Cmd,
