@@ -25,11 +25,13 @@ Dockerfile.cross
 *.swo
 *~
 
-# goreleaser resources
+# goreleaser resources
 dist/
 output/
 /.project
 
+# OSX garbage
+.DS_Store
 
 # env files
 .env.local
