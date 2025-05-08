@@ -42,7 +42,7 @@ func TestPluginManager(t *testing.T) {
 	desc, err := plugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*v1.OCIRepository]{
 		Repository: &v1.OCIRepository{
 			Type:    typ,
-			BaseUrl: "https://ocm.software/",
+			BaseUrl: "https://ocm.software/test",
 		},
 		Name:    "test-component",
 		Version: "1.0.0",

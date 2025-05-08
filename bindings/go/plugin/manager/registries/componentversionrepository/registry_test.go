@@ -27,7 +27,7 @@ func TestPluginFlow(t *testing.T) {
 	repository.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(ctx)
 	config := mtypes.Config{
-		ID:         "test-plugin",
+		ID:         "test-plugin-1",
 		Type:       mtypes.Socket,
 		PluginType: mtypes.ComponentVersionRepositoryPluginType,
 	}
@@ -41,15 +41,15 @@ func TestPluginFlow(t *testing.T) {
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	t.Cleanup(func() {
 		_ = pluginCmd.Process.Kill()
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		_ = os.Remove("/tmp/test-plugin-1-plugin.socket")
 	})
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)
 	plugin := mtypes.Plugin{
-		ID:   "test-plugin",
+		ID:   "test-plugin-1",
 		Path: path,
 		Config: mtypes.Config{
-			ID:         "test-plugin",
+			ID:         "test-plugin-1",
 			Type:       mtypes.Socket,
 			PluginType: mtypes.ComponentVersionRepositoryPluginType,
 		},
