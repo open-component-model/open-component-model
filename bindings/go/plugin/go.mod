@@ -8,8 +8,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250410115029-6dcf800db82b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250410115029-6dcf800db82b
-	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250422074904-687ce2e13f13
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250429070005-5beac9658d2b
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250508105002-2a19fc4bec7c
 )
 
 require (
@@ -17,6 +16,7 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
