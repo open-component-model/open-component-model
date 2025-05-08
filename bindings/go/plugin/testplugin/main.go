@@ -9,7 +9,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
@@ -24,7 +24,7 @@ func (m *TestPlugin) Ping(_ context.Context) error {
 	return nil
 }
 
-func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.GetComponentVersionRequest[*v1.OCIRepository], credentials map[string]string) (*descriptor.Descriptor, error) {
+func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.GetComponentVersionRequest[*ociv1.Repository], credentials map[string]string) (*descriptor.Descriptor, error) {
 	return &descriptor.Descriptor{
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
@@ -65,22 +65,22 @@ func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.Get
 	}, nil
 }
 
-func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*v1.OCIRepository], credentials map[string]string) error {
+func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*ociv1.Repository], credentials map[string]string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "Writing my local resource here to target: %+v\n", request.TargetLocation)
 	return nil
 }
 
-func (m *TestPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*v1.OCIRepository], credentials map[string]string) (*descriptor.Resource, error) {
+func (m *TestPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*ociv1.Repository], credentials map[string]string) (*descriptor.Resource, error) {
 	_, _ = fmt.Fprintf(os.Stdout, "AddLocalResource: %+v\n", request.ResourceLocation)
 	return nil, nil
 }
 
-func (m *TestPlugin) AddComponentVersion(ctx context.Context, request repov1.PostComponentVersionRequest[*v1.OCIRepository], credentials map[string]string) error {
+func (m *TestPlugin) AddComponentVersion(ctx context.Context, request repov1.PostComponentVersionRequest[*ociv1.Repository], credentials map[string]string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "AddComponentVersiont: %+v\n", request.Descriptor.Component.Name)
 	return nil
 }
 
-var _ repov1.ReadWriteOCMRepositoryPluginContract[*v1.OCIRepository] = &TestPlugin{}
+var _ repov1.ReadWriteOCMRepositoryPluginContract[*ociv1.Repository] = &TestPlugin{}
 
 func main() {
 	args := os.Args[1:]
@@ -89,7 +89,7 @@ func main() {
 	repository.MustAddToScheme(scheme)
 	capabilities := endpoints.NewEndpoints(scheme)
 
-	if err := componentversionrepository.RegisterComponentVersionRepository(&v1.OCIRepository{}, &TestPlugin{}, capabilities); err != nil {
+	if err := componentversionrepository.RegisterComponentVersionRepository(&ociv1.Repository{}, &TestPlugin{}, capabilities); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

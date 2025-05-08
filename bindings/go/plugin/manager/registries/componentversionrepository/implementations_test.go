@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -69,7 +69,7 @@ func TestAddComponentVersion(t *testing.T) {
 
 	ctx := context.Background()
 	err := plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
-		Repository: &v1.OCIRepository{
+		Repository: &ociv1.Repository{
 			BaseUrl: "ocm.software",
 		},
 		Descriptor: defaultDescriptor(),
@@ -90,7 +90,7 @@ func TestAddComponentVersionValidationFail(t *testing.T) {
 	defer server.Close()
 
 	// Setup logger
-	repository := &v1.OCIRepository{
+	repository := &ociv1.Repository{
 		BaseUrl: "ocm.software",
 	}
 	schemaOCIRegistry, err := jsonschema.Reflect(repository).MarshalJSON()
@@ -134,7 +134,7 @@ func TestGetComponentVersion(t *testing.T) {
 
 	ctx := context.Background()
 	desc, err := plugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
-		Repository: &v1.OCIRepository{},
+		Repository: &ociv1.Repository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 	}, map[string]string{})
@@ -167,7 +167,7 @@ func TestAddLocalResource(t *testing.T) {
 
 	ctx := context.Background()
 	gotResource, err := plugin.AddLocalResource(ctx, repov1.PostLocalResourceRequest[runtime.Typed]{
-		Repository: &v1.OCIRepository{},
+		Repository: &ociv1.Repository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 		Resource:   &resource,
@@ -208,7 +208,7 @@ func TestGetLocalResource(t *testing.T) {
 
 	ctx := context.Background()
 	err = plugin.GetLocalResource(ctx, repov1.GetLocalResourceRequest[runtime.Typed]{
-		Repository: &v1.OCIRepository{},
+		Repository: &ociv1.Repository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 		TargetLocation: types.Location{

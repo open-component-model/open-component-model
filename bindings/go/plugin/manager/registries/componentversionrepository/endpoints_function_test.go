@@ -9,7 +9,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
@@ -20,15 +20,15 @@ type mockPlugin struct {
 	contracts.EmptyBasePlugin
 }
 
-func (m *mockPlugin) AddLocalResource(_ context.Context, _ repov1.PostLocalResourceRequest[*v1.OCIRepository], _ map[string]string) (*descriptor.Resource, error) {
+func (m *mockPlugin) AddLocalResource(_ context.Context, _ repov1.PostLocalResourceRequest[*ociv1.Repository], _ map[string]string) (*descriptor.Resource, error) {
 	return &descriptor.Resource{}, nil
 }
 
-func (m *mockPlugin) AddComponentVersion(_ context.Context, _ repov1.PostComponentVersionRequest[*v1.OCIRepository], _ map[string]string) error {
+func (m *mockPlugin) AddComponentVersion(_ context.Context, _ repov1.PostComponentVersionRequest[*ociv1.Repository], _ map[string]string) error {
 	return nil
 }
 
-func (m *mockPlugin) GetComponentVersion(_ context.Context, _ repov1.GetComponentVersionRequest[*v1.OCIRepository], _ map[string]string) (*descriptor.Descriptor, error) {
+func (m *mockPlugin) GetComponentVersion(_ context.Context, _ repov1.GetComponentVersionRequest[*ociv1.Repository], _ map[string]string) (*descriptor.Descriptor, error) {
 	return &descriptor.Descriptor{
 		Meta: descriptor.Meta{
 			Version: "1.0.0",
@@ -44,11 +44,11 @@ func (m *mockPlugin) GetComponentVersion(_ context.Context, _ repov1.GetComponen
 	}, nil
 }
 
-func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResourceRequest[*v1.OCIRepository], _ map[string]string) error {
+func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResourceRequest[*ociv1.Repository], _ map[string]string) error {
 	return nil
 }
 
-var _ repov1.ReadWriteOCMRepositoryPluginContract[*v1.OCIRepository] = &mockPlugin{}
+var _ repov1.ReadWriteOCMRepositoryPluginContract[*ociv1.Repository] = &mockPlugin{}
 
 func TestRegisterComponentVersionRepository(t *testing.T) {
 	r := require.New(t)
@@ -56,7 +56,7 @@ func TestRegisterComponentVersionRepository(t *testing.T) {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	builder := endpoints.NewEndpoints(scheme)
-	typ := &v1.OCIRepository{}
+	typ := &ociv1.Repository{}
 	plugin := &mockPlugin{}
 	r.NoError(RegisterComponentVersionRepository(typ, plugin, builder))
 	content, err := json.Marshal(builder)
