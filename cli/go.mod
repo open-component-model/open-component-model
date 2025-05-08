@@ -8,13 +8,13 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/sync v0.13.0
-	ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250505102409-21397204174d
-	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250505102409-21397204174d
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250429070005-5beac9658d2b
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250505102409-21397204174d
-	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250505102409-21397204174d
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250505102409-21397204174d
+	golang.org/x/sync v0.14.0
+	ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250508115415-6a7bf5320737
+	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250508115415-6a7bf5320737
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250508115415-6a7bf5320737
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250508115415-6a7bf5320737
+	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250508115415-6a7bf5320737
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250508115415-6a7bf5320737
 	oras.land/oras-go/v2 v2.5.0
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -40,5 +40,5 @@ require (
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250505102409-21397204174d // indirect
+	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250508115415-6a7bf5320737 // indirect
 )
