@@ -19,13 +19,15 @@ type Scheme struct {
 	// if the constructors cannot determine a match,
 	// this will trigger the creation of an unstructured.Unstructured with NewScheme instead of failing.
 	allowUnknown bool
-	types        map[Type]Typed
+	aliases      map[Type][]Type
+	defaults     map[Type]Typed
 }
 
 // NewScheme creates a new registry.
 func NewScheme(opts ...SchemeOption) *Scheme {
 	reg := &Scheme{
-		types: make(map[Type]Typed),
+		defaults: make(map[Type]Typed),
+		aliases:  make(map[Type][]Type),
 	}
 	for _, opt := range opts {
 		opt(reg)
@@ -47,19 +49,33 @@ func (r *Scheme) Clone() *Scheme {
 	defer r.mu.RUnlock()
 	clone := NewScheme()
 	clone.allowUnknown = r.allowUnknown
-	maps.Copy(clone.types, r.types)
+	maps.Copy(clone.defaults, r.defaults)
+	maps.Copy(clone.aliases, r.aliases)
 	return clone
 }
 
+// RegisterWithAlias registers a new type with the registry.
+// The first type is the default type and all other types are aliases.
+// Note that if Scheme.RegisterWithAlias or Scheme.MustRegister were called before,
+// even the first type will be counted as an alias.
 func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for _, typ := range types {
-		if _, exists := r.types[typ]; exists {
-			return fmt.Errorf("type %q is already registered", typ)
+	for i, typ := range types {
+		if prototype, exists := r.defaults[typ]; exists {
+			return fmt.Errorf("type %q is already registered as default for %T", typ, prototype)
 		}
-		r.types[typ] = prototype
+		if def, alias := r.aliases[typ]; alias {
+			return fmt.Errorf("type %q is already registered as alias for %q", typ, def)
+		}
+		if i == 0 && r.defaults[typ] == nil {
+			// first type is the defaults type
+			r.defaults[typ] = prototype
+		} else {
+			// all other types are aliases
+			r.aliases[typ] = append(r.aliases[typ], types[0])
+		}
 	}
 	return nil
 }
@@ -77,7 +93,7 @@ func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for typ, proto := range r.types {
+	for typ, proto := range r.defaults {
 		// if there is an unversioned type registered, do not use it
 		// TODO find a way to avoid this or to fallback to the fully qualified type instead of unqualified ones
 		if !typ.HasVersion() {
@@ -103,7 +119,14 @@ func (r *Scheme) IsRegistered(typ Type) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	_, exists := r.types[typ]
+	_, exists := r.defaults[typ]
+	if exists {
+		return true
+	}
+
+	// check if the type is an alias
+	_, exists = r.aliases[typ]
+
 	return exists
 }
 
@@ -120,7 +143,7 @@ func (r *Scheme) NewObject(typ Type) (Typed, error) {
 
 	var object any
 	// construct by full type
-	proto, exists := r.types[typ]
+	proto, exists := r.defaults[typ]
 	if exists {
 		t := reflect.TypeOf(proto)
 		for t.Kind() == reflect.Ptr {

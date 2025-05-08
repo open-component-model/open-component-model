@@ -246,6 +246,21 @@ func TestRegistry_Default_DifferentRegisteredType(t *testing.T) {
 	r.Equal(typed.Type, typ2)
 }
 
+func TestRegistry_Default_MultipleRegisteredTypesWithoutTypeSet(t *testing.T) {
+	r := require.New(t)
+	typ1 := NewVersionedType("test1", "v1")
+	typ2 := NewVersionedType("test2", "v1")
+	registry := NewScheme()
+	registry.MustRegisterWithAlias(&TestType{}, typ1, typ2)
+
+	// Test defaulting a typed object with different registered type
+	typed := &TestType{}
+	updated, err := registry.DefaultType(typed)
+	r.NoError(err)
+	r.True(updated) // Type should not be updated since it's already a valid registered type
+	r.Equal(typed.Type, typ1)
+}
+
 func TestRegistry_Default_UnregisteredType(t *testing.T) {
 	r := require.New(t)
 	typ1 := NewVersionedType("test1", "v1")
@@ -258,4 +273,14 @@ func TestRegistry_Default_UnregisteredType(t *testing.T) {
 	updated, err := registry.DefaultType(typed)
 	r.NoError(err)
 	r.True(updated) // Type should be updated since it was unregistered
+}
+
+func TestRegistry_MultipleTypes_With_Alias(t *testing.T) {
+	r := require.New(t)
+	def := NewVersionedType("test1", "v1")
+	alias := NewVersionedType("test2", "v1")
+	registry := NewScheme()
+	registry.MustRegisterWithAlias(&TestType{}, def, alias)
+	r.ErrorContains(registry.RegisterWithAlias(&TestType{}, def), "already registered as default")
+	r.ErrorContains(registry.RegisterWithAlias(&TestType{}, alias), "already registered as alias")
 }
