@@ -10,13 +10,13 @@ require (
 	github.com/testcontainers/testcontainers-go v0.36.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.36.0
 	golang.org/x/crypto v0.37.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250429152233-24b0a5c885ff
-	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250429152233-24b0a5c885ff
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250429152233-24b0a5c885ff
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250429152233-24b0a5c885ff
+	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250508115415-6a7bf5320737
+	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250508115415-6a7bf5320737
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250508115415-6a7bf5320737
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250508115415-6a7bf5320737
 	ocm.software/open-component-model/bindings/go/oci v0.0.0
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250429152233-24b0a5c885ff
-	oras.land/oras-go/v2 v2.5.0
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250508115415-6a7bf5320737
+	oras.land/oras-go/v2 v2.6.0
 )
 
 // Replace include to make sure we are always testing the current code instead of a version.
@@ -78,7 +78,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sync v0.13.0 // indirect
+	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
