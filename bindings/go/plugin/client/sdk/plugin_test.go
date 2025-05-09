@@ -25,7 +25,7 @@ func TestPluginSDK(t *testing.T) {
 	output := bytes.NewBuffer(nil)
 	location := "/tmp/test-plugin-flow-plugin.socket"
 	ctx := context.Background()
-	p := NewPlugin(ctx, types.Config{
+	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:         "test-plugin-flow",
 		Type:       types.Socket,
 		PluginType: types.ComponentVersionRepositoryPluginType,
@@ -72,7 +72,7 @@ func TestPluginSDKForceShutdownContext(t *testing.T) {
 	location := "/tmp/test-plugin-force-plugin.socket"
 	ctx := context.Background()
 	baseCtx := context.Background()
-	p := NewPlugin(baseCtx, types.Config{
+	p := NewPlugin(baseCtx, slog.Default(), types.Config{
 		ID:         "test-plugin-force",
 		Type:       types.Socket,
 		PluginType: types.ComponentVersionRepositoryPluginType,
@@ -131,7 +131,7 @@ func TestIdleChecker(t *testing.T) {
 	output := bytes.NewBuffer(nil)
 	timeout := 10 * time.Millisecond
 	ctx := context.Background()
-	p := NewPlugin(ctx, types.Config{
+	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:          "test-plugin-idle",
 		Type:        types.Socket,
 		PluginType:  types.ComponentVersionRepositoryPluginType,
@@ -174,7 +174,7 @@ func TestHealthCheckInvalidMethod(t *testing.T) {
 	location := "/tmp/test-plugin-invalid-plugin.socket"
 	output := bytes.NewBuffer(nil)
 	ctx := context.Background()
-	p := NewPlugin(ctx, types.Config{
+	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:         "test-plugin-invalid",
 		Type:       types.Socket,
 		PluginType: types.ComponentVersionRepositoryPluginType,
