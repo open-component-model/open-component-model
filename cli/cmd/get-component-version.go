@@ -27,6 +27,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
@@ -101,6 +102,29 @@ func getComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
+
+	repositorySpec := ref.Repository
+	plugin, err := Root.PluginManager.ComponentVersionRepositoryRegistry.GetPlugin(cmd.Context(), repositorySpec)
+	if err != nil {
+		return fmt.Errorf("getting plugin for repository %q failed: %w", repositorySpec, err)
+	}
+	var creds map[string]string
+	identity, err := plugin.GetIdentity(cmd.Context(), v1.GetIdentityRequest[runtime.Typed]{Typ: repositorySpec})
+	if err == nil {
+		if creds, err = Root.CredentialGraph.Resolve(cmd.Context(), identity); err != nil {
+			return fmt.Errorf("getting credentials for repository %q failed: %w", repositorySpec, err)
+		}
+	}
+
+	cv, err := plugin.GetComponentVersion(cmd.Context(), v1.GetComponentVersionRequest[runtime.Typed]{
+		Repository: repositorySpec,
+		Name:       ref.Component,
+		Version:    "",
+	}, creds)
+	if err != nil {
+		return fmt.Errorf("getting component version %q failed: %w", ref.Component, err)
+	}
+	_ = cv
 
 	repo, err := componentVersionRepositoryForSpec(ref.Repository)
 	if err != nil {
@@ -284,6 +308,8 @@ func componentVersionRepositoryForSpec(typed runtime.Typed) (oci.ComponentVersio
 				if err != nil {
 					return auth.Credential{}, fmt.Errorf("splitting host and port failed: %w", err)
 				}
+				// TODO(jakobmoellerdev): replace hard coded identity generation
+				//  with call to ConsumerIdentityProvider plugin
 				identity := runtime.Identity{}
 				identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
 				if host != "" {
@@ -292,9 +318,10 @@ func componentVersionRepositoryForSpec(typed runtime.Typed) (oci.ComponentVersio
 				if port != "" {
 					identity[runtime.IdentityAttributePort] = port
 				}
-				// TODO add credentials back once resolver is present
-				credentialMap := map[string]string{}
-				// credentialMap, err := Root.CredentialResolver.Resolve(ctx, identity)
+				credentialMap, err := Root.CredentialGraph.Resolve(ctx, identity)
+				if err != nil {
+					return auth.EmptyCredential, nil
+				}
 
 				// TODO(jakobmoellerdev): add support for other credential types such as token
 				cred := auth.Credential{}

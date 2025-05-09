@@ -14,8 +14,9 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250508115415-6a7bf5320737
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250508115415-6a7bf5320737
 	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250508115415-6a7bf5320737
+	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250508115415-6a7bf5320737
 	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250508115415-6a7bf5320737
-	oras.land/oras-go/v2 v2.5.0
+	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -41,4 +42,5 @@ require (
 	golang.org/x/text v0.24.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250508115415-6a7bf5320737 // indirect
+	ocm.software/open-component-model/bindings/go/dag v0.0.0-20250424074939-6e4c0e90b848 // indirect
 )
