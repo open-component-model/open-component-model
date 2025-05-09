@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -84,29 +85,37 @@ var _ repov1.ReadWriteOCMRepositoryPluginContract[*dummyv1.Repository] = &TestPl
 
 func main() {
 	args := os.Args[1:]
+	// log messages are shared over stderr by convention established by the plugin manager.
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug, // debug level here is respected when sending this message.
+	}))
 
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	capabilities := endpoints.NewEndpoints(scheme)
 
 	if err := componentversionrepository.RegisterComponentVersionRepository(&dummyv1.Repository{}, &TestPlugin{}, capabilities); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logger.Error("failed to register test plugin", "error", err.Error())
 		os.Exit(1)
 	}
+
+	logger.Info("registered test plugin")
 
 	// TODO(Skarlso): ConsumerIdentityTypesForConfig endpoint
 
 	if len(args) > 0 && args[0] == "capabilities" {
 		content, err := json.Marshal(capabilities)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Error("failed to marshal capabilities", "error", err)
 			os.Exit(1)
 		}
 
 		if _, err := fmt.Fprintln(os.Stdout, string(content)); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Error("failed print capabilities", "error", err)
 			os.Exit(1)
 		}
+
+		logger.Info("capabilities sent")
 
 		os.Exit(0)
 	}
@@ -115,30 +124,33 @@ func main() {
 	configData := flag.String("config", "", "Plugin config.")
 	flag.Parse()
 	if configData == nil || *configData == "" {
-		fmt.Fprintln(os.Stderr, "Missing required flag --config")
+		logger.Error("missing required flag --config")
 		os.Exit(1)
 	}
 
 	conf := types.Config{}
 	if err := json.Unmarshal([]byte(*configData), &conf); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logger.Error("failed to unmarshal config", "error", err)
 		os.Exit(1)
 	}
+	logger.Debug("config data", "config", conf)
 
 	if conf.ID == "" {
-		fmt.Fprintln(os.Stderr, "Plugin ID is required")
+		logger.Error("plugin config has no ID")
 		os.Exit(1)
 	}
 
 	separateContext := context.Background()
-	ocmPlugin := plugin.NewPlugin(separateContext, conf, os.Stdout)
+	ocmPlugin := plugin.NewPlugin(separateContext, logger, conf, os.Stdout)
 	if err := ocmPlugin.RegisterHandlers(capabilities.GetHandlers()...); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logger.Error("failed to register handlers", "error", err)
 		os.Exit(1)
 	}
 
+	logger.Info("starting up plugin", "extra", "info")
+
 	if err := ocmPlugin.Start(context.Background()); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logger.Error("failed to start plugin", "error", err)
 		os.Exit(1)
 	}
 }

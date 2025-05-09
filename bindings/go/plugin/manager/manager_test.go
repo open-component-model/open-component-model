@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -115,7 +115,7 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 	writer := bytes.NewBuffer(nil)
 	slog.SetDefault(slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: slog.LevelInfo,
 	})))
 	ctx, cancel := context.WithCancel(context.Background())
 	baseContext := context.Background() // a different context
@@ -147,7 +147,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 
 	content, err := io.ReadAll(writer)
 	require.NoError(t, err)
-	require.Contains(t, string(content), "Gracefully shutting down plugin id=test-plugin")
+	require.Contains(t, string(content), "Gracefully shutting down plugin")
 }
 
 func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {

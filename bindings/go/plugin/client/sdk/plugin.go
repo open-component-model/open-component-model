@@ -34,6 +34,8 @@ type Plugin struct {
 	location      string
 	output        io.Writer
 	baseCtx       context.Context
+	// this should be a logger using stderr instead of default logger.
+	logger slog.Logger
 }
 
 // NewPlugin creates a new Go based plugin. After creation,
@@ -43,12 +45,13 @@ type Plugin struct {
 // for the plugin to so that the manager can pick it up.
 // TODO(Skarlso): Provide documentation for secure data flow with local certificate
 // setup and certificate generation. At least start a document / issue.
-func NewPlugin(ctx context.Context, conf types.Config, output io.Writer) *Plugin {
+func NewPlugin(ctx context.Context, logger *slog.Logger, conf types.Config, output io.Writer) *Plugin {
 	return &Plugin{
 		Config:    conf,
 		interrupt: make(chan bool, 1), // to not block any new work coming in
 		output:    output,
 		baseCtx:   ctx, // base context is used for graceful shutdown operation to finish properly
+		logger:    *logger,
 	}
 }
 
@@ -66,10 +69,10 @@ func (p *Plugin) startIdleChecker(ctx context.Context) {
 			timer.Stop()
 
 			if err := p.GracefulShutdown(ctx); err != nil {
-				slog.ErrorContext(ctx, "failed to gracefully shutdown plugin", "error", err)
+				p.logger.ErrorContext(ctx, "failed to gracefully shutdown plugin", "error", err)
 			}
 
-			slog.InfoContext(ctx, "idle check timer expired for plugin", "id", p.Config.ID)
+			p.logger.InfoContext(ctx, "idle check timer expired for plugin", "id", p.Config.ID)
 			return
 		case working := <-p.interrupt:
 			if !working && p.workerCounter.Load() == 0 {
@@ -104,12 +107,12 @@ func (p *Plugin) Start(ctx context.Context) error {
 	go func(ctx context.Context) {
 		sig := <-sigs
 
-		slog.InfoContext(ctx, "Received signal. Shutting down.", "signal", sig)
+		p.logger.InfoContext(ctx, "Received signal. Shutting down.", "signal", sig)
 
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		if err := p.GracefulShutdown(ctx); err != nil {
-			slog.ErrorContext(ctx, "Error shutting down plugin", "error", err)
+			p.logger.ErrorContext(ctx, "Error shutting down plugin", "error", err)
 		}
 	}(ctx)
 
@@ -215,7 +218,7 @@ func (p *Plugin) determineLocation() (_ string, err error) {
 // GracefulShutdown will stop the server and do cleanup if necessary.
 // In case of sockets it will remove the created socket.
 func (p *Plugin) GracefulShutdown(ctx context.Context) error {
-	slog.InfoContext(ctx, "Gracefully shutting down plugin", "id", p.Config.ID)
+	p.logger.InfoContext(ctx, "Gracefully shutting down plugin", "id", p.Config.ID)
 	// We ignore server closed errors because server closing might race with the listener.
 	if err := p.server.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("failed to shutdown server: %w", err)
@@ -223,7 +226,7 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 
 	switch p.Config.Type {
 	case types.Socket:
-		slog.InfoContext(ctx, "removing socket", "location", p.location)
+		p.logger.InfoContext(ctx, "removing socket", "location", p.location)
 		if err := os.Remove(p.location); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -266,9 +269,9 @@ func (p *Plugin) workerHandler(h http.HandlerFunc) http.HandlerFunc {
 // because otherwise, the shutdown is interrupted by the request context being cancelled mid-shutdown
 // resulting in a context cancelled error instead of properly closing connection to the server.
 func (p *Plugin) Shutdown(w http.ResponseWriter, _ *http.Request) {
-	slog.InfoContext(p.baseCtx, "Shutting down plugin", "id", p.Config.ID)
+	p.logger.InfoContext(p.baseCtx, "Shutting down plugin", "id", p.Config.ID)
 	w.WriteHeader(http.StatusOK)
 	if err := p.GracefulShutdown(p.baseCtx); err != nil {
-		slog.ErrorContext(p.baseCtx, "Error shutting down plugin", "error", err)
+		p.logger.ErrorContext(p.baseCtx, "Error shutting down plugin", "error", err)
 	}
 }
