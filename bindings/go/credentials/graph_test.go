@@ -58,13 +58,8 @@ func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity
 }
 
 type RepositoryPlugin struct {
-	RepositoryConfigTypes  []runtime.Type
 	RepositoryIdentityFunc func(config runtime.Typed) (runtime.Identity, error)
 	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
-}
-
-func (s RepositoryPlugin) SupportedRepositoryConfigTypes() []runtime.Type {
-	return s.RepositoryConfigTypes
 }
 
 func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config runtime.Typed) (runtime.Identity, error) {
@@ -169,7 +164,6 @@ func GetGraph(t testing.TB, yaml string) (*credentials.Graph, error) {
 		switch repoType.GetType().String() {
 		case "OCIRegistry":
 			return RepositoryPlugin{
-				RepositoryConfigTypes: []runtime.Type{runtime.NewVersionedType("DockerConfig", "v1")},
 				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
 					var mm map[string]interface{}
 					if err := json.Unmarshal(config.(*runtime.Raw).Data, &mm); err != nil {
@@ -200,13 +194,16 @@ func GetGraph(t testing.TB, yaml string) (*credentials.Graph, error) {
 			}, nil
 		case credentials.AnyConsumerIdentityType.String():
 			return RepositoryPlugin{
-				RepositoryConfigTypes: []runtime.Type{runtime.NewUnversionedType("HashiCorpVault")},
 				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
 					var mm map[string]interface{}
 					if err := json.Unmarshal(config.(*runtime.Raw).Data, &mm); err != nil {
 						return nil, err
 					}
-					purl, err := url.Parse(mm["serverURL"].(string))
+					serverURL := mm["serverURL"]
+					if serverURL == nil {
+						return nil, fmt.Errorf("missing serverURL in config")
+					}
+					purl, err := url.Parse(serverURL.(string))
 					if err != nil {
 						return nil, err
 					}
