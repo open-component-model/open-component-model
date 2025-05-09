@@ -17,6 +17,9 @@ func init() {
 
 // LookupCredentialConfiguration creates a new ConfigCredentialProvider from a central V1 config.
 func LookupCredentialConfiguration(cfg *v1.Config) (*credentialsRuntime.Config, error) {
+	if cfg == nil {
+		return &credentialsRuntime.Config{}, nil
+	}
 	cfg, err := v1.Filter(cfg, &v1.FilterOptions{
 		ConfigTypes: []runtime.Type{
 			runtime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version),
