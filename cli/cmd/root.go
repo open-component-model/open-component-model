@@ -65,7 +65,7 @@ func setupRoot(cmd *cobra.Command, _ []string) error {
 		Root.Configuration = cfg
 	}
 
-	if err := setupPluginManager(cmd, err); err != nil {
+	if err := setupPluginManager(cmd); err != nil {
 		return fmt.Errorf("could not setup plugin manager: %w", err)
 	}
 
@@ -76,7 +76,7 @@ func setupRoot(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func setupPluginManager(cmd *cobra.Command, err error) error {
+func setupPluginManager(cmd *cobra.Command) error {
 	Root.PluginManager = manager.NewPluginManager(cmd.Context())
 	pluginCfg, err := v2alpha1.LookupConfig(Root.Configuration)
 	if err != nil {
