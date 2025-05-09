@@ -34,17 +34,6 @@ func (p *OCICredentialRepository) Resolve(ctx context.Context, cfg runtime.Typed
 	return ResolveV1DockerConfigCredentials(ctx, dockerConfig, identity)
 }
 
-// SupportedRepositoryConfigTypes returns the list of repository configuration types
-// that this plugin can handle. Currently, it only supports configurations of type [ocicredentials.CredentialRepositoryConfigType].
-//
-// To use this plugin, one must reference such a configuration inside their credential configuration, at which
-// point it will be accessible from the credential graph.
-func (p *OCICredentialRepository) SupportedRepositoryConfigTypes() []runtime.Type {
-	return []runtime.Type{
-		ocicredentials.CredentialRepositoryConfigType,
-	}
-}
-
 // ConsumerIdentityForConfig is not supported for Docker config files as they are
 // expected to be available on the host system and don't require consumer identity mapping.
 // This method always returns an error to indicate that consumer identities are not needed.
