@@ -7,7 +7,10 @@ import (
 // PluginType defines the type of the plugin such as, ComponentVersionRepositoryPlugin, Transformation, Credential, Config plugin.
 type PluginType string
 
-var ComponentVersionRepositoryPluginType PluginType = "componentVersionRepository"
+var (
+	ComponentVersionRepositoryPluginType PluginType = "componentVersionRepository"
+	CredentialRepositoryPluginType       PluginType = "credentialRepository" //nolint:gosec // not hardcoded cred
+)
 
 type Location struct {
 	LocationType `json:"type"`

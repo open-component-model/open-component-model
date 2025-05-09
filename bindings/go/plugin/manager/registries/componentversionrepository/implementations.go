@@ -28,58 +28,8 @@ const (
 	UploadComponentVersion = "/component-version/upload"
 	// DownloadComponentVersion defines the endpoint to download component versions.
 	DownloadComponentVersion = "/component-version/download"
+	Identity                 = "/identity"
 )
-
-// NewTypedComponentVersionRepositoryPluginImplementation is a Type specific wrapper for the repository plugin implementation.
-// This is used during fetching a plugin. The registry implementation MUST be type agnostic in order to deal with all types.
-// Thus, we use this wrapper to make the returning implementation type safe for all dynamic types.
-func NewTypedComponentVersionRepositoryPluginImplementation[T runtime.Typed](base *RepositoryPlugin) *TypedComponentVersionRepositoryPlugin[T] {
-	return &TypedComponentVersionRepositoryPlugin[T]{base}
-}
-
-type TypedComponentVersionRepositoryPlugin[T runtime.Typed] struct {
-	base *RepositoryPlugin
-}
-
-func (r *TypedComponentVersionRepositoryPlugin[T]) GetLocalResource(ctx context.Context, request v1.GetLocalResourceRequest[T], credentials map[string]string) error {
-	return r.base.GetLocalResource(ctx, v1.GetLocalResourceRequest[runtime.Typed]{
-		Repository:     request.Repository,
-		Name:           request.Name,
-		Version:        request.Version,
-		Identity:       request.Identity,
-		TargetLocation: request.TargetLocation,
-	}, credentials)
-}
-
-func (r *TypedComponentVersionRepositoryPlugin[T]) AddLocalResource(ctx context.Context, request v1.PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error) {
-	return r.base.AddLocalResource(ctx, v1.PostLocalResourceRequest[runtime.Typed]{
-		Repository:       request.Repository,
-		Name:             request.Name,
-		Version:          request.Version,
-		ResourceLocation: request.ResourceLocation,
-		Resource:         request.Resource,
-	}, credentials)
-}
-
-func (r *TypedComponentVersionRepositoryPlugin[T]) Ping(ctx context.Context) error {
-	return r.base.Ping(ctx)
-}
-
-func (r *TypedComponentVersionRepositoryPlugin[T]) AddComponentVersion(ctx context.Context, request v1.PostComponentVersionRequest[T], credentials map[string]string) error {
-	return r.base.AddComponentVersion(ctx, v1.PostComponentVersionRequest[runtime.Typed]{
-		Repository: request.Repository,
-		Descriptor: request.Descriptor,
-	}, credentials)
-}
-
-func (r *TypedComponentVersionRepositoryPlugin[T]) GetComponentVersion(ctx context.Context, request v1.GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error) {
-	req := v1.GetComponentVersionRequest[runtime.Typed]{
-		Name:       request.Name,
-		Version:    request.Version,
-		Repository: request.Repository,
-	}
-	return r.base.GetComponentVersion(ctx, req, credentials)
-}
 
 type RepositoryPlugin struct {
 	ID string
@@ -230,6 +180,19 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetL
 	}
 
 	return nil
+}
+
+func (r *RepositoryPlugin) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
+	if err := r.validateEndpoint(typ.Typ, r.jsonSchema); err != nil {
+		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
+	}
+
+	identity := &runtime.Identity{}
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(typ), plugins.WithResult(identity)); err != nil {
+		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
+	}
+
+	return nil, nil
 }
 
 func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {

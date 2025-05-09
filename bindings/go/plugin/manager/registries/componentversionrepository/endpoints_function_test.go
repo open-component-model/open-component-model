@@ -48,6 +48,10 @@ func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResour
 	return nil
 }
 
+func (m *mockPlugin) GetIdentity(ctx context.Context, typ repov1.GetIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {
+	return nil, nil
+}
+
 var _ repov1.ReadWriteOCMRepositoryPluginContract[*dummyv1.Repository] = &mockPlugin{}
 
 func TestRegisterComponentVersionRepository(t *testing.T) {
