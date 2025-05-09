@@ -28,7 +28,9 @@ const (
 	UploadComponentVersion = "/component-version/upload"
 	// DownloadComponentVersion defines the endpoint to download component versions.
 	DownloadComponentVersion = "/component-version/download"
-	Identity                 = "/identity"
+	// ListComponentVersions defines the endpoint to list component versions.
+	ListComponentVersions = "/component-versions"
+	Identity              = "/identity"
 )
 
 type RepositoryPlugin struct {
@@ -118,6 +120,31 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request v1.G
 	}
 
 	return desc, nil
+}
+
+func (r *RepositoryPlugin) ListComponentVersions(ctx context.Context, request v1.ListComponentVersionsRequest[runtime.Typed], credentials map[string]string) ([]string, error) {
+	var params []plugins.KV
+	addParam := func(k, v string) {
+		params = append(params, plugins.KV{Key: k, Value: v})
+	}
+	addParam("name", request.Name)
+
+	credHeader, err := toCredentials(credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	// We know we only have this single schema for all endpoints which require validation.
+	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+		return nil, err
+	}
+
+	var result []string
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ListComponentVersions, http.MethodGet, plugins.WithResult(&result), plugins.WithQueryParams(params), plugins.WithHeader(credHeader)); err != nil {
+		return nil, fmt.Errorf("failed to get component version %s from %s: %w", request.Name, r.ID, err)
+	}
+
+	return result, nil
 }
 
 func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request v1.PostLocalResourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Resource, error) {

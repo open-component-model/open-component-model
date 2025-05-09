@@ -143,6 +143,36 @@ func TestGetComponentVersion(t *testing.T) {
 	require.Equal(t, response.String(), desc.String())
 }
 
+func TestListComponentVersions(t *testing.T) {
+	// Setup test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/"+ListComponentVersions && r.Method == http.MethodGet {
+			err := json.NewEncoder(w).Encode([]string{"v0.0.1", "v0.0.2"})
+			require.NoError(t, err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Create plugin
+	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
+		ID:         "test-plugin",
+		Type:       types.TCP,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+	}, server.URL, []byte(`{}`))
+
+	ctx := context.Background()
+	list, err := plugin.ListComponentVersions(ctx, repov1.ListComponentVersionsRequest[runtime.Typed]{
+		Repository: &dummyv1.Repository{},
+		Name:       "test-plugin",
+	}, map[string]string{})
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"v0.0.1", "v0.0.2"}, list)
+}
+
 func TestAddLocalResource(t *testing.T) {
 	// Setup test server
 	desc := defaultDescriptor()
