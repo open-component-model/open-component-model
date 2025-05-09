@@ -62,3 +62,7 @@ type PostResourceRequest struct {
 	ResourceLocation types.Location `json:"resourceLocation"`
 	Resource         *v2.Resource   `json:"resource"`
 }
+
+type GetIdentityRequest[T runtime.Typed] struct {
+	Typ T `json:"type"`
+}

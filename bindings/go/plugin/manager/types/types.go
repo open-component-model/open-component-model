@@ -8,6 +8,7 @@ import (
 type PluginType string
 
 var ComponentVersionRepositoryPluginType PluginType = "componentVersionRepository"
+var CredentialRepositoryPluginType PluginType = "credentialRepository"
 
 type Location struct {
 	LocationType `json:"type"`

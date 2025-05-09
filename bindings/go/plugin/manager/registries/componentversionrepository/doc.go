@@ -7,7 +7,7 @@
 //	repository.MustAddToScheme(scheme)
 //	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 //		scheme,
-//		&Plugin{scheme: scheme, memory: inmemory.New()},
+//		&TypeToUntypedPlugin{scheme: scheme, memory: inmemory.New()},
 //		&v1.OCIRepository{},
 //	); err != nil {
 //		panic(err)
@@ -16,7 +16,7 @@
 // The package includes functionality for:
 //   - Adding and retrieving component versions
 //   - Handling local resources related to component versions
-//   - Plugin-based registry for managing repository plugins
+//   - TypeToUntypedPlugin-based registry for managing repository plugins
 //   - Type-safe plugin wrappers for interacting with repository resources
 //
 // The package is divided into three key sections:

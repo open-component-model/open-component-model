@@ -80,6 +80,11 @@ func (m *TestPlugin) AddComponentVersion(ctx context.Context, request repov1.Pos
 	return nil
 }
 
+func (m *TestPlugin) GetIdentity(ctx context.Context, typ repov1.GetIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {
+	_, _ = fmt.Fprintf(os.Stdout, "GetIdentity: %+v\n", typ.Typ.BaseUrl)
+	return nil, nil
+}
+
 var _ repov1.ReadWriteOCMRepositoryPluginContract[*dummyv1.Repository] = &TestPlugin{}
 
 func main() {
@@ -112,7 +117,7 @@ func main() {
 	}
 
 	// Parse command-line arguments
-	configData := flag.String("config", "", "Plugin config.")
+	configData := flag.String("config", "", "TypeToUntypedPlugin config.")
 	flag.Parse()
 	if configData == nil || *configData == "" {
 		fmt.Fprintln(os.Stderr, "Missing required flag --config")
@@ -126,7 +131,7 @@ func main() {
 	}
 
 	if conf.ID == "" {
-		fmt.Fprintln(os.Stderr, "Plugin ID is required")
+		fmt.Fprintln(os.Stderr, "TypeToUntypedPlugin ID is required")
 		os.Exit(1)
 	}
 

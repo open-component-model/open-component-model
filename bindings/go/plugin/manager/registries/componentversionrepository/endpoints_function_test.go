@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 
@@ -46,6 +47,10 @@ func (m *mockPlugin) GetComponentVersion(_ context.Context, _ repov1.GetComponen
 
 func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResourceRequest[*dummyv1.Repository], _ map[string]string) error {
 	return nil
+}
+
+func (m *mockPlugin) GetIdentity(ctx context.Context, typ repov1.GetIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {
+	return nil, nil
 }
 
 var _ repov1.ReadWriteOCMRepositoryPluginContract[*dummyv1.Repository] = &mockPlugin{}
