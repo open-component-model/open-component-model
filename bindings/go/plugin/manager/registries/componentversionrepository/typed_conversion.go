@@ -54,6 +54,14 @@ func (r *TypeToUntypedPlugin[T]) GetComponentVersion(ctx context.Context, reques
 	return r.base.GetComponentVersion(ctx, req, credentials)
 }
 
+func (r *TypeToUntypedPlugin[T]) ListComponentVersions(ctx context.Context, request v1.ListComponentVersionsRequest[runtime.Typed], credentials map[string]string) ([]string, error) {
+	req := v1.ListComponentVersionsRequest[T]{
+		Repository: request.Repository.(T),
+		Name:       request.Name,
+	}
+	return r.base.ListComponentVersions(ctx, req, credentials)
+}
+
 func (r *TypeToUntypedPlugin[T]) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
 	return r.base.GetIdentity(ctx, v1.GetIdentityRequest[T]{
 		Typ: typ.Typ.(T),

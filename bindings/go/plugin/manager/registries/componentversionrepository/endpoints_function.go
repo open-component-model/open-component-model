@@ -35,6 +35,10 @@ func RegisterComponentVersionRepository[T runtime.Typed](
 			Location: DownloadComponentVersion,
 		},
 		endpoints.Handler{
+			Handler:  ListComponentVersionsHandlerFunc(handler.ListComponentVersions, c.Scheme, proto),
+			Location: ListComponentVersions,
+		},
+		endpoints.Handler{
 			Handler:  GetLocalResourceHandlerFunc(handler.GetLocalResource, c.Scheme, proto),
 			Location: DownloadLocalResource,
 		},

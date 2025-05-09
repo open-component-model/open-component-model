@@ -14,6 +14,7 @@ type ReadOCMRepositoryPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	IdentityProvider[T]
 	GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error)
+	ListComponentVersions(ctx context.Context, request ListComponentVersionsRequest[T], credentials map[string]string) ([]string, error)
 	GetLocalResource(ctx context.Context, request GetLocalResourceRequest[T], credentials map[string]string) error
 }
 

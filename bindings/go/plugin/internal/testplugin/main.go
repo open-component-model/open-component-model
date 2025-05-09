@@ -66,6 +66,10 @@ func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.Get
 	}, nil
 }
 
+func (m *TestPlugin) ListComponentVersions(ctx context.Context, request repov1.ListComponentVersionsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
+	return []string{"v0.0.1", "v0.0.2"}, nil
+}
+
 func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "Writing my local resource here to target: %+v\n", request.TargetLocation)
 	return nil
