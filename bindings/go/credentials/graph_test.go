@@ -176,9 +176,14 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 						return nil, err
 					}
 
+					file, ok := mm["dockerConfigFile"]
+					if !ok {
+						return nil, fmt.Errorf("missing dockerConfigFile in config")
+					}
+
 					return runtime.Identity{
 						runtime.IdentityAttributeType: runtime.NewVersionedType("DockerConfig", "v1").String(),
-						"dockerConfigFile":            mm["dockerConfigFile"].(string),
+						"dockerConfigFile":            file.(string),
 					}, nil
 				},
 				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
@@ -193,7 +198,7 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 					}
 				},
 			}, nil
-		case credentials2.AnyCredentialType.String():
+		case credentials2.AnyConsumerIdentityType.String():
 			return RepositoryPlugin{
 				RepositoryConfigTypes: []runtime.Type{runtime.NewUnversionedType("HashiCorpVault")},
 				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
