@@ -97,6 +97,7 @@ func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts 
 
 type VersionOptions struct {
 	SemverConstraint string
+	LatestOnly       bool
 }
 
 func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptions) ([]string, error) {
@@ -113,9 +114,13 @@ func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptio
 	}
 
 	if opts.SemverConstraint != "" {
-		if versions, err = filterBySemver(versions, repo.ref.Version); err != nil {
+		if versions, err = filterBySemver(versions, opts.SemverConstraint); err != nil {
 			return nil, fmt.Errorf("filtering component versions failed: %w", err)
 		}
+	}
+
+	if opts.LatestOnly && len(versions) > 1 {
+		return versions[:1], nil
 	}
 
 	return versions, nil

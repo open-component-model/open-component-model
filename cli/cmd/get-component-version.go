@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	goruntime "runtime"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -22,16 +21,20 @@ import (
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
+const (
+	FlagSemverConstraint = "semver-constraint"
+	FlagOutput           = "output"
+	FlagConcurrencyLimit = "concurrency-limit"
+	FlagLatest           = "latest"
+)
+
 var GetComponentVersionCmd = &cobra.Command{
 	Use:        "component-version {reference}",
 	Aliases:    []string{"cv", "component-versions", "cvs"},
 	SuggestFor: []string{"component", "components", "version", "versions"},
 	Short:      "Get component version(s) from an OCM repository",
 	// GroupID:    "component",
-	Args: cobra.MatchAll(cobra.ExactArgs(1), func(cmd *cobra.Command, args []string) error {
-		_, err := compref.Parse(args[0])
-		return err
-	}),
+	Args: cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
 	Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
 
 The format of a component reference is:
@@ -67,29 +70,45 @@ get cv ctf::github.com/locally-checked-out-repo//ocm.software/ocmcli:0.23.0
 get cvs oci::http://localhost:8080//ocm.software/ocmcli
 `),
 	Version:           "v1alpha1",
-	RunE:              getComponentVersion,
+	RunE:              GetComponentVersion,
 	DisableAutoGenTag: true,
 }
 
+func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("missing component reference as first positional argument")
+	}
+	if _, err := compref.Parse(args[0]); err != nil {
+		return fmt.Errorf("parsing component reference from first position argument %q failed: %w", args[0], err)
+	}
+	return nil
+}
+
 func init() {
-	enum.VarP(GetComponentVersionCmd.Flags(), "output", "o", []string{"table", "yaml", "json"}, "output format of the component descriptors")
-	GetComponentVersionCmd.Flags().String("semver-constraint", "> 0.0.0-0", "semantic version constraint restricting which versions to output")
-	GetComponentVersionCmd.Flags().Int("concurrency-limit", goruntime.NumCPU(), "maximum amount of parallel requests to the repository for resolving component versions")
+	enum.VarP(GetComponentVersionCmd.Flags(), FlagOutput, "o", []string{"table", "yaml", "json"}, "output format of the component descriptors")
+	GetComponentVersionCmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
+	GetComponentVersionCmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
+	GetComponentVersionCmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
+	// TODO(jakobmoellerdev): Add Recursive Resolution
 	GetCmd.AddCommand(GetComponentVersionCmd)
 }
 
-func getComponentVersion(cmd *cobra.Command, args []string) error {
-	output, err := enum.Get(cmd.Flags(), "output")
+func GetComponentVersion(cmd *cobra.Command, args []string) error {
+	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
 	}
-	constraint, err := cmd.Flags().GetString("semver-constraint")
+	constraint, err := cmd.Flags().GetString(FlagSemverConstraint)
 	if err != nil {
 		return fmt.Errorf("getting semver-constraint flag failed: %w", err)
 	}
 	concurrencyLimit, err := cmd.Flags().GetInt("concurrency-limit")
 	if err != nil {
 		return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
+	}
+	latestOnly, err := cmd.Flags().GetBool(FlagLatest)
+	if err != nil {
+		return fmt.Errorf("getting latest flag failed: %w", err)
 	}
 
 	reference := args[0]
@@ -101,6 +120,7 @@ func getComponentVersion(cmd *cobra.Command, args []string) error {
 	descs, err := repo.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
 		VersionOptions: ocm.VersionOptions{
 			SemverConstraint: constraint,
+			LatestOnly:       latestOnly,
 		},
 		ConcurrencyLimit: concurrencyLimit,
 	})
