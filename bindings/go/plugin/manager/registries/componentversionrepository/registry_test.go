@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
+	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -24,7 +24,7 @@ func TestPluginFlow(t *testing.T) {
 
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
+	dummytype.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin-1",
@@ -34,7 +34,7 @@ func TestPluginFlow(t *testing.T) {
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	proto := &v1.OCIRepository{}
+	proto := &dummyv1.Repository{}
 	typ, err := scheme.TypeForPrototype(proto)
 	require.NoError(t, err)
 
@@ -68,10 +68,10 @@ func TestPluginFlow(t *testing.T) {
 
 	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
 	require.NoError(t, err)
-	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*v1.OCIRepository]{
-		Repository: &v1.OCIRepository{
+	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*dummyv1.Repository]{
+		Repository: &dummyv1.Repository{
 			Type: runtime.Type{
-				Name:    "OCIRepository",
+				Name:    "DummyRepository",
 				Version: "v1",
 			},
 			BaseUrl: "base-url",
@@ -86,36 +86,36 @@ func TestPluginFlow(t *testing.T) {
 func TestPluginNotFound(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
+	dummytype.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &v1.OCIRepository{}
+	proto := &dummyv1.Repository{}
 	_, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
-	require.ErrorContains(t, err, "failed to get plugin for typ runtime.Type OCIRepository/v1: no plugin registered for type OCIRepository/v1")
+	require.ErrorContains(t, err, "failed to get plugin for typ runtime.Type DummyRepository/v1: no plugin registered for type DummyRepository/v1")
 }
 
 func TestSchemeDoesNotExist(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
 	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &v1.OCIRepository{}
+	proto := &dummyv1.Repository{}
 	_, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
-	require.ErrorContains(t, err, "failed to get type for prototype *v1.OCIRepository: prototype not found in registry")
+	require.ErrorContains(t, err, "failed to get type for prototype *v1.Repository: prototype not found in registry")
 }
 
 func TestInternalPluginRegistry(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
+	dummytype.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &v1.OCIRepository{}
+	proto := &dummyv1.Repository{}
 	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockPlugin{}, proto))
 
 	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
 	require.NoError(t, err)
-	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*v1.OCIRepository]{
-		Repository: &v1.OCIRepository{
+	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*dummyv1.Repository]{
+		Repository: &dummyv1.Repository{
 			Type: runtime.Type{
-				Name:    "OCIRepository",
+				Name:    "DummyRepository",
 				Version: "v1",
 			},
 			BaseUrl: "base-url",

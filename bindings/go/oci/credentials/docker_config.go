@@ -163,26 +163,8 @@ func createDefaultStore(ctx context.Context) (remotecredentials.Store, error) {
 // It creates a temporary file to store the configuration and loads it into memory.
 func createInlineConfigStore(ctx context.Context, config string) (remotecredentials.Store, error) {
 	slog.InfoContext(ctx, "using docker config from inline config")
-
-	// Create a temporary file to store the configuration
-	tmp, err := os.CreateTemp("", "docker-config-*.json")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary file: %w", err)
-	}
-
-	// Ensure cleanup of the temporary file
-	defer func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmp.Name()) // Safe to remove as store is loaded into memory
-	}()
-
-	// Write the configuration to the temporary file
-	if err := os.WriteFile(tmp.Name(), []byte(config), 0o600); err != nil {
-		return nil, fmt.Errorf("failed to write temporary file: %w", err)
-	}
-
 	// Create and return the store
-	store, err := remotecredentials.NewStore(tmp.Name(), remotecredentials.StoreOptions{})
+	store, err := remotecredentials.NewMemoryStoreFromDockerConfig([]byte(config))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create inline config store: %w", err)
 	}
