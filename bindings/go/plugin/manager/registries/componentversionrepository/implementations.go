@@ -71,19 +71,6 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
-	if err := r.validateEndpoint(typ.Typ, r.jsonSchema); err != nil {
-		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
-	}
-
-	identity := &runtime.Identity{}
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(typ), plugins.WithResult(identity)); err != nil {
-		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
-	}
-
-	return nil, nil
-}
-
 func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request v1.PostComponentVersionRequest[runtime.Typed], credentials map[string]string) error {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
