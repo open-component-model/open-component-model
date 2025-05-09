@@ -27,7 +27,7 @@ func (t *TestType) DeepCopyTyped() Typed {
 	}
 }
 
-func TestRegistry_Decode(t *testing.T) {
+func TestRegistry_Decode_With_Type_Mismatch_Defaulting_On_Raw(t *testing.T) {
 	r := require.New(t)
 	typ := NewVersionedType("test", "v1")
 	registry := NewScheme()
@@ -50,7 +50,9 @@ func TestRegistry_Decode(t *testing.T) {
 	r.Equal(parsed2.(*TestType).Value, "foo")
 
 	parsed3, err := registry.Clone().NewObject(typ)
+	// forcefully empty the type, because new object defaults to the correct type
 	r.NoError(err)
+	parsed3.SetType(NewUnversionedType(""))
 	r.NoError(registry.Decode(bytes.NewReader(raw.Data), parsed3))
 	r.Equal(parsed3.(*TestType).Value, "foo")
 
@@ -283,4 +285,19 @@ func TestRegistry_MultipleTypes_With_Alias(t *testing.T) {
 	registry.MustRegisterWithAlias(&TestType{}, def, alias)
 	r.ErrorContains(registry.RegisterWithAlias(&TestType{}, def), "already registered as default")
 	r.ErrorContains(registry.RegisterWithAlias(&TestType{}, alias), "already registered as alias")
+}
+
+func TestRegistry_NewObject_Based_On_Alias(t *testing.T) {
+	r := require.New(t)
+	def := NewVersionedType("test1", "v1")
+	alias := NewVersionedType("test2", "v1")
+	registry := NewScheme()
+	registry.MustRegisterWithAlias(&TestType{}, def, alias)
+
+	obj, err := registry.NewObject(def)
+	r.NoError(err)
+	r.Equal(obj.GetType(), def)
+	obj, err = registry.NewObject(alias)
+	r.NoError(err)
+	r.Equal(obj.GetType(), alias)
 }

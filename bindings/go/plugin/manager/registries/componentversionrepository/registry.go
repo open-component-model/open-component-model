@@ -36,7 +36,7 @@ func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](
 		return fmt.Errorf("failed to get type for prototype %T: %w", prototype, err)
 	}
 
-	r.internalComponentVersionRepositoryPlugins[typ] = &TypeToUntypedPlugin[T]{p}
+	r.internalComponentVersionRepositoryPlugins[typ] = &TypeToUntypedPlugin[T]{base: p}
 
 	if err := r.internalComponentVersionRepositoryScheme.RegisterWithAlias(prototype, typ); err != nil {
 		return fmt.Errorf("failed to register prototype %T: %w", prototype, err)

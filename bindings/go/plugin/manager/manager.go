@@ -97,7 +97,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		plugin.Config = *conf
 
 		output := bytes.NewBuffer(nil)
-		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") // nolint: gosec // G204 does not apply
+		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
 		cmd.Stdout = output
 		cmd.Stderr = os.Stderr
 
@@ -173,7 +173,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, plugin mtypes.Plugin, ou
 	}
 
 	// Create a command that can then be managed.
-	pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) // nolint: gosec // G204 does not apply
+	pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint:gosec // G204 does not apply
 	pluginCmd.Cancel = func() error {
 		slog.Info("killing plugin process because the parent context is cancelled", "id", plugin.ID)
 		return pluginCmd.Process.Kill()

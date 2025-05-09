@@ -59,3 +59,7 @@ func (p *credentialGraphPlugin) Resolve(ctx context.Context, cfg runtime.Typed, 
 		Identity: identity,
 	}, credentials)
 }
+
+func (p *credentialGraphPlugin) SupportedRepositoryConfigTypes() []runtime.Type {
+	return nil
+}

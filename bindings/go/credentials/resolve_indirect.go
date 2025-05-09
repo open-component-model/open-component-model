@@ -19,6 +19,9 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 
 	plugin, err := g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity)
 	if err != nil {
+		// in case of an error, we try to resolve the credentials using the AnyConsumerIdentityType
+		// this is a fallback resolution mechanism intended for plugins that do not mind which
+		// consumer identity type is used.
 		identity := identity.DeepCopy()
 		identity.SetType(AnyConsumerIdentityType)
 		var anyErr error

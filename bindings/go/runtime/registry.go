@@ -19,7 +19,7 @@ type Scheme struct {
 	// if the constructors cannot determine a match,
 	// this will trigger the creation of an unstructured.Unstructured with NewScheme instead of failing.
 	allowUnknown bool
-	aliases      map[Type][]Type
+	aliases      map[Type]Type
 	defaults     map[Type]Typed
 }
 
@@ -27,7 +27,7 @@ type Scheme struct {
 func NewScheme(opts ...SchemeOption) *Scheme {
 	reg := &Scheme{
 		defaults: make(map[Type]Typed),
-		aliases:  make(map[Type][]Type),
+		aliases:  make(map[Type]Type),
 	}
 	for _, opt := range opts {
 		opt(reg)
@@ -66,15 +66,15 @@ func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
 		if prototype, exists := r.defaults[typ]; exists {
 			return fmt.Errorf("type %q is already registered as default for %T", typ, prototype)
 		}
-		if def, alias := r.aliases[typ]; alias {
+		if def, ok := r.aliases[typ]; ok {
 			return fmt.Errorf("type %q is already registered as alias for %q", typ, def)
 		}
-		if i == 0 && r.defaults[typ] == nil {
-			// first type is the defaults type
+		if i == 0 {
+			// first type is the def type
 			r.defaults[typ] = prototype
 		} else {
 			// all other types are aliases
-			r.aliases[typ] = append(r.aliases[typ], types[0])
+			r.aliases[typ] = types[0]
 		}
 	}
 	return nil
@@ -141,17 +141,17 @@ func (r *Scheme) NewObject(typ Type) (Typed, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var object any
-	// construct by full type
-	proto, exists := r.defaults[typ]
-	if exists {
-		t := reflect.TypeOf(proto)
-		for t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-		object = reflect.New(t).Interface()
-
-		return object.(Typed), nil
+	// construct by full type if present in defaults
+	if proto, exists := r.defaults[typ]; exists {
+		instance := proto.DeepCopyTyped()
+		instance.SetType(typ)
+		return instance, nil
+	}
+	// construct by alias if present
+	if def, ok := r.aliases[typ]; ok {
+		instance := r.defaults[def].DeepCopyTyped()
+		instance.SetType(typ)
+		return instance, nil
 	}
 
 	if r.allowUnknown {

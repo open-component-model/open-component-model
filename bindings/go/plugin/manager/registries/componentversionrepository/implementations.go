@@ -195,6 +195,19 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetL
 	return nil
 }
 
+func (r *RepositoryPlugin) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
+	if err := r.validateEndpoint(typ.Typ, r.jsonSchema); err != nil {
+		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
+	}
+
+	identity := &runtime.Identity{}
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(typ), plugins.WithResult(identity)); err != nil {
+		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
+	}
+
+	return nil, nil
+}
+
 func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
 	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
 	if err != nil {
