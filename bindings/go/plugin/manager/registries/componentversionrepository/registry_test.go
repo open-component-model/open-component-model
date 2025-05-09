@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -65,10 +65,11 @@ func TestPluginFlow(t *testing.T) {
 		Stdout: pipe,
 	}
 	require.NoError(t, registry.AddPlugin(plugin, typ))
-
-	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
+	p, err := scheme.NewObject(typ)
 	require.NoError(t, err)
-	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*dummyv1.Repository]{
+	retrievedPlugin, err := registry.GetPlugin(ctx, p)
+	require.NoError(t, err)
+	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
 		Repository: &dummyv1.Repository{
 			Type: runtime.Type{
 				Name:    "DummyRepository",
@@ -85,21 +86,30 @@ func TestPluginFlow(t *testing.T) {
 
 func TestPluginNotFound(t *testing.T) {
 	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &dummyv1.Repository{}
-	_, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
-	require.ErrorContains(t, err, "failed to get plugin for typ runtime.Type DummyRepository/v1: no plugin registered for type DummyRepository/v1")
+	proto := &dummyv1.Repository{
+		Type: runtime.Type{
+			Name:    "DummyRepository",
+			Version: "v1",
+		},
+		BaseUrl: "",
+	}
+	_, err := registry.GetPlugin(ctx, proto)
+	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
 func TestSchemeDoesNotExist(t *testing.T) {
 	ctx := context.Background()
-	scheme := runtime.NewScheme()
 	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &dummyv1.Repository{}
-	_, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
-	require.ErrorContains(t, err, "failed to get type for prototype *v1.Repository: prototype not found in registry")
+	proto := &dummyv1.Repository{
+		Type: runtime.Type{
+			Name:    "DummyRepository",
+			Version: "v1",
+		},
+		BaseUrl: "",
+	}
+	_, err := registry.GetPlugin(ctx, proto)
+	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
 func TestInternalPluginRegistry(t *testing.T) {
@@ -107,12 +117,17 @@ func TestInternalPluginRegistry(t *testing.T) {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &dummyv1.Repository{}
+	proto := &dummyv1.Repository{
+		Type: runtime.Type{
+			Name:    "DummyRepository",
+			Version: "v1",
+		},
+		BaseUrl: "",
+	}
 	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockPlugin{}, proto))
-
-	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
+	retrievedPlugin, err := registry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
-	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*dummyv1.Repository]{
+	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
 		Repository: &dummyv1.Repository{
 			Type: runtime.Type{
 				Name:    "DummyRepository",
