@@ -3,10 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"os"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -19,8 +16,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	contractsv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/location"
 )
 
 const Creator = "OCI Repository TypeToUntypedPlugin"
@@ -44,6 +41,14 @@ type Plugin struct {
 
 func (p *Plugin) GetIdentity(_ context.Context, _ contractsv1.GetIdentityRequest[*ctfv1.Repository]) (runtime.Identity, error) {
 	return nil, fmt.Errorf("not implemented because ctfs do not need consumer identity based credentials")
+}
+
+func (p *Plugin) ListComponentVersions(ctx context.Context, request contractsv1.ListComponentVersionsRequest[*ctfv1.Repository], credentials map[string]string) ([]string, error) {
+	repo, err := p.createRepository(request.Repository)
+	if err != nil {
+		return nil, fmt.Errorf("error creating repository: %w", err)
+	}
+	return repo.ListComponentVersions(ctx, request.Name)
 }
 
 func (p *Plugin) GetComponentVersion(ctx context.Context, request contractsv1.GetComponentVersionRequest[*ctfv1.Repository], _ map[string]string) (*descriptor.Descriptor, error) {
@@ -73,7 +78,7 @@ func (p *Plugin) AddLocalResource(ctx context.Context, request contractsv1.PostL
 	}
 	resource := descriptor.ConvertFromV2Resources([]v2.Resource{*request.Resource})[0]
 
-	b, err := readBlobFromLocation(request.ResourceLocation)
+	b, err := location.Read(request.ResourceLocation)
 	if err != nil {
 		return nil, fmt.Errorf("error reading blob from location: %w", err)
 	}
@@ -92,7 +97,7 @@ func (p *Plugin) GetLocalResource(ctx context.Context, request contractsv1.GetLo
 	}
 	b, _, err := repo.GetLocalResource(ctx, request.Name, request.Version, request.Identity)
 
-	return writeBlobToLocation(request.TargetLocation, b)
+	return location.Write(request.TargetLocation, b)
 }
 
 var (
@@ -111,44 +116,4 @@ func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionR
 		oci.WithOCIDescriptorCache(p.memory),
 	)
 	return repo, err
-}
-
-func writeBlobToLocation(location types.Location, b blob.ReadOnlyBlob) error {
-	switch location.LocationType {
-	case types.LocationTypeLocalFile:
-		f, err := os.OpenFile(location.Value, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-		if err != nil {
-			return fmt.Errorf("error opening file %q: %w", location.Value, err)
-		}
-		defer f.Close()
-		if err := blob.Copy(f, b); err != nil {
-			return fmt.Errorf("error copying blob to file %q: %w", location.Value, err)
-		}
-	case types.LocationTypeUnixNamedPipe:
-		f, err := os.OpenFile(location.Value, os.O_WRONLY|os.O_APPEND|os.O_CREATE, os.ModeNamedPipe)
-		if err != nil {
-			return fmt.Errorf("error opening named pipe %q: %w", location.Value, err)
-		}
-		defer f.Close()
-		if err := blob.Copy(f, b); err != nil {
-			return fmt.Errorf("error copying blob to named pipe %q: %w", location.Value, err)
-		}
-	default:
-		return fmt.Errorf("unsupported target location type %q", location.LocationType)
-	}
-	return nil
-}
-
-func readBlobFromLocation(location types.Location) (blob.ReadOnlyBlob, error) {
-	var b blob.ReadOnlyBlob
-	var err error
-	switch location.LocationType {
-	case types.LocationTypeLocalFile, types.LocationTypeUnixNamedPipe:
-		if b, err = filesystem.GetBlobFromOSPath(location.Value); err != nil {
-			return nil, fmt.Errorf("error getting blob from OS path: %w", err)
-		}
-	default:
-		return nil, fmt.Errorf("unsupported resource location type %q", location.LocationType)
-	}
-	return b, nil
 }

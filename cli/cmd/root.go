@@ -14,9 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/configuration/v1"
 	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
-	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/credentials/oci"
-	ctfplugin "ocm.software/open-component-model/cli/internal/plugin/ctf"
-	ociplugin "ocm.software/open-component-model/cli/internal/plugin/oci"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin"
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 	"ocm.software/open-component-model/cli/log"
 )
@@ -92,16 +90,8 @@ func setupPluginManager(cmd *cobra.Command, err error) error {
 		}
 	}
 
-	if err := ocicredentialplugin.Register(Root.PluginManager.CredentialRepositoryRegistry); err != nil {
-		return fmt.Errorf("could not register OCI credential plugin: %w", err)
-	}
-
-	if err := ociplugin.Register(Root.PluginManager.ComponentVersionRepositoryRegistry); err != nil {
-		return fmt.Errorf("could not register OCI plugin: %w", err)
-	}
-
-	if err := ctfplugin.Register(Root.PluginManager.ComponentVersionRepositoryRegistry); err != nil {
-		return fmt.Errorf("could not register CTF plugin: %w", err)
+	if err := builtin.Register(Root.PluginManager); err != nil {
+		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 
 	return nil

@@ -2,35 +2,24 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"net"
 	goruntime "runtime"
 	"strings"
-	"sync"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
-	"oras.land/oras-go/v2/registry/remote/auth"
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/go/ctf"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
-	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
+	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
 var GetComponentVersionCmd = &cobra.Command{
@@ -85,6 +74,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 func init() {
 	enum.VarP(GetComponentVersionCmd.Flags(), "output", "o", []string{"table", "yaml", "json"}, "output format of the component descriptors")
 	GetComponentVersionCmd.Flags().String("semver-constraint", "> 0.0.0-0", "semantic version constraint restricting which versions to output")
+	GetComponentVersionCmd.Flags().Int("concurrency-limit", goruntime.NumCPU(), "maximum amount of parallel requests to the repository for resolving component versions")
 	GetCmd.AddCommand(GetComponentVersionCmd)
 }
 
@@ -97,43 +87,25 @@ func getComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting semver-constraint flag failed: %w", err)
 	}
+	concurrencyLimit, err := cmd.Flags().GetInt("concurrency-limit")
+	if err != nil {
+		return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
+	}
 
-	ref, versions, err := listVersions(cmd.Context(), args[0], constraint)
+	reference := args[0]
+	repo, err := ocm.New(cmd.Context(), Root.PluginManager, Root.CredentialGraph, reference)
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm repository: %w", err)
+	}
+
+	descs, err := repo.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
+		VersionOptions: ocm.VersionOptions{
+			SemverConstraint: constraint,
+		},
+		ConcurrencyLimit: concurrencyLimit,
+	})
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
-	}
-
-	repositorySpec := ref.Repository
-	plugin, err := Root.PluginManager.ComponentVersionRepositoryRegistry.GetPlugin(cmd.Context(), repositorySpec)
-	if err != nil {
-		return fmt.Errorf("getting plugin for repository %q failed: %w", repositorySpec, err)
-	}
-	var creds map[string]string
-	identity, err := plugin.GetIdentity(cmd.Context(), v1.GetIdentityRequest[runtime.Typed]{Typ: repositorySpec})
-	if err == nil {
-		if creds, err = Root.CredentialGraph.Resolve(cmd.Context(), identity); err != nil {
-			return fmt.Errorf("getting credentials for repository %q failed: %w", repositorySpec, err)
-		}
-	}
-
-	cv, err := plugin.GetComponentVersion(cmd.Context(), v1.GetComponentVersionRequest[runtime.Typed]{
-		Repository: repositorySpec,
-		Name:       ref.Component,
-		Version:    "",
-	}, creds)
-	if err != nil {
-		return fmt.Errorf("getting component version %q failed: %w", ref.Component, err)
-	}
-	_ = cv
-
-	repo, err := componentVersionRepositoryForSpec(ref.Repository)
-	if err != nil {
-		return fmt.Errorf("component version repository lookup failed: %w", err)
-	}
-
-	descs, err := getDescriptorsConcurrently(cmd.Context(), repo, ref.Component, versions)
-	if err != nil {
-		return fmt.Errorf("getting component version descriptors failed: %w", err)
 	}
 
 	reader, size, err := encodeDescriptors(output, descs)
@@ -146,76 +118,6 @@ func getComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func getDescriptorsConcurrently(ctx context.Context, repo oci.ComponentVersionRepository, component string, versions []string) ([]*descruntime.Descriptor, error) {
-	descs := make([]*descruntime.Descriptor, len(versions))
-	var descMu sync.Mutex
-
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.SetLimit(goruntime.NumCPU())
-	for i, version := range versions {
-		eg.Go(func() error {
-			desc, err := repo.GetComponentVersion(ctx, component, version)
-			if err != nil {
-				return fmt.Errorf("getting component version failed: %w", err)
-			}
-
-			descMu.Lock()
-			defer descMu.Unlock()
-			descs[i] = desc
-
-			return nil
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
-		return nil, fmt.Errorf("getting component versions failed: %w", err)
-	}
-
-	return descs, nil
-}
-
-func listVersions(ctx context.Context, rawComponentReference string, constraint string) (*compref.Ref, []string, error) {
-	ref, _ := compref.Parse(rawComponentReference)
-	repo, err := componentVersionRepositoryForSpec(ref.Repository)
-	if err != nil {
-		return nil, nil, fmt.Errorf("creating component version repository failed: %w", err)
-	}
-
-	var versions []string
-	if ref.Version != "" {
-		versions = []string{ref.Version}
-	} else if versions, err = repo.ListComponentVersions(ctx, ref.Component); err != nil {
-		return nil, nil, fmt.Errorf("listing component versions failed: %w", err)
-	}
-
-	if constraint != "" {
-		if versions, err = filterComponentVersionsBySemverConstraint(versions, constraint); err != nil {
-			return nil, nil, fmt.Errorf("filtering component versions failed: %w", err)
-		}
-	}
-
-	return ref, versions, nil
-}
-
-func filterComponentVersionsBySemverConstraint(versions []string, constraint string) ([]string, error) {
-	filteredVersions := make([]string, 0, len(versions))
-	constraints, err := semver.NewConstraint(constraint)
-	if err != nil {
-		return nil, fmt.Errorf("parsing semantic version constraint failed: %w", err)
-	}
-	for _, version := range versions {
-		semversion, err := semver.NewVersion(version)
-		if err != nil {
-			continue
-		}
-		if !constraints.Check(semversion) {
-			continue
-		}
-		filteredVersions = append(filteredVersions, version)
-	}
-	return filteredVersions, nil
 }
 
 func encodeDescriptors(output string, descs []*descruntime.Descriptor) (io.Reader, int64, error) {
@@ -290,65 +192,4 @@ func encodeDescriptorsAsTable(descriptor []*descruntime.Descriptor) ([]byte, err
 	t.SetStyle(style)
 	t.Render()
 	return buf.Bytes(), nil
-}
-
-func componentVersionRepositoryForSpec(typed runtime.Typed) (oci.ComponentVersionRepository, error) {
-	// TODO(jakobmoellerdev): switch to plugin system to allow arbitrary repository selection.
-	var opts []oci.RepositoryOption
-	switch typed := typed.(type) {
-	case *ociv1.Repository:
-		resolver := urlresolver.New(typed.BaseUrl)
-		resolver.SetClient(&auth.Client{
-			Credential: func(ctx context.Context, hostport string) (auth.Credential, error) {
-				host, port, err := net.SplitHostPort(hostport)
-				var netErr *net.AddrError
-				if errors.As(err, &netErr) && netErr.Err == "missing port in address" {
-					host, err = hostport, nil
-				}
-				if err != nil {
-					return auth.Credential{}, fmt.Errorf("splitting host and port failed: %w", err)
-				}
-				// TODO(jakobmoellerdev): replace hard coded identity generation
-				//  with call to ConsumerIdentityProvider plugin
-				identity := runtime.Identity{}
-				identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
-				if host != "" {
-					identity[runtime.IdentityAttributeHostname] = host
-				}
-				if port != "" {
-					identity[runtime.IdentityAttributePort] = port
-				}
-				credentialMap, err := Root.CredentialGraph.Resolve(ctx, identity)
-				if err != nil {
-					return auth.EmptyCredential, nil
-				}
-
-				// TODO(jakobmoellerdev): add support for other credential types such as token
-				cred := auth.Credential{}
-				if credentialMap["username"] != "" {
-					cred.Username = credentialMap["username"]
-				}
-				if credentialMap["password"] != "" {
-					cred.Password = credentialMap["password"]
-				}
-
-				return cred, nil
-			},
-			Cache: auth.NewCache(),
-		})
-		opts = append(opts, oci.WithResolver(resolver))
-	case *ctfv1.Repository:
-		archive, err := ctf.OpenCTFFromOSPath(typed.Path, ctf.O_RDONLY)
-		if err != nil {
-			return nil, fmt.Errorf("opening ctf component version repository failed: %w", err)
-		}
-		opts = append(opts, ocictf.WithCTF(ocictf.NewFromCTF(archive)))
-	default:
-		return nil, fmt.Errorf("unsupported repository type: %q", typed.GetType())
-	}
-	repo, err := oci.NewRepository(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("creating component version repository failed: %w", err)
-	}
-	return repo, nil
 }
