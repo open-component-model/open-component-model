@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -21,7 +20,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	plugin, err := g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity)
 	if err != nil {
 		identity := identity.DeepCopy()
-		identity.SetType(AnyCredentialType)
+		identity.SetType(AnyConsumerIdentityType)
 		var anyErr error
 		if plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity); anyErr != nil {
 			return nil, errors.Join(err, anyErr)
@@ -68,16 +67,11 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		}
 	}
 
-	repoConfigTypes := plugin.SupportedRepositoryConfigTypes()
-
 	g.repositoryConfigurationsMu.Lock()
 	repositoryConfigurations := g.repositoryConfigurations
 	g.repositoryConfigurationsMu.Unlock()
 
 	for _, repoConfig := range repositoryConfigurations {
-		if !slices.Contains(repoConfigTypes, repoConfig.GetType()) {
-			continue
-		}
 		wg.Add(1)
 		go resolve(plugin, repoConfig)
 	}

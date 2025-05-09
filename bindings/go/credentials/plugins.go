@@ -8,9 +8,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// AnyCredentialType represents a wildcard credential type that can match any credential type.
-// It is used when attempting to resolve credentials without a specific type constraint.
-var AnyCredentialType = runtime.NewUnversionedType("*")
+// AnyConsumerIdentityType represents a wildcard consumer identity type that can match any consumer identity.
+// It is used when attempting to resolve consumer identities without a specific type constraint.
+var AnyConsumerIdentityType = runtime.NewUnversionedType("*")
 
 // RepositoryPlugin defines the interface for plugins that handle repository-specific
 // credential resolution. These plugins are responsible for:
@@ -18,11 +18,6 @@ var AnyCredentialType = runtime.NewUnversionedType("*")
 // - Mapping repository configurations to consumer identities
 // - Resolving credentials for specific repository configurations
 type RepositoryPlugin interface {
-	// SupportedRepositoryConfigTypes returns a list of repository configuration types
-	// that this plugin can handle. The plugin will only be used for configurations
-	// matching one of these types.
-	SupportedRepositoryConfigTypes() []runtime.Type
-
 	// ConsumerIdentityForConfig maps a repository configuration to a consumer identity.
 	// This identity is used to look up credentials in the credential graph.
 	ConsumerIdentityForConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error)
