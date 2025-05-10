@@ -1,18 +1,56 @@
-## ocm generate docs
+## ocm get component-version
 
-Generation Documentation for the CLI
+Get component version(s) from an OCM repository
+
+### Synopsis
+
+Get component version(s) from an OCM repository.
+
+The format of a component reference is:
+	[type::]{repository}/[valid-prefix]/{component}[:version]
+
+For valid prefixes {component-descriptors|none} are available. If <none> is used, it defaults to "component-descriptors". This is because by default,
+OCM components are stored within a specific sub-repository.
+
+For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.
+
+If no type is given, the repository path is interpreted based on introspection and heuristics.
+
 
 ```
-ocm generate docs [-d <directory>] [flags]
+ocm get component-version {reference} [flags]
+```
+
+### Examples
+
+```
+Getting a single component version:
+
+get component-version ghcr.com/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+get cv ./path/to/ctf//ocm.software/ocmcli:0.23.0
+get cv ./path/to/ctf/component-descriptors/ocm.software/ocmcli:0.23.0
+
+Listing many component versions:
+
+get component-versions ghcr.com/open-component-model/ocm//ocm.software/ocmcli
+get cvs ghcr.com/open-component-model/ocm//ocm.software/ocmcli --output json
+get cvs ghcr.com/open-component-model/ocm//ocm.software/ocmcli -oyaml
+
+Specifying types and schemes:
+
+get cv ctf::github.com/locally-checked-out-repo//ocm.software/ocmcli:0.23.0
+get cvs oci::http://localhost:8080//ocm.software/ocmcli
 ```
 
 ### Options
 
 ```
-  -d, --directory string   directory to generate docs to. If not set, current working directory is used.
-  -h, --help               help for docs
-      --mode enum          generation mode to use
-                           (must be one of [man markdown restructured]) (default markdown)
+      --concurrency-limit int      maximum amount of parallel requests to the repository for resolving component versions (default 4)
+  -h, --help                       help for component-version
+      --latest                     if set, only the latest version of the component is returned
+  -o, --output enum                output format of the component descriptors
+                                   (must be one of [json table yaml]) (default table)
+      --semver-constraint string   semantic version constraint restricting which versions to output (default "> 0.0.0-0")
 ```
 
 ### Options inherited from parent commands
@@ -53,5 +91,5 @@ ocm generate docs [-d <directory>] [flags]
 
 ### SEE ALSO
 
-* [ocm generate](ocm_generate.md)	 - Generate documentation for the OCM CLI
+* [ocm get](ocm_get.md)	 - Get anything from OCM
 

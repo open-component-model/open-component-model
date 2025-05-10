@@ -1,19 +1,29 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/configuration/v1"
+	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin"
+	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 	"ocm.software/open-component-model/cli/log"
 )
 
 type OCM struct {
-	*cobra.Command            // the root command
-	Configuration  *v1.Config // the global ocm configuration
+	*cobra.Command             // the root command
+	Configuration   *v1.Config // the global ocm configuration
+	PluginManager   *manager.PluginManager
+	CredentialGraph *credentials.Graph
 }
 
 // Root represents the base command when called without any subcommands
@@ -38,6 +48,7 @@ func init() {
 	v1.RegisterConfigFlag(Root.Command)
 	log.RegisterLoggingFlags(Root.Command.PersistentFlags())
 	Root.AddCommand(GenerateCmd)
+	Root.AddCommand(GetCmd)
 }
 
 // setupRoot sets up the root command with the necessary setup for all cli commands.
@@ -54,6 +65,54 @@ func setupRoot(cmd *cobra.Command, _ []string) error {
 		Root.Configuration = cfg
 	}
 
+	if err := setupPluginManager(cmd); err != nil {
+		return fmt.Errorf("could not setup plugin manager: %w", err)
+	}
+
+	if err := setupCredentialGraph(cmd); err != nil {
+		return fmt.Errorf("could not setup credential graph: %w", err)
+	}
+
+	return nil
+}
+
+func setupPluginManager(cmd *cobra.Command) error {
+	Root.PluginManager = manager.NewPluginManager(cmd.Context())
+	pluginCfg, err := v2alpha1.LookupConfig(Root.Configuration)
+	if err != nil {
+		return fmt.Errorf("could not get plugin configuration: %w", err)
+	}
+	for _, pluginLocation := range pluginCfg.Locations {
+		if err := Root.PluginManager.RegisterPlugins(cmd.Context(), pluginLocation,
+			manager.WithIdleTimeout(time.Duration(pluginCfg.IdleTimeout)),
+		); err != nil {
+			slog.WarnContext(cmd.Context(), "could not register plugin location", "error", err)
+		}
+	}
+
+	if err := builtin.Register(Root.PluginManager); err != nil {
+		return fmt.Errorf("could not register builtin plugins: %w", err)
+	}
+
+	return nil
+}
+
+func setupCredentialGraph(cmd *cobra.Command) error {
+	if credCfg, err := credentialsConfig.LookupCredentialConfiguration(Root.Configuration); err != nil {
+		return fmt.Errorf("could not get credential configuration: %w", err)
+	} else {
+		graph, err := credentials.ToGraph(cmd.Context(), credCfg, credentials.Options{
+			RepositoryPluginProvider: Root.PluginManager.CredentialRepositoryRegistry,
+			CredentialPluginProvider: credentials.GetCredentialPluginFn(func(ctx context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
+				return nil, fmt.Errorf("no credential plugin found for type %s", typed)
+			}),
+			CredentialRepositoryTypeScheme: Root.PluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
+		})
+		if err != nil {
+			return fmt.Errorf("could not create credential graph: %w", err)
+		}
+		Root.CredentialGraph = graph
+	}
 	return nil
 }
 

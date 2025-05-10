@@ -1,5 +1,6 @@
 { "replacementPatterns": [
      { "pattern": "^/", "replacement": "{{BASEURL}}/" }
   ],
-  "ignorePatterns": []
+  "ignorePatterns": [],
+  "retryOn429": "true"
 }

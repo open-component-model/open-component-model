@@ -1,18 +1,15 @@
-## ocm generate docs
+## ocm get
 
-Generation Documentation for the CLI
+Get anything from OCM
 
 ```
-ocm generate docs [-d <directory>] [flags]
+ocm get {component-version|component-versions|cv|cvs} [flags]
 ```
 
 ### Options
 
 ```
-  -d, --directory string   directory to generate docs to. If not set, current working directory is used.
-  -h, --help               help for docs
-      --mode enum          generation mode to use
-                           (must be one of [man markdown restructured]) (default markdown)
+  -h, --help   help for get
 ```
 
 ### Options inherited from parent commands
@@ -53,5 +50,6 @@ ocm generate docs [-d <directory>] [flags]
 
 ### SEE ALSO
 
-* [ocm generate](ocm_generate.md)	 - Generate documentation for the OCM CLI
+* [ocm](ocm.md)	 - The official Open Component Model (OCM) CLI
+* [ocm get component-version](ocm_get_component-version.md)	 - Get component version(s) from an OCM repository
 

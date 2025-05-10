@@ -36,7 +36,7 @@ ocm [sub-command] [flags]
       --logformat enum   set the log output format that is used to print individual logs
                             json: Output logs in JSON format, suitable for machine processing
                             text: Output logs in human-readable text format, suitable for console output
-                         (must be one of [json text]) (default json)
+                         (must be one of [json text]) (default text)
       --loglevel enum    sets the logging level
                             debug: Show all logs including detailed debugging information
                             info:  Show informational messages and above
@@ -53,4 +53,5 @@ ocm [sub-command] [flags]
 
 * [ocm completion](ocm_completion.md)	 - Generate the autocompletion script for the specified shell
 * [ocm generate](ocm_generate.md)	 - Generate documentation for the OCM CLI
+* [ocm get](ocm_get.md)	 - Get anything from OCM
 

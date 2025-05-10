@@ -61,8 +61,8 @@ const (
 //	--logformat json --loglevel debug --logoutput stderr
 func RegisterLoggingFlags(flagset *pflag.FlagSet) {
 	enum.Var(flagset, FormatFlagName, []string{
-		FormatJSON,
 		FormatText,
+		FormatJSON,
 	}, `set the log output format that is used to print individual logs
    json: Output logs in JSON format, suitable for machine processing
    text: Output logs in human-readable text format, suitable for console output`)

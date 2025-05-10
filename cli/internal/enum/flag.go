@@ -56,6 +56,13 @@ func Var(f *pflag.FlagSet, name string, options []string, usage string) {
 	f.Var(flag, name, fmt.Sprintf("%s\n(must be one of %v)", usage, cloned))
 }
 
+func VarP(f *pflag.FlagSet, name string, shorthand string, options []string, usage string) {
+	flag := New(options...)
+	cloned := slices.Clone(options)
+	slices.Sort(cloned)
+	f.VarP(flag, name, shorthand, fmt.Sprintf("%s\n(must be one of %v)", usage, cloned))
+}
+
 func get[T any](f *pflag.FlagSet, name string, ftype string, convFunc func(sval string) (T, error)) (T, error) {
 	flag := f.Lookup(name)
 	if flag == nil {

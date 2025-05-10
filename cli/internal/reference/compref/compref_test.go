@@ -254,7 +254,11 @@ func Test_ComponentReference(t *testing.T) {
 			t.Logf("%q", tc.input)
 			r := require.New(t)
 			parsed, err := Parse(tc.input)
-
+			if tc.expected.Type != "" {
+				if typ, err := runtime.TypeFromString(parsed.Type); err == nil {
+					tc.expected.Repository.SetType(typ)
+				}
+			}
 			if tc.err(t, err) && err == nil {
 				r.Equalf(tc.expected, parsed, "input %q was incorrectly parsed", tc.input)
 			}
@@ -346,6 +350,11 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 								Repository: expectedRepository,
 								Prefix:     repositoryPrefix,
 								Component:  componentName,
+							}
+							if expected.Type != "" {
+								if typ, err := runtime.TypeFromString(expected.Type); err == nil {
+									expected.Repository.SetType(typ)
+								}
 							}
 
 							if strings.HasPrefix(componentVersion, ":") {

@@ -81,6 +81,7 @@ func GetOCMConfig(additional ...string) (*Config, error) {
 			)
 			continue
 		}
+		slog.Debug("ocm config was loaded successfully", slog.String("path", path))
 		cfgs = append(cfgs, cfg)
 	}
 	return FlatMap(cfgs...), nil
@@ -104,7 +105,7 @@ func GetConfigFromPath(path string) (*Config, error) {
 	}()
 
 	var instance Config
-	if err := scheme.Decode(file, &instance); err != nil {
+	if err := Scheme.Decode(file, &instance); err != nil {
 		return nil, err
 	}
 	return &instance, nil
