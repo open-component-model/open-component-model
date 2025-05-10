@@ -9,6 +9,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/credentials/Taskfile.yml
     dir: ./bindings/go/credentials
+  bindings/go/constructor:
+    optional: true
+    taskfile: ./bindings/go/constructor/Taskfile.yml
+    dir: ./bindings/go/constructor
   bindings/go/descriptor/v2:
     optional: true
     taskfile: ./bindings/go/descriptor/v2/Taskfile.yml

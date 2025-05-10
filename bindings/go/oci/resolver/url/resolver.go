@@ -3,6 +3,7 @@ package url
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"oras.land/oras-go/v2/registry"
@@ -65,6 +66,10 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	repo.PlainHTTP = resolver.PlainHTTP
 	if resolver.BaseClient != nil {
 		repo.Client = resolver.BaseClient
+	}
+	repo.SkipReferrersGC = true
+	repo.HandleWarning = func(warning remote.Warning) {
+		slog.Warn(warning.Text, "agent", warning.Agent, "code", warning.Code, "warning", warning.WarningValue)
 	}
 
 	resolver.addToCache(key, repo)

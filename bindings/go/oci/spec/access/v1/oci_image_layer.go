@@ -29,7 +29,7 @@ const (
 type OCIImageLayer struct {
 	Type runtime.Type `json:"type"`
 	// Reference is the oci reference to the OCI repository
-	Reference string `json:"ref"`
+	Reference string `json:"reference"`
 	// MediaType is the media type of the object this schema refers to.
 	MediaType string `json:"mediaType,omitempty"`
 	// Digest is the digest of the targeted content.
