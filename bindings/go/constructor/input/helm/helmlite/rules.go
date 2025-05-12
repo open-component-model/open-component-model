@@ -170,8 +170,8 @@ func (r *Rules) parseRule(rule string) error {
 		rule = strings.TrimSuffix(rule, "/")
 	}
 
-	if strings.HasPrefix(rule, "/") {
-		// Require path matches the root path.
+	switch {
+	case strings.HasPrefix(rule, "/"):
 		p.match = func(n string, _ os.FileInfo) bool {
 			rule = strings.TrimPrefix(rule, "/")
 			ok, err := filepath.Match(rule, n)
@@ -181,8 +181,7 @@ func (r *Rules) parseRule(rule string) error {
 			}
 			return ok
 		}
-	} else if strings.Contains(rule, "/") {
-		// require structural match.
+	case strings.Contains(rule, "/"):
 		p.match = func(n string, _ os.FileInfo) bool {
 			ok, err := filepath.Match(rule, n)
 			if err != nil {
@@ -191,7 +190,7 @@ func (r *Rules) parseRule(rule string) error {
 			}
 			return ok
 		}
-	} else {
+	default:
 		p.match = func(n string, _ os.FileInfo) bool {
 			// When there is no slash in the pattern, we evaluate ONLY the
 			// filename.

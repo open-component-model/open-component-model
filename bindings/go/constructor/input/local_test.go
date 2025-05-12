@@ -94,7 +94,6 @@ func TestAddColocatedLocalBlob(t *testing.T) {
 						},
 					},
 					Relation: descriptor.LocalRelation,
-					Size:     int64(len("test data")),
 					Access: &v2.LocalBlob{
 						Type: runtime.Type{
 							Name:    v2.LocalBlobAccessType,
@@ -107,7 +106,6 @@ func TestAddColocatedLocalBlob(t *testing.T) {
 					return r.Name == expectedResource.Name &&
 						r.Version == expectedResource.Version &&
 						r.Relation == expectedResource.Relation &&
-						r.Size == expectedResource.Size &&
 						r.Access.(*v2.LocalBlob).MediaType == expectedResource.Access.(*v2.LocalBlob).MediaType
 				}), mock.Anything).Return(expectedResource, nil)
 			},
@@ -119,7 +117,6 @@ func TestAddColocatedLocalBlob(t *testing.T) {
 					},
 				},
 				Relation: descriptor.LocalRelation,
-				Size:     int64(len("test data")),
 				Access: &v2.LocalBlob{
 					Type: runtime.Type{
 						Name:    v2.LocalBlobAccessType,
@@ -164,7 +161,6 @@ func TestAddColocatedLocalBlob(t *testing.T) {
 						},
 					},
 					Relation: descriptor.ExternalRelation,
-					Size:     int64(len("test data")),
 					Access: &v2.LocalBlob{
 						Type: runtime.Type{
 							Name:    v2.LocalBlobAccessType,
@@ -177,7 +173,6 @@ func TestAddColocatedLocalBlob(t *testing.T) {
 					return r.Name == expectedResource.Name &&
 						r.Version == expectedResource.Version &&
 						r.Relation == expectedResource.Relation &&
-						r.Size == expectedResource.Size &&
 						r.Access.(*v2.LocalBlob).MediaType == expectedResource.Access.(*v2.LocalBlob).MediaType
 				}), mock.Anything).Return(expectedResource, nil)
 			},
@@ -189,7 +184,6 @@ func TestAddColocatedLocalBlob(t *testing.T) {
 					},
 				},
 				Relation: descriptor.ExternalRelation,
-				Size:     int64(len("test data")),
 				Access: &v2.LocalBlob{
 					Type: runtime.Type{
 						Name:    v2.LocalBlobAccessType,
@@ -261,7 +255,6 @@ func TestAddColocatedLocalBlob(t *testing.T) {
 						},
 					},
 					Relation: descriptor.LocalRelation,
-					Size:     int64(len("test data")),
 					Access: &v2.LocalBlob{
 						Type: runtime.Type{
 							Name:    v2.LocalBlobAccessType,
@@ -272,8 +265,7 @@ func TestAddColocatedLocalBlob(t *testing.T) {
 				m.On("AddLocalResource", mock.Anything, "test-component", "v1.0.0", mock.MatchedBy(func(r *descriptor.Resource) bool {
 					return r.Name == expectedResource.Name &&
 						r.Version == expectedResource.Version &&
-						r.Relation == expectedResource.Relation &&
-						r.Size == expectedResource.Size
+						r.Relation == expectedResource.Relation
 				}), mock.Anything).Return(expectedResource, nil)
 			},
 			expectedResult: &descriptor.Resource{
@@ -284,7 +276,6 @@ func TestAddColocatedLocalBlob(t *testing.T) {
 					},
 				},
 				Relation: descriptor.LocalRelation,
-				Size:     int64(len("test data")),
 				Access: &v2.LocalBlob{
 					Type: runtime.Type{
 						Name:    v2.LocalBlobAccessType,

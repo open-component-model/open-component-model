@@ -14,13 +14,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/constructor"
+	"ocm.software/open-component-model/bindings/go/constructor/input/helm/io"
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -28,7 +28,6 @@ import (
 var testData embed.FS
 
 func TestConstruct(t *testing.T) {
-
 	r := require.New(t)
 	data, err := testData.ReadFile("testdata/component-constructor.01.yaml")
 	r.NoError(err)
@@ -111,12 +110,23 @@ func TestConstruct(t *testing.T) {
 	t.Run("verify External OCI Image", func(t *testing.T) {
 		resource := desc.Component.Resources[3]
 		r := require.New(t)
+		b, err := repo.DownloadResource(t.Context(), &resource)
+		r.Errorf(err, "the resource should not have been downloaded by default so it should not be present")
+		r.Nil(b)
+	})
+
+	t.Run("verify input based Helm Chart", func(t *testing.T) {
+		resource := desc.Component.Resources[4]
+		r := require.New(t)
 		b, _, err := repo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, resource.ToIdentity())
 		r.NoError(err)
 		r.NotNil(b)
 
-		layout, err := tar.ReadOCILayout(t.Context(), b)
+		chart, err := io.ReadHelmOCILayout(t.Context(), b)
 		r.NoError(err)
-		r.NotNil(layout)
+		r.NotNil(chart)
+		r.Equal("chart", chart.Name())
+		r.Equal("0.1.0", chart.Metadata.Version)
+		r.NoError(chart.Validate())
 	})
 }

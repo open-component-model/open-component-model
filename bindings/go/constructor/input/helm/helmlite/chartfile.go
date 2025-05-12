@@ -55,7 +55,7 @@ func SaveChartfile(filename string, cf *Metadata) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filename, out, 0644)
+	return os.WriteFile(filename, out, 0o644) //nolint:gosec // sticking to helm default packaging
 }
 
 // IsChartDir validate a chart directory.

@@ -61,7 +61,7 @@ func LoadFile(name string) (*Chart, error) {
 
 	c, err := LoadArchive(raw)
 	if errors.Is(err, gzip.ErrHeader) {
-		return nil, fmt.Errorf("file '%s' does not appear to be a valid chart file (details: %s)", name, err)
+		return nil, fmt.Errorf("file '%s' does not appear to be a valid chart file (details: %w)", name, err)
 	}
 	return c, err
 }
@@ -78,7 +78,7 @@ func ensureArchive(name string, raw *os.File) error {
 	buffer := make([]byte, 512)
 	_, err := raw.Read(buffer)
 	if err != nil && err != io.EOF {
-		return fmt.Errorf("file '%s' cannot be read: %s", name, err)
+		return fmt.Errorf("file '%s' cannot be read: %w", name, err)
 	}
 
 	// Helm may identify achieve of the application/x-gzip as application/vnd.ms-fontobject.
@@ -173,7 +173,7 @@ func LoadArchiveFiles(in io.Reader) ([]*BufferedFile, error) {
 			return nil, errors.New("chart yaml not in base directory")
 		}
 
-		if _, err := io.Copy(b, tr); err != nil {
+		if _, err := io.CopyN(b, tr, hd.Size); err != nil {
 			return nil, err
 		}
 

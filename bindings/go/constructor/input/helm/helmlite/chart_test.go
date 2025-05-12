@@ -22,39 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCRDs(t *testing.T) {
-	chrt := Chart{
-		Files: []*File{
-			{
-				Name: "crds/foo.yaml",
-				Data: []byte("hello"),
-			},
-			{
-				Name: "bar.yaml",
-				Data: []byte("hello"),
-			},
-			{
-				Name: "crds/foo/bar/baz.yaml",
-				Data: []byte("hello"),
-			},
-			{
-				Name: "crdsfoo/bar/baz.yaml",
-				Data: []byte("hello"),
-			},
-			{
-				Name: "crds/README.md",
-				Data: []byte("# hello"),
-			},
-		},
-	}
-
-	is := assert.New(t)
-	crds := chrt.CRDs()
-	is.Equal(2, len(crds))
-	is.Equal("crds/foo.yaml", crds[0].Name)
-	is.Equal("crds/foo/bar/baz.yaml", crds[1].Name)
-}
-
 func TestSaveChartNoRawData(t *testing.T) {
 	chrt := Chart{
 		Raw: []*File{

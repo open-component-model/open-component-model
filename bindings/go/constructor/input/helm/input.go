@@ -16,7 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/constructor/input"
-	"ocm.software/open-component-model/bindings/go/constructor/input/helm/internal/helmlite"
+	"ocm.software/open-component-model/bindings/go/constructor/input/helm/helmlite"
 	"ocm.software/open-component-model/bindings/go/constructor/input/helm/spec/v1"
 	"ocm.software/open-component-model/bindings/go/constructor/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"

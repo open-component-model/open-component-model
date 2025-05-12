@@ -21,6 +21,7 @@ const (
 	OCIScheme = "oci"
 
 	// CredentialsFileBasename is the filename for auth credentials file
+	//nolint:gosec // these are not hard coded credentials
 	CredentialsFileBasename = "registry/config.json"
 
 	// ConfigMediaType is the reserved media type for the Helm chart manifest config

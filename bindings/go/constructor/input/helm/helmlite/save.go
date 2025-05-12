@@ -57,7 +57,7 @@ func SaveDir(c *Chart, dest string) error {
 	if fi, err := os.Stat(outdir); err == nil && !fi.IsDir() {
 		return fmt.Errorf("file %s already exists and is not a directory", outdir)
 	}
-	if err := os.MkdirAll(outdir, 0755); err != nil {
+	if err := os.MkdirAll(outdir, 0o755); err != nil {
 		return err
 	}
 
@@ -123,7 +123,7 @@ func Save(c *Chart, outDir string) (string, error) {
 	dir := filepath.Dir(filename)
 	if stat, err := os.Stat(dir); err != nil {
 		if os.IsNotExist(err) {
-			if err2 := os.MkdirAll(dir, 0755); err2 != nil {
+			if err2 := os.MkdirAll(dir, 0o755); err2 != nil {
 				return "", err2
 			}
 		} else {
@@ -250,7 +250,7 @@ func writeToTar(out *tar.Writer, name string, body []byte) error {
 	// TODO: Do we need to create dummy parent directory names if none exist?
 	h := &tar.Header{
 		Name:    filepath.ToSlash(name),
-		Mode:    0644,
+		Mode:    0o644,
 		Size:    int64(len(body)),
 		ModTime: time.Now(),
 	}
@@ -274,8 +274,8 @@ func validateName(name string) error {
 }
 
 func writeFile(name string, content []byte) error {
-	if err := os.MkdirAll(filepath.Dir(name), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(name, content, 0644)
+	return os.WriteFile(name, content, 0o644) //nolint:gosec // sticking to helm default packaging
 }

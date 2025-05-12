@@ -29,6 +29,7 @@ func ValidationErrorf(msg string, args ...interface{}) ValidationError {
 	return ValidationError(fmt.Sprintf(msg, args...))
 }
 
+//nolint:errname // sticking to HELM Naming Scheme
 type ErrInvalidChartName struct {
 	Name string
 }

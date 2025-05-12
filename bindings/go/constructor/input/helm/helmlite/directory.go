@@ -23,7 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	walk2 "ocm.software/open-component-model/bindings/go/constructor/input/helm/internal/helmlite/walk"
+	walk2 "ocm.software/open-component-model/bindings/go/constructor/input/helm/helmlite/walk"
 )
 
 var utf8bom = []byte{0xEF, 0xBB, 0xBF}
