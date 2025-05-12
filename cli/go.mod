@@ -9,6 +9,7 @@ require (
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.14.0
+	golang.org/x/sys v0.33.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250509151238-4a0ed5851bda
 	ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250509151238-4a0ed5851bda
 	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250509151238-4a0ed5851bda
@@ -39,7 +40,6 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
-	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.0-20250509151238-4a0ed5851bda // indirect
