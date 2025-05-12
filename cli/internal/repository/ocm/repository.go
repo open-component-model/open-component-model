@@ -1,3 +1,6 @@
+// Package ocm provides functionality for interacting with OCM (Open Component Model) repositories.
+// It offers a high-level interface for managing component versions, handling credentials,
+// and performing repository operations through plugin-based implementations.
 package ocm
 
 import (
@@ -18,13 +21,16 @@ import (
 
 // ComponentRepository is a wrapper around the [v1.ReadWriteOCMRepositoryPluginContract] that provides
 // useful CLI relevant helper functions that make high level operations easier.
+// It manages component references, repository specifications, and credentials for OCM operations.
 type ComponentRepository struct {
-	ref         *compref.Ref
-	spec        runtime.Typed
-	base        v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed]
-	credentials map[string]string
+	ref         *compref.Ref                                           // Component reference containing repository and component information
+	spec        runtime.Typed                                          // Repository specification
+	base        v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed] // Base repository plugin contract
+	credentials map[string]string                                      // Credentials for repository access
 }
 
+// New creates a new ComponentRepository instance for the given component reference.
+// It resolves the appropriate plugin and credentials for the repository.
 func New(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
@@ -51,15 +57,19 @@ func New(ctx context.Context, manager *manager.PluginManager, graph *credentials
 	}, nil
 }
 
+// ComponentReference returns the component reference associated with this repository.
 func (repo *ComponentRepository) ComponentReference() *compref.Ref {
 	return repo.ref
 }
 
+// GetComponentVersionsOptions configures how component versions are retrieved.
 type GetComponentVersionsOptions struct {
 	VersionOptions
-	ConcurrencyLimit int
+	ConcurrencyLimit int // Maximum number of concurrent version retrievals
 }
 
+// GetComponentVersions retrieves component version descriptors based on the provided options.
+// It supports concurrent retrieval of multiple versions with a configurable limit.
 func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions) ([]*descriptor.Descriptor, error) {
 	versions, err := repo.Versions(ctx, opts.VersionOptions)
 	if err != nil {
@@ -97,11 +107,14 @@ func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts 
 	return descs, nil
 }
 
+// VersionOptions configures how versions are filtered and retrieved.
 type VersionOptions struct {
-	SemverConstraint string
-	LatestOnly       bool
+	SemverConstraint string // Optional semantic version constraint for filtering
+	LatestOnly       bool   // If true, only return the latest version
 }
 
+// Versions retrieves available versions for the component based on the provided options.
+// It supports filtering by semantic version constraints and retrieving only the latest version.
 func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptions) ([]string, error) {
 	if repo.ref.Version != "" {
 		return []string{repo.ref.Version}, nil
@@ -128,6 +141,8 @@ func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptio
 	return versions, nil
 }
 
+// filterBySemver filters a list of versions based on a semantic version constraint.
+// It returns only versions that satisfy the given constraint.
 func filterBySemver(versions []string, constraint string) ([]string, error) {
 	filteredVersions := make([]string, 0, len(versions))
 	constraints, err := semver.NewConstraint(constraint)
