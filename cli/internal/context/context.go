@@ -2,6 +2,7 @@ package context
 
 import (
 	"context"
+	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -20,6 +21,8 @@ type key struct{}
 //
 // The Context should only be used to transfer centrally passed struct pointers
 type Context struct {
+	mu sync.RWMutex
+
 	// configuration is the central OCM Config configuration of the CLI.
 	// It can be used to initialize other components and is always guaranteed to be
 	// available first.
@@ -52,6 +55,8 @@ type Context struct {
 // using [FromContext] and [Context.Configuration].
 func WithCredentialGraph(ctx context.Context, graph *credentials.Graph) context.Context {
 	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
 	ocmctx.credentialGraph = graph
 	return ctx
 }
@@ -61,6 +66,8 @@ func WithCredentialGraph(ctx context.Context, graph *credentials.Graph) context.
 // using [FromContext] and [Context.PluginManager].
 func WithPluginManager(ctx context.Context, pm *manager.PluginManager) context.Context {
 	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
 	ocmctx.pluginManager = pm
 	return ctx
 }
@@ -70,6 +77,8 @@ func WithPluginManager(ctx context.Context, pm *manager.PluginManager) context.C
 // using [FromContext] and [Context.Configuration].
 func WithConfiguration(ctx context.Context, cfg *v1.Config) context.Context {
 	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
 	ocmctx.configuration = cfg
 	return ctx
 }
@@ -80,23 +89,33 @@ func WithConfiguration(ctx context.Context, cfg *v1.Config) context.Context {
 // will return this command.
 func RegisterAtRoot(cmd *cobra.Command) {
 	ctx, ocmctx := retrieveOrCreateOCMContext(cmd.Context())
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
 	ocmctx.root = cmd
 	cmd.SetContext(ctx)
 }
 
 func (ctx *Context) RootCommand() *cobra.Command {
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
 	return ctx.root
 }
 
 func (ctx *Context) PluginManager() *manager.PluginManager {
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
 	return ctx.pluginManager
 }
 
 func (ctx *Context) CredentialGraph() *credentials.Graph {
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
 	return ctx.credentialGraph
 }
 
 func (ctx *Context) Configuration() *v1.Config {
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
 	return ctx.configuration
 }
 
