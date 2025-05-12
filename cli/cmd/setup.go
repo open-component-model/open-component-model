@@ -29,7 +29,6 @@ func setupOCMConfig(cmd *cobra.Command) {
 }
 
 func setupPluginManager(cmd *cobra.Command) error {
-
 	pluginManager := manager.NewPluginManager(cmd.Context())
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
@@ -59,7 +58,6 @@ func setupPluginManager(cmd *cobra.Command) error {
 }
 
 func setupCredentialGraph(cmd *cobra.Command) error {
-
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not get plugin manager to initialize credential graph")
