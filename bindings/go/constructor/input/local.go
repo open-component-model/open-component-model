@@ -43,11 +43,6 @@ func AddColocatedLocalBlob(
 
 	descResource := spec.ConvertToRuntimeResource(*resource)
 
-	// if the data is size aware, set the size in the resource
-	if sizeAware, ok := data.(blob.SizeAware); ok {
-		descResource.Size = sizeAware.Size()
-	}
-
 	descResource.Access = localBlob
 	uploaded, err := repo.AddLocalResource(ctx, component, version, &descResource, data)
 	if err != nil {

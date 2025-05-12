@@ -31,10 +31,13 @@ type Options struct {
 	Target TargetRepository
 }
 
-// ResourceInputMethod is the interface for processing a resource with an input method decaled as per
-// [spec.Resource.Input].
+// ResourceInputMethod is the interface for processing a resource with an input method declared as per
+// [spec.Resource.Input]. Note that spec.Resource's who have their access predefined, are never processed
+// with a ResourceInputMethod, but are directly added to the component version repository.
+// any spec.Resource passed MUST have its [spec.Resource.Input] field set.
+// If the input method does not support the given input specification it MAY reject the request
 //
-// The method will get called with the raw specification for the resource and is expected
+// The method will get called with the raw specification specified in the constructor and is expected
 // to return a runtime resource specification with [descriptor.Resource.Access] set to the
 // now resulting access type.
 //

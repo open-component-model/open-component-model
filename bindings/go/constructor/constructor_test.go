@@ -2,6 +2,7 @@ package constructor_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"embed"
 	_ "embed"
 	"os"
@@ -19,6 +20,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -57,18 +59,64 @@ func TestConstruct(t *testing.T) {
 	r.NotEmpty(descYAML)
 	t.Log(string(descYAML))
 
-	r.Len(desc.Component.Resources, 4)
+	r.Len(desc.Component.Resources, 5)
 
-	resource := desc.Component.Resources[0]
+	t.Run("verify file blob", func(t *testing.T) {
+		resource := desc.Component.Resources[0]
+		r := require.New(t)
+		b, _, err := repo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, resource.ToIdentity())
+		r.NoError(err)
+		r.NotNil(b)
 
-	b, _, err := repo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, resource.ToIdentity())
-	r.NoError(err)
-	r.NotNil(b)
+		var buf bytes.Buffer
+		r.NoError(blob.Copy(&buf, b))
 
-	var buf bytes.Buffer
-	r.NoError(blob.Copy(&buf, b))
+		expected, err := testData.ReadFile("testdata/text.txt")
+		r.NoError(err)
+		r.Equal(expected, buf.Bytes())
+	})
 
-	expected, err := testData.ReadFile("testdata/text.txt")
-	r.NoError(err)
-	r.Equal(expected, buf.Bytes())
+	t.Run("verify (compressed) utf8 blob", func(t *testing.T) {
+		resource := desc.Component.Resources[1]
+		r := require.New(t)
+		b, _, err := repo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, resource.ToIdentity())
+		r.NoError(err)
+		r.NotNil(b)
+
+		var buf bytes.Buffer
+		r.NoError(blob.Copy(&buf, b))
+
+		var zippedHW bytes.Buffer
+		w := gzip.NewWriter(&zippedHW)
+		_, err = w.Write([]byte("Hello, world!"))
+		r.NoError(err)
+		r.NoError(w.Close())
+
+		r.Equal(zippedHW.Bytes(), buf.Bytes())
+	})
+
+	t.Run("verify utf8 JSON blob passed via object", func(t *testing.T) {
+		resource := desc.Component.Resources[2]
+		r := require.New(t)
+		b, _, err := repo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, resource.ToIdentity())
+		r.NoError(err)
+		r.NotNil(b)
+
+		var buf bytes.Buffer
+		r.NoError(blob.Copy(&buf, b))
+
+		r.Equal("{\"key\":\"value\"}\n", buf.String())
+	})
+
+	t.Run("verify External OCI Image", func(t *testing.T) {
+		resource := desc.Component.Resources[3]
+		r := require.New(t)
+		b, _, err := repo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, resource.ToIdentity())
+		r.NoError(err)
+		r.NotNil(b)
+
+		layout, err := tar.ReadOCILayout(t.Context(), b)
+		r.NoError(err)
+		r.NotNil(layout)
+	})
 }

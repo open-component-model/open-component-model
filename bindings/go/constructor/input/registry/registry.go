@@ -3,7 +3,9 @@ package registry
 import (
 	"ocm.software/open-component-model/bindings/go/constructor/input"
 	"ocm.software/open-component-model/bindings/go/constructor/input/file"
-	v1 "ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
+	filev1 "ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
+	"ocm.software/open-component-model/bindings/go/constructor/input/helm"
+	helmv1 "ocm.software/open-component-model/bindings/go/constructor/input/helm/spec/v1"
 	"ocm.software/open-component-model/bindings/go/constructor/input/utf8"
 	"ocm.software/open-component-model/bindings/go/constructor/input/utf8/spec/v2alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -19,17 +21,29 @@ var (
 // MustAddToScheme registers the file and UTF8 types with the given scheme.
 // It registers both versioned and unversioned types.
 func MustAddToScheme(scheme *runtime.Scheme) {
-	scheme.MustRegisterWithAlias(&v1.File{}, runtime.NewVersionedType("file", v1.Version))
-	scheme.MustRegisterWithAlias(&v1.File{}, runtime.NewUnversionedType("file"))
+	scheme.MustRegisterWithAlias(&filev1.File{},
+		runtime.NewVersionedType("file", filev1.Version),
+		runtime.NewUnversionedType("file"),
+	)
 
-	scheme.MustRegisterWithAlias(&v2alpha1.UTF8{}, runtime.NewVersionedType("utf8", v2alpha1.Version))
-	scheme.MustRegisterWithAlias(&v2alpha1.UTF8{}, runtime.NewUnversionedType("utf8"))
+	scheme.MustRegisterWithAlias(&v2alpha1.UTF8{},
+		runtime.NewVersionedType("utf8", v2alpha1.Version),
+		runtime.NewUnversionedType("utf8"),
+	)
+
+	scheme.MustRegisterWithAlias(&helmv1.Helm{},
+		runtime.NewVersionedType("helmChart", helmv1.Version),
+		runtime.NewUnversionedType("helmChart"),
+		runtime.NewVersionedType("helm", helmv1.Version),
+		runtime.NewUnversionedType("helm"),
+	)
 }
 
 func init() {
 	MustAddToScheme(Scheme)
-	Default.MustRegisterMethod(&v1.File{}, &file.Method{Scheme: Scheme})
+	Default.MustRegisterMethod(&filev1.File{}, &file.Method{Scheme: Scheme})
 	Default.MustRegisterMethod(&v2alpha1.UTF8{}, &utf8.Method{Scheme: Scheme})
+	Default.MustRegisterMethod(&helmv1.Helm{}, &helm.Method{Scheme: Scheme})
 }
 
 // Registry manages resource input methods for different types

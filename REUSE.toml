@@ -27,3 +27,9 @@ path = "bindings/go/dag/**"
 precedence = "override"
 SPDX-FileCopyrightText = "Copyright 2025 The Kube Resource Orchestrator Authors."
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "bindings/go/constructor/input/helm/internal/helmlite/**"
+precedence = "override"
+SPDX-FileCopyrightText = "Copyright The Helm Authors."
+SPDX-License-Identifier = "Apache-2.0"

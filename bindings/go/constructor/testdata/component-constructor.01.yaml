@@ -26,9 +26,16 @@ components:
         object:
           key: value
     - name: image
-      type: ociImage
+      type: OCIImage/v1
       relation: external
       access:
-        type: ociImage
+        type: OCIImage/v1
         imageReference: ghcr.io/stefanprodan/podinfo:6.8.0
+      version: 6.8.0
+    - name: chart-from-path
+      type: helmChart
+      relation: external
+      input:
+        type: helmChart
+        path: ./input/helm/testdata/chart
       version: 6.8.0

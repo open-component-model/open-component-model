@@ -52,6 +52,12 @@ const (
 
 // A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,
 // relevant for a deployment mechanism.
+//
+// In a component constructor, the Resource is defined with an AccessOrInput that specifies if
+//
+//   - the resource is a resource that is just externally referenced (Access)
+//   - the resource is a resource that is embedded / added during component constructor (Input)
+//
 // For example, installation procedures or meta-model descriptions controlling orchestration and/or deployment mechanisms.
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#resources
 // +k8s:deepcopy-gen=true
@@ -72,6 +78,12 @@ type Resource struct {
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
 // Source elements do not have specific additional formal attributes.
+//
+// In a component constructor, the Source is defined with an AccessOrInput that specifies if
+//
+//   - the resource is a resource that is just externally referenced (Access)
+//   - the resource is a resource that is embedded / added during component constructor (Input)
+//
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#sources
 // +k8s:deepcopy-gen=true
 type Source struct {
