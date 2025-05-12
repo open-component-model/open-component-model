@@ -20,6 +20,9 @@ import (
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
+// ErrNoPluginsFound is returned when a register plugin call finds no plugins.
+var ErrNoPluginsFound = errors.New("no plugins found")
+
 // PluginManager manages all connected plugins.
 type PluginManager struct {
 	// Registries containing various typed plugins. These should be called directly using the
@@ -89,7 +92,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 	}
 
 	if len(plugins) == 0 {
-		return errors.New("no plugins found")
+		return ErrNoPluginsFound
 	}
 
 	for _, plugin := range plugins {
