@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	credentials2 "ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -58,13 +58,8 @@ func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity
 }
 
 type RepositoryPlugin struct {
-	RepositoryConfigTypes  []runtime.Type
 	RepositoryIdentityFunc func(config runtime.Typed) (runtime.Identity, error)
 	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
-}
-
-func (s RepositoryPlugin) SupportedRepositoryConfigTypes() []runtime.Type {
-	return s.RepositoryConfigTypes
 }
 
 func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config runtime.Typed) (runtime.Identity, error) {
@@ -149,7 +144,7 @@ const invalidRecursionYAML = testYAML + `
         secretId: "recursive-creds"
 `
 
-func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
+func GetGraph(t testing.TB, yaml string) (*credentials.Graph, error) {
 	t.Helper()
 	r := require.New(t)
 	scheme := runtime.NewScheme()
@@ -165,20 +160,24 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 
 	config := credentialruntime.Merge(configs...)
 
-	getPluginRepositoryFn := func(ctx context.Context, repoType runtime.Typed) (credentials2.RepositoryPlugin, error) {
+	getPluginRepositoryFn := func(ctx context.Context, repoType runtime.Typed) (credentials.RepositoryPlugin, error) {
 		switch repoType.GetType().String() {
 		case "OCIRegistry":
 			return RepositoryPlugin{
-				RepositoryConfigTypes: []runtime.Type{runtime.NewVersionedType("DockerConfig", "v1")},
 				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
 					var mm map[string]interface{}
 					if err := json.Unmarshal(config.(*runtime.Raw).Data, &mm); err != nil {
 						return nil, err
 					}
 
+					file, ok := mm["dockerConfigFile"]
+					if !ok {
+						return nil, fmt.Errorf("missing dockerConfigFile in config")
+					}
+
 					return runtime.Identity{
 						runtime.IdentityAttributeType: runtime.NewVersionedType("DockerConfig", "v1").String(),
-						"dockerConfigFile":            mm["dockerConfigFile"].(string),
+						"dockerConfigFile":            file.(string),
 					}, nil
 				},
 				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
@@ -193,15 +192,18 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 					}
 				},
 			}, nil
-		case credentials2.AnyCredentialType.String():
+		case credentials.AnyConsumerIdentityType.String():
 			return RepositoryPlugin{
-				RepositoryConfigTypes: []runtime.Type{runtime.NewUnversionedType("HashiCorpVault")},
 				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
 					var mm map[string]interface{}
 					if err := json.Unmarshal(config.(*runtime.Raw).Data, &mm); err != nil {
 						return nil, err
 					}
-					purl, err := url.Parse(mm["serverURL"].(string))
+					serverURL := mm["serverURL"]
+					if serverURL == nil {
+						return nil, fmt.Errorf("missing serverURL in config")
+					}
+					purl, err := url.Parse(serverURL.(string))
 					if err != nil {
 						return nil, err
 					}
@@ -231,7 +233,7 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 		}
 	}
 
-	getCredentialPluginsFn := func(ctx context.Context, repoType runtime.Typed) (credentials2.CredentialPlugin, error) {
+	getCredentialPluginsFn := func(ctx context.Context, repoType runtime.Typed) (credentials.CredentialPlugin, error) {
 		switch repoType.GetType() {
 		case runtime.NewUnversionedType("RecursionTest"):
 			return CredentialPlugin{
@@ -307,9 +309,9 @@ func GetGraph(t testing.TB, yaml string) (*credentials2.Graph, error) {
 		return nil, fmt.Errorf("unsupported repository type %q", repoType)
 	}
 
-	graph, err := credentials2.ToGraph(t.Context(), config, credentials2.Options{
-		RepositoryPluginProvider:       credentials2.GetRepositoryPluginFn(getPluginRepositoryFn),
-		CredentialPluginProvider:       credentials2.GetCredentialPluginFn(getCredentialPluginsFn),
+	graph, err := credentials.ToGraph(t.Context(), config, credentials.Options{
+		RepositoryPluginProvider:       credentials.GetRepositoryPluginFn(getPluginRepositoryFn),
+		CredentialPluginProvider:       credentials.GetCredentialPluginFn(getCredentialPluginsFn),
 		CredentialRepositoryTypeScheme: runtime.NewScheme(runtime.WithAllowUnknown()),
 	})
 	if err != nil {

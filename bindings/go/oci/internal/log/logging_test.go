@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"log/slog"
 	"testing"
-	"time"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -21,19 +20,19 @@ func TestOperation(t *testing.T) {
 	var buf bytes.Buffer
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 		if a.Key == "time" {
-			return slog.Time("time", time.Time{})
+			return slog.Attr{}
 		}
 		return a
 	}})))
 
 	done := Operation(ctx, "test-operation", slog.String("test", "value"))
-	assert.Equal(t, "time=0001-01-01T00:00:00.000Z level=INFO msg=\"INFO starting operation realm=oci operation=test-operation test=value\"\n", buf.String())
+	assert.Equal(t, "level=INFO msg=\"operation starting\" realm=oci operation=test-operation test=value\n", buf.String())
 	buf.Reset()
 	done(nil) // No error
-	assert.Contains(t, buf.String(), "time=0001-01-01T00:00:00.000Z level=INFO msg=\"INFO operation completed realm=oci operation=test-operation test=value")
+	assert.Contains(t, buf.String(), "level=INFO msg=\"operation completed\" realm=oci operation=test-operation")
 	buf.Reset()
 	done(assert.AnError) // With error
-	assert.Contains(t, buf.String(), "time=0001-01-01T00:00:00.000Z level=INFO msg=\"ERROR operation failed realm=oci operation=test-operation test=value")
+	assert.Contains(t, buf.String(), "level=ERROR msg=\"operation failed\" realm=oci operation=test-operation")
 }
 
 func TestDescriptorLogAttr(t *testing.T) {

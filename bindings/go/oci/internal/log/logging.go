@@ -12,24 +12,30 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var Base = slog.With(slog.String("realm", "oci"))
+// Base returns a base logger for OCI operations with a default RealmKey.
+func Base() *slog.Logger {
+	return slog.With(slog.String("realm", "oci"))
+}
 
 // Operation is a helper function to log operations with timing and error handling.
 func Operation(ctx context.Context, operation string, fields ...slog.Attr) func(error) {
 	start := time.Now()
-	attrs := make([]any, 0, len(fields)+1)
-	attrs = append(attrs, slog.String("operation", operation))
-	for _, field := range fields {
-		attrs = append(attrs, field)
-	}
-	logger := Base.With(attrs...)
-	logger.Log(ctx, slog.LevelInfo, "starting operation")
+	logger := Base().With(slog.String("operation", operation))
+	logger.LogAttrs(ctx, slog.LevelInfo, "operation starting", fields...)
+
 	return func(err error) {
+		duration := slog.Duration("duration", time.Since(start))
+
+		var level slog.Level
+		var msg string
 		if err != nil {
-			logger.Log(ctx, slog.LevelError, "operation failed", slog.Duration("duration", time.Since(start)), slog.String("error", err.Error()))
+			level, msg = slog.LevelError, "operation failed"
+			fields = append(fields, slog.String("error", err.Error()))
 		} else {
-			logger.Log(ctx, slog.LevelInfo, "operation completed", slog.Duration("duration", time.Since(start)))
+			level, msg = slog.LevelInfo, "operation completed"
 		}
+
+		logger.LogAttrs(ctx, level, msg, append([]slog.Attr{duration}, fields...)...)
 	}
 }
 
