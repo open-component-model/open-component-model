@@ -96,24 +96,36 @@ func RegisterAtRoot(cmd *cobra.Command) {
 }
 
 func (ctx *Context) RootCommand() *cobra.Command {
+	if ctx == nil {
+		return nil
+	}
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.root
 }
 
 func (ctx *Context) PluginManager() *manager.PluginManager {
+	if ctx == nil {
+		return nil
+	}
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.pluginManager
 }
 
 func (ctx *Context) CredentialGraph() *credentials.Graph {
+	if ctx == nil {
+		return nil
+	}
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.credentialGraph
 }
 
 func (ctx *Context) Configuration() *v1.Config {
+	if ctx == nil {
+		return nil
+	}
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.configuration
