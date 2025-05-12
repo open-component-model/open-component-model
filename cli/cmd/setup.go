@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	v1 "ocm.software/open-component-model/cli/configuration/v1"
@@ -58,18 +59,10 @@ func setupPluginManager(cmd *cobra.Command) error {
 }
 
 func setupCredentialGraph(cmd *cobra.Command) error {
-	cfg := ocmctx.FromContext(cmd.Context()).Configuration()
-	if cfg == nil {
-		return fmt.Errorf("could not get central configuration to initialize credential graph")
-	}
+
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not get plugin manager to initialize credential graph")
-	}
-
-	credCfg, err := credentialsConfig.LookupCredentialConfiguration(cfg)
-	if err != nil {
-		return fmt.Errorf("could not get credential configuration: %w", err)
 	}
 
 	opts := credentials.Options{
@@ -81,6 +74,15 @@ func setupCredentialGraph(cmd *cobra.Command) error {
 			},
 		),
 		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
+	}
+
+	var credCfg *credentialsRuntime.Config
+	var err error
+	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
+		slog.WarnContext(cmd.Context(), "could not get configuration to initialize credential graph")
+		credCfg = &credentialsRuntime.Config{}
+	} else if credCfg, err = credentialsConfig.LookupCredentialConfiguration(cfg); err != nil {
+		return fmt.Errorf("could not get credential configuration: %w", err)
 	}
 
 	graph, err := credentials.ToGraph(cmd.Context(), credCfg, opts)
