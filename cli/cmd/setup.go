@@ -28,21 +28,22 @@ func setupOCMConfig(cmd *cobra.Command) {
 }
 
 func setupPluginManager(cmd *cobra.Command) error {
-	cfg := ocmctx.FromContext(cmd.Context()).Configuration()
-	if cfg == nil {
-		return fmt.Errorf("could not get central configuration to initialize plugin manager")
-	}
 
 	pluginManager := manager.NewPluginManager(cmd.Context())
-	pluginCfg, err := v2alpha1.LookupConfig(cfg)
-	if err != nil {
-		return fmt.Errorf("could not get plugin configuration: %w", err)
-	}
-	for _, pluginLocation := range pluginCfg.Locations {
-		if err := pluginManager.RegisterPlugins(cmd.Context(), pluginLocation,
-			manager.WithIdleTimeout(time.Duration(pluginCfg.IdleTimeout)),
-		); err != nil {
-			slog.WarnContext(cmd.Context(), "could not register plugin location", "error", err)
+
+	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
+		slog.WarnContext(cmd.Context(), "could not get configuration to initialize plugin manager")
+	} else {
+		pluginCfg, err := v2alpha1.LookupConfig(cfg)
+		if err != nil {
+			return fmt.Errorf("could not get plugin configuration: %w", err)
+		}
+		for _, pluginLocation := range pluginCfg.Locations {
+			if err := pluginManager.RegisterPlugins(cmd.Context(), pluginLocation,
+				manager.WithIdleTimeout(time.Duration(pluginCfg.IdleTimeout)),
+			); err != nil {
+				slog.WarnContext(cmd.Context(), "could not register plugin location", "error", err)
+			}
 		}
 	}
 
