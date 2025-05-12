@@ -3,6 +3,7 @@ package enum
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/spf13/pflag"
 )
@@ -26,7 +27,8 @@ func New(options ...string) *Flag {
 	if len(options) == 0 {
 		panic("options must not be empty")
 	}
-	return &Flag{target: &options[0], options: options}
+	target := strings.Clone(options[0]) // clone as flag value will be used by cobra and we don't want to change options
+	return &Flag{target: &target, options: slices.Clone(options)}
 }
 
 func (f *Flag) String() string {

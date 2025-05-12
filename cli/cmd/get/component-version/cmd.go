@@ -22,14 +22,14 @@ const (
 	FlagLatest           = "latest"
 )
 
-var Cmd = &cobra.Command{
-	Use:        "component-version {reference}",
-	Aliases:    []string{"cv", "component-versions", "cvs"},
-	SuggestFor: []string{"component", "components", "version", "versions"},
-	Short:      "Get component version(s) from an OCM repository",
-	// GroupID:    "component",
-	Args: cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
-	Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
+func New() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:        "component-version {reference}",
+		Aliases:    []string{"cv", "component-versions", "cvs"},
+		SuggestFor: []string{"component", "components", "version", "versions"},
+		Short:      "Get component version(s) from an OCM repository",
+		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
+		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
 
 The format of a component reference is:
 	[type::]{repository}/[valid-prefix]/{component}[:version]
@@ -41,11 +41,11 @@ For known types, currently only {%[2]s} are supported, which can be shortened to
 
 If no type is given, the repository path is interpreted based on introspection and heuristics.
 `,
-		compref.DefaultPrefix,
-		strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
-		strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
-	),
-	Example: strings.TrimSpace(`
+			compref.DefaultPrefix,
+			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
+			strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
+		),
+		Example: strings.TrimSpace(`
 Getting a single component version:
 
 get component-version ghcr.com/open-component-model/ocm//ocm.software/ocmcli:0.23.0
@@ -63,9 +63,17 @@ Specifying types and schemes:
 get cv ctf::github.com/locally-checked-out-repo//ocm.software/ocmcli:0.23.0
 get cvs oci::http://localhost:8080//ocm.software/ocmcli
 `),
-	Version:           "v1alpha1",
-	RunE:              GetComponentVersion,
-	DisableAutoGenTag: true,
+		Version:           "v1alpha1",
+		RunE:              GetComponentVersion,
+		DisableAutoGenTag: true,
+	}
+
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{"table", "yaml", "json"}, "output format of the component descriptors")
+	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
+	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
+	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
+
+	return cmd
 }
 
 func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
@@ -76,13 +84,6 @@ func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error 
 		return fmt.Errorf("parsing component reference from first position argument %q failed: %w", args[0], err)
 	}
 	return nil
-}
-
-func init() {
-	enum.VarP(Cmd.Flags(), FlagOutput, "o", []string{"table", "yaml", "json"}, "output format of the component descriptors")
-	Cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
-	Cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
-	Cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
 }
 
 func GetComponentVersion(cmd *cobra.Command, args []string) error {

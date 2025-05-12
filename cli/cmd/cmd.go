@@ -14,20 +14,17 @@ import (
 	"ocm.software/open-component-model/cli/log"
 )
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the root.
+// Execute adds all child commands to the Cmd command and sets flags appropriately.
+// This is called by main.main(). It only needs to happen once to the Cmd.
 func Execute() {
-	err := root.Execute()
+	err := New().Execute()
 	if err != nil {
 		os.Exit(1)
 	}
 }
 
-// root represents the base command when called without any subcommands
-var root *cobra.Command
-
-func init() {
-	root = &cobra.Command{
+func New() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:   "ocm [sub-command]",
 		Short: "The official Open Component Model (OCM) CLI",
 		Long: `The Open Component Model command line client supports the work with OCM
@@ -36,18 +33,19 @@ func init() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
-		PersistentPreRunE: setupRoot,
+		PersistentPreRunE: preRunE,
 		DisableAutoGenTag: true,
 	}
 
-	v1.RegisterConfigFlag(root)
-	log.RegisterLoggingFlags(root.PersistentFlags())
-	root.AddCommand(generate.Cmd)
-	root.AddCommand(get.Cmd)
+	v1.RegisterConfigFlag(cmd)
+	log.RegisterLoggingFlags(cmd.PersistentFlags())
+	cmd.AddCommand(generate.New())
+	cmd.AddCommand(get.New())
+	return cmd
 }
 
-// setupRoot sets up the root command with the necessary setup for all cli commands.
-func setupRoot(cmd *cobra.Command, _ []string) error {
+// preRunE sets up the Cmd command with the necessary setup for all cli commands.
+func preRunE(cmd *cobra.Command, _ []string) error {
 	logger, err := log.GetBaseLogger(cmd)
 	if err != nil {
 		return fmt.Errorf("could not retrieve logger: %w", err)
@@ -65,6 +63,11 @@ func setupRoot(cmd *cobra.Command, _ []string) error {
 	}
 
 	ocmctx.RegisterAtRoot(cmd)
+
+	if parent := cmd.Parent(); parent != nil {
+		cmd.SetOut(parent.OutOrStdout())
+		cmd.SetErr(parent.ErrOrStderr())
+	}
 
 	return nil
 }
