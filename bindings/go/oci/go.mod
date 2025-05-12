@@ -9,11 +9,11 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.14.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250509144149-5af6e035802d
-	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250509144149-5af6e035802d
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250509144149-5af6e035802d
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250509144149-5af6e035802d
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250509144149-5af6e035802d
+	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250512105124-5195faf2cc18
+	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250512105124-5195faf2cc18
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250512105124-5195faf2cc18
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250512105124-5195faf2cc18
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250512105124-5195faf2cc18
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.4.0
 )
