@@ -37,12 +37,12 @@ func encodeDescriptorsAsNDJSON(descs []*descruntime.Descriptor) ([]byte, error) 
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
 	for _, desc := range descs {
-		// TODO(add formatting options for scheme version with v2 as only option)
+		// TODO(jakobmoellerdev): add formatting options for scheme version with v2 as only option
 		v2descriptor, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
 		if err != nil {
 			return nil, fmt.Errorf("converting component version to v2 descriptor failed: %w", err)
 		}
-		// TODO(add formatting options for yaml/json)
+		// TODO(jakobmoellerdev): add formatting options for yaml/json
 		// multiple output is equivalent to NDJSON (new line delimited json), may want array access
 		if err := encoder.Encode(v2descriptor); err != nil {
 			return nil, fmt.Errorf("encoding component version descriptor failed: %w", err)
@@ -52,7 +52,7 @@ func encodeDescriptorsAsNDJSON(descs []*descruntime.Descriptor) ([]byte, error) 
 }
 
 func encodeDescriptorsAsYAML(descriptor []*descruntime.Descriptor) ([]byte, error) {
-	// TODO(add formatting options for scheme version with v2 as only option)
+	// TODO(jakobmoellerdev): add formatting options for scheme version with v2 as only option
 	v2List := make([]*v2.Descriptor, len(descriptor))
 	for i, desc := range descriptor {
 		v2descriptor, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)

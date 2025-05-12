@@ -111,7 +111,7 @@ var (
 	_ contractsv1.ReadWriteOCMRepositoryPluginContract[*ociv1.Repository] = (*Plugin)(nil)
 )
 
-// TODO add identity mapping function from OCI package here as soon as we have the conversion function
+// TODO(jakobmoellerdev): add identity mapping function from OCI package here as soon as we have the conversion function
 func (p *Plugin) createRepository(spec *ociv1.Repository, credentials map[string]string) (oci.ComponentVersionRepository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
