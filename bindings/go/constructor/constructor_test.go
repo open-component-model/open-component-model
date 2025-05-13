@@ -3,6 +3,7 @@ package constructor_test
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"embed"
 	_ "embed"
 	"os"
@@ -21,6 +22,8 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,7 +46,17 @@ func TestConstruct(t *testing.T) {
 
 	descs, err := constructor.Construct(t.Context(), &constructorSpec, constructor.Options{
 		Target: repo,
+		ResourceRepositoryProvider: constructor.ResourceRepositoryProviderFn(func(ctx context.Context, resource *descruntime.Resource) (constructor.ResourceRepository, error) {
+			// for the tests we direct our calls to a hardcoded repo, but in reality this would instantiate based on the access with the plugin manager
+			// the plugin can introspect the resource, the access, then derive from that a repository
+			resolver := urlresolver.New("ghcr.io")
+			return oci.NewRepository(oci.WithResolver(resolver))
+		}),
+		ProcessByValue: func(resource *spec.Resource) bool {
+			return resource.Name == "image"
+		},
 	})
+
 	r.NoError(err)
 	r.Len(descs, 1)
 
@@ -110,9 +123,16 @@ func TestConstruct(t *testing.T) {
 	t.Run("verify External OCI Image", func(t *testing.T) {
 		resource := desc.Component.Resources[3]
 		r := require.New(t)
-		b, err := repo.DownloadResource(t.Context(), &resource)
-		r.Errorf(err, "the resource should not have been downloaded by default so it should not be present")
-		r.Nil(b)
+		b, _, err := repo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, resource.ToIdentity())
+		r.NoErrorf(err, "the resource should have been constructed by value so it should be present")
+		r.NotNil(b)
+
+		layout, err := tar.ReadOCILayout(t.Context(), b)
+		r.NoError(err)
+		t.Cleanup(func() {
+			r.NoError(layout.Close())
+		})
+		r.NotNil(layout)
 	})
 
 	t.Run("verify input based Helm Chart", func(t *testing.T) {

@@ -16,31 +16,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Repository defines the interface for a target repository that can store component versions but also
-// act as a target for the constructor to add resources to.
-type Repository interface {
-	input.TargetRepository
-	// AddComponentVersion adds a new component version to the repository.
-	// If a component version already exists, it will be updated with the new descriptor.
-	// The descriptor internally will be serialized via the runtime package.
-	// The descriptor MUST have its target Name and Version already set as they are used to identify the target
-	// Location in the Store.
-	AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error
-}
-
-type Options struct {
-	Target              Repository
-	InputMethodRegistry *registry.Registry
-}
-
 // Construct processes a component constructor specification and creates the corresponding component descriptors.
 // It validates the constructor specification and processes each component in sequence.
 func Construct(ctx context.Context, constructor *spec.ComponentConstructor, opts Options) ([]*descriptor.Descriptor, error) {
 	if err := spec.Validate(constructor); err != nil {
 		return nil, err
 	}
-	if opts.InputMethodRegistry == nil {
-		opts.InputMethodRegistry = registry.Default
+	if opts.InputMethodProvider == nil {
+		opts.InputMethodProvider = registry.Default
 	}
 	descriptors := make([]*descriptor.Descriptor, 0)
 	for _, component := range constructor.Components {
@@ -129,19 +112,32 @@ func processResource(ctx context.Context, index int, resource spec.Resource, com
 	var res *descriptor.Resource
 	var err error
 
-	if resource.HasInput() {
+	switch {
+	case resource.HasInput():
 		res, err = processResourceWithInput(ctx, resource, component, opts)
-		if err != nil {
-			return err
+	case resource.HasAccess():
+		if byValue := opts.ProcessByValue != nil && opts.ProcessByValue(&resource); byValue {
+			// if the resource is something we want to transport by value we have to
+			//   1. download the resource from a repository that is made available to use via the provider in the options
+			//   2. Then take the data from that resource and upload it as a colocated local blob
+			//   3. Finally, we have to update the resource in the descriptor with the new resource
+			res, err = processResourceByValue(ctx, opts, component, resource)
+		} else {
+			// if the resource already has an access type, we can just convert it to a runtime resource
+			converted := spec.ConvertToRuntimeResource(resource)
+			res = &converted
 		}
-		descLock.Lock()
-		defer descLock.Unlock()
-		desc.Component.Resources[index] = *res
-	} else {
-		descLock.Lock()
-		defer descLock.Unlock()
-		desc.Component.Resources[index] = spec.ConvertToRuntimeResource(resource)
+	default:
+		return fmt.Errorf("resource %q has no access type and no input method", resource.ToIdentity())
 	}
+
+	if err != nil {
+		return fmt.Errorf("error processing resource %q: %w", resource.ToIdentity(), err)
+	}
+
+	descLock.Lock()
+	defer descLock.Unlock()
+	desc.Component.Resources[index] = *res
 
 	if desc.Component.Resources[index].Access == nil {
 		return fmt.Errorf("after the input method was processed, no access was present in the resource. This is likely a problem in the input method")
@@ -150,13 +146,26 @@ func processResource(ctx context.Context, index int, resource spec.Resource, com
 	return nil
 }
 
+func processResourceByValue(ctx context.Context, opts Options, component spec.Component, resource spec.Resource) (*descriptor.Resource, error) {
+	converted := spec.ConvertToRuntimeResource(resource)
+	repository, err := opts.ResourceRepositoryProvider.GetResourceRepository(ctx, &converted)
+	if err != nil {
+		return nil, err
+	}
+	data, err := repository.DownloadResource(ctx, &converted)
+	if err != nil {
+		return nil, fmt.Errorf("error downloading resource: %w", err)
+	}
+	return input.AddColocatedLocalBlob(ctx, opts.Target, component.Name, component.Version, &resource, data)
+}
+
 // processResourceWithInput handles the specific case of processing a resource that has an input method.
 // It looks up the appropriate input method from the registry and processes the resource
 // using the found method.
 func processResourceWithInput(ctx context.Context, resource spec.Resource, component spec.Component, opts Options) (*descriptor.Resource, error) {
-	method, found := opts.InputMethodRegistry.GetFor(resource.Input)
-	if !found {
-		return nil, fmt.Errorf("no input method found for input specification of type %q", resource.Input.GetType())
+	method, err := opts.InputMethodProvider.GetResourceInputMethod(ctx, resource.Input)
+	if err != nil {
+		return nil, fmt.Errorf("no input method resolvable for input specification of type %q: %w", resource.Input.GetType(), err)
 	}
 
 	res, err := method.ProcessResource(ctx, &resource, input.Options{

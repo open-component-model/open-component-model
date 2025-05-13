@@ -1,6 +1,9 @@
 package registry
 
 import (
+	"context"
+	"fmt"
+
 	"ocm.software/open-component-model/bindings/go/constructor/input"
 	"ocm.software/open-component-model/bindings/go/constructor/input/file"
 	filev1 "ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
@@ -66,17 +69,20 @@ func (r *Registry) MustRegisterMethod(prototype runtime.Typed, method input.Reso
 	r.methods[r.scheme.MustTypeForPrototype(prototype)] = method
 }
 
-// GetFor retrieves the resource input method for a given typed object.
+// GetResourceInputMethod retrieves the resource input method for a given typed object.
 // Returns the method and a boolean indicating if the method was found.
-func (r *Registry) GetFor(t runtime.Typed) (input.ResourceInputMethod, bool) {
+func (r *Registry) GetResourceInputMethod(_ context.Context, t runtime.Typed) (input.ResourceInputMethod, error) {
 	typed, err := r.scheme.NewObject(t.GetType())
 	if err != nil {
-		return nil, false
+		return nil, fmt.Errorf("error getting resource input method: %w", err)
 	}
 	typ, err := r.scheme.TypeForPrototype(typed)
 	if err != nil {
-		return nil, false
+		return nil, fmt.Errorf("error getting resource input method: %w", err)
 	}
 	method, ok := r.methods[typ]
-	return method, ok
+	if !ok {
+		return nil, fmt.Errorf("no input method found for type %q", typ)
+	}
+	return method, nil
 }
