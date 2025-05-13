@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -20,8 +19,11 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 
 	plugin, err := g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity)
 	if err != nil {
+		// in case of an error, we try to resolve the credentials using the AnyConsumerIdentityType
+		// this is a fallback resolution mechanism intended for plugins that do not mind which
+		// consumer identity type is used.
 		identity := identity.DeepCopy()
-		identity.SetType(AnyCredentialType)
+		identity.SetType(AnyConsumerIdentityType)
 		var anyErr error
 		if plugin, anyErr = g.repositoryPluginProvider.GetRepositoryPlugin(ctx, identity); anyErr != nil {
 			return nil, errors.Join(err, anyErr)
@@ -68,16 +70,11 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 		}
 	}
 
-	repoConfigTypes := plugin.SupportedRepositoryConfigTypes()
-
 	g.repositoryConfigurationsMu.Lock()
 	repositoryConfigurations := g.repositoryConfigurations
 	g.repositoryConfigurationsMu.Unlock()
 
 	for _, repoConfig := range repositoryConfigurations {
-		if !slices.Contains(repoConfigTypes, repoConfig.GetType()) {
-			continue
-		}
 		wg.Add(1)
 		go resolve(plugin, repoConfig)
 	}

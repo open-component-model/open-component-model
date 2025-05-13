@@ -15,6 +15,13 @@ type GetComponentVersionRequest[T runtime.Typed] struct {
 	Version string `json:"version"`
 }
 
+type ListComponentVersionsRequest[T runtime.Typed] struct {
+	// The Location of the Component Version
+	Repository T `json:"repository"`
+	// The Component Name
+	Name string `json:"name"`
+}
+
 type PostComponentVersionRequest[T runtime.Typed] struct {
 	Repository T              `json:"repository"`
 	Descriptor *v2.Descriptor `json:"descriptor"`
@@ -61,4 +68,8 @@ type PostResourceRequest struct {
 	// The ResourceLocation of the Local Resource
 	ResourceLocation types.Location `json:"resourceLocation"`
 	Resource         *v2.Resource   `json:"resource"`
+}
+
+type GetIdentityRequest[T runtime.Typed] struct {
+	Typ T `json:"type"`
 }

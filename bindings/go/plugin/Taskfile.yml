@@ -8,7 +8,7 @@ tasks:
       - test -d tmp
   build:
     cmds:
-      - go build -o tmp/testdata/test-plugin testplugin/main.go
+      - go build -o tmp/testdata/test-plugin internal/testplugin/main.go
   test:
     sources:
       - ./**/*.go

@@ -11,9 +11,9 @@ import (
 	"github.com/invopop/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -69,7 +69,7 @@ func TestAddComponentVersion(t *testing.T) {
 
 	ctx := context.Background()
 	err := plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
-		Repository: &v1.OCIRepository{
+		Repository: &dummyv1.Repository{
 			BaseUrl: "ocm.software",
 		},
 		Descriptor: defaultDescriptor(),
@@ -90,7 +90,7 @@ func TestAddComponentVersionValidationFail(t *testing.T) {
 	defer server.Close()
 
 	// Setup logger
-	repository := &v1.OCIRepository{
+	repository := &dummyv1.Repository{
 		BaseUrl: "ocm.software",
 	}
 	schemaOCIRegistry, err := jsonschema.Reflect(repository).MarshalJSON()
@@ -134,13 +134,43 @@ func TestGetComponentVersion(t *testing.T) {
 
 	ctx := context.Background()
 	desc, err := plugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
-		Repository: &v1.OCIRepository{},
+		Repository: &dummyv1.Repository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 	}, map[string]string{})
 	require.NoError(t, err)
 
 	require.Equal(t, response.String(), desc.String())
+}
+
+func TestListComponentVersions(t *testing.T) {
+	// Setup test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/"+ListComponentVersions && r.Method == http.MethodGet {
+			err := json.NewEncoder(w).Encode([]string{"v0.0.1", "v0.0.2"})
+			require.NoError(t, err)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Create plugin
+	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
+		ID:         "test-plugin",
+		Type:       types.TCP,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+	}, server.URL, []byte(`{}`))
+
+	ctx := context.Background()
+	list, err := plugin.ListComponentVersions(ctx, repov1.ListComponentVersionsRequest[runtime.Typed]{
+		Repository: &dummyv1.Repository{},
+		Name:       "test-plugin",
+	}, map[string]string{})
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"v0.0.1", "v0.0.2"}, list)
 }
 
 func TestAddLocalResource(t *testing.T) {
@@ -167,7 +197,7 @@ func TestAddLocalResource(t *testing.T) {
 
 	ctx := context.Background()
 	gotResource, err := plugin.AddLocalResource(ctx, repov1.PostLocalResourceRequest[runtime.Typed]{
-		Repository: &v1.OCIRepository{},
+		Repository: &dummyv1.Repository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 		Resource:   &resource,
@@ -208,7 +238,7 @@ func TestGetLocalResource(t *testing.T) {
 
 	ctx := context.Background()
 	err = plugin.GetLocalResource(ctx, repov1.GetLocalResourceRequest[runtime.Typed]{
-		Repository: &v1.OCIRepository{},
+		Repository: &dummyv1.Repository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 		TargetLocation: types.Location{

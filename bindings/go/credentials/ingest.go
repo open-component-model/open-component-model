@@ -148,7 +148,7 @@ func processRepositoryConfigurations(g *Graph, config *Config, repoTypeScheme *r
 		if err != nil {
 			return fmt.Errorf("could not create new object of type %q: %w", repository.GetType(), err)
 		}
-		if err := scheme.Convert(repository, typed); err != nil {
+		if err := repoTypeScheme.Convert(repository, typed); err != nil {
 			return fmt.Errorf("could not convert repository to typed object: %w", err)
 		}
 		g.repositoryConfigurationsMu.Lock()

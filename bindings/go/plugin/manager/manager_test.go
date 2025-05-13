@@ -13,10 +13,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
+	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -28,21 +27,22 @@ func TestPluginManager(t *testing.T) {
 	pm := NewPluginManager(baseContext)
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata")))
 	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-	proto := &v1.OCIRepository{}
-	typ, err := scheme.TypeForPrototype(proto)
+	dummytype.MustAddToScheme(scheme)
+	typ, err := scheme.TypeForPrototype(&dummyv1.Repository{})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
 		require.NoError(t, os.Remove("/tmp/test-plugin-plugin.socket"))
 	})
 
-	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
+	proto, err := scheme.NewObject(typ)
 	require.NoError(t, err)
-	desc, err := plugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*v1.OCIRepository]{
-		Repository: &v1.OCIRepository{
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
+	require.NoError(t, err)
+	desc, err := plugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
+		Repository: &dummyv1.Repository{
 			Type:    typ,
-			BaseUrl: "https://ocm.software/",
+			BaseUrl: "https://ocm.software/test",
 		},
 		Name:    "test-component",
 		Version: "1.0.0",
@@ -57,16 +57,18 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	baseContext, baseCancel := context.WithCancel(context.Background()) // a different context
 	pm := NewPluginManager(baseContext)
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata")))
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-	proto := &v1.OCIRepository{}
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
 		require.NoError(t, os.Remove("/tmp/test-plugin-plugin.socket"))
 	})
 
-	// start the plugin
-	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
+	proto := &dummyv1.Repository{
+		Type: runtime.Type{
+			Name:    "DummyRepository",
+			Version: "v1",
+		},
+	}
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
 	require.NoError(t, plugin.Ping(ctx))
 
@@ -89,16 +91,19 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 	baseContext := context.Background() // a different context
 	pm := NewPluginManager(baseContext)
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata")))
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-	proto := &v1.OCIRepository{}
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
 		_ = os.Remove("/tmp/test-plugin-plugin.socket")
 	})
 
 	// start the plugin
-	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
+	proto := &dummyv1.Repository{
+		Type: runtime.Type{
+			Name:    "DummyRepository",
+			Version: "v1",
+		},
+	}
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
 	require.NoError(t, plugin.Ping(ctx))
 
@@ -115,22 +120,26 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 	writer := bytes.NewBuffer(nil)
 	slog.SetDefault(slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: slog.LevelInfo,
 	})))
 	ctx, cancel := context.WithCancel(context.Background())
 	baseContext := context.Background() // a different context
 	pm := NewPluginManager(baseContext)
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata")))
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-	proto := &v1.OCIRepository{}
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
 		_ = os.Remove("/tmp/test-plugin-plugin.socket")
 	})
 
 	// start the plugin
-	plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
+	proto := &dummyv1.Repository{
+		Type: runtime.Type{
+			Name:    "DummyRepository",
+			Version: "v1",
+		},
+	}
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
+	//plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
 	require.NoError(t, err)
 	require.NoError(t, plugin.Ping(ctx))
 
@@ -147,7 +156,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 
 	content, err := io.ReadAll(writer)
 	require.NoError(t, err)
-	require.Contains(t, string(content), "Gracefully shutting down plugin id=test-plugin")
+	require.Contains(t, string(content), "Gracefully shutting down plugin")
 }
 
 func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {

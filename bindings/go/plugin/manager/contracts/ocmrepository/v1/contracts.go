@@ -12,13 +12,16 @@ import (
 // These provide type safety for all implementations. The Type defines the repository on which these requests work on.
 type ReadOCMRepositoryPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
+	IdentityProvider[T]
 	GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error)
+	ListComponentVersions(ctx context.Context, request ListComponentVersionsRequest[T], credentials map[string]string) ([]string, error)
 	GetLocalResource(ctx context.Context, request GetLocalResourceRequest[T], credentials map[string]string) error
 }
 
 // WriteOCMRepositoryPluginContract defines the ability to upload ComponentVersions to a repository with a given Type.
 type WriteOCMRepositoryPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
+	IdentityProvider[T]
 	AddLocalResource(ctx context.Context, request PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error)
 	AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[T], credentials map[string]string) error
 }
@@ -44,4 +47,9 @@ type ReadResourcePluginContract interface {
 type WriteResourcePluginContract interface {
 	contracts.PluginBase
 	AddGlobalResource(ctx context.Context, request PostResourceRequest, credentials map[string]string) (*descriptor.Resource, error)
+}
+
+type IdentityProvider[T runtime.Typed] interface {
+	contracts.PluginBase
+	GetIdentity(ctx context.Context, typ GetIdentityRequest[T]) (runtime.Identity, error)
 }

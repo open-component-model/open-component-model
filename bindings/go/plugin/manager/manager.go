@@ -16,14 +16,19 @@ import (
 	"time"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
+
+// ErrNoPluginsFound is returned when a register plugin call finds no plugins.
+var ErrNoPluginsFound = errors.New("no plugins found")
 
 // PluginManager manages all connected plugins.
 type PluginManager struct {
 	// Registries containing various typed plugins. These should be called directly using the
 	// plugin manager to locate a required plugin.
 	ComponentVersionRepositoryRegistry *componentversionrepository.RepositoryRegistry
+	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
 
 	mu sync.Mutex
 
@@ -39,8 +44,8 @@ type PluginManager struct {
 func NewPluginManager(ctx context.Context) *PluginManager {
 	return &PluginManager{
 		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
-
-		baseCtx: ctx,
+		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
+		baseCtx:                            ctx,
 	}
 }
 
@@ -87,7 +92,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 	}
 
 	if len(plugins) == 0 {
-		return errors.New("no plugins found")
+		return ErrNoPluginsFound
 	}
 
 	for _, plugin := range plugins {
@@ -95,7 +100,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		plugin.Config = *conf
 
 		output := bytes.NewBuffer(nil)
-		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint: gosec // G204 does not apply
+		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
 		cmd.Stdout = output
 		cmd.Stderr = os.Stderr
 
@@ -171,7 +176,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, plugin mtypes.Plugin, ou
 	}
 
 	// Create a command that can then be managed.
-	pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint: gosec // G204 does not apply
+	pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint:gosec // G204 does not apply
 	pluginCmd.Cancel = func() error {
 		slog.Info("killing plugin process because the parent context is cancelled", "id", plugin.ID)
 		return pluginCmd.Process.Kill()
@@ -197,14 +202,18 @@ func (pm *PluginManager) addPlugin(ctx context.Context, plugin mtypes.Plugin, ou
 	plugin.Types = types.Types
 
 	for pType, typs := range plugin.Types {
-		//nolint:gocritic // will be extended later
 		switch pType {
 		case mtypes.ComponentVersionRepositoryPluginType:
 			for _, typ := range typs {
-				slog.DebugContext(ctx, "transferring plugin", "id", plugin.ID)
+				slog.DebugContext(ctx, "adding component version repository plugin", "id", plugin.ID)
 				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, typ.Type); err != nil {
 					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 				}
+			}
+		case mtypes.CredentialRepositoryPluginType:
+			slog.DebugContext(ctx, "adding credential repository plugin", "id", plugin.ID)
+			if err := pm.CredentialRepositoryRegistry.AddPlugin(plugin, typs[0].Type, typs[1].Type); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		}
 	}

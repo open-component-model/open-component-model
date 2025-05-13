@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
+	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
@@ -24,7 +25,7 @@ func (m *TestPlugin) Ping(_ context.Context) error {
 	return nil
 }
 
-func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.GetComponentVersionRequest[*v1.OCIRepository], credentials map[string]string) (*descriptor.Descriptor, error) {
+func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.GetComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Descriptor, error) {
 	return &descriptor.Descriptor{
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
@@ -65,48 +66,65 @@ func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.Get
 	}, nil
 }
 
-func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*v1.OCIRepository], credentials map[string]string) error {
+func (m *TestPlugin) ListComponentVersions(ctx context.Context, request repov1.ListComponentVersionsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
+	return []string{"v0.0.1", "v0.0.2"}, nil
+}
+
+func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "Writing my local resource here to target: %+v\n", request.TargetLocation)
 	return nil
 }
 
-func (m *TestPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*v1.OCIRepository], credentials map[string]string) (*descriptor.Resource, error) {
+func (m *TestPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Resource, error) {
 	_, _ = fmt.Fprintf(os.Stdout, "AddLocalResource: %+v\n", request.ResourceLocation)
 	return nil, nil
 }
 
-func (m *TestPlugin) AddComponentVersion(ctx context.Context, request repov1.PostComponentVersionRequest[*v1.OCIRepository], credentials map[string]string) error {
+func (m *TestPlugin) AddComponentVersion(ctx context.Context, request repov1.PostComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "AddComponentVersiont: %+v\n", request.Descriptor.Component.Name)
 	return nil
 }
 
-var _ repov1.ReadWriteOCMRepositoryPluginContract[*v1.OCIRepository] = &TestPlugin{}
+func (m *TestPlugin) GetIdentity(ctx context.Context, typ repov1.GetIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {
+	_, _ = fmt.Fprintf(os.Stdout, "GetIdentity: %+v\n", typ.Typ.BaseUrl)
+	return nil, nil
+}
+
+var _ repov1.ReadWriteOCMRepositoryPluginContract[*dummyv1.Repository] = &TestPlugin{}
 
 func main() {
 	args := os.Args[1:]
+	// log messages are shared over stderr by convention established by the plugin manager.
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug, // debug level here is respected when sending this message.
+	}))
 
 	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
+	dummytype.MustAddToScheme(scheme)
 	capabilities := endpoints.NewEndpoints(scheme)
 
-	if err := componentversionrepository.RegisterComponentVersionRepository(&v1.OCIRepository{}, &TestPlugin{}, capabilities); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if err := componentversionrepository.RegisterComponentVersionRepository(&dummyv1.Repository{}, &TestPlugin{}, capabilities); err != nil {
+		logger.Error("failed to register test plugin", "error", err.Error())
 		os.Exit(1)
 	}
+
+	logger.Info("registered test plugin")
 
 	// TODO(Skarlso): ConsumerIdentityTypesForConfig endpoint
 
 	if len(args) > 0 && args[0] == "capabilities" {
 		content, err := json.Marshal(capabilities)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Error("failed to marshal capabilities", "error", err)
 			os.Exit(1)
 		}
 
 		if _, err := fmt.Fprintln(os.Stdout, string(content)); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			logger.Error("failed print capabilities", "error", err)
 			os.Exit(1)
 		}
+
+		logger.Info("capabilities sent")
 
 		os.Exit(0)
 	}
@@ -115,30 +133,33 @@ func main() {
 	configData := flag.String("config", "", "Plugin config.")
 	flag.Parse()
 	if configData == nil || *configData == "" {
-		fmt.Fprintln(os.Stderr, "Missing required flag --config")
+		logger.Error("missing required flag --config")
 		os.Exit(1)
 	}
 
 	conf := types.Config{}
 	if err := json.Unmarshal([]byte(*configData), &conf); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logger.Error("failed to unmarshal config", "error", err)
 		os.Exit(1)
 	}
+	logger.Debug("config data", "config", conf)
 
 	if conf.ID == "" {
-		fmt.Fprintln(os.Stderr, "Plugin ID is required")
+		logger.Error("plugin config has no ID")
 		os.Exit(1)
 	}
 
 	separateContext := context.Background()
-	ocmPlugin := plugin.NewPlugin(separateContext, conf, os.Stdout)
+	ocmPlugin := plugin.NewPlugin(separateContext, logger, conf, os.Stdout)
 	if err := ocmPlugin.RegisterHandlers(capabilities.GetHandlers()...); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logger.Error("failed to register handlers", "error", err)
 		os.Exit(1)
 	}
 
+	logger.Info("starting up plugin", "extra", "info")
+
 	if err := ocmPlugin.Start(context.Background()); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logger.Error("failed to start plugin", "error", err)
 		os.Exit(1)
 	}
 }

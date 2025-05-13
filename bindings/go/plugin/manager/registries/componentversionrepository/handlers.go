@@ -25,7 +25,6 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 		name := query.Get("name")
 		version := query.Get("version")
 		rawCredentials := []byte(request.Header.Get("Authorization"))
-		// TODO(Skarlso): Replace this with correct Credential Structure
 		credentials := map[string]string{}
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
 			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
@@ -50,6 +49,36 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 		}
 
 		if err := json.NewEncoder(writer).Encode(descV2); err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+	}
+}
+
+// ListComponentVersionsHandlerFunc is a wrapper around calling the interface method ListComponentVersions for the plugin.
+// This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
+// the plugin implementor.
+func ListComponentVersionsHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.ListComponentVersionsRequest[T], credentials map[string]string) ([]string, error), scheme *runtime.Scheme, typ T) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		query := request.URL.Query()
+		name := query.Get("name")
+		rawCredentials := []byte(request.Header.Get("Authorization"))
+		credentials := map[string]string{}
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			plugins.NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(writer)
+			return
+		}
+
+		versions, err := f(request.Context(), v1.ListComponentVersionsRequest[T]{
+			Repository: typ,
+			Name:       name,
+		}, credentials)
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(versions); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}

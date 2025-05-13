@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
+	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -24,32 +24,32 @@ func TestPluginFlow(t *testing.T) {
 
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
+	dummytype.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(ctx)
 	config := mtypes.Config{
-		ID:         "test-plugin",
+		ID:         "test-plugin-1",
 		Type:       mtypes.Socket,
 		PluginType: mtypes.ComponentVersionRepositoryPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	proto := &v1.OCIRepository{}
+	proto := &dummyv1.Repository{}
 	typ, err := scheme.TypeForPrototype(proto)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	t.Cleanup(func() {
 		_ = pluginCmd.Process.Kill()
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		_ = os.Remove("/tmp/test-plugin-1-plugin.socket")
 	})
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)
 	plugin := mtypes.Plugin{
-		ID:   "test-plugin",
+		ID:   "test-plugin-1",
 		Path: path,
 		Config: mtypes.Config{
-			ID:         "test-plugin",
+			ID:         "test-plugin-1",
 			Type:       mtypes.Socket,
 			PluginType: mtypes.ComponentVersionRepositoryPluginType,
 		},
@@ -65,13 +65,14 @@ func TestPluginFlow(t *testing.T) {
 		Stdout: pipe,
 	}
 	require.NoError(t, registry.AddPlugin(plugin, typ))
-
-	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
+	p, err := scheme.NewObject(typ)
 	require.NoError(t, err)
-	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*v1.OCIRepository]{
-		Repository: &v1.OCIRepository{
+	retrievedPlugin, err := registry.GetPlugin(ctx, p)
+	require.NoError(t, err)
+	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
+		Repository: &dummyv1.Repository{
 			Type: runtime.Type{
-				Name:    "OCIRepository",
+				Name:    "DummyRepository",
 				Version: "v1",
 			},
 			BaseUrl: "base-url",
@@ -85,37 +86,51 @@ func TestPluginFlow(t *testing.T) {
 
 func TestPluginNotFound(t *testing.T) {
 	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &v1.OCIRepository{}
-	_, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
-	require.ErrorContains(t, err, "failed to get plugin for typ runtime.Type OCIRepository/v1: no plugin registered for type OCIRepository/v1")
+	proto := &dummyv1.Repository{
+		Type: runtime.Type{
+			Name:    "DummyRepository",
+			Version: "v1",
+		},
+		BaseUrl: "",
+	}
+	_, err := registry.GetPlugin(ctx, proto)
+	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
 func TestSchemeDoesNotExist(t *testing.T) {
 	ctx := context.Background()
-	scheme := runtime.NewScheme()
 	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &v1.OCIRepository{}
-	_, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
-	require.ErrorContains(t, err, "failed to get type for prototype *v1.OCIRepository: prototype not found in registry")
+	proto := &dummyv1.Repository{
+		Type: runtime.Type{
+			Name:    "DummyRepository",
+			Version: "v1",
+		},
+		BaseUrl: "",
+	}
+	_, err := registry.GetPlugin(ctx, proto)
+	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
 func TestInternalPluginRegistry(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
+	dummytype.MustAddToScheme(scheme)
 	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &v1.OCIRepository{}
+	proto := &dummyv1.Repository{
+		Type: runtime.Type{
+			Name:    "DummyRepository",
+			Version: "v1",
+		},
+		BaseUrl: "",
+	}
 	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockPlugin{}, proto))
-
-	retrievedPlugin, err := GetReadWriteComponentVersionRepositoryPluginForType(ctx, registry, proto, scheme)
+	retrievedPlugin, err := registry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
-	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[*v1.OCIRepository]{
-		Repository: &v1.OCIRepository{
+	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
+		Repository: &dummyv1.Repository{
 			Type: runtime.Type{
-				Name:    "OCIRepository",
+				Name:    "DummyRepository",
 				Version: "v1",
 			},
 			BaseUrl: "base-url",
