@@ -15,15 +15,56 @@ var ErrReadOnly = fmt.Errorf("read only file system")
 // to be usable within the OCM Bindings.
 // The ComponentVersionReference Implementation is the osFileSystem which is backed by the os package.
 type FileSystem interface {
-	Base() string
-	Open(name string) (fs.File, error)
+	String() string
+
+	fs.FS
+	fs.StatFS
+	fs.ReadDirFS
+
+	MkdirAllFS
+	OpenFileFS
+	RemoveFS
+	RemoveAllFS
+	ReadOnlyFS
+}
+
+// OpenFileFS is a filesystem that supports opening files with a specific flag and permission bitmask
+type OpenFileFS interface {
+	// OpenFile is the generalized open call; most users will use Open
+	// or Create instead. It opens the named file with specified flag
+	// (O_RDONLY etc.). If the file does not exist, and the O_CREATE flag
+	// is passed, it is created with mode perm (before umask);
+	// the containing directory must exist. If successful,
+	// methods on the returned File can be used for I/O.
 	OpenFile(name string, flag int, perm os.FileMode) (fs.File, error)
-	MkdirAll(name string, perm os.FileMode) error
+}
+
+// RemoveFS is a filesystem that supports Remove of a file
+type RemoveFS interface {
+	// Remove removes the named file or (empty) directory.
 	Remove(name string) error
-	ReadDir(name string) ([]fs.DirEntry, error)
+}
+
+// RemoveAllFS is a filesystem that supports RemoveAll of a directory
+type RemoveAllFS interface {
+	// RemoveAll removes path and any children it contains.
+	// It removes everything it can but returns the first error it encounters.
+	// If the path does not exist, RemoveAll returns nil (no error).
 	RemoveAll(path string) error
-	Stat(name string) (fs.FileInfo, error)
+}
+
+type MkdirAllFS interface {
+	// MkdirAll creates a directory named path, along with any necessary parents,
+	// and returns nil, or else returns an error.
+	// The permission bits perm (before umask) are used for all directories that MkdirAll creates.
+	// If path is already a directory, MkdirAll does nothing and returns nil.
+	MkdirAll(name string, perm os.FileMode) error
+}
+
+type ReadOnlyFS interface {
+	// ReadOnly returns true if the filesystem is read only.
 	ReadOnly() bool
+	// ForceReadOnly sets the filesystem to read only mode, restricting all future operations.
 	ForceReadOnly()
 }
 
@@ -69,7 +110,7 @@ type osFileSystem struct {
 	flag int
 }
 
-func (s *osFileSystem) Base() string {
+func (s *osFileSystem) String() string {
 	return s.base
 }
 
