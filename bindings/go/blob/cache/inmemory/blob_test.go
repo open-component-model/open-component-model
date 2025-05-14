@@ -464,3 +464,70 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 		})
 	}
 }
+
+func TestCache_SizeBeforeRead(t *testing.T) {
+	tests := []struct {
+		name        string
+		data        []byte
+		expected    int64
+		unknownSize bool
+	}{
+		{
+			name:     "known size before read",
+			data:     []byte("test data"),
+			expected: 9,
+		},
+		{
+			name:        "unknown size before read",
+			data:        []byte("test data"),
+			expected:    blob.SizeUnknown,
+			unknownSize: true,
+		},
+		{
+			name:     "empty blob with known size",
+			data:     []byte{},
+			expected: 0,
+		},
+		{
+			name:        "empty blob with unknown size",
+			data:        []byte{},
+			expected:    blob.SizeUnknown,
+			unknownSize: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockBlob{
+				data:        tt.data,
+				unknownSize: tt.unknownSize,
+			}
+
+			// Create cached blob
+			cached := Cache(mock)
+
+			// Test size before any read operations
+			size := cached.Size()
+			assert.Equal(t, tt.expected, size)
+
+			// Verify that the size hasn't changed after multiple calls
+			for i := 0; i < 3; i++ {
+				assert.Equal(t, tt.expected, cached.Size())
+			}
+
+			// Verify that the data hasn't been loaded yet
+			assert.Nil(t, cached.getData())
+
+			// Now read the data and verify size changes appropriately
+			_, err := cached.Data()
+			require.NoError(t, err)
+
+			if tt.unknownSize {
+				// After reading, size should be known
+				assert.Equal(t, int64(len(tt.data)), cached.Size())
+			} else {
+				assert.Equal(t, tt.expected, cached.Size())
+			}
+		})
+	}
+}

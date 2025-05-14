@@ -77,7 +77,20 @@ func (c *Blob) Size() int64 {
 		return sizeAware.Size()
 	}
 
-	return blob.SizeUnknown
+	// Read and cache the data as a fallback
+	// this only gets triggered if we couldn't eagerly lead the size from the source blob
+	// and we don't already have data.
+	reader, err := c.ReadOnlyBlob.ReadCloser()
+	if err != nil {
+		return blob.SizeUnknown
+	}
+	defer reader.Close()
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return blob.SizeUnknown
+	}
+	c.setData(data)
+	return int64(len(data))
 }
 
 // Digest calculates and returns the digest of the blob's data.
