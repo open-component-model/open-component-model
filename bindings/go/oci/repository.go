@@ -205,7 +205,9 @@ var _ ComponentVersionRepository = (*Repository)(nil)
 func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) (err error) {
 	component, version := descriptor.Component.Name, descriptor.Component.Version
 	done := log.Operation(ctx, "add component version", slog.String("component", component), slog.String("version", version))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
@@ -236,7 +238,9 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 func (repo *Repository) ListComponentVersions(ctx context.Context, component string) (_ []string, err error) {
 	done := log.Operation(ctx, "list component versions",
 		slog.String("component", component))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	_, store, err := repo.getStore(ctx, component, "latest")
 	if err != nil {
@@ -267,7 +271,9 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	done := log.Operation(ctx, "get component version",
 		slog.String("component", component),
 		slog.String("version", version))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
@@ -289,7 +295,9 @@ func (repo *Repository) AddLocalResource(
 		slog.String("component", component),
 		slog.String("version", version),
 		log.IdentityLogAttr("resource", resource.ToIdentity()))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	if err := repo.addLocalArtifact(ctx, component, version, resource, b); err != nil {
 		return nil, err
@@ -303,7 +311,9 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 		slog.String("component", component),
 		slog.String("version", version),
 		log.IdentityLogAttr("source", source.ToIdentity()))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	if err := repo.addLocalArtifact(ctx, component, version, source, content); err != nil {
 		return nil, err
@@ -348,7 +358,9 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		slog.String("component", component),
 		slog.String("version", version),
 		log.IdentityLogAttr("resource", identity))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	var b LocalBlob
 	var artifact descriptor.Artifact
@@ -364,7 +376,9 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 		slog.String("component", component),
 		slog.String("version", version),
 		log.IdentityLogAttr("resource", identity))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	var b LocalBlob
 	var artifact descriptor.Artifact
@@ -479,7 +493,9 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 // UploadResource uploads a [*descriptor.Resource] to the repository.
 func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed, res *descriptor.Resource, b blob.ReadOnlyBlob) (err error) {
 	done := log.Operation(ctx, "upload resource", log.IdentityLogAttr("resource", res.ToIdentity()))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	desc, access, err := repo.uploadOCIImage(ctx, res.Access, target, b)
 	if err != nil {
@@ -501,7 +517,9 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 // UploadSource uploads a [*descriptor.Source] to the repository.
 func (repo *Repository) UploadSource(ctx context.Context, target runtime.Typed, src *descriptor.Source, b blob.ReadOnlyBlob) (err error) {
 	done := log.Operation(ctx, "upload source", log.IdentityLogAttr("source", src.ToIdentity()))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	_, access, err := repo.uploadOCIImage(ctx, src.Access, target, b)
 	if err != nil {
@@ -578,7 +596,9 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, oldAccess, newAccess
 // DownloadResource downloads a [*descriptor.Resource] from the repository.
 func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Resource) (data blob.ReadOnlyBlob, err error) {
 	done := log.Operation(ctx, "download resource", log.IdentityLogAttr("resource", res.ToIdentity()))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
@@ -589,7 +609,9 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 // DownloadSource downloads a [*descriptor.Source] from the repository.
 func (repo *Repository) DownloadSource(ctx context.Context, src *descriptor.Source) (data blob.ReadOnlyBlob, err error) {
 	done := log.Operation(ctx, "download source", log.IdentityLogAttr("resource", src.ToIdentity()))
-	defer done(err)
+	defer func() {
+		done(err)
+	}()
 
 	if src.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("source access type is empty")
