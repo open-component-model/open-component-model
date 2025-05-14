@@ -320,7 +320,9 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, 
 	targetAccess := resource.Access.DeepCopyTyped()
 	targetAccess.(*v1.OCIImage).ImageReference = to
 
-	r.NoError(repo.UploadResource(ctx, targetAccess, &resource, blob))
+	newRes, err := repo.UploadResource(ctx, targetAccess, &resource, blob)
+	r.NoError(err)
+	resource = *newRes
 
 	downloaded, err := repo.DownloadResource(ctx, &resource)
 	r.NoError(err)

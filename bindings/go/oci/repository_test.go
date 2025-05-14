@@ -585,11 +585,12 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 
 				// Upload the resource with the store content
 				b := blob.NewDirectReadOnlyBlob(buf)
-				r.NoError(repo.UploadResource(ctx, tc.resource.Access, tc.resource, b), "Failed to upload test resource")
-				r.NotNil(tc.resource.Access, "Resource should not be nil after uploading")
+				newRes, err := repo.UploadResource(ctx, tc.resource.Access, tc.resource, b)
+				r.NoError(err, "Failed to upload test resource")
+				r.NotNil(newRes, "Resource should not be nil after uploading")
 
 				// Download the resource
-				downloadedRes, err = repo.DownloadResource(ctx, tc.resource)
+				downloadedRes, err = repo.DownloadResource(ctx, newRes)
 				r.NoError(err, "Failed to download resource")
 				r.NotNil(downloadedRes, "Downloaded resource should not be nil")
 			}
@@ -768,11 +769,12 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 
 				// Upload the source with the store content
 				b := blob.NewDirectReadOnlyBlob(buf)
-				r.NoError(repo.UploadSource(ctx, tc.source.Access, tc.source, b), "Failed to upload test source")
-				r.NotNil(tc.source.Access, "Source should not be nil after uploading")
+				newSrc, err := repo.UploadSource(ctx, tc.source.Access, tc.source, b)
+				r.NoError(err, "Failed to upload test source")
+				r.NotNil(newSrc, "Source should not be nil after uploading")
 
 				// Download the source
-				downloadedSrc, err = repo.DownloadSource(ctx, tc.source)
+				downloadedSrc, err = repo.DownloadSource(ctx, newSrc)
 				r.NoError(err, "Failed to download source")
 				r.NotNil(downloadedSrc, "Downloaded source should not be nil")
 			}

@@ -24,25 +24,12 @@ type ArtifactBlob struct {
 }
 
 // NewArtifactBlobWithMediaType creates a new ArtifactBlob instance with the given artifact,
-// blob data, and media type. This constructor ensures that all necessary
-// information is properly initialized for the ArtifactBlob to function correctly.
+// blob data, and media type.
 func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyBlob, mediaType string) (*ArtifactBlob, error) {
 	size := blob.SizeUnknown
 	if sizeAware, ok := b.(blob.SizeAware); ok {
 		if blobSize := sizeAware.Size(); blobSize != size {
 			size = blobSize
-		}
-	}
-	if resource, ok := artifact.(*descriptor.Resource); ok {
-		if resource.Size == 0 && size > blob.SizeUnknown {
-			resource.Size = size
-		}
-		if resource.Size != size {
-			if size > blob.SizeUnknown {
-				return nil, fmt.Errorf("resource blob size mismatch: resource %d vs blob %d", resource.Size, size)
-			} else {
-				size = resource.Size
-			}
 		}
 	}
 
@@ -52,24 +39,29 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 		}
 	}
 
+	// lets do additional defaulting and verification of the resulting blob
+	// if we have a resource, because a resource contains more data than a generic artifact
 	if resource, ok := artifact.(*descriptor.Resource); ok {
-		if resource.Digest == nil {
-			if digAware, ok := b.(blob.DigestAware); ok {
-				if dig, ok := digAware.Digest(); ok {
-					digSpec, err := digestSpec(dig)
+		if size == blob.SizeUnknown {
+			// if we dont have a size information from the blob yet,
+			// but we do have one in the resource,
+			// use that
+			if resource.Size > 0 {
+				size = resource.Size
+			}
+		} else if size != resource.Size {
+			// mismatches are never okay!
+			return nil, fmt.Errorf("resource size mismatch: resource %d vs blob %d", resource.Size, size)
+		}
+		if digAware, ok := b.(blob.DigestAware); ok {
+			if blobDig, ok := digAware.Digest(); ok {
+				if resource.Digest != nil {
+					// if we have a digest in the resource and in the blob, we need to verify that
+					// they don't mismatch with each other
+					dig, err := digestSpecToDigest(resource.Digest)
 					if err != nil {
-						return nil, fmt.Errorf("failed to parse digest spec from blob: %w", err)
+						return nil, fmt.Errorf("failed to parse digest spec from resource: %w", err)
 					}
-					resource.Digest = digSpec
-				}
-			}
-		} else {
-			dig, err := digestSpecToDigest(resource.Digest)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse digest spec from resource: %w", err)
-			}
-			if digAware, ok := b.(blob.DigestAware); ok {
-				if blobDig, ok := digAware.Digest(); ok {
 					if dig != digest.Digest(blobDig) {
 						return nil, fmt.Errorf("resource blob digest mismatch: resource %s vs blob %s", resource.Digest.Value, blobDig)
 					}

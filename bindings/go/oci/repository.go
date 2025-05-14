@@ -114,7 +114,7 @@ type ResourceRepository interface {
 	//
 	// The given OCI Layout MUST contain the resource described in source with an v1.OCIImage specification,
 	// otherwise the upload will fail
-	UploadResource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Resource, content blob.ReadOnlyBlob) (err error)
+	UploadResource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Resource, content blob.ReadOnlyBlob) (resourceAfterUpload *descriptor.Resource, err error)
 
 	// DownloadResource downloads a [descriptor.Resource] from the repository.
 	// THe resource MUST contain a valid v1.OCIImage specification that exists in the Store.
@@ -140,7 +140,7 @@ type SourceRepository interface {
 	//
 	// The given OCI Layout MUST contain the source described in source with an v1.OCIImage specification,
 	// otherwise the upload will fail
-	UploadSource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Source, content blob.ReadOnlyBlob) (err error)
+	UploadSource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Source, content blob.ReadOnlyBlob) (sourceAfterUpload *descriptor.Source, err error)
 
 	// DownloadSource downloads a [descriptor.Source] from the repository.
 	// THe resource MUST contain a valid v1.OCIImage specification that exists in the Store.
@@ -299,7 +299,9 @@ func (repo *Repository) AddLocalResource(
 		done(err)
 	}()
 
-	if err := repo.addLocalArtifact(ctx, component, version, resource, b); err != nil {
+	resource = resource.DeepCopy()
+
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, resource, b); err != nil {
 		return nil, err
 	}
 
@@ -315,17 +317,23 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 		done(err)
 	}()
 
-	if err := repo.addLocalArtifact(ctx, component, version, source, content); err != nil {
+	source = source.DeepCopy()
+
+	if err := repo.uploadAndUpdateLocalArtifact(ctx, component, version, source, content); err != nil {
 		return nil, err
 	}
 
 	return source, nil
 }
 
-func (repo *Repository) addLocalArtifact(ctx context.Context, component string, version string, artifact descriptor.Artifact, b blob.ReadOnlyBlob) error {
+func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, component string, version string, artifact descriptor.Artifact, b blob.ReadOnlyBlob) error {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
 		return err
+	}
+
+	if err := ociblob.UpdateArtifactWithInformationFromBlob(artifact, b); err != nil {
+		return fmt.Errorf("failed to update artifact with data from blob: %w", err)
 	}
 
 	artifactBlob, err := ociblob.NewArtifactBlob(artifact, b)
@@ -491,15 +499,17 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 }
 
 // UploadResource uploads a [*descriptor.Resource] to the repository.
-func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed, res *descriptor.Resource, b blob.ReadOnlyBlob) (err error) {
+func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed, res *descriptor.Resource, b blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {
 	done := log.Operation(ctx, "upload resource", log.IdentityLogAttr("resource", res.ToIdentity()))
 	defer func() {
 		done(err)
 	}()
 
+	res = res.DeepCopy()
+
 	desc, access, err := repo.uploadOCIImage(ctx, res.Access, target, b)
 	if err != nil {
-		return fmt.Errorf("failed to upload resource as OCI image: %w", err)
+		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
 
 	res.Size = desc.Size
@@ -507,27 +517,29 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 		res.Digest = &descriptor.Digest{}
 	}
 	if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
-		return fmt.Errorf("failed to apply digest to resource: %w", err)
+		return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
 	}
 	res.Access = access
 
-	return nil
+	return res, nil
 }
 
 // UploadSource uploads a [*descriptor.Source] to the repository.
-func (repo *Repository) UploadSource(ctx context.Context, target runtime.Typed, src *descriptor.Source, b blob.ReadOnlyBlob) (err error) {
+func (repo *Repository) UploadSource(ctx context.Context, target runtime.Typed, src *descriptor.Source, b blob.ReadOnlyBlob) (newSrc *descriptor.Source, err error) {
 	done := log.Operation(ctx, "upload source", log.IdentityLogAttr("source", src.ToIdentity()))
 	defer func() {
 		done(err)
 	}()
 
+	src = src.DeepCopy()
+
 	_, access, err := repo.uploadOCIImage(ctx, src.Access, target, b)
 	if err != nil {
-		return fmt.Errorf("failed to upload source as OCI image: %w", err)
+		return nil, fmt.Errorf("failed to upload source as OCI image: %w", err)
 	}
 	src.Access = access
 
-	return nil
+	return src, nil
 }
 
 func (repo *Repository) uploadOCIImage(ctx context.Context, oldAccess, newAccess runtime.Typed, b blob.ReadOnlyBlob) (ociImageSpecV1.Descriptor, *accessv1.OCIImage, error) {

@@ -389,7 +389,9 @@ func TestNewResourceBlobWithMediaType_SizeValidation(t *testing.T) {
 				Size: tt.resourceSize,
 			}
 
-			_, err := ociblob.NewArtifactBlobWithMediaType(resource, &mockSizeAwareBlob{size: tt.blobSize}, "application/octet-stream")
+			base := &mockSizeAwareBlob{size: tt.blobSize}
+			require.NoError(t, ociblob.UpdateArtifactWithInformationFromBlob(resource, base))
+			_, err := ociblob.NewArtifactBlobWithMediaType(resource, base, "application/octet-stream")
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
@@ -410,16 +412,16 @@ func TestNewResourceBlobWithMediaType_DigestValidation(t *testing.T) {
 			name: "matching digests",
 			resourceDigest: &descriptor.Digest{
 				HashAlgorithm: internaldigest.HashAlgorithmSHA256,
-				Value:         "1234567890abcdef",
+				Value:         "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			},
-			blobDigest:    "sha256:1234567890abcdef",
+			blobDigest:    "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			expectedError: false,
 		},
 		{
 			name: "mismatched digests",
 			resourceDigest: &descriptor.Digest{
 				HashAlgorithm: internaldigest.HashAlgorithmSHA256,
-				Value:         "1234567890abcdef",
+				Value:         "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			},
 			blobDigest:    "sha256:differentdigest",
 			expectedError: true,
@@ -427,14 +429,14 @@ func TestNewResourceBlobWithMediaType_DigestValidation(t *testing.T) {
 		{
 			name:           "nil resource digest with valid blob digest",
 			resourceDigest: nil,
-			blobDigest:     "sha256:1234567890abcdef",
-			expectedError:  true,
+			blobDigest:     "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			expectedError:  false,
 		},
 		{
 			name: "valid resource digest with empty blob digest",
 			resourceDigest: &descriptor.Digest{
 				HashAlgorithm: internaldigest.HashAlgorithmSHA256,
-				Value:         "1234567890abcdef",
+				Value:         "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 			},
 			blobDigest:    "",
 			expectedError: false,
@@ -447,7 +449,9 @@ func TestNewResourceBlobWithMediaType_DigestValidation(t *testing.T) {
 				Digest: tt.resourceDigest,
 			}
 
-			_, err := ociblob.NewArtifactBlobWithMediaType(resource, &mockDigestAwareBlob{digest: tt.blobDigest}, "application/octet-stream")
+			base := &mockDigestAwareBlob{digest: tt.blobDigest}
+			require.NoError(t, ociblob.UpdateArtifactWithInformationFromBlob(resource, base))
+			_, err := ociblob.NewArtifactBlobWithMediaType(resource, base, "application/octet-stream")
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
