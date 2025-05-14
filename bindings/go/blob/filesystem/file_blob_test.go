@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"testing"
+	"testing/fstest"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
@@ -92,4 +94,28 @@ func TestBlob_Digest(t *testing.T) {
 	expectedDigest, err := digest.FromReader(io.TeeReader(data, &buf))
 	r.NoError(err)
 	r.Equal(expectedDigest.String(), digestStr)
+}
+
+func TestBlob_FS_Compat(t *testing.T) {
+	r := require.New(t)
+	td := []byte("test data")
+	fs := fstest.MapFS{
+		"testfile.txt": &fstest.MapFile{
+			Data:    td,
+			Mode:    0644,
+			ModTime: time.Now(),
+		},
+	}
+
+	b := filesystem.NewFileBlob(fs, "testfile.txt")
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	data, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.Equal(td, data)
+	r.NoError(reader.Close())
+
+	_, err = b.WriteCloser()
+	r.Error(err)
+	r.Equal(b.Size(), int64(len(td)))
 }

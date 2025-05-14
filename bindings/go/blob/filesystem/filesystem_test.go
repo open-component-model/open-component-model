@@ -15,7 +15,7 @@ func TestNewFS(t *testing.T) {
 
 	fsys, err := filesystem.NewFS(tempDir, os.O_RDWR)
 	require.NoError(t, err)
-	require.Equal(t, tempDir, fsys.Base())
+	require.Equal(t, tempDir, fsys.String())
 }
 
 func TestNewFS_NonExistentPath(t *testing.T) {

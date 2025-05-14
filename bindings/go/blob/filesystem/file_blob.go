@@ -17,7 +17,7 @@ import (
 // It delegates all meta operations to the underlying filesystem.
 type Blob struct {
 	// fileSystem is the underlying filesystem.
-	fileSystem FileSystem
+	fileSystem fs.FS
 	// path is the original path to the blob.
 	path string
 }
@@ -28,7 +28,7 @@ var (
 	_ blob.DigestAware = (*Blob)(nil)
 )
 
-func NewFileBlob(fs FileSystem, path string) *Blob {
+func NewFileBlob(fs fs.FS, path string) *Blob {
 	return &Blob{
 		path:       path,
 		fileSystem: fs,
@@ -36,7 +36,7 @@ func NewFileBlob(fs FileSystem, path string) *Blob {
 }
 
 func (f *Blob) ReadCloser() (io.ReadCloser, error) {
-	file, err := f.fileSystem.OpenFile(f.path, os.O_RDONLY, 0o400)
+	file, err := f.fileSystem.Open(f.path)
 	if err != nil {
 		return nil, fmt.Errorf("unable to open file %q: %w", f.path, err)
 	}
@@ -44,7 +44,11 @@ func (f *Blob) ReadCloser() (io.ReadCloser, error) {
 }
 
 func (f *Blob) WriteCloser() (io.WriteCloser, error) {
-	fi, err := f.fileSystem.Stat(f.path)
+	statFS, ok := f.fileSystem.(fs.StatFS)
+	if !ok {
+		return nil, fmt.Errorf("filesystem %T does not support stat", f.fileSystem)
+	}
+	fi, err := statFS.Stat(f.path)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("unable to stat file %q: %w", f.path, err)
 	}
@@ -52,7 +56,12 @@ func (f *Blob) WriteCloser() (io.WriteCloser, error) {
 	if err == nil && fi.Mode()&fs.ModeNamedPipe != 0 {
 		mode = fs.ModeNamedPipe
 	}
-	file, err := f.fileSystem.OpenFile(f.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, mode)
+	ofFS, ok := f.fileSystem.(OpenFileFS)
+	if !ok {
+		return nil, fmt.Errorf("filesystem %T does not support open file", f.fileSystem)
+	}
+
+	file, err := ofFS.OpenFile(f.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +73,11 @@ func (f *Blob) WriteCloser() (io.WriteCloser, error) {
 }
 
 func (f *Blob) Size() int64 {
-	fi, err := f.fileSystem.Stat(f.path)
+	statFS, ok := f.fileSystem.(fs.StatFS)
+	if !ok {
+		return blob.SizeUnknown
+	}
+	fi, err := statFS.Stat(f.path)
 	if err != nil {
 		return blob.SizeUnknown
 	}
