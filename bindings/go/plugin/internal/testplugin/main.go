@@ -96,7 +96,7 @@ func main() {
 	args := os.Args[1:]
 	// log messages are shared over stderr by convention established by the plugin manager.
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug, // debug level here is respected when sending this message.
+		Level: slog.LevelInfo, // debug level here is respected when sending this message.
 	}))
 
 	scheme := runtime.NewScheme()
@@ -109,6 +109,11 @@ func main() {
 	}
 
 	logger.Info("registered test plugin")
+
+	capabilities.AddConfigType(runtime.Type{
+		Name:    "custom.config",
+		Version: "v1",
+	})
 
 	// TODO(Skarlso): ConsumerIdentityTypesForConfig endpoint
 
@@ -137,6 +142,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	logger.Info("config data", "data", *configData)
 	conf := types.Config{}
 	if err := json.Unmarshal([]byte(*configData), &conf); err != nil {
 		logger.Error("failed to unmarshal config", "error", err)
@@ -148,6 +154,12 @@ func main() {
 		logger.Error("plugin config has no ID")
 		os.Exit(1)
 	}
+
+	var configs []runtime.Raw
+	for _, raw := range conf.ConfigTypes {
+		configs = append(configs, *raw)
+	}
+	logger.Info("got my configuration", "config", configs)
 
 	separateContext := context.Background()
 	ocmPlugin := plugin.NewPlugin(separateContext, logger, conf, os.Stdout)

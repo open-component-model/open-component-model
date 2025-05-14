@@ -42,7 +42,8 @@ type Type struct {
 
 // Types contains all the types a specific plugin has declared for a specific functionality.
 type Types struct {
-	// Maybe we don't even need the plugin type here?
-	// Does a binary implement multiple plugin types? Didn't we say we don't want to overstep that boundary?
+	// Types define a plugin type specific list of types that the plugin supports.
 	Types map[PluginType][]Type `json:"types"`
+	// ConfigTypes define a list of configuration types the plugin understands. These will be provided during startup.
+	ConfigTypes []runtime.Type `json:"configTypes,omitempty"`
 }

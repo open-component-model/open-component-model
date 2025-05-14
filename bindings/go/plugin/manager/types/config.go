@@ -2,6 +2,8 @@ package types
 
 import (
 	"time"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type ConnectionType string
@@ -25,4 +27,6 @@ type Config struct {
 	// IdleTimeout sets how long the plugin should sit around without work to do. If idle time is exceeded the plugin
 	// is automatically terminated to not hog resources indefinitely.
 	IdleTimeout *time.Duration `json:"idleTimeout,omitempty"`
+	// ConfigTypes defines the configurations that are sent to the plugin.
+	ConfigTypes []*runtime.Raw `json:"configTypes,omitempty"`
 }

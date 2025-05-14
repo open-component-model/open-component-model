@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	v1 "ocm.software/open-component-model/cli/configuration/v1"
 )
 
 // ErrNoPluginsFound is returned when a register plugin call finds no plugins.
@@ -64,7 +65,7 @@ func WithIdleTimeout(d time.Duration) RegistrationOptionFn {
 // RegisterPlugins walks through files in a folder and registers them
 // as plugins if connection points can be established. This function doesn't support
 // concurrent access.
-func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts ...RegistrationOptionFn) error {
+func (pm *PluginManager) RegisterPlugins(ctx context.Context, config *v1.Config, dir string, opts ...RegistrationOptionFn) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -109,7 +110,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 		}
 
-		if err := pm.addPlugin(pm.baseCtx, *plugin, output); err != nil {
+		if err := pm.addPlugin(pm.baseCtx, config, *plugin, output); err != nil {
 			return fmt.Errorf("failed to add plugin %s: %w", plugin.ID, err)
 		}
 	}
@@ -169,7 +170,17 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 	return plugins, nil
 }
 
-func (pm *PluginManager) addPlugin(ctx context.Context, plugin mtypes.Plugin, output *bytes.Buffer) error {
+func (pm *PluginManager) addPlugin(ctx context.Context, cliConfig *v1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
+	// Determine Configuration requirements.
+	types := &mtypes.Types{}
+	if err := json.Unmarshal(capabilitiesCommandOutput.Bytes(), types); err != nil {
+		return fmt.Errorf("failed to unmarshal capabilities: %w", err)
+	}
+
+	// TODO: config is a flattened config map; but is that right? Will all configs be in `Configuration`?
+	filtered, _ := v1.Filter(cliConfig, &v1.FilterOptions{ConfigTypes: types.ConfigTypes})
+	plugin.Config.ConfigTypes = append(plugin.Config.ConfigTypes, filtered.Configurations...)
+
 	serialized, err := json.Marshal(plugin.Config)
 	if err != nil {
 		return err
@@ -194,11 +205,6 @@ func (pm *PluginManager) addPlugin(ctx context.Context, plugin mtypes.Plugin, ou
 		return fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 	plugin.Stdout = sdtOut
-
-	types := &mtypes.Types{}
-	if err := json.Unmarshal(output.Bytes(), types); err != nil {
-		return fmt.Errorf("failed to unmarshal capabilities: %w", err)
-	}
 	plugin.Types = types.Types
 
 	for pType, typs := range plugin.Types {
