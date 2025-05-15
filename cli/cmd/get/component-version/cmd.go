@@ -48,15 +48,15 @@ If no type is given, the repository path is interpreted based on introspection a
 		Example: strings.TrimSpace(`
 Getting a single component version:
 
-get component-version ghcr.com/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+get component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 get cv ./path/to/ctf//ocm.software/ocmcli:0.23.0
 get cv ./path/to/ctf/component-descriptors/ocm.software/ocmcli:0.23.0
 
 Listing many component versions:
 
-get component-versions ghcr.com/open-component-model/ocm//ocm.software/ocmcli
-get cvs ghcr.com/open-component-model/ocm//ocm.software/ocmcli --output json
-get cvs ghcr.com/open-component-model/ocm//ocm.software/ocmcli -oyaml
+get component-versions ghcr.io/open-component-model/ocm//ocm.software/ocmcli
+get cvs ghcr.io/open-component-model/ocm//ocm.software/ocmcli --output json
+get cvs ghcr.io/open-component-model/ocm//ocm.software/ocmcli -oyaml
 
 Specifying types and schemes:
 

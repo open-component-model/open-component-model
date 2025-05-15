@@ -63,7 +63,7 @@ func preRunE(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not setup credential graph: %w", err)
 	}
 
-	ocmctx.RegisterAtRoot(cmd)
+	ocmctx.Register(cmd)
 
 	if parent := cmd.Parent(); parent != nil {
 		cmd.SetOut(parent.OutOrStdout())

@@ -11,7 +11,9 @@ import (
 	"ocm.software/open-component-model/cli/configuration/v1"
 )
 
-type key struct{}
+type ctxKey string
+
+const key ctxKey = "ocm.software/open-component-model/cli/internal/context"
 
 // Context is the OCM Command Line context.
 // It contains pointers to centrally managed structures that are created
@@ -44,10 +46,6 @@ type Context struct {
 	// Once resolved they are passed to the corresponding plugin call.
 	// Usually plugins can return correct consumer identities based on respective endpoints.
 	credentialGraph *credentials.Graph
-
-	// root is the root command of the CLI.
-	// it can be used to traverse the command tree (e.g. for additional command generation or docs).
-	root *cobra.Command
 }
 
 // WithCredentialGraph creates a new context with the given credential graph.
@@ -83,25 +81,15 @@ func WithConfiguration(ctx context.Context, cfg *v1.Config) context.Context {
 	return ctx
 }
 
-// RegisterAtRoot registers the command to contain a new Context object, with
+// Register registers the command to contain a new Context object, with
 // the root command set as entrypoint.
 // From this point on any call to the Context.RootCommand based on [cobra.Command.Context]
 // will return this command.
-func RegisterAtRoot(cmd *cobra.Command) {
+func Register(cmd *cobra.Command) {
 	ctx, ocmctx := retrieveOrCreateOCMContext(cmd.Context())
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
-	ocmctx.root = cmd
 	cmd.SetContext(ctx)
-}
-
-func (ctx *Context) RootCommand() *cobra.Command {
-	if ctx == nil {
-		return nil
-	}
-	ctx.mu.RLock()
-	defer ctx.mu.RUnlock()
-	return ctx.root
 }
 
 func (ctx *Context) PluginManager() *manager.PluginManager {
@@ -133,14 +121,14 @@ func (ctx *Context) Configuration() *v1.Config {
 
 // FromContext retrieves the OCM context from the given context.
 // If the OCM context does not exist, it returns nil.
-// Within a command or subcommand which was registered with [RegisterAtRoot],
+// Within a command or subcommand which was registered with [Register],
 // the context is always available and guaranteed to be present.
 func FromContext(ctx context.Context) *Context {
 	if ctx == nil {
 		return nil
 	}
 
-	if v, ok := ctx.Value(key{}).(*Context); ok {
+	if v, ok := ctx.Value(key).(*Context); ok {
 		return v
 	}
 	return nil
@@ -151,7 +139,7 @@ func WithContext(ctx context.Context, c *Context) context.Context {
 	if c == nil {
 		return nil
 	}
-	return context.WithValue(ctx, key{}, c)
+	return context.WithValue(ctx, key, c)
 }
 
 // retrieveOrCreateOCMContext retrieves the OCM context from the given context.
