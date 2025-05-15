@@ -10,14 +10,14 @@ require (
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.14.0
 	golang.org/x/sys v0.33.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250509151238-4a0ed5851bda
-	ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250509151238-4a0ed5851bda
-	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250509151238-4a0ed5851bda
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250509151238-4a0ed5851bda
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250509151238-4a0ed5851bda
-	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250509151238-4a0ed5851bda
-	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250509155348-549ff0f3ede9
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250509151238-4a0ed5851bda
+	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250515115252-ee74eadbb2d8
+	ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250515115252-ee74eadbb2d8
+	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515115252-ee74eadbb2d8
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250515115252-ee74eadbb2d8
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250515115252-ee74eadbb2d8
+	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250515115252-ee74eadbb2d8
+	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250515115252-ee74eadbb2d8
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250515115252-ee74eadbb2d8
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -40,7 +40,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/text v0.25.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.0-20250509151238-4a0ed5851bda // indirect
 )
