@@ -329,7 +329,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					)),
 				},
 			},
-			content: func() []byte {
+			content: func(t *testing.T) []byte {
 				// Create a buffer to hold the OCI layout
 				buf := bytes.NewBuffer(nil)
 				layout := tar.NewOCILayoutWriter(buf)
@@ -343,30 +343,22 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				}
 
 				// Push the content
-				if err := layout.Push(t.Context(), desc, bytes.NewReader(content)); err != nil {
-					panic(fmt.Sprintf("failed to push content: %v", err))
-				}
+				require.NoError(t, layout.Push(t.Context(), desc, bytes.NewReader(content)))
 
 				// Create a manifest
 				manifest, err := oras.PackManifest(t.Context(), layout, oras.PackManifestVersion1_1, ociImageSpecV1.MediaTypeImageManifest, oras.PackManifestOptions{
 					Layers: []ociImageSpecV1.Descriptor{desc},
 				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to create manifest: %v", err))
-				}
+				require.NoError(t, err, "Failed to create manifest")
 
 				// Tag the manifest
-				if err := layout.Tag(t.Context(), manifest, "test-tag"); err != nil {
-					panic(fmt.Sprintf("failed to tag manifest: %v", err))
-				}
+				require.NoError(t, layout.Tag(t.Context(), manifest, "test-tag"))
 
 				// Close the layout
-				if err := layout.Close(); err != nil {
-					panic(fmt.Sprintf("failed to close layout: %v", err))
-				}
+				require.NoError(t, layout.Close())
 
 				return buf.Bytes()
-			}(),
+			}(t),
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
 				r := require.New(t)
 				store, err := tar.ReadOCILayout(t.Context(), blob.NewDirectReadOnlyBlob(bytes.NewReader(original)))
@@ -1273,7 +1265,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 					)),
 				},
 			},
-			content: func() []byte {
+			content: func(t *testing.T) []byte {
 				// Create a buffer to hold the OCI layout
 				buf := bytes.NewBuffer(nil)
 				layout := tar.NewOCILayoutWriter(buf)
@@ -1287,30 +1279,23 @@ func TestRepository_GetLocalSource(t *testing.T) {
 				}
 
 				// Push the content
-				if err := layout.Push(t.Context(), desc, bytes.NewReader(content)); err != nil {
-					panic(fmt.Sprintf("failed to push content: %v", err))
-				}
+				err := layout.Push(t.Context(), desc, bytes.NewReader(content))
+				require.NoError(t, err)
 
 				// Create a manifest
 				manifest, err := oras.PackManifest(t.Context(), layout, oras.PackManifestVersion1_1, ociImageSpecV1.MediaTypeImageManifest, oras.PackManifestOptions{
 					Layers: []ociImageSpecV1.Descriptor{desc},
 				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to create manifest: %v", err))
-				}
+				require.NoError(t, err)
 
 				// Tag the manifest
-				if err := layout.Tag(t.Context(), manifest, "test-tag"); err != nil {
-					panic(fmt.Sprintf("failed to tag manifest: %v", err))
-				}
+				require.NoError(t, layout.Tag(t.Context(), manifest, "test-tag"))
 
 				// Close the layout
-				if err := layout.Close(); err != nil {
-					panic(fmt.Sprintf("failed to close layout: %v", err))
-				}
+				require.NoError(t, layout.Close())
 
 				return buf.Bytes()
-			}(),
+			}(t),
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
 				r := require.New(t)
 				store, err := tar.ReadOCILayout(t.Context(), blob.NewDirectReadOnlyBlob(bytes.NewReader(original)))
