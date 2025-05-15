@@ -35,6 +35,7 @@ func New() *cobra.Command {
 		},
 		PersistentPreRunE: preRunE,
 		DisableAutoGenTag: true,
+		SilenceUsage:      true,
 	}
 
 	v1.RegisterConfigFlag(cmd)
