@@ -1,0 +1,41 @@
+components:
+- name: github.com/acme.org/helloworld
+  version: 1.0.0
+  provider:
+    name: internal
+  resources:
+    - name: testdata
+      type: blob
+      relation: local
+      input:
+        type: file
+        path: ./testdata/text.txt
+    - name: teststring
+      type: blob
+      relation: local
+      input:
+        type: utf8
+        compress: true
+        text: "Hello, world!"
+    - name: testobject
+      type: blob
+      relation: local
+      input:
+        type: utf8
+        objectFormat: json
+        object:
+          key: value
+    - name: image
+      type: OCIImage/v1
+      relation: external
+      access:
+        type: OCIImage/v1
+        imageReference: ghcr.io/stefanprodan/podinfo:6.8.0
+      version: 6.8.0
+    - name: chart-from-path
+      type: helmChart
+      relation: external
+      input:
+        type: helmChart
+        path: ./input/helm/testdata/chart
+      version: 6.8.0
