@@ -2,6 +2,7 @@ package log
 
 import (
 	"bytes"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -87,4 +88,24 @@ func TestIdentityLogAttr(t *testing.T) {
 			t.Errorf("expected key %s at position %d, got %s", expectedKeys[i], i, attr.Key)
 		}
 	}
+}
+
+func TestLogDefer(t *testing.T) {
+	var buf bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == "time" {
+			return slog.Attr{}
+		}
+		return a
+	}})))
+	test := func() (err error) {
+		done := Operation(t.Context(), "test")
+		defer func() {
+			done(err)
+		}()
+		return errors.New("operation failed")
+	}
+	_ = test()
+
+	assert.Contains(t, buf.String(), "level=ERROR msg=\"operation failed\" realm=oci operation=test")
 }

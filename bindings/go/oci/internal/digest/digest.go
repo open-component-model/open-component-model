@@ -18,24 +18,19 @@ var SHAMapping = map[string]digest.Algorithm{
 
 var ReverseSHAMapping = reverseMap(SHAMapping)
 
-// ApplyToResource applies the given digest to the resource.
+// Apply applies the given digest to the target digest structure.
 // It sets the Digest field of the resource to a new Digest object
 // with the specified hash algorithm and normalisation algorithm.
 // The Mappings are defined by OCM and are static.
 // They mainly differ in the algorithm name, but are semantically equivalent.
-func ApplyToResource(resource *runtime.Resource, digest digest.Digest) error {
-	if resource == nil {
-		return fmt.Errorf("resource must not be nil")
-	}
+func Apply(target *runtime.Digest, digest digest.Digest) error {
 	algo, ok := ReverseSHAMapping[digest.Algorithm()]
 	if !ok {
 		return fmt.Errorf("unknown algorithm: %s", digest.Algorithm())
 	}
-	resource.Digest = &runtime.Digest{
-		HashAlgorithm:          algo,
-		NormalisationAlgorithm: "genericBlobDigest/v1", // TODO use a constant from blob package for this
-		Value:                  digest.Encoded(),
-	}
+	target.HashAlgorithm = algo
+	target.NormalisationAlgorithm = "genericBlobDigest/v1" // TODO use a constant from blob package for this
+	target.Value = digest.Encoded()
 
 	return nil
 }

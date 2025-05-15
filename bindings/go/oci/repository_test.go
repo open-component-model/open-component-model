@@ -329,7 +329,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					)),
 				},
 			},
-			content: func() []byte {
+			content: func(t *testing.T) []byte {
 				// Create a buffer to hold the OCI layout
 				buf := bytes.NewBuffer(nil)
 				layout := tar.NewOCILayoutWriter(buf)
@@ -343,30 +343,22 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				}
 
 				// Push the content
-				if err := layout.Push(t.Context(), desc, bytes.NewReader(content)); err != nil {
-					panic(fmt.Sprintf("failed to push content: %v", err))
-				}
+				require.NoError(t, layout.Push(t.Context(), desc, bytes.NewReader(content)))
 
 				// Create a manifest
 				manifest, err := oras.PackManifest(t.Context(), layout, oras.PackManifestVersion1_1, ociImageSpecV1.MediaTypeImageManifest, oras.PackManifestOptions{
 					Layers: []ociImageSpecV1.Descriptor{desc},
 				})
-				if err != nil {
-					panic(fmt.Sprintf("failed to create manifest: %v", err))
-				}
+				require.NoError(t, err, "Failed to create manifest")
 
 				// Tag the manifest
-				if err := layout.Tag(t.Context(), manifest, "test-tag"); err != nil {
-					panic(fmt.Sprintf("failed to tag manifest: %v", err))
-				}
+				require.NoError(t, layout.Tag(t.Context(), manifest, "test-tag"))
 
 				// Close the layout
-				if err := layout.Close(); err != nil {
-					panic(fmt.Sprintf("failed to close layout: %v", err))
-				}
+				require.NoError(t, layout.Close())
 
 				return buf.Bytes()
-			}(),
+			}(t),
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
 				r := require.New(t)
 				store, err := tar.ReadOCILayout(t.Context(), blob.NewDirectReadOnlyBlob(bytes.NewReader(original)))
@@ -585,11 +577,12 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 
 				// Upload the resource with the store content
 				b := blob.NewDirectReadOnlyBlob(buf)
-				r.NoError(repo.UploadResource(ctx, tc.resource.Access, tc.resource, b), "Failed to upload test resource")
-				r.NotNil(tc.resource.Access, "Resource should not be nil after uploading")
+				newRes, err := repo.UploadResource(ctx, tc.resource.Access, tc.resource, b)
+				r.NoError(err, "Failed to upload test resource")
+				r.NotNil(newRes, "Resource should not be nil after uploading")
 
 				// Download the resource
-				downloadedRes, err = repo.DownloadResource(ctx, tc.resource)
+				downloadedRes, err = repo.DownloadResource(ctx, newRes)
 				r.NoError(err, "Failed to download resource")
 				r.NotNil(downloadedRes, "Downloaded resource should not be nil")
 			}
@@ -640,6 +633,189 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 				r.Equal(tc.content, downloadedContent, "Downloaded content should match original content")
 			}
 
+		})
+	}
+}
+
+func TestRepository_DownloadUploadSource(t *testing.T) {
+	artifactMediaType := "application/custom"
+	tests := []struct {
+		name           string
+		source         *descriptor.Source
+		content        []byte
+		wantErr        bool
+		useLocalUpload bool
+	}{
+		{
+			name: "source with valid OCI image access",
+			source: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-source",
+						Version: "1.0.0",
+					},
+				},
+				Type: "ociImage",
+				Access: &v1.OCIImage{
+					ImageReference: "test-image:latest",
+				},
+			},
+			content:        []byte("test content"),
+			wantErr:        false,
+			useLocalUpload: false,
+		},
+		{
+			name: "source with valid OCI image layer access",
+			source: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-layer-source",
+						Version: "1.0.0",
+					},
+				},
+				Type: "ociImageLayer",
+				Access: &runtime.Raw{
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Data: []byte(fmt.Sprintf(
+						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						digest.FromString("test layer content").String(),
+						artifactMediaType,
+					)),
+				},
+			},
+			content:        []byte("test layer content"),
+			wantErr:        false,
+			useLocalUpload: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+
+			// Create a mock resolver with a memory store
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store))
+
+			// Create a test component descriptor
+			desc := &descriptor.Descriptor{
+				Component: descriptor.Component{
+					ComponentMeta: descriptor.ComponentMeta{
+						ObjectMeta: descriptor.ObjectMeta{
+							Name:    "test-component",
+							Version: "1.0.0",
+						},
+					},
+				},
+			}
+
+			// Add the source to the component descriptor
+			desc.Component.Sources = append(desc.Component.Sources, *tc.source)
+
+			b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
+
+			var downloadedSrc blob.ReadOnlyBlob
+			if tc.useLocalUpload {
+				// Use AddLocalSource for local uploads
+				var newSrc *descriptor.Source
+				newSrc, err = repo.AddLocalSource(ctx, desc.Component.Name, desc.Component.Version, tc.source, b)
+				r.NoError(err, "Failed to add local source")
+				r.NotNil(newSrc, "Source should not be nil after adding")
+
+				r.NotNil(newSrc.Access)
+				r.IsType(&v2.LocalBlob{}, newSrc.Access)
+				r.Nil(newSrc.Access.(*v2.LocalBlob).GlobalAccess, "in CTF, there should not be any global access")
+
+				// Add the component version
+				err = repo.AddComponentVersion(ctx, desc)
+				r.NoError(err, "Failed to add component version")
+
+				// Try to get the source back using GetSource with the global access
+				downloadedSrc, newSrc, err = repo.GetLocalSource(ctx, desc.Component.Name, desc.Component.Version, newSrc.ToIdentity())
+				r.NoError(err, "Failed to download source")
+				r.NotNil(newSrc, "received source should not be nil")
+				r.NotNil(downloadedSrc, "downloaded source blob should not be nil")
+			} else {
+				// Use UploadSource for global uploads
+				// Create a temporary OCI store
+				buf := bytes.NewBuffer(nil)
+				store := tar.NewOCILayoutWriter(buf)
+
+				base := content.NewDescriptorFromBytes("", tc.content)
+				r.NoError(store.Push(ctx, base, bytes.NewReader(tc.content)), "Failed to push content to store")
+				var manifestDesc ociImageSpecV1.Descriptor
+				manifestDesc, err = oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, artifactMediaType, oras.PackManifestOptions{
+					Layers: []ociImageSpecV1.Descriptor{base},
+				})
+				r.NoError(err, "Failed to create manifest descriptor")
+
+				// Tag the manifest
+				err = store.Tag(ctx, manifestDesc, "test-image:latest")
+				r.NoError(err, "Failed to tag manifest")
+
+				r.NoError(store.Close())
+
+				// Upload the source with the store content
+				b := blob.NewDirectReadOnlyBlob(buf)
+				newSrc, err := repo.UploadSource(ctx, tc.source.Access, tc.source, b)
+				r.NoError(err, "Failed to upload test source")
+				r.NotNil(newSrc, "Source should not be nil after uploading")
+
+				// Download the source
+				downloadedSrc, err = repo.DownloadSource(ctx, newSrc)
+				r.NoError(err, "Failed to download source")
+				r.NotNil(downloadedSrc, "Downloaded source should not be nil")
+			}
+
+			if tc.wantErr {
+				r.Error(err, "Expected error but got none")
+				return
+			}
+
+			if tc.useLocalUpload {
+				// for local resources, the resource is opinionated as single layer oci artifact, so we can directly
+				// use the data
+				var data bytes.Buffer
+				r.NoError(blob.Copy(&data, downloadedSrc), "Failed to copy blob content")
+				r.Equal(tc.content, data.Bytes(), "Downloaded content should match original content")
+			} else {
+				// for global resources, the access is a generic oci layout that is not opinionated
+				imageLayout, err := tar.ReadOCILayout(ctx, downloadedSrc)
+				r.NoError(err, "Failed to read OCI layout")
+				t.Cleanup(func() {
+					r.NoError(imageLayout.Close(), "Failed to close blob reader")
+				})
+
+				r.Len(imageLayout.Index.Manifests, 1, "Expected one manifest in the OCI layout")
+				// Verify the downloaded content
+				manifestRaw, err := imageLayout.Fetch(ctx, imageLayout.Index.Manifests[0])
+				r.NoError(err, "Failed to fetch manifest")
+				t.Cleanup(func() {
+					r.NoError(manifestRaw.Close(), "Failed to close manifest reader")
+				})
+				var manifest ociImageSpecV1.Manifest
+				r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest), "Failed to unmarshal manifest")
+
+				r.Equal(manifest.ArtifactType, artifactMediaType)
+
+				r.Len(manifest.Layers, 1, "Expected one layer in the OCI layout")
+
+				layer := manifest.Layers[0]
+
+				layerRaw, err := imageLayout.Fetch(ctx, layer)
+				r.NoError(err, "Failed to fetch layer")
+				t.Cleanup(func() {
+					r.NoError(layerRaw.Close(), "Failed to close layer reader")
+				})
+
+				downloadedContent, err := io.ReadAll(layerRaw)
+				r.NoError(err, "Failed to read blob content")
+				r.Equal(tc.content, downloadedContent, "Downloaded content should match original content")
+			}
 		})
 	}
 }
@@ -881,7 +1057,7 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 		Digest:    digest.FromBytes(content),
 		Size:      int64(len(content)),
 	}
-	r.NoError(identity.AdoptAsResource(&layerDesc, resource))
+	r.NoError(identity.Adopt(&layerDesc, resource))
 
 	// Push the component version as a layer
 	r.NoError(repoStore.Push(ctx, layerDesc, bytes.NewReader(content)))
@@ -892,4 +1068,324 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 	})
 	r.NoError(err)
 	r.NoError(repoStore.Tag(ctx, *topDesc, "1.0.0"))
+}
+
+func setupLegacyComponentVersionWithSource(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, source *descriptor.Source) {
+	r := require.New(t)
+	// Get a repository store for the component
+	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference("test-component", "1.0.0"))
+	r.NoError(err)
+
+	// Create a descriptor for the component version
+	desc := &descriptor.Descriptor{
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-component",
+					Version: "1.0.0",
+				},
+			},
+		},
+	}
+	desc.Component.Sources = append(desc.Component.Sources, *source)
+
+	// Create a layer descriptor for the component version
+	layerDesc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageLayer,
+		Digest:    digest.FromBytes(content),
+		Size:      int64(len(content)),
+	}
+	r.NoError(identity.Adopt(&layerDesc, source))
+
+	// Push the component version as a layer
+	r.NoError(repoStore.Push(ctx, layerDesc, bytes.NewReader(content)))
+
+	topDesc, err := oci.AddDescriptorToStore(ctx, repoStore, desc, oci.AddDescriptorOptions{
+		Author:           "OLD OCM",
+		AdditionalLayers: []ociImageSpecV1.Descriptor{layerDesc},
+	})
+	r.NoError(err)
+	r.NoError(repoStore.Tag(ctx, *topDesc, "1.0.0"))
+}
+
+func TestRepository_GetLocalSource(t *testing.T) {
+	type getLocalSourceTestCase struct {
+		name                     string
+		source                   *descriptor.Source
+		content                  []byte
+		identity                 map[string]string
+		expectError              bool
+		errorContains            string
+		setupComponent           bool
+		setupComponentLikeOldOCM bool
+		setupManifest            func(t *testing.T, store spec.Store, ctx context.Context, content []byte, source *descriptor.Source) error
+		checkContent             func(t *testing.T, original []byte, actual []byte)
+	}
+
+	// Create test sources with different configurations
+	testCases := []getLocalSourceTestCase{
+		{
+			name: "non-existent component",
+			source: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-source",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &runtime.Raw{
+					Type: runtime.Type{
+						Name: "localBlob",
+					},
+					Data: []byte(`{"localReference":"sha256:1234567890","mediaType":"application/octet-stream"}`),
+				},
+			},
+			identity: map[string]string{
+				"name":    "test-source",
+				"version": "1.0.0",
+			},
+			expectError:    true,
+			setupComponent: false,
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				assert.Equal(t, string(original), string(actual))
+			},
+		},
+		{
+			name: "non-existent source in existing component",
+			source: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-source",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &runtime.Raw{
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Data: []byte(fmt.Sprintf(
+						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						digest.FromString("test content").String(),
+					)),
+				},
+			},
+			identity: map[string]string{
+				"name":    "test-source",
+				"version": "1.0.0",
+			},
+			setupComponent: true,
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				assert.Equal(t, string(original), string(actual))
+			},
+		},
+		{
+			name: "source with platform-specific identity",
+			source: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "platform-source",
+						Version: "1.0.0",
+					},
+					ExtraIdentity: map[string]string{
+						"architecture": "amd64",
+						"os":           "linux",
+					},
+				},
+				Type: "test-type",
+				Access: &runtime.Raw{
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Data: []byte(fmt.Sprintf(
+						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						digest.FromString("platform specific content").String(),
+					)),
+				},
+			},
+			content: []byte("platform specific content"),
+			identity: map[string]string{
+				"name":         "platform-source",
+				"version":      "1.0.0",
+				"architecture": "amd64",
+				"os":           "linux",
+			},
+			setupComponent: true,
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				assert.Equal(t, string(original), string(actual))
+			},
+		},
+		{
+			name: "source with invalid identity",
+			source: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "platform-source",
+						Version: "1.0.0",
+					},
+					ExtraIdentity: map[string]string{
+						"architecture": "amd64",
+						"os":           "linux",
+					},
+				},
+				Type: "test-type",
+				Access: &runtime.Raw{
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Data: []byte(fmt.Sprintf(
+						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						digest.FromString("platform specific content").String(),
+					)),
+				},
+			},
+			identity: map[string]string{
+				"name":    "test-source",
+				"version": "1.0.0",
+			},
+			expectError:    true,
+			errorContains:  "found 0 candidates while looking for source \"name=test-source,version=1.0.0\", but expected exactly one",
+			setupComponent: true,
+		},
+		{
+			name: "oci layout source",
+			source: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "oci-layout-source",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &runtime.Raw{
+					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					Data: []byte(fmt.Sprintf(
+						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
+						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+						digest.FromString("oci layout content").String(),
+						layout.MediaTypeOCIImageLayoutV1+"+tar+gzip",
+					)),
+				},
+			},
+			content: func(t *testing.T) []byte {
+				// Create a buffer to hold the OCI layout
+				buf := bytes.NewBuffer(nil)
+				layout := tar.NewOCILayoutWriter(buf)
+
+				// Create a descriptor for our content
+				content := []byte("oci layout content")
+				desc := ociImageSpecV1.Descriptor{
+					MediaType: ociImageSpecV1.MediaTypeImageLayer,
+					Digest:    digest.FromBytes(content),
+					Size:      int64(len(content)),
+				}
+
+				// Push the content
+				err := layout.Push(t.Context(), desc, bytes.NewReader(content))
+				require.NoError(t, err)
+
+				// Create a manifest
+				manifest, err := oras.PackManifest(t.Context(), layout, oras.PackManifestVersion1_1, ociImageSpecV1.MediaTypeImageManifest, oras.PackManifestOptions{
+					Layers: []ociImageSpecV1.Descriptor{desc},
+				})
+				require.NoError(t, err)
+
+				// Tag the manifest
+				require.NoError(t, layout.Tag(t.Context(), manifest, "test-tag"))
+
+				// Close the layout
+				require.NoError(t, layout.Close())
+
+				return buf.Bytes()
+			}(t),
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				r := require.New(t)
+				store, err := tar.ReadOCILayout(t.Context(), blob.NewDirectReadOnlyBlob(bytes.NewReader(original)))
+				r.NoError(err, "Failed to read OCI layout")
+				t.Cleanup(func() {
+					r.NoError(store.Close(), "Failed to close blob reader")
+				})
+				r.Len(store.Index.Manifests, 1, "Expected one manifest in the OCI layout")
+			},
+			identity: map[string]string{
+				"name":    "oci-layout-source",
+				"version": "1.0.0",
+			},
+			expectError:    false,
+			setupComponent: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store))
+
+			// Create a test component descriptor
+			desc := &descriptor.Descriptor{
+				Component: descriptor.Component{
+					ComponentMeta: descriptor.ComponentMeta{
+						ObjectMeta: descriptor.ObjectMeta{
+							Name:    "test-component",
+							Version: "1.0.0",
+						},
+					},
+				},
+			}
+			desc.Component.Sources = append(desc.Component.Sources, *tc.source)
+
+			// Setup component if needed
+			if tc.setupComponent {
+				// Add the source first
+				b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
+				newSrc, err := repo.AddLocalSource(ctx, desc.Component.Name, desc.Component.Version, tc.source, b)
+				r.NoError(err, "Failed to add test source")
+				r.NotNil(newSrc, "Source should not be nil after adding")
+
+				// Then add the component version
+				err = repo.AddComponentVersion(ctx, desc)
+				r.NoError(err, "Failed to setup test component")
+			} else if tc.setupComponentLikeOldOCM {
+				// Setup legacy component version
+				setupLegacyComponentVersionWithSource(t, store, ctx, tc.content, tc.source)
+			}
+
+			// Test getting the source
+			blob, _, err := repo.GetLocalSource(ctx, desc.Component.Name, desc.Component.Version, tc.identity)
+
+			if tc.expectError {
+				r.Error(err, "Expected error but got none")
+				if tc.errorContains != "" {
+					r.Contains(err.Error(), tc.errorContains, "Error message should contain expected text")
+				}
+				r.Nil(blob, "Blob should be nil when error occurs")
+			} else {
+				r.NoError(err, "Unexpected error when getting source")
+				r.NotNil(blob, "Blob should not be nil for successful retrieval")
+
+				// Verify blob content if it was provided
+				if tc.content != nil {
+					reader, err := blob.ReadCloser()
+					r.NoError(err, "Failed to get blob reader")
+					defer reader.Close()
+
+					content, err := io.ReadAll(reader)
+					r.NoError(err, "Failed to read blob content")
+
+					// If the content is gzipped (starts with gzip magic number), decompress it
+					if len(content) >= 2 && content[0] == 0x1f && content[1] == 0x8b {
+						gzipReader, err := gzip.NewReader(bytes.NewReader(content))
+						r.NoError(err, "Failed to create gzip reader")
+						defer gzipReader.Close()
+						content, err = io.ReadAll(gzipReader)
+						r.NoError(err, "Failed to decompress content")
+					}
+					tc.checkContent(t, tc.content, content)
+				}
+			}
+		})
+	}
 }

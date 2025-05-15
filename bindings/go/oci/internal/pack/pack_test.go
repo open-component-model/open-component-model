@@ -94,10 +94,11 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resourceBlob, err := resourceblob.NewResourceBlob(tt.res, tt.blob)
+			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.res, tt.blob))
+			resourceBlob, err := resourceblob.NewArtifactBlob(tt.res, tt.blob)
 			require.NoError(t, err)
 
-			desc, err := NewResourceBlobOCILayer(resourceBlob, tt.opts)
+			desc, err := NewBlobOCILayer(resourceBlob, tt.opts)
 
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError)
@@ -311,10 +312,10 @@ func TestResourceBlob(t *testing.T) {
 
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
-
-			resourceBlob, err := resourceblob.NewResourceBlob(tt.resource, tt.blob)
+			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
+			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
-			desc, err := ResourceBlob(ctx, store, resourceBlob, tt.opts)
+			desc, err := ArtifactBlob(ctx, store, resourceBlob, tt.opts)
 
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError)
@@ -398,7 +399,9 @@ func TestResourceLocalBlob(t *testing.T) {
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
 
-			resourceBlob, err := resourceblob.NewResourceBlob(tt.resource, tt.blob)
+			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
+
+			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
 			desc, err := ResourceLocalBlob(t.Context(), store, resourceBlob, tt.access, tt.opts)
 
@@ -501,7 +504,9 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
 
-			resourceBlob, err := resourceblob.NewResourceBlob(tt.resource, tt.blob)
+			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
+
+			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
 			desc, err := ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, tt.access, tt.opts)
 
@@ -580,7 +585,9 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
 
-			resourceBlob, err := resourceblob.NewResourceBlob(tt.resource, tt.blob)
+			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
+
+			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
 
 			fromStore, err := ResourceLocalBlobOCILayout(ctx, store, resourceBlob, tt.opts)

@@ -186,6 +186,10 @@ func Test_Integration_OCIRepository(t *testing.T) {
 	t.Run("local resource oci layout upload and download", func(t *testing.T) {
 		uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v1.0.0")
 	})
+
+	t.Run("local source blob upload and download", func(t *testing.T) {
+		uploadDownloadLocalSource(t, repo, "test-component", "v1.0.0")
+	})
 }
 
 func Test_Integration_CTF(t *testing.T) {
@@ -212,6 +216,10 @@ func Test_Integration_CTF(t *testing.T) {
 
 	t.Run("local resource oci layout upload and download", func(t *testing.T) {
 		uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v3.0.0")
+	})
+
+	t.Run("local source blob upload and download", func(t *testing.T) {
+		uploadDownloadLocalSource(t, repo, "test-component", "v4.0.0")
 	})
 }
 
@@ -312,7 +320,9 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, 
 	targetAccess := resource.Access.DeepCopyTyped()
 	targetAccess.(*v1.OCIImage).ImageReference = to
 
-	r.NoError(repo.UploadResource(ctx, targetAccess, &resource, blob))
+	newRes, err := repo.UploadResource(ctx, targetAccess, &resource, blob)
+	r.NoError(err)
+	resource = *newRes
 
 	downloaded, err := repo.DownloadResource(ctx, &resource)
 	r.NoError(err)
@@ -558,6 +568,78 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 	downloadedBlob, resFromGet, err := repo.GetLocalResource(ctx, name, version, resource.ElementMeta.ToIdentity())
 	r.NoError(err)
 	r.Equal(resFromGet.ElementMeta, newRes.ElementMeta)
+
+	var data bytes.Buffer
+	r.NoError(blob.Copy(&data, downloadedBlob))
+
+	r.Equal(testData, data.Bytes())
+}
+
+func uploadDownloadLocalSource(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	// Create a simple component descriptor
+	cd := &descriptor.Descriptor{
+		Meta: descriptor.Meta{
+			Version: "v2",
+		},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    name,
+					Version: version,
+				},
+			},
+		},
+	}
+
+	// Create test data
+	testData := []byte("test source data")
+	testDataDigest := digest.FromBytes(testData)
+
+	// Create test source
+	source := &descriptor.Source{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-source",
+				Version: "v1.0.0",
+			},
+			ExtraIdentity: map[string]string{
+				"type": "test.source.type",
+			},
+		},
+		Type: "test.source.type",
+		Access: &v2.LocalBlob{
+			Type: ocmruntime.Type{
+				Name:    v2.LocalBlobAccessType,
+				Version: v2.LocalBlobAccessTypeVersion,
+			},
+			MediaType:      "application/json",
+			LocalReference: testDataDigest.String(),
+		},
+	}
+
+	// Add source to component descriptor
+	cd.Component.Sources = append(cd.Component.Sources, *source)
+
+	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
+	testBlob.SetMediaType("application/json")
+
+	// Add local source
+	newSrc, err := repo.AddLocalSource(ctx, name, version, source, testBlob)
+	r.NoError(err)
+	r.NotNil(newSrc)
+	cd.Component.Sources[0] = *newSrc
+
+	// Add component version after
+	err = repo.AddComponentVersion(ctx, cd)
+	r.NoError(err)
+
+	// Get local source
+	downloadedBlob, srcFromGet, err := repo.GetLocalSource(ctx, name, version, source.ElementMeta.ToIdentity())
+	r.NoError(err)
+	r.Equal(srcFromGet.ElementMeta, newSrc.ElementMeta)
 
 	var data bytes.Buffer
 	r.NoError(blob.Copy(&data, downloadedBlob))
