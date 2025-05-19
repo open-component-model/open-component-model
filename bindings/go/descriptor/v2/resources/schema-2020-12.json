@@ -590,6 +590,13 @@
       "items": {
         "$ref": "#/$defs/signature"
       }
+    },
+    "nestedDigests": {
+      "description": "Digest information for nested components",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nestedComponentDigests"
+      }
     }
   }
 }
