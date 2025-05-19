@@ -14,7 +14,6 @@ type ComponentConstructor struct {
 
 func (c *ComponentConstructor) UnmarshalJSON(data []byte) error {
 	// Unmarshal the JSON data into the ComponentConstructor struct
-	type Alias ComponentConstructor
 	aux := &struct {
 		Components []Component `json:"components"`
 	}{
