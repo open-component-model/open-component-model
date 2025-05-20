@@ -29,6 +29,19 @@ func TestParseLine(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "make sure args are sorted",
+			// notice that order is key2, key1 but the output should be key1, key2
+			// this is unlikely as slog also orders, but the result is parsed into a map
+			// so that would fail from time to time on the other end
+			input: `{"level":"info","msg":"test message","key2":42,"key1":"value1"}`,
+			want: record{
+				level: "info",
+				msg:   "test message",
+				args:  []any{"key1", "value1", "key2", float64(42)},
+			},
+			wantErr: false,
+		},
+		{
 			name:    "invalid JSON",
 			input:   `{"level":"info","msg":"test message"`,
 			want:    record{},

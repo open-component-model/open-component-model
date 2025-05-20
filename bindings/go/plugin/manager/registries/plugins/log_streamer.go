@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
@@ -118,8 +119,17 @@ func parseLine(line string) (record, error) {
 	delete(parsed, "msg")
 	delete(parsed, "level")
 
-	for k, v := range parsed {
-		result.args = append(result.args, k, v)
+	var keys []string
+
+	for k := range parsed {
+		keys = append(keys, k)
+	}
+
+	// make the output determinable
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		result.args = append(result.args, k, parsed[k])
 	}
 
 	return result, nil
