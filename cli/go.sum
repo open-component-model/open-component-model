@@ -90,6 +90,8 @@ ocm.software/open-component-model/bindings/go/oci v0.0.0-20250515115252-ee74eadb
 ocm.software/open-component-model/bindings/go/oci v0.0.0-20250515115252-ee74eadbb2d8/go.mod h1:PxTg/10lQCyTYspKjIs8oFFJ3hUIRDTuWfuWQHh71yA=
 ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250515115252-ee74eadbb2d8 h1:f80NXM6aOcw+AwE/snk5nfcPOkCqD+ZJMh8M46hLsd8=
 ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250515115252-ee74eadbb2d8/go.mod h1:5a7oGFlYkh685/cICeDvg5GTwrb1eZDCM3+/FWZZncM=
+ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250520091418-cc5a0fb57ffb h1:1rIny+BSUlXxj6r0LkHxxWR0wDrgIfXXTl8YGaqNxKM=
+ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250520091418-cc5a0fb57ffb/go.mod h1:fvZKTtcM9h1Ihgjht26ONXeXcgarxe7F/P/IqOyWQuQ=
 ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250515115252-ee74eadbb2d8 h1:xj4nrCTvbQU3SHCCLNUzl9ZKbT1tStVph7dsjir54m0=
 ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250515115252-ee74eadbb2d8/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
