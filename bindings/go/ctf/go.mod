@@ -8,7 +8,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.13.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250407070550-eea1df4793e3
+	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250515124949-75bfcc622a06
 )
 
 require (
