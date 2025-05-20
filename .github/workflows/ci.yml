@@ -158,7 +158,7 @@ jobs:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
       - name: golangci-lint ${{ matrix.modules }}
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
