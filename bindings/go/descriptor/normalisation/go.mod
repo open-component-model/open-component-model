@@ -6,7 +6,7 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520090949-8d9589202418
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250416102607-3642ceeb16f4
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46
 	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250416102607-3642ceeb16f4
 	sigs.k8s.io/yaml v1.4.0
 )

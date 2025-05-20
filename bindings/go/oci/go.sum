@@ -66,6 +66,8 @@ ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520090949-8d9589202418/go.mod h1:sZEid940DaRx/1J90S9HZjTs05rrxoD337WDy1hl0+Y=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250512105124-5195faf2cc18 h1:TKHWg3mVdWVrfdoc1arOFl1yUJBrDghqi8nKjwiJ9dE=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250512105124-5195faf2cc18/go.mod h1:AhhJA6/XK1Qt4G/KjngiGA+lI/anY4Cx0YolxRgjjZk=
+ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46 h1:ZmWtG1VMJq5dFixQz8FQLgXh7bYqMSsc3r2mhxbEPis=
+ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46/go.mod h1:AhhJA6/XK1Qt4G/KjngiGA+lI/anY4Cx0YolxRgjjZk=
 ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250512105124-5195faf2cc18 h1:NHTUxA1XNwnKdEWLSrRLdo6xVFMeAkCHdgDW5TLWRCg=
 ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250512105124-5195faf2cc18/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
