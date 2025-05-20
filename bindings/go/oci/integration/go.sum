@@ -122,6 +122,8 @@ github.com/testcontainers/testcontainers-go v0.37.0 h1:L2Qc0vkTw2EHWQ08djon0D2uw
 github.com/testcontainers/testcontainers-go v0.37.0/go.mod h1:QPzbxZhQ6Bclip9igjLFj6z0hs01bU8lrl2dHQmgFGM=
 github.com/testcontainers/testcontainers-go/modules/registry v0.36.0 h1:ECmkTSgyUx2HG97BRdVwWt3RK0+6z8hRSGLTOHSRcjA=
 github.com/testcontainers/testcontainers-go/modules/registry v0.36.0/go.mod h1:yOg+DPbBRRfWvId8kIS0Cbu8n+l2HoM/+6IPPAJa3VU=
+github.com/testcontainers/testcontainers-go/modules/registry v0.37.0 h1:NGR3Wi4hZT3WbNhSVyoZ2pvsxck6Ule5jkz/sjtdXbY=
+github.com/testcontainers/testcontainers-go/modules/registry v0.37.0/go.mod h1:rc6LMSwwYrHNV2k0HhO3O5sCmvVFowj56r1dLD742Ow=
 github.com/tklauser/go-sysconf v0.3.15 h1:VE89k0criAymJ/Os65CSn1IXaol+1wrsFHEB8Ol49K4=
 github.com/tklauser/go-sysconf v0.3.15/go.mod h1:Dmjwr6tYFIseJw7a3dRLJfsHAMXZ3nEnL/aZY+0IuI4=
 github.com/tklauser/numcpus v0.10.0 h1:18njr6LDBk1zuna922MgdjQuJFjrdppsZG60sHGfjso=
