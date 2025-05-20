@@ -32,7 +32,8 @@ func TestPluginManager(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
-		require.NoError(t, os.Remove("/tmp/test-plugin-plugin.socket"))
+		// make sure it's not there but during a proper shutdown now this is removed by the plugin
+		_ = os.Remove("/tmp/test-plugin-plugin.socket")
 	})
 
 	proto, err := scheme.NewObject(typ)
