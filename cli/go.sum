@@ -72,6 +72,8 @@ ocm.software/open-component-model/bindings/go/blob v0.0.0-20250515115252-ee74ead
 ocm.software/open-component-model/bindings/go/blob v0.0.0-20250515115252-ee74eadbb2d8/go.mod h1:4pS6FmitPCbJcFGsVRh8UF2QdmxlVpl+7B8Ojd5+Zxk=
 ocm.software/open-component-model/bindings/go/blob v0.0.0-20250515124949-75bfcc622a06 h1:gdExy6gUntMqkcj/bsVaiIJCfWDxNpTn+wdQqw1kIM0=
 ocm.software/open-component-model/bindings/go/blob v0.0.0-20250515124949-75bfcc622a06/go.mod h1:4pS6FmitPCbJcFGsVRh8UF2QdmxlVpl+7B8Ojd5+Zxk=
+ocm.software/open-component-model/bindings/go/blob v0.0.0-20250520093648-0642d9778941 h1:CeHDlp7/W6EI1X0DdeqUsIEJesxMAegnZX3bQrsQ7Fw=
+ocm.software/open-component-model/bindings/go/blob v0.0.0-20250520093648-0642d9778941/go.mod h1:XHcaZ3WihLLswm+dNDs7QrAHu4M0zaNTy2nErUkZNLU=
 ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250515115252-ee74eadbb2d8 h1:Iz5dA62jm46V9SZXgOD0WTcrIyZFAxrTDi5uid8+cco=
 ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250515115252-ee74eadbb2d8/go.mod h1:zR5CwEaBrCJZqI/dRhD897vcna5LLk6X24egKxrsG4s=
 ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250515124949-75bfcc622a06 h1:CZIRashPkCPkj6OubWUwrrFy6C6ofLPTNqMw9BxTz8M=
