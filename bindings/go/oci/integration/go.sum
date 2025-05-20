@@ -220,6 +220,8 @@ ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515124949-75bfcc62
 ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515124949-75bfcc622a06/go.mod h1:KejtQe6VW4y3wZYLBDHg8vCkSi9vkI942fSWh5uBHTs=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250512105124-5195faf2cc18 h1:Z0BRM5Lq5RLT+eUPys9sDpazK9/bgA7npGiY3TmzcK4=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250512105124-5195faf2cc18/go.mod h1:sZEid940DaRx/1J90S9HZjTs05rrxoD337WDy1hl0+Y=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520090949-8d9589202418 h1:WbawuayMEZ8FNPWMi8zR/8EBVOCdqfIqJJwoeE83T7k=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520090949-8d9589202418/go.mod h1:sZEid940DaRx/1J90S9HZjTs05rrxoD337WDy1hl0+Y=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250512105124-5195faf2cc18 h1:TKHWg3mVdWVrfdoc1arOFl1yUJBrDghqi8nKjwiJ9dE=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250512105124-5195faf2cc18/go.mod h1:AhhJA6/XK1Qt4G/KjngiGA+lI/anY4Cx0YolxRgjjZk=
 ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250512105124-5195faf2cc18 h1:NHTUxA1XNwnKdEWLSrRLdo6xVFMeAkCHdgDW5TLWRCg=
