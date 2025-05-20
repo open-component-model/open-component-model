@@ -54,5 +54,7 @@ ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-2025041011502
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250410115029-6dcf800db82b/go.mod h1:sj+3m/i7OvmClcVURwN1mSOVSd5gOEdzFHX77cZbz0M=
 ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250509144149-5af6e035802d h1:Q3FkxHDYt8WHXvrqtueNpPpAQXlxS7CH1O8wfp1nlIc=
 ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250509144149-5af6e035802d/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
+ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250520093648-0642d9778941 h1:s3L0SWLi4jtje8mUa6QlulNGQUgSYMvP0leKdaRiKTI=
+ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250520093648-0642d9778941/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 sigs.k8s.io/yaml v1.4.0 h1:Mk1wCc2gy/F0THH0TAp1QYyJNzRm2KCLy3o5ASXVI5E=
 sigs.k8s.io/yaml v1.4.0/go.mod h1:Ejl7/uTz7PSA4eKMyQCUTnhZYNmLIl+5c2lQPGR2BPY=

@@ -104,6 +104,8 @@ ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250520091418-cc5a0
 ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250520091418-cc5a0fb57ffb/go.mod h1:fvZKTtcM9h1Ihgjht26ONXeXcgarxe7F/P/IqOyWQuQ=
 ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250515115252-ee74eadbb2d8 h1:xj4nrCTvbQU3SHCCLNUzl9ZKbT1tStVph7dsjir54m0=
 ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250515115252-ee74eadbb2d8/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
+ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250520093648-0642d9778941 h1:s3L0SWLi4jtje8mUa6QlulNGQUgSYMvP0leKdaRiKTI=
+ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250520093648-0642d9778941/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
 oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
 sigs.k8s.io/yaml v1.4.0 h1:Mk1wCc2gy/F0THH0TAp1QYyJNzRm2KCLy3o5ASXVI5E=
