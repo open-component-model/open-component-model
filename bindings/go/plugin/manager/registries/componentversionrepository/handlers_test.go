@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
@@ -67,7 +68,6 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 								},
 							},
 						},
-						Signatures: nil,
 					}, nil
 				}, scheme, &dummyv1.Repository{})
 
@@ -78,7 +78,7 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
-				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","provider":""}}
+				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"","resources":null,"sources":null,"componentReferences":null}}
 `, string(content))
 
 			},
