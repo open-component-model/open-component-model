@@ -11,7 +11,7 @@ require (
 	golang.org/x/sync v0.14.0
 	golang.org/x/sys v0.33.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250520093648-0642d9778941
-	ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250515124949-75bfcc622a06
+	ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250520093648-0642d9778941
 	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515124949-75bfcc622a06
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520090949-8d9589202418
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250515115252-ee74eadbb2d8
@@ -42,5 +42,5 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	golang.org/x/text v0.25.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/dag v0.0.0-20250509151238-4a0ed5851bda // indirect
+	ocm.software/open-component-model/bindings/go/dag v0.0.0-20250515124949-75bfcc622a06 // indirect
 )
