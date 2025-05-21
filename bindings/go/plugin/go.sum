@@ -36,8 +36,8 @@ gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntN
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250520105023-82a459e39e46 h1:4iZbug6dU5f/l0c1RIA8tIVuctuuWLCAzAFslns0gzU=
-ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250520105023-82a459e39e46/go.mod h1:+bnmwEHzJQA5vzgacoJ1CSC+MUT9rnbdcxe5QCZ8vnw=
+ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250521120014-424308d81e7b h1:ATzV22RULLUKMd0LHTUvtaIc9SNcZ9Pn8Bc9i9Vvxbo=
+ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250521120014-424308d81e7b/go.mod h1:+bnmwEHzJQA5vzgacoJ1CSC+MUT9rnbdcxe5QCZ8vnw=
 ocm.software/open-component-model/bindings/go/dag v0.0.0-20250520105023-82a459e39e46 h1:tKB7L4CFeOPQSQ3vOA7B644FbaVTvpoA9ShZpR5cXYc=
 ocm.software/open-component-model/bindings/go/dag v0.0.0-20250520105023-82a459e39e46/go.mod h1:sVCmOyATyMcvW+o0i4ctJ/OVLjYf/NcLeHbu7gZbF3w=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250521120014-424308d81e7b h1:0M7iJmwAgSl6NYB5TyeH/HHrj8bzTd0ofY5v277t9oU=
