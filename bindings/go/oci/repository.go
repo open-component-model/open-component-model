@@ -410,13 +410,13 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	switch kind {
 	case annotations.ArtifactKindResource:
 		for _, res := range desc.Component.Resources {
-			if identity.Match(res.ElementMeta.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
+			if identity.Match(res.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
 				candidates = append(candidates, &res)
 			}
 		}
 	case annotations.ArtifactKindSource:
 		for _, src := range desc.Component.Sources {
-			if identity.Match(src.ElementMeta.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
+			if identity.Match(src.ToIdentity(), runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
 				candidates = append(candidates, &src)
 			}
 		}

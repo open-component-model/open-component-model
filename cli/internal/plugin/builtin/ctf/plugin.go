@@ -96,13 +96,14 @@ func (p *Plugin) GetLocalResource(ctx context.Context, request contractsv1.GetLo
 		return fmt.Errorf("error creating repository: %w", err)
 	}
 	b, _, err := repo.GetLocalResource(ctx, request.Name, request.Version, request.Identity)
+	if err != nil {
+		return fmt.Errorf("error getting local resource: %w", err)
+	}
 
 	return location.Write(request.TargetLocation, b)
 }
 
-var (
-	_ contractsv1.ReadWriteOCMRepositoryPluginContract[*ctfv1.Repository] = (*Plugin)(nil)
-)
+var _ contractsv1.ReadWriteOCMRepositoryPluginContract[*ctfv1.Repository] = (*Plugin)(nil)
 
 func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionRepository, error) {
 	archive, err := ctf.OpenCTFFromOSPath(spec.Path, spec.AccessMode.ToAccessBitmask())
