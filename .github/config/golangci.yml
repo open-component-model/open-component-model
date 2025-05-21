@@ -18,6 +18,7 @@ linters:
     - exhaustive
     - exhaustruct
     - forcetypeassert
+    - funcorder
     - funlen
     - gochecknoglobals
     - gochecknoinits
