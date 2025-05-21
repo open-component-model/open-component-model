@@ -12,11 +12,10 @@
   "postUpdateOptions": [
     "gomodTidy"
   ],
-  "monorepo": true,
   "packageRules": [
     {
       // Group all internal OCM module updates (e.g. ocm.software/open-component-model/bindings/go/...)
-      "matchPackagePatterns": ["ocm.software/open-component-model/**"],
+      "matchPackagePatterns": ["/^ocm\.software\/open-component-model\//"],
       "managers": ["gomod"],
       "groupName": "OCM Monorepo Go Module Dependencies",
       "groupSlug": "ocm-monorepo",
