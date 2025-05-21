@@ -49,7 +49,7 @@ jobs:
           echo "Latest tag: $latest"
 
           if [ -z "$latest" ]; then
-            latest_commit=HEAD
+            latest_commit=$(git rev-list --max-parents=0 HEAD)  # first commit in history
             version="0.0.0"
           else
             latest_commit=$(git rev-list -n 1 "$latest")
