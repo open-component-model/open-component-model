@@ -6,7 +6,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1
 	github.com/stretchr/testify v1.10.0
-	ocm.software/open-component-model/bindings/go/credentials v0.0.0-20250520105023-82a459e39e46
+	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250521120014-424308d81e7b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46
 	ocm.software/open-component-model/bindings/go/runtime v0.0.1
@@ -22,6 +22,6 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	golang.org/x/text v0.25.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/dag v0.0.0-20250520105023-82a459e39e46 // indirect
+	ocm.software/open-component-model/bindings/go/dag v0.0.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
