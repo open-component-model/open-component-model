@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 
@@ -13,18 +14,29 @@ type ComponentConstructor struct {
 }
 
 func (c *ComponentConstructor) UnmarshalJSON(data []byte) error {
-	// Unmarshal the JSON data into the ComponentConstructor struct
-	aux := &struct {
-		Components []Component `json:"components"`
-	}{
-		Components: make([]Component, 0),
-	}
-	if err := json.Unmarshal(data, aux); err != nil {
-		return err
+	// Try to unmarshal as a struct with "components" field (array form)
+	type Alias ComponentConstructor
+	var alias Alias // use an alias because that won't cause recursion into UnmarshalJSON
+	var errs []error
+
+	if err := json.Unmarshal(data, &alias); err == nil && len(alias.Components) > 0 {
+		c.Components = alias.Components
+		return nil
+	} else {
+		errs = append(errs, err)
 	}
 
-	c.Components = aux.Components
-	return nil
+	// Try to unmarshal as a single component (object form)
+	var single Component
+	if err := json.Unmarshal(data, &single); err == nil {
+		c.Components = []Component{single}
+		return nil
+	} else {
+		errs = append(errs, err)
+	}
+
+	// If both fail, return an error
+	return errors.Join(errs...)
 }
 
 // These constants describe identity attributes predefined by the

@@ -6,7 +6,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250515124949-75bfcc622a06
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250515124949-75bfcc622a06
+	ocm.software/open-component-model/bindings/go/runtime v0.0.1
 	sigs.k8s.io/yaml v1.4.0
 )
 
