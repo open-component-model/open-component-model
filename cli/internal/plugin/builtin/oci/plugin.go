@@ -103,13 +103,14 @@ func (p *Plugin) GetLocalResource(ctx context.Context, request contractsv1.GetLo
 		return fmt.Errorf("error creating repository: %w", err)
 	}
 	b, _, err := repo.GetLocalResource(ctx, request.Name, request.Version, request.Identity)
+	if err != nil {
+		return fmt.Errorf("error getting local resource: %w", err)
+	}
 
 	return location.Write(request.TargetLocation, b)
 }
 
-var (
-	_ contractsv1.ReadWriteOCMRepositoryPluginContract[*ociv1.Repository] = (*Plugin)(nil)
-)
+var _ contractsv1.ReadWriteOCMRepositoryPluginContract[*ociv1.Repository] = (*Plugin)(nil)
 
 // TODO(jakobmoellerdev): add identity mapping function from OCI package here as soon as we have the conversion function
 func (p *Plugin) createRepository(spec *ociv1.Repository, credentials map[string]string) (oci.ComponentVersionRepository, error) {

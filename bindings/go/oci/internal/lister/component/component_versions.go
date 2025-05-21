@@ -67,7 +67,7 @@ func ReferenceTagVersionResolver(store content.Resolver) lister.TagVersionResolv
 		legacy := desc.MediaType == ociImageSpecV1.MediaTypeImageManifest && desc.ArtifactType == ""
 		current := desc.MediaType == ociImageSpecV1.MediaTypeImageManifest && desc.ArtifactType == descriptor.MediaTypeComponentDescriptorV2 ||
 			desc.MediaType == ociImageSpecV1.MediaTypeImageIndex && desc.ArtifactType == descriptor.MediaTypeComponentDescriptorV2
-		if !(legacy || current) {
+		if !legacy && !current {
 			return "", fmt.Errorf("not recognized as valid top level descriptor type: %w", lister.ErrSkip)
 		}
 

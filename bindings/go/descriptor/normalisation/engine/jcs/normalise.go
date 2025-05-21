@@ -44,24 +44,24 @@ func New() Normalisation {
 
 // NewArray creates a new normalized array.
 // Returns a Normalised interface that can be used to build an array structure.
-func (_ normalisation) NewArray() Normalised {
+func (normalisation) NewArray() Normalised {
 	return &normalised{value: make([]interface{}, 0)}
 }
 
 // NewMap creates a new normalized map.
 // Returns a Normalised interface that can be used to build a map structure.
-func (_ normalisation) NewMap() Normalised {
+func (normalisation) NewMap() Normalised {
 	return &normalised{value: make(map[string]interface{})}
 }
 
 // NewValue wraps a basic value into a normalized value.
 // This is used for primitive types that don't need special handling.
-func (_ normalisation) NewValue(v interface{}) Normalised {
+func (normalisation) NewValue(v interface{}) Normalised {
 	return &normalised{value: v}
 }
 
 // String returns a descriptive name for this normalisation.
-func (_ normalisation) String() string {
+func (normalisation) String() string {
 	return "JCS(rfc8785) normalisation"
 }
 

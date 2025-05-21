@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	. "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
-
+	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -33,7 +32,7 @@ type Options struct {
 // ToGraph creates a new credential graph from the provided configuration and options.
 // It initializes the graph structure and ingests the configuration into the graph.
 // Returns an error if the configuration cannot be properly ingested.
-func ToGraph(ctx context.Context, config *Config, opts Options) (*Graph, error) {
+func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Graph, error) {
 	g := &Graph{
 		syncedDag:                newSyncedDag(),
 		credentialPluginProvider: opts.CredentialPluginProvider,

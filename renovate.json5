@@ -1,0 +1,28 @@
+{
+  extends: [
+    'config:recommended',
+    'config:best-practices',
+    'security:openssf-scorecard',
+    'helpers:pinGitHubActionDigests',
+    ':rebaseStalePrs',
+  ],
+  'git-submodules': {
+    enabled: true,
+  },
+  postUpdateOptions: [
+    'gomodTidy',
+  ],
+  packageRules: [
+    {
+      matchManagers: [
+        'gomod',
+      ],
+      groupName: 'OCM Monorepo Go Module Dependencies',
+      groupSlug: 'ocm-monorepo',
+      automerge: true,
+      matchPackageNames: [
+        '//^ocm.software/open-component-model///',
+      ],
+    },
+  ],
+}

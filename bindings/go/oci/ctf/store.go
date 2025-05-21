@@ -163,7 +163,7 @@ func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 		if artifact.Repository != repo {
 			continue
 		}
-		if !(artifact.Tag == reference || artifact.Digest == reference) {
+		if artifact.Tag != reference && artifact.Digest != reference {
 			continue
 		}
 

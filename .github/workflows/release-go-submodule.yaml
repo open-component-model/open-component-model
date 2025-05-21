@@ -1,0 +1,169 @@
+name: Release Go Submodule
+
+on:
+  workflow_dispatch:
+    inputs:
+      path:
+        description: "Relative path to the Go submodule (e.g., module-a)"
+        required: true
+        type: string
+      bump:
+        description: "Optional bump level override (major, minor, patch)"
+        required: false
+        type: string
+      dry_run:
+        description: "Perform a dry run without pushing tags"
+        required: false
+        default: "false"
+        type: boolean
+
+jobs:
+  release:
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      - name: Validate path exists
+        run: |
+          if [ ! -f "${{ inputs.path }}/go.mod" ]; then
+            echo "No go.mod found in ${{ inputs.path }}"
+            exit 1
+          fi
+
+      - name: Get latest tag for submodule
+        id: get_tag
+        run: |
+          prefix="${{ inputs.path }}/v"
+          latest=$(git tag --list "${prefix}[0-9]*" | sort -V | tail -n1 || echo "")
+          echo "Latest tag: $latest"
+
+          if [ -z "$latest" ]; then
+            latest_commit=$(git rev-list --max-parents=0 HEAD)  # first commit in history
+            version="0.0.0"
+          else
+            latest_commit=$(git rev-list -n 1 "$latest")
+            version=${latest#${prefix}}
+          fi
+
+          echo "latest_commit=$latest_commit" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Determine bump level
+        id: bump
+        run: |
+          path="${{ inputs.path }}"
+          commits=$(git log --pretty=format:"%s" ${{ steps.get_tag.outputs.latest_commit }}..HEAD -- "$path" || true)
+
+          if [ -z "$commits" ]; then
+            echo "No new commits to release."
+            exit 0
+          fi
+
+          bump="patch"
+          while read -r line; do
+            if echo "$line" | grep -qE '^feat(\(.+\))?: '; then
+              bump="minor"
+            elif echo "$line" | grep -qE '^BREAKING CHANGE:|!:'; then
+              bump="major"
+              break
+            fi
+          done <<< "$commits"
+
+          echo "Determined bump: $bump"
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate new version
+        id: version
+        run: |
+          version="${{ steps.get_tag.outputs.version }}"
+          bump="${{ inputs.bump }}"
+          if [ -z "$bump" ]; then
+            bump="${{ steps.bump.outputs.bump }}"
+          fi
+          major=$(echo "$version" | cut -d. -f1)
+          minor=$(echo "$version" | cut -d. -f2)
+          patch=$(echo "$version" | cut -d. -f3)
+
+          major=${major:-0}
+          minor=${minor:-0}
+          patch=${patch:-0}
+
+          case "$bump" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+            *)
+              echo "Invalid bump value: $bump"
+              exit 1
+              ;;
+          esac
+
+          new_tag="${{ inputs.path }}/v${major}.${minor}.${patch}"
+          echo "Calculated new tag: $new_tag"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Setup git config
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "<41898282+github-actions[bot]@users.noreply.github.com>"
+
+      - name: Create Tag with Changelog
+        run: |
+          path="${{ github.event.inputs.path }}"
+          from="${{ steps.get_tag.outputs.latest_commit }}"
+          to=HEAD
+          tag="${{ steps.version.outputs.new_tag }}"
+          
+          changelog=$(git log --pretty=format:"- %s (%h)" "$from".."$to" -- "$path" || echo "No changes")
+          
+          {
+            echo "Release $tag"
+            echo ""
+            echo "$changelog"
+          } > .tagmsg
+          
+          cat .tagmsg
+          
+          git tag -a "$tag" -F .tagmsg
+          
+          rm .tagmsg
+
+      - name: Dry Run
+        if: ${{ inputs.dry_run == 'true' }}
+        run: echo "Dry run enabled – no tag created or pushed."
+
+      - name: Generate token for Push
+        if: ${{ inputs.dry_run != 'true' }}
+        id: generate_token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2
+        with:
+          app_id: ${{ secrets.OCMBOT_APP_ID }}
+          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Push Tag
+        if: ${{ inputs.dry_run != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+        run: |
+          git push origin "${{ steps.version.outputs.new_tag }}" --verbose
+

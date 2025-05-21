@@ -86,7 +86,7 @@ func TestValidate(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "validation failed:\n- duplicate resource identities found: identity 'map[name:resource1 version:1.0]' appears 2 times at resource indices [0, 1]",
+			errorMsg:    "validation failed:\n- duplicate resource identities found: identity 'name=resource1,version=1.0' appears 2 times at resource indices [0, 1]",
 		},
 		{
 			name: "duplicate source identities with extra identity",
@@ -119,7 +119,7 @@ func TestValidate(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "validation failed:\n- duplicate source identities found: identity 'map[name:source1 type:git version:1.0]' appears 2 times at source indices [0, 1]",
+			errorMsg:    "validation failed:\n- duplicate source identities found: identity 'name=source1,type=git,version=1.0' appears 2 times at source indices [0, 1]",
 		},
 		{
 			name: "multiple duplicate types",
@@ -164,7 +164,7 @@ func TestValidate(t *testing.T) {
 				},
 			},
 			expectError: true,
-			errorMsg:    "validation failed:\n- duplicate resource identities found: identity 'map[name:resource1 version:1.0]' appears 2 times at resource indices [0, 1]\n- duplicate source identities found: identity 'map[name:source1 version:1.0]' appears 2 times at source indices [0, 1]",
+			errorMsg:    "validation failed:\n- duplicate resource identities found: identity 'name=resource1,version=1.0' appears 2 times at resource indices [0, 1]\n- duplicate source identities found: identity 'name=source1,version=1.0' appears 2 times at source indices [0, 1]",
 		},
 	}
 

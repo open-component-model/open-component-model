@@ -291,9 +291,9 @@ func TestElementMeta_String(t *testing.T) {
 	// Assert
 	assert.Contains(t, result, "test-element:2.0.0")
 	assert.Contains(t, result, "+labels([{type backend false}])")
-	assert.Contains(t, result, "+extraIdentity(map[")
-	assert.Contains(t, result, "namespace:system")
-	assert.Contains(t, result, "platform:linux")
+	assert.Contains(t, result, "+extraIdentity(")
+	assert.Contains(t, result, "namespace=system")
+	assert.Contains(t, result, "platform=linux")
 }
 
 func TestElementMeta_ToIdentity(t *testing.T) {

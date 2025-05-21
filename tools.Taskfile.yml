@@ -2,7 +2,7 @@ version: '3'
 
 vars:
   DEEPCOPY_GEN_TARGET_VERSION: v0.32.3
-  GOLANGCI_LINT_TARGET_VERSION: 1.64.7
+  GOLANGCI_LINT_TARGET_VERSION: 2.1.6
 
 tasks:
   deepcopy-gen/generate-deepcopy:
@@ -36,6 +36,9 @@ tasks:
           task: 'golangci-lint/module'
           vars:
             ITEM: '{{ .ITEM }}'
+        - task: 'golangci-lint/module'
+          vars:
+            ITEM: 'cli'
     aliases:
       - "lint"
 
@@ -57,7 +60,7 @@ tasks:
     desc: "Install golangci-lint at {{ .GOLANGCI_LINT_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
     vars:
       CURRENT_VERSION:
-        sh: '{{ .ROOT_DIR }}/tmp/bin/golangci-lint version --format short || echo "0.0.0"'
+        sh: '{{ .ROOT_DIR }}/tmp/bin/golangci-lint version --short || echo "0.0.0"'
     status:
       - '{{ contains .GOLANGCI_LINT_TARGET_VERSION .CURRENT_VERSION }}'
     cmds:

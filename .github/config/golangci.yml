@@ -1,147 +1,132 @@
+version: "2"
 run:
-  timeout: 10m
+  issues-exit-code: 2
   tests: false
   allow-parallel-runners: true
-  issues-exit-code: 2
-
-
 linters:
-  enable-all: true
+  default: all
   disable:
-    - tenv
-    # We are working on it
-    - wrapcheck
-
-    # Logical next step
-    - forcetypeassert  # Priority: that can lead to serious crashes.
-    - revive           # Too many issues.
-                       #   It's important to at least address:
-                       #     - no camel_case
-                       #     - no this and self
-                       #     - receiver name a should be consistent
-    - gomoddirectives  # Replacement statements are not allowed in a library.
-                       #   if it has a replace statement, other can't use the
-                       #   library at all (go does not allow that)
-    - godox            # TODO/FIXME/BUG should not be in the code-base without
-                       # a related GitHub issue.
-                       #   Added an exclude-rules for that, if a TODO/FIXME/BUG
-                       #   line has an URL on the line, it counts as valid mark.
-    - errcheck         # Too many issues.
-    - stylecheck       # Too many issues.
-                       #   No snake_case in Go.
-                       #   convert_ComponentReferences_from should be convertComponentReferencesFrom
-    - prealloc         # Performance.
-    - nilerr           # There a few places where we don't return with an error
-                       #   in an 'if err != nil {}' block. If it's intentional,
-                       #   we should add a '//nolint: nilerr // Reason why...'
-    - nlreturn         # Use empty line at least before return/break/continue.
-    - err113         # Do not define dynamic errors with Errorf.
-    - varnamelen       # m, d, p < These are not so meaningful variables.
-    - testpackage      # Blackbox testing is preferred.
-    - funlen           # Break long functions.
-    - ireturn          # Accept interface, return concrete.
-    - nestif           # Some nexted if statements are 8 or 9 deep.
-    - dupl             # Check code duplications.
-    - cyclop           # Complex functions are not good.
-    - gochecknoinits   # Init functions cause an import to have side effects,
-                       #   and side effects are hard to test,
-                       #   reduce readability and increase the complexity of code.
-    - gocyclo          # We shouldn't have functions with complexity 51
-    - gocognit         # Another complexity check, they check different things.
-    - containedctx     # Struct should not contain context, action does.
-    - nilnil           # A function should return either something valuable
-                       #   or an error, but both value and error as nil is
-                       #   useless. Like when I call it, why is it nil? Tell me
-                       #   in an error why.
     - bodyclose
-    - unparam
-    - nonamedreturns   # Either named return, or use simply `return`.
-
-    # Opinionated (we may want to keep it disabled)
-    - gochecknoglobals
-    - lll
-    - paralleltest
-    - tagliatelle
-    - wsl
-    - interfacebloat
-    - inamedparam
-    - mnd
-    - perfsprint
-
-
-    # Disabled with reason
-    - nakedret
-    - depguard
-    - mirror
-    - dogsled
-    - exhaustruct      # Doesn't really make sense.
-    - exhaustive       # Doesn't really make sense.
-    - loggercheck         # Doesn't really make sense.
-    - goimports        # acts weirdly, dci handles imports anyway
-    - intrange         # Confusing, since manipulating a range variable in a loop does not change the number of
-    # iterations. Thus, an integer range is constant.
-
-    # Disabled because of generics in go 1.18
+    - containedctx
     - contextcheck
+    - cyclop
+    - depguard
+    - dogsled
+    - dupl
+    - err113
+    - errcheck
+    - exhaustive
+    - exhaustruct
+    - forcetypeassert
+    - funcorder
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - gocyclo
+    - godot
+    - godox
+    - gomoddirectives
+    - inamedparam
+    - interfacebloat
+    - intrange
+    - ireturn
+    - lll
+    - loggercheck
+    - mirror
+    - mnd
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - nlreturn
+    - nonamedreturns
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - revive
     - rowserrcheck
     - sqlclosecheck
+    - tagliatelle
+    - testpackage
+    - unparam
+    - varnamelen
     - wastedassign
-
-    # Seriously, who wants every comment to end in a period???
-    - godot
-
-linters-settings:
-  gci:
-    sections:
-      - standard
-      - blank
-      - dot
-      - default
-      - prefix(ocm.software/open-component-model)
-    custom-order: true
-  funlen:
-    lines: 110
-    statements: 60
-  cyclop:
-    max-complexity: 15
-    skip-tests: true
-  nolintlint:
-    allow-unused: false
-    require-explanation: true
-    require-specific: false
-  varnamelen:
-    ignore-names:
-    - err
-    - wg
-    - id
-  lll:
-    line-length: 120
-  gosec:
-    exclude-generated: true
-  gocritic:
-    disabled-checks:
-      - elseif
-  recvcheck:
-    disable-builtin: true
-    exclusions:
-      - "*.UnmarshalJSON" # UnmarshalJSON always needs pointer values to do proper value assignments
-
+    - wrapcheck
+    - wsl
+  settings:
+    cyclop:
+      max-complexity: 15
+    funlen:
+      lines: 110
+      statements: 60
+    gocritic:
+      disabled-checks:
+        - elseif
+    lll:
+      line-length: 120
+    nolintlint:
+      require-explanation: true
+      require-specific: false
+      allow-unused: false
+    recvcheck:
+      disable-builtin: true
+      exclusions:
+        - '*.UnmarshalJSON'
+    varnamelen:
+      ignore-names:
+        - err
+        - wg
+        - id
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - lll
+        source: https://
+      - linters:
+          - dupl
+          - err113
+          - errcheck
+          - funlen
+          - gocyclo
+          - gosec
+          - scopelint
+        path: _test\.go
+      - path: (.+)\.go$
+        text: composites
+      - linters:
+          - cyclop
+        path: (.+)_test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude:
-    - composites
-  exclude-rules:
-    - source: "https://"
-      linters:
-        - lll
-    - path: _test\.go
-      linters:
-        - err113
-        - gocyclo
-        - errcheck
-        - gosec
-        - dupl
-        - funlen
-        - scopelint
-
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - blank
+        - dot
+        - default
+        - prefix(ocm.software/open-component-model)
+      custom-order: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

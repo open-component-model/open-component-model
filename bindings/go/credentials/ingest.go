@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"maps"
 
-	. "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
-
+	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -21,7 +20,7 @@ import (
 // - Edges represent relationships between identities
 // - Direct credentials are stored on their respective identity nodes inside the vertex
 // - Repository configurations are stored in the Graph for later use
-func ingest(ctx context.Context, g *Graph, config *Config, repoTypeScheme *runtime.Scheme) error {
+func ingest(ctx context.Context, g *Graph, config *cfgRuntime.Config, repoTypeScheme *runtime.Scheme) error {
 	consumers, err := processDirectCredentials(g, config)
 	if err != nil {
 		return fmt.Errorf("failed to process direct credentials: %w", err)
@@ -49,9 +48,9 @@ func ingest(ctx context.Context, g *Graph, config *Config, repoTypeScheme *runti
 // The function returns
 //   - left-over consumers: Contains only consumers that still have plugin-based credentials to process, all direct
 //     credentials are already stored in the graph.
-func processDirectCredentials(g *Graph, config *Config) ([]Consumer, error) {
+func processDirectCredentials(g *Graph, config *cfgRuntime.Config) ([]cfgRuntime.Consumer, error) {
 	directPerIdentity := make(map[string]map[string]string)
-	consumers := make([]Consumer, 0, len(config.Consumers))
+	consumers := make([]cfgRuntime.Consumer, 0, len(config.Consumers))
 
 	for _, consumer := range config.Consumers {
 		direct, remaining, err := extractDirect(consumer.Credentials)
@@ -89,7 +88,7 @@ func processDirectCredentials(g *Graph, config *Config) ([]Consumer, error) {
 
 // processPluginBasedEdges handles the second phase of credential processing:
 // For each consumer identity that has plugin-based credentials, call processConsumerCredential
-func processPluginBasedEdges(ctx context.Context, g *Graph, consumers []Consumer) error {
+func processPluginBasedEdges(ctx context.Context, g *Graph, consumers []cfgRuntime.Consumer) error {
 	for _, consumer := range consumers {
 		for _, identity := range consumer.Identities {
 			node := identity.String()
@@ -141,7 +140,7 @@ func processConsumerCredential(ctx context.Context, g *Graph, credential runtime
 //
 // This phase ensures that repository-specific configurations are properly
 // stored and can be accessed when needed.
-func processRepositoryConfigurations(g *Graph, config *Config, repoTypeScheme *runtime.Scheme) error {
+func processRepositoryConfigurations(g *Graph, config *cfgRuntime.Config, repoTypeScheme *runtime.Scheme) error {
 	for _, repository := range config.Repositories {
 		repository := repository.Repository
 		typed, err := repoTypeScheme.NewObject(repository.GetType())
