@@ -127,9 +127,26 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "<41898282+github-actions[bot]@users.noreply.github.com>"
 
-      - name: Create Tag
+      - name: Create Tag with Changelog
         run: |
-          git tag -a "${{ steps.version.outputs.new_tag }}" -m "Release ${{ steps.version.outputs.new_tag }}"
+          path="${{ github.event.inputs.path }}"
+          from="${{ steps.get_tag.outputs.latest_commit }}"
+          to=HEAD
+          tag="${{ steps.version.outputs.new_tag }}"
+          
+          changelog=$(git log --pretty=format:"- %s (%h)" "$from".."$to" -- "$path" || echo "No changes")
+          
+          {
+            echo "Release $tag"
+            echo ""
+            echo "$changelog"
+          } > .tagmsg
+          
+          cat .tagmsg
+          
+          git tag -a "$tag" -F .tagmsg
+          
+          rm .tagmsg
 
       - name: Dry Run
         if: ${{ inputs.dry_run == 'true' }}
