@@ -44,7 +44,7 @@ ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520105023-82a459e39e46/go.mod h1:sZEid940DaRx/1J90S9HZjTs05rrxoD337WDy1hl0+Y=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46 h1:ZmWtG1VMJq5dFixQz8FQLgXh7bYqMSsc3r2mhxbEPis=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46/go.mod h1:AhhJA6/XK1Qt4G/KjngiGA+lI/anY4Cx0YolxRgjjZk=
-ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250520105023-82a459e39e46 h1:A/H+0CP8zie4yfnHjKX89KFH6UvDNpWVC0RlSsQXB+c=
-ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250520105023-82a459e39e46/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
+ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250521091112-e09947491475 h1:zfiVls7xJhPk2+xdII+yRq63AL+x2hxBCkSqp3jYlOc=
+ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250521091112-e09947491475/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 sigs.k8s.io/yaml v1.4.0 h1:Mk1wCc2gy/F0THH0TAp1QYyJNzRm2KCLy3o5ASXVI5E=
 sigs.k8s.io/yaml v1.4.0/go.mod h1:Ejl7/uTz7PSA4eKMyQCUTnhZYNmLIl+5c2lQPGR2BPY=

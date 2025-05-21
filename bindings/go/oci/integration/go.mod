@@ -15,7 +15,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520090949-8d9589202418
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46
 	ocm.software/open-component-model/bindings/go/oci v0.0.0
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250512105124-5195faf2cc18
+	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250521091112-e09947491475
 	oras.land/oras-go/v2 v2.6.0
 )
 
@@ -77,7 +77,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
