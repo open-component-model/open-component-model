@@ -20,7 +20,7 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
           TYPE_TO_LABEL: |
             {
@@ -117,11 +117,11 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           sparse-checkout: |
             .github/config/labeler.yml
-      - uses: actions/labeler@v5
+      - uses: actions/labeler@8558fd74291d67161a8a78ce36a881fa63b766a9 # v5
         with:
           configuration-path: .github/config/labeler.yml
   size-labeler:
@@ -131,7 +131,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: codelytv/pr-size-labeler@v1
+      - uses: codelytv/pr-size-labeler@c7a55a022747628b50f3eb5bf863b9e796b8f274 # v1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           xs_label: 'size/xs'
@@ -156,7 +156,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: PRs should have at least one qualifying label
-        uses: docker://agilepathway/pull-request-label-checker:latest
+        uses: docker://agilepathway/pull-request-label-checker:latest@sha256:14f5f3dfda922496d07d53494e2d2b42885165f90677a1c03d600059b7706a61
         with:
           any_of: kind/chore,kind/bugfix,kind/feature,kind/dependency,kind/refactor
           repo_token: ${{ secrets.GITHUB_TOKEN }}
