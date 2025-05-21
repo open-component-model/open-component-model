@@ -11,9 +11,9 @@ require (
 	golang.org/x/sync v0.14.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.0-20250520093648-0642d9778941
 	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515124949-75bfcc622a06
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250520090949-8d9589202418
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250521120014-424308d81e7b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46
-	ocm.software/open-component-model/bindings/go/runtime v0.0.0-20250512105124-5195faf2cc18
+	ocm.software/open-component-model/bindings/go/runtime v0.0.1
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -29,6 +29,6 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
-	golang.org/x/text v0.24.0 // indirect
+	golang.org/x/text v0.25.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
