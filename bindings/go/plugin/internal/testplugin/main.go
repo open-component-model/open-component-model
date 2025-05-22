@@ -92,6 +92,11 @@ func (m *TestPlugin) GetIdentity(ctx context.Context, typ repov1.GetIdentityRequ
 
 var _ repov1.ReadWriteOCMRepositoryPluginContract[*dummyv1.Repository] = &TestPlugin{}
 
+// Config defines a configuration that this plugin requires.
+type Config struct {
+	MaximumNumberOfPotatoes string `json:"maximumNumberOfPotatoes"`
+}
+
 func main() {
 	args := os.Args[1:]
 	// log messages are shared over stderr by convention established by the plugin manager.
@@ -142,7 +147,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Info("config data", "data", *configData)
 	conf := types.Config{}
 	if err := json.Unmarshal([]byte(*configData), &conf); err != nil {
 		logger.Error("failed to unmarshal config", "error", err)
@@ -155,11 +159,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	var configs []runtime.Raw
 	for _, raw := range conf.ConfigTypes {
-		configs = append(configs, *raw)
+		pluginConfig := &Config{}
+		if err := json.Unmarshal(raw.Data, pluginConfig); err != nil {
+			logger.Error("failed to unmarshal plugin config", "error", err)
+			os.Exit(1)
+		}
+
+		logger.Info("configuration successfully marshaled", "maximumNumberOfPotatoes", pluginConfig.MaximumNumberOfPotatoes)
 	}
-	logger.Info("got my configuration", "config", configs)
 
 	separateContext := context.Background()
 	ocmPlugin := plugin.NewPlugin(separateContext, logger, conf, os.Stdout)

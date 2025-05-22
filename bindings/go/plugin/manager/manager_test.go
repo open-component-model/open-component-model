@@ -80,7 +80,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 					Name:    "custom.config",
 					Version: "v1",
 				},
-				Data: []byte(`{"test":"value"}`),
+				Data: []byte(`{"maximumNumberOfPotatoes":"100"}`),
 			},
 		},
 	}
@@ -113,7 +113,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 
 	content, err := io.ReadAll(writer)
 	require.NoError(t, err)
-	require.Contains(t, string(content), `config=[map[test:value]]`)
+	require.Contains(t, string(content), `maximumNumberOfPotatoes=100`)
 }
 
 func TestConfigurationPassedToPluginNotFound(t *testing.T) {
