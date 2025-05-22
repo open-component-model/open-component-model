@@ -13,12 +13,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	v1 "ocm.software/open-component-model/cli/configuration/v1"
 )
 
 func TestPluginManager(t *testing.T) {
@@ -41,7 +41,7 @@ func TestPluginManager(t *testing.T) {
 	ctx := t.Context()
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
-	require.NoError(t, pm.RegisterPlugins(ctx, config, filepath.Join("..", "tmp", "testdata")))
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata")), WithConfiguration(config))
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	typ, err := scheme.TypeForPrototype(&dummyv1.Repository{})
@@ -91,7 +91,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 	ctx := t.Context()
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
-	require.NoError(t, pm.RegisterPlugins(ctx, config, filepath.Join("..", "tmp", "testdata")))
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	typ, err := scheme.TypeForPrototype(&dummyv1.Repository{})
@@ -128,7 +128,7 @@ func TestConfigurationPassedToPluginNotFound(t *testing.T) {
 	ctx := t.Context()
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
-	err := pm.RegisterPlugins(ctx, config, filepath.Join("..", "tmp", "testdata"))
+	err := pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config))
 	require.EqualError(t, err, "failed to add plugin test-plugin: no configuration found for plugin test-plugin; requested configuration types: [custom.config/v1]")
 }
 
@@ -152,7 +152,7 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	baseContext, baseCancel := context.WithCancel(context.Background()) // a different context
 	pm := NewPluginManager(baseContext)
-	require.NoError(t, pm.RegisterPlugins(ctx, config, filepath.Join("..", "tmp", "testdata")))
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
 		require.NoError(t, os.Remove("/tmp/test-plugin-plugin.socket"))
@@ -201,7 +201,7 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 	ctx := context.Background()
 	baseContext := context.Background() // a different context
 	pm := NewPluginManager(baseContext)
-	require.NoError(t, pm.RegisterPlugins(ctx, config, filepath.Join("..", "tmp", "testdata")))
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
 		_ = os.Remove("/tmp/test-plugin-plugin.socket")
@@ -251,7 +251,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	baseContext := context.Background() // a different context
 	pm := NewPluginManager(baseContext)
-	require.NoError(t, pm.RegisterPlugins(ctx, config, filepath.Join("..", "tmp", "testdata")))
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
 		_ = os.Remove("/tmp/test-plugin-plugin.socket")
@@ -333,12 +333,6 @@ func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
 }
 
 func TestPluginManagerWithNoPlugins(t *testing.T) {
-	config := &v1.Config{
-		Type: runtime.Type{
-			Name:    "custom.config",
-			Version: "v1",
-		},
-	}
 	pm := NewPluginManager(context.Background())
-	require.ErrorContains(t, pm.RegisterPlugins(context.Background(), config, filepath.Join(".")), "no plugins found")
+	require.ErrorContains(t, pm.RegisterPlugins(context.Background(), filepath.Join(".")), "no plugins found")
 }

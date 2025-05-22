@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
+	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
-	v1 "ocm.software/open-component-model/cli/configuration/v1"
 )
 
 // ErrNoPluginsFound is returned when a register plugin call finds no plugins.
@@ -52,20 +52,29 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 
 type RegistrationOptions struct {
 	IdleTimeout time.Duration
+	Config      *v1.Config
 }
 
 type RegistrationOptionFn func(*RegistrationOptions)
 
+// WithIdleTimeout configures the maximum amount of time for a plugin to quit if it's idle.
 func WithIdleTimeout(d time.Duration) RegistrationOptionFn {
 	return func(o *RegistrationOptions) {
 		o.IdleTimeout = d
 	}
 }
 
+// WithConfiguration adds a configuration to the plugin.
+func WithConfiguration(c *v1.Config) RegistrationOptionFn {
+	return func(o *RegistrationOptions) {
+		o.Config = c
+	}
+}
+
 // RegisterPlugins walks through files in a folder and registers them
 // as plugins if connection points can be established. This function doesn't support
 // concurrent access.
-func (pm *PluginManager) RegisterPlugins(ctx context.Context, config *v1.Config, dir string, opts ...RegistrationOptionFn) error {
+func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts ...RegistrationOptionFn) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -110,7 +119,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, config *v1.Config,
 			return fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 		}
 
-		if err := pm.addPlugin(pm.baseCtx, config, *plugin, output); err != nil {
+		if err := pm.addPlugin(pm.baseCtx, defaultOpts.Config, *plugin, output); err != nil {
 			return fmt.Errorf("failed to add plugin %s: %w", plugin.ID, err)
 		}
 	}
@@ -177,13 +186,14 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, pl
 		return fmt.Errorf("failed to unmarshal capabilities: %w", err)
 	}
 
-	// TODO: config is a flattened config map; but is that right? Will all configs be in `Configuration`?
-	filtered, _ := v1.Filter(ocmConfig, &v1.FilterOptions{ConfigTypes: types.ConfigTypes})
-	if len(types.ConfigTypes) > 0 && len(filtered.Configurations) == 0 {
-		return fmt.Errorf("no configuration found for plugin %s; requested configuration types: %s", plugin.ID, types.ConfigTypes)
-	}
+	if ocmConfig != nil {
+		filtered, _ := v1.Filter(ocmConfig, &v1.FilterOptions{ConfigTypes: types.ConfigTypes})
+		if len(types.ConfigTypes) > 0 && len(filtered.Configurations) == 0 {
+			return fmt.Errorf("no configuration found for plugin %s; requested configuration types: %s", plugin.ID, types.ConfigTypes)
+		}
 
-	plugin.Config.ConfigTypes = append(plugin.Config.ConfigTypes, filtered.Configurations...)
+		plugin.Config.ConfigTypes = append(plugin.Config.ConfigTypes, filtered.Configurations...)
+	}
 
 	serialized, err := json.Marshal(plugin.Config)
 	if err != nil {
