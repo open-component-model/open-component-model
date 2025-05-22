@@ -170,7 +170,7 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 	return plugins, nil
 }
 
-func (pm *PluginManager) addPlugin(ctx context.Context, cliConfig *v1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
+func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
 	// Determine Configuration requirements.
 	types := &mtypes.Types{}
 	if err := json.Unmarshal(capabilitiesCommandOutput.Bytes(), types); err != nil {
@@ -178,7 +178,11 @@ func (pm *PluginManager) addPlugin(ctx context.Context, cliConfig *v1.Config, pl
 	}
 
 	// TODO: config is a flattened config map; but is that right? Will all configs be in `Configuration`?
-	filtered, _ := v1.Filter(cliConfig, &v1.FilterOptions{ConfigTypes: types.ConfigTypes})
+	filtered, _ := v1.Filter(ocmConfig, &v1.FilterOptions{ConfigTypes: types.ConfigTypes})
+	if len(types.ConfigTypes) > 0 && len(filtered.Configurations) == 0 {
+		return fmt.Errorf("no configuration found for plugin %s; requested configuration types: %s", plugin.ID, types.ConfigTypes)
+	}
+
 	plugin.Config.ConfigTypes = append(plugin.Config.ConfigTypes, filtered.Configurations...)
 
 	serialized, err := json.Marshal(plugin.Config)

@@ -27,6 +27,15 @@ func TestPluginManager(t *testing.T) {
 			Name:    "custom.config",
 			Version: "v1",
 		},
+		Configurations: []*runtime.Raw{
+			{
+				Type: runtime.Type{
+					Name:    "custom.config",
+					Version: "v1",
+				},
+				Data: []byte(`{}`),
+			},
+		},
 	}
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	ctx := t.Context()
@@ -75,7 +84,10 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 			},
 		},
 	}
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	writer := bytes.NewBuffer(nil)
+	slog.SetDefault(slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
 	ctx := t.Context()
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
@@ -85,14 +97,39 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 	typ, err := scheme.TypeForPrototype(&dummyv1.Repository{})
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, pm.Shutdown(ctx))
 		// make sure it's not there but during a proper shutdown now this is removed by the plugin
 		_ = os.Remove("/tmp/test-plugin-plugin.socket")
 	})
 	proto, err := scheme.NewObject(typ)
 	require.NoError(t, err)
-	_, err = pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
+	require.NoError(t, pm.Shutdown(ctx))
+	// we need some time for the logs to be streamed back
+	require.Eventually(t, func() bool {
+		err := plugin.Ping(context.Background())
+		return err != nil
+	}, 1*time.Second, 100*time.Millisecond)
+
+	content, err := io.ReadAll(writer)
+	require.NoError(t, err)
+	require.Contains(t, string(content), `config=[map[test:value]]`)
+}
+
+func TestConfigurationPassedToPluginNotFound(t *testing.T) {
+	config := &v1.Config{
+		Type: runtime.Type{
+			Version: "v1",
+			Name:    "generic.config.ocm.software",
+		},
+		Configurations: []*runtime.Raw{},
+	}
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+	ctx := t.Context()
+	baseContext := context.Background()
+	pm := NewPluginManager(baseContext)
+	err := pm.RegisterPlugins(ctx, config, filepath.Join("..", "tmp", "testdata"))
+	require.EqualError(t, err, "failed to add plugin test-plugin: no configuration found for plugin test-plugin; requested configuration types: [custom.config/v1]")
 }
 
 func TestPluginManagerCancelContext(t *testing.T) {
@@ -100,6 +137,15 @@ func TestPluginManagerCancelContext(t *testing.T) {
 		Type: runtime.Type{
 			Name:    "custom.config",
 			Version: "v1",
+		},
+		Configurations: []*runtime.Raw{
+			{
+				Type: runtime.Type{
+					Name:    "custom.config",
+					Version: "v1",
+				},
+				Data: []byte(`{}`),
+			},
 		},
 	}
 	slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -141,6 +187,15 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 			Name:    "custom.config",
 			Version: "v1",
 		},
+		Configurations: []*runtime.Raw{
+			{
+				Type: runtime.Type{
+					Name:    "custom.config",
+					Version: "v1",
+				},
+				Data: []byte(`{}`),
+			},
+		},
 	}
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	ctx := context.Background()
@@ -178,6 +233,15 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 		Type: runtime.Type{
 			Name:    "custom.config",
 			Version: "v1",
+		},
+		Configurations: []*runtime.Raw{
+			{
+				Type: runtime.Type{
+					Name:    "custom.config",
+					Version: "v1",
+				},
+				Data: []byte(`{}`),
+			},
 		},
 	}
 	writer := bytes.NewBuffer(nil)
