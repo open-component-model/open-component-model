@@ -1,18 +1,46 @@
-## ocm
+## ocm add component-version
 
-The official Open Component Model (OCM) CLI
+Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a "component-constructor" file
 
 ### Synopsis
 
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Add component version(s) to an OCM Common Transport Format Archive (CTF) that can be reused
+for transfers.
+
+A "component-constructor" file is used to specify the component version(s) to be added. It can contain both a single component or many
+components. The component reference is used to determine the repository to add the components to.
+
+By default, the command will look for a file named ""component-constructor".yaml" or ""component-constructor".yml" in the current directory.
+If given a path to a directory, the command will look for a file named "component-constructor.yaml" or "component-constructor.yml" in that directory.
+If given a path to a file, the command will attempt to use that file as the "component-constructor" file.
+
+In case the component archive does not exist, it will be created by default.
+
 
 ```
-ocm [sub-command] [flags]
+ocm add component-version [flags]
+```
+
+### Examples
+
+```
+Adding component versions to a non-default CTF named "transport-archive" based on a non-default default "component-constructor" file:
+
+add component-version ./path/to/transport-archive ./path/to/component-constructor.yaml
 ```
 
 ### Options
+
+```
+      --blob-cache-directory string   path to the blob cache directory (default "blobs")
+      --concurrency-limit int         maximum amount of parallel requests to the repository for resolving component versions (default 4)
+  -c, --constructor path              path to the repository (default component-constructor.yaml)
+      --copy-resources                copy external resources by-value to the archive
+  -h, --help                          help for component-version
+  -r, --repository path               path to the repository (default transport-archive)
+```
+
+### Options inherited from parent commands
 
 ```
       --config string    supply configuration by a given configuration file.
@@ -32,7 +60,6 @@ ocm [sub-command] [flags]
                          - $EXE_DIR/ocm/config
                          - $EXE_DIR/.ocmconfig
                          Using the option, this configuration file be used instead of the lookup above.
-  -h, --help             help for ocm
       --logformat enum   set the log output format that is used to print individual logs
                             json: Output logs in JSON format, suitable for machine processing
                             text: Output logs in human-readable text format, suitable for console output
@@ -52,7 +79,4 @@ ocm [sub-command] [flags]
 ### SEE ALSO
 
 * [ocm add](ocm_add.md)	 - Add anything to OCM
-* [ocm completion](ocm_completion.md)	 - Generate the autocompletion script for the specified shell
-* [ocm generate](ocm_generate.md)	 - Generate documentation for the OCM CLI
-* [ocm get](ocm_get.md)	 - Get anything from OCM
 
