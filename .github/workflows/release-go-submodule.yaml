@@ -55,17 +55,25 @@ jobs:
       - name: Get latest tag for submodule
         id: get_tag
         run: |
-          prefix="${{ inputs.path }}/v"
+          path="${{ inputs.path }}"
+          suffix=$(basename "${{ inputs.path }}")
+          
+          # Extract version from suffix using sed so that go modules with mod suffix of major are respected.
+          major_version=$(echo "$suffix" | sed -n 's/^v\([0-9][0-9]*\)$/\1/p')
+          
+          if [ -n "$major_version" ]; then
+            tag_path="${path%/v$major_version}"
+          else
+            tag_path="$path"
+          fi
+          
+          prefix="${tag_path}/v"
+          
           latest=$(git tag --list "${prefix}[0-9]*" | sort -V | tail -n1 || echo "")
           echo "Latest tag: $latest"
 
           if [ -z "$latest" ]; then
             latest_commit=$(git rev-list --max-parents=0 HEAD)  # first commit in history
-          
-            # Extract version from suffix using sed so that go modules with mod suffix of major are respected.
-            suffix=$(basename "${{ inputs.path }}")
-            major_version=$(echo "$suffix" | sed -n 's/^v\([0-9][0-9]*\)$/\1/p')
-      
             if [ -n "$major_version" ]; then
               version="${major_version}.0.0"
             else
@@ -161,11 +169,11 @@ jobs:
           rm .tagmsg
 
       - name: Dry Run
-        if: ${{ inputs.dry_run == 'true' }}
+        if: ${{ inputs.dry_run == true }}
         run: echo "Dry run enabled – no tag created or pushed."
 
       - name: Generate token for Push
-        if: ${{ inputs.dry_run != 'true' }}
+        if: ${{ inputs.dry_run == false }}
         id: generate_token
         uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2
         with:
@@ -173,7 +181,7 @@ jobs:
           private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
 
       - name: Push Tag
-        if: ${{ inputs.dry_run != 'true' }}
+        if: ${{ inputs.dry_run == false }}
         env:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
