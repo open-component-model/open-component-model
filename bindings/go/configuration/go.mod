@@ -1,4 +1,4 @@
-module ocm.software/open-component-model/bindings/go/configuration/v1
+module ocm.software/open-component-model/bindings/go/configuration
 
 go 1.24.2
 
