@@ -34,26 +34,44 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Discover Go Modules
         id: discover
-        run: |
-          MODULES="$(task go_modules)"
-          MODULES_JSON=$(echo "$MODULES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
-          FILTERS="$(echo "$MODULES" | jq -rR -s -c 'split("\n") | map(select(. != "")) | map("\(.):\n - \"\(sub("^";""))/**\"") | join ("\n")')"
-          
-          echo "Detected modules: $MODULES"
-          echo "Generated modules JSON: $MODULES_JSON"
-          echo "Generated filters: $FILTERS"
-          
-          echo "modules_json=$MODULES_JSON" >> $GITHUB_OUTPUT 
-          
-          {
-            echo 'filters<<EOF'
-            echo "$FILTERS"
-            echo EOF
-          } >> $GITHUB_ENV
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            
+            // Get all Go modules using task
+            const modulesOutput = execSync('task go_modules', { encoding: 'utf-8' });
+            const modules = modulesOutput.split('\n').filter(Boolean);
+            
+            // Generate filters for paths-filter
+            const filters = modules.map(module => {
+              const lines = [`${module}:`];
+              
+              // Add the module's own path
+              lines.push(` - "${module}/**"`);
+              
+              // If this is an integration module, add its parent module path
+              if (module.includes('/integration')) {
+                const parentModule = module.split('/integration')[0];
+                lines.push(` - "${parentModule}/**"`);
+                console.log(`🔍 Detected integration test module: ${module}`);
+                console.log(`   └─ Linked to parent module: ${parentModule}`);
+              }
+              
+              return lines.join('\n');
+            }).join('\n');
+            
+            // Set outputs
+            core.setOutput('modules_json', JSON.stringify(modules));
+            core.setOutput('filters', filters);
+            
+            // Log for debugging
+            console.log('📦 Detected modules:', modules);
+            console.log('🎯 Generated filters:', filters);
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: changes
         with:
-          filters: ${{ env.filters }}
+          filters: ${{ steps.discover.outputs.filters }}
       - name: Filter JSONs Based on Changes
         id: filtered
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
