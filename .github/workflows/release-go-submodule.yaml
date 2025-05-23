@@ -18,10 +18,9 @@ on:
           - major
           - none
       suffix:
-        description: "Suffix for the tag (e.g. alpha1)"
+        description: "optional suffix for the tag (e.g. alpha1 can lead to v0.0.0-alpha1)"
         required: false
         type: string
-        default: "alpha1"
       dry_run:
         description: "Perform a dry run without pushing tags"
         required: false
