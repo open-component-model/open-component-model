@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
@@ -71,7 +72,9 @@ func ExtractTAR(ctx context.Context, base, path string, format FileFormat, flag 
 	// if we have an original flag, we will now respect the flag and set the FS to read-only if O_RDONLY is set
 	// this makes sure that even though we just extracted the tar, it can only be read from.
 	if flag&O_RDONLY != 0 || (flag&os.O_WRONLY == 0 && flag&os.O_RDWR == 0) {
-		ctf.FS().ForceReadOnly()
+		if roFS, ok := ctf.FS().(filesystem.ReadOnlyFS); ok {
+			roFS.ForceReadOnly()
+		}
 	}
 
 	return ctf, nil

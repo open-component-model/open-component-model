@@ -2,12 +2,16 @@ package ctf_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
+	"time"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -74,6 +78,62 @@ func Test_FileSystemCTF_BasicOperations(t *testing.T) {
 	blobs, err = fs.ListBlobs(ctx)
 	r.NoError(err)
 	r.Len(blobs, 0)
+}
+
+func Test_FileSystemCTF_MemFS(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	content := []byte("test content")
+	dig := digest.FromBytes(content)
+	f, err := ctf.ToBlobFileName(dig.String())
+	r.NoError(err)
+
+	idx := v1.NewIndex()
+	idx.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test",
+		Tag:        "test",
+		MediaType:  "test",
+	})
+	idxData, err := json.Marshal(idx)
+	r.NoError(err)
+
+	mfs := fstest.MapFS{
+		v1.ArtifactIndexFileName: &fstest.MapFile{
+			Data: idxData,
+		},
+		filepath.Join(ctf.BlobsDirectoryName, f): &fstest.MapFile{
+			Data:    content,
+			Mode:    0644,
+			ModTime: time.Now(),
+		},
+	}
+
+	archive := ctf.NewFileSystemCTF(mfs)
+
+	b, err := archive.GetBlob(ctx, dig.String())
+	r.NoError(err)
+	r.NotNil(b)
+
+	// read only fs => no write or delete should be possible
+	r.Error(archive.SaveBlob(ctx, b))
+	r.Error(archive.DeleteBlob(ctx, dig.String()))
+
+	stream, err := b.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() {
+		r.NoError(stream.Close())
+	})
+	data, err := io.ReadAll(stream)
+	r.NoError(err)
+
+	r.Equal(content, data)
+
+	idxFromArchive, err := archive.GetIndex(ctx)
+	r.NoError(err)
+	r.NotNil(idxFromArchive)
+
+	r.Equal(idx.GetArtifacts(), idxFromArchive.GetArtifacts())
 }
 
 func Test_FileSystemCTF_ErrorCases(t *testing.T) {
