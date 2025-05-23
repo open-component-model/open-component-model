@@ -150,6 +150,50 @@ To support this behavior, the constructor must be capable of:
 - Downloading input data as needed.
 - Uploading resources again as local blobs for inclusion.
 
+### Automatically discovering digests for resources added by reference
+
+In old OCM versions, adding a resource with an access automatically downloaded the resource and
+calculated digest information for it based on the downloaded data.
+
+For this reason, it should be possible for accesses to be enriched with a digest.
+
+For example, the resource
+
+```yaml
+access:
+  localReference: sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2
+  mediaType: application/octet-stream
+  type: localBlob/v1
+name: testdata
+relation: local
+type: blob
+version: 1.0.0
+```
+
+should be extendable by a plugin to contain a digest such as
+
+```yaml
+digest:
+  hashAlgorithm: SHA-256
+  normalisationAlgorithm: genericBlobDigest/v1
+  value: c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2
+```
+
+This is important, because unlike the access, a digest is included in component version signatures, while an access is not.
+
+As such it is imperative that component versions constructed eventually also have the digest information set.
+
+To achieve this, the constructor library will
+
+- Look for any resource added "by reference" and check if the digest is NOT set.
+- If there are any, the constructor library will attempt to lookup a digest provider
+  for the resource type.
+- If a digest provider is found, it will be called with the resource and the constructor library
+  will set the digest information on the resource based on the provided function.
+
+_Note: For input types, this is less of an issue, because while processing the input, the digest can be provided
+by the input method._
+
 ## Processing Architecture
 
 All `component-constructors` follow a simple and consistent processing pattern:
@@ -164,21 +208,30 @@ All `component-constructors` follow a simple and consistent processing pattern:
    For each component version, the constructor handles all resources and sources:
 
     - **Input Method Specified**  
-      If an input method is defined:
+      If an input method is defined for resources:
         - If it returns `ResourceInputMethodResult.ProcessedBlobData`, the constructor uploads the local blob to the target OCM repository.
           (if this is the case, the resource is automatically marked as `by value`)
         - If it returns `ResourceInputMethodResult.ProcessedResource`, the constructor applies the resource directly to the component descriptor candidate.
           (if this is the case, the resource is automatically marked as `by reference`)
+      _Note: The input method must be registered in the constructor library._
+      _Sources are processed in the same way with `SourceInputMethodResult._
 
     - **Access Specified**  
       If an access method is defined, it is applied directly to the component descriptor candidate. However, it can
       be explicitly interpreted as `by value` or `by reference`.
 
-    - **"By Value" Resources**  
+    - **"By Value" Resources / Sources**  
       If the resource is marked to be processed "by value":
         - The constructor downloads the resource (if not already available as a `localBlob`).
         - It is then stored in the component version as a `localBlob`.
         - The local blob is uploaded using the OCM repository's capabilities.
+    
+    - **"By Reference" Resources**
+      If the resource is marked to be processed "by reference":
+        - The constructor checks if the resource has a digest set.
+        - If not, it attempts to find a digest provider for the resource type.
+        - If found, the digest provider is called with the resource, and the digest information is set on the resource.
+      _Note: Sources do not have digest information and will not get processed like this._
 
 4. **Upload Component Version**  
    Once all resources, sources, and metadata are processed, the constructor uploads the final component version to the OCM repository.
@@ -212,7 +265,7 @@ type ResourceInputMethodResult struct {
 // If the input method does not support the given input specification it MAY reject the request
 //
 // The method will get called with the raw specification specified in the constructor and is expected
-// to return a ResourceMethodResult or an error.
+// to return a ResourceInputMethodResult or an error.
 //
 // A method can be supplied with credentials from any credentials system by requesting a consumer identity with
 // ResourceInputMethod.GetCredentialConsumerIdentity. The resulting identity MAY be used to uniquely identify the consuming
@@ -253,7 +306,7 @@ type SourceInputMethodResult struct {
 // If the input method does not support the given input specification it MAY reject the request
 //
 // The method will get called with the raw specification specified in the constructor and is expected
-// to return a ResourceMethodResult or an error.
+// to return a SourceInputMethodResult or an error.
 //
 // A method can be supplied with credentials from any credentials system by requesting a consumer identity with
 // SourceInputMethod.GetCredentialConsumerIdentity. The resulting identity MAY be used to uniquely identify the consuming
@@ -281,6 +334,22 @@ type ResourceInputMethodProvider interface {
 type SourceInputMethodProvider interface {
     // GetSourceInputMethod returns the input method for the given source constructor specification.
     GetSourceInputMethod(ctx context.Context, resource *constructor.Resource) (input.ResourceInputMethod, error)
+}
+```
+
+To allow the dynamic expansion of digest information for resources added by reference, we also provide a digest provider interface:
+
+```go
+type ResourceDigestProcessor interface {
+    // ProcessResourceDigest processes the given resource and returns a new resource with the digest information set.
+    // The resource returned MUST have its digest information filled appropriately or the method MUST return an error.
+    // The resource passed MUST have an access set that can be used to interpret the resource and provide the digest.
+    ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource) (*descriptor.Resource, err error)
+}
+
+type ResourceDigestProcessorProvider interface {
+    // GetDigestProcessor returns the digest processor for the given resource constructor specification.
+    GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (DigestProcessor, error)
 }
 ```
 
@@ -339,6 +408,11 @@ type Options struct {
     // While constructing a component version, the constructor library will use the given source input method provider
     // to get the source input method for the component specification when processing sources with an input method.
     SourceInputMethodProvider
+    
+    // While constructing a component version, the constructor library will use the given digest processor provider
+    // to get the digest processor for the component specification when processing resources by reference to ammend
+    // digest information.
+    ResourceDigestProcessorProvider
 
     // While constructing a component version, the constructor library will use the 
     // given function to decide whether a resource should be processed by value or not.
@@ -367,6 +441,7 @@ Pros:
 Cons:
 
 * Complex Interfaces for a lot of different scenarios (input and access specs are mutually exclusive and lead to branching)
+* By default, accesses by reference do not get their digest information added when pushed into the constructor.
 
 ## Conclusion
 
