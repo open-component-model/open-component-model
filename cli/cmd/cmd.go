@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"ocm.software/open-component-model/bindings/go/configuration/v1"
+	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/generate"
 	"ocm.software/open-component-model/cli/cmd/get"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -38,7 +38,7 @@ func New() *cobra.Command {
 		SilenceUsage:      true,
 	}
 
-	v1.RegisterConfigFlag(cmd)
+	configuration.RegisterConfigFlag(cmd)
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())

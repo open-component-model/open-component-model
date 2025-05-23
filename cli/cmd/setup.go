@@ -8,11 +8,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/cmd/configuration"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
@@ -20,7 +20,7 @@ import (
 )
 
 func setupOCMConfig(cmd *cobra.Command) {
-	if cfg, err := v1.GetFlattenedOCMConfigForCommand(cmd); err != nil {
+	if cfg, err := configuration.GetFlattenedOCMConfigForCommand(cmd); err != nil {
 		slog.DebugContext(cmd.Context(), "could not get configuration", slog.String("error", err.Error()))
 	} else {
 		ctx := ocmctx.WithConfiguration(cmd.Context(), cfg)
