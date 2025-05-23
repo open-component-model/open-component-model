@@ -101,7 +101,7 @@ func main() {
 	args := os.Args[1:]
 	// log messages are shared over stderr by convention established by the plugin manager.
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo, // debug level here is respected when sending this message.
+		Level: slog.LevelDebug, // debug level here is respected when sending this message.
 	}))
 
 	scheme := runtime.NewScheme()

@@ -44,7 +44,6 @@ func (c *EndpointBuilder) GetHandlers() []Handler {
 }
 
 // AddConfigType adds a configuration type to the list of supported config types.
-// TODO(Gergely Brautigam): This could live on the config object's side.
 func (c *EndpointBuilder) AddConfigType(typ ...runtime.Type) {
 	c.CurrentTypes.ConfigTypes = append(c.CurrentTypes.ConfigTypes, typ...)
 }
