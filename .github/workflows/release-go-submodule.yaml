@@ -67,9 +67,9 @@ jobs:
             major_version=$(echo "$suffix" | sed -n 's/^v\([0-9][0-9]*\)$/\1/p')
       
             if [ -n "$major_version" ]; then
-            version="${major_version}.0.0"
+              version="${major_version}.0.0"
             else
-            version="0.0.0"
+              version="0.0.0"
             fi
           else
             latest_commit=$(git rev-list -n 1 "$latest")
@@ -112,8 +112,20 @@ jobs:
               exit 1
               ;;
           esac
+          
+          path="${{ inputs.path }}"
+          
+          # Extract version from suffix using sed so that go modules with mod suffix of major are respected.
+          suffix=$(basename "${{ inputs.path }}")
+          major_version=$(echo "$suffix" | sed -n 's/^v\([0-9][0-9]*\)$/\1/p')
+          
+          if [ -n "$major_version" ]; then
+            tag_path="${path%/v$major_version}"
+          else
+            tag_path="$path"
+          fi
 
-          new_tag="${{ inputs.path }}/v${major}.${minor}.${patch}"
+          new_tag="${tag_path}/v${major}.${minor}.${patch}"
           
           if [ -n "${{ inputs.suffix }}" ]; then
             new_tag="${new_tag}-${{ inputs.suffix }}"
