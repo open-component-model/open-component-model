@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
+	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	v1 "ocm.software/open-component-model/cli/configuration/v1"
 )
 
 const (

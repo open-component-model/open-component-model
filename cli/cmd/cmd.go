@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/cli/cmd/generate"
 	"ocm.software/open-component-model/cli/cmd/get"
-	"ocm.software/open-component-model/cli/configuration/v1"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/log"
 )

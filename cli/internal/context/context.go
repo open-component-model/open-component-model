@@ -6,9 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/cli/configuration/v1"
 )
 
 type ctxKey string

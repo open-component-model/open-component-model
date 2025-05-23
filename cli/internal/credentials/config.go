@@ -3,10 +3,10 @@ package credentials
 import (
 	"fmt"
 
+	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	v1 "ocm.software/open-component-model/cli/configuration/v1"
 )
 
 var scheme = runtime.NewScheme()

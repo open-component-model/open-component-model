@@ -8,11 +8,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	v1 "ocm.software/open-component-model/cli/configuration/v1"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
