@@ -61,7 +61,16 @@ jobs:
 
           if [ -z "$latest" ]; then
             latest_commit=$(git rev-list --max-parents=0 HEAD)  # first commit in history
+          
+            # Extract version from suffix using sed so that go modules with mod suffix of major are respected.
+            suffix=$(basename "${{ inputs.path }}")
+            major_version=$(echo "$suffix" | sed -n 's/^v\([0-9][0-9]*\)$/\1/p')
+      
+            if [ -n "$major_version" ]; then
+            version="${major_version}.0.0"
+            else
             version="0.0.0"
+            fi
           else
             latest_commit=$(git rev-list -n 1 "$latest")
             version=${latest#${prefix}}
