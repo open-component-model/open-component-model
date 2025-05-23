@@ -8,13 +8,24 @@ on:
         required: true
         type: string
       bump:
-        description: "Optional bump level override (major, minor, patch)"
+        description: "Bump Mode (major, minor, patch, none)"
         required: false
         type: string
+        default: "patch"
+        options:
+          - patch
+          - minor
+          - major
+          - none
+      suffix:
+        description: "Suffix for the tag (e.g. alpha1)"
+        required: false
+        type: string
+        default: "alpha1"
       dry_run:
         description: "Perform a dry run without pushing tags"
         required: false
-        default: "false"
+        default: true
         type: boolean
 
 jobs:
@@ -58,39 +69,11 @@ jobs:
 
           echo "latest_commit=$latest_commit" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Determine bump level
-        id: bump
-        run: |
-          path="${{ inputs.path }}"
-          commits=$(git log --pretty=format:"%s" ${{ steps.get_tag.outputs.latest_commit }}..HEAD -- "$path" || true)
-
-          if [ -z "$commits" ]; then
-            echo "No new commits to release."
-            exit 0
-          fi
-
-          bump="patch"
-          while read -r line; do
-            if echo "$line" | grep -qE '^feat(\(.+\))?: '; then
-              bump="minor"
-            elif echo "$line" | grep -qE '^BREAKING CHANGE:|!:'; then
-              bump="major"
-              break
-            fi
-          done <<< "$commits"
-
-          echo "Determined bump: $bump"
-          echo "bump=$bump" >> "$GITHUB_OUTPUT"
-
       - name: Calculate new version
         id: version
         run: |
           version="${{ steps.get_tag.outputs.version }}"
           bump="${{ inputs.bump }}"
-          if [ -z "$bump" ]; then
-            bump="${{ steps.bump.outputs.bump }}"
-          fi
           major=$(echo "$version" | cut -d. -f1)
           minor=$(echo "$version" | cut -d. -f2)
           patch=$(echo "$version" | cut -d. -f3)
@@ -112,6 +95,9 @@ jobs:
             patch)
               patch=$((patch + 1))
               ;;
+            none)
+              # No change to version
+              ;;
             *)
               echo "Invalid bump value: $bump"
               exit 1
@@ -119,6 +105,11 @@ jobs:
           esac
 
           new_tag="${{ inputs.path }}/v${major}.${minor}.${patch}"
+          
+          if [ -n "${{ inputs.suffix }}" ]; then
+            new_tag="${new_tag}-${{ inputs.suffix }}"
+          fi
+          
           echo "Calculated new tag: $new_tag"
           echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
 
