@@ -16,7 +16,7 @@ require (
 	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515124949-75bfcc622a06
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250521120014-424308d81e7b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46
-	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250520091418-cc5a0fb57ffb
+	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250523144648-0b97b5970ac8
 	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250520175609-9a51c0d3707b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.1
 	oras.land/oras-go/v2 v2.6.0
