@@ -11,11 +11,11 @@ Check out the [the main OCM project web page](https://ocm.software) to find out 
 
 ## OCM Specifications
 
-OCM describes delivery [artifacts](https://github.com/open-component-model/ocm-spec/tree/main/doc/01-model/02-elements-toplevel.md#artifacts-resources-and-sources) that can be accessed from many types of [component repositories](https://github.com/open-component-model/ocm-spec/tree/main/doc/01-model/01-model.md#component-repositories). It defines a set of semantic, formatting, and other types of specifications that can be found in the [`ocm-spec` repository](https://github.com/open-component-model/ocm-spec). Start learning about the core concepts of OCM elements [here](https://github.com/open-component-model/ocm-spec/tree/main/doc/01-model/02-elements-toplevel.md#model-elements).
+OCM describes delivery [artifacts](https://github.com/open-component-model/ocm-spec/tree/main/doc/01-model/02-elements-toplevel.md#artifacts-resources-and-sources) that can be accessed from many types of [component repositories](https://github.com/open-component-model/ocm-spec/tree/main/doc/01-model/01-model.md#component-repositories). It defines a set of semantic, formatting, and other types of specifications that can be found in the [`ocm-spec` repository](https://github.com/open-component-model/ocm-spec). Start learning about [the core concepts of OCM elements here](https://github.com/open-component-model/ocm-spec/tree/main/doc/01-model/02-elements-toplevel.md#model-elements).
 
 ## OCM Library
 
-> **Work In Progress**: This OCM Library is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Library API. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and reference the previous implementation [here](https://github.com/open-component-model/ocm)
+> **Work In Progress**: This OCM Library is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Library API. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and [reference the previous implementation here](https://github.com/open-component-model/ocm)
 
 This project provides a Go library containing an API for interacting with the
 [Open Component Model (OCM)](https://github.com/open-component-model/ocm-spec) elements and mechanisms.
@@ -36,7 +36,7 @@ Additionally, OCM provides a generic solution for how to:
 
 ## [OCM CLI](docs/reference/cli/ocm.md)
 
-> **Work In Progress**: This OCM CLI is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Commands available. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and reference the previous implementation [here](https://github.com/open-component-model/ocm)
+> **Work In Progress**: This OCM CLI is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Commands available. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and [reference the previous implementation here](https://github.com/open-component-model/ocm)
 
 The [`ocm` CLI](docs/reference/cli/ocm.md) may also be used to interact with OCM mechanisms. It makes it easy to create component versions and embed them in build processes.
 
