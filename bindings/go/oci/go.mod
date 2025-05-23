@@ -10,7 +10,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.14.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.2
-	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515124949-75bfcc622a06
+	ocm.software/open-component-model/bindings/go/ctf v0.0.1
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250521120014-424308d81e7b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46
 	ocm.software/open-component-model/bindings/go/runtime v0.0.1
@@ -26,7 +26,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	golang.org/x/text v0.25.0 // indirect
