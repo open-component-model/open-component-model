@@ -1,8 +1,11 @@
 package docs
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -24,13 +27,16 @@ const (
 	GenerationModeYAML         = "yaml"
 )
 
-// New represents the docs command
+// New creates and returns the docs command for CLI documentation generation.
+// This command supports different output formats including markdown, restructured text,
+// man pages, and YAML, with markdown being enhanced with Hugo-compatible frontmatter.
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "docs [-d <directory>]",
 		Short: "Generation Documentation for the CLI",
-		Long:  ``,
+		Long:  `Generate documentation for the OCM CLI in various formats, with special handling for Hugo-compatible markdown.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get the target directory, defaulting to current working directory if not specified
 			dir, err := cmd.Flags().GetString(FlagDirectory)
 			if err != nil {
 				return err
@@ -40,15 +46,19 @@ func New() *cobra.Command {
 					return err
 				}
 			}
+			
+			// Create the target directory if it doesn't exist
 			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 				return err
 			}
 
+			// Get the generation mode (markdown, restructured, man, yaml)
 			mode, err := enum.Get(cmd.Flags(), FlagMode)
 			if err != nil {
 				return err
 			}
 
+			// Get the root command to generate docs for the entire CLI
 			candidate := cmd
 			for candidate.Parent() != nil {
 				candidate = candidate.Parent()
@@ -56,7 +66,26 @@ func New() *cobra.Command {
 
 			switch mode {
 			case GenerationModeMarkdown:
-				return doc.GenMarkdownTree(candidate, dir)
+				// Step 1: Generate raw markdown documentation using Cobra's built-in generator
+				// This creates individual .md files for each command but without Hugo frontmatter
+				if err := doc.GenMarkdownTree(candidate, dir); err != nil {
+					return fmt.Errorf("failed to generate markdown: %w", err)
+				}
+
+				// Step 2: Generate a special _index.md file for the section folder on the website
+				// This is needed for proper Hugo navigation and must happen before we process other files
+				// The _index.md uses content from ocm.md if available
+				if err := createIndexFile(dir); err != nil {
+					return err
+				}
+
+				// Step 3: Add frontmatter to all other markdown files (except _index.md which was handled separately)
+				// Each .md file gets Hugo frontmatter with title, TOC settings, and sidebar configuration
+				if err := addFrontmatterToFiles(dir); err != nil {
+					return err
+				}
+
+				return nil
 			case GenerationModeReStructured:
 				return doc.GenReSTTree(candidate, dir)
 			case GenerationModeMan:
@@ -71,6 +100,182 @@ func New() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringP(FlagDirectory, FlagDirectoryShortHand, "", "directory to generate docs to. If not set, current working directory is used.")
-	enum.Var(cmd.Flags(), FlagMode, []string{GenerationModeMarkdown, GenerationModeReStructured, GenerationModeMan}, "generation mode to use")
+	enum.Var(cmd.Flags(), FlagMode, []string{GenerationModeMarkdown, GenerationModeReStructured, GenerationModeMan, GenerationModeYAML}, "generation mode to use")
 	return cmd
+}
+
+// extractDescriptionFromContent extracts the description text from the markdown content.
+// The description is the text between the H2 header (## command) and the first H3 header (### something).
+// If no description is found, an empty string is returned.
+func extractDescriptionFromContent(content string) string {
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	
+	// Find the first H2 header
+	foundH2 := false
+	var description []string
+	
+	for scanner.Scan() {
+		line := scanner.Text()
+		
+		// Skip until we find the H2 header
+		if !foundH2 {
+			if strings.HasPrefix(line, "## ") {
+				foundH2 = true
+			}
+			continue
+		}
+		
+		// Skip the H2 line itself
+		if strings.HasPrefix(line, "## ") {
+			continue
+		}
+		
+		// Stop when we hit an H3 header or another H2
+		if strings.HasPrefix(line, "### ") || strings.HasPrefix(line, "## ") {
+			break
+		}
+		
+		// Skip empty lines at the beginning
+		if len(description) == 0 && strings.TrimSpace(line) == "" {
+			continue
+		}
+		
+		// Add non-empty lines to the description
+		if strings.TrimSpace(line) != "" {
+			description = append(description, strings.TrimSpace(line))
+		}
+	}
+	
+	// Join all description lines and trim any extra whitespace
+	return strings.TrimSpace(strings.Join(description, " "))
+}
+
+// addFrontmatterToFiles adds Hugo-compatible frontmatter to all markdown files in the given directory.
+// The frontmatter includes:
+// - title: derived from filename, with underscores converted to spaces
+// - description: extracted from the content, specifically the text below the H2 header
+// - suppressTitle: true (to avoid duplicate titles on Hugo pages)
+// - toc: true (to show table of contents)
+// - sidebar configuration for navigation
+//
+// This function processes all .md files except _index.md which is handled separately.
+func addFrontmatterToFiles(dir string) error {
+	// Get all markdown files from the directory
+	files, err := filepath.Glob(filepath.Join(dir, "*.md"))
+	if err != nil {
+		return fmt.Errorf("failed to list markdown files: %w", err)
+	}
+
+	// Process each file
+	for _, file := range files {
+		// Skip _index.md because it's handled separately with special frontmatter
+		if filepath.Base(file) == "_index.md" {
+			continue
+		}
+
+		// Read file content
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("failed to read file %s: %w", file, err)
+		}
+
+		// Generate title from filename, converting underscores to spaces
+		// Example: ocm_command_name.md -> ocm command name
+		filename := filepath.Base(file)
+		title := strings.TrimSuffix(filename, ".md")
+		title = strings.ReplaceAll(title, "_", " ")
+
+		// Extract description from content - the text between H2 header and first H3 header
+		description := extractDescriptionFromContent(string(content))
+
+		// Create frontmatter with consistent formatting and suppressTitle flag
+		// Also include the description extracted from the content
+		frontmatter := fmt.Sprintf(`---
+title: %s
+description: %s
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
+`, title, description)
+
+		// Add frontmatter to content
+		newContent := frontmatter + string(content)
+
+		// Write updated content back to file
+		if err := os.WriteFile(file, []byte(newContent), 0644); err != nil {
+			return fmt.Errorf("failed to write file %s: %w", file, err)
+		}
+	}
+
+	return nil
+}
+
+// createIndexFile creates the _index.md file with special frontmatter for the Hugo site.
+// This file serves as the main landing page for the CLI documentation section and
+// includes content from the ocm.md file if it exists.
+//
+// In Hugo, _index.md files are special and serve as section entry points. This function
+// ensures the OCM CLI documentation has a properly formatted entry point.
+func createIndexFile(dir string) error {
+	// Path to the index file
+	indexFile := filepath.Join(dir, "_index.md")
+
+	// Content for the index file will come from ocm.md
+	ocmFile := filepath.Join(dir, "ocm.md")
+	ocmContent := ""
+	description := "OCM CLI reference documentation" // Default description
+
+	// Check if ocm.md exists and read its content
+	if fileExists(ocmFile) {
+		content, err := os.ReadFile(ocmFile)
+		if err != nil {
+			return fmt.Errorf("failed to read ocm.md: %w", err)
+		}
+
+		// Use the content directly as the main CLI documentation
+		ocmContent = string(content)
+		
+		// Try to extract description from ocm.md content
+		extractedDesc := extractDescriptionFromContent(ocmContent)
+		if extractedDesc != "" {
+			description = extractedDesc
+		}
+		
+		// Note: We don't delete ocm.md here to preserve it for reference
+		// and to maintain compatibility with other doc generation modes
+	}
+
+	// Special frontmatter for the root index file includes:
+	// - title: The page title
+	// - description: Brief description extracted from the content
+	// - suppressTitle: Prevents showing the title twice
+	// - toc: Enables table of contents
+	// - sidebar: Controls sidebar behavior
+	frontmatter := fmt.Sprintf(`---
+title: OCM CLI
+description: %s
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
+`, description)
+
+	// Write the index file with frontmatter and content from ocm.md
+	if err := os.WriteFile(indexFile, []byte(frontmatter+ocmContent), 0644); err != nil {
+		return fmt.Errorf("failed to write _index.md: %w", err)
+	}
+
+	return nil
+}
+
+// fileExists is a helper function that checks if a file exists at the given path.
+// It returns true if the file exists, false otherwise.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
 }
