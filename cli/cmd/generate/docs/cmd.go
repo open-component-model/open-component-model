@@ -46,7 +46,7 @@ func New() *cobra.Command {
 					return err
 				}
 			}
-			
+
 			// Create the target directory if it doesn't exist
 			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 				return err
@@ -109,14 +109,14 @@ func New() *cobra.Command {
 // If no description is found, an empty string is returned.
 func extractDescriptionFromContent(content string) string {
 	scanner := bufio.NewScanner(strings.NewReader(content))
-	
+
 	// Find the first H2 header
 	foundH2 := false
 	var description []string
-	
+
 	for scanner.Scan() {
 		line := scanner.Text()
-		
+
 		// Skip until we find the H2 header
 		if !foundH2 {
 			if strings.HasPrefix(line, "## ") {
@@ -124,28 +124,28 @@ func extractDescriptionFromContent(content string) string {
 			}
 			continue
 		}
-		
+
 		// Skip the H2 line itself
 		if strings.HasPrefix(line, "## ") {
 			continue
 		}
-		
+
 		// Stop when we hit an H3 header or another H2
 		if strings.HasPrefix(line, "### ") || strings.HasPrefix(line, "## ") {
 			break
 		}
-		
+
 		// Skip empty lines at the beginning
 		if len(description) == 0 && strings.TrimSpace(line) == "" {
 			continue
 		}
-		
+
 		// Add non-empty lines to the description
 		if strings.TrimSpace(line) != "" {
 			description = append(description, strings.TrimSpace(line))
 		}
 	}
-	
+
 	// Join all description lines and trim any extra whitespace
 	return strings.TrimSpace(strings.Join(description, " "))
 }
@@ -237,13 +237,13 @@ func createIndexFile(dir string) error {
 
 		// Use the content directly as the main CLI documentation
 		ocmContent = string(content)
-		
+
 		// Try to extract description from ocm.md content
 		extractedDesc := extractDescriptionFromContent(ocmContent)
 		if extractedDesc != "" {
 			description = extractedDesc
 		}
-		
+
 		// Note: We don't delete ocm.md here to preserve it for reference
 		// and to maintain compatibility with other doc generation modes
 	}
