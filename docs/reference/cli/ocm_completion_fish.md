@@ -1,3 +1,12 @@
+---
+title: ocm completion fish
+description: Generate the autocompletion script for fish
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm completion fish
 
 Generate the autocompletion script for fish

@@ -27,16 +27,13 @@ const (
 	GenerationModeYAML         = "yaml"
 )
 
-// New creates and returns the docs command for CLI documentation generation.
-// This command supports different output formats including markdown, restructured text,
-// man pages, and YAML, with markdown being enhanced with Hugo-compatible frontmatter.
+// New represents the docs command
 func New() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "docs [-d <directory>]",
-		Short: "Generation Documentation for the CLI",
+		Use:   "docs [-d <directory>] [--mode <format>]",
+		Short: "Generate Documentation for the CLI",
 		Long:  `Generate documentation for the OCM CLI in various formats, with special handling for Hugo-compatible markdown.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Get the target directory, defaulting to current working directory if not specified
 			dir, err := cmd.Flags().GetString(FlagDirectory)
 			if err != nil {
 				return err
@@ -47,18 +44,15 @@ func New() *cobra.Command {
 				}
 			}
 
-			// Create the target directory if it doesn't exist
 			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 				return err
 			}
 
-			// Get the generation mode (markdown, restructured, man, yaml)
 			mode, err := enum.Get(cmd.Flags(), FlagMode)
 			if err != nil {
 				return err
 			}
 
-			// Get the root command to generate docs for the entire CLI
 			candidate := cmd
 			for candidate.Parent() != nil {
 				candidate = candidate.Parent()
@@ -66,25 +60,9 @@ func New() *cobra.Command {
 
 			switch mode {
 			case GenerationModeMarkdown:
-				// Step 1: Generate raw markdown documentation using Cobra's built-in generator
-				// This creates individual .md files for each command but without Hugo frontmatter
-				if err := doc.GenMarkdownTree(candidate, dir); err != nil {
-					return fmt.Errorf("failed to generate markdown: %w", err)
-				}
-
-				// Step 2: Generate a special _index.md file for the section folder on the website
-				// This is needed for proper Hugo navigation and must happen before we process other files
-				// The _index.md uses content from ocm.md if available
-				if err := createIndexFile(dir); err != nil {
+				if err := generateHugoMarkdown(candidate, dir); err != nil {
 					return err
 				}
-
-				// Step 3: Add frontmatter to all other markdown files (except _index.md which was handled separately)
-				// Each .md file gets Hugo frontmatter with title, TOC settings, and sidebar configuration
-				if err := addFrontmatterToFiles(dir); err != nil {
-					return err
-				}
-
 				return nil
 			case GenerationModeReStructured:
 				return doc.GenReSTTree(candidate, dir)
@@ -102,6 +80,23 @@ func New() *cobra.Command {
 	cmd.Flags().StringP(FlagDirectory, FlagDirectoryShortHand, "", "directory to generate docs to. If not set, current working directory is used.")
 	enum.Var(cmd.Flags(), FlagMode, []string{GenerationModeMarkdown, GenerationModeReStructured, GenerationModeMan, GenerationModeYAML}, "generation mode to use")
 	return cmd
+}
+
+// generateHugoMarkdown generates markdown documentation with Hugo frontmatter
+func generateHugoMarkdown(cmd *cobra.Command, dir string) error {
+	if err := doc.GenMarkdownTree(cmd, dir); err != nil {
+		return fmt.Errorf("failed to generate markdown: %w", err)
+	}
+
+	if err := createIndexFile(dir); err != nil {
+		return fmt.Errorf("failed to create index file: %w", err)
+	}
+
+	if err := addFrontmatterToFiles(dir); err != nil {
+		return fmt.Errorf("failed to add frontmatter to files: %w", err)
+	}
+
+	return nil
 }
 
 // extractDescriptionFromContent extracts the description text from the markdown content.

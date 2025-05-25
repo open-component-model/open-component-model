@@ -1,3 +1,12 @@
+---
+title: ocm get component-version
+description: Get component version(s) from an OCM repository
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm get component-version
 
 Get component version(s) from an OCM repository

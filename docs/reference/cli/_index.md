@@ -1,52 +1,27 @@
 ---
-title: ocm completion bash
-description: Generate the autocompletion script for bash
+title: OCM CLI
+description: The official Open Component Model (OCM) CLI
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm completion bash
+## ocm
 
-Generate the autocompletion script for bash
+The official Open Component Model (OCM) CLI
 
 ### Synopsis
 
-Generate the autocompletion script for the bash shell.
-
-This script depends on the 'bash-completion' package.
-If it is not installed already, you can install it via your OS's package manager.
-
-To load completions in your current shell session:
-
-	source <(ocm completion bash)
-
-To load completions for every new session, execute once:
-
-#### Linux:
-
-	ocm completion bash > /etc/bash_completion.d/ocm
-
-#### macOS:
-
-	ocm completion bash > $(brew --prefix)/etc/bash_completion.d/ocm
-
-You will need to start a new shell for this setup to take effect.
-
+The Open Component Model command line client supports the work with OCM
+  artifacts, like Component Archives, Common Transport Archive,
+  Component Repositories, and Component Versions.
 
 ```
-ocm completion bash
+ocm [sub-command] [flags]
 ```
 
 ### Options
-
-```
-  -h, --help              help for bash
-      --no-descriptions   disable completion descriptions
-```
-
-### Options inherited from parent commands
 
 ```
       --config string    supply configuration by a given configuration file.
@@ -66,6 +41,7 @@ ocm completion bash
                          - $EXE_DIR/ocm/config
                          - $EXE_DIR/.ocmconfig
                          Using the option, this configuration file be used instead of the lookup above.
+  -h, --help             help for ocm
       --logformat enum   set the log output format that is used to print individual logs
                             json: Output logs in JSON format, suitable for machine processing
                             text: Output logs in human-readable text format, suitable for console output
@@ -85,4 +61,6 @@ ocm completion bash
 ### SEE ALSO
 
 * [ocm completion](ocm_completion.md)	 - Generate the autocompletion script for the specified shell
+* [ocm generate](ocm_generate.md)	 - Generate documentation for the OCM CLI
+* [ocm get](ocm_get.md)	 - Get anything from OCM
 

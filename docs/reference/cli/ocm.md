@@ -1,3 +1,12 @@
+---
+title: ocm
+description: The official Open Component Model (OCM) CLI
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm
 
 The official Open Component Model (OCM) CLI

@@ -1,3 +1,12 @@
+---
+title: ocm completion zsh
+description: Generate the autocompletion script for zsh
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm completion zsh
 
 Generate the autocompletion script for zsh
