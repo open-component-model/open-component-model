@@ -14,16 +14,9 @@ import (
 )
 
 const (
-			// Add frontmatter to content
-		newContent := frontmatter + string(content)
-
-		// Write updated content back to file
-		if err := os.WriteFile(file, []byte(newContent), 0o600); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", file, err)
-		}ectory          = "directory"
+	FlagDirectory          = "directory"
 	FlagDirectoryShortHand = "d"
-
-	FlagMode = "mode"
+	FlagMode               = "mode"
 )
 
 const (
@@ -84,7 +77,7 @@ func New() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringP(FlagDirectory, FlagDirectoryShortHand, "", "directory to generate docs to. If not set, current working directory is used.")
-	enum.Var(cmd.Flags(), FlagMode, []string{GenerationModeMarkdown, GenerationModeReStructured, GenerationModeMan, GenerationModeYAML}, "generation mode to use")
+	cmd.Flags().Var(enum.New(GenerationModeMarkdown, []string{GenerationModeMarkdown, GenerationModeReStructured, GenerationModeMan, GenerationModeYAML}), FlagMode, "generation mode to use")
 	return cmd
 }
 
