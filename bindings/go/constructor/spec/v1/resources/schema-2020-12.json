@@ -120,44 +120,88 @@
       ]
     },
     "sourceDefinition": {
-      "type": "object",
-      "description": "Definition of a source artifact used to generate resources",
-      "required": [
-        "name",
-        "version",
-        "type",
-        "access"
-      ],
-      "properties": {
-        "name": {
-          "description": "Name of the source",
-          "type": "string",
-          "$ref": "#/$defs/identityAttributeKey"
-        },
-        "extraIdentity": {
-          "description": "Additional identity attributes for the source",
-          "$ref": "#/$defs/identityAttribute"
-        },
-        "version": {
-          "description": "Version of the source",
-          "$ref": "#/$defs/relaxedSemver"
-        },
-        "type": {
-          "description": "Type of the source",
-          "$ref": "#/$defs/ocmType"
-        },
-        "labels": {
-          "description": "Labels associated with the source",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/label"
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "a source that has a predefined access specification",
+          "required": [
+            "name",
+            "version",
+            "type",
+            "access"
+          ],
+          "properties": {
+            "name": {
+              "description": "Name of the source",
+              "type": "string",
+              "$ref": "#/$defs/identityAttributeKey"
+            },
+            "extraIdentity": {
+              "description": "Additional identity attributes for the source",
+              "$ref": "#/$defs/identityAttribute"
+            },
+            "version": {
+              "description": "Version of the source",
+              "$ref": "#/$defs/relaxedSemver"
+            },
+            "type": {
+              "description": "Type of the source",
+              "$ref": "#/$defs/ocmType"
+            },
+            "labels": {
+              "description": "Labels associated with the source",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/label"
+              }
+            },
+            "access": {
+              "description": "Access specification for the source",
+              "$ref": "#/$defs/access"
+            }
           }
         },
-        "access": {
-          "description": "Access specification for the source",
-          "$ref": "#/$defs/access"
+        {
+          "type": "object",
+          "description": "a source that has an input specification",
+          "required": [
+            "name",
+            "version",
+            "type",
+            "input"
+          ],
+          "properties": {
+            "name": {
+              "description": "Name of the source",
+              "type": "string",
+              "$ref": "#/$defs/identityAttributeKey"
+            },
+            "extraIdentity": {
+              "description": "Additional identity attributes for the source",
+              "$ref": "#/$defs/identityAttribute"
+            },
+            "version": {
+              "description": "Version of the source",
+              "$ref": "#/$defs/relaxedSemver"
+            },
+            "type": {
+              "description": "Type of the source",
+              "$ref": "#/$defs/ocmType"
+            },
+            "labels": {
+              "description": "Labels associated with the source",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/label"
+              }
+            },
+            "input": {
+              "description": "Input specification for the source",
+              "$ref": "#/$defs/input"
+            }
+          }
         }
-      }
+      ]
     },
     "digestSpec": {
       "type": "object",
@@ -381,7 +425,7 @@
               }
             },
             "input": {
-              "description": "Access specification for the resource",
+              "description": "Input specification for the resource",
               "$ref": "#/$defs/input"
             }
           }
