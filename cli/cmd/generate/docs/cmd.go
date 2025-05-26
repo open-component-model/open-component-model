@@ -77,7 +77,7 @@ func New() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringP(FlagDirectory, FlagDirectoryShortHand, "", "directory to generate docs to. If not set, current working directory is used.")
-	cmd.Flags().Var(enum.New(GenerationModeMarkdown, []string{GenerationModeMarkdown, GenerationModeReStructured, GenerationModeMan, GenerationModeYAML}), FlagMode, "generation mode to use")
+	enum.Var(cmd.Flags(), FlagMode, []string{GenerationModeMarkdown, GenerationModeReStructured, GenerationModeMan, GenerationModeYAML}, "generation mode to use")
 	return cmd
 }
 
