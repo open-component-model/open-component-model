@@ -4,12 +4,12 @@ go 1.24.2
 
 require (
 	github.com/invopop/jsonschema v0.13.0
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/configuration v0.0.1
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250521120014-424308d81e7b
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-20250520105023-82a459e39e46
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.1
 )
 
