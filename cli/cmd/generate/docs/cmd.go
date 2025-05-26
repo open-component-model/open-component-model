@@ -200,7 +200,7 @@ sidebar:
 		newContent := frontmatter + string(content)
 
 		// Write updated content back to file
-		if err := os.WriteFile(file, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(file, []byte(newContent), 0600); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", file, err)
 		}
 	}
@@ -261,7 +261,7 @@ sidebar:
 `, description)
 
 	// Write the index file with frontmatter and content from ocm.md
-	if err := os.WriteFile(indexFile, []byte(frontmatter+ocmContent), 0644); err != nil {
+	if err := os.WriteFile(indexFile, []byte(frontmatter+ocmContent), 0600); err != nil {
 		return fmt.Errorf("failed to write _index.md: %w", err)
 	}
 
