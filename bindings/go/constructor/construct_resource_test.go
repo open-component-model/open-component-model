@@ -207,10 +207,10 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 			return true
 		},
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := ctor.Construct(t.Context(), constructor)
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -251,10 +251,10 @@ func TestConstructWithResourceAccess(t *testing.T) {
 			return false // Don't process by value for this test
 		},
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := ctor.Construct(t.Context(), constructor)
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -335,10 +335,10 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 			return true
 		},
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := ctor.Construct(t.Context(), constructor)
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -406,10 +406,10 @@ func TestConstructWithResourceByValue(t *testing.T) {
 			return true // Always process by value for this test
 		},
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := ctor.Construct(t.Context(), constructor)
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -467,10 +467,10 @@ func TestConstructWithResourceDigest(t *testing.T) {
 			return false // Don't process by value for this test
 		},
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := ctor.Construct(t.Context(), constructor)
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -516,10 +516,10 @@ func TestConstructWithInvalidInputMethod(t *testing.T) {
 		},
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := ctor.Construct(t.Context(), constructor)
+	_, err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no input method resolvable for input specification of type")
 }
@@ -562,10 +562,10 @@ func TestConstructWithMissingAccess(t *testing.T) {
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := ctor.Construct(t.Context(), constructor)
+	_, err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "after the input method was processed, no access was present in the resource")
 }
@@ -618,10 +618,10 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 		CredentialProvider:          mockCredProvider,
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := ctor.Construct(t.Context(), constructor)
+	_, err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error resolving credentials for input method")
 }
@@ -660,10 +660,127 @@ func TestConstructWithResourceByValueFailure(t *testing.T) {
 			return true // Always process by value for this test
 		},
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := ctor.Construct(t.Context(), constructor)
+	_, err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error downloading resource")
+}
+
+func TestConstructWithMultipleResources(t *testing.T) {
+	// Create mock input methods for different resource types
+	mockInput1 := &mockInputMethod{
+		processedResource: &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-resource-1",
+					Version: "v1.0.0",
+				},
+			},
+			Access: &v2.LocalBlob{
+				MediaType: "application/octet-stream",
+			},
+			Relation: descriptor.LocalRelation,
+		},
+	}
+
+	mockInput2 := &mockInputMethod{
+		processedResource: &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-resource-2",
+					Version: "v1.0.0",
+				},
+			},
+			Access: &v2.LocalBlob{
+				MediaType: "application/json",
+			},
+			Relation: descriptor.ExternalRelation,
+		},
+	}
+
+	// Create a mock input method provider with multiple methods
+	mockProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock1", "v1"): mockInput1,
+			runtime.NewVersionedType("mock2", "v1"): mockInput2,
+		},
+	}
+
+	// Create a component with multiple resources
+	yamlData := `
+components:
+  - name: ocm.software/test-component
+    version: v1.0.0
+    provider:
+      name: test-provider
+    resources:
+      - name: test-resource-1
+        version: v1.0.0
+        relation: local
+        type: blob
+        input:
+          type: mock1/v1
+      - name: test-resource-2
+        version: v1.0.0
+        relation: local
+        type: json
+        input:
+          type: mock2/v1
+    sources: []
+`
+
+	var constructor constructorv1.ComponentConstructor
+	err := yaml.Unmarshal([]byte(yamlData), &constructor)
+	require.NoError(t, err)
+
+	// Create a mock target repository
+	mockRepo := &mockTargetRepository{}
+
+	// Create the constructor with our mocks
+	opts := Options{
+		ResourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
+		ProcessResourceByValue: func(resource *constructorv1.Resource) bool {
+			return true
+		},
+	}
+	constructorInstance := NewDefaultConstructor(opts)
+
+	// Process the constructor
+	descriptors, err := constructorInstance.Construct(t.Context(), &constructor)
+	require.NoError(t, err)
+	require.Len(t, descriptors, 1)
+
+	// Verify the results
+	desc := descriptors[0]
+	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
+	assert.Equal(t, "v1.0.0", desc.Component.Version)
+	assert.Equal(t, "test-provider", desc.Component.Provider["name"])
+	assert.Len(t, desc.Component.Resources, 2)
+
+	// Verify the first resource
+	resource1 := desc.Component.Resources[0]
+	assert.Equal(t, "test-resource-1", resource1.Name)
+	assert.Equal(t, "v1.0.0", resource1.Version)
+	assert.Equal(t, descriptor.LocalRelation, resource1.Relation)
+	assert.NotNil(t, resource1.Access)
+	access1, ok := resource1.Access.(*v2.LocalBlob)
+	require.True(t, ok, "Access should be of type LocalBlob")
+	assert.Equal(t, "application/octet-stream", access1.MediaType)
+
+	// Verify the second resource
+	resource2 := desc.Component.Resources[1]
+	assert.Equal(t, "test-resource-2", resource2.Name)
+	assert.Equal(t, "v1.0.0", resource2.Version)
+	assert.Equal(t, descriptor.ExternalRelation, resource2.Relation)
+	assert.NotNil(t, resource2.Access)
+	access2, ok := resource2.Access.(*v2.LocalBlob)
+	require.True(t, ok, "Access should be of type LocalBlob")
+	assert.Equal(t, "application/json", access2.MediaType)
+
+	// Verify the repository was called correctly
+	assert.Len(t, mockRepo.addedLocalResources, 0)
+	assert.Len(t, mockRepo.addedVersions, 1)
 }

@@ -29,10 +29,26 @@ func New(scheme *runtime.Scheme) *InputMethodRegistry {
 	}
 }
 
+// RegisterResourceInputMethod registers a resource input method for a given prototype type.
+// Returns an error if the registration fails or if the type is already registered.
+func (r *InputMethodRegistry) RegisterResourceInputMethod(prototype runtime.Typed, method ResourceInputMethod) error {
+	typ, err := r.scheme.TypeForPrototype(prototype)
+	if err != nil {
+		return fmt.Errorf("failed to get type for prototype: %w", err)
+	}
+	if _, exists := r.resourceMethods[typ]; exists {
+		return fmt.Errorf("resource input method for type %q is already registered", typ)
+	}
+	r.resourceMethods[typ] = method
+	return nil
+}
+
 // MustRegisterResourceInputMethod registers a resource input method for a given prototype type.
-// Panics if the registration fails.
+// Panics if the registration fails or if the type is already registered.
 func (r *InputMethodRegistry) MustRegisterResourceInputMethod(prototype runtime.Typed, method ResourceInputMethod) {
-	r.resourceMethods[r.scheme.MustTypeForPrototype(prototype)] = method
+	if err := r.RegisterResourceInputMethod(prototype, method); err != nil {
+		panic(err)
+	}
 }
 
 func (r *InputMethodRegistry) typeInsideRegistry(input runtime.Typed) (runtime.Type, error) {
@@ -52,7 +68,6 @@ func (r *InputMethodRegistry) typeInsideRegistry(input runtime.Typed) (runtime.T
 }
 
 // GetResourceInputMethod retrieves the resource input method for a given typed object.
-// Returns the method and a boolean indicating if the method was found.
 func (r *InputMethodRegistry) GetResourceInputMethod(_ context.Context, res *constructorv1.Resource) (ResourceInputMethod, error) {
 	if res == nil || !res.HasInput() {
 		return nil, fmt.Errorf("resource input method requested for resource without input: %v", res)
@@ -88,6 +103,24 @@ func (r *InputMethodRegistry) GetSourceInputMethod(_ context.Context, src *const
 	return method, nil
 }
 
+// RegisterSourceInputMethod registers a source input method for a given prototype type.
+// Returns an error if the registration fails or if the type is already registered.
+func (r *InputMethodRegistry) RegisterSourceInputMethod(prototype runtime.Typed, method SourceInputMethod) error {
+	typ, err := r.scheme.TypeForPrototype(prototype)
+	if err != nil {
+		return fmt.Errorf("failed to get type for prototype: %w", err)
+	}
+	if _, exists := r.sourceMethods[typ]; exists {
+		return fmt.Errorf("source input method for type %q is already registered", typ)
+	}
+	r.sourceMethods[typ] = method
+	return nil
+}
+
+// MustRegisterSourceInputMethod registers a source input method for a given prototype type.
+// Panics if the registration fails or if the type is already registered.
 func (r *InputMethodRegistry) MustRegisterSourceInputMethod(prototype runtime.Typed, method SourceInputMethod) {
-	r.sourceMethods[r.scheme.MustTypeForPrototype(prototype)] = method
+	if err := r.RegisterSourceInputMethod(prototype, method); err != nil {
+		panic(err)
+	}
 }
