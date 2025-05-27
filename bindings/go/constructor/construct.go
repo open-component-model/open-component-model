@@ -410,7 +410,7 @@ func Validate(component *constructorv1.Component) error {
 // addColocatedResourceLocalBlob adds a local blob to the component version repository and defaults fields relevant
 // to declare the spec.LocalRelation to the component version as well as default the resource version and media type:
 //
-//  1. If not resource relation is set, it defaults to constructorv1.LocalRelation because the resource is then located
+//  1. If no resource relation is set, it defaults to constructorv1.LocalRelation because the resource is then located
 //     locally alongside the component
 //  2. If the media type is available it is used for the local blob specification.
 //
