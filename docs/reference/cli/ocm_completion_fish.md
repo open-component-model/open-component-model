@@ -1,6 +1,6 @@
 ---
 title: ocm completion fish
-description: Generate the autocompletion script for fish
+description: Generate the autocompletion script for fish.
 suppressTitle: true
 toc: true
 sidebar:

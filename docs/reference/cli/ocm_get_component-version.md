@@ -1,6 +1,6 @@
 ---
 title: ocm get component-version
-description: Get component version(s) from an OCM repository
+description: Get component version(s) from an OCM repository.
 suppressTitle: true
 toc: true
 sidebar:

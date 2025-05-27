@@ -1,7 +1,7 @@
 package docs
 
 import (
-	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +21,7 @@ const (
 
 const (
 	GenerationModeMarkdown     = "markdown"
+	GenerationModeHugo         = "hugo"
 	GenerationModeReStructured = "restructured"
 	GenerationModeMan          = "man"
 	GenerationModeYAML         = "yaml"
@@ -31,7 +32,7 @@ func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "docs [-d <directory>] [--mode <format>]",
 		Short: "Generate Documentation for the CLI",
-		Long:  `Generate documentation for the OCM CLI in various formats, with special handling for Hugo-compatible markdown.`,
+		Long:  `Generate documentation for the OCM CLI in various formats, including Hugo-compatible markdown.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := cmd.Flags().GetString(FlagDirectory)
 			if err != nil {
@@ -59,10 +60,9 @@ func New() *cobra.Command {
 
 			switch mode {
 			case GenerationModeMarkdown:
-				if err := generateHugoMarkdown(candidate, dir); err != nil {
-					return err
-				}
-				return nil
+				return doc.GenMarkdownTree(candidate, dir)
+			case GenerationModeHugo:
+				return generateHugoMarkdown(candidate, dir)
 			case GenerationModeReStructured:
 				return doc.GenReSTTree(candidate, dir)
 			case GenerationModeMan:
@@ -77,114 +77,73 @@ func New() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringP(FlagDirectory, FlagDirectoryShortHand, "", "directory to generate docs to. If not set, current working directory is used.")
-	enum.Var(cmd.Flags(), FlagMode, []string{GenerationModeMarkdown, GenerationModeReStructured, GenerationModeMan, GenerationModeYAML}, "generation mode to use")
+	enum.Var(cmd.Flags(), FlagMode, []string{GenerationModeMarkdown, GenerationModeHugo, GenerationModeReStructured, GenerationModeMan, GenerationModeYAML}, "generation mode to use")
 	return cmd
 }
 
-// generateHugoMarkdown generates markdown documentation with Hugo frontmatter
-func generateHugoMarkdown(cmd *cobra.Command, dir string) error {
-	if err := doc.GenMarkdownTree(cmd, dir); err != nil {
-		return fmt.Errorf("failed to generate markdown: %w", err)
-	}
+// hugoGenerator implements a custom cobra.doc.GenMarkdownCustom generator with Hugo frontmatter
+type hugoGenerator struct {
+	dir string
+}
 
-	if err := createIndexFile(dir); err != nil {
-		return fmt.Errorf("failed to create index file: %w", err)
-	}
+// generateHugoMarkdownTree generates markdown documentation for a command and all its children
+func generateHugoMarkdownTree(cmd *cobra.Command, generator *hugoGenerator) error {
+	for _, c := range cmd.Commands() {
+		// Skip hidden commands
+		if !c.IsAvailableCommand() || c.IsAdditionalHelpTopicCommand() {
+			continue
+		}
 
-	if err := addFrontmatterToFiles(dir); err != nil {
-		return fmt.Errorf("failed to add frontmatter to files: %w", err)
-	}
+		// Generate markdown for each command
+		if err := generateHugoMarkdownForCommand(c, generator); err != nil {
+			return err
+		}
 
+		// Recursively process children commands
+		if err := generateHugoMarkdownTree(c, generator); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// extractDescriptionFromContent extracts the description text from the markdown content.
-// The description is the text between the H2 header (## command) and the first H3 header (### something).
-// If no description is found, an empty string is returned.
-func extractDescriptionFromContent(content string) string {
-	scanner := bufio.NewScanner(strings.NewReader(content))
+// generateHugoMarkdownForCommand generates a single markdown file for a command with Hugo frontmatter
+func generateHugoMarkdownForCommand(cmd *cobra.Command, generator *hugoGenerator) error {
+	// Create file name based on command path (like standard cobra markdown generator)
+	basename := strings.ReplaceAll(cmd.CommandPath(), " ", "_") + ".md"
+	filename := filepath.Join(generator.dir, basename)
 
-	// Find the first H2 header
-	foundH2 := false
-	var description []string
-
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		// Skip until we find the H2 header
-		if !foundH2 {
-			if strings.HasPrefix(line, "## ") {
-				foundH2 = true
-			}
-			continue
-		}
-
-		// Skip the H2 line itself
-		if strings.HasPrefix(line, "## ") {
-			continue
-		}
-
-		// Stop when we hit an H3 header or another H2
-		if strings.HasPrefix(line, "### ") || strings.HasPrefix(line, "## ") {
-			break
-		}
-
-		// Skip empty lines at the beginning
-		if len(description) == 0 && strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		// Add non-empty lines to the description
-		if strings.TrimSpace(line) != "" {
-			description = append(description, strings.TrimSpace(line))
-		}
+	// Generate the markdown content
+	var markdownBuffer bytes.Buffer
+	if err := doc.GenMarkdown(cmd, &markdownBuffer); err != nil {
+		return fmt.Errorf("failed to generate markdown for %s: %w", cmd.CommandPath(), err)
 	}
 
-	// Join all description lines and trim any extra whitespace
-	return strings.TrimSpace(strings.Join(description, " "))
-}
+	markdownContent := markdownBuffer.String()
 
-// addFrontmatterToFiles adds Hugo-compatible frontmatter to all markdown files in the given directory.
-// The frontmatter includes:
-// - title: derived from filename, with underscores converted to spaces
-// - description: extracted from the content, specifically the text below the H2 header
-// - suppressTitle: true (to avoid duplicate titles on Hugo pages)
-// - toc: true (to show table of contents)
-// - sidebar configuration for navigation
-//
-// This function processes all .md files except _index.md which is handled separately.
-func addFrontmatterToFiles(dir string) error {
-	// Get all markdown files from the directory
-	files, err := filepath.Glob(filepath.Join(dir, "*.md"))
+	// Use cmd.Short for the description
+	description := cmd.Short
+	if description == "" {
+		description = fmt.Sprintf("Documentation for the %s command", cmd.CommandPath())
+	}
+
+	// Ensure description ends with a period
+	if !strings.HasSuffix(description, ".") {
+		description = description + "."
+	}
+
+	// Open file for writing
+	f, err := os.Create(filename)
 	if err != nil {
-		return fmt.Errorf("failed to list markdown files: %w", err)
+		return fmt.Errorf("failed to create file %s: %w", filename, err)
 	}
+	defer f.Close()
 
-	// Process each file
-	for _, file := range files {
-		// Skip _index.md because it's handled separately with special frontmatter
-		if filepath.Base(file) == "_index.md" {
-			continue
-		}
+	// Generate Hugo frontmatter
+	title := cmd.CommandPath()
 
-		// Read file content
-		content, err := os.ReadFile(file)
-		if err != nil {
-			return fmt.Errorf("failed to read file %s: %w", file, err)
-		}
-
-		// Generate title from filename, converting underscores to spaces
-		// Example: ocm_command_name.md -> ocm command name
-		filename := filepath.Base(file)
-		title := strings.TrimSuffix(filename, ".md")
-		title = strings.ReplaceAll(title, "_", " ")
-
-		// Extract description from content - the text between H2 header and first H3 header
-		description := extractDescriptionFromContent(string(content))
-
-		// Create frontmatter with consistent formatting and suppressTitle flag
-		// Also include the description extracted from the content
-		frontmatter := fmt.Sprintf(`---
+	// Create frontmatter
+	frontmatter := fmt.Sprintf(`---
 title: %s
 description: %s
 suppressTitle: true
@@ -195,81 +154,59 @@ sidebar:
 
 `, title, description)
 
-		// Add frontmatter to content
-		newContent := frontmatter + string(content)
+	// Write frontmatter to file
+	if _, err := f.WriteString(frontmatter); err != nil {
+		return fmt.Errorf("failed to write frontmatter to %s: %w", filename, err)
+	}
 
-		// Write updated content back to file
-		if err := os.WriteFile(file, []byte(newContent), 0o600); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", file, err)
-		}
+	// Write the captured output to the file
+	if _, err := f.WriteString(markdownContent); err != nil {
+		return fmt.Errorf("failed to write markdown to %s: %w", filename, err)
 	}
 
 	return nil
 }
 
-// createIndexFile creates the _index.md file with special frontmatter for the Hugo site.
-// This file serves as the main landing page for the CLI documentation section and
-// includes content from the ocm.md file if it exists.
-//
-// In Hugo, _index.md files are special and serve as section entry points. This function
-// ensures the OCM CLI documentation has a properly formatted entry point.
-func createIndexFile(dir string) error {
-	// Path to the index file
+// createHugoIndexFile creates an _index.md file for the Hugo site with only frontmatter
+func createHugoIndexFile(cmd *cobra.Command, dir string) error {
+	// Create index file
 	indexFile := filepath.Join(dir, "_index.md")
 
-	// Content for the index file will come from ocm.md
-	ocmFile := filepath.Join(dir, "ocm.md")
-	ocmContent := ""
-	description := "OCM CLI reference documentation" // Default description
-
-	// Check if ocm.md exists and read its content
-	if fileExists(ocmFile) {
-		content, err := os.ReadFile(ocmFile)
-		if err != nil {
-			return fmt.Errorf("failed to read ocm.md: %w", err)
-		}
-
-		// Use the content directly as the main CLI documentation
-		ocmContent = string(content)
-
-		// Try to extract description from ocm.md content
-		extractedDesc := extractDescriptionFromContent(ocmContent)
-		if extractedDesc != "" {
-			description = extractedDesc
-		}
-
-		// Note: We don't delete ocm.md here to preserve it for reference
-		// and to maintain compatibility with other doc generation modes
-	}
-
-	// Special frontmatter for the root index file includes:
-	// - title: The page title
-	// - description: Brief description extracted from the content
-	// - suppressTitle: Prevents showing the title twice
-	// - toc: Enables table of contents
-	// - sidebar: Controls sidebar behavior
-	frontmatter := fmt.Sprintf(`---
+	// Use the fixed frontmatter as specified without any additional content
+	content := `---
 title: OCM CLI
-description: %s
-suppressTitle: true
+description: Reference Documentation for the OCM CLI.
+suppressTitle: false
 toc: true
 sidebar:
   collapsed: true
 ---
+`
 
-`, description)
-
-	// Write the index file with frontmatter and content from ocm.md
-	if err := os.WriteFile(indexFile, []byte(frontmatter+ocmContent), 0o600); err != nil {
+	// Write the index file with only the frontmatter
+	if err := os.WriteFile(indexFile, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("failed to write _index.md: %w", err)
 	}
 
 	return nil
 }
 
-// fileExists is a helper function that checks if a file exists at the given path.
-// It returns true if the file exists, false otherwise.
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
+// generateHugoMarkdown generates markdown documentation with Hugo frontmatter
+func generateHugoMarkdown(cmd *cobra.Command, dir string) error {
+	// Create a custom generator for Hugo markdown
+	hugoGen := &hugoGenerator{
+		dir: dir,
+	}
+
+	// Process all commands with custom generator
+	if err := generateHugoMarkdownTree(cmd, hugoGen); err != nil {
+		return fmt.Errorf("failed to generate markdown: %w", err)
+	}
+
+	// Create the _index.md file (special handling)
+	if err := createHugoIndexFile(cmd, dir); err != nil {
+		return fmt.Errorf("failed to create index file: %w", err)
+	}
+
+	return nil
 }

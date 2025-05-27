@@ -1,6 +1,6 @@
 ---
 title: ocm completion zsh
-description: Generate the autocompletion script for zsh
+description: Generate the autocompletion script for zsh.
 suppressTitle: true
 toc: true
 sidebar:

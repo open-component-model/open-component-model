@@ -1,6 +1,6 @@
 ---
 title: ocm completion
-description: Generate the autocompletion script for the specified shell
+description: Generate the autocompletion script for the specified shell.
 suppressTitle: true
 toc: true
 sidebar:

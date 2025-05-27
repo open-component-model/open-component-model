@@ -1,6 +1,6 @@
 ---
 title: ocm completion powershell
-description: Generate the autocompletion script for powershell
+description: Generate the autocompletion script for powershell.
 suppressTitle: true
 toc: true
 sidebar:

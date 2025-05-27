@@ -1,6 +1,6 @@
 ---
 title: ocm completion bash
-description: Generate the autocompletion script for bash
+description: Generate the autocompletion script for bash.
 suppressTitle: true
 toc: true
 sidebar:

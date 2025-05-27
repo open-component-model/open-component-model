@@ -1,6 +1,6 @@
 ---
 title: ocm get
-description: Get anything from OCM ``` ocm get {component-version|component-versions|cv|cvs} [flags] ```
+description: Get anything from OCM.
 suppressTitle: true
 toc: true
 sidebar:
