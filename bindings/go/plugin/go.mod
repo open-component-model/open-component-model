@@ -8,7 +8,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/configuration v0.0.1
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250521120014-424308d81e7b
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250526130658-2a15446778e5
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.1
 )

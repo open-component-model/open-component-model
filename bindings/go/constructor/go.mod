@@ -7,7 +7,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.14.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250515124949-75bfcc622a06
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250526130658-2a15446778e5
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.1
 	sigs.k8s.io/yaml v1.4.0
