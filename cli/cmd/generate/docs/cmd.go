@@ -168,7 +168,7 @@ sidebar:
 }
 
 // createHugoIndexFile creates an _index.md file for the Hugo site with only frontmatter
-func createHugoIndexFile(cmd *cobra.Command, dir string) error {
+func createHugoIndexFile(dir string) error {
 	// Create index file
 	indexFile := filepath.Join(dir, "_index.md")
 
@@ -204,7 +204,7 @@ func generateHugoMarkdown(cmd *cobra.Command, dir string) error {
 	}
 
 	// Create the _index.md file (special handling)
-	if err := createHugoIndexFile(cmd, dir); err != nil {
+	if err := createHugoIndexFile(dir); err != nil {
 		return fmt.Errorf("failed to create index file: %w", err)
 	}
 
