@@ -129,7 +129,7 @@ func generateHugoMarkdownForCommand(cmd *cobra.Command, generator *hugoGenerator
 
 	// Ensure description ends with a period
 	if !strings.HasSuffix(description, ".") {
-		description = description + "."
+		description += "."
 	}
 
 	// Open file for writing
