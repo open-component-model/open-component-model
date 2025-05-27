@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -49,7 +50,7 @@ type mockTargetRepositoryProvider struct {
 	repo TargetRepository
 }
 
-func (m *mockTargetRepositoryProvider) GetTargetRepository(ctx context.Context, component *constructorv1.Component) (TargetRepository, error) {
+func (m *mockTargetRepositoryProvider) GetTargetRepository(ctx context.Context, component *constructorruntime.Component) (TargetRepository, error) {
 	return m.repo, nil
 }
 
@@ -157,6 +158,8 @@ components:
 	err := yaml.Unmarshal([]byte(yamlData), &constructor)
 	require.NoError(t, err)
 
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
 	// Create a mock target repository
 	mockRepo := &mockTargetRepository{}
 
@@ -165,14 +168,14 @@ components:
 		SourceInputMethodProvider:   sourceProvider,
 		ResourceInputMethodProvider: resourceProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		ProcessResourceByValue: func(resource *constructorv1.Resource) bool {
+		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return true
 		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), &constructor)
+	descriptors, err := constructorInstance.Construct(t.Context(), converted)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 

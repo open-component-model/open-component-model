@@ -2,29 +2,26 @@ package constructor
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	goruntime "runtime"
+	"runtime"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in sequence.
-	Construct(ctx context.Context, constructor *constructorv1.ComponentConstructor) ([]*descriptor.Descriptor, error)
+	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
 }
 
 // ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
-func ConstructDefault(ctx context.Context, constructor *constructorv1.ComponentConstructor, opts Options) ([]*descriptor.Descriptor, error) {
+func ConstructDefault(ctx context.Context, constructor *constructor.ComponentConstructor, opts Options) ([]*descriptor.Descriptor, error) {
 	return NewDefaultConstructor(opts).Construct(ctx, constructor)
 }
 
@@ -32,10 +29,10 @@ type DefaultConstructor struct {
 	opts Options
 }
 
-func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constructorv1.ComponentConstructor) ([]*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
 	logger := log.Base().With("operation", "construct")
 
-	if err := constructorv1.Validate(constructor); err != nil {
+	if err := constructor.Validate(); err != nil {
 		return nil, err
 	}
 	if c.opts.ResourceInputMethodProvider == nil {
@@ -89,11 +86,11 @@ func NewDefaultConstructor(opts Options) Constructor {
 // construct creates a single component descriptor from a component specification.
 // It handles the creation of the base descriptor, processes all resources concurrently,
 // and adds the final component version to the target repository.
-func (c *DefaultConstructor) construct(ctx context.Context, component *constructorv1.Component) (*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) construct(ctx context.Context, component *constructor.Component) (*descriptor.Descriptor, error) {
 	logger := log.Base().With("component", component.Name, "version", component.Version)
 	logger.Debug("starting component construction")
 
-	if err := Validate(component); err != nil {
+	if err := component.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -120,28 +117,10 @@ func (c *DefaultConstructor) construct(ctx context.Context, component *construct
 // createBaseDescriptor initializes a new descriptor with the basic component metadata.
 // It sets up the component name, version, labels, and provider information, and prepares
 // empty slices for resources, sources, references, and repository contexts.
-func createBaseDescriptor(component *constructorv1.Component) *descriptor.Descriptor {
-	return &descriptor.Descriptor{
-		Meta: descriptor.Meta{
-			Version: "v2",
-		},
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    component.Name,
-					Version: component.Version,
-					Labels:  constructorv1.ConvertFromLabels(component.Labels),
-				},
-			},
-			Provider: map[string]string{
-				"name": component.Provider.Name,
-			},
-			Resources:          make([]descriptor.Resource, len(component.Resources)),
-			Sources:            make([]descriptor.Source, len(component.Sources)),
-			References:         make([]descriptor.Reference, 0),
-			RepositoryContexts: make([]runtime.Typed, 0),
-		},
-	}
+func createBaseDescriptor(component *constructor.Component) *descriptor.Descriptor {
+	return constructor.ConvertToDescriptor(&constructor.ComponentConstructor{
+		Components: []constructor.Component{*component},
+	})
 }
 
 // processDescriptor handles the concurrent processing of all resources and sources in a component.
@@ -150,7 +129,7 @@ func createBaseDescriptor(component *constructorv1.Component) *descriptor.Descri
 func (c *DefaultConstructor) processDescriptor(
 	ctx context.Context,
 	targetRepo TargetRepository,
-	component *constructorv1.Component,
+	component *constructor.Component,
 	desc *descriptor.Descriptor,
 ) error {
 	logger := log.Base().With("component", component.Name, "version", component.Version)
@@ -206,7 +185,7 @@ func (c *DefaultConstructor) processDescriptor(
 // processResource handles the processing of a single resource, including both input and non-input cases.
 // It ensures thread-safe access to the descriptor when updating resource information
 // and validates that the processed resource has proper access information.
-func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo TargetRepository, resource *constructorv1.Resource, component, version string) (*descriptor.Resource, error) {
+func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
 	logger := log.Base().With(
 		"component", component,
 		"version", version,
@@ -227,8 +206,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			res, err = c.processResourceByValue(ctx, targetRepo, resource, component, version)
 		} else {
 			logger.Debug("processing resource with existing access")
-			converted := constructorv1.ConvertToRuntimeResource(*resource)
-			res = &converted
+			res = constructor.ConvertToDescriptorResource(resource)
 
 			if c.opts.ResourceDigestProcessorProvider != nil {
 				var digestProcessor ResourceDigestProcessor
@@ -256,20 +234,21 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	return res, nil
 }
 
-func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetRepo TargetRepository, resource *constructorv1.Resource, component, version string) (*descriptor.Resource, error) {
+func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
 	repository, err := c.opts.GetResourceRepository(ctx, resource)
 	if err != nil {
 		return nil, err
 	}
-	converted := constructorv1.ConvertToRuntimeResource(*resource)
-	data, err := repository.DownloadResource(ctx, &converted)
+
+	converted := constructor.ConvertToDescriptorResource(resource)
+	data, err := repository.DownloadResource(ctx, converted)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}
 	return addColocatedResourceLocalBlob(ctx, targetRepo, component, version, resource, data)
 }
 
-func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo TargetRepository, src *constructorv1.Source, component, version string) (*descriptor.Source, error) {
+func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo TargetRepository, src *constructor.Source, component, version string) (*descriptor.Source, error) {
 	logger := log.Base().With(
 		"component", component,
 		"version", version,
@@ -285,8 +264,7 @@ func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo Targe
 		res, err = c.processSourceWithInput(ctx, targetRepo, src, component, version)
 	} else {
 		logger.Debug("processing source with existing access")
-		converted := constructorv1.ConvertToRuntimeSource(*src)
-		res = &converted
+		res = constructor.ConvertToDescriptorSource(src)
 	}
 
 	if err != nil {
@@ -304,7 +282,7 @@ func (c *DefaultConstructor) processSource(ctx context.Context, targetRepo Targe
 // processSourceWithInput handles the specific case of processing a source that has an input method.
 // It looks up the appropriate input method from the registry and processes the source
 // using the found method.
-func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetRepo TargetRepository, src *constructorv1.Source, component, version string) (*descriptor.Source, error) {
+func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetRepo TargetRepository, src *constructor.Source, component, version string) (*descriptor.Source, error) {
 	method, err := c.opts.GetSourceInputMethod(ctx, src)
 	if err != nil {
 		return nil, fmt.Errorf("no input method resolvable for input specification of type %q: %w", src.Input.GetType(), err)
@@ -348,7 +326,7 @@ func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetR
 // processResourceWithInput handles the specific case of processing a resource that has an input method.
 // It looks up the appropriate input method from the registry and processes the resource
 // using the found method.
-func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targetRepo TargetRepository, resource *constructorv1.Resource, component, version string) (*descriptor.Resource, error) {
+func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
 	method, err := c.opts.GetResourceInputMethod(ctx, resource)
 	if err != nil {
 		return nil, fmt.Errorf("no input method resolvable for input specification of type %q: %w", resource.Input.GetType(), err)
@@ -392,25 +370,14 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 // Validate performs validation checks on a component specification.
 // It validates all resources and sources in the component, collecting any validation errors
 // and returning them as a single joined error.
-func Validate(component *constructorv1.Component) error {
-	errs := make([]error, 0, len(component.Resources)+len(component.Sources))
-	for _, resource := range component.Resources {
-		if err := resource.Validate(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	for _, source := range component.Sources {
-		if err := source.Validate(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
+func Validate(component *constructor.Component) error {
+	return component.Validate()
 }
 
 // addColocatedResourceLocalBlob adds a local blob to the component version repository and defaults fields relevant
 // to declare the spec.LocalRelation to the component version as well as default the resource version and media type:
 //
-//  1. If no resource relation is set, it defaults to constructorv1.LocalRelation because the resource is then located
+//  1. If no resource relation is set, it defaults to constructor.LocalRelation because the resource is then located
 //     locally alongside the component
 //  2. If the media type is available it is used for the local blob specification.
 //
@@ -419,13 +386,10 @@ func addColocatedResourceLocalBlob(
 	ctx context.Context,
 	repo TargetRepository,
 	component, version string,
-	resource *constructorv1.Resource,
+	resource *constructor.Resource,
 	data blob.ReadOnlyBlob,
 ) (processed *descriptor.Resource, err error) {
-	localBlob := &v2.LocalBlob{}
-	if _, err := v2.Scheme.DefaultType(localBlob); err != nil {
-		return nil, fmt.Errorf("error getting default type for local blob: %w", err)
-	}
+	localBlob := &descriptor.LocalBlob{}
 
 	if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
 		localBlob.MediaType, _ = mediaTypeAware.MediaType()
@@ -434,7 +398,7 @@ func addColocatedResourceLocalBlob(
 	// if the resource doesn't have any information about its relation to the component
 	// default to a local resource.
 	if resource.Relation == "" {
-		resource.Relation = constructorv1.LocalRelation
+		resource.Relation = constructor.LocalRelation
 	}
 
 	// if the resource doesn't have any information about its version,
@@ -443,10 +407,10 @@ func addColocatedResourceLocalBlob(
 		resource.Version = version
 	}
 
-	descResource := constructorv1.ConvertToRuntimeResource(*resource)
-
+	descResource := constructor.ConvertToDescriptorResource(resource)
 	descResource.Access = localBlob
-	uploaded, err := repo.AddLocalResource(ctx, component, version, &descResource, data)
+
+	uploaded, err := repo.AddLocalResource(ctx, component, version, descResource, data)
 	if err != nil {
 		return nil, fmt.Errorf("error adding local resource %q based on input type %q as local resource to component %q : %w", resource.ToIdentity(), resource.Input.GetType(), component, err)
 	}
@@ -458,13 +422,10 @@ func addColocatedSourceLocalBlob(
 	ctx context.Context,
 	repo TargetRepository,
 	component, version string,
-	source *constructorv1.Source,
+	source *constructor.Source,
 	data blob.ReadOnlyBlob,
 ) (processed *descriptor.Source, err error) {
-	localBlob := &v2.LocalBlob{}
-	if _, err := v2.Scheme.DefaultType(localBlob); err != nil {
-		return nil, fmt.Errorf("error getting default type for local blob: %w", err)
-	}
+	localBlob := &descriptor.LocalBlob{}
 
 	if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
 		localBlob.MediaType, _ = mediaTypeAware.MediaType()
@@ -476,10 +437,10 @@ func addColocatedSourceLocalBlob(
 		source.Version = version
 	}
 
-	descSource := constructorv1.ConvertToRuntimeSource(*source)
-
+	descSource := constructor.ConvertToDescriptorSource(source)
 	descSource.Access = localBlob
-	uploaded, err := repo.AddLocalSource(ctx, component, version, &descSource, data)
+
+	uploaded, err := repo.AddLocalSource(ctx, component, version, descSource, data)
 	if err != nil {
 		return nil, fmt.Errorf("error adding local source %q based on input type %q as local resource to component %q : %w", source.ToIdentity(), source.Input.GetType(), component, err)
 	}
@@ -496,7 +457,7 @@ func newConcurrencyGroup(ctx context.Context, limit int) (*errgroup.Group, conte
 		logger.Debug("setting custom concurrency limit", "limit", limit)
 		eg.SetLimit(limit)
 	} else {
-		cores := goruntime.NumCPU()
+		cores := runtime.NumCPU()
 		logger.Debug("using CPU core count as concurrency limit", "cores", cores)
 		eg.SetLimit(cores)
 	}

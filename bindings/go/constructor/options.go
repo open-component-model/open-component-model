@@ -1,7 +1,7 @@
 package constructor
 
 import (
-	constructor "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 )
 
 // Options are the options for construction based on a *constructor.Constructor.
@@ -33,17 +33,17 @@ type Options struct {
 	ResourceDigestProcessorProvider
 
 	// While constructing a component version, the constructor library will use the given credential provider
-	// to get the credentials for the component specification when processing resources with an input method.
+	// to resolve credentials for the input methods.
 	// The CredentialProvider is OPTIONAL, if not provided, the constructor library will not resolve credentials.
 	CredentialProvider
 
-	// While constructing a component version, the constructor library will use the
-	// given function to decide whether a resource should be processed by value or not.
-	// The ProcessResourceByValue function is OPTIONAL, if not provided, the constructor library will never process resources by value.
-	ProcessResourceByValue func(*constructor.Resource) bool
+	// While constructing a component version, the constructor library will use the given function
+	// to determine if a resource should be processed by value.
+	// The ProcessResourceByValue is OPTIONAL, if not provided, the constructor library will not process resources by value.
+	ProcessResourceByValue func(resource *constructor.Resource) bool
 
-	// While constructing a component version, the constructor library will use the
-	// given ConcurrencyLimit to limit the number of concurrent operations on resources and sources.
-	// The ConcurrencyLimit is OPTIONAL, if not provided, the constructor library will limit concurrency to the number of available CPU cores.
+	// While constructing a component version, the constructor library will use the given concurrency limit
+	// to limit the number of concurrent operations.
+	// The ConcurrencyLimit is OPTIONAL, if not provided, the constructor library will use the number of CPU cores.
 	ConcurrencyLimit int
 }

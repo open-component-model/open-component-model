@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -22,13 +23,13 @@ type mockSourceInputMethod struct {
 	processedBlob   blob.ReadOnlyBlob
 }
 
-func (m *mockSourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, source *constructorv1.Source) (runtime.Identity, error) {
+func (m *mockSourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, source *constructorruntime.Source) (runtime.Identity, error) {
 	id := runtime.Identity{}
 	id.SetType(runtime.NewVersionedType("mock", "v1"))
 	return id, nil
 }
 
-func (m *mockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorv1.Source, creds map[string]string) (*SourceInputMethodResult, error) {
+func (m *mockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, creds map[string]string) (*SourceInputMethodResult, error) {
 	if m.processedSource != nil {
 		return &SourceInputMethodResult{
 			ProcessedSource: m.processedSource,
@@ -47,15 +48,15 @@ type mockSourceInputMethodProvider struct {
 	methods map[runtime.Type]SourceInputMethod
 }
 
-func (m *mockSourceInputMethodProvider) GetSourceInputMethod(ctx context.Context, source *constructorv1.Source) (SourceInputMethod, error) {
-	if method, ok := m.methods[source.Input.Type]; ok {
+func (m *mockSourceInputMethodProvider) GetSourceInputMethod(ctx context.Context, source *constructorruntime.Source) (SourceInputMethod, error) {
+	if method, ok := m.methods[source.Input.GetType()]; ok {
 		return method, nil
 	}
-	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", source.Input.Type)
+	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", source.Input.GetType())
 }
 
 // setupTestComponentWithSource creates a basic component constructor with a source for testing
-func setupTestComponentWithSource(t *testing.T, sourceYAML string) *constructorv1.ComponentConstructor {
+func setupTestComponentWithSource(t *testing.T, sourceYAML string) *constructorruntime.ComponentConstructor {
 	yamlData := fmt.Sprintf(`
 components:
   - name: ocm.software/test-component
@@ -70,7 +71,10 @@ components:
 	var constructor constructorv1.ComponentConstructor
 	err := yaml.Unmarshal([]byte(yamlData), &constructor)
 	require.NoError(t, err)
-	return &constructor
+
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
+	return converted
 }
 
 // verifyBasicComponentWithSource verifies the basic component properties for source tests
@@ -519,6 +523,8 @@ components:
 	err := yaml.Unmarshal([]byte(yamlData), &constructor)
 	require.NoError(t, err)
 
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
 	// Create a mock target repository
 	mockRepo := &mockTargetRepository{}
 
@@ -530,7 +536,7 @@ components:
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), &constructor)
+	descriptors, err := constructorInstance.Construct(t.Context(), converted)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -68,12 +68,12 @@ func (r *InputMethodRegistry) typeInsideRegistry(input runtime.Typed) (runtime.T
 }
 
 // GetResourceInputMethod retrieves the resource input method for a given typed object.
-func (r *InputMethodRegistry) GetResourceInputMethod(_ context.Context, res *constructorv1.Resource) (ResourceInputMethod, error) {
-	if res == nil || !res.HasInput() {
+func (r *InputMethodRegistry) GetResourceInputMethod(_ context.Context, res *constructor.Resource) (ResourceInputMethod, error) {
+	if res == nil || !res.AccessOrInput.HasInput() {
 		return nil, fmt.Errorf("resource input method requested for resource without input: %v", res)
 	}
 
-	typ, err := r.typeInsideRegistry(res.Input)
+	typ, err := r.typeInsideRegistry(res.AccessOrInput.Input)
 	if err != nil {
 		return nil, fmt.Errorf("error getting resource input method: %w", err)
 	}
@@ -86,12 +86,12 @@ func (r *InputMethodRegistry) GetResourceInputMethod(_ context.Context, res *con
 }
 
 // GetSourceInputMethod retrieves the source input method for a given typed object.
-func (r *InputMethodRegistry) GetSourceInputMethod(_ context.Context, src *constructorv1.Source) (SourceInputMethod, error) {
-	if src == nil || !src.HasInput() {
+func (r *InputMethodRegistry) GetSourceInputMethod(_ context.Context, src *constructor.Source) (SourceInputMethod, error) {
+	if src == nil || !src.AccessOrInput.HasInput() {
 		return nil, fmt.Errorf("source input method requested for source without input: %v", src)
 	}
 
-	typ, err := r.typeInsideRegistry(src.Input)
+	typ, err := r.typeInsideRegistry(src.AccessOrInput.Input)
 	if err != nil {
 		return nil, fmt.Errorf("error getting source input method: %w", err)
 	}

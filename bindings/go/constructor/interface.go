@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	constructor "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )

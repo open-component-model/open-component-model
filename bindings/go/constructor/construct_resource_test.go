@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -22,13 +23,13 @@ type mockInputMethod struct {
 	processedBlob     blob.ReadOnlyBlob
 }
 
-func (m *mockInputMethod) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorv1.Resource) (runtime.Identity, error) {
+func (m *mockInputMethod) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
 	id := runtime.Identity{}
 	id.SetType(runtime.NewVersionedType("mock", "v1"))
 	return id, nil
 }
 
-func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constructorv1.Resource, creds map[string]string) (*ResourceInputMethodResult, error) {
+func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, creds map[string]string) (*ResourceInputMethodResult, error) {
 	if m.processedResource != nil {
 		return &ResourceInputMethodResult{
 			ProcessedResource: m.processedResource,
@@ -47,11 +48,11 @@ type mockInputMethodProvider struct {
 	methods map[runtime.Type]ResourceInputMethod
 }
 
-func (m *mockInputMethodProvider) GetResourceInputMethod(ctx context.Context, resource *constructorv1.Resource) (ResourceInputMethod, error) {
-	if method, ok := m.methods[resource.Input.Type]; ok {
+func (m *mockInputMethodProvider) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (ResourceInputMethod, error) {
+	if method, ok := m.methods[resource.Input.GetType()]; ok {
 		return method, nil
 	}
-	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", resource.Input.Type)
+	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", resource.Input.GetType())
 }
 
 // mockResourceRepository implements ResourceRepository for testing
@@ -72,7 +73,7 @@ type mockResourceRepositoryProvider struct {
 	repo ResourceRepository
 }
 
-func (m *mockResourceRepositoryProvider) GetResourceRepository(ctx context.Context, resource *constructorv1.Resource) (ResourceRepository, error) {
+func (m *mockResourceRepositoryProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (ResourceRepository, error) {
 	return m.repo, nil
 }
 
@@ -138,7 +139,7 @@ func (m *mockCredentialProvider) Resolve(ctx context.Context, identity runtime.I
 }
 
 // setupTestComponent creates a basic component constructor for testing
-func setupTestComponent(t *testing.T, resourceYAML string) *constructorv1.ComponentConstructor {
+func setupTestComponent(t *testing.T, resourceYAML string) *constructorruntime.ComponentConstructor {
 	yamlData := fmt.Sprintf(`
 components:
   - name: ocm.software/test-component
@@ -153,7 +154,10 @@ components:
 	var constructor constructorv1.ComponentConstructor
 	err := yaml.Unmarshal([]byte(yamlData), &constructor)
 	require.NoError(t, err)
-	return &constructor
+
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
+	return converted
 }
 
 // verifyBasicComponent verifies the basic component properties
@@ -203,7 +207,7 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		ProcessResourceByValue: func(resource *constructorv1.Resource) bool {
+		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return true
 		},
 	}
@@ -247,7 +251,7 @@ func TestConstructWithResourceAccess(t *testing.T) {
 	// Create the constructor with our mocks
 	opts := Options{
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
-		ProcessResourceByValue: func(resource *constructorv1.Resource) bool {
+		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return false // Don't process by value for this test
 		},
 	}
@@ -331,7 +335,7 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 		CredentialProvider:          mockCredProvider,
-		ProcessResourceByValue: func(resource *constructorv1.Resource) bool {
+		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return true
 		},
 	}
@@ -402,7 +406,7 @@ func TestConstructWithResourceByValue(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceRepositoryProvider: mockRepoProvider,
-		ProcessResourceByValue: func(resource *constructorv1.Resource) bool {
+		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return true // Always process by value for this test
 		},
 	}
@@ -463,7 +467,7 @@ func TestConstructWithResourceDigest(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider:        &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceDigestProcessorProvider: mockDigestProvider,
-		ProcessResourceByValue: func(resource *constructorv1.Resource) bool {
+		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return false // Don't process by value for this test
 		},
 	}
@@ -656,7 +660,7 @@ func TestConstructWithResourceByValueFailure(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceRepositoryProvider: mockRepoProvider,
-		ProcessResourceByValue: func(resource *constructorv1.Resource) bool {
+		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return true // Always process by value for this test
 		},
 	}
@@ -735,6 +739,8 @@ components:
 	err := yaml.Unmarshal([]byte(yamlData), &constructor)
 	require.NoError(t, err)
 
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
 	// Create a mock target repository
 	mockRepo := &mockTargetRepository{}
 
@@ -742,14 +748,14 @@ components:
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		ProcessResourceByValue: func(resource *constructorv1.Resource) bool {
+		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return true
 		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), &constructor)
+	descriptors, err := constructorInstance.Construct(t.Context(), converted)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 

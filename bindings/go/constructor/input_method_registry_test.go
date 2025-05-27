@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -15,11 +15,11 @@ import (
 // MockResourceInputMethod is a mock implementation of ResourceInputMethod
 type MockResourceInputMethod struct{}
 
-func (m *MockResourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorv1.Resource) (runtime.Identity, error) {
+func (m *MockResourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
 	return runtime.Identity{}, nil
 }
 
-func (m *MockResourceInputMethod) ProcessResource(ctx context.Context, resource *constructorv1.Resource, credentials map[string]string) (*ResourceInputMethodResult, error) {
+func (m *MockResourceInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (*ResourceInputMethodResult, error) {
 	return &ResourceInputMethodResult{
 		ProcessedResource: &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{
@@ -36,11 +36,11 @@ func (m *MockResourceInputMethod) ProcessResource(ctx context.Context, resource 
 // MockSourceInputMethod is a mock implementation of SourceInputMethod
 type MockSourceInputMethod struct{}
 
-func (m *MockSourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, source *constructorv1.Source) (runtime.Identity, error) {
+func (m *MockSourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, source *constructorruntime.Source) (runtime.Identity, error) {
 	return runtime.Identity{}, nil
 }
 
-func (m *MockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorv1.Source, credentials map[string]string) (*SourceInputMethodResult, error) {
+func (m *MockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, credentials map[string]string) (*SourceInputMethodResult, error) {
 	return &SourceInputMethodResult{
 		ProcessedSource: &descriptor.Source{
 			ElementMeta: descriptor.ElementMeta{
@@ -97,15 +97,15 @@ func TestRegisterAndGetResourceInputMethod(t *testing.T) {
 	registry.MustRegisterResourceInputMethod(mockTyped, mockMethod)
 
 	// Create a resource with input
-	resource := &constructorv1.Resource{
-		ElementMeta: constructorv1.ElementMeta{
-			ObjectMeta: constructorv1.ObjectMeta{
+	resource := &constructorruntime.Resource{
+		ElementMeta: constructorruntime.ElementMeta{
+			ObjectMeta: constructorruntime.ObjectMeta{
 				Name:    "test-resource",
 				Version: "v1.0.0",
 			},
 		},
 		Type: "test-type",
-		AccessOrInput: constructorv1.AccessOrInput{
+		AccessOrInput: constructorruntime.AccessOrInput{
 			Input: &runtime.Raw{
 				Type: runtime.Type{Name: "test-type", Version: "v1"},
 			},
@@ -122,7 +122,7 @@ func TestRegisterAndGetResourceInputMethod(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test error case - resource without input
-	emptyResource := &constructorv1.Resource{}
+	emptyResource := &constructorruntime.Resource{}
 	_, err = registry.GetResourceInputMethod(context.Background(), emptyResource)
 	assert.Error(t, err)
 }
@@ -141,15 +141,15 @@ func TestRegisterAndGetSourceInputMethod(t *testing.T) {
 	registry.MustRegisterSourceInputMethod(mockTyped, mockMethod)
 
 	// Create a source with input
-	source := &constructorv1.Source{
-		ElementMeta: constructorv1.ElementMeta{
-			ObjectMeta: constructorv1.ObjectMeta{
+	source := &constructorruntime.Source{
+		ElementMeta: constructorruntime.ElementMeta{
+			ObjectMeta: constructorruntime.ObjectMeta{
 				Name:    "test-source",
 				Version: "v1.0.0",
 			},
 		},
 		Type: "test-type",
-		AccessOrInput: constructorv1.AccessOrInput{
+		AccessOrInput: constructorruntime.AccessOrInput{
 			Input: &runtime.Raw{
 				Type: runtime.Type{Name: "test-type", Version: "v1"},
 			},
@@ -166,7 +166,7 @@ func TestRegisterAndGetSourceInputMethod(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test error case - source without input
-	emptySource := &constructorv1.Source{}
+	emptySource := &constructorruntime.Source{}
 	_, err = registry.GetSourceInputMethod(context.Background(), emptySource)
 	assert.Error(t, err)
 }
