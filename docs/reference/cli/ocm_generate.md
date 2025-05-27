@@ -1,3 +1,12 @@
+---
+title: ocm generate
+description: Generate documentation for the OCM CLI.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm generate
 
 Generate documentation for the OCM CLI

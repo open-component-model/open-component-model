@@ -1,3 +1,12 @@
+---
+title: ocm completion bash
+description: Generate the autocompletion script for bash.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm completion bash
 
 Generate the autocompletion script for bash

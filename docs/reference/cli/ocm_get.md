@@ -1,3 +1,12 @@
+---
+title: ocm get
+description: Get anything from OCM.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm get
 
 Get anything from OCM
