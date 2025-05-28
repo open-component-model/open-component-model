@@ -1,3 +1,12 @@
+---
+title: ocm completion powershell
+description: Generate the autocompletion script for powershell.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm completion powershell
 
 Generate the autocompletion script for powershell

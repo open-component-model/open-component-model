@@ -1,9 +1,22 @@
+---
+title: ocm generate docs
+description: Generate Documentation for the CLI.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm generate docs
 
-Generation Documentation for the CLI
+Generate Documentation for the CLI
+
+### Synopsis
+
+Generate documentation for the OCM CLI in various formats, including Hugo-compatible markdown.
 
 ```
-ocm generate docs [-d <directory>] [flags]
+ocm generate docs [-d <directory>] [--mode <format>] [flags]
 ```
 
 ### Options
@@ -12,7 +25,7 @@ ocm generate docs [-d <directory>] [flags]
   -d, --directory string   directory to generate docs to. If not set, current working directory is used.
   -h, --help               help for docs
       --mode enum          generation mode to use
-                           (must be one of [man markdown restructured]) (default markdown)
+                           (must be one of [hugo man markdown restructured yaml]) (default markdown)
 ```
 
 ### Options inherited from parent commands

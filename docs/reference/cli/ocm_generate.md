@@ -1,3 +1,12 @@
+---
+title: ocm generate
+description: Generate documentation for the OCM CLI.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm generate
 
 Generate documentation for the OCM CLI
@@ -56,5 +65,5 @@ to quickly create a Cobra application.
 ### SEE ALSO
 
 * [ocm](ocm.md)	 - The official Open Component Model (OCM) CLI
-* [ocm generate docs](ocm_generate_docs.md)	 - Generation Documentation for the CLI
+* [ocm generate docs](ocm_generate_docs.md)	 - Generate Documentation for the CLI
 

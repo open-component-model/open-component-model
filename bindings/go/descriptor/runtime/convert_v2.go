@@ -95,8 +95,8 @@ func ConvertFromV2Provider(provider string) (Provider, error) {
 			return Provider{}, fmt.Errorf("invalid JSON format")
 		}
 		type providerStruct struct {
-			Name   string  `json:"name"`
-			Labels []Label `json:"labels,omitempty"`
+			Name   string     `json:"name"`
+			Labels []v2.Label `json:"labels,omitempty"`
 		}
 		var id providerStruct
 		if err := json.Unmarshal([]byte(provider), &id); err != nil {
@@ -104,7 +104,7 @@ func ConvertFromV2Provider(provider string) (Provider, error) {
 		}
 		return Provider{
 			Name:   id.Name,
-			Labels: id.Labels,
+			Labels: ConvertFromV2Labels(id.Labels),
 		}, nil
 	}
 	// If not JSON, fallback to a single key map.
