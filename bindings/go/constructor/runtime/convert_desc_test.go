@@ -255,8 +255,8 @@ func TestConvertToDescriptorComponent(t *testing.T) {
 						Version: "1.0.0",
 					},
 				},
-				Provider: runtime.Identity{
-					"name": "test-provider",
+				Provider: descriptor.Provider{
+					Name: "test-provider",
 				},
 			},
 		},
@@ -303,8 +303,8 @@ func TestConvertToDescriptorComponent(t *testing.T) {
 						Version: "1.0.0",
 					},
 				},
-				Provider: runtime.Identity{
-					"name": "test-provider",
+				Provider: descriptor.Provider{
+					Name: "test-provider",
 				},
 				Resources: []descriptor.Resource{
 					{
@@ -394,8 +394,8 @@ func TestConvertToDescriptor(t *testing.T) {
 							Version: "1.0.0",
 						},
 					},
-					Provider: runtime.Identity{
-						"name": "test-provider",
+					Provider: descriptor.Provider{
+						Name: "test-provider",
 					},
 				},
 			},

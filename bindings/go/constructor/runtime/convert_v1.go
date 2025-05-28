@@ -5,12 +5,11 @@ import (
 
 	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Label conversion functions
 
-func convertV1LabelsToDescriptorLabels(labels []v1.Label) []descriptor.Label {
+func ConvertV1LabelsToDescriptorLabels(labels []v1.Label) []descriptor.Label {
 	if labels == nil {
 		return nil
 	}
@@ -25,7 +24,7 @@ func convertV1LabelsToDescriptorLabels(labels []v1.Label) []descriptor.Label {
 	return result
 }
 
-func convertV1LabelsToLabels(labels []v1.Label) []Label {
+func ConvertV1LabelsToLabels(labels []v1.Label) []Label {
 	if labels == nil {
 		return nil
 	}
@@ -42,17 +41,17 @@ func convertV1LabelsToLabels(labels []v1.Label) []Label {
 
 // Common conversion helpers
 
-func convertObjectMeta(meta v1.ObjectMeta) descriptor.ObjectMeta {
+func ConvertObjectMeta(meta v1.ObjectMeta) descriptor.ObjectMeta {
 	return descriptor.ObjectMeta{
 		Name:    meta.Name,
 		Version: meta.Version,
-		Labels:  convertV1LabelsToDescriptorLabels(meta.Labels),
+		Labels:  ConvertV1LabelsToDescriptorLabels(meta.Labels),
 	}
 }
 
-func convertElementMeta(meta v1.ElementMeta) descriptor.ElementMeta {
+func ConvertElementMeta(meta v1.ElementMeta) descriptor.ElementMeta {
 	return descriptor.ElementMeta{
-		ObjectMeta:    convertObjectMeta(meta.ObjectMeta),
+		ObjectMeta:    ConvertObjectMeta(meta.ObjectMeta),
 		ExtraIdentity: meta.ExtraIdentity.DeepCopy(),
 	}
 }
@@ -65,7 +64,7 @@ func ConvertToRuntimeResource(resource *v1.Resource) descriptor.Resource {
 	}
 
 	target := descriptor.Resource{
-		ElementMeta: convertElementMeta(resource.ElementMeta),
+		ElementMeta: ConvertElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    descriptor.ResourceRelation(resource.Relation),
 	}
@@ -75,7 +74,7 @@ func ConvertToRuntimeResource(resource *v1.Resource) descriptor.Resource {
 		for i, ref := range resource.SourceRefs {
 			target.SourceRefs[i] = descriptor.SourceRef{
 				IdentitySelector: maps.Clone(ref.IdentitySelector),
-				Labels:           convertV1LabelsToDescriptorLabels(ref.Labels),
+				Labels:           ConvertV1LabelsToDescriptorLabels(ref.Labels),
 			}
 		}
 	}
@@ -95,7 +94,7 @@ func ConvertToRuntimeSource(source *v1.Source) descriptor.Source {
 	}
 
 	target := descriptor.Source{
-		ElementMeta: convertElementMeta(source.ElementMeta),
+		ElementMeta: ConvertElementMeta(source.ElementMeta),
 		Type:        source.Type,
 	}
 
@@ -114,7 +113,7 @@ func ConvertToRuntimeReference(reference *v1.Reference) descriptor.Reference {
 	}
 
 	target := descriptor.Reference{
-		ElementMeta: convertElementMeta(reference.ElementMeta),
+		ElementMeta: ConvertElementMeta(reference.ElementMeta),
 		Component:   reference.Component,
 	}
 
@@ -130,19 +129,17 @@ func ConvertToRuntimeComponent(component *v1.Component) descriptor.Component {
 
 	target := descriptor.Component{
 		ComponentMeta: descriptor.ComponentMeta{
-			ObjectMeta:   convertObjectMeta(component.ObjectMeta),
+			ObjectMeta:   ConvertObjectMeta(component.ObjectMeta),
 			CreationTime: component.CreationTime,
 		},
-		Provider: make(runtime.Identity),
+		Provider: descriptor.Provider{},
 	}
 
 	if component.Provider.Name != "" {
-		target.Provider[IdentityAttributeName] = component.Provider.Name
+		target.Provider.Name = component.Provider.Name
 	}
 	if component.Provider.Labels != nil {
-		for _, label := range component.Provider.Labels {
-			target.Provider[label.Name] = label.Value
-		}
+		target.Provider.Labels = ConvertV1LabelsToDescriptorLabels(component.Provider.Labels)
 	}
 
 	if component.Resources != nil {
@@ -258,7 +255,7 @@ func ConvertToRuntimeConstructor(constructor *v1.ComponentConstructor) *Componen
 			},
 			Provider: Provider{
 				Name:   component.Provider.Name,
-				Labels: convertV1LabelsToLabels(component.Provider.Labels),
+				Labels: ConvertV1LabelsToLabels(component.Provider.Labels),
 			},
 		}
 

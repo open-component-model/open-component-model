@@ -337,8 +337,8 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 						Version: "1.0.0",
 					},
 				},
-				Provider: map[string]string{
-					"name": "test-provider",
+				Provider: descriptor.Provider{
+					Name: "test-provider",
 				},
 			},
 		},
@@ -369,9 +369,15 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 						Version: "1.0.0",
 					},
 				},
-				Provider: map[string]string{
-					"name":           "test-provider",
-					"provider-label": "provider-value",
+				Provider: descriptor.Provider{
+					Name: "test-provider",
+					Labels: []descriptor.Label{
+						{
+							Name:    "provider-label",
+							Value:   "provider-value",
+							Signing: true,
+						},
+					},
 				},
 			},
 		},
@@ -418,8 +424,8 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 						Version: "1.0.0",
 					},
 				},
-				Provider: map[string]string{
-					"name": "test-provider",
+				Provider: descriptor.Provider{
+					Name: "test-provider",
 				},
 				Resources: []descriptor.Resource{
 					{
@@ -517,8 +523,8 @@ func TestConvertToRuntimeDescriptor(t *testing.T) {
 							Version: "1.0.0",
 						},
 					},
-					Provider: map[string]string{
-						"name": "test-provider",
+					Provider: descriptor.Provider{
+						Name: "test-provider",
 					},
 				},
 			},

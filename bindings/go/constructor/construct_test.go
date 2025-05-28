@@ -183,7 +183,7 @@ components:
 	desc := descriptors[0]
 	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
 	assert.Equal(t, "v1.0.0", desc.Component.Version)
-	assert.Equal(t, "test-provider", desc.Component.Provider["name"])
+	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
 	assert.Len(t, desc.Component.Resources, 1)
 	assert.Len(t, desc.Component.Sources, 1)
 

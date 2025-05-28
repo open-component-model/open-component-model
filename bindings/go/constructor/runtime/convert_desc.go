@@ -96,24 +96,11 @@ func ConvertToDescriptorReference(reference *Reference) *descriptor.Reference {
 }
 
 // Provider conversion
-func convertProviderToDescriptor(provider Provider) (runtime.Identity, error) {
-	if provider.Name == "" && len(provider.Labels) == 0 {
-		return nil, nil
-	}
-	if len(provider.Labels) == 0 {
-		return runtime.Identity{
-			IdentityAttributeName: provider.Name,
-		}, nil
-	}
-	// If we have labels, create a full identity map
-	target := make(runtime.Identity)
-	if provider.Name != "" {
-		target[IdentityAttributeName] = provider.Name
-	}
-	for _, label := range provider.Labels {
-		target[label.Name] = label.Value
-	}
-	return target, nil
+func convertProviderToDescriptor(provider Provider) (descriptor.Provider, error) {
+	return descriptor.Provider{
+		Name:   provider.Name,
+		Labels: ConvertFromLabels(provider.Labels),
+	}, nil
 }
 
 // Component conversion

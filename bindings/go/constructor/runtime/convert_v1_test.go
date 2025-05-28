@@ -301,9 +301,11 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 					},
 					CreationTime: "2024-01-01T00:00:00Z",
 				},
-				Provider: rt.Identity{
-					"name": "test-provider",
-					"test": "value",
+				Provider: descriptor.Provider{
+					Name: "test-provider",
+					Labels: []descriptor.Label{
+						{Name: "test", Value: "value"},
+					},
 				},
 			},
 		},
@@ -361,8 +363,8 @@ func TestConvertToRuntimeDescriptor(t *testing.T) {
 							Version: "1.0.0",
 						},
 					},
-					Provider: rt.Identity{
-						"name": "test-provider",
+					Provider: descriptor.Provider{
+						Name: "test-provider",
 					},
 				},
 			},
