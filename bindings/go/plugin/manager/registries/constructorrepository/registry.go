@@ -10,63 +10,86 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/construction/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
-	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+const (
+	resourceInputRegistryType           = "resourceInputRegistry"
+	sourceInputRegistryType             = "sourceInputRegistry"
+	resourceDigestProcessorRegistryType = "resourceDigestProcessorRegistry"
 )
 
 // NewConstructionRepositoryRegistry creates a new registry and initializes maps.
 func NewConstructionRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
-		ctx:                                              ctx,
-		resourceInputRegistry:                            make(map[runtime.Type]mtypes.Plugin),
-		sourceInputRegistry:                              make(map[runtime.Type]mtypes.Plugin),
-		resourceDigestProcessorRegistry:                  make(map[runtime.Type]mtypes.Plugin),
-		constructedPlugins:                               make(map[string]*constructedPlugin), // running plugins
-		internalResourceInputRepositoryPlugins:           make(map[runtime.Type]v1.ConstructionContract),
-		internalResourceInputRepositoryScheme:            runtime.NewScheme(),
-		internalSourceInputRepositoryPlugins:             make(map[runtime.Type]v1.ConstructionContract),
-		internalSourceInputRepositoryScheme:              runtime.NewScheme(),
-		internalResourceDigestProcessorRepositoryPlugins: make(map[runtime.Type]v1.ConstructionContract),
-		internalResourceDigestProcessorRepositoryScheme:  runtime.NewScheme(),
+		ctx:      ctx,
+		registry: make(map[string]map[runtime.Type]types.Plugin),
+		internalRepositorySchemes: map[string]*runtime.Scheme{
+			resourceInputRegistryType:           runtime.NewScheme(runtime.WithAllowUnknown()),
+			sourceInputRegistryType:             runtime.NewScheme(runtime.WithAllowUnknown()),
+			resourceDigestProcessorRegistryType: runtime.NewScheme(runtime.WithAllowUnknown()),
+		},
+		internalRepositoryPlugins: make(map[string]map[runtime.Type]v1.ConstructionContract),
+		constructedPlugins:        make(map[string]*constructedPlugin),
 	}
 }
 
 // RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
 type RepositoryRegistry struct {
-	ctx                             context.Context
-	mu                              sync.Mutex
-	resourceInputRegistry           map[runtime.Type]mtypes.Plugin
-	sourceInputRegistry             map[runtime.Type]mtypes.Plugin
-	resourceDigestProcessorRegistry map[runtime.Type]mtypes.Plugin
-	constructedPlugins              map[string]*constructedPlugin // running plugins
-
-	// TODO: Think about this being a list instead where the elements are a struct{contract, type}.
-	// And then the list would have a lookup method for Has/Exists. Might be better codewise. It's no like we
-	// have thousands of plugins to loop through.
-	internalResourceInputRepositoryPlugins           map[runtime.Type]v1.ConstructionContract
-	internalSourceInputRepositoryPlugins             map[runtime.Type]v1.ConstructionContract
-	internalResourceDigestProcessorRepositoryPlugins map[runtime.Type]v1.ConstructionContract
-
-	internalResourceInputRepositoryScheme           *runtime.Scheme
-	internalSourceInputRepositoryScheme             *runtime.Scheme
-	internalResourceDigestProcessorRepositoryScheme *runtime.Scheme
+	ctx                       context.Context
+	mu                        sync.Mutex
+	registry                  map[string]map[runtime.Type]types.Plugin
+	internalRepositoryPlugins map[string]map[runtime.Type]v1.ConstructionContract
+	internalRepositorySchemes map[string]*runtime.Scheme
+	constructedPlugins        map[string]*constructedPlugin // running plugins
 }
 
-// TODO: Think about this.
-// func (r *RepositoryRegistry) RepositoryScheme() *runtime.Scheme {
-//	 return r.internalConstructionRepositoryScheme
-// }
+func (r *RepositoryRegistry) ResourceInputRepositoryScheme() *runtime.Scheme {
+	return r.internalRepositorySchemes[resourceInputRegistryType]
+}
 
-// AddResourceInputPlugin takes a construction discovered by the manager and adds it to the stored construction registry.
-func (r *RepositoryRegistry) AddResourceInputPlugin(plugin mtypes.Plugin, constructionType runtime.Type) error {
+func (r *RepositoryRegistry) SourceInputRepositoryScheme() *runtime.Scheme {
+	return r.internalRepositorySchemes[sourceInputRegistryType]
+}
+
+func (r *RepositoryRegistry) ResourceDigestProcessorRepositoryScheme() *runtime.Scheme {
+	return r.internalRepositorySchemes[resourceDigestProcessorRegistryType]
+}
+
+// AddResourceInputPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
+// tracking the plugin.
+func (r *RepositoryRegistry) AddResourceInputPlugin(plugin types.Plugin, constructionType runtime.Type) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if plugin, ok := r.resourceInputRegistry[constructionType]; ok {
-		return fmt.Errorf("plugin for construction type %q already registered with ID: %s", constructionType, plugin.ID)
+	return r.addPlugin(plugin, constructionType, resourceInputRegistryType)
+}
+
+// AddSourceInputPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
+// tracking the plugin.
+func (r *RepositoryRegistry) AddSourceInputPlugin(plugin types.Plugin, constructionType runtime.Type) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.addPlugin(plugin, constructionType, sourceInputRegistryType)
+}
+
+// AddResourceDigestProcessorPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
+// tracking the plugin.
+func (r *RepositoryRegistry) AddResourceDigestProcessorPlugin(plugin types.Plugin, constructionType runtime.Type) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.addPlugin(plugin, constructionType, resourceDigestProcessorRegistryType)
+}
+
+func (r *RepositoryRegistry) addPlugin(plugin types.Plugin, typ runtime.Type, registry string) error {
+	if plugin, ok := r.registry[registry][typ]; ok {
+		return fmt.Errorf("plugin for construction type %q already registered with ID: %s", typ, plugin.ID)
 	}
 
-	r.resourceInputRegistry[constructionType] = plugin
+	r.registry[registry][typ] = plugin
 
 	return nil
 }
@@ -75,20 +98,7 @@ func (r *RepositoryRegistry) GetResourceInputPlugin(ctx context.Context, spec ru
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.internalResourceInputRepositoryScheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
-	}
-	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.internalResourceInputRepositoryScheme.TypeForPrototype(spec); err == nil {
-		p, ok := r.internalResourceInputRepositoryPlugins[typ]
-		if !ok {
-			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
-		}
-
-		return p, nil
-	}
-
-	plugin, err := r.getPlugin(ctx, r.resourceInputRegistry, spec)
+	plugin, err := r.getPlugin(ctx, resourceInputRegistryType, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -100,20 +110,7 @@ func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runt
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.internalSourceInputRepositoryScheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
-	}
-	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.internalSourceInputRepositoryScheme.TypeForPrototype(spec); err == nil {
-		p, ok := r.internalSourceInputRepositoryPlugins[typ]
-		if !ok {
-			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
-		}
-
-		return p, nil
-	}
-
-	plugin, err := r.getPlugin(ctx, r.sourceInputRegistry, spec)
+	plugin, err := r.getPlugin(ctx, sourceInputRegistryType, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -122,20 +119,10 @@ func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runt
 }
 
 func (r *RepositoryRegistry) GetResourceDigestProcessorPlugin(ctx context.Context, spec runtime.Typed) (v1.ResourceDigestProcessorPlugin, error) {
-	if _, err := r.internalResourceDigestProcessorRepositoryScheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
-	}
-	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.internalResourceDigestProcessorRepositoryScheme.TypeForPrototype(spec); err == nil {
-		p, ok := r.internalResourceDigestProcessorRepositoryPlugins[typ]
-		if !ok {
-			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
-		}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-		return p, nil
-	}
-
-	plugin, err := r.getPlugin(ctx, r.resourceDigestProcessorRegistry, spec)
+	plugin, err := r.getPlugin(ctx, resourceDigestProcessorRegistryType, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +133,20 @@ func (r *RepositoryRegistry) GetResourceDigestProcessorPlugin(ctx context.Contex
 // Loops through all the plugin with the same type implementing the right contract. Because there could be
 // multiple plugins, with the same type but implementing a different contract. For example,
 // a ResourceInputPlugin and the SourceInputPlugin but registered for the same type.
-func (r *RepositoryRegistry) getPlugin(ctx context.Context, registry map[runtime.Type]mtypes.Plugin, spec runtime.Typed) (v1.ConstructionContract, error) {
+func (r *RepositoryRegistry) getPlugin(ctx context.Context, registry string, spec runtime.Typed) (v1.ConstructionContract, error) {
+	if _, err := r.internalRepositorySchemes[registry].DefaultType(spec); err != nil {
+		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
+	}
+	// if we find the type has been registered internally, we look for internal plugins for it.
+	if typ, err := r.internalRepositorySchemes[registry].TypeForPrototype(spec); err == nil {
+		p, ok := r.internalRepositoryPlugins[registry][typ]
+		if !ok {
+			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
+		}
+
+		return p, nil
+	}
+
 	// if we don't find the type registered internally, we look for external plugins by using the type
 	// from the specification.
 	typ := spec.GetType()
@@ -154,7 +154,7 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, registry map[runtime
 		return nil, fmt.Errorf("external plugins can not be fetched without a type %T", spec)
 	}
 
-	plugin, ok := registry[typ]
+	plugin, ok := r.registry[registry][typ]
 	if !ok {
 		return nil, fmt.Errorf("failed to get plugin for typ %q", typ)
 	}
@@ -180,9 +180,9 @@ func RegisterInternalResourceInputPlugin(
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
 	}
 
-	r.internalResourceInputRepositoryPlugins[typ] = plugin
+	r.internalRepositoryPlugins[resourceInputRegistryType][typ] = plugin
 
-	if err := r.internalResourceInputRepositoryScheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.internalRepositorySchemes[resourceInputRegistryType].RegisterWithAlias(proto, typ); err != nil {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
@@ -203,9 +203,9 @@ func RegisterInternalSourceInputPlugin(
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
 	}
 
-	r.internalSourceInputRepositoryPlugins[typ] = plugin
+	r.internalRepositoryPlugins[sourceInputRegistryType][typ] = plugin
 
-	if err := r.internalSourceInputRepositoryScheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.internalRepositorySchemes[sourceInputRegistryType].RegisterWithAlias(proto, typ); err != nil {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
@@ -226,9 +226,9 @@ func RegisterInternalResourceDigestProcessorPlugin(
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
 	}
 
-	r.internalResourceDigestProcessorRepositoryPlugins[typ] = plugin
+	r.internalRepositoryPlugins[resourceDigestProcessorRegistryType][typ] = plugin
 
-	if err := r.internalResourceDigestProcessorRepositoryScheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.internalRepositorySchemes[resourceDigestProcessorRegistryType].RegisterWithAlias(proto, typ); err != nil {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
@@ -258,7 +258,7 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	return errs
 }
 
-func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mtypes.Plugin) (v1.ConstructionContract, error) {
+func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (v1.ConstructionContract, error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
