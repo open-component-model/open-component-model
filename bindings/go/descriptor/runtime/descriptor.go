@@ -52,13 +52,19 @@ type Component struct {
 	// See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#repository-contexts
 	RepositoryContexts []runtime.Typed `json:"-"`
 	// Provider describes the provider type of component in the origin's context.
-	Provider runtime.Identity `json:"-"`
+	Provider Provider `json:"-"`
 	// Resources defines all resources that are created by the component and by a third party.
 	Resources []Resource `json:"-"`
 	// Sources defines sources that produced the component.
 	Sources []Source `json:"-"`
 	// References component dependencies that can be resolved in the current context.
 	References []Reference `json:"-"`
+}
+
+// Provider describes the provider of the component.
+type Provider struct {
+	Name   string  `json:"-"`
+	Labels []Label `json:"-"`
 }
 
 // ResourceRelation describes whether the component is created by a third party or internally.

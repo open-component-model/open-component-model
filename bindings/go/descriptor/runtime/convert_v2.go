@@ -86,23 +86,30 @@ func ConvertToV2(scheme *runtime.Scheme, descriptor *Descriptor) (*v2.Descriptor
 }
 
 // ConvertFromV2Provider parses a provider string to an Identity map or JSON structure.
-func ConvertFromV2Provider(provider string) (runtime.Identity, error) {
+func ConvertFromV2Provider(provider string) (Provider, error) {
 	if provider == "" {
-		return nil, nil
+		return Provider{}, nil
 	}
 	if strings.HasPrefix(strings.TrimSpace(provider), "{") {
 		if !json.Valid([]byte(provider)) {
-			return nil, fmt.Errorf("invalid JSON format")
+			return Provider{}, fmt.Errorf("invalid JSON format")
 		}
-		id := runtime.Identity{}
+		type providerStruct struct {
+			Name   string     `json:"name"`
+			Labels []v2.Label `json:"labels,omitempty"`
+		}
+		var id providerStruct
 		if err := json.Unmarshal([]byte(provider), &id); err != nil {
-			return nil, fmt.Errorf("could not unmarshal provider string: %w", err)
+			return Provider{}, fmt.Errorf("could not unmarshal provider string: %w", err)
 		}
-		return id, nil
+		return Provider{
+			Name:   id.Name,
+			Labels: ConvertFromV2Labels(id.Labels),
+		}, nil
 	}
 	// If not JSON, fallback to a single key map.
-	return runtime.Identity{
-		v2.IdentityAttributeName: provider,
+	return Provider{
+		Name: provider,
 	}, nil
 }
 
@@ -251,14 +258,25 @@ func ConvertFromV2Signatures(signatures []v2.Signature) []Signature {
 }
 
 // ConvertToV2Provider converts an internal provider identity to a string format expected by v2.
-func ConvertToV2Provider(provider runtime.Identity) (string, error) {
-	if provider == nil {
-		return "", nil
+func ConvertToV2Provider(provider Provider) (string, error) {
+	if provider.Name == "" {
+		return "", fmt.Errorf("provider name is empty")
 	}
-	if name, ok := provider[v2.IdentityAttributeName]; ok {
-		return name, nil
+	if provider.Labels == nil {
+		return provider.Name, nil
 	}
-	return "", fmt.Errorf("provider name not found")
+	type providerStruct struct {
+		Name   string     `json:"name"`
+		Labels []v2.Label `json:"labels,omitempty"`
+	}
+	providerJSON, err := json.Marshal(&providerStruct{
+		Name:   provider.Name,
+		Labels: ConvertToV2Labels(provider.Labels),
+	})
+	if err != nil {
+		return "", fmt.Errorf("could not marshal provider to JSON: %w", err)
+	}
+	return string(providerJSON), nil
 }
 
 // ConvertToV2RepositoryContexts deep copies internal repository contexts to v2 format.
