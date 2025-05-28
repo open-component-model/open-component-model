@@ -112,17 +112,16 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
-	instance := constructorProvider{
+	instance := &constructorProvider{
 		cache:          cacheDir,
 		targetRepoSpec: repoSpec,
 		PluginManager:  pluginManager,
 	}
 
 	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, constructor.Options{
-		TargetRepositoryProvider:        instance,
-		ResourceRepositoryProvider:      instance,
-		ResourceInputMethodProvider:     instance,
-		ResourceDigestProcessorProvider: instance,
+		TargetRepositoryProvider:    instance,
+		ResourceRepositoryProvider:  instance,
+		ResourceInputMethodProvider: instance,
 		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return copyResources
 		},
@@ -191,34 +190,37 @@ type constructorProvider struct {
 	*credentials.Graph
 }
 
-func (c constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {
-	// TODO implement digest processor registry in plugin manager
+func (prov *constructorProvider) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceInputMethod, error) {
+	// plugin, err := prov.PluginManager.InputMethodRegistry.GetPlugin(ctx, resource)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("getting plugin for resource %q failed: %w", resource.ToIdentity().String(), err)
+	// }
 	panic("implement me")
 }
 
-func (c constructorProvider) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceInputMethod, error) {
+func (prov *constructorProvider) GetSourceInputMethod(ctx context.Context, resource *constructorruntime.Source) (constructor.SourceInputMethod, error) {
 	// TODO implement input method registry in plugin manager
 	panic("implement me")
 }
 
-func (c constructorProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceRepository, error) {
-	// TODO implement resource repository registry in plugin manager
+func (prov *constructorProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceRepository, error) {
+	// plugin, err := prov.PluginManager.ResourceRepositoryRegistry.GetPlugin(ctx, resource)
 	panic("implement me")
 }
 
-func (c constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
-	plugin, err := c.PluginManager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, c.targetRepoSpec)
+func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
+	plugin, err := prov.PluginManager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, prov.targetRepoSpec)
 	if err != nil {
-		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", c.targetRepoSpec, err)
+		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", prov.targetRepoSpec, err)
 	}
 	var creds map[string]string
-	identity, err := plugin.GetIdentity(ctx, v1.GetIdentityRequest[runtime.Typed]{Typ: c.targetRepoSpec})
+	identity, err := plugin.GetIdentity(ctx, v1.GetIdentityRequest[runtime.Typed]{Typ: prov.targetRepoSpec})
 	if err == nil {
-		if creds, err = c.Graph.Resolve(ctx, identity); err != nil {
-			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", c.targetRepoSpec, err)
+		if creds, err = prov.Graph.Resolve(ctx, identity); err != nil {
+			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", prov.targetRepoSpec, err)
 		}
 	}
-	return &targetRepo{c.cache, c.targetRepoSpec, creds, plugin}, nil
+	return &targetRepo{prov.cache, prov.targetRepoSpec, creds, plugin}, nil
 }
 
 type targetRepo struct {
