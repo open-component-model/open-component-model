@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/constructor"
+	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -117,16 +118,13 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		PluginManager:  pluginManager,
 	}
 
-	_, err = constructor.Construct(cmd.Context(), constructorSpec, constructor.Options{
+	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, constructor.Options{
 		TargetRepositoryProvider:        instance,
 		ResourceRepositoryProvider:      instance,
 		ResourceInputMethodProvider:     instance,
 		ResourceDigestProcessorProvider: instance,
-		ProcessByValue: func(resource *constructorv1.Resource) bool {
-			if resource.Relation == constructorv1.ExternalRelation {
-				return copyResources
-			}
-			return true
+		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
+			return copyResources
 		},
 		ConcurrencyLimit: concurrencyLimit,
 	})
@@ -150,7 +148,7 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	return &repoSpec, nil
 }
 
-func GetComponentConstructor(cmd *cobra.Command) (*constructorv1.ComponentConstructor, error) {
+func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentConstructor, error) {
 	constructorFlag, err := file.Get(cmd.Flags(), FlagComponentConstructorPath)
 	if err != nil {
 		return nil, fmt.Errorf("getting component constructor path flag failed: %w", err)
@@ -177,7 +175,10 @@ func GetComponentConstructor(cmd *cobra.Command) (*constructorv1.ComponentConstr
 	if err := yaml.Unmarshal(constructorData, &data); err != nil {
 		return nil, fmt.Errorf("unmarshalling component constructor %q failed: %w", constructorFlag.String(), err)
 	}
-	return &data, nil
+
+	converted := constructorruntime.ConvertToRuntimeConstructor(&data)
+
+	return converted, nil
 }
 
 var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
@@ -195,17 +196,17 @@ func (c constructorProvider) GetDigestProcessor(ctx context.Context, resource *d
 	panic("implement me")
 }
 
-func (c constructorProvider) GetResourceInputMethod(ctx context.Context, resource *constructorv1.Resource) (constructor.ResourceInputMethod, error) {
+func (c constructorProvider) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceInputMethod, error) {
 	// TODO implement input method registry in plugin manager
 	panic("implement me")
 }
 
-func (c constructorProvider) GetResourceRepository(ctx context.Context, resource *constructorv1.Resource) (constructor.ResourceRepository, error) {
+func (c constructorProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceRepository, error) {
 	// TODO implement resource repository registry in plugin manager
 	panic("implement me")
 }
 
-func (c constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorv1.Component) (constructor.TargetRepository, error) {
+func (c constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
 	plugin, err := c.PluginManager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, c.targetRepoSpec)
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", c.targetRepoSpec, err)
@@ -225,6 +226,10 @@ type targetRepo struct {
 	spec        runtime.Typed
 	credentials map[string]string
 	v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed]
+}
+
+func (t targetRepo) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (newRes *descriptor.Source, err error) {
+	return nil, fmt.Errorf("adding local sources is not yet supported in this command")
 }
 
 func (t targetRepo) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {

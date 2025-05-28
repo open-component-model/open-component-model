@@ -12,9 +12,10 @@ require (
 	golang.org/x/sys v0.33.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.2
 	ocm.software/open-component-model/bindings/go/configuration v0.0.1
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250528104233-35270a74713a
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515124949-75bfcc622a06
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250526130658-2a15446778e5
+	ocm.software/open-component-model/bindings/go/ctf v0.0.1
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250528090425-67776186e12d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
 	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250520091418-cc5a0fb57ffb
 	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250526115132-9c9e145ad14f
