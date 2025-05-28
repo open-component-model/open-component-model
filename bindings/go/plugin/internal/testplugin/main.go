@@ -34,8 +34,8 @@ func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.Get
 					Version: "1.0.0",
 				},
 			},
-			Provider: runtime.Identity{
-				"name": "ocm.software",
+			Provider: descriptor.Provider{
+				Name: "ocm.software",
 			},
 			Resources: []descriptor.Resource{
 				{
