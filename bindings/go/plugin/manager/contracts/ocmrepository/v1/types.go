@@ -37,9 +37,11 @@ type GetLocalResourceRequest[T runtime.Typed] struct {
 
 	// Identity of the local resource
 	Identity map[string]string `json:"identity,omitempty"`
+}
 
-	// The Location of the Local Resource to download to
-	TargetLocation types.Location `json:"targetLocation"`
+type GetLocalResourceResponse struct {
+	// Location where the local resource will be downloaded to and can be accessed.
+	Location types.Location `json:"location"`
 }
 
 type PostLocalResourceRequest[T runtime.Typed] struct {
@@ -59,9 +61,11 @@ type GetResourceRequest struct {
 	types.Location
 	// The resource specification to download
 	*v2.Resource `json:"resource"`
+}
 
-	// The Location of the Local Resource to download to
-	TargetLocation types.Location `json:"targetLocation"`
+type GetResourceResponse struct {
+	// Location where the resource will be downloaded to and can be accessed.
+	Location types.Location `json:"location"`
 }
 
 type PostResourceRequest struct {

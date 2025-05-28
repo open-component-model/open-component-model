@@ -66,6 +66,20 @@ func TestPluginManager(t *testing.T) {
 	}, map[string]string{})
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
+
+	response, err := plugin.GetLocalResource(ctx, repov1.GetLocalResourceRequest[runtime.Typed]{
+		Repository: &dummyv1.Repository{
+			Type:    typ,
+			BaseUrl: "https://ocm.software/test",
+		},
+		Name:    "test-resource",
+		Version: "v0.0.1",
+	}, map[string]string{})
+	require.NoError(t, err)
+	require.Equal(t, types.LocationTypeLocalFile, response.Location.LocationType)
+	content, err := os.ReadFile(response.Location.Value)
+	require.NoError(t, err)
+	require.Equal(t, "test-resource", string(content))
 }
 
 func TestConfigurationPassedToPlugin(t *testing.T) {

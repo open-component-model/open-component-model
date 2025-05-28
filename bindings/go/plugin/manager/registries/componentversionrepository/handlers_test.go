@@ -130,8 +130,8 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "GetLocalResourceHandlerFunc unauthorized error",
 			handlerFunc: func(t *testing.T) http.HandlerFunc {
-				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) error {
-					return nil
+				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
+					return repov1.GetLocalResourceResponse{}, nil
 				}, scheme, &dummyv1.Repository{})
 
 				return handler
@@ -153,10 +153,10 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "GetLocalResourceHandlerFunc success",
 			handlerFunc: func(t *testing.T) http.HandlerFunc {
-				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) error {
+				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
 					require.Equal(t, "component", request.Name)
 					require.Equal(t, "1.0.0", request.Version)
-					return nil
+					return repov1.GetLocalResourceResponse{}, nil
 				}, scheme, &dummyv1.Repository{})
 
 				return handler

@@ -70,9 +70,24 @@ func (m *TestPlugin) ListComponentVersions(ctx context.Context, request repov1.L
 	return []string{"v0.0.1", "v0.0.2"}, nil
 }
 
-func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) error {
-	_, _ = fmt.Fprintf(os.Stdout, "Writing my local resource here to target: %+v\n", request.TargetLocation)
-	return nil
+func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
+	// the plugin decides where things will live.
+	f, err := os.CreateTemp("", "test-resource-file")
+	if err != nil {
+		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error creating temp file: %w", err)
+	}
+
+	if err := os.WriteFile(f.Name(), []byte("test-resource"), 0o600); err != nil {
+		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error write to temp file: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(os.Stdout, "Writing my local resource here to target: %+v\n", f.Name())
+	return repov1.GetLocalResourceResponse{
+		Location: types.Location{
+			Value:        f.Name(),
+			LocationType: types.LocationTypeLocalFile,
+		},
+	}, nil
 }
 
 func (m *TestPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Resource, error) {

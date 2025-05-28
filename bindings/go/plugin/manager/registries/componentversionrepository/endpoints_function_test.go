@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
@@ -48,8 +49,13 @@ func (m *mockPlugin) ListComponentVersions(_ context.Context, _ repov1.ListCompo
 	return []string{"v0.0.1", "v0.0.2"}, nil
 }
 
-func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResourceRequest[*dummyv1.Repository], _ map[string]string) error {
-	return nil
+func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResourceRequest[*dummyv1.Repository], _ map[string]string) (repov1.GetLocalResourceResponse, error) {
+	return repov1.GetLocalResourceResponse{
+		Location: types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        "/dummy/local-file",
+		},
+	}, nil
 }
 
 func (m *mockPlugin) GetIdentity(ctx context.Context, typ repov1.GetIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {

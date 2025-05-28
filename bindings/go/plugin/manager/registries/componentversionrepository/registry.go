@@ -131,6 +131,9 @@ loop:
 }
 
 func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if _, err := r.internalComponentVersionRepositoryScheme.DefaultType(spec); err != nil {
 		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
 	}
