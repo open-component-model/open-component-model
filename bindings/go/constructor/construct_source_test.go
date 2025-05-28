@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -22,13 +23,13 @@ type mockSourceInputMethod struct {
 	processedBlob   blob.ReadOnlyBlob
 }
 
-func (m *mockSourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, source *constructorv1.Source) (runtime.Identity, error) {
+func (m *mockSourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, source *constructorruntime.Source) (runtime.Identity, error) {
 	id := runtime.Identity{}
 	id.SetType(runtime.NewVersionedType("mock", "v1"))
 	return id, nil
 }
 
-func (m *mockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorv1.Source, creds map[string]string) (*SourceInputMethodResult, error) {
+func (m *mockSourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, creds map[string]string) (*SourceInputMethodResult, error) {
 	if m.processedSource != nil {
 		return &SourceInputMethodResult{
 			ProcessedSource: m.processedSource,
@@ -47,15 +48,15 @@ type mockSourceInputMethodProvider struct {
 	methods map[runtime.Type]SourceInputMethod
 }
 
-func (m *mockSourceInputMethodProvider) GetSourceInputMethod(ctx context.Context, source *constructorv1.Source) (SourceInputMethod, error) {
-	if method, ok := m.methods[source.Input.Type]; ok {
+func (m *mockSourceInputMethodProvider) GetSourceInputMethod(ctx context.Context, source *constructorruntime.Source) (SourceInputMethod, error) {
+	if method, ok := m.methods[source.Input.GetType()]; ok {
 		return method, nil
 	}
-	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", source.Input.Type)
+	return nil, fmt.Errorf("no input method resolvable for input specification of type %s", source.Input.GetType())
 }
 
 // setupTestComponentWithSource creates a basic component constructor with a source for testing
-func setupTestComponentWithSource(t *testing.T, sourceYAML string) *constructorv1.ComponentConstructor {
+func setupTestComponentWithSource(t *testing.T, sourceYAML string) *constructorruntime.ComponentConstructor {
 	yamlData := fmt.Sprintf(`
 components:
   - name: ocm.software/test-component
@@ -70,14 +71,17 @@ components:
 	var constructor constructorv1.ComponentConstructor
 	err := yaml.Unmarshal([]byte(yamlData), &constructor)
 	require.NoError(t, err)
-	return &constructor
+
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
+	return converted
 }
 
 // verifyBasicComponentWithSource verifies the basic component properties for source tests
 func verifyBasicComponentWithSource(t *testing.T, desc *descriptor.Descriptor) {
 	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
 	assert.Equal(t, "v1.0.0", desc.Component.Version)
-	assert.Equal(t, "test-provider", desc.Component.Provider["name"])
+	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
 	assert.Len(t, desc.Component.Sources, 1)
 }
 
@@ -121,10 +125,10 @@ func TestConstructWithSourceInputMethod(t *testing.T) {
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	ctor := NewDefaultConstructor(opts)
+	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := ctor.Construct(t.Context(), constructor)
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -162,10 +166,10 @@ func TestConstructWithSourceAccess(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	ctor := NewDefaultConstructor(opts)
+	instance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := ctor.Construct(t.Context(), constructor)
+	descriptors, err := instance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -452,4 +456,118 @@ func TestConstructWithSourceCredentialResolutionError(t *testing.T) {
 	_, err := ctor.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error resolving credentials for input method")
+}
+
+func TestConstructWithMultipleSources(t *testing.T) {
+	// Create mock source input methods for different source types
+	mockInput1 := &mockSourceInputMethod{
+		processedSource: &descriptor.Source{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-source-1",
+					Version: "v1.0.0",
+				},
+			},
+			Type: "git",
+			Access: &v2.LocalBlob{
+				MediaType: "application/octet-stream",
+			},
+		},
+	}
+
+	mockInput2 := &mockSourceInputMethod{
+		processedSource: &descriptor.Source{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-source-2",
+					Version: "v1.0.0",
+				},
+			},
+			Type: "helm",
+			Access: &v2.LocalBlob{
+				MediaType: "application/x-tar",
+			},
+		},
+	}
+
+	// Create a mock source input method provider with multiple methods
+	mockProvider := &mockSourceInputMethodProvider{
+		methods: map[runtime.Type]SourceInputMethod{
+			runtime.NewVersionedType("mock1", "v1"): mockInput1,
+			runtime.NewVersionedType("mock2", "v1"): mockInput2,
+		},
+	}
+
+	// Create a component with multiple sources
+	yamlData := `
+components:
+  - name: ocm.software/test-component
+    version: v1.0.0
+    provider:
+      name: test-provider
+    resources: []
+    sources:
+      - name: test-source-1
+        version: v1.0.0
+        type: git
+        input:
+          type: mock1/v1
+      - name: test-source-2
+        version: v1.0.0
+        type: helm
+        input:
+          type: mock2/v1
+`
+
+	var constructor constructorv1.ComponentConstructor
+	err := yaml.Unmarshal([]byte(yamlData), &constructor)
+	require.NoError(t, err)
+
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
+	// Create a mock target repository
+	mockRepo := &mockTargetRepository{}
+
+	// Create the constructor with our mocks
+	opts := Options{
+		SourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
+	}
+	constructorInstance := NewDefaultConstructor(opts)
+
+	// Process the constructor
+	descriptors, err := constructorInstance.Construct(t.Context(), converted)
+	require.NoError(t, err)
+	require.Len(t, descriptors, 1)
+
+	// Verify the results
+	desc := descriptors[0]
+	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
+	assert.Equal(t, "v1.0.0", desc.Component.Version)
+	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
+	assert.Len(t, desc.Component.Sources, 2)
+
+	// Verify the first source
+	source1 := desc.Component.Sources[0]
+	assert.Equal(t, "test-source-1", source1.Name)
+	assert.Equal(t, "v1.0.0", source1.Version)
+	assert.Equal(t, "git", source1.Type)
+	assert.NotNil(t, source1.Access)
+	access1, ok := source1.Access.(*v2.LocalBlob)
+	require.True(t, ok, "Access should be of type LocalBlob")
+	assert.Equal(t, "application/octet-stream", access1.MediaType)
+
+	// Verify the second source
+	source2 := desc.Component.Sources[1]
+	assert.Equal(t, "test-source-2", source2.Name)
+	assert.Equal(t, "v1.0.0", source2.Version)
+	assert.Equal(t, "helm", source2.Type)
+	assert.NotNil(t, source2.Access)
+	access2, ok := source2.Access.(*v2.LocalBlob)
+	require.True(t, ok, "Access should be of type LocalBlob")
+	assert.Equal(t, "application/x-tar", access2.MediaType)
+
+	// Verify the repository was called correctly
+	assert.Len(t, mockRepo.addedSources, 0)
+	assert.Len(t, mockRepo.addedVersions, 1)
 }

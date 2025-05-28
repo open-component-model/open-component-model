@@ -167,30 +167,30 @@ func TestConvertFromV2Provider(t *testing.T) {
 	tests := []struct {
 		name     string
 		provider string
-		want     runtime.Identity
+		want     descriptorRuntime.Provider
 		wantErr  bool
 	}{
 		{
 			name:     "simple provider name",
 			provider: "test-provider",
-			want: runtime.Identity{
-				v2.IdentityAttributeName: "test-provider",
+			want: descriptorRuntime.Provider{
+				Name: "test-provider",
 			},
 			wantErr: false,
 		},
 		{
 			name:     "json provider",
-			provider: `{"name": "test-provider", "type": "org"}`,
-			want: runtime.Identity{
-				"name": "test-provider",
-				"type": "org",
+			provider: `{"name": "test-provider", "labels": [{"name": "label1", "value": "value1"}]}`,
+			want: descriptorRuntime.Provider{
+				Name:   "test-provider",
+				Labels: []descriptorRuntime.Label{{Name: "label1", Value: "value1"}},
 			},
 			wantErr: false,
 		},
 		{
 			name:     "invalid json",
 			provider: `{invalid json}`,
-			want:     nil,
+			want:     descriptorRuntime.Provider{},
 			wantErr:  true,
 		},
 	}
@@ -496,31 +496,39 @@ func TestConvertFromV2Signatures(t *testing.T) {
 func TestConvertToV2Provider(t *testing.T) {
 	tests := []struct {
 		name     string
-		provider runtime.Identity
+		provider descriptorRuntime.Provider
 		want     string
 		wantErr  bool
 	}{
 		{
 			name:     "nil provider",
-			provider: nil,
+			provider: descriptorRuntime.Provider{},
 			want:     "",
-			wantErr:  false,
+			wantErr:  true,
 		},
 		{
 			name: "simple provider",
-			provider: runtime.Identity{
-				v2.IdentityAttributeName: "test-provider",
+			provider: descriptorRuntime.Provider{
+				Name: "test-provider",
 			},
 			want:    "test-provider",
 			wantErr: false,
 		},
 		{
 			name: "provider without name",
-			provider: runtime.Identity{
-				"other": "value",
+			provider: descriptorRuntime.Provider{
+				Labels: []descriptorRuntime.Label{{Name: "test", Value: "value"}},
 			},
 			want:    "",
 			wantErr: true,
+		},
+		{
+			name: "provider with name and labels",
+			provider: descriptorRuntime.Provider{
+				Name:   "test-provider",
+				Labels: []descriptorRuntime.Label{{Name: "test", Value: "value"}},
+			},
+			want: `{"name":"test-provider","labels":[{"name":"test","value":"value"}]}`,
 		},
 	}
 

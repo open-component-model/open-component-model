@@ -31,22 +31,43 @@ const (
 //
 // The CTF offered will always be of type FormatDirectory.
 type FileSystemCTF struct {
-	fs filesystem.FileSystem
+	fs        fs.FS
+	statFS    fs.StatFS
+	readDirFS fs.ReadDirFS
+	mkdirFS   filesystem.MkdirAllFS
+	ofFS      filesystem.OpenFileFS
+	remFS     filesystem.RemoveFS
 }
 
 var _ CTF = (*FileSystemCTF)(nil)
 
 // NewFileSystemCTF opens a CTF with the specified filesystem as its root
-func NewFileSystemCTF(filesystem filesystem.FileSystem) *FileSystemCTF {
-	return &FileSystemCTF{
-		fs: filesystem,
+func NewFileSystemCTF(fsys fs.FS) *FileSystemCTF {
+	base := &FileSystemCTF{
+		fs: fsys,
 	}
+	if statFS, ok := fsys.(fs.StatFS); ok {
+		base.statFS = statFS
+	}
+	if mkdirFS, ok := fsys.(filesystem.MkdirAllFS); ok {
+		base.mkdirFS = mkdirFS
+	}
+	if readDirFS, ok := fsys.(fs.ReadDirFS); ok {
+		base.readDirFS = readDirFS
+	}
+	if ofFS, ok := fsys.(filesystem.OpenFileFS); ok {
+		base.ofFS = ofFS
+	}
+	if remFS, ok := fsys.(filesystem.RemoveFS); ok {
+		base.remFS = remFS
+	}
+	return base
 }
 
 // FS returns the underlying filesystem.FileSystem of the CTF.
 // Note that write operations to the FileSystem can affect the integrity of the CTF.
 // TODO(jakobmoellerdev): restrict returned FileSystem to only allow read operations.
-func (c *FileSystemCTF) FS() filesystem.FileSystem {
+func (c *FileSystemCTF) FS() fs.FS {
 	return c.fs
 }
 
@@ -58,7 +79,12 @@ func (c *FileSystemCTF) Format() FileFormat {
 // GetIndex returns the v1.ArtifactIndexFileName parsed as v1.Index of the CTF.
 // If the CTF is empty, an empty index is returned so it can be set with SetIndex.
 func (c *FileSystemCTF) GetIndex(_ context.Context) (index v1.Index, err error) {
-	fi, err := c.fs.Stat(v1.ArtifactIndexFileName)
+	if c.statFS == nil {
+		return nil, fmt.Errorf("index cannot be retrieved from a filesystem that does not support stat: %T", c.fs)
+	}
+
+	fi, err := c.statFS.Stat(v1.ArtifactIndexFileName)
+
 	if errors.Is(err, fs.ErrNotExist) {
 		return v1.NewIndex(), nil
 	}
@@ -110,11 +136,18 @@ var ioBufPool = sync.Pool{
 // writeFile writes the given raw data to the given name in the CTF.
 // If the directory does not exist, it will be created.
 func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err error) {
-	if err := c.fs.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-		return fmt.Errorf("unable to create directory: %w", err)
+	if c.mkdirFS != nil {
+		if err := c.mkdirFS.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			return fmt.Errorf("unable to create directory: %w", err)
+		}
 	}
+
+	if c.ofFS == nil {
+		return fmt.Errorf("filesystem does not support opening files for write or creation: %T", c.fs)
+	}
+
 	var file fs.File
-	if file, err = c.fs.OpenFile(name, os.O_CREATE|os.O_WRONLY, 0o644); err != nil {
+	if file, err = c.ofFS.OpenFile(name, os.O_CREATE|os.O_WRONLY, 0o644); err != nil {
 		return fmt.Errorf("unable to open artifact index: %w", err)
 	}
 	defer func() {
@@ -143,11 +176,15 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err e
 
 // DeleteBlob deletes the blob with the given digest from the CTF by removing the file from BlobsDirectoryName.
 func (c *FileSystemCTF) DeleteBlob(_ context.Context, digest string) (err error) {
+	if c.remFS == nil {
+		return fmt.Errorf("filesystem does not support removing files: %T", c.fs)
+	}
+
 	file, err := ToBlobFileName(digest)
 	if err != nil {
 		return err
 	}
-	if err = c.fs.Remove(filepath.Join(BlobsDirectoryName, file)); err != nil {
+	if err = c.remFS.Remove(filepath.Join(BlobsDirectoryName, file)); err != nil {
 		return fmt.Errorf("unable to delete blob: %w", err)
 	}
 
@@ -156,12 +193,16 @@ func (c *FileSystemCTF) DeleteBlob(_ context.Context, digest string) (err error)
 
 // GetBlob returns the blob with the given digest from the CTF by reading the file from BlobsDirectoryName.
 func (c *FileSystemCTF) GetBlob(_ context.Context, digest string) (blob.ReadOnlyBlob, error) {
+	if c.statFS == nil {
+		return nil, fmt.Errorf("filesystem does not support stat: %T", c.fs)
+	}
+
 	file, err := ToBlobFileName(digest)
 	if err != nil {
 		return nil, err
 	}
 	path := filepath.Join(BlobsDirectoryName, file)
-	if _, err := c.fs.Stat(path); err != nil {
+	if _, err := c.statFS.Stat(path); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("blob %s not found: %w", digest, err)
 		}
@@ -175,7 +216,11 @@ func (c *FileSystemCTF) GetBlob(_ context.Context, digest string) (blob.ReadOnly
 
 // ListBlobs returns a list of all blobs in the CTF by listing the files in BlobsDirectoryName.
 func (c *FileSystemCTF) ListBlobs(_ context.Context) (digests []string, err error) {
-	dir, err := c.fs.ReadDir(BlobsDirectoryName)
+	if c.readDirFS == nil {
+		return nil, fmt.Errorf("filesystem does not support reading directories: %T", c.fs)
+	}
+
+	dir, err := c.readDirFS.ReadDir(BlobsDirectoryName)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list blobs: %w", err)
 	}

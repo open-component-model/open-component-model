@@ -2,6 +2,7 @@ package ctf
 
 import (
 	"io"
+	"io/fs"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -24,7 +25,7 @@ var (
 )
 
 // NewCASFileBlob creates a new CASFileBlob instance.
-func NewCASFileBlob(fs filesystem.FileSystem, path string) *CASFileBlob {
+func NewCASFileBlob(fs fs.FS, path string) *CASFileBlob {
 	return &CASFileBlob{blob: filesystem.NewFileBlob(fs, path)}
 }
 
