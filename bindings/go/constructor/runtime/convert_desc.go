@@ -7,163 +7,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ConvertToDescriptorResource converts Resource to descriptor representation.
-func ConvertToDescriptorResource(resource *Resource) *descriptor.Resource {
-	if resource == nil {
-		return nil
-	}
-	target := &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    resource.Name,
-				Version: resource.Version,
-			},
-		},
-		Type:     resource.Type,
-		Relation: descriptor.ResourceRelation(resource.Relation),
-	}
+// Label conversion functions
 
-	if resource.Labels != nil {
-		target.Labels = ConvertFromLabels(resource.Labels)
-	}
-	if resource.SourceRefs != nil {
-		target.SourceRefs = ConvertFromSourceRefs(resource.SourceRefs)
-	}
-	if resource.AccessOrInput.HasInput() {
-		target.Access = resource.AccessOrInput.Input.DeepCopyTyped()
-	} else if resource.AccessOrInput.HasAccess() {
-		target.Access = resource.AccessOrInput.Access.DeepCopyTyped()
-	}
-	if resource.ExtraIdentity != nil {
-		target.ExtraIdentity = resource.ExtraIdentity.DeepCopy()
-	}
-	return target
-}
-
-// ConvertToDescriptorSource converts Source to descriptor representation.
-func ConvertToDescriptorSource(source *Source) *descriptor.Source {
-	if source == nil {
-		return nil
-	}
-	target := &descriptor.Source{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    source.Name,
-				Version: source.Version,
-			},
-		},
-		Type: source.Type,
-	}
-
-	if source.Labels != nil {
-		target.Labels = ConvertFromLabels(source.Labels)
-	}
-	if source.AccessOrInput.HasInput() {
-		target.Access = source.AccessOrInput.Input.DeepCopyTyped()
-	} else if source.AccessOrInput.HasAccess() {
-		target.Access = source.AccessOrInput.Access.DeepCopyTyped()
-	}
-	if source.ExtraIdentity != nil {
-		target.ExtraIdentity = source.ExtraIdentity.DeepCopy()
-	}
-	return target
-}
-
-// ConvertToDescriptorReference converts Reference to descriptor representation.
-func ConvertToDescriptorReference(reference *Reference) *descriptor.Reference {
-	if reference == nil {
-		return nil
-	}
-	target := &descriptor.Reference{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    reference.Name,
-				Version: reference.Version,
-			},
-		},
-		Component: reference.Component,
-	}
-
-	if reference.Labels != nil {
-		target.Labels = ConvertFromLabels(reference.Labels)
-	}
-	if reference.ExtraIdentity != nil {
-		target.ExtraIdentity = reference.ExtraIdentity.DeepCopy()
-	}
-	return target
-}
-
-// ConvertToDescriptorComponent converts Component to descriptor representation.
-func ConvertToDescriptorComponent(component *Component) *descriptor.Component {
-	if component == nil {
-		return nil
-	}
-	target := &descriptor.Component{
-		ComponentMeta: descriptor.ComponentMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    component.Name,
-				Version: component.Version,
-			},
-		},
-	}
-
-	if component.Labels != nil {
-		target.Labels = ConvertFromLabels(component.Labels)
-	}
-
-	// Convert provider to runtime.Identity
-	target.Provider = make(runtime.Identity)
-	if component.Provider.Name != "" {
-		target.Provider["name"] = component.Provider.Name
-	}
-	if component.Provider.Labels != nil {
-		for _, label := range component.Provider.Labels {
-			target.Provider[label.Name] = label.Value
-		}
-	}
-
-	if component.Resources != nil {
-		target.Resources = make([]descriptor.Resource, len(component.Resources))
-		for i, resource := range component.Resources {
-			if converted := ConvertToDescriptorResource(&resource); converted != nil {
-				target.Resources[i] = *converted
-			}
-		}
-	}
-	if component.Sources != nil {
-		target.Sources = make([]descriptor.Source, len(component.Sources))
-		for i, source := range component.Sources {
-			if converted := ConvertToDescriptorSource(&source); converted != nil {
-				target.Sources[i] = *converted
-			}
-		}
-	}
-	if component.References != nil {
-		target.References = make([]descriptor.Reference, len(component.References))
-		for i, reference := range component.References {
-			if converted := ConvertToDescriptorReference(&reference); converted != nil {
-				target.References[i] = *converted
-			}
-		}
-	}
-	return target
-}
-
-// ConvertToDescriptor converts ComponentConstructor to descriptor representation.
-func ConvertToDescriptor(constructor *ComponentConstructor) *descriptor.Descriptor {
-	if constructor == nil || len(constructor.Components) == 0 {
-		return nil
-	}
-	component := ConvertToDescriptorComponent(&constructor.Components[0])
-	return &descriptor.Descriptor{
-		Meta: descriptor.Meta{
-			Version: "v2",
-		},
-		Component: *component,
-	}
-}
-
-// ConvertFromLabels converts a list of Label to descriptor Label.
 func ConvertFromLabels(labels []Label) []descriptor.Label {
 	if labels == nil {
 		return nil
@@ -177,7 +22,167 @@ func ConvertFromLabels(labels []Label) []descriptor.Label {
 	return n
 }
 
-// ConvertFromSourceRefs converts source references to descriptor format.
+// Common conversion helpers
+
+func convertObjectMetaToDescriptor(meta ObjectMeta) descriptor.ObjectMeta {
+	return descriptor.ObjectMeta{
+		Name:    meta.Name,
+		Version: meta.Version,
+		Labels:  ConvertFromLabels(meta.Labels),
+	}
+}
+
+func convertElementMetaToDescriptor(meta ElementMeta) descriptor.ElementMeta {
+	return descriptor.ElementMeta{
+		ObjectMeta:    convertObjectMetaToDescriptor(meta.ObjectMeta),
+		ExtraIdentity: meta.ExtraIdentity.DeepCopy(),
+	}
+}
+
+func handleAccessOrInputToDescriptor(accessOrInput AccessOrInput) runtime.Typed {
+	if accessOrInput.HasInput() {
+		return accessOrInput.Input.DeepCopyTyped()
+	} else if accessOrInput.HasAccess() {
+		return accessOrInput.Access.DeepCopyTyped()
+	}
+	return nil
+}
+
+// Resource conversion
+
+func ConvertToDescriptorResource(resource *Resource) *descriptor.Resource {
+	if resource == nil {
+		return nil
+	}
+	target := &descriptor.Resource{
+		ElementMeta: convertElementMetaToDescriptor(resource.ElementMeta),
+		Type:        resource.Type,
+		Relation:    descriptor.ResourceRelation(resource.Relation),
+	}
+
+	if resource.SourceRefs != nil {
+		target.SourceRefs = ConvertFromSourceRefs(resource.SourceRefs)
+	}
+
+	target.Access = handleAccessOrInputToDescriptor(resource.AccessOrInput)
+	return target
+}
+
+// Source conversion
+
+func ConvertToDescriptorSource(source *Source) *descriptor.Source {
+	if source == nil {
+		return nil
+	}
+	target := &descriptor.Source{
+		ElementMeta: convertElementMetaToDescriptor(source.ElementMeta),
+		Type:        source.Type,
+		Access:      handleAccessOrInputToDescriptor(source.AccessOrInput),
+	}
+	return target
+}
+
+// Reference conversion
+
+func ConvertToDescriptorReference(reference *Reference) *descriptor.Reference {
+	if reference == nil {
+		return nil
+	}
+	target := &descriptor.Reference{
+		ElementMeta: convertElementMetaToDescriptor(reference.ElementMeta),
+		Component:   reference.Component,
+	}
+	return target
+}
+
+// Provider conversion
+func convertProviderToDescriptor(provider Provider) (runtime.Identity, error) {
+	if provider.Name == "" && len(provider.Labels) == 0 {
+		return nil, nil
+	}
+	if len(provider.Labels) == 0 {
+		return runtime.Identity{
+			IdentityAttributeName: provider.Name,
+		}, nil
+	}
+	// If we have labels, create a full identity map
+	target := make(runtime.Identity)
+	if provider.Name != "" {
+		target[IdentityAttributeName] = provider.Name
+	}
+	for _, label := range provider.Labels {
+		target[label.Name] = label.Value
+	}
+	return target, nil
+}
+
+// Component conversion
+
+func ConvertToDescriptorComponent(component *Component) *descriptor.Component {
+	if component == nil {
+		return nil
+	}
+
+	provider, err := convertProviderToDescriptor(component.Provider)
+	if err != nil {
+		return nil
+	}
+
+	target := &descriptor.Component{
+		ComponentMeta: descriptor.ComponentMeta{
+			ObjectMeta:   convertObjectMetaToDescriptor(component.ObjectMeta),
+			CreationTime: component.CreationTime,
+		},
+		Provider: provider,
+	}
+
+	if component.Resources != nil {
+		target.Resources = make([]descriptor.Resource, len(component.Resources))
+		for i, resource := range component.Resources {
+			if converted := ConvertToDescriptorResource(&resource); converted != nil {
+				target.Resources[i] = *converted
+			}
+		}
+	}
+
+	if component.Sources != nil {
+		target.Sources = make([]descriptor.Source, len(component.Sources))
+		for i, source := range component.Sources {
+			if converted := ConvertToDescriptorSource(&source); converted != nil {
+				target.Sources[i] = *converted
+			}
+		}
+	}
+
+	if component.References != nil {
+		target.References = make([]descriptor.Reference, len(component.References))
+		for i, reference := range component.References {
+			if converted := ConvertToDescriptorReference(&reference); converted != nil {
+				target.References[i] = *converted
+			}
+		}
+	}
+
+	return target
+}
+
+// Constructor conversion
+
+func ConvertToDescriptor(constructor *ComponentConstructor) *descriptor.Descriptor {
+	if constructor == nil || len(constructor.Components) == 0 {
+		return nil
+	}
+	component := ConvertToDescriptorComponent(&constructor.Components[0])
+	return &descriptor.Descriptor{
+		Meta: descriptor.Meta{
+			Version: "v2",
+		},
+		Component: *component,
+	}
+}
+
+// SourceRef conversion
+
 func ConvertFromSourceRefs(refs []SourceRef) []descriptor.SourceRef {
 	if refs == nil {
 		return nil

@@ -8,32 +8,66 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ConvertToRuntimeResource converts a Resource to its runtime representation.
+// Label conversion functions
+
+func convertV1LabelsToDescriptorLabels(labels []v1.Label) []descriptor.Label {
+	if labels == nil {
+		return nil
+	}
+	result := make([]descriptor.Label, len(labels))
+	for i, label := range labels {
+		result[i] = descriptor.Label{
+			Name:    label.Name,
+			Value:   label.Value,
+			Signing: label.Signing,
+		}
+	}
+	return result
+}
+
+func convertV1LabelsToLabels(labels []v1.Label) []Label {
+	if labels == nil {
+		return nil
+	}
+	result := make([]Label, len(labels))
+	for i, label := range labels {
+		result[i] = Label{
+			Name:    label.Name,
+			Value:   label.Value,
+			Signing: label.Signing,
+		}
+	}
+	return result
+}
+
+// Common conversion helpers
+
+func convertObjectMeta(meta v1.ObjectMeta) descriptor.ObjectMeta {
+	return descriptor.ObjectMeta{
+		Name:    meta.Name,
+		Version: meta.Version,
+		Labels:  convertV1LabelsToDescriptorLabels(meta.Labels),
+	}
+}
+
+func convertElementMeta(meta v1.ElementMeta) descriptor.ElementMeta {
+	return descriptor.ElementMeta{
+		ObjectMeta:    convertObjectMeta(meta.ObjectMeta),
+		ExtraIdentity: meta.ExtraIdentity.DeepCopy(),
+	}
+}
+
+// Resource conversion
+
 func ConvertToRuntimeResource(resource *v1.Resource) descriptor.Resource {
 	if resource == nil {
 		return descriptor.Resource{}
 	}
 
 	target := descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    resource.Name,
-				Version: resource.Version,
-			},
-		},
-		Type:     resource.Type,
-		Relation: descriptor.ResourceRelation(resource.Relation),
-	}
-
-	if resource.Labels != nil {
-		target.Labels = make([]descriptor.Label, len(resource.Labels))
-		for i, label := range resource.Labels {
-			target.Labels[i] = descriptor.Label{
-				Name:    label.Name,
-				Value:   label.Value,
-				Signing: label.Signing,
-			}
-		}
+		ElementMeta: convertElementMeta(resource.ElementMeta),
+		Type:        resource.Type,
+		Relation:    descriptor.ResourceRelation(resource.Relation),
 	}
 
 	if resource.SourceRefs != nil {
@@ -41,108 +75,54 @@ func ConvertToRuntimeResource(resource *v1.Resource) descriptor.Resource {
 		for i, ref := range resource.SourceRefs {
 			target.SourceRefs[i] = descriptor.SourceRef{
 				IdentitySelector: maps.Clone(ref.IdentitySelector),
-				Labels:           make([]descriptor.Label, len(ref.Labels)),
-			}
-			for j, label := range ref.Labels {
-				target.SourceRefs[i].Labels[j] = descriptor.Label{
-					Name:    label.Name,
-					Value:   label.Value,
-					Signing: label.Signing,
-				}
+				Labels:           convertV1LabelsToDescriptorLabels(ref.Labels),
 			}
 		}
 	}
 
-	// Handle AccessOrInput - if Input is present, use that as Access
-	if resource.AccessOrInput.HasInput() {
-		target.Access = resource.AccessOrInput.Input.DeepCopyTyped()
-	} else if resource.AccessOrInput.HasAccess() {
-		target.Access = resource.AccessOrInput.Access.DeepCopyTyped()
-	}
-
-	if resource.ExtraIdentity != nil {
-		target.ExtraIdentity = resource.ExtraIdentity.DeepCopy()
+	if resource.Access != nil {
+		target.Access = resource.Access.DeepCopy()
 	}
 
 	return target
 }
 
-// ConvertToRuntimeSource converts a Source to its runtime representation.
+// Source conversion
+
 func ConvertToRuntimeSource(source *v1.Source) descriptor.Source {
 	if source == nil {
 		return descriptor.Source{}
 	}
 
 	target := descriptor.Source{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    source.Name,
-				Version: source.Version,
-			},
-		},
-		Type: source.Type,
+		ElementMeta: convertElementMeta(source.ElementMeta),
+		Type:        source.Type,
 	}
 
-	if source.Labels != nil {
-		target.Labels = make([]descriptor.Label, len(source.Labels))
-		for i, label := range source.Labels {
-			target.Labels[i] = descriptor.Label{
-				Name:    label.Name,
-				Value:   label.Value,
-				Signing: label.Signing,
-			}
-		}
-	}
-
-	// Handle AccessOrInput - if Input is present, use that as Access
-	if source.AccessOrInput.HasInput() {
-		target.Access = source.AccessOrInput.Input.DeepCopyTyped()
-	} else if source.AccessOrInput.HasAccess() {
-		target.Access = source.AccessOrInput.Access.DeepCopyTyped()
-	}
-
-	if source.ExtraIdentity != nil {
-		target.ExtraIdentity = source.ExtraIdentity.DeepCopy()
+	if source.Access != nil {
+		target.Access = source.Access.DeepCopy()
 	}
 
 	return target
 }
 
-// ConvertToRuntimeReference converts a Reference to its runtime representation.
+// Reference conversion
+
 func ConvertToRuntimeReference(reference *v1.Reference) descriptor.Reference {
 	if reference == nil {
 		return descriptor.Reference{}
 	}
 
 	target := descriptor.Reference{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    reference.Name,
-				Version: reference.Version,
-			},
-		},
-		Component: reference.Component,
-	}
-
-	if reference.Labels != nil {
-		target.Labels = make([]descriptor.Label, len(reference.Labels))
-		for i, label := range reference.Labels {
-			target.Labels[i] = descriptor.Label{
-				Name:    label.Name,
-				Value:   label.Value,
-				Signing: label.Signing,
-			}
-		}
-	}
-
-	if reference.ExtraIdentity != nil {
-		target.ExtraIdentity = reference.ExtraIdentity.DeepCopy()
+		ElementMeta: convertElementMeta(reference.ElementMeta),
+		Component:   reference.Component,
 	}
 
 	return target
 }
 
-// ConvertToRuntimeComponent converts a Component to its runtime representation.
+// Component conversion
+
 func ConvertToRuntimeComponent(component *v1.Component) descriptor.Component {
 	if component == nil {
 		return descriptor.Component{}
@@ -150,24 +130,10 @@ func ConvertToRuntimeComponent(component *v1.Component) descriptor.Component {
 
 	target := descriptor.Component{
 		ComponentMeta: descriptor.ComponentMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    component.Name,
-				Version: component.Version,
-			},
+			ObjectMeta:   convertObjectMeta(component.ObjectMeta),
 			CreationTime: component.CreationTime,
 		},
 		Provider: make(runtime.Identity),
-	}
-
-	if component.Labels != nil {
-		target.Labels = make([]descriptor.Label, len(component.Labels))
-		for i, label := range component.Labels {
-			target.Labels[i] = descriptor.Label{
-				Name:    label.Name,
-				Value:   label.Value,
-				Signing: label.Signing,
-			}
-		}
 	}
 
 	if component.Provider.Name != "" {
@@ -203,13 +169,10 @@ func ConvertToRuntimeComponent(component *v1.Component) descriptor.Component {
 	return target
 }
 
-// ConvertToRuntimeDescriptor converts a ComponentConstructor to its runtime representation.
-func ConvertToRuntimeDescriptor(constructor *v1.ComponentConstructor) *descriptor.Descriptor {
-	if constructor == nil {
-		return nil
-	}
+// Constructor conversion
 
-	if len(constructor.Components) == 0 {
+func ConvertToRuntimeDescriptor(constructor *v1.ComponentConstructor) *descriptor.Descriptor {
+	if constructor == nil || len(constructor.Components) == 0 {
 		return nil
 	}
 
@@ -222,7 +185,62 @@ func ConvertToRuntimeDescriptor(constructor *v1.ComponentConstructor) *descripto
 	}
 }
 
-// ConvertToRuntimeConstructor converts a ComponentConstructor to its runtime representation.
+// Runtime constructor resource conversion
+func convertToRuntimeConstructorResource(resource v1.Resource) Resource {
+	target := Resource{
+		ElementMeta: ElementMeta{
+			ObjectMeta: ObjectMeta{
+				Name:    resource.Name,
+				Version: resource.Version,
+			},
+		},
+		Type:     resource.Type,
+		Relation: ResourceRelation(resource.Relation),
+	}
+
+	if resource.HasInput() {
+		target.Input = resource.Input.DeepCopyTyped()
+	} else if resource.HasAccess() {
+		target.Access = resource.Access.DeepCopyTyped()
+	}
+
+	return target
+}
+
+// Runtime constructor source conversion
+func convertToRuntimeConstructorSource(source v1.Source) Source {
+	target := Source{
+		ElementMeta: ElementMeta{
+			ObjectMeta: ObjectMeta{
+				Name:    source.Name,
+				Version: source.Version,
+			},
+		},
+		Type: source.Type,
+	}
+
+	if source.HasInput() {
+		target.Input = source.Input.DeepCopyTyped()
+	} else if source.HasAccess() {
+		target.Access = source.Access.DeepCopyTyped()
+	}
+
+	return target
+}
+
+// Runtime constructor reference conversion
+func convertToRuntimeConstructorReference(reference v1.Reference) Reference {
+	return Reference{
+		ElementMeta: ElementMeta{
+			ObjectMeta: ObjectMeta{
+				Name:    reference.Name,
+				Version: reference.Version,
+			},
+		},
+		Component: reference.Component,
+	}
+}
+
 func ConvertToRuntimeConstructor(constructor *v1.ComponentConstructor) *ComponentConstructor {
 	if constructor == nil {
 		return nil
@@ -235,72 +253,20 @@ func ConvertToRuntimeConstructor(constructor *v1.ComponentConstructor) *Componen
 	for i, component := range constructor.Components {
 		target.Components[i] = Component{
 			ComponentMeta: ComponentMeta{
-				ObjectMeta: ObjectMeta{
-					Name:    component.Name,
-					Version: component.Version,
-				},
+				ObjectMeta:   ObjectMeta{Name: component.Name, Version: component.Version},
 				CreationTime: component.CreationTime,
 			},
 			Provider: Provider{
 				Name:   component.Provider.Name,
-				Labels: make([]Label, len(component.Provider.Labels)),
+				Labels: convertV1LabelsToLabels(component.Provider.Labels),
 			},
-		}
-
-		// Copy provider labels
-		for j, label := range component.Provider.Labels {
-			target.Components[i].Provider.Labels[j] = Label{
-				Name:    label.Name,
-				Value:   label.Value,
-				Signing: label.Signing,
-			}
-		}
-
-		// Copy component labels
-		if component.Labels != nil {
-			target.Components[i].Labels = make([]Label, len(component.Labels))
-			for j, label := range component.Labels {
-				target.Components[i].Labels[j] = Label{
-					Name:    label.Name,
-					Value:   label.Value,
-					Signing: label.Signing,
-				}
-			}
 		}
 
 		// Copy resources
 		if component.Resources != nil {
 			target.Components[i].Resources = make([]Resource, len(component.Resources))
 			for j, resource := range component.Resources {
-				target.Components[i].Resources[j] = Resource{
-					ElementMeta: ElementMeta{
-						ObjectMeta: ObjectMeta{
-							Name:    resource.Name,
-							Version: resource.Version,
-						},
-					},
-					Type:     resource.Type,
-					Relation: ResourceRelation(resource.Relation),
-				}
-
-				// Copy resource labels
-				if resource.Labels != nil {
-					target.Components[i].Resources[j].Labels = make([]Label, len(resource.Labels))
-					for k, label := range resource.Labels {
-						target.Components[i].Resources[j].Labels[k] = Label{
-							Name:    label.Name,
-							Value:   label.Value,
-							Signing: label.Signing,
-						}
-					}
-				}
-
-				// Copy resource access or input
-				if resource.AccessOrInput.HasInput() {
-					target.Components[i].Resources[j].AccessOrInput.Input = resource.AccessOrInput.Input.DeepCopyTyped()
-				} else if resource.AccessOrInput.HasAccess() {
-					target.Components[i].Resources[j].AccessOrInput.Access = resource.AccessOrInput.Access.DeepCopyTyped()
-				}
+				target.Components[i].Resources[j] = convertToRuntimeConstructorResource(resource)
 			}
 		}
 
@@ -308,34 +274,7 @@ func ConvertToRuntimeConstructor(constructor *v1.ComponentConstructor) *Componen
 		if component.Sources != nil {
 			target.Components[i].Sources = make([]Source, len(component.Sources))
 			for j, source := range component.Sources {
-				target.Components[i].Sources[j] = Source{
-					ElementMeta: ElementMeta{
-						ObjectMeta: ObjectMeta{
-							Name:    source.Name,
-							Version: source.Version,
-						},
-					},
-					Type: source.Type,
-				}
-
-				// Copy source labels
-				if source.Labels != nil {
-					target.Components[i].Sources[j].Labels = make([]Label, len(source.Labels))
-					for k, label := range source.Labels {
-						target.Components[i].Sources[j].Labels[k] = Label{
-							Name:    label.Name,
-							Value:   label.Value,
-							Signing: label.Signing,
-						}
-					}
-				}
-
-				// Copy source access or input
-				if source.AccessOrInput.HasInput() {
-					target.Components[i].Sources[j].AccessOrInput.Input = source.AccessOrInput.Input.DeepCopyTyped()
-				} else if source.AccessOrInput.HasAccess() {
-					target.Components[i].Sources[j].AccessOrInput.Access = source.AccessOrInput.Access.DeepCopyTyped()
-				}
+				target.Components[i].Sources[j] = convertToRuntimeConstructorSource(source)
 			}
 		}
 
@@ -343,27 +282,7 @@ func ConvertToRuntimeConstructor(constructor *v1.ComponentConstructor) *Componen
 		if component.References != nil {
 			target.Components[i].References = make([]Reference, len(component.References))
 			for j, reference := range component.References {
-				target.Components[i].References[j] = Reference{
-					ElementMeta: ElementMeta{
-						ObjectMeta: ObjectMeta{
-							Name:    reference.Name,
-							Version: reference.Version,
-						},
-					},
-					Component: reference.Component,
-				}
-
-				// Copy reference labels
-				if reference.Labels != nil {
-					target.Components[i].References[j].Labels = make([]Label, len(reference.Labels))
-					for k, label := range reference.Labels {
-						target.Components[i].References[j].Labels[k] = Label{
-							Name:    label.Name,
-							Value:   label.Value,
-							Signing: label.Signing,
-						}
-					}
-				}
+				target.Components[i].References[j] = convertToRuntimeConstructorReference(reference)
 			}
 		}
 	}

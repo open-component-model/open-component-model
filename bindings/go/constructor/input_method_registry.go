@@ -69,11 +69,11 @@ func (r *InputMethodRegistry) typeInsideRegistry(input runtime.Typed) (runtime.T
 
 // GetResourceInputMethod retrieves the resource input method for a given typed object.
 func (r *InputMethodRegistry) GetResourceInputMethod(_ context.Context, res *constructor.Resource) (ResourceInputMethod, error) {
-	if res == nil || !res.AccessOrInput.HasInput() {
+	if res == nil || !res.HasInput() {
 		return nil, fmt.Errorf("resource input method requested for resource without input: %v", res)
 	}
 
-	typ, err := r.typeInsideRegistry(res.AccessOrInput.Input)
+	typ, err := r.typeInsideRegistry(res.Input)
 	if err != nil {
 		return nil, fmt.Errorf("error getting resource input method: %w", err)
 	}
@@ -87,11 +87,11 @@ func (r *InputMethodRegistry) GetResourceInputMethod(_ context.Context, res *con
 
 // GetSourceInputMethod retrieves the source input method for a given typed object.
 func (r *InputMethodRegistry) GetSourceInputMethod(_ context.Context, src *constructor.Source) (SourceInputMethod, error) {
-	if src == nil || !src.AccessOrInput.HasInput() {
+	if src == nil || !src.HasInput() {
 		return nil, fmt.Errorf("source input method requested for source without input: %v", src)
 	}
 
-	typ, err := r.typeInsideRegistry(src.AccessOrInput.Input)
+	typ, err := r.typeInsideRegistry(src.Input)
 	if err != nil {
 		return nil, fmt.Errorf("error getting source input method: %w", err)
 	}

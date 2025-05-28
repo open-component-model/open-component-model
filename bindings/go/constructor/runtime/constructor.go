@@ -24,14 +24,10 @@ type ComponentConstructor struct {
 // references pointing to further component versions.
 type Component struct {
 	ComponentMeta `json:",inline"`
-	// Provider describes the provider type of component in the origin's context.
-	Provider Provider `json:"-"`
-	// Resources defines all resources that are created by the component and by a third party.
-	Resources []Resource `json:"-"`
-	// Sources defines sources that produced the component.
-	Sources []Source `json:"-"`
-	// References component dependencies that can be resolved in the current context.
-	References []Reference `json:"-"`
+	Provider      Provider    `json:"-"`
+	Resources     []Resource  `json:"-"`
+	Sources       []Source    `json:"-"`
+	References    []Reference `json:"-"`
 }
 
 type Provider struct {
@@ -141,17 +137,6 @@ type ObjectMeta struct {
 	Labels []Label `json:"-"`
 }
 
-func (m *ObjectMeta) String() string {
-	base := m.Name
-	if m.Version != "" {
-		base += ":" + m.Version
-	}
-	if len(m.Labels) > 0 {
-		base += fmt.Sprintf("+labels(%v)", m.Labels)
-	}
-	return base
-}
-
 // ElementMeta defines an object with name and version containing labels.
 // It is an implementation of the Element Identity as per
 // https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#element-identity
@@ -162,22 +147,17 @@ type ElementMeta struct {
 	ExtraIdentity runtime.Identity `json:"-"`
 }
 
-func (m *ElementMeta) String() string {
-	base := m.ObjectMeta.String()
-	if m.ExtraIdentity != nil {
-		base += fmt.Sprintf("+extraIdentity(%v)", m.ExtraIdentity)
-	}
-	return base
-}
-
 func (m *ElementMeta) ToIdentity() runtime.Identity {
-	if m.ExtraIdentity == nil {
-		return runtime.Identity{
-			IdentityAttributeName:    m.Name,
-			IdentityAttributeVersion: m.Version,
-		}
+	if m == nil {
+		return nil
 	}
-	return maps.Clone(m.ExtraIdentity)
+	mp := maps.Clone(m.ExtraIdentity)
+	if mp == nil {
+		mp = make(runtime.Identity, 2)
+	}
+	mp[IdentityAttributeName] = m.Name
+	mp[IdentityAttributeVersion] = m.Version
+	return mp
 }
 
 // ComponentMeta defines the metadata of a component.
@@ -188,10 +168,13 @@ type ComponentMeta struct {
 }
 
 func (r *ComponentMeta) ToIdentity() runtime.Identity {
-	return runtime.Identity{
-		IdentityAttributeName:    r.Name,
-		IdentityAttributeVersion: r.Version,
+	if r == nil {
+		return nil
 	}
+	m := make(runtime.Identity, 2)
+	m[IdentityAttributeName] = r.Name
+	m[IdentityAttributeVersion] = r.Version
+	return m
 }
 
 // Label defines a label that can be used to add additional information to an element.
@@ -200,49 +183,4 @@ type Label struct {
 	Value string `json:"-"`
 	// Signing describes whether the label should be included into the signature
 	Signing bool `json:"-"`
-}
-
-// Validate checks for duplicate identities and validates AccessOrInput fields in the component constructor.
-func (cc *ComponentConstructor) Validate() error {
-	if cc == nil {
-		return nil
-	}
-	// Track identities for resources, sources, and references
-	resourceIdentities := make(map[string]int)
-	sourceIdentities := make(map[string]int)
-	referenceIdentities := make(map[string]int)
-
-	for ci, c := range cc.Components {
-		for ri, r := range c.Resources {
-			id := r.ElementMeta.ToIdentity()
-			key := fmt.Sprintf("resource:%v", id)
-			if _, exists := resourceIdentities[key]; exists {
-				return fmt.Errorf("duplicate resource identity in component %d, resource %d: %v", ci, ri, id)
-			}
-			resourceIdentities[key] = 1
-			if err := r.AccessOrInput.Validate(); err != nil {
-				return fmt.Errorf("invalid AccessOrInput in component %d, resource %d: %w", ci, ri, err)
-			}
-		}
-		for si, s := range c.Sources {
-			id := s.ElementMeta.ToIdentity()
-			key := fmt.Sprintf("source:%v", id)
-			if _, exists := sourceIdentities[key]; exists {
-				return fmt.Errorf("duplicate source identity in component %d, source %d: %v", ci, si, id)
-			}
-			sourceIdentities[key] = 1
-			if err := s.AccessOrInput.Validate(); err != nil {
-				return fmt.Errorf("invalid AccessOrInput in component %d, source %d: %w", ci, si, err)
-			}
-		}
-		for ri, r := range c.References {
-			id := r.ElementMeta.ToIdentity()
-			key := fmt.Sprintf("reference:%v", id)
-			if _, exists := referenceIdentities[key]; exists {
-				return fmt.Errorf("duplicate reference identity in component %d, reference %d: %v", ci, ri, id)
-			}
-			referenceIdentities[key] = 1
-		}
-	}
-	return nil
 }

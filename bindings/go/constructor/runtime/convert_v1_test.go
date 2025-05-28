@@ -122,39 +122,6 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				},
 			},
 		},
-		{
-			name: "resource with input",
-			resource: &v1.Resource{
-				ElementMeta: v1.ElementMeta{
-					ObjectMeta: v1.ObjectMeta{
-						Name:    "test",
-						Version: "1.0.0",
-					},
-				},
-				Type:     "test-type",
-				Relation: v1.LocalRelation,
-				AccessOrInput: v1.AccessOrInput{
-					Input: &rt.Raw{
-						Type: rt.NewUnversionedType("test-input"),
-						Data: []byte(`{"test": "value"}`),
-					},
-				},
-			},
-			want: descriptor.Resource{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{
-						Name:    "test",
-						Version: "1.0.0",
-					},
-				},
-				Type:     "test-type",
-				Relation: descriptor.LocalRelation,
-				Access: &rt.Raw{
-					Type: rt.NewUnversionedType("test-input"),
-					Data: []byte(`{"test": "value"}`),
-				},
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -230,37 +197,6 @@ func TestConvertToRuntimeSource(t *testing.T) {
 				Type: "test-type",
 				Access: &rt.Raw{
 					Type: rt.NewUnversionedType("test-access"),
-					Data: []byte(`{"test": "value"}`),
-				},
-			},
-		},
-		{
-			name: "source with input",
-			source: &v1.Source{
-				ElementMeta: v1.ElementMeta{
-					ObjectMeta: v1.ObjectMeta{
-						Name:    "test",
-						Version: "1.0.0",
-					},
-				},
-				Type: "test-type",
-				AccessOrInput: v1.AccessOrInput{
-					Input: &rt.Raw{
-						Type: rt.NewUnversionedType("test-input"),
-						Data: []byte(`{"test": "value"}`),
-					},
-				},
-			},
-			want: descriptor.Source{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{
-						Name:    "test",
-						Version: "1.0.0",
-					},
-				},
-				Type: "test-type",
-				Access: &rt.Raw{
-					Type: rt.NewUnversionedType("test-input"),
 					Data: []byte(`{"test": "value"}`),
 				},
 			},
