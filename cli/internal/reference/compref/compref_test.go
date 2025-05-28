@@ -16,6 +16,7 @@ import (
 func Test_ComponentReference(t *testing.T) {
 	cases := []struct {
 		input    string
+		opts     ParseOptions
 		expected *Ref
 		err      assert.ErrorAssertionFunc
 	}{
@@ -247,13 +248,54 @@ func Test_ComponentReference(t *testing.T) {
 			},
 			err: assert.NoError,
 		},
+		{
+			input: "myrepo//ocm.software/ocmcli:0.23.0",
+			opts: ParseOptions{
+				Aliases: map[string]*runtime.Raw{
+					"myrepo": {
+						Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+						Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"github.com/open-component-model/ocm"}`),
+					},
+				},
+			},
+			expected: &Ref{
+				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
+				Repository: &ociv1.Repository{
+					BaseUrl: "github.com/open-component-model/ocm",
+				},
+				Component: "ocm.software/ocmcli",
+				Version:   "0.23.0",
+			},
+			err: assert.NoError,
+		},
+		{
+			input: "myrepo//component-descriptors/ocm.software/ocmcli:0.23.0",
+			opts: ParseOptions{
+				Aliases: map[string]*runtime.Raw{
+					"myrepo": {
+						Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+						Data: []byte(`{"type":"OCIRepository/v1","baseUrl":"github.com/open-component-model/ocm"}`),
+					},
+				},
+			},
+			expected: &Ref{
+				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
+				Repository: &ociv1.Repository{
+					BaseUrl: "github.com/open-component-model/ocm",
+				},
+				Prefix:    "component-descriptors",
+				Component: "ocm.software/ocmcli",
+				Version:   "0.23.0",
+			},
+			err: assert.NoError,
+		},
 	}
 
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("case-%02d", i+1), func(t *testing.T) {
 			t.Logf("%q", tc.input)
 			r := require.New(t)
-			parsed, err := Parse(tc.input)
+			parsed, err := Parse(tc.input, &tc.opts)
 			if tc.expected.Type != "" {
 				if typ, err := runtime.TypeFromString(parsed.Type); err == nil {
 					tc.expected.Repository.SetType(typ)
@@ -366,7 +408,7 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 
 							t.Run(fmt.Sprintf("perm-%03d", i), func(t *testing.T) {
 								t.Logf("%q", repositoryInput)
-								parsed, err := Parse(repositoryInput)
+								parsed, err := Parse(repositoryInput, &ParseOptions{})
 								if !assert.NoError(t, err) {
 									return
 								}

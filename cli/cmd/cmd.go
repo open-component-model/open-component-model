@@ -55,6 +55,10 @@ func preRunE(cmd *cobra.Command, _ []string) error {
 
 	setupOCMConfig(cmd)
 
+	if err := setupResolverConfig(cmd); err != nil {
+		return fmt.Errorf("could not setup resolver config: %w", err)
+	}
+
 	if err := setupPluginManager(cmd); err != nil {
 		return fmt.Errorf("could not setup plugin manager: %w", err)
 	}

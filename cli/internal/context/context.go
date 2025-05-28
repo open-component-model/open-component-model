@@ -9,6 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	resolverv1 "ocm.software/open-component-model/cli/internal/reference/resolver/config/v1"
 )
 
 type ctxKey string
@@ -46,6 +47,10 @@ type Context struct {
 	// Once resolved they are passed to the corresponding plugin call.
 	// Usually plugins can return correct consumer identities based on respective endpoints.
 	credentialGraph *credentials.Graph
+
+	// ResolverCfg is the resolver configuration that is used to resolve component references and can be used
+	// for recursive lookups.
+	ResolverCfg *resolverv1.Config
 }
 
 // WithCredentialGraph creates a new context with the given credential graph.
@@ -67,6 +72,17 @@ func WithPluginManager(ctx context.Context, pm *manager.PluginManager) context.C
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
 	ocmctx.pluginManager = pm
+	return ctx
+}
+
+// WithResolverConfig creates a new context with the given resolver configuration.
+// After this function is called, the resolver configuration can be retrieved from the context
+// using [FromContext] and [Context.ResolverCfg].
+func WithResolverConfig(ctx context.Context, cfg *resolverv1.Config) context.Context {
+	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
+	ocmctx.ResolverCfg = cfg
 	return ctx
 }
 
@@ -117,6 +133,15 @@ func (ctx *Context) Configuration() *v1.Config {
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.configuration
+}
+
+func (ctx *Context) ResolverConfig() *resolverv1.Config {
+	if ctx == nil {
+		return nil
+	}
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
+	return ctx.ResolverCfg
 }
 
 // FromContext retrieves the OCM context from the given context.

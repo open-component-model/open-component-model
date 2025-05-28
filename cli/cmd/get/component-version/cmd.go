@@ -76,11 +76,17 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 	return cmd
 }
 
-func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
+func ComponentReferenceAsFirstPositional(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing component reference as first positional argument")
 	}
-	if _, err := compref.Parse(args[0]); err != nil {
+
+	parseOptions := compref.ParseOptions{}
+	if resolvers := ocmctx.FromContext(cmd.Context()).ResolverConfig(); resolvers != nil {
+		parseOptions.Aliases = resolvers.Aliases
+	}
+
+	if _, err := compref.Parse(args[0], &parseOptions); err != nil {
 		return fmt.Errorf("parsing component reference from first position argument %q failed: %w", args[0], err)
 	}
 	return nil
@@ -96,6 +102,8 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if credentialGraph == nil {
 		return fmt.Errorf("could not retrieve credential graph from context")
 	}
+
+	resolverCfg := ocmctx.FromContext(cmd.Context()).ResolverConfig()
 
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
@@ -114,8 +122,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting latest flag failed: %w", err)
 	}
 
-	reference := args[0]
-	repo, err := ocm.New(cmd.Context(), pluginManager, credentialGraph, reference)
+	repo, err := ocm.New(cmd.Context(), pluginManager, credentialGraph, args[0], resolverCfg)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}

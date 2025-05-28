@@ -17,6 +17,7 @@ import (
 	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
+	resolverv1 "ocm.software/open-component-model/cli/internal/reference/resolver/config/v1"
 )
 
 func setupOCMConfig(cmd *cobra.Command) {
@@ -90,5 +91,18 @@ func setupCredentialGraph(cmd *cobra.Command) error {
 
 	cmd.SetContext(ocmctx.WithCredentialGraph(cmd.Context(), graph))
 
+	return nil
+}
+
+func setupResolverConfig(cmd *cobra.Command) error {
+	cfg := ocmctx.FromContext(cmd.Context()).Configuration()
+	if cfg == nil {
+		slog.WarnContext(cmd.Context(), "could not get resolver configuration, skipping")
+	}
+	if cfg, err := resolverv1.Lookup(cfg); err == nil {
+		cmd.SetContext(ocmctx.WithResolverConfig(cmd.Context(), cfg))
+	} else {
+		slog.WarnContext(cmd.Context(), "could not lookup resolver configuration from central configuration", slog.String("error", err.Error()))
+	}
 	return nil
 }
