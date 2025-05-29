@@ -83,17 +83,17 @@ func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request v1.Process
 	panic("implement me")
 }
 
-func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
-	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
-	if err != nil {
-		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)
-	}
-	if !valid {
-		return fmt.Errorf("validation of plugin %q failed for get local resource", r.ID)
-	}
-
-	return nil
-}
+// func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
+//	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
+//	if err != nil {
+//		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)
+//	}
+//	if !valid {
+//		return fmt.Errorf("validation of plugin %q failed for get local resource", r.ID)
+//	}
+//
+//	return nil
+// }
 
 func toCredentials(credentials map[string]string) (plugins.KV, error) {
 	rawCreds, err := json.Marshal(credentials)
