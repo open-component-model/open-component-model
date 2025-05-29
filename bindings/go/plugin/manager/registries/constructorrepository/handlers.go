@@ -29,11 +29,6 @@ func ResourceInputProcessorHandlerFunc(f func(ctx context.Context, r v1.ProcessR
 		}
 
 		defer request.Body.Close()
-		//content, err := io.ReadAll(request.Body)
-		//if err != nil {
-		//	plugins.NewError(fmt.Errorf("failed to read body: %w", err), http.StatusBadRequest).Write(writer)
-		//	return
-		//}
 
 		result := &v1.ProcessResourceRequest{}
 		if err := json.NewDecoder(request.Body).Decode(result); err != nil {
