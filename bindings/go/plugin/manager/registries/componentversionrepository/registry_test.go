@@ -3,12 +3,14 @@ package componentversionrepository
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
@@ -21,6 +23,7 @@ func TestPluginFlow(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-component-version")
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-component-version first")
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
@@ -85,6 +88,28 @@ func TestPluginFlow(t *testing.T) {
 	}, map[string]string{})
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
+
+	err = retrievedPlugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
+		Repository: &dummyv1.Repository{
+			Type: runtime.Type{
+				Name:    "DummyRepository",
+				Version: "v1",
+			},
+			BaseUrl: "base-url",
+		},
+		Descriptor: &v2.Descriptor{
+			Component: v2.Component{
+				ComponentMeta: v2.ComponentMeta{
+					ObjectMeta: v2.ObjectMeta{
+						Name:    "test-component",
+						Version: "1.0.0",
+					},
+				},
+				Provider: "ocm.software",
+			},
+		},
+	}, map[string]string{})
+	require.NoError(t, err)
 }
 
 func TestPluginNotFound(t *testing.T) {

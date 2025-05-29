@@ -28,7 +28,7 @@ func TestPluginFlow(t *testing.T) {
 	dummytype.MustAddToScheme(scheme)
 	registry := NewConstructionRepositoryRegistry(ctx)
 	config := mtypes.Config{
-		ID:         "test-plugin-1",
+		ID:         "test-plugin-1-construction",
 		Type:       mtypes.Socket,
 		PluginType: mtypes.ConstructionResourceInputPluginType,
 	}
@@ -45,15 +45,15 @@ func TestPluginFlow(t *testing.T) {
 	stderr, err := pluginCmd.StderrPipe()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Remove("/tmp/test-plugin-1-plugin.socket")
+		_ = os.Remove("/tmp/test-plugin-1-construction-plugin.socket")
 		_ = pluginCmd.Process.Kill()
 	})
 	plugin := mtypes.Plugin{
-		ID:     "test-plugin-1",
+		ID:     "test-plugin-1-construction",
 		Path:   path,
 		Stderr: stderr,
 		Config: mtypes.Config{
-			ID:         "test-plugin-1",
+			ID:         "test-plugin-1-construction",
 			Type:       mtypes.Socket,
 			PluginType: mtypes.ComponentVersionRepositoryPluginType,
 		},
@@ -96,5 +96,5 @@ func TestPluginFlow(t *testing.T) {
 		},
 	}, map[string]string{})
 	require.NoError(t, err)
-	require.Equal(t, "asdf", response.Resource.Name)
+	require.Equal(t, "test-resource", response.Resource.Name)
 }
