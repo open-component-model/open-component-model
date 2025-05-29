@@ -10,6 +10,10 @@ type PluginType string
 var (
 	ComponentVersionRepositoryPluginType PluginType = "componentVersionRepository"
 	CredentialRepositoryPluginType       PluginType = "credentialRepository" //nolint:gosec // not hardcoded cred
+	// TODO: This might be too granular and it should be just a construction type plugin that implements all of these?
+	ConstructionResourceInputPluginType                PluginType = "constructionResourceInput"
+	ConstructionSourceInputPluginType                  PluginType = "constructionSourceInput"
+	ConstructionResourceDigestProcessorInputPluginType PluginType = "constructionResourceDigestProcessor"
 )
 
 type Location struct {

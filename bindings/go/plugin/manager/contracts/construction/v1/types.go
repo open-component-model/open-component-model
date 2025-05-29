@@ -15,8 +15,8 @@ type ProcessResourceRequest struct {
 }
 
 type ProcessResourceResponse struct {
-	Resource *constructorv1.Resource `json:"resource,omitempty"`
-	Location *types.Location         `json:"location,omitempty"`
+	Resource *constructorv1.Resource `json:"resource"`
+	Location *types.Location         `json:"location"`
 }
 
 type ProcessSourceRequest struct {
@@ -24,6 +24,6 @@ type ProcessSourceRequest struct {
 }
 
 type ProcessSourceResponse struct {
-	Source   *constructorv1.Source `json:"source,omitempty"`
-	Location *types.Location       `json:"location,omitempty"`
+	Source   *constructorv1.Source `json:"source"`
+	Location *types.Location       `json:"location"`
 }

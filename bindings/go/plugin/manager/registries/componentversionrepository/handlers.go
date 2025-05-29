@@ -84,7 +84,7 @@ func ListComponentVersionsHandlerFunc[T runtime.Typed](f func(ctx context.Contex
 	}
 }
 
-func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
+func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, r v1.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
@@ -92,8 +92,7 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
 			return
 		}
-
-		body, err := decodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
+		body, err := plugins.DecodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
 		if err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
@@ -150,6 +149,35 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 	}
 }
 
+func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ v1.GetIdentityRequest[T]) (runtime.Identity, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		//rawCredentials := []byte(request.Header.Get("Authorization"))
+		//credentials := map[string]string{}
+		//if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+		//	plugins.NewError(err, http.StatusUnauthorized).Write(writer)
+		//	return
+		//}
+
+		// TODO: Figure this out
+		//query := request.URL.Query()
+		//name := query.Get("name")
+		//version := query.Get("version")
+
+		response, err := f(request.Context(), v1.GetIdentityRequest[T]{
+			Typ: proto,
+		})
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(response); err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+	}
+}
+
 func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
@@ -159,7 +187,7 @@ func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			return
 		}
 
-		body, err := decodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
+		body, err := plugins.DecodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
 		if err != nil {
 			slog.Error("failed to decode request body", "error", err)
 			return
