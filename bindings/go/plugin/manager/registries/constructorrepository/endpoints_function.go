@@ -34,12 +34,11 @@ func RegisterResourceInputProcessor[T runtime.Typed](
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
 	}
 
-	c.Handlers = append(c.Handlers,
-		endpoints.Handler{
-			Handler:  ResourceInputProcessorHandlerFunc(handler.ProcessResource, c.Scheme, proto),
-			Location: ProcessResource,
-		})
-	
+	c.Handlers = append(c.Handlers, endpoints.Handler{
+		Handler:  ResourceInputProcessorHandlerFunc(handler.ProcessResource, c.Scheme, proto),
+		Location: ProcessResource,
+	})
+
 	schema, err := runtime.GenerateJSONSchemaForType(proto)
 	if err != nil {
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
