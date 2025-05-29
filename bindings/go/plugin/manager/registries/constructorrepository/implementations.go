@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/construction/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
@@ -57,7 +56,7 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 }
 
 func (r *RepositoryPlugin) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
-	panic("implement me")
+	return runtime.Identity{}, nil
 }
 
 func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request v1.ProcessResourceRequest, credentials map[string]string) (v1.ProcessResourceResponse, error) {
@@ -105,14 +104,4 @@ func toCredentials(credentials map[string]string) (plugins.KV, error) {
 		Key:   "Authorization",
 		Value: string(rawCreds),
 	}, nil
-}
-
-func convertFromRuntimeToV1(from *descriptor.Resource) *constructorv1.Resource {
-	response := constructorv1.Resource{}
-	response.Name = from.Name
-	response.Version = from.Version
-	response.Type = from.Type
-	response.Relation = "local"
-
-	return &response
 }
