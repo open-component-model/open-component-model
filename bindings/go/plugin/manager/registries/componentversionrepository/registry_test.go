@@ -18,9 +18,9 @@ import (
 )
 
 func TestPluginFlow(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-component-version")
 	_, err := os.Stat(path)
-	require.NoError(t, err, "test plugin not found, please build the plugin under plugin/testplugin first")
+	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-component-version first")
 
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
@@ -45,6 +45,8 @@ func TestPluginFlow(t *testing.T) {
 	})
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)
+	stderr, err := pluginCmd.StderrPipe()
+	require.NoError(t, err)
 	plugin := mtypes.Plugin{
 		ID:   "test-plugin-1",
 		Path: path,
@@ -63,6 +65,7 @@ func TestPluginFlow(t *testing.T) {
 		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
+		Stderr: stderr,
 	}
 	require.NoError(t, registry.AddPlugin(plugin, typ))
 	p, err := scheme.NewObject(typ)
