@@ -16,7 +16,7 @@ import (
 // ResourceInputProcessorHandlerFunc is a wrapper around calling the interface method GetComponentVersion for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func ResourceInputProcessorHandlerFunc(f func(ctx context.Context, r v1.ProcessResourceRequest, credentials map[string]string) (v1.ProcessResourceResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
+func ResourceInputProcessorHandlerFunc(f func(ctx context.Context, r v1.ProcessResourceInputRequest, credentials map[string]string) (v1.ProcessResourceResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		logger.Info("request", "request", request.Method, "url", request.URL.String())
@@ -30,7 +30,7 @@ func ResourceInputProcessorHandlerFunc(f func(ctx context.Context, r v1.ProcessR
 
 		defer request.Body.Close()
 
-		result := &v1.ProcessResourceRequest{}
+		result := &v1.ProcessResourceInputRequest{}
 		if err := json.NewDecoder(request.Body).Decode(result); err != nil {
 			plugins.NewError(fmt.Errorf("failed to marshal request body: %w", err), http.StatusInternalServerError).Write(writer)
 			return

@@ -12,7 +12,12 @@ import (
 const (
 	// ProcessResource processes the input of a resource.
 	ProcessResource = "/resource/process"
-	Identity        = "/identity"
+	// ProcessSource processes the input of a source.
+	ProcessSource = "/source/process"
+	// Identity provides the identity of a type supported by the plugin.
+	Identity = "/identity"
+	// ProcessResourceDigest processes the digest of a resource.
+	ProcessResourceDigest = "/resource/process/digest"
 )
 
 // RegisterResourceInputProcessor takes a builder and a handler and based on the handler's contract type

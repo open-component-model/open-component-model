@@ -16,13 +16,13 @@ type IdentityProvider[T runtime.Typed] interface {
 type ResourceInputPluginContract interface {
 	contracts.PluginBase
 	IdentityProvider[runtime.Typed]
-	ProcessResource(ctx context.Context, request ProcessResourceRequest, credentials map[string]string) (ProcessResourceResponse, error)
+	ProcessResource(ctx context.Context, request *ProcessResourceInputRequest, credentials map[string]string) (*ProcessResourceResponse, error)
 }
 
 type SourceInputPluginContract interface {
 	contracts.PluginBase
 	IdentityProvider[runtime.Typed]
-	ProcessSource(ctx context.Context, request ProcessSourceRequest, credentials map[string]string) (ProcessSourceResponse, error)
+	ProcessSource(ctx context.Context, request *ProcessSourceInputRequest, credentials map[string]string) (*ProcessSourceResponse, error)
 }
 
 type ResourceDigestProcessorPlugin interface {
