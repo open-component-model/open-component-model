@@ -35,7 +35,7 @@ func TestProcessResourceHandler(t *testing.T) {
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
-	_, err := plugin.ProcessResource(ctx, v1.ProcessResourceRequest{
+	_, err := plugin.ProcessResource(ctx, v1.ProcessResourceInputRequest{
 		Resource: &constructorv1.Resource{},
 	}, map[string]string{})
 	require.NoError(t, err)

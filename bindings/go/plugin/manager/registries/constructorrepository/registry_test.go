@@ -74,7 +74,7 @@ func TestPluginFlow(t *testing.T) {
 	retrievedPlugin, err := registry.GetResourceInputPlugin(ctx, p)
 	require.NoError(t, err)
 	require.NoError(t, retrievedPlugin.Ping(ctx))
-	response, err := retrievedPlugin.ProcessResource(ctx, v1.ProcessResourceRequest{
+	response, err := retrievedPlugin.ProcessResource(ctx, v1.ProcessResourceInputRequest{
 		Resource: &constructorv1.Resource{
 			ElementMeta: constructorv1.ElementMeta{
 				ObjectMeta: constructorv1.ObjectMeta{
