@@ -214,6 +214,7 @@ mvn
 mvnrepository
 namespace
 namespaces
+neonephos
 newcomponentaccess
 newcomponentversionaccess
 newrepository
@@ -334,6 +335,7 @@ toolings
 toolset
 transformerplugin
 transportarchive
+tsc
 typehandler
 typename
 unmarshaller
@@ -363,3 +365,18 @@ yitsushi
 yml
 yyyy
 zsh
+cwienk
+möller
+ccwienk
+fabianburth
+frewilhelm
+jakobmoellerdev
+morri
+lf
+onboarding
+lfx
+priyanka
+sakundarwar
+scheidemann
+braun
+xxxx
