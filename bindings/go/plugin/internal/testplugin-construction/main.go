@@ -28,7 +28,7 @@ func (m *TestPlugin) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[
 	return runtime.Identity{}, nil
 }
 
-func (m *TestPlugin) ProcessResource(ctx context.Context, request v1.ProcessResourceRequest, credentials map[string]string) (v1.ProcessResourceResponse, error) {
+func (m *TestPlugin) ProcessResource(ctx context.Context, request v1.ProcessResourceInputRequest, credentials map[string]string) (v1.ProcessResourceResponse, error) {
 	return v1.ProcessResourceResponse{
 		Resource: &constructorv1.Resource{
 			ElementMeta: constructorv1.ElementMeta{
