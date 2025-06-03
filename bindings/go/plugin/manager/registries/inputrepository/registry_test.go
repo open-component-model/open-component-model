@@ -23,7 +23,7 @@ func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-input")
 	_, err := os.Stat(path)
-	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/testplugin-construction first")
+	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-input first")
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
