@@ -12,9 +12,9 @@ import (
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/construction/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
-	constructorrepositroy "ocm.software/open-component-model/bindings/go/plugin/manager/registries/constructorrepository"
+	constructorrepositroy "ocm.software/open-component-model/bindings/go/plugin/manager/registries/inputrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -23,13 +23,13 @@ type TestPlugin struct{}
 
 var logger *slog.Logger
 
-func (m *TestPlugin) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
+func (m *TestPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
 	_, _ = fmt.Fprintf(os.Stdout, "GetIdentity: %+v\n", typ.Typ)
 	return runtime.Identity{}, nil
 }
 
-func (m *TestPlugin) ProcessResource(ctx context.Context, request v1.ProcessResourceInputRequest, credentials map[string]string) (v1.ProcessResourceResponse, error) {
-	return v1.ProcessResourceResponse{
+func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceResponse, error) {
+	return &v1.ProcessResourceResponse{
 		Resource: &constructorv1.Resource{
 			ElementMeta: constructorv1.ElementMeta{
 				ObjectMeta: constructorv1.ObjectMeta{
@@ -39,6 +39,24 @@ func (m *TestPlugin) ProcessResource(ctx context.Context, request v1.ProcessReso
 			},
 			Type:     "type",
 			Relation: "local",
+		},
+		Location: &types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        "/tmp/to/file",
+		},
+	}, nil
+}
+
+func (m *TestPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceResponse, error) {
+	return &v1.ProcessSourceResponse{
+		Source: &constructorv1.Source{
+			ElementMeta: constructorv1.ElementMeta{
+				ObjectMeta: constructorv1.ObjectMeta{
+					Name:    "test-source",
+					Version: "v0.0.1",
+				},
+			},
+			Type: "type",
 		},
 		Location: &types.Location{
 			LocationType: types.LocationTypeLocalFile,
@@ -64,7 +82,7 @@ func main() {
 	dummytype.MustAddToScheme(scheme)
 	capabilities := endpoints.NewEndpoints(scheme)
 
-	if err := constructorrepositroy.RegisterResourceInputProcessor(&dummyv1.Repository{}, &TestPlugin{}, capabilities); err != nil {
+	if err := constructorrepositroy.RegisterInputProcessor(&dummyv1.Repository{}, &TestPlugin{}, capabilities); err != nil {
 		logger.Error("failed to register test plugin", "error", err.Error())
 		os.Exit(1)
 	}
