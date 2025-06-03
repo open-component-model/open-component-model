@@ -17,8 +17,8 @@ import (
 
 	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
-	constructorrepositroy "ocm.software/open-component-model/bindings/go/plugin/manager/registries/constructorrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/inputrepository"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -31,7 +31,7 @@ type PluginManager struct {
 	// plugin manager to locate a required plugin.
 	ComponentVersionRepositoryRegistry *componentversionrepository.RepositoryRegistry
 	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
-	ConstructionRegistry               *constructorrepositroy.RepositoryRegistry
+	InputRegistry                      *inputrepository.RepositoryRegistry
 
 	mu sync.Mutex
 
@@ -48,7 +48,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 	return &PluginManager{
 		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
 		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
-		ConstructionRegistry:               constructorrepositroy.NewConstructionRepositoryRegistry(ctx),
+		InputRegistry:                      inputrepository.NewInputRepositoryRegistry(ctx),
 		baseCtx:                            ctx,
 	}
 }
@@ -238,9 +238,9 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, pl
 			if err := pm.CredentialRepositoryRegistry.AddPlugin(plugin, typs[0].Type, typs[1].Type); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
-		case mtypes.ConstructionResourceInputPluginType:
+		case mtypes.InputPluginType:
 			slog.DebugContext(ctx, "adding construction resource input plugin", "id", plugin.ID)
-			if err := pm.ConstructionRegistry.AddResourceInputPlugin(plugin, typs[0].Type); err != nil {
+			if err := pm.InputRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		}
