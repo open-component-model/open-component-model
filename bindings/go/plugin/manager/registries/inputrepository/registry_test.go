@@ -1,4 +1,4 @@
-package constructorrepositroy
+package inputrepository
 
 import (
 	"context"
@@ -10,27 +10,28 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/construction/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-construction")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-input")
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/testplugin-construction first")
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
-	registry := NewConstructionRepositoryRegistry(ctx)
+	registry := NewInputRepositoryRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin-1-construction",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.ConstructionResourceInputPluginType,
+		PluginType: mtypes.InputPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -68,13 +69,13 @@ func TestPluginFlow(t *testing.T) {
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	require.NoError(t, registry.AddResourceInputPlugin(plugin, typ))
+	require.NoError(t, registry.AddPlugin(plugin, typ))
 	p, err := scheme.NewObject(typ)
 	require.NoError(t, err)
-	retrievedPlugin, err := registry.GetResourceInputPlugin(ctx, p)
+	retrievedResourcePlugin, err := registry.GetResourceInputPlugin(ctx, p)
 	require.NoError(t, err)
-	require.NoError(t, retrievedPlugin.Ping(ctx))
-	response, err := retrievedPlugin.ProcessResource(ctx, v1.ProcessResourceInputRequest{
+	require.NoError(t, retrievedResourcePlugin.Ping(ctx))
+	resource, err := retrievedResourcePlugin.ProcessResource(ctx, &v1.ProcessResourceInputRequest{
 		Resource: &constructorv1.Resource{
 			ElementMeta: constructorv1.ElementMeta{
 				ObjectMeta: constructorv1.ObjectMeta{
@@ -96,5 +97,31 @@ func TestPluginFlow(t *testing.T) {
 		},
 	}, map[string]string{})
 	require.NoError(t, err)
-	require.Equal(t, "test-resource", response.Resource.Name)
+	require.Equal(t, "test-resource", resource.Resource.Name)
+
+	retrievedSourcePlugin, err := registry.GetSourceInputPlugin(ctx, p)
+	require.NoError(t, err)
+	require.NoError(t, retrievedSourcePlugin.Ping(ctx))
+	source, err := retrievedSourcePlugin.ProcessSource(ctx, &v1.ProcessSourceInputRequest{
+		Source: &constructorv1.Source{
+			ElementMeta: constructorv1.ElementMeta{
+				ObjectMeta: constructorv1.ObjectMeta{
+					Name:    "test-source-1",
+					Version: "0.1.0",
+				},
+			},
+			Type: "type",
+			AccessOrInput: constructorv1.AccessOrInput{
+				Access: &runtime.Raw{
+					Type: runtime.Type{
+						Version: "test-access",
+						Name:    "v1",
+					},
+					Data: []byte(`{ "access": "v1" }`),
+				},
+			},
+		},
+	}, map[string]string{})
+	require.NoError(t, err)
+	require.Equal(t, "test-source", source.Source.Name)
 }

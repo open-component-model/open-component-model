@@ -1,9 +1,9 @@
-package constructorrepositroy
+package inputrepository
 
 import (
 	"fmt"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/construction/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -16,18 +16,16 @@ const (
 	ProcessSource = "/source/process"
 	// Identity provides the identity of a type supported by the plugin.
 	Identity = "/identity"
-	// ProcessResourceDigest processes the digest of a resource.
-	ProcessResourceDigest = "/resource/process/digest"
 )
 
-// RegisterResourceInputProcessor takes a builder and a handler and based on the handler's contract type
+// RegisterInputProcessor takes a builder and a handler and based on the handler's contract type
 // will construct a list of endpoint handlers that they will need. Once completed, MarshalJSON can be
 // used to construct the supported endpoint list to give back to the plugin manager. This information is stored
 // about the plugin and then used for later lookup. The type is also saved with the endpoint, meaning
 // during lookup the right endpoint + type is used.
-func RegisterResourceInputProcessor[T runtime.Typed](
+func RegisterInputProcessor[T runtime.Typed](
 	proto T,
-	handler v1.ResourceInputPluginContract,
+	handler v1.InputPluginContract,
 	c *endpoints.EndpointBuilder,
 ) error {
 	if c.CurrentTypes.Types == nil {
@@ -42,6 +40,9 @@ func RegisterResourceInputProcessor[T runtime.Typed](
 	c.Handlers = append(c.Handlers, endpoints.Handler{
 		Handler:  ResourceInputProcessorHandlerFunc(handler.ProcessResource, c.Scheme, proto),
 		Location: ProcessResource,
+	}, endpoints.Handler{
+		Handler:  SourceInputProcessorHandlerFunc(handler.ProcessSource, c.Scheme, proto),
+		Location: ProcessSource,
 	})
 
 	schema, err := runtime.GenerateJSONSchemaForType(proto)
@@ -49,7 +50,7 @@ func RegisterResourceInputProcessor[T runtime.Typed](
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
 
-	c.CurrentTypes.Types[types.ConstructionResourceInputPluginType] = append(c.CurrentTypes.Types[types.ConstructionResourceInputPluginType],
+	c.CurrentTypes.Types[types.InputPluginType] = append(c.CurrentTypes.Types[types.InputPluginType],
 		types.Type{
 			Type:       typ,
 			JSONSchema: schema,

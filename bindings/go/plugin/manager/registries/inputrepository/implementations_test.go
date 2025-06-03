@@ -1,4 +1,4 @@
-package constructorrepositroy
+package inputrepository
 
 import (
 	"context"
@@ -8,8 +8,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/construction/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -35,7 +36,7 @@ func TestProcessResourceHandler(t *testing.T) {
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
-	_, err := plugin.ProcessResource(ctx, v1.ProcessResourceInputRequest{
+	_, err := plugin.ProcessResource(ctx, &v1.ProcessResourceInputRequest{
 		Resource: &constructorv1.Resource{},
 	}, map[string]string{})
 	require.NoError(t, err)
