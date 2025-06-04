@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -39,10 +40,15 @@ func setupPluginManager(cmd *cobra.Command) error {
 			return fmt.Errorf("could not get plugin configuration: %w", err)
 		}
 		for _, pluginLocation := range pluginCfg.Locations {
-			if err := pluginManager.RegisterPlugins(cmd.Context(), pluginLocation,
+			err := pluginManager.RegisterPlugins(cmd.Context(), pluginLocation,
 				manager.WithIdleTimeout(time.Duration(pluginCfg.IdleTimeout)),
-			); err != nil {
-				slog.WarnContext(cmd.Context(), "could not register plugin location", "error", err)
+			)
+			if errors.Is(err, manager.ErrNoPluginsFound) {
+				slog.DebugContext(cmd.Context(), "no plugins found at location", slog.String("location", pluginLocation))
+				continue
+			}
+			if err != nil {
+				return err
 			}
 		}
 	}
