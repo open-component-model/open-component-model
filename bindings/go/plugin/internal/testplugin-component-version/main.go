@@ -34,8 +34,8 @@ func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.Get
 					Version: "1.0.0",
 				},
 			},
-			Provider: runtime.Identity{
-				"name": "ocm.software",
+			Provider: descriptor.Provider{
+				Name: "ocm.software",
 			},
 			Resources: []descriptor.Resource{
 				{
@@ -70,23 +70,38 @@ func (m *TestPlugin) ListComponentVersions(ctx context.Context, request repov1.L
 	return []string{"v0.0.1", "v0.0.2"}, nil
 }
 
-func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) error {
-	_, _ = fmt.Fprintf(os.Stdout, "Writing my local resource here to target: %+v\n", request.TargetLocation)
-	return nil
+func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
+	// the plugin decides where things will live.
+	f, err := os.CreateTemp("", "test-resource-file")
+	if err != nil {
+		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error creating temp file: %w", err)
+	}
+
+	if err := os.WriteFile(f.Name(), []byte("test-resource"), 0o600); err != nil {
+		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error write to temp file: %w", err)
+	}
+
+	logger.Debug("writing local file here", "location", f.Name())
+	return repov1.GetLocalResourceResponse{
+		Location: types.Location{
+			Value:        f.Name(),
+			LocationType: types.LocationTypeLocalFile,
+		},
+	}, nil
 }
 
 func (m *TestPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Resource, error) {
-	_, _ = fmt.Fprintf(os.Stdout, "AddLocalResource: %+v\n", request.ResourceLocation)
+	logger.Debug("AddLocalResource", "location", request.ResourceLocation)
 	return nil, nil
 }
 
 func (m *TestPlugin) AddComponentVersion(ctx context.Context, request repov1.PostComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) error {
-	_, _ = fmt.Fprintf(os.Stdout, "AddComponentVersiont: %+v\n", request.Descriptor.Component.Name)
+	logger.Debug("AddComponentVersion", "name", request.Descriptor.Component.Name)
 	return nil
 }
 
-func (m *TestPlugin) GetIdentity(ctx context.Context, typ repov1.GetIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {
-	_, _ = fmt.Fprintf(os.Stdout, "GetIdentity: %+v\n", typ.Typ.BaseUrl)
+func (m *TestPlugin) GetIdentity(ctx context.Context, typ *repov1.GetIdentityRequest[*dummyv1.Repository]) (*repov1.GetIdentityResponse, error) {
+	logger.Debug("GetIdentity", "url", typ.Typ.BaseUrl)
 	return nil, nil
 }
 
@@ -97,10 +112,12 @@ type Config struct {
 	MaximumNumberOfPotatoes string `json:"maximumNumberOfPotatoes"`
 }
 
+var logger *slog.Logger
+
 func main() {
 	args := os.Args[1:]
 	// log messages are shared over stderr by convention established by the plugin manager.
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	logger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelDebug, // debug level here is respected when sending this message.
 	}))
 

@@ -18,13 +18,12 @@ func (r *TypeToUntypedPlugin[T]) Ping(ctx context.Context) error {
 	return r.base.Ping(ctx)
 }
 
-func (r *TypeToUntypedPlugin[T]) GetLocalResource(ctx context.Context, request v1.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) error {
+func (r *TypeToUntypedPlugin[T]) GetLocalResource(ctx context.Context, request v1.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalResourceResponse, error) {
 	return r.base.GetLocalResource(ctx, v1.GetLocalResourceRequest[T]{
-		Repository:     request.Repository.(T),
-		Name:           request.Name,
-		Version:        request.Version,
-		Identity:       request.Identity,
-		TargetLocation: request.TargetLocation,
+		Repository: request.Repository.(T),
+		Name:       request.Name,
+		Version:    request.Version,
+		Identity:   request.Identity,
 	}, credentials)
 }
 
@@ -62,8 +61,8 @@ func (r *TypeToUntypedPlugin[T]) ListComponentVersions(ctx context.Context, requ
 	return r.base.ListComponentVersions(ctx, req, credentials)
 }
 
-func (r *TypeToUntypedPlugin[T]) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
-	return r.base.GetIdentity(ctx, v1.GetIdentityRequest[T]{
+func (r *TypeToUntypedPlugin[T]) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+	return r.base.GetIdentity(ctx, &v1.GetIdentityRequest[T]{
 		Typ: typ.Typ.(T),
 	})
 }

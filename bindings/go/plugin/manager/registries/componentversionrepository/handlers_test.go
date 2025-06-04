@@ -61,6 +61,9 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 							Version: "1.0.0",
 						},
 						Component: descriptor.Component{
+							Provider: descriptor.Provider{
+								Name: "ocm.software",
+							},
 							ComponentMeta: descriptor.ComponentMeta{
 								ObjectMeta: descriptor.ObjectMeta{
 									Name:    "component",
@@ -78,7 +81,7 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
-				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"","resources":null,"sources":null,"componentReferences":null}}
+				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"ocm.software","resources":null,"sources":null,"componentReferences":null}}
 `, string(content))
 
 			},
@@ -130,8 +133,8 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "GetLocalResourceHandlerFunc unauthorized error",
 			handlerFunc: func(t *testing.T) http.HandlerFunc {
-				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) error {
-					return nil
+				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
+					return repov1.GetLocalResourceResponse{}, nil
 				}, scheme, &dummyv1.Repository{})
 
 				return handler
@@ -153,10 +156,10 @@ func TestGetLocalResourceHandlerFunc(t *testing.T) {
 		{
 			name: "GetLocalResourceHandlerFunc success",
 			handlerFunc: func(t *testing.T) http.HandlerFunc {
-				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) error {
+				handler := GetLocalResourceHandlerFunc(func(ctx context.Context, request repov1.GetLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
 					require.Equal(t, "component", request.Name)
 					require.Equal(t, "1.0.0", request.Version)
-					return nil
+					return repov1.GetLocalResourceResponse{}, nil
 				}, scheme, &dummyv1.Repository{})
 
 				return handler

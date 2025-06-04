@@ -8,12 +8,10 @@ tasks:
       - test -d tmp
   build:
     cmds:
-      - go build -o tmp/testdata/test-plugin internal/testplugin/main.go
+      - go build -o tmp/testdata/test-plugin-component-version internal/testplugin-component-version/main.go
+      - go build -o tmp/testdata/test-plugin-resource internal/testplugin-resource/main.go
+      - go build -o tmp/testdata/test-plugin-input internal/testplugin-input/main.go
   test:
-    sources:
-      - ./**/*.go
-      - ./go.mod
-      - ./go.sum
     cmds:
       - go test -v -coverprofile=tmp/coverage.out ./...
     deps:

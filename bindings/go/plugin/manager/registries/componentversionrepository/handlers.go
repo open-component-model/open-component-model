@@ -12,7 +12,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -85,7 +84,7 @@ func ListComponentVersionsHandlerFunc[T runtime.Typed](f func(ctx context.Contex
 	}
 }
 
-func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
+func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, r v1.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
@@ -93,8 +92,7 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
 			return
 		}
-
-		body, err := decodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
+		body, err := plugins.DecodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
 		if err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
@@ -106,7 +104,7 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	}
 }
 
-func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalResourceRequest[T], credentials map[string]string) error, scheme *runtime.Scheme, proto T) http.HandlerFunc {
+func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalResourceRequest[T], credentials map[string]string) (v1.GetLocalResourceResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
@@ -118,10 +116,6 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 		query := request.URL.Query()
 		name := query.Get("name")
 		version := query.Get("version")
-		targetLocation := types.Location{
-			LocationType: types.LocationType(query.Get("target_location_type")),
-			Value:        query.Get("target_location_value"),
-		}
 		identityQuery := query.Get("identity")
 		decodedIdentity, err := base64.StdEncoding.DecodeString(identityQuery)
 		if err != nil {
@@ -137,13 +131,40 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			}
 		}
 
-		if err := f(request.Context(), v1.GetLocalResourceRequest[T]{
-			Repository:     proto,
-			Name:           name,
-			Version:        version,
-			Identity:       identity,
-			TargetLocation: targetLocation,
-		}, credentials); err != nil {
+		response, err := f(request.Context(), v1.GetLocalResourceRequest[T]{
+			Repository: proto,
+			Name:       name,
+			Version:    version,
+			Identity:   identity,
+		}, credentials)
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(response); err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+	}
+}
+
+func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1.GetIdentityRequest[T]) (*v1.GetIdentityResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		// TODO: Figure this out
+		// query := request.URL.Query()
+		// name := query.Get("name")
+		// version := query.Get("version")
+
+		response, err := f(request.Context(), &v1.GetIdentityRequest[T]{
+			Typ: proto,
+		})
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(response); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
@@ -159,7 +180,7 @@ func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			return
 		}
 
-		body, err := decodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
+		body, err := plugins.DecodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
 		if err != nil {
 			slog.Error("failed to decode request body", "error", err)
 			return

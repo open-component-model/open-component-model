@@ -18,6 +18,8 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -30,6 +32,8 @@ type PluginManager struct {
 	// plugin manager to locate a required plugin.
 	ComponentVersionRepositoryRegistry *componentversionrepository.RepositoryRegistry
 	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
+	InputRegistry                      *input.RepositoryRegistry
+	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
 
 	mu sync.Mutex
 
@@ -46,6 +50,8 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 	return &PluginManager{
 		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
 		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
+		InputRegistry:                      input.NewInputRepositoryRegistry(ctx),
+		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
 		baseCtx:                            ctx,
 	}
 }
@@ -233,6 +239,16 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, pl
 		case mtypes.CredentialRepositoryPluginType:
 			slog.DebugContext(ctx, "adding credential repository plugin", "id", plugin.ID)
 			if err := pm.CredentialRepositoryRegistry.AddPlugin(plugin, typs[0].Type, typs[1].Type); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case mtypes.InputPluginType:
+			slog.DebugContext(ctx, "adding construction resource input plugin", "id", plugin.ID)
+			if err := pm.InputRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case mtypes.DigestProcessorPluginType:
+			slog.DebugContext(ctx, "adding digest processor plugin", "id", plugin.ID)
+			if err := pm.DigestProcessorRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		}

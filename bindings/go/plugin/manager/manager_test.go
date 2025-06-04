@@ -66,6 +66,20 @@ func TestPluginManager(t *testing.T) {
 	}, map[string]string{})
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
+
+	response, err := plugin.GetLocalResource(ctx, repov1.GetLocalResourceRequest[runtime.Typed]{
+		Repository: &dummyv1.Repository{
+			Type:    typ,
+			BaseUrl: "https://ocm.software/test",
+		},
+		Name:    "test-resource",
+		Version: "v0.0.1",
+	}, map[string]string{})
+	require.NoError(t, err)
+	require.Equal(t, types.LocationTypeLocalFile, response.Location.LocationType)
+	content, err := os.ReadFile(response.Location.Value)
+	require.NoError(t, err)
+	require.Equal(t, "test-resource", string(content))
 }
 
 func TestConfigurationPassedToPlugin(t *testing.T) {
@@ -129,7 +143,7 @@ func TestConfigurationPassedToPluginNotFound(t *testing.T) {
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
 	err := pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config))
-	require.EqualError(t, err, "failed to add plugin test-plugin: no configuration found for plugin test-plugin; requested configuration types: [custom.config/v1]")
+	require.EqualError(t, err, "failed to add plugin test-plugin-component-version: no configuration found for plugin test-plugin-component-version; requested configuration types: [custom.config/v1]")
 }
 
 func TestPluginManagerCancelContext(t *testing.T) {
@@ -155,7 +169,7 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
-		require.NoError(t, os.Remove("/tmp/test-plugin-plugin.socket"))
+		require.NoError(t, os.Remove("/tmp/test-plugin-component-version-plugin.socket"))
 	})
 
 	proto := &dummyv1.Repository{
