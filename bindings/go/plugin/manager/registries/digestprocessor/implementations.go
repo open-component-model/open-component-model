@@ -14,7 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type DigestProcessorPlugin struct {
+type RepositoryPlugin struct {
 	ID string
 
 	// config is used to start the plugin during a later phase.
@@ -31,11 +31,11 @@ type DigestProcessorPlugin struct {
 
 // This plugin implements all the given contracts.
 var (
-	_ v1.ResourceDigestProcessorPlugin = (*DigestProcessorPlugin)(nil)
+	_ v1.ResourceDigestProcessorPlugin = (*RepositoryPlugin)(nil)
 )
 
-func NewDigestProcessorPlugin(client *http.Client, id string, path string, config mtypes.Config, loc string, jsonSchema []byte) *DigestProcessorPlugin {
-	return &DigestProcessorPlugin{
+func NewDigestProcessorPlugin(client *http.Client, id string, path string, config mtypes.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
+	return &RepositoryPlugin{
 		ID:         id,
 		path:       path,
 		config:     config,
@@ -45,7 +45,7 @@ func NewDigestProcessorPlugin(client *http.Client, id string, path string, confi
 	}
 }
 
-func (p *DigestProcessorPlugin) Ping(ctx context.Context) error {
+func (p *RepositoryPlugin) Ping(ctx context.Context) error {
 	slog.InfoContext(ctx, "Pinging plugin", "id", p.ID)
 
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, "healthz", http.MethodGet); err != nil {
@@ -55,20 +55,20 @@ func (p *DigestProcessorPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (p *DigestProcessorPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
-	if err := p.validateEndpoint(typ.Typ, p.jsonSchema); err != nil {
-		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
+func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+	if err := r.validateEndpoint(request.Typ, r.jsonSchema); err != nil {
+		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
 	}
 
-	identity := runtime.Identity{}
-	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, "GetIdentity", http.MethodPost, plugins.WithPayload(typ), plugins.WithResult(&identity)); err != nil {
-		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", p.ID, err)
+	identity := v1.GetIdentityResponse{}
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
+		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
 	}
 
-	return identity, nil
+	return &identity, nil
 }
 
-func (p *DigestProcessorPlugin) ProcessResourceDigest(ctx context.Context, resource descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func (p *RepositoryPlugin) ProcessResourceDigest(ctx context.Context, resource descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
 	// Note: We don't validate the resource here since it doesn't implement runtime.Typed
 	// The validation should be handled by the plugin itself
 
@@ -91,7 +91,7 @@ func (p *DigestProcessorPlugin) ProcessResourceDigest(ctx context.Context, resou
 	return &result, nil
 }
 
-func (p *DigestProcessorPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
+func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
 	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", p.ID, err)

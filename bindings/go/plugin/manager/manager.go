@@ -19,7 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/inputrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -32,7 +32,7 @@ type PluginManager struct {
 	// plugin manager to locate a required plugin.
 	ComponentVersionRepositoryRegistry *componentversionrepository.RepositoryRegistry
 	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
-	InputRegistry                      *inputrepository.RepositoryRegistry
+	InputRegistry                      *input.RepositoryRegistry
 	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
 
 	mu sync.Mutex
@@ -50,7 +50,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 	return &PluginManager{
 		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
 		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
-		InputRegistry:                      inputrepository.NewInputRepositoryRegistry(ctx),
+		InputRegistry:                      input.NewInputRepositoryRegistry(ctx),
 		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
 		baseCtx:                            ctx,
 	}

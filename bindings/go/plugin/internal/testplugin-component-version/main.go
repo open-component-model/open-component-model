@@ -100,7 +100,7 @@ func (m *TestPlugin) AddComponentVersion(ctx context.Context, request repov1.Pos
 	return nil
 }
 
-func (m *TestPlugin) GetIdentity(ctx context.Context, typ repov1.GetIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {
+func (m *TestPlugin) GetIdentity(ctx context.Context, typ *repov1.GetIdentityRequest[*dummyv1.Repository]) (*repov1.GetIdentityResponse, error) {
 	logger.Debug("GetIdentity", "url", typ.Typ.BaseUrl)
 	return nil, nil
 }

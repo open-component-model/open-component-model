@@ -1,4 +1,4 @@
-package inputrepository
+package input
 
 import (
 	"context"
@@ -55,17 +55,17 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
+func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
 	if err := r.validateEndpoint(request.Typ, r.jsonSchema); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
 	}
 
-	identity := runtime.Identity{}
+	identity := v1.GetIdentityResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
 	}
 
-	return identity, nil
+	return &identity, nil
 }
 
 func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceResponse, error) {
