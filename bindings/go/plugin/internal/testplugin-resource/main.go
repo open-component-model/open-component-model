@@ -8,18 +8,42 @@ import (
 	"log/slog"
 	"os"
 
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type TestPlugin struct{}
+
+func (m *TestPlugin) GetGlobalResource(ctx context.Context, request *v1.GetResourceRequest, credentials map[string]string) (*v1.GetResourceResponse, error) {
+	return &v1.GetResourceResponse{
+		Location: types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        "/tmp/to/file",
+		},
+	}, nil
+}
+
+func (m *TestPlugin) AddGlobalResource(ctx context.Context, request *v1.PostResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
+	return &v1.GetGlobalResourceResponse{
+		Resource: &descriptorv2.Resource{
+			ElementMeta: descriptorv2.ElementMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "test-global-resource",
+					Version: "v0.0.1",
+				},
+			},
+			Type:     "type",
+			Relation: descriptorv2.LocalRelation,
+		},
+	}, nil
+}
 
 var logger *slog.Logger
 
@@ -28,48 +52,11 @@ func (m *TestPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest
 	return nil, nil
 }
 
-func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceResponse, error) {
-	return &v1.ProcessResourceResponse{
-		Resource: &constructorv1.Resource{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
-					Name:    "test-resource",
-					Version: "v0.0.1",
-				},
-			},
-			Type:     "type",
-			Relation: "local",
-		},
-		Location: &types.Location{
-			LocationType: types.LocationTypeLocalFile,
-			Value:        "/tmp/to/file",
-		},
-	}, nil
-}
-
-func (m *TestPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceResponse, error) {
-	return &v1.ProcessSourceResponse{
-		Source: &constructorv1.Source{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
-					Name:    "test-source",
-					Version: "v0.0.1",
-				},
-			},
-			Type: "type",
-		},
-		Location: &types.Location{
-			LocationType: types.LocationTypeLocalFile,
-			Value:        "/tmp/to/file",
-		},
-	}, nil
-}
-
 func (m *TestPlugin) Ping(_ context.Context) error {
 	return nil
 }
 
-var _ v1.ResourceInputPluginContract = &TestPlugin{}
+var _ v1.ReadWriteResourcePluginContract = &TestPlugin{}
 
 func main() {
 	args := os.Args[1:]
@@ -82,7 +69,7 @@ func main() {
 	dummytype.MustAddToScheme(scheme)
 	capabilities := endpoints.NewEndpoints(scheme)
 
-	if err := input.RegisterInputProcessor(&dummyv1.Repository{}, &TestPlugin{}, capabilities); err != nil {
+	if err := resource.RegisterResourcePlugin(&dummyv1.Repository{}, &TestPlugin{}, capabilities); err != nil {
 		logger.Error("failed to register test plugin", "error", err.Error())
 		os.Exit(1)
 	}

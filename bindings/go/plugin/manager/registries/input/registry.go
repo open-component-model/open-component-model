@@ -1,4 +1,4 @@
-package inputrepository
+package input
 
 import (
 	"context"

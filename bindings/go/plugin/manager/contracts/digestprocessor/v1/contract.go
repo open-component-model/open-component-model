@@ -10,7 +10,7 @@ import (
 
 type IdentityProvider[T runtime.Typed] interface {
 	contracts.PluginBase
-	GetIdentity(ctx context.Context, typ *GetIdentityRequest[T]) (runtime.Identity, error)
+	GetIdentity(ctx context.Context, typ *GetIdentityRequest[T]) (*GetIdentityResponse, error)
 }
 
 type ResourceDigestProcessorPlugin interface {

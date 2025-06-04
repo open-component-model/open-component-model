@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -58,7 +59,7 @@ func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResour
 	}, nil
 }
 
-func (m *mockPlugin) GetIdentity(ctx context.Context, typ repov1.GetIdentityRequest[*dummyv1.Repository]) (runtime.Identity, error) {
+func (m *mockPlugin) GetIdentity(ctx context.Context, typ *repov1.GetIdentityRequest[*dummyv1.Repository]) (*repov1.GetIdentityResponse, error) {
 	return nil, nil
 }
 

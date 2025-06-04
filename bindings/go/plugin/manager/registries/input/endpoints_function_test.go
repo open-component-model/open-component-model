@@ -1,4 +1,4 @@
-package inputrepository
+package input
 
 import (
 	"context"
@@ -27,7 +27,7 @@ func (m *mockPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourc
 	return nil, nil
 }
 
-func (m *mockPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
+func (m *mockPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
 	return nil, nil
 }
 

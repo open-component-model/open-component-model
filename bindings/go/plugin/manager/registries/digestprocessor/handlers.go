@@ -24,8 +24,8 @@ func ResourceDigestProcessorHandlerFunc(f func(ctx context.Context, resource des
 // IdentityProcessorHandlerFunc is a wrapper around calling the interface method GetIdentity for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func IdentityProcessorHandlerFunc(f func(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error)) http.HandlerFunc {
-	return identityProcessorHandlerFunc[v1.GetIdentityRequest[runtime.Typed], runtime.Identity](f)
+func IdentityProcessorHandlerFunc(f func(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error)) http.HandlerFunc {
+	return identityProcessorHandlerFunc[v1.GetIdentityRequest[runtime.Typed], v1.GetIdentityResponse](f)
 }
 
 func digestProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, resource REQ, credentials map[string]string) (*RES, error)) http.HandlerFunc {
@@ -63,7 +63,7 @@ func digestProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, resour
 	}
 }
 
-func identityProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, typ *REQ) (RES, error)) http.HandlerFunc {
+func identityProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, typ *REQ) (*RES, error)) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 		logger.Info("request", "request", request.Method, "url", request.URL.String())
