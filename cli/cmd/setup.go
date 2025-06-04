@@ -45,6 +45,7 @@ func setupPluginManager(cmd *cobra.Command) error {
 			)
 			if errors.Is(err, manager.ErrNoPluginsFound) {
 				slog.DebugContext(cmd.Context(), "no plugins found at location", slog.String("location", pluginLocation))
+				continue
 			}
 			if err != nil {
 				return err
