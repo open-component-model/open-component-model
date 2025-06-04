@@ -44,13 +44,13 @@ type Plugin struct {
 	memory cache.OCIDescriptorCache
 }
 
-func (p *Plugin) GetIdentity(_ context.Context, typ contractsv1.GetIdentityRequest[*ociv1.Repository]) (runtime.Identity, error) {
+func (p *Plugin) GetIdentity(_ context.Context, typ *contractsv1.GetIdentityRequest[*ociv1.Repository]) (*contractsv1.GetIdentityResponse, error) {
 	identity, err := runtime.ParseURLToIdentity(typ.Typ.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
 	}
 	identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
-	return identity, nil
+	return &contractsv1.GetIdentityResponse{Identity: identity}, nil
 }
 
 func (p *Plugin) GetComponentVersion(ctx context.Context, request contractsv1.GetComponentVersionRequest[*ociv1.Repository], credentials map[string]string) (*descriptor.Descriptor, error) {
