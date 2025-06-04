@@ -26,3 +26,11 @@ type PostResourceRequest struct {
 type GetIdentityRequest[T runtime.Typed] struct {
 	Typ T `json:"type"`
 }
+
+type GetIdentityResponse struct {
+	Identity map[string]string `json:"identity"`
+}
+
+type GetGlobalResourceResponse struct {
+	Resource *v2.Resource `json:"resource"`
+}

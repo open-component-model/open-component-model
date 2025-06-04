@@ -12,6 +12,7 @@ var (
 	CredentialRepositoryPluginType       PluginType = "credentialRepository" //nolint:gosec // not hardcoded cred
 	InputPluginType                      PluginType = "inputRepository"
 	DigestProcessorPluginType            PluginType = "digestProcessorRepository"
+	ResourcePluginType                   PluginType = "resourceRepository"
 )
 
 type Location struct {
