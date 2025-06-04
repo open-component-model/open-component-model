@@ -15,7 +15,7 @@ type IdentityProvider[T runtime.Typed] interface {
 type ReadResourcePluginContract interface {
 	contracts.PluginBase
 	IdentityProvider[runtime.Typed]
-	GetGlobalResource(ctx context.Context, request *GetResourceRequest, credentials map[string]string) (*GetResourceResponse, error)
+	GetGlobalResource(ctx context.Context, request *GetResourceRequest, credentials map[string]string) (*GetGlobalResourceResponse, error)
 }
 
 type WriteResourcePluginContract interface {

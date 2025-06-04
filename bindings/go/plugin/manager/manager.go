@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -34,6 +35,7 @@ type PluginManager struct {
 	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
 	InputRegistry                      *input.RepositoryRegistry
 	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
+	ResourceRepositoryRegistry         *resource.RepositoryRegistry
 
 	mu sync.Mutex
 
@@ -249,6 +251,11 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, pl
 		case mtypes.DigestProcessorPluginType:
 			slog.DebugContext(ctx, "adding digest processor plugin", "id", plugin.ID)
 			if err := pm.DigestProcessorRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case mtypes.ResourceRepositoryPluginType:
+			slog.DebugContext(ctx, "adding resource repository plugin", "id", plugin.ID)
+			if err := pm.ResourceRepositoryRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		}

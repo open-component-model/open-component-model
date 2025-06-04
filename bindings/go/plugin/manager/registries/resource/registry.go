@@ -15,8 +15,8 @@ import (
 )
 
 // NewResourceRegistry creates a new registry and initializes maps.
-func NewResourceRegistry(ctx context.Context) *ResourceRegistry {
-	return &ResourceRegistry{
+func NewResourceRegistry(ctx context.Context) *RepositoryRegistry {
+	return &RepositoryRegistry{
 		ctx:                ctx,
 		registry:           make(map[runtime.Type]types.Plugin),
 		resourceScheme:     runtime.NewScheme(runtime.WithAllowUnknown()),
@@ -25,8 +25,8 @@ func NewResourceRegistry(ctx context.Context) *ResourceRegistry {
 	}
 }
 
-// ResourceRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
-type ResourceRegistry struct {
+// RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
+type RepositoryRegistry struct {
 	ctx                context.Context
 	mu                 sync.Mutex
 	registry           map[runtime.Type]types.Plugin
@@ -36,13 +36,13 @@ type ResourceRegistry struct {
 }
 
 // ResourceScheme returns the scheme used by the Resource registry.
-func (r *ResourceRegistry) ResourceScheme() *runtime.Scheme {
+func (r *RepositoryRegistry) ResourceScheme() *runtime.Scheme {
 	return r.resourceScheme
 }
 
 // AddPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
 // tracking the plugin.
-func (r *ResourceRegistry) AddPlugin(plugin types.Plugin, constructionType runtime.Type) error {
+func (r *RepositoryRegistry) AddPlugin(plugin types.Plugin, constructionType runtime.Type) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -56,7 +56,7 @@ func (r *ResourceRegistry) AddPlugin(plugin types.Plugin, constructionType runti
 }
 
 // GetResourcePlugin returns Resource plugins for a specific type.
-func (r *ResourceRegistry) GetResourcePlugin(ctx context.Context, spec runtime.Typed) (v1.ReadWriteResourcePluginContract, error) {
+func (r *RepositoryRegistry) GetResourcePlugin(ctx context.Context, spec runtime.Typed) (v1.ReadWriteResourcePluginContract, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -70,7 +70,7 @@ func (r *ResourceRegistry) GetResourcePlugin(ctx context.Context, spec runtime.T
 
 // getPlugin returns a Resource plugin for a given type using a specific plugin storage map. It will also first look
 // for existing registered internal plugins based on the type and the same registry name.
-func (r *ResourceRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (v1.ReadWriteResourcePluginContract, error) {
+func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (v1.ReadWriteResourcePluginContract, error) {
 	if _, err := r.resourceScheme.DefaultType(spec); err != nil {
 		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
 	}
@@ -106,7 +106,7 @@ func (r *ResourceRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (v
 // RegisterInternalResourcePlugin is called to register an internal implementation for a resource plugin.
 func RegisterInternalResourcePlugin(
 	scheme *runtime.Scheme,
-	r *ResourceRegistry,
+	r *RepositoryRegistry,
 	plugin v1.ReadWriteResourcePluginContract,
 	proto runtime.Typed,
 ) error {
@@ -135,7 +135,7 @@ type constructedPlugin struct {
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
 // All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
 // the plugin SDK.
-func (r *ResourceRegistry) Shutdown(ctx context.Context) error {
+func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var errs error
@@ -149,7 +149,7 @@ func (r *ResourceRegistry) Shutdown(ctx context.Context) error {
 	return errs
 }
 
-func startAndReturnPlugin(ctx context.Context, r *ResourceRegistry, plugin *types.Plugin) (v1.ReadWriteResourcePluginContract, error) {
+func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (v1.ReadWriteResourcePluginContract, error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}

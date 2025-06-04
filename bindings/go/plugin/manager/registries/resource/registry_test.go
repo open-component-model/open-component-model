@@ -31,7 +31,7 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         "test-plugin-1-resource",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.ResourcePluginType,
+		PluginType: mtypes.ResourceRepositoryPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -56,10 +56,10 @@ func TestPluginFlow(t *testing.T) {
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-resource",
 			Type:       mtypes.Socket,
-			PluginType: mtypes.ResourcePluginType,
+			PluginType: mtypes.ResourceRepositoryPluginType,
 		},
 		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.ResourcePluginType: {
+			mtypes.ResourceRepositoryPluginType: {
 				{
 					Type:       typ,
 					JSONSchema: []byte(`{}`),

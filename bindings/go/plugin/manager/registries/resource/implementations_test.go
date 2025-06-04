@@ -33,7 +33,7 @@ func TestGetGlobalResource(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourcePluginType,
+		PluginType: types.ResourceRepositoryPluginType,
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
@@ -77,7 +77,7 @@ func TestAddGlobalResource(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourcePluginType,
+		PluginType: types.ResourceRepositoryPluginType,
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
@@ -119,7 +119,7 @@ func TestPing(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourcePluginType,
+		PluginType: types.ResourceRepositoryPluginType,
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
@@ -147,7 +147,7 @@ func TestValidateEndpoint(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourcePluginType,
+		PluginType: types.ResourceRepositoryPluginType,
 	}, server.URL, []byte(validSchema))
 
 	// Test valid object

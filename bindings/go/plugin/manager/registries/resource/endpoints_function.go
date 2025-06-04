@@ -127,7 +127,7 @@ func RegisterResourcePlugin[T runtime.Typed](
 	}
 
 	// Add resource type to the plugin's types
-	c.CurrentTypes.Types[types.ResourcePluginType] = append(c.CurrentTypes.Types[types.ResourcePluginType], types.Type{
+	c.CurrentTypes.Types[types.ResourceRepositoryPluginType] = append(c.CurrentTypes.Types[types.ResourceRepositoryPluginType], types.Type{
 		Type:       typ,
 		JSONSchema: schema,
 	})
