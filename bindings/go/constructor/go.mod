@@ -5,7 +5,7 @@ go 1.24.2
 require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/sync v0.14.0
+	golang.org/x/sync v0.15.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.2
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250528090425-67776186e12d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
