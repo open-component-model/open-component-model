@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -31,7 +30,7 @@ type RepositoryPlugin struct {
 
 // This plugin implements all the given contracts.
 var (
-	_ v1.ResourceDigestProcessorPlugin = (*RepositoryPlugin)(nil)
+	_ v1.ResourceDigestProcessorContract = (*RepositoryPlugin)(nil)
 )
 
 func NewDigestProcessorPlugin(client *http.Client, id string, path string, config mtypes.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
@@ -55,20 +54,20 @@ func (p *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
-	if err := r.validateEndpoint(request.Typ, r.jsonSchema); err != nil {
-		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
+func (p *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+	if err := p.validateEndpoint(request.Typ, p.jsonSchema); err != nil {
+		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 
 	identity := v1.GetIdentityResponse{}
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
-		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
+	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
+		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", p.ID, err)
 	}
 
 	return &identity, nil
 }
 
-func (p *RepositoryPlugin) ProcessResourceDigest(ctx context.Context, resource descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+func (p *RepositoryPlugin) ProcessResourceDigest(ctx context.Context, request *v1.ProcessResourceDigestRequest, credentials map[string]string) (*v1.ProcessResourceDigestResponse, error) {
 	// Note: We don't validate the resource here since it doesn't implement runtime.Typed
 	// The validation should be handled by the plugin itself
 
@@ -77,18 +76,12 @@ func (p *RepositoryPlugin) ProcessResourceDigest(ctx context.Context, resource d
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	req := struct {
-		Resource descriptor.Resource `json:"resource"`
-	}{
-		Resource: resource,
-	}
-
-	var result descriptor.Resource
-	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, "ProcessResourceDigest", http.MethodPost, plugins.WithPayload(req), plugins.WithResult(&result), plugins.WithHeader(credHeader)); err != nil {
+	result := &v1.ProcessResourceDigestResponse{}
+	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, ProcessResourceDigest, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&result), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to process resource digest %s: %w", p.ID, err)
 	}
 
-	return &result, nil
+	return result, nil
 }
 
 func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {

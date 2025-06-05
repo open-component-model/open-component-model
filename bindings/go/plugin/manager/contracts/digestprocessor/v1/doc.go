@@ -3,7 +3,7 @@
 // The contracts are categorized based on their functionality:
 //
 //   - IdentityProvider: Provides a way to get the identity of a typed object.
-//   - ResourceDigestProcessorPlugin: Defines methods for processing resource digests.
+//   - ResourceDigestProcessorContract: Defines methods for processing resource digests.
 //
 // The types define the request and response structures used by these contracts.
 package v1
