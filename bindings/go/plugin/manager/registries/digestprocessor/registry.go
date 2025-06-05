@@ -15,7 +15,7 @@ import (
 )
 
 type constructedPlugin struct {
-	Plugin v1.ResourceDigestProcessorPlugin
+	Plugin v1.ResourceDigestProcessorContract
 	cmd    *exec.Cmd
 }
 
@@ -25,7 +25,7 @@ func NewDigestProcessorRegistry(ctx context.Context) *RepositoryRegistry {
 		ctx:                            ctx,
 		registry:                       make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins:             make(map[string]*constructedPlugin),
-		internalDigestProcessorPlugins: make(map[runtime.Type]v1.ResourceDigestProcessorPlugin),
+		internalDigestProcessorPlugins: make(map[runtime.Type]v1.ResourceDigestProcessorContract),
 		internalDigestProcessorScheme:  runtime.NewScheme(runtime.WithAllowUnknown()),
 	}
 }
@@ -35,7 +35,7 @@ func NewDigestProcessorRegistry(ctx context.Context) *RepositoryRegistry {
 func RegisterInternalDigestProcessorPlugin(
 	scheme *runtime.Scheme,
 	r *RepositoryRegistry,
-	p v1.ResourceDigestProcessorPlugin,
+	p v1.ResourceDigestProcessorContract,
 	prototype runtime.Typed,
 ) error {
 	r.mu.Lock()
@@ -61,7 +61,7 @@ type RepositoryRegistry struct {
 	mu                             sync.Mutex
 	registry                       map[runtime.Type]mtypes.Plugin
 	constructedPlugins             map[string]*constructedPlugin
-	internalDigestProcessorPlugins map[runtime.Type]v1.ResourceDigestProcessorPlugin
+	internalDigestProcessorPlugins map[runtime.Type]v1.ResourceDigestProcessorContract
 	internalDigestProcessorScheme  *runtime.Scheme
 }
 
@@ -91,7 +91,7 @@ func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, typ runtime.Type) e
 	return nil
 }
 
-func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mtypes.Plugin) (v1.ResourceDigestProcessorPlugin, error) {
+func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mtypes.Plugin) (v1.ResourceDigestProcessorContract, error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -121,7 +121,7 @@ loop:
 	return digestPlugin, nil
 }
 
-func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (v1.ResourceDigestProcessorPlugin, error) {
+func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (v1.ResourceDigestProcessorContract, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

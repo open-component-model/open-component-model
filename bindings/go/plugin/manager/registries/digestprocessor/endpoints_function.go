@@ -23,7 +23,7 @@ const (
 // during lookup the right endpoint + type is used.
 func RegisterDigestProcessor[T runtime.Typed](
 	proto T,
-	handler v1.ResourceDigestProcessorPlugin,
+	handler v1.ResourceDigestProcessorContract,
 	c *endpoints.EndpointBuilder,
 ) error {
 	if c.CurrentTypes.Types == nil {
