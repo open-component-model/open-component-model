@@ -57,8 +57,8 @@ github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOf
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/wk8/go-ordered-map/v2 v2.1.8 h1:5h/BUHu93oj4gIdvHHHGsScSTMijfx5PeYkE/fJgbpc=
 github.com/wk8/go-ordered-map/v2 v2.1.8/go.mod h1:5nJHM5DyteebpVlHnWMV0rPz6Zp7+xBAnxjb1X5vnTw=
-golang.org/x/sync v0.14.0 h1:woo0S4Yywslg6hp4eUFjTVOyKt0RookbpAHG4c1HmhQ=
-golang.org/x/sync v0.14.0/go.mod h1:1dzgHSNfp02xaA81J2MS99Qcpr2w7fw1gpm99rleRqA=
+golang.org/x/sync v0.15.0 h1:KWH3jNZsfyT6xfAfKiz6MRNmd46ByHDYaZ7KSkCtdW8=
+golang.org/x/sync v0.15.0/go.mod h1:1dzgHSNfp02xaA81J2MS99Qcpr2w7fw1gpm99rleRqA=
 golang.org/x/sys v0.33.0 h1:q3i8TbbEz+JRD9ywIRlyRAQbM0qF7hu24q3teo2hbuw=
 golang.org/x/sys v0.33.0/go.mod h1:BJP2sWEmIv4KK5OTEluFJCKSidICx8ciO85XgH3Ak8k=
 golang.org/x/text v0.25.0 h1:qVyWApTSYLk/drJRO5mDlNYskwQznZmkpV2c8q9zls4=
@@ -74,8 +74,8 @@ ocm.software/open-component-model/bindings/go/configuration v0.0.1 h1:so1VxeReS2
 ocm.software/open-component-model/bindings/go/configuration v0.0.1/go.mod h1:FxrQyX5FUqbnl288a1WouOpeId2G+3eOjmGMPCXjBSQ=
 ocm.software/open-component-model/bindings/go/credentials v0.0.1 h1:iT2RlZthTfy8mMP6s7BF/gr8EV/HWvTcFijvRc4YUFw=
 ocm.software/open-component-model/bindings/go/credentials v0.0.1/go.mod h1:eLLVJAztmxMPJMd15XcJXJ8u3cKNNmGvVexTKn0WCIk=
-ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515124949-75bfcc622a06 h1:btL6cZPnSlGG0r/jXIw/Damt+SD9ij22bMYnvcdpDjg=
-ocm.software/open-component-model/bindings/go/ctf v0.0.0-20250515124949-75bfcc622a06/go.mod h1:KejtQe6VW4y3wZYLBDHg8vCkSi9vkI942fSWh5uBHTs=
+ocm.software/open-component-model/bindings/go/ctf v0.0.1 h1:Zuiiih2M753jEktj5FH+epIQCbE56atAqAVvSzdFAX8=
+ocm.software/open-component-model/bindings/go/ctf v0.0.1/go.mod h1:1RYP75q41GGtxzNYM9QtoUDnnkKH0AnEgoc5K7NzQ8A=
 ocm.software/open-component-model/bindings/go/dag v0.0.1 h1:A99YX6ZnW3HBMQECIj/2ohdbOsXrvgD2ZBjk3F5bdww=
 ocm.software/open-component-model/bindings/go/dag v0.0.1/go.mod h1:XjjxMPWjvMDf4+zFP+9RdurVNZb7CUmOepRllujuRkw=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250526130658-2a15446778e5 h1:pfFFbRZ7pHNQx9/XxSe4/dmTSDxrJOysRXGDvzU/9+0=
