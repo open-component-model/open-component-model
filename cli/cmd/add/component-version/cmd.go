@@ -37,6 +37,7 @@ const (
 	FlagComponentConstructorPath = "constructor"
 	FlagCopyResources            = "copy-resources"
 	FlagBlobCacheDirectory       = "blob-cache-directory"
+	FlagCreate                   = "create"
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"

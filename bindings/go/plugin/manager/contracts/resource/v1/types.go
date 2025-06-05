@@ -14,6 +14,7 @@ type GetResourceRequest struct {
 type PostResourceRequest struct {
 	// The ResourceLocation of the Local Resource
 	ResourceLocation types.Location `json:"resourceLocation"`
+	TargetAccess     runtime.Typed  `json:"targetAccess"`
 	Resource         *v2.Resource   `json:"resource"`
 }
 
@@ -27,4 +28,8 @@ type GetIdentityResponse struct {
 
 type GetGlobalResourceResponse struct {
 	ResourceLocation types.Location `json:"resourceLocation"`
+}
+
+type AddGlobalResourceResponse struct {
+	Resource *v2.Resource `json:"resource"`
 }

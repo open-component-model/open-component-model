@@ -54,6 +54,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
 		InputRegistry:                      input.NewInputRepositoryRegistry(ctx),
 		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
+		ResourceRepositoryRegistry:         resource.NewResourceRegistry(ctx),
 		baseCtx:                            ctx,
 	}
 }

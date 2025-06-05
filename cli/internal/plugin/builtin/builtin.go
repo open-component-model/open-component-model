@@ -14,7 +14,10 @@ func Register(manager *manager.PluginManager) error {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
 
-	if err := ociplugin.Register(manager.ComponentVersionRepositoryRegistry); err != nil {
+	if err := ociplugin.Register(
+		manager.ComponentVersionRepositoryRegistry,
+		manager.ResourceRepositoryRegistry,
+	); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt plugin: %w", err)
 	}
 

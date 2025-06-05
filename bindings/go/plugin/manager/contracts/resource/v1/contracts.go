@@ -21,7 +21,7 @@ type ReadResourcePluginContract interface {
 type WriteResourcePluginContract interface {
 	contracts.PluginBase
 	IdentityProvider[runtime.Typed]
-	AddGlobalResource(ctx context.Context, request *PostResourceRequest, credentials map[string]string) (*GetGlobalResourceResponse, error)
+	AddGlobalResource(ctx context.Context, request *PostResourceRequest, credentials map[string]string) (*AddGlobalResourceResponse, error)
 }
 
 // ReadWriteResourcePluginContract is the contract defining Add and Get global resources.

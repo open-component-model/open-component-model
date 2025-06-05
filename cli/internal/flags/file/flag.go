@@ -43,6 +43,9 @@ func (f *Flag) Open() (io.ReadCloser, error) {
 }
 
 func (f *Flag) Set(s string) error {
+	if f.path == nil {
+		f.path = new(string)
+	}
 	*f.path = s
 	info, err := os.Stat(s)
 	if err != nil {
@@ -58,6 +61,7 @@ func (f *Flag) Set(s string) error {
 		if f.isDir = info.IsDir(); f.isDir {
 			return fmt.Errorf("path %q is a directory", f.path)
 		}
+		f.exists = true
 	}
 	return nil
 }
@@ -74,8 +78,9 @@ func Var(f *pflag.FlagSet, name string, value string, usage string) {
 
 func VarP(f *pflag.FlagSet, name, shorthand string, value string, usage string) {
 	actual := strings.Clone(value)
-	flag := Flag{path: &actual}
-	f.VarP(&flag, name, shorthand, usage)
+	flag := &Flag{}
+	_ = flag.Set(actual)
+	f.VarP(flag, name, shorthand, usage)
 }
 
 func Get(f *pflag.FlagSet, name string) (*Flag, error) {
