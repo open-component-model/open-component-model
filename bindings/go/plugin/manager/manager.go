@@ -145,6 +145,10 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, dir string) ([]*mtypes.Plugin, error) {
 	var plugins []*mtypes.Plugin
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if os.IsNotExist(err) {
+			return ErrNoPluginsFound
+		}
+
 		if err != nil {
 			return err
 		}
