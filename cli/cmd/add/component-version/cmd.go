@@ -1,6 +1,7 @@
 package componentversion
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -28,20 +30,48 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
 )
 
 const (
-	FlagConcurrencyLimit         = "concurrency-limit"
-	FlagRepositoryRef            = "repository"
-	FlagComponentConstructorPath = "constructor"
-	FlagCopyResources            = "copy-resources"
-	FlagBlobCacheDirectory       = "blob-cache-directory"
-	FlagCreate                   = "create"
+	FlagConcurrencyLimit               = "concurrency-limit"
+	FlagRepositoryRef                  = "repository"
+	FlagComponentConstructorPath       = "constructor"
+	FlagCopyResources                  = "copy-resources"
+	FlagBlobCacheDirectory             = "blob-cache-directory"
+	FlagComponentVersionConflictPolicy = "component-version-conflict-policy"
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
 )
+
+type ComponentVersionConflictPolicy string
+
+const (
+	ComponentVersionConflictPolicyAbortAndFail ComponentVersionConflictPolicy = "abort-and-fail"
+	ComponentVersionConflictPolicySkip         ComponentVersionConflictPolicy = "skip"
+	ComponentVersionConflictPolicyReplace      ComponentVersionConflictPolicy = "replace"
+)
+
+func (p ComponentVersionConflictPolicy) ToConstructorConflictPolicy() constructor.ComponentVersionConflictPolicy {
+	switch p {
+	case ComponentVersionConflictPolicyReplace:
+		return constructor.ComponentVersionConflictReplace
+	case ComponentVersionConflictPolicySkip:
+		return constructor.ComponentVersionConflictSkip
+	default:
+		return constructor.ComponentVersionConflictAbortAndFail
+	}
+}
+
+func ComponentVersionOverridePolicies() []string {
+	return []string{
+		string(ComponentVersionConflictPolicyAbortAndFail),
+		string(ComponentVersionConflictPolicySkip),
+		string(ComponentVersionConflictPolicyReplace),
+	}
+}
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
@@ -78,6 +108,7 @@ add component-version ./path/to/%[1]s ./path/to/%[2]s.yaml
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the repository")
 	cmd.Flags().Bool(FlagCopyResources, false, "copy external resources by-value to the archive")
 	cmd.Flags().String(FlagBlobCacheDirectory, "blobs", "path to the blob cache directory")
+	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionOverridePolicies(), "policy to apply when a component version already exists in the repository")
 
 	return cmd
 }
@@ -101,6 +132,11 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
 	if err != nil {
 		return fmt.Errorf("getting copy-resources flag failed: %w", err)
+	}
+
+	cvConflictPolicy, err := enum.Get(cmd.Flags(), FlagComponentVersionConflictPolicy)
+	if err != nil {
+		return fmt.Errorf("getting component-version-override-policy flag failed: %w", err)
 	}
 
 	repoSpec, err := GetRepositorySpec(cmd)
@@ -128,7 +164,8 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return copyResources
 		},
-		ConcurrencyLimit: concurrencyLimit,
+		ConcurrencyLimit:               concurrencyLimit,
+		ComponentVersionConflictPolicy: ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 	})
 
 	return err
@@ -206,14 +243,21 @@ func (r resourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, 
 }
 
 func (r resourceInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
-	res, err := r.plugin.ProcessResource(ctx, &inputv1.ProcessResourceInputRequest{}, credentials)
+	v1resource, err := constructorruntime.ConvertToV1Resource(resource)
+	if err != nil {
+		return nil, fmt.Errorf("converting resource %q to v1 failed: %w", resource.ToIdentity().String(), err)
+	}
+
+	res, err := r.plugin.ProcessResource(ctx, &inputv1.ProcessResourceInputRequest{
+		Resource: v1resource,
+	}, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("processing resource %q failed: %w", resource.ToIdentity().String(), err)
 	}
 
 	switch {
 	case res.Resource != nil:
-		runtimeResource := constructorruntime.ConvertToRuntimeResource(res.Resource)
+		runtimeResource := descriptor.ConvertFromV2Resources([]v2.Resource{*res.Resource})[0]
 		return &constructor.ResourceInputMethodResult{
 			ProcessedResource: &runtimeResource,
 		}, nil
@@ -225,8 +269,19 @@ func (r resourceInputMethod) ProcessResource(ctx context.Context, resource *cons
 		if err != nil {
 			return nil, fmt.Errorf("getting blob from resource location %q failed: %w", res.Location.Value, err)
 		}
+		defer func() {
+			// remove the path after we are done with it, so it does not linger around.
+			if err := os.Remove(res.Location.Value); err != nil && !os.IsNotExist(err) {
+				slog.WarnContext(ctx, "failed removing temporary resource file after processing through input method", "path", res.Location.Value, "error", err)
+			}
+		}()
+		// hot load the blob so we can remove the path afterwards.
+		var buf bytes.Buffer
+		if err := blob.Copy(&buf, b); err != nil {
+			return nil, fmt.Errorf("copying blob data from resource location %q failed: %w", res.Location.Value, err)
+		}
 		return &constructor.ResourceInputMethodResult{
-			ProcessedBlobData: b,
+			ProcessedBlobData: blob.NewDirectReadOnlyBlob(&buf),
 		}, nil
 	default:
 		return nil, fmt.Errorf("no resource or location returned by plugin for resource %q", resource.ToIdentity().String())
@@ -255,14 +310,21 @@ func (s sourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, so
 }
 
 func (s sourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, credentials map[string]string) (result *constructor.SourceInputMethodResult, err error) {
-	res, err := s.plugin.ProcessSource(ctx, &inputv1.ProcessSourceInputRequest{}, credentials)
+	v1source, err := constructorruntime.ConvertToV1Source(source)
+	if err != nil {
+		return nil, fmt.Errorf("converting resource %q to v1 failed: %w", source.ToIdentity().String(), err)
+	}
+
+	res, err := s.plugin.ProcessSource(ctx, &inputv1.ProcessSourceInputRequest{
+		Source: v1source,
+	}, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("processing source %q failed: %w", source.ToIdentity().String(), err)
 	}
 
 	switch {
 	case res.Source != nil:
-		runtimeSource := constructorruntime.ConvertToRuntimeSource(res.Source)
+		runtimeSource := descriptor.ConvertFromV2Sources([]v2.Source{*res.Source})[0]
 		return &constructor.SourceInputMethodResult{
 			ProcessedSource: &runtimeSource,
 		}, nil
@@ -370,6 +432,10 @@ func (t targetRepo) AddLocalResource(ctx context.Context, component, version str
 		return nil, fmt.Errorf("getting absolute path for cache file %q failed: %w", cacheFileName, err)
 	}
 
+	if err := os.MkdirAll(t.cache, 0755); err != nil {
+		return nil, fmt.Errorf("creating cache directory %q failed: %w", t.cache, err)
+	}
+
 	if err := filesystem.CopyBlobToOSPath(content, cacheFileName); err != nil {
 		return nil, fmt.Errorf("copying blob to cache file %q failed: %w", cacheFileName, err)
 	}
@@ -403,4 +469,16 @@ func (t targetRepo) AddComponentVersion(ctx context.Context, desc *descriptor.De
 		Repository: t.spec,
 		Descriptor: v2desc,
 	}, t.credentials)
+}
+
+func (t targetRepo) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
+	cv, err := t.ReadWriteOCMRepositoryPluginContract.GetComponentVersion(ctx, v1.GetComponentVersionRequest[runtime.Typed]{
+		Repository: t.spec,
+		Name:       component,
+		Version:    version,
+	}, t.credentials)
+	if err != nil {
+		return nil, fmt.Errorf("getting component version %q/%q from %q failed: %w", component, version, t.spec.GetType(), err)
+	}
+	return cv, nil
 }

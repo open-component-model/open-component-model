@@ -2,6 +2,7 @@ package v1
 
 import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -19,8 +20,8 @@ type ProcessResourceInputRequest struct {
 }
 
 type ProcessResourceResponse struct {
-	Resource *constructorv1.Resource `json:"resource"`
-	Location *types.Location         `json:"location"`
+	Resource *descriptorv2.Resource `json:"resource"`
+	Location *types.Location        `json:"location"`
 }
 
 type ProcessSourceInputRequest struct {
@@ -28,6 +29,6 @@ type ProcessSourceInputRequest struct {
 }
 
 type ProcessSourceResponse struct {
-	Source   *constructorv1.Source `json:"source"`
-	Location *types.Location       `json:"location"`
+	Source   *descriptorv2.Source `json:"source"`
+	Location *types.Location      `json:"location"`
 }

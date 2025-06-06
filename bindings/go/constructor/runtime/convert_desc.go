@@ -9,11 +9,24 @@ import (
 
 // Label conversion functions
 
-func ConvertFromLabels(labels []Label) []descriptor.Label {
+func ConvertToDescriptorLabels(labels []Label) []descriptor.Label {
 	if labels == nil {
 		return nil
 	}
 	n := make([]descriptor.Label, len(labels))
+	for i := range labels {
+		n[i].Name = labels[i].Name
+		n[i].Value = labels[i].Value
+		n[i].Signing = labels[i].Signing
+	}
+	return n
+}
+
+func ConvertFromDescriptorLabels(labels []descriptor.Label) []Label {
+	if labels == nil {
+		return nil
+	}
+	n := make([]Label, len(labels))
 	for i := range labels {
 		n[i].Name = labels[i].Name
 		n[i].Value = labels[i].Value
@@ -28,7 +41,15 @@ func convertObjectMetaToDescriptor(meta ObjectMeta) descriptor.ObjectMeta {
 	return descriptor.ObjectMeta{
 		Name:    meta.Name,
 		Version: meta.Version,
-		Labels:  ConvertFromLabels(meta.Labels),
+		Labels:  ConvertToDescriptorLabels(meta.Labels),
+	}
+}
+
+func convertObjectMetaFromDescriptor(meta descriptor.ObjectMeta) ObjectMeta {
+	return ObjectMeta{
+		Name:    meta.Name,
+		Version: meta.Version,
+		Labels:  ConvertFromDescriptorLabels(meta.Labels),
 	}
 }
 
@@ -39,16 +60,48 @@ func convertElementMetaToDescriptor(meta ElementMeta) descriptor.ElementMeta {
 	}
 }
 
-func handleAccessOrInputToDescriptor(accessOrInput AccessOrInput) runtime.Typed {
-	if accessOrInput.HasInput() {
-		return accessOrInput.Input.DeepCopyTyped()
-	} else if accessOrInput.HasAccess() {
-		return accessOrInput.Access.DeepCopyTyped()
+func convertElementMetaFromDescriptor(meta descriptor.ElementMeta) ElementMeta {
+	return ElementMeta{
+		ObjectMeta:    convertObjectMetaFromDescriptor(meta.ObjectMeta),
+		ExtraIdentity: meta.ExtraIdentity.Clone(),
 	}
-	return nil
+}
+
+func convertAccessToDescriptor(accessOrInput AccessOrInput) runtime.Typed {
+	if accessOrInput.Access == nil {
+		return nil
+	}
+	return accessOrInput.Access.DeepCopyTyped()
+}
+
+func convertAccessFromDescriptor(access runtime.Typed) AccessOrInput {
+	if access == nil {
+		return AccessOrInput{}
+	}
+	return AccessOrInput{
+		Access: access.DeepCopyTyped(),
+	}
 }
 
 // Resource conversion
+
+func ConvertFromDescriptorResource(resource *descriptor.Resource) *Resource {
+	if resource == nil {
+		return nil
+	}
+	target := &Resource{
+		ElementMeta: convertElementMetaFromDescriptor(resource.ElementMeta),
+		Type:        resource.Type,
+		Relation:    ResourceRelation(resource.Relation),
+	}
+
+	if resource.SourceRefs != nil {
+		target.SourceRefs = ConvertFromDescriptorSourceRefs(resource.SourceRefs)
+	}
+
+	target.AccessOrInput = convertAccessFromDescriptor(resource.Access)
+	return target
+}
 
 func ConvertToDescriptorResource(resource *Resource) *descriptor.Resource {
 	if resource == nil {
@@ -61,10 +114,10 @@ func ConvertToDescriptorResource(resource *Resource) *descriptor.Resource {
 	}
 
 	if resource.SourceRefs != nil {
-		target.SourceRefs = ConvertFromSourceRefs(resource.SourceRefs)
+		target.SourceRefs = ConvertToDescriptorSourceRefs(resource.SourceRefs)
 	}
 
-	target.Access = handleAccessOrInputToDescriptor(resource.AccessOrInput)
+	target.Access = convertAccessToDescriptor(resource.AccessOrInput)
 	return target
 }
 
@@ -77,7 +130,7 @@ func ConvertToDescriptorSource(source *Source) *descriptor.Source {
 	target := &descriptor.Source{
 		ElementMeta: convertElementMetaToDescriptor(source.ElementMeta),
 		Type:        source.Type,
-		Access:      handleAccessOrInputToDescriptor(source.AccessOrInput),
+		Access:      convertAccessToDescriptor(source.AccessOrInput),
 	}
 	return target
 }
@@ -99,7 +152,7 @@ func ConvertToDescriptorReference(reference *Reference) *descriptor.Reference {
 func convertProviderToDescriptor(provider Provider) (descriptor.Provider, error) {
 	return descriptor.Provider{
 		Name:   provider.Name,
-		Labels: ConvertFromLabels(provider.Labels),
+		Labels: ConvertToDescriptorLabels(provider.Labels),
 	}, nil
 }
 
@@ -170,14 +223,26 @@ func ConvertToDescriptor(constructor *ComponentConstructor) *descriptor.Descript
 
 // SourceRef conversion
 
-func ConvertFromSourceRefs(refs []SourceRef) []descriptor.SourceRef {
+func ConvertToDescriptorSourceRefs(refs []SourceRef) []descriptor.SourceRef {
 	if refs == nil {
 		return nil
 	}
 	n := make([]descriptor.SourceRef, len(refs))
 	for i := range refs {
 		n[i].IdentitySelector = maps.Clone(refs[i].IdentitySelector)
-		n[i].Labels = ConvertFromLabels(refs[i].Labels)
+		n[i].Labels = ConvertToDescriptorLabels(refs[i].Labels)
+	}
+	return n
+}
+
+func ConvertFromDescriptorSourceRefs(refs []descriptor.SourceRef) []SourceRef {
+	if refs == nil {
+		return nil
+	}
+	n := make([]SourceRef, len(refs))
+	for i := range refs {
+		n[i].IdentitySelector = maps.Clone(refs[i].IdentitySelector)
+		n[i].Labels = ConvertFromDescriptorLabels(refs[i].Labels)
 	}
 	return n
 }

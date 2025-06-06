@@ -19,7 +19,7 @@ func NewInputRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
 		ctx:                       ctx,
 		registry:                  make(map[runtime.Type]types.Plugin),
-		repositoryScheme:          runtime.NewScheme(runtime.WithAllowUnknown()),
+		repositoryScheme:          runtime.NewScheme(),
 		internalRepositoryPlugins: make(map[runtime.Type]v1.InputPluginContract),
 		constructedPlugins:        make(map[string]*constructedPlugin),
 	}
@@ -84,11 +84,12 @@ func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runt
 // getPlugin returns a Construction plugin for a given type using a specific plugin storage map. It will also first look
 // for existing registered internal plugins based on the type and the same registry name.
 func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (v1.InputPluginContract, error) {
-	if _, err := r.repositoryScheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
+	obj, err := r.repositoryScheme.NewObject(spec.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new object for type %T: %w", spec, err)
 	}
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.repositoryScheme.TypeForPrototype(spec); err == nil {
+	if typ, err := r.repositoryScheme.TypeForPrototype(obj); err == nil {
 		p, ok := r.internalRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
@@ -133,7 +134,7 @@ func RegisterInternalInputPlugin(
 
 	r.internalRepositoryPlugins[typ] = plugin
 
-	if err := r.repositoryScheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.repositoryScheme.AddTypeFromScheme(scheme, typ); err != nil {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 

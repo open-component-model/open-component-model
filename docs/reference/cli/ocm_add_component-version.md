@@ -1,3 +1,12 @@
+---
+title: ocm add component-version
+description: Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a "component-constructor" file.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm add component-version
 
 Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a "component-constructor" file
@@ -32,12 +41,14 @@ add component-version ./path/to/transport-archive ./path/to/component-constructo
 ### Options
 
 ```
-      --blob-cache-directory string   path to the blob cache directory (default "blobs")
-      --concurrency-limit int         maximum amount of parallel requests to the repository for resolving component versions (default 4)
-  -c, --constructor path              path to the repository (default component-constructor.yaml)
-      --copy-resources                copy external resources by-value to the archive
-  -h, --help                          help for component-version
-  -r, --repository path               path to the repository (default transport-archive)
+      --blob-cache-directory string              path to the blob cache directory (default "blobs")
+      --component-version-conflict-policy enum   policy to apply when a component version already exists in the repository
+                                                 (must be one of [abort-and-fail replace skip]) (default abort-and-fail)
+      --concurrency-limit int                    maximum amount of parallel requests to the repository for resolving component versions (default 4)
+  -c, --constructor path                         path to the repository (default component-constructor.yaml)
+      --copy-resources                           copy external resources by-value to the archive
+  -h, --help                                     help for component-version
+  -r, --repository path                          path to the repository (default transport-archive)
 ```
 
 ### Options inherited from parent commands
@@ -69,7 +80,7 @@ add component-version ./path/to/transport-archive ./path/to/component-constructo
                             info:  Show informational messages and above
                             warn:  Show warnings and errors only (default)
                             error: Show errors only
-                         (must be one of [debug error info warn]) (default warn)
+                         (must be one of [debug error info warn]) (default info)
       --logoutput enum   set the log output destination
                             stdout: Write logs to standard output (default)
                             stderr: Write logs to standard error, useful for separating logs from normal output

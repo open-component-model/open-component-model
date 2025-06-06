@@ -23,7 +23,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/location"
 )
 
-const Creator = "OCI Repository TypeToUntypedPlugin"
+const Creator = "CTF Repository"
 
 func Register(registry *componentversionrepository.RepositoryRegistry) error {
 	scheme := runtime.NewScheme()
@@ -131,7 +131,6 @@ func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionR
 	}
 	repo, err := oci.NewRepository(
 		ocictf.WithCTF(ocictf.NewFromCTF(archive)),
-		oci.WithScheme(p.scheme),
 		oci.WithCreator(Creator),
 		oci.WithOCIDescriptorCache(p.memory),
 	)

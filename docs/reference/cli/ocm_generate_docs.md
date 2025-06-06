@@ -57,7 +57,7 @@ ocm generate docs [-d <directory>] [--mode <format>] [flags]
                             info:  Show informational messages and above
                             warn:  Show warnings and errors only (default)
                             error: Show errors only
-                         (must be one of [debug error info warn]) (default warn)
+                         (must be one of [debug error info warn]) (default info)
       --logoutput enum   set the log output destination
                             stdout: Write logs to standard output (default)
                             stderr: Write logs to standard error, useful for separating logs from normal output
