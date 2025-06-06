@@ -3,6 +3,8 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -16,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	contractsv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/location"
 )
@@ -90,17 +93,33 @@ func (p *Plugin) AddLocalResource(ctx context.Context, request contractsv1.PostL
 	return newRes, nil
 }
 
-func (p *Plugin) GetLocalResource(ctx context.Context, request contractsv1.GetLocalResourceRequest[*ctfv1.Repository], _ map[string]string) error {
+func (p *Plugin) GetLocalResource(ctx context.Context, request contractsv1.GetLocalResourceRequest[*ctfv1.Repository], _ map[string]string) (contractsv1.GetLocalResourceResponse, error) {
 	repo, err := p.createRepository(request.Repository)
 	if err != nil {
-		return fmt.Errorf("error creating repository: %w", err)
+		return contractsv1.GetLocalResourceResponse{}, fmt.Errorf("error creating repository: %w", err)
 	}
-	b, _, err := repo.GetLocalResource(ctx, request.Name, request.Version, request.Identity)
+	b, res, err := repo.GetLocalResource(ctx, request.Name, request.Version, request.Identity)
 	if err != nil {
-		return fmt.Errorf("error getting local resource: %w", err)
+		return contractsv1.GetLocalResourceResponse{}, fmt.Errorf("error getting local resource: %w", err)
 	}
 
-	return location.Write(request.TargetLocation, b)
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("ocm-local-resource-%d", res.ToIdentity().CanonicalHashV1()))
+	tmp, err := os.Create(path)
+	if err != nil {
+		return contractsv1.GetLocalResourceResponse{}, fmt.Errorf("error creating buffer file: %w", err)
+	}
+	_ = tmp.Close() // Ensure the file is closed after creation
+
+	loc := types.Location{
+		LocationType: types.LocationTypeLocalFile,
+		Value:        path,
+	}
+
+	if err := location.Write(loc, b); err != nil {
+		return contractsv1.GetLocalResourceResponse{}, fmt.Errorf("error writing blob to location: %w", err)
+	}
+
+	return contractsv1.GetLocalResourceResponse{Location: loc}, nil
 }
 
 var _ contractsv1.ReadWriteOCMRepositoryPluginContract[*ctfv1.Repository] = (*Plugin)(nil)
