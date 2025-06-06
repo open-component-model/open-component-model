@@ -2,7 +2,7 @@
 
 This folder contains information about the Open Component Model Steering Committee.
 
-OCM is an open standard for describing software artifacts and lifecycle metadata,, contributed to the [Linux Foundation](https://www.linuxfoundation.org/) under the [NeoNephos Foundation](https://neonephos.org/) community.
+OCM is an open standard for describing software artifacts and lifecycle metadata, contributed to the [Linux Foundation](https://www.linuxfoundation.org/) under the [NeoNephos Foundation](https://neonephos.org/) community.
 
 ## Meetings
 
