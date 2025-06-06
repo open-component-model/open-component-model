@@ -10,11 +10,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -74,54 +73,48 @@ func TestPluginFlow(t *testing.T) {
 	require.NoError(t, err)
 	retrievedResourcePlugin, err := registry.GetResourceInputPlugin(ctx, p)
 	require.NoError(t, err)
-	require.NoError(t, retrievedResourcePlugin.Ping(ctx))
-	resource, err := retrievedResourcePlugin.ProcessResource(ctx, &v1.ProcessResourceInputRequest{
-		Resource: &constructorv1.Resource{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
-					Name:    "test-resource-1",
-					Version: "0.1.0",
-				},
+	resource, err := retrievedResourcePlugin.ProcessResource(ctx, &constructor.Resource{
+		ElementMeta: constructor.ElementMeta{
+			ObjectMeta: constructor.ObjectMeta{
+				Name:    "test-resource-1",
+				Version: "0.1.0",
 			},
-			Type:     "type",
-			Relation: "local",
-			AccessOrInput: constructorv1.AccessOrInput{
-				Access: &runtime.Raw{
-					Type: runtime.Type{
-						Version: "test-access",
-						Name:    "v1",
-					},
-					Data: []byte(`{ "access": "v1" }`),
+		},
+		Type:     "type",
+		Relation: "local",
+		AccessOrInput: constructor.AccessOrInput{
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Version: "test-access",
+					Name:    "v1",
 				},
+				Data: []byte(`{ "access": "v1" }`),
 			},
 		},
 	}, map[string]string{})
 	require.NoError(t, err)
-	require.Equal(t, "test-resource", resource.Resource.Name)
+	require.Equal(t, "test-resource", resource.ProcessedResource.Name)
 
 	retrievedSourcePlugin, err := registry.GetSourceInputPlugin(ctx, p)
 	require.NoError(t, err)
-	require.NoError(t, retrievedSourcePlugin.Ping(ctx))
-	source, err := retrievedSourcePlugin.ProcessSource(ctx, &v1.ProcessSourceInputRequest{
-		Source: &constructorv1.Source{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
-					Name:    "test-source-1",
-					Version: "0.1.0",
-				},
+	source, err := retrievedSourcePlugin.ProcessSource(ctx, &constructor.Source{
+		ElementMeta: constructor.ElementMeta{
+			ObjectMeta: constructor.ObjectMeta{
+				Name:    "test-source-1",
+				Version: "0.1.0",
 			},
-			Type: "type",
-			AccessOrInput: constructorv1.AccessOrInput{
-				Access: &runtime.Raw{
-					Type: runtime.Type{
-						Version: "test-access",
-						Name:    "v1",
-					},
-					Data: []byte(`{ "access": "v1" }`),
+		},
+		Type: "type",
+		AccessOrInput: constructor.AccessOrInput{
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Version: "test-access",
+					Name:    "v1",
 				},
+				Data: []byte(`{ "access": "v1" }`),
 			},
 		},
 	}, map[string]string{})
 	require.NoError(t, err)
-	require.Equal(t, "test-source", source.Source.Name)
+	require.Equal(t, "test-source", source.ProcessedSource.Name)
 }
