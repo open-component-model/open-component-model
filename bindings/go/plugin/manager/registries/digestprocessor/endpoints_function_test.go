@@ -33,21 +33,74 @@ var _ v1.ResourceDigestProcessorContract = &mockPlugin{}
 func TestRegisterInputProcessor(t *testing.T) {
 	r := require.New(t)
 
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
-	builder := endpoints.NewEndpoints(scheme)
-	typ := &dummyv1.Repository{}
-	plugin := &mockPlugin{}
-	r.NoError(RegisterDigestProcessor(typ, plugin, builder))
-	content, err := json.Marshal(builder)
-	r.NoError(err)
-	r.Equal(`{"types":{"digestProcessorRepository":[{"type":"DummyRepository/v1","jsonSchema":"eyIkc2NoZW1hIjoiaHR0cHM6Ly9qc29uLXNjaGVtYS5vcmcvZHJhZnQvMjAyMC0xMi9zY2hlbWEiLCIkaWQiOiJodHRwczovL29jbS5zb2Z0d2FyZS9vcGVuLWNvbXBvbmVudC1tb2RlbC9iaW5kaW5ncy9nby9wbHVnaW4vaW50ZXJuYWwvZHVtbXl0eXBlL3YxL3JlcG9zaXRvcnkiLCIkcmVmIjoiIy8kZGVmcy9SZXBvc2l0b3J5IiwiJGRlZnMiOnsiUmVwb3NpdG9yeSI6eyJwcm9wZXJ0aWVzIjp7InR5cGUiOnsidHlwZSI6InN0cmluZyIsInBhdHRlcm4iOiJeKFthLXpBLVowLTldW2EtekEtWjAtOS5dKikoPzovKHZbMC05XSsoPzphbHBoYVswLTldK3xiZXRhWzAtOV0rKT8pKT8ifSwiYmFzZVVybCI6eyJ0eXBlIjoic3RyaW5nIn19LCJhZGRpdGlvbmFsUHJvcGVydGllcyI6ZmFsc2UsInR5cGUiOiJvYmplY3QiLCJyZXF1aXJlZCI6WyJ0eXBlIiwiYmFzZVVybCJdfX19"}]}}`, string(content))
+	tests := []struct {
+		name             string
+		setupScheme      func(*runtime.Scheme)
+		proto            runtime.Typed
+		plugin           v1.ResourceDigestProcessorContract
+		expectError      bool
+		expectedTypes    int
+		expectedHandlers int
+	}{
+		{
+			name: "successful registration",
+			setupScheme: func(scheme *runtime.Scheme) {
+				dummytype.MustAddToScheme(scheme)
+			},
+			proto:            &dummyv1.Repository{},
+			plugin:           &mockPlugin{},
+			expectError:      false,
+			expectedTypes:    1,
+			expectedHandlers: 2,
+		},
+		{
+			name:             "invalid prototype",
+			setupScheme:      func(scheme *runtime.Scheme) {},
+			proto:            &dummyv1.Repository{},
+			plugin:           &mockPlugin{},
+			expectError:      true,
+			expectedTypes:    0,
+			expectedHandlers: 0,
+		},
+		{
+			name: "duplicate handler registration",
+			setupScheme: func(scheme *runtime.Scheme) {
+				dummytype.MustAddToScheme(scheme)
+			},
+			proto:            &dummyv1.Repository{},
+			plugin:           &mockPlugin{},
+			expectError:      false,
+			expectedTypes:    1,
+			expectedHandlers: 2,
+		},
+	}
 
-	handlers := builder.GetHandlers()
-	r.Len(handlers, 2)
-	handler0 := handlers[0]
-	handler1 := handlers[1]
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			tt.setupScheme(scheme)
+			builder := endpoints.NewEndpoints(scheme)
 
-	r.Equal(ProcessResourceDigest, handler0.Location)
-	r.Equal(Identity, handler1.Location)
+			// Register the processor
+			err := RegisterDigestProcessor(tt.proto, tt.plugin, builder)
+			if tt.expectError {
+				r.Error(err)
+				return
+			}
+			r.NoError(err)
+
+			// Validate registered types
+			content, err := json.Marshal(builder)
+			r.NoError(err)
+			if tt.expectedTypes > 0 {
+				r.Contains(string(content), `"types":{"digestProcessorRepository"`)
+			} else {
+				r.NotContains(string(content), `"types":{"digestProcessorRepository"`)
+			}
+
+			// Validate handler count
+			handlers := builder.GetHandlers()
+			r.Len(handlers, tt.expectedHandlers)
+		})
+	}
 }

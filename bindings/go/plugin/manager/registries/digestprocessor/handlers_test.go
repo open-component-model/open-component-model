@@ -119,3 +119,83 @@ func TestResourceDigestProcessorHandlerFunc(t *testing.T) {
 		})
 	}
 }
+
+func TestIdentityProcessorHandlerFunc(t *testing.T) {
+	tests := []struct {
+		name         string
+		handlerFunc  func() http.HandlerFunc
+		request      func(base string) *http.Request
+		assertOutput func(t *testing.T, resp *http.Response)
+		assertError  func(t *testing.T, err error)
+	}{
+		{
+			name: "IdentityProcessorHandlerFunc missing body error",
+			handlerFunc: func() http.HandlerFunc {
+				handler := IdentityProcessorHandlerFunc(func(ctx context.Context, req *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+					return &v1.GetIdentityResponse{}, nil
+				})
+				return handler
+			},
+			assertOutput: func(t *testing.T, resp *http.Response) {
+				require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+			},
+			assertError: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+			request: func(base string) *http.Request {
+				parse, _ := url.Parse(base)
+				return &http.Request{
+					Method: "POST",
+					URL:    parse,
+					Body:   nil,
+				}
+			},
+		},
+		{
+			name: "IdentityProcessorHandlerFunc success",
+			handlerFunc: func() http.HandlerFunc {
+				handler := IdentityProcessorHandlerFunc(func(ctx context.Context, req *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+					return &v1.GetIdentityResponse{
+						Identity: map[string]string{"id": "test-identity"},
+					}, nil
+				})
+				return handler
+			},
+			assertOutput: func(t *testing.T, resp *http.Response) {
+				defer resp.Body.Close()
+				require.Equal(t, http.StatusOK, resp.StatusCode)
+				content, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				require.Contains(t, string(content), `"id":"test-identity"`)
+			},
+			assertError: func(t *testing.T, err error) {
+				require.NoError(t, err)
+			},
+			request: func(base string) *http.Request {
+				header := http.Header{}
+				parse, _ := url.Parse(base)
+				body := &bytes.Buffer{}
+				body.Write([]byte(`{"typed":{"type":"example-type"}}`))
+
+				return &http.Request{
+					Method: "POST",
+					URL:    parse,
+					Header: header,
+					Body:   io.NopCloser(body),
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := tt.handlerFunc()
+			testServer := httptest.NewServer(handler)
+			defer testServer.Close()
+			client := testServer.Client()
+			resp, err := client.Do(tt.request(testServer.URL))
+			tt.assertError(t, err)
+			tt.assertOutput(t, resp)
+		})
+	}
+}
