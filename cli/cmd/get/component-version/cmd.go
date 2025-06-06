@@ -10,7 +10,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
-	"ocm.software/open-component-model/cli/internal/enum"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
@@ -115,7 +115,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	repo, err := ocm.New(cmd.Context(), pluginManager, credentialGraph, reference)
+	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}

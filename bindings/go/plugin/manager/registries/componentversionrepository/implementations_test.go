@@ -51,7 +51,7 @@ func TestPing(t *testing.T) {
 func TestAddComponentVersion(t *testing.T) {
 	// Setup test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+UploadComponentVersion && r.Method == http.MethodPost {
+		if r.URL.Path == UploadComponentVersion && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -80,7 +80,7 @@ func TestAddComponentVersion(t *testing.T) {
 func TestAddComponentVersionValidationFail(t *testing.T) {
 	// Setup test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+UploadComponentVersion && r.Method == http.MethodPost {
+		if r.URL.Path == UploadComponentVersion && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -115,7 +115,7 @@ func TestGetComponentVersion(t *testing.T) {
 	// Setup test server
 	response := defaultDescriptor()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+DownloadComponentVersion && r.Method == http.MethodGet {
+		if r.URL.Path == DownloadComponentVersion && r.Method == http.MethodGet {
 			err := json.NewEncoder(w).Encode(response)
 			require.NoError(t, err)
 			return
@@ -146,7 +146,7 @@ func TestGetComponentVersion(t *testing.T) {
 func TestListComponentVersions(t *testing.T) {
 	// Setup test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+ListComponentVersions && r.Method == http.MethodGet {
+		if r.URL.Path == ListComponentVersions && r.Method == http.MethodGet {
 			err := json.NewEncoder(w).Encode([]string{"v0.0.1", "v0.0.2"})
 			require.NoError(t, err)
 			return
@@ -178,7 +178,7 @@ func TestAddLocalResource(t *testing.T) {
 	desc := defaultDescriptor()
 	resource := desc.Component.Resources[0]
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+UploadLocalResource && r.Method == http.MethodPost {
+		if r.URL.Path == UploadLocalResource && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode(resource)
 			require.NoError(t, err)
 			return
@@ -217,7 +217,7 @@ func TestGetLocalResource(t *testing.T) {
 		},
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+DownloadLocalResource && r.Method == http.MethodGet {
+		if r.URL.Path == DownloadLocalResource && r.Method == http.MethodGet {
 			require.NoError(t, os.WriteFile(f.Name(), []byte(`test`), os.ModePerm))
 			require.NoError(t, json.NewEncoder(w).Encode(response))
 

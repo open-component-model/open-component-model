@@ -87,7 +87,7 @@ func TestObjectMeta_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.meta.Validate()
+			err := tt.meta.ValidateWithVersion()
 			if tt.hasError {
 				assert.Error(t, err)
 			} else {
@@ -139,7 +139,7 @@ func TestElementMeta_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.meta.Validate()
+			err := tt.meta.ValidateWithVersion()
 			if tt.hasError {
 				assert.Error(t, err)
 			} else {

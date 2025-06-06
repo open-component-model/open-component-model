@@ -40,7 +40,7 @@ func (cc *ComponentConstructor) Validate() error {
 	}
 	for ci, c := range cc.Components {
 		if err := c.Validate(); err != nil {
-			return fmt.Errorf("invalid component %d': %w", ci, err)
+			return fmt.Errorf("invalid component %d: %w", ci, err)
 		}
 	}
 	return nil
@@ -84,8 +84,16 @@ func (p *Provider) Validate() error {
 
 // Validate validates the resource.
 func (r *Resource) Validate() error {
-	if err := r.ElementMeta.Validate(); err != nil {
-		return fmt.Errorf("element meta: %w", err)
+	if r.HasInput() {
+		if err := r.ElementMeta.Validate(); err != nil {
+			return fmt.Errorf("input: %w", err)
+		}
+	}
+
+	if r.HasAccess() {
+		if err := r.ElementMeta.ValidateWithVersion(); err != nil {
+			return fmt.Errorf("element meta: %w", err)
+		}
 	}
 
 	if err := validateRequiredString("type", r.Type); err != nil {
@@ -105,8 +113,16 @@ func (r *Resource) Validate() error {
 
 // Validate validates the source.
 func (s *Source) Validate() error {
-	if err := s.ElementMeta.Validate(); err != nil {
-		return fmt.Errorf("element meta: %w", err)
+	if s.HasInput() {
+		if err := s.ElementMeta.Validate(); err != nil {
+			return fmt.Errorf("input: %w", err)
+		}
+	}
+
+	if s.HasAccess() {
+		if err := s.ElementMeta.ValidateWithVersion(); err != nil {
+			return fmt.Errorf("element meta: %w", err)
+		}
 	}
 
 	if err := validateRequiredString("type", s.Type); err != nil {
@@ -122,16 +138,30 @@ func (s *Source) Validate() error {
 
 // Validate validates the reference.
 func (r *Reference) Validate() error {
-	if err := r.ElementMeta.Validate(); err != nil {
+	if err := r.ElementMeta.ValidateWithVersion(); err != nil {
 		return fmt.Errorf("element meta: %w", err)
 	}
 
 	return validateRequiredString("component", r.Component)
 }
 
-// Validate validates the element meta.
 func (m *ElementMeta) Validate() error {
 	if err := m.ObjectMeta.Validate(); err != nil {
+		return fmt.Errorf("object meta: %w", err)
+	}
+
+	if m.ExtraIdentity != nil {
+		if _, ok := m.ExtraIdentity[IdentityAttributeName]; ok {
+			return newValidationError("extra identity", "must not contain name attribute")
+		}
+	}
+
+	return nil
+}
+
+// ValidateWithVersion validates the element meta.
+func (m *ElementMeta) ValidateWithVersion() error {
+	if err := m.ObjectMeta.ValidateWithVersion(); err != nil {
 		return err
 	}
 
@@ -144,16 +174,20 @@ func (m *ElementMeta) Validate() error {
 	return nil
 }
 
-// Validate validates the object meta.
-func (m *ObjectMeta) Validate() error {
-	if err := validateRequiredString("name", m.Name); err != nil {
+// ValidateWithVersion validates the object meta.
+func (m *ObjectMeta) ValidateWithVersion() error {
+	if err := m.Validate(); err != nil {
 		return err
 	}
 
 	return validateRequiredString("version", m.Version)
 }
 
+func (m *ObjectMeta) Validate() error {
+	return validateRequiredString("name", m.Name)
+}
+
 // Validate validates the component meta.
 func (m *ComponentMeta) Validate() error {
-	return m.ObjectMeta.Validate()
+	return m.ObjectMeta.ValidateWithVersion()
 }

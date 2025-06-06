@@ -181,7 +181,7 @@ func Parse(input string) (*Ref, error) {
 		return nil, fmt.Errorf("no valid descriptor prefix found in %q (expected one of: %v)", originalInput, ValidPrefixes)
 	}
 
-	// Step 5: Validate component name
+	// Step 5: ValidateWithVersion component name
 	if !componentRegex.MatchString(ref.Component) {
 		return nil, fmt.Errorf("invalid component name %q in %q, must match %q", ref.Component, originalInput, ComponentRegex)
 	}

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/spf13/pflag"
+
+	"ocm.software/open-component-model/cli/internal/flags/internal"
 )
 
 const Type = "enum"
@@ -46,7 +48,7 @@ func (f *Flag) Set(value string) error {
 }
 
 func Get(f *pflag.FlagSet, name string) (string, error) {
-	return get[string](f, name, Type, func(sval string) (string, error) {
+	return internal.Get[string](f, name, Type, func(sval string) (string, error) {
 		return sval, nil
 	})
 }
@@ -63,24 +65,4 @@ func VarP(f *pflag.FlagSet, name string, shorthand string, options []string, usa
 	cloned := slices.Clone(options)
 	slices.Sort(cloned)
 	f.VarP(flag, name, shorthand, fmt.Sprintf("%s\n(must be one of %v)", usage, cloned))
-}
-
-func get[T any](f *pflag.FlagSet, name string, ftype string, convFunc func(sval string) (T, error)) (T, error) {
-	flag := f.Lookup(name)
-	if flag == nil {
-		err := fmt.Errorf("flag accessed but not defined: %s", name)
-		return *new(T), err
-	}
-
-	if flag.Value.Type() != ftype {
-		err := fmt.Errorf("trying to get %s value of flag of type %s", ftype, flag.Value.Type())
-		return *new(T), err
-	}
-
-	sval := flag.Value.String()
-	result, err := convFunc(sval)
-	if err != nil {
-		return *new(T), err
-	}
-	return result, nil
 }

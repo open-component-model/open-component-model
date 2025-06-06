@@ -23,7 +23,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/location"
 )
 
-const Creator = "OCI Repository TypeToUntypedPlugin"
+const Creator = "CTF Repository"
 
 func Register(registry *componentversionrepository.RepositoryRegistry) error {
 	scheme := runtime.NewScheme()
@@ -42,7 +42,7 @@ type Plugin struct {
 	memory cache.OCIDescriptorCache
 }
 
-func (p *Plugin) GetIdentity(_ context.Context, _ contractsv1.GetIdentityRequest[*ctfv1.Repository]) (runtime.Identity, error) {
+func (p *Plugin) GetIdentity(_ context.Context, _ *contractsv1.GetIdentityRequest[*ctfv1.Repository]) (*contractsv1.GetIdentityResponse, error) {
 	return nil, fmt.Errorf("not implemented because ctfs do not need consumer identity based credentials")
 }
 
@@ -131,7 +131,6 @@ func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionR
 	}
 	repo, err := oci.NewRepository(
 		ocictf.WithCTF(ocictf.NewFromCTF(archive)),
-		oci.WithScheme(p.scheme),
 		oci.WithCreator(Creator),
 		oci.WithOCIDescriptorCache(p.memory),
 	)

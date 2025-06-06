@@ -133,6 +133,10 @@ type TargetRepository interface {
 	// The descriptor MUST have its target Name and Version already set as they are used to identify the target
 	// Location in the Store.
 	AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error
+
+	// GetComponentVersion retrieves a component version from the repository.
+	// Returns the descriptor from the most recent AddComponentVersion call for that component and version.
+	GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error)
 }
 
 type TargetRepositoryProvider interface {
@@ -142,8 +146,9 @@ type TargetRepositoryProvider interface {
 }
 
 type ResourceRepository interface {
+	GetCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)
 	// DownloadResource downloads a resource from the repository.
-	DownloadResource(ctx context.Context, res *descriptor.Resource) (content blob.ReadOnlyBlob, err error)
+	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error)
 }
 
 type ResourceRepositoryProvider interface {

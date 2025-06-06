@@ -4,27 +4,12 @@ import (
 	"maps"
 
 	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Label conversion functions
 
-func ConvertV1LabelsToDescriptorLabels(labels []v1.Label) []descriptor.Label {
-	if labels == nil {
-		return nil
-	}
-	result := make([]descriptor.Label, len(labels))
-	for i, label := range labels {
-		result[i] = descriptor.Label{
-			Name:    label.Name,
-			Value:   label.Value,
-			Signing: label.Signing,
-		}
-	}
-	return result
-}
-
-func ConvertV1LabelsToLabels(labels []v1.Label) []Label {
+func ConvertFromV1Labels(labels []v1.Label) []Label {
 	if labels == nil {
 		return nil
 	}
@@ -39,42 +24,72 @@ func ConvertV1LabelsToLabels(labels []v1.Label) []Label {
 	return result
 }
 
+func ConvertToV1Labels(labels []Label) []v1.Label {
+	if labels == nil {
+		return nil
+	}
+	result := make([]v1.Label, len(labels))
+	for i, label := range labels {
+		result[i] = v1.Label{
+			Name:    label.Name,
+			Value:   label.Value,
+			Signing: label.Signing,
+		}
+	}
+	return result
+}
+
 // Common conversion helpers
 
-func ConvertObjectMeta(meta v1.ObjectMeta) descriptor.ObjectMeta {
-	return descriptor.ObjectMeta{
+func ConvertFromV1ObjectMeta(meta v1.ObjectMeta) ObjectMeta {
+	return ObjectMeta{
 		Name:    meta.Name,
 		Version: meta.Version,
-		Labels:  ConvertV1LabelsToDescriptorLabels(meta.Labels),
+		Labels:  ConvertFromV1Labels(meta.Labels),
 	}
 }
 
-func ConvertElementMeta(meta v1.ElementMeta) descriptor.ElementMeta {
-	return descriptor.ElementMeta{
-		ObjectMeta:    ConvertObjectMeta(meta.ObjectMeta),
+func ConvertToV1ObjectMeta(meta ObjectMeta) v1.ObjectMeta {
+	return v1.ObjectMeta{
+		Name:    meta.Name,
+		Version: meta.Version,
+		Labels:  ConvertToV1Labels(meta.Labels),
+	}
+}
+
+func ConvertFromV1ElementMeta(meta v1.ElementMeta) ElementMeta {
+	return ElementMeta{
+		ObjectMeta:    ConvertFromV1ObjectMeta(meta.ObjectMeta),
+		ExtraIdentity: meta.ExtraIdentity.DeepCopy(),
+	}
+}
+
+func ConvertToV1ElementMeta(meta ElementMeta) v1.ElementMeta {
+	return v1.ElementMeta{
+		ObjectMeta:    ConvertToV1ObjectMeta(meta.ObjectMeta),
 		ExtraIdentity: meta.ExtraIdentity.DeepCopy(),
 	}
 }
 
 // Resource conversion
 
-func ConvertToRuntimeResource(resource *v1.Resource) descriptor.Resource {
+func ConvertFromV1Resource(resource *v1.Resource) Resource {
 	if resource == nil {
-		return descriptor.Resource{}
+		return Resource{}
 	}
 
-	target := descriptor.Resource{
-		ElementMeta: ConvertElementMeta(resource.ElementMeta),
+	target := Resource{
+		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
 		Type:        resource.Type,
-		Relation:    descriptor.ResourceRelation(resource.Relation),
+		Relation:    ResourceRelation(resource.Relation),
 	}
 
 	if resource.SourceRefs != nil {
-		target.SourceRefs = make([]descriptor.SourceRef, len(resource.SourceRefs))
+		target.SourceRefs = make([]SourceRef, len(resource.SourceRefs))
 		for i, ref := range resource.SourceRefs {
-			target.SourceRefs[i] = descriptor.SourceRef{
+			target.SourceRefs[i] = SourceRef{
 				IdentitySelector: maps.Clone(ref.IdentitySelector),
-				Labels:           ConvertV1LabelsToDescriptorLabels(ref.Labels),
+				Labels:           ConvertFromV1Labels(ref.Labels),
 			}
 		}
 	}
@@ -82,19 +97,62 @@ func ConvertToRuntimeResource(resource *v1.Resource) descriptor.Resource {
 	if resource.Access != nil {
 		target.Access = resource.Access.DeepCopy()
 	}
+	if resource.Input != nil {
+		target.Input = resource.Input.DeepCopy()
+	}
 
 	return target
 }
 
-// Source conversion
-
-func ConvertToRuntimeSource(source *v1.Source) descriptor.Source {
-	if source == nil {
-		return descriptor.Source{}
+func ConvertToV1Resource(resource *Resource) (*v1.Resource, error) {
+	if resource == nil {
+		return nil, nil
 	}
 
-	target := descriptor.Source{
-		ElementMeta: ConvertElementMeta(source.ElementMeta),
+	target := v1.Resource{
+		ElementMeta: ConvertToV1ElementMeta(resource.ElementMeta),
+		Type:        resource.Type,
+		Relation:    v1.ResourceRelation(resource.Relation),
+	}
+
+	if resource.SourceRefs != nil {
+		target.SourceRefs = make([]v1.SourceRef, len(resource.SourceRefs))
+		for i, ref := range resource.SourceRefs {
+			target.SourceRefs[i] = v1.SourceRef{
+				IdentitySelector: maps.Clone(ref.IdentitySelector),
+				Labels:           ConvertToV1Labels(ref.Labels),
+			}
+		}
+	}
+
+	if resource.HasAccess() {
+		var raw runtime.Raw
+		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(resource.Access, &raw); err != nil {
+			return nil, err
+		}
+		target.Access = &raw
+	}
+
+	if resource.HasInput() {
+		var raw runtime.Raw
+		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(resource.Input, &raw); err != nil {
+			return nil, err
+		}
+		target.Input = &raw
+	}
+
+	return &target, nil
+}
+
+// Source conversion
+
+func ConvertFromV1Source(source *v1.Source) Source {
+	if source == nil {
+		return Source{}
+	}
+
+	target := Source{
+		ElementMeta: ConvertFromV1ElementMeta(source.ElementMeta),
 		Type:        source.Type,
 	}
 
@@ -105,15 +163,44 @@ func ConvertToRuntimeSource(source *v1.Source) descriptor.Source {
 	return target
 }
 
-// Reference conversion
-
-func ConvertToRuntimeReference(reference *v1.Reference) descriptor.Reference {
-	if reference == nil {
-		return descriptor.Reference{}
+func ConvertToV1Source(source *Source) (*v1.Source, error) {
+	if source == nil {
+		return nil, nil
 	}
 
-	target := descriptor.Reference{
-		ElementMeta: ConvertElementMeta(reference.ElementMeta),
+	target := v1.Source{
+		ElementMeta: ConvertToV1ElementMeta(source.ElementMeta),
+		Type:        source.Type,
+	}
+
+	if source.HasAccess() {
+		var raw runtime.Raw
+		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(source.Access, &raw); err != nil {
+			return nil, err
+		}
+		target.Access = &raw
+	}
+
+	if source.HasInput() {
+		var raw runtime.Raw
+		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(source.Input, &raw); err != nil {
+			return nil, err
+		}
+		target.Input = &raw
+	}
+
+	return &target, nil
+}
+
+// Reference conversion
+
+func ConvertToRuntimeReference(reference *v1.Reference) Reference {
+	if reference == nil {
+		return Reference{}
+	}
+
+	target := Reference{
+		ElementMeta: ConvertFromV1ElementMeta(reference.ElementMeta),
 		Component:   reference.Component,
 	}
 
@@ -122,42 +209,42 @@ func ConvertToRuntimeReference(reference *v1.Reference) descriptor.Reference {
 
 // Component conversion
 
-func ConvertToRuntimeComponent(component *v1.Component) descriptor.Component {
+func ConvertToRuntimeComponent(component *v1.Component) Component {
 	if component == nil {
-		return descriptor.Component{}
+		return Component{}
 	}
 
-	target := descriptor.Component{
-		ComponentMeta: descriptor.ComponentMeta{
-			ObjectMeta:   ConvertObjectMeta(component.ObjectMeta),
+	target := Component{
+		ComponentMeta: ComponentMeta{
+			ObjectMeta:   ConvertFromV1ObjectMeta(component.ObjectMeta),
 			CreationTime: component.CreationTime,
 		},
-		Provider: descriptor.Provider{},
+		Provider: Provider{},
 	}
 
 	if component.Provider.Name != "" {
 		target.Provider.Name = component.Provider.Name
 	}
 	if component.Provider.Labels != nil {
-		target.Provider.Labels = ConvertV1LabelsToDescriptorLabels(component.Provider.Labels)
+		target.Provider.Labels = ConvertFromV1Labels(component.Provider.Labels)
 	}
 
 	if component.Resources != nil {
-		target.Resources = make([]descriptor.Resource, len(component.Resources))
+		target.Resources = make([]Resource, len(component.Resources))
 		for i, resource := range component.Resources {
-			target.Resources[i] = ConvertToRuntimeResource(&resource)
+			target.Resources[i] = ConvertFromV1Resource(&resource)
 		}
 	}
 
 	if component.Sources != nil {
-		target.Sources = make([]descriptor.Source, len(component.Sources))
+		target.Sources = make([]Source, len(component.Sources))
 		for i, source := range component.Sources {
-			target.Sources[i] = ConvertToRuntimeSource(&source)
+			target.Sources[i] = ConvertFromV1Source(&source)
 		}
 	}
 
 	if component.References != nil {
-		target.References = make([]descriptor.Reference, len(component.References))
+		target.References = make([]Reference, len(component.References))
 		for i, reference := range component.References {
 			target.References[i] = ConvertToRuntimeReference(&reference)
 		}
@@ -167,20 +254,6 @@ func ConvertToRuntimeComponent(component *v1.Component) descriptor.Component {
 }
 
 // Constructor conversion
-
-func ConvertToRuntimeDescriptor(constructor *v1.ComponentConstructor) *descriptor.Descriptor {
-	if constructor == nil || len(constructor.Components) == 0 {
-		return nil
-	}
-
-	component := ConvertToRuntimeComponent(&constructor.Components[0])
-	return &descriptor.Descriptor{
-		Meta: descriptor.Meta{
-			Version: "v1",
-		},
-		Component: component,
-	}
-}
 
 // Runtime constructor resource conversion
 func convertToRuntimeConstructorResource(resource v1.Resource) Resource {
@@ -255,7 +328,7 @@ func ConvertToRuntimeConstructor(constructor *v1.ComponentConstructor) *Componen
 			},
 			Provider: Provider{
 				Name:   component.Provider.Name,
-				Labels: ConvertV1LabelsToLabels(component.Provider.Labels),
+				Labels: ConvertFromV1Labels(component.Provider.Labels),
 			},
 		}
 

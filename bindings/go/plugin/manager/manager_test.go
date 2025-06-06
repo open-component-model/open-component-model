@@ -143,7 +143,7 @@ func TestConfigurationPassedToPluginNotFound(t *testing.T) {
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
 	err := pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config))
-	require.EqualError(t, err, "failed to add plugin test-plugin: no configuration found for plugin test-plugin; requested configuration types: [custom.config/v1]")
+	require.EqualError(t, err, "failed to add plugin test-plugin-component-version: no configuration found for plugin test-plugin-component-version; requested configuration types: [custom.config/v1]")
 }
 
 func TestPluginManagerCancelContext(t *testing.T) {
@@ -169,7 +169,7 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
-		require.NoError(t, os.Remove("/tmp/test-plugin-plugin.socket"))
+		require.NoError(t, os.Remove("/tmp/test-plugin-component-version-plugin.socket"))
 	})
 
 	proto := &dummyv1.Repository{
