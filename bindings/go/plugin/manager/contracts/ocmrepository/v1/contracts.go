@@ -10,7 +10,7 @@ import (
 
 type IdentityProvider[T runtime.Typed] interface {
 	contracts.PluginBase
-	GetIdentity(ctx context.Context, typ GetIdentityRequest[T]) (runtime.Identity, error)
+	GetIdentity(ctx context.Context, typ *GetIdentityRequest[T]) (*GetIdentityResponse, error)
 }
 
 // ReadOCMRepositoryPluginContract is a plugin type that can deal with repositories
@@ -35,22 +35,4 @@ type WriteOCMRepositoryPluginContract[T runtime.Typed] interface {
 type ReadWriteOCMRepositoryPluginContract[T runtime.Typed] interface {
 	ReadOCMRepositoryPluginContract[T]
 	WriteOCMRepositoryPluginContract[T]
-}
-
-type ReadResourcePluginContract interface {
-	contracts.PluginBase
-	IdentityProvider[runtime.Typed]
-	GetGlobalResource(ctx context.Context, request GetResourceRequest, credentials map[string]string) (GetResourceResponse, error)
-}
-
-type WriteResourcePluginContract interface {
-	contracts.PluginBase
-	IdentityProvider[runtime.Typed]
-	AddGlobalResource(ctx context.Context, request PostResourceRequest, credentials map[string]string) (*descriptor.Resource, error)
-}
-
-// ReadWriteResourcePluginContract is the contract defining Add and Get global resources.
-type ReadWriteResourcePluginContract interface {
-	ReadResourcePluginContract
-	WriteResourcePluginContract
 }

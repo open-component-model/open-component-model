@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
@@ -81,6 +82,8 @@ func Call(ctx context.Context, client *http.Client, locationType types.Connectio
 		base = location
 	}
 
+	// always ensure that we aren't starting with a `/`.
+	endpoint = strings.TrimPrefix(endpoint, "/")
 	request, err := http.NewRequestWithContext(ctx, method, base+"/"+endpoint, body)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -97,6 +100,8 @@ func Call(ctx context.Context, client *http.Client, locationType types.Connectio
 	for _, v := range options.Headers {
 		request.Header.Add(v.Key, v.Value)
 	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(request)
 	if err != nil {

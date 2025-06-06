@@ -61,6 +61,9 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 							Version: "1.0.0",
 						},
 						Component: descriptor.Component{
+							Provider: descriptor.Provider{
+								Name: "ocm.software",
+							},
 							ComponentMeta: descriptor.ComponentMeta{
 								ObjectMeta: descriptor.ObjectMeta{
 									Name:    "component",
@@ -78,7 +81,7 @@ func TestGetComponentVersionHandlerFunc(t *testing.T) {
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 				content, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
-				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"","resources":null,"sources":null,"componentReferences":null}}
+				require.Equal(t, `{"meta":{"schemaVersion":"1.0.0"},"component":{"name":"component","version":"1.0.0","repositoryContexts":null,"provider":"ocm.software","resources":null,"sources":null,"componentReferences":null}}
 `, string(content))
 
 			},
