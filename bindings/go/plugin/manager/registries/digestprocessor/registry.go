@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"ocm.software/open-component-model/bindings/go/constructor"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -25,8 +26,9 @@ func NewDigestProcessorRegistry(ctx context.Context) *RepositoryRegistry {
 		ctx:                            ctx,
 		registry:                       make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins:             make(map[string]*constructedPlugin),
-		internalDigestProcessorPlugins: make(map[runtime.Type]v1.ResourceDigestProcessorContract),
+		internalDigestProcessorPlugins: make(map[runtime.Type]constructor.ResourceDigestProcessor),
 		internalDigestProcessorScheme:  runtime.NewScheme(runtime.WithAllowUnknown()),
+		repositoryScheme:               runtime.NewScheme(runtime.WithAllowUnknown()),
 	}
 }
 
@@ -35,7 +37,7 @@ func NewDigestProcessorRegistry(ctx context.Context) *RepositoryRegistry {
 func RegisterInternalDigestProcessorPlugin(
 	scheme *runtime.Scheme,
 	r *RepositoryRegistry,
-	p v1.ResourceDigestProcessorContract,
+	p constructor.ResourceDigestProcessor,
 	prototype runtime.Typed,
 ) error {
 	r.mu.Lock()
@@ -61,8 +63,9 @@ type RepositoryRegistry struct {
 	mu                             sync.Mutex
 	registry                       map[runtime.Type]mtypes.Plugin
 	constructedPlugins             map[string]*constructedPlugin
-	internalDigestProcessorPlugins map[runtime.Type]v1.ResourceDigestProcessorContract
+	internalDigestProcessorPlugins map[runtime.Type]constructor.ResourceDigestProcessor
 	internalDigestProcessorScheme  *runtime.Scheme
+	repositoryScheme               *runtime.Scheme
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
@@ -121,7 +124,7 @@ loop:
 	return digestPlugin, nil
 }
 
-func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (v1.ResourceDigestProcessorContract, error) {
+func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (constructor.ResourceDigestProcessor, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -142,6 +145,15 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 		return nil, fmt.Errorf("external plugins can not be fetched without a type %T", spec)
 	}
 
+	plugin, err := r.getPlugin(ctx, typ)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
+	}
+
+	return r.externalToResourceDigestProcessorPluginConverter(plugin, r.repositoryScheme), nil
+}
+
+func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (v1.ResourceDigestProcessorContract, error) {
 	plugin, ok := r.registry[typ]
 	if !ok {
 		return nil, fmt.Errorf("failed to get plugin for typ %q", typ)

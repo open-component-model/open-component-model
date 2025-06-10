@@ -11,10 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -74,26 +73,23 @@ func TestPluginFlow(t *testing.T) {
 	require.NoError(t, err)
 	retrievedResourcePlugin, err := registry.GetPlugin(ctx, p)
 	require.NoError(t, err)
-	require.NoError(t, retrievedResourcePlugin.Ping(ctx))
-	resource, err := retrievedResourcePlugin.ProcessResourceDigest(ctx, &v1.ProcessResourceDigestRequest{
-		Resource: &descriptorv2.Resource{
-			ElementMeta: descriptorv2.ElementMeta{
-				ObjectMeta: descriptorv2.ObjectMeta{
-					Name:    "test-resource-1",
-					Version: "0.1.0",
-				},
-			},
-			Type:     "type",
-			Relation: "local",
-			Access: &runtime.Raw{
-				Type: runtime.Type{
-					Version: "test-access",
-					Name:    "v1",
-				},
-				Data: []byte(`{ "access": "v1" }`),
+	resource, err := retrievedResourcePlugin.ProcessResourceDigest(ctx, &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource-1",
+				Version: "0.1.0",
 			},
 		},
-	}, map[string]string{})
+		Type:     "type",
+		Relation: "local",
+		Access: &runtime.Raw{
+			Type: runtime.Type{
+				Version: "test-access",
+				Name:    "v1",
+			},
+			Data: []byte(`{ "access": "v1" }`),
+		},
+	})
 	require.NoError(t, err)
-	require.Equal(t, "test-resource", resource.Resource.Name)
+	require.Equal(t, "test-resource", resource.Name)
 }
