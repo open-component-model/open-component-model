@@ -54,6 +54,64 @@ func (r *Scheme) Clone() *Scheme {
 	return clone
 }
 
+// AddToScheme adds all types from the given scheme to the given scheme, and fails if any of the types already exist.
+func (r *Scheme) AddToScheme(scheme *Scheme) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if scheme == nil {
+		return fmt.Errorf("cannot add to nil scheme")
+	}
+
+	for typ, prototype := range scheme.defaults {
+		if _, exists := r.defaults[typ]; exists {
+			return fmt.Errorf("cannot add already existing type %T", typ)
+		}
+		r.defaults[typ] = prototype
+	}
+
+	for alias, def := range scheme.aliases {
+		if _, exists := r.aliases[alias]; exists {
+			return fmt.Errorf("cannot add already existing alias %q for type %q", alias, def)
+		}
+		r.aliases[alias] = def
+	}
+
+	return nil
+}
+
+func (r *Scheme) AddTypeFromScheme(scheme *Scheme, typ Type) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if scheme == nil {
+		return fmt.Errorf("cannot add to nil scheme")
+	}
+
+	if _, exists := r.defaults[typ]; exists {
+		return fmt.Errorf("type %q already registered", typ)
+	}
+
+	prototype, ok := scheme.defaults[typ]
+	if !ok {
+		return fmt.Errorf("type %q not found in the provided scheme", typ)
+	}
+
+	r.defaults[typ] = prototype
+
+	// now copy aliases if they exist
+	for alias, forTyp := range scheme.aliases {
+		if forTyp.Equal(typ) {
+			if _, exists := r.aliases[alias]; exists {
+				return fmt.Errorf("alias %q already registered, cannot register for type %q", alias, typ)
+			}
+			r.aliases[alias] = typ
+		}
+	}
+
+	return nil
+}
+
 // RegisterWithAlias registers a new type with the registry.
 // The first type is the default type and all other types are aliases.
 // Note that if Scheme.RegisterWithAlias or Scheme.MustRegister were called before,
@@ -94,11 +152,6 @@ func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
 	defer r.mu.RUnlock()
 
 	for typ, proto := range r.defaults {
-		// if there is an unversioned type registered, do not use it
-		// TODO find a way to avoid this or to fallback to the fully qualified type instead of unqualified ones
-		if !typ.HasVersion() {
-			continue
-		}
 		if reflect.TypeOf(prototype).Elem() == reflect.TypeOf(proto).Elem() {
 			return typ, nil
 		}
