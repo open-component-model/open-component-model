@@ -71,6 +71,7 @@ func (r *resourceDigestProcessorPluginConverter) ProcessResourceDigest(ctx conte
 	request := &v1.ProcessResourceDigestRequest{
 		Resource: convertResource,
 	}
+	// TODO: Figure out the credential.
 	response, err := r.externalPlugin.ProcessResourceDigest(ctx, request, map[string]string{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to process resource digest: %w", err)
