@@ -140,8 +140,8 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) 
 	return startAndReturnPlugin(ctx, r, &plugin)
 }
 
-// RegisterInternalInputPlugin is called to register an internal implementation for an input plugin.
-func RegisterInternalInputPlugin(
+// RegisterInternalResourceInputPlugin is called to register an internal implementation for an input plugin.
+func RegisterInternalResourceInputPlugin(
 	scheme *runtime.Scheme,
 	r *RepositoryRegistry,
 	plugin constructor.ResourceInputMethod,
