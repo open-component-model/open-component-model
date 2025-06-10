@@ -21,21 +21,24 @@ import (
 
 // mockTargetRepository implements TargetRepository for testing
 type mockTargetRepository struct {
+	components          map[string]*descriptor.Descriptor
 	addedLocalResources []*descriptor.Resource
 	addedSources        []*descriptor.Source
 	addedVersions       []*descriptor.Descriptor
 }
 
-func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
-	if len(m.addedVersions) == 0 {
-		return nil, fmt.Errorf("no versions added")
+func newMockTargetRepository() *mockTargetRepository {
+	return &mockTargetRepository{
+		components: make(map[string]*descriptor.Descriptor),
 	}
-	for _, v := range m.addedVersions {
-		if v.Component.Name == component && v.Component.Version == version {
-			return v, nil
-		}
+}
+
+func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
+	key := name + ":" + version
+	if desc, exists := m.components[key]; exists {
+		return desc, nil
 	}
-	return nil, fmt.Errorf("version %s of component %s not found", version, component)
+	return nil, fmt.Errorf("component version %q not found", name+":"+version)
 }
 
 func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, component *constructorv1.Component) (TargetRepository, error) {
@@ -54,6 +57,8 @@ func (m *mockTargetRepository) AddLocalSource(ctx context.Context, component, ve
 
 func (m *mockTargetRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
 	m.addedVersions = append(m.addedVersions, desc)
+	key := desc.Component.Name + ":" + desc.Component.Version
+	m.components[key] = desc
 	return nil
 }
 
@@ -173,7 +178,7 @@ components:
 	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -220,7 +225,119 @@ components:
 	assert.Equal(t, "application/octet-stream", sourceAccess.MediaType)
 
 	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.addedLocalResources, 0)
-	assert.Len(t, mockRepo.addedSources, 0)
-	assert.Len(t, mockRepo.addedVersions, 1)
+	assert.Len(t, mockRepo.components, 1)
+}
+
+func TestComponentVersionConflictPolicies(t *testing.T) {
+	tests := []struct {
+		name           string
+		policy         ComponentVersionConflictPolicy
+		existing       bool
+		expectError    bool
+		expectReplaced bool
+	}{
+		{
+			name:           "AbortAndFail with existing component",
+			policy:         ComponentVersionConflictAbortAndFail,
+			existing:       true,
+			expectError:    true,
+			expectReplaced: false,
+		},
+		{
+			name:           "AbortAndFail with no existing component",
+			policy:         ComponentVersionConflictAbortAndFail,
+			existing:       false,
+			expectError:    false,
+			expectReplaced: false,
+		},
+		{
+			name:           "Skip with existing component",
+			policy:         ComponentVersionConflictSkip,
+			existing:       true,
+			expectError:    false,
+			expectReplaced: false,
+		},
+		{
+			name:           "Skip with no existing component",
+			policy:         ComponentVersionConflictSkip,
+			existing:       false,
+			expectError:    false,
+			expectReplaced: false,
+		},
+		{
+			name:           "Replace with existing component",
+			policy:         ComponentVersionConflictReplace,
+			existing:       true,
+			expectError:    false,
+			expectReplaced: true,
+		},
+		{
+			name:           "Replace with no existing component",
+			policy:         ComponentVersionConflictReplace,
+			existing:       false,
+			expectError:    false,
+			expectReplaced: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newMockTargetRepository()
+			opts := Options{
+				ComponentVersionConflictPolicy: tt.policy,
+				TargetRepositoryProvider:       &mockTargetRepositoryProvider{repo: repo},
+			}
+
+			component := &constructorruntime.Component{
+				ComponentMeta: constructorruntime.ComponentMeta{
+					ObjectMeta: constructorruntime.ObjectMeta{
+						Name:    "test-component",
+						Version: "1.0.0",
+					},
+				},
+			}
+
+			if tt.existing {
+				existingDesc := &descriptor.Descriptor{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    component.Name,
+								Version: component.Version,
+							},
+						},
+					},
+				}
+				err := repo.AddComponentVersion(context.Background(), existingDesc)
+				require.NoError(t, err)
+			}
+
+			constructor := NewDefaultConstructor(opts)
+			compConstructor := &constructorruntime.ComponentConstructor{
+				Components: []constructorruntime.Component{*component},
+			}
+
+			descriptors, err := constructor.Construct(context.Background(), compConstructor)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, descriptors)
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, descriptors, 1)
+				assert.Equal(t, component.Name, descriptors[0].Component.Name)
+				assert.Equal(t, component.Version, descriptors[0].Component.Version)
+			}
+
+			if tt.expectReplaced {
+				desc, err := repo.GetComponentVersion(context.Background(), component.Name, component.Version)
+				require.NoError(t, err)
+				assert.NotNil(t, desc)
+			} else if tt.existing && tt.policy == ComponentVersionConflictSkip {
+				desc, err := repo.GetComponentVersion(context.Background(), component.Name, component.Version)
+				require.NoError(t, err)
+				assert.NotNil(t, desc)
+			}
+		})
+	}
 }

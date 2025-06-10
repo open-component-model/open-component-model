@@ -118,7 +118,7 @@ func TestConstructWithSourceInputMethod(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -160,7 +160,7 @@ func TestConstructWithSourceAccess(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -238,7 +238,7 @@ func TestConstructWithSourceCredentialResolution(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -301,7 +301,7 @@ func TestConstructWithSourceBlob(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -341,7 +341,7 @@ func TestConstructWithInvalidSourceInputMethodType(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -388,7 +388,7 @@ func TestConstructWithSourceMissingAccess(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -442,7 +442,7 @@ func TestConstructWithSourceCredentialResolutionError(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -526,7 +526,7 @@ components:
 	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{

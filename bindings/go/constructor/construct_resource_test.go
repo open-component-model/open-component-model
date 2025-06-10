@@ -207,7 +207,7 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -252,7 +252,7 @@ func TestConstructWithResourceAccess(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -334,7 +334,7 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -406,7 +406,7 @@ func TestConstructWithResourceByValue(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockTargetRepo := &mockTargetRepository{}
+	mockTargetRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -467,7 +467,7 @@ func TestConstructWithResourceDigest(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockTargetRepo := &mockTargetRepository{}
+	mockTargetRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -517,7 +517,7 @@ func TestConstructWithInvalidInputMethod(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -565,7 +565,7 @@ func TestConstructWithMissingAccess(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -620,7 +620,7 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -660,7 +660,7 @@ func TestConstructWithResourceByValueFailure(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockTargetRepo := &mockTargetRepository{}
+	mockTargetRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -748,7 +748,7 @@ components:
 	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
