@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	rt "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -14,12 +13,12 @@ func TestConvertToRuntimeResource(t *testing.T) {
 	tests := []struct {
 		name     string
 		resource *v1.Resource
-		want     descriptor.Resource
+		want     Resource
 	}{
 		{
 			name:     "nil resource",
 			resource: nil,
-			want:     descriptor.Resource{},
+			want:     Resource{},
 		},
 		{
 			name: "basic resource",
@@ -36,18 +35,18 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				Type:     "test-type",
 				Relation: v1.LocalRelation,
 			},
-			want: descriptor.Resource{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
 						Name:    "test",
 						Version: "1.0.0",
-						Labels: []descriptor.Label{
+						Labels: []Label{
 							{Name: "test", Value: "value", Signing: true},
 						},
 					},
 				},
 				Type:     "test-type",
-				Relation: descriptor.LocalRelation,
+				Relation: LocalRelation,
 			},
 		},
 		{
@@ -70,19 +69,19 @@ func TestConvertToRuntimeResource(t *testing.T) {
 					},
 				},
 			},
-			want: descriptor.Resource{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
 						Name:    "test",
 						Version: "1.0.0",
 					},
 				},
 				Type:     "test-type",
-				Relation: descriptor.LocalRelation,
-				SourceRefs: []descriptor.SourceRef{
+				Relation: LocalRelation,
+				SourceRefs: []SourceRef{
 					{
 						IdentitySelector: map[string]string{"name": "test"},
-						Labels: []descriptor.Label{
+						Labels: []Label{
 							{Name: "test", Value: "value"},
 						},
 					},
@@ -107,18 +106,20 @@ func TestConvertToRuntimeResource(t *testing.T) {
 					},
 				},
 			},
-			want: descriptor.Resource{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
 						Name:    "test",
 						Version: "1.0.0",
 					},
 				},
 				Type:     "test-type",
-				Relation: descriptor.LocalRelation,
-				Access: &rt.Raw{
-					Type: rt.NewUnversionedType("test-access"),
-					Data: []byte(`{"test": "value"}`),
+				Relation: LocalRelation,
+				AccessOrInput: AccessOrInput{
+					Access: &rt.Raw{
+						Type: rt.NewUnversionedType("test-access"),
+						Data: []byte(`{"test": "value"}`),
+					},
 				},
 			},
 		},
@@ -126,7 +127,7 @@ func TestConvertToRuntimeResource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ConvertToRuntimeResource(tt.resource)
+			got := ConvertFromV1Resource(tt.resource)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -136,12 +137,12 @@ func TestConvertToRuntimeSource(t *testing.T) {
 	tests := []struct {
 		name   string
 		source *v1.Source
-		want   descriptor.Source
+		want   Source
 	}{
 		{
 			name:   "nil source",
 			source: nil,
-			want:   descriptor.Source{},
+			want:   Source{},
 		},
 		{
 			name: "basic source",
@@ -157,17 +158,18 @@ func TestConvertToRuntimeSource(t *testing.T) {
 				},
 				Type: "test-type",
 			},
-			want: descriptor.Source{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{
+			want: Source{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
 						Name:    "test",
 						Version: "1.0.0",
-						Labels: []descriptor.Label{
+						Labels: []Label{
 							{Name: "test", Value: "value", Signing: true},
 						},
 					},
 				},
-				Type: "test-type",
+				Type:          "test-type",
+				AccessOrInput: AccessOrInput{},
 			},
 		},
 		{
@@ -187,17 +189,19 @@ func TestConvertToRuntimeSource(t *testing.T) {
 					},
 				},
 			},
-			want: descriptor.Source{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{
+			want: Source{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
 						Name:    "test",
 						Version: "1.0.0",
 					},
 				},
 				Type: "test-type",
-				Access: &rt.Raw{
-					Type: rt.NewUnversionedType("test-access"),
-					Data: []byte(`{"test": "value"}`),
+				AccessOrInput: AccessOrInput{
+					Access: &rt.Raw{
+						Type: rt.NewUnversionedType("test-access"),
+						Data: []byte(`{"test": "value"}`),
+					},
 				},
 			},
 		},
@@ -205,7 +209,7 @@ func TestConvertToRuntimeSource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ConvertToRuntimeSource(tt.source)
+			got := ConvertFromV1Source(tt.source)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -215,12 +219,12 @@ func TestConvertToRuntimeReference(t *testing.T) {
 	tests := []struct {
 		name      string
 		reference *v1.Reference
-		want      descriptor.Reference
+		want      Reference
 	}{
 		{
 			name:      "nil reference",
 			reference: nil,
-			want:      descriptor.Reference{},
+			want:      Reference{},
 		},
 		{
 			name: "basic reference",
@@ -236,12 +240,12 @@ func TestConvertToRuntimeReference(t *testing.T) {
 				},
 				Component: "test-component",
 			},
-			want: descriptor.Reference{
-				ElementMeta: descriptor.ElementMeta{
-					ObjectMeta: descriptor.ObjectMeta{
+			want: Reference{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
 						Name:    "test",
 						Version: "1.0.0",
-						Labels: []descriptor.Label{
+						Labels: []Label{
 							{Name: "test", Value: "value", Signing: true},
 						},
 					},
@@ -263,12 +267,12 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 	tests := []struct {
 		name      string
 		component *v1.Component
-		want      descriptor.Component
+		want      Component
 	}{
 		{
 			name:      "nil component",
 			component: nil,
-			want:      descriptor.Component{},
+			want:      Component{},
 		},
 		{
 			name: "basic component",
@@ -290,20 +294,20 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 					},
 				},
 			},
-			want: descriptor.Component{
-				ComponentMeta: descriptor.ComponentMeta{
-					ObjectMeta: descriptor.ObjectMeta{
+			want: Component{
+				ComponentMeta: ComponentMeta{
+					ObjectMeta: ObjectMeta{
 						Name:    "test",
 						Version: "1.0.0",
-						Labels: []descriptor.Label{
+						Labels: []Label{
 							{Name: "test", Value: "value", Signing: true},
 						},
 					},
 					CreationTime: "2024-01-01T00:00:00Z",
 				},
-				Provider: descriptor.Provider{
+				Provider: Provider{
 					Name: "test-provider",
-					Labels: []descriptor.Label{
+					Labels: []Label{
 						{Name: "test", Value: "value"},
 					},
 				},
@@ -314,66 +318,6 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ConvertToRuntimeComponent(tt.component)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestConvertToRuntimeDescriptor(t *testing.T) {
-	tests := []struct {
-		name        string
-		constructor *v1.ComponentConstructor
-		want        *descriptor.Descriptor
-	}{
-		{
-			name:        "nil constructor",
-			constructor: nil,
-			want:        nil,
-		},
-		{
-			name:        "empty constructor",
-			constructor: &v1.ComponentConstructor{},
-			want:        nil,
-		},
-		{
-			name: "basic constructor",
-			constructor: &v1.ComponentConstructor{
-				Components: []v1.Component{
-					{
-						ComponentMeta: v1.ComponentMeta{
-							ObjectMeta: v1.ObjectMeta{
-								Name:    "test",
-								Version: "1.0.0",
-							},
-						},
-						Provider: v1.Provider{
-							Name: "test-provider",
-						},
-					},
-				},
-			},
-			want: &descriptor.Descriptor{
-				Meta: descriptor.Meta{
-					Version: "v1",
-				},
-				Component: descriptor.Component{
-					ComponentMeta: descriptor.ComponentMeta{
-						ObjectMeta: descriptor.ObjectMeta{
-							Name:    "test",
-							Version: "1.0.0",
-						},
-					},
-					Provider: descriptor.Provider{
-						Name: "test-provider",
-					},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := ConvertToRuntimeDescriptor(tt.constructor)
 			assert.Equal(t, tt.want, got)
 		})
 	}

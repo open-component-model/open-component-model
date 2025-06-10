@@ -1,3 +1,6 @@
+// Package runtime provides conversion functions between runtime and descriptor types
+// for the Open Component Model. These functions handle the transformation of
+// component model structures between their runtime representation and descriptor format.
 package runtime
 
 import (
@@ -9,7 +12,9 @@ import (
 
 // Label conversion functions
 
-func ConvertFromLabels(labels []Label) []descriptor.Label {
+// ConvertToDescriptorLabels converts a slice of runtime Labels to descriptor Labels.
+// Returns nil if the input slice is nil.
+func ConvertToDescriptorLabels(labels []Label) []descriptor.Label {
 	if labels == nil {
 		return nil
 	}
@@ -22,102 +27,178 @@ func ConvertFromLabels(labels []Label) []descriptor.Label {
 	return n
 }
 
+// ConvertFromDescriptorLabels converts a slice of descriptor Labels to runtime Labels.
+// Returns nil if the input slice is nil.
+func ConvertFromDescriptorLabels(labels []descriptor.Label) []Label {
+	if labels == nil {
+		return nil
+	}
+	n := make([]Label, len(labels))
+	for i := range labels {
+		n[i].Name = labels[i].Name
+		n[i].Value = labels[i].Value
+		n[i].Signing = labels[i].Signing
+	}
+	return n
+}
+
 // Common conversion helpers
 
-func convertObjectMetaToDescriptor(meta ObjectMeta) descriptor.ObjectMeta {
+// ConvertObjectMetaToDescriptor converts runtime ObjectMeta to descriptor ObjectMeta.
+func ConvertObjectMetaToDescriptor(meta ObjectMeta) descriptor.ObjectMeta {
 	return descriptor.ObjectMeta{
 		Name:    meta.Name,
 		Version: meta.Version,
-		Labels:  ConvertFromLabels(meta.Labels),
+		Labels:  ConvertToDescriptorLabels(meta.Labels),
 	}
 }
 
-func convertElementMetaToDescriptor(meta ElementMeta) descriptor.ElementMeta {
+// ConvertObjectMetaFromDescriptor converts descriptor ObjectMeta to runtime ObjectMeta.
+func ConvertObjectMetaFromDescriptor(meta descriptor.ObjectMeta) ObjectMeta {
+	return ObjectMeta{
+		Name:    meta.Name,
+		Version: meta.Version,
+		Labels:  ConvertFromDescriptorLabels(meta.Labels),
+	}
+}
+
+// ConvertElementMetaToDescriptor converts runtime ElementMeta to descriptor ElementMeta.
+func ConvertElementMetaToDescriptor(meta ElementMeta) descriptor.ElementMeta {
 	return descriptor.ElementMeta{
-		ObjectMeta:    convertObjectMetaToDescriptor(meta.ObjectMeta),
+		ObjectMeta:    ConvertObjectMetaToDescriptor(meta.ObjectMeta),
 		ExtraIdentity: meta.ExtraIdentity.DeepCopy(),
 	}
 }
 
-func handleAccessOrInputToDescriptor(accessOrInput AccessOrInput) runtime.Typed {
-	if accessOrInput.HasInput() {
-		return accessOrInput.Input.DeepCopyTyped()
-	} else if accessOrInput.HasAccess() {
-		return accessOrInput.Access.DeepCopyTyped()
+// ConvertElementMetaFromDescriptor converts descriptor ElementMeta to runtime ElementMeta.
+func ConvertElementMetaFromDescriptor(meta descriptor.ElementMeta) ElementMeta {
+	return ElementMeta{
+		ObjectMeta:    ConvertObjectMetaFromDescriptor(meta.ObjectMeta),
+		ExtraIdentity: meta.ExtraIdentity.Clone(),
 	}
-	return nil
+}
+
+// ConvertAccessToDescriptor converts runtime AccessOrInput to descriptor Typed.
+// Returns nil if the input Access is nil.
+func ConvertAccessToDescriptor(accessOrInput AccessOrInput) runtime.Typed {
+	if accessOrInput.Access == nil {
+		return nil
+	}
+	return accessOrInput.Access.DeepCopyTyped()
+}
+
+// ConvertAccessFromDescriptor converts descriptor Typed to runtime AccessOrInput.
+// Returns empty AccessOrInput if the input is nil.
+func ConvertAccessFromDescriptor(access runtime.Typed) AccessOrInput {
+	if access == nil {
+		return AccessOrInput{}
+	}
+	return AccessOrInput{
+		Access: access.DeepCopyTyped(),
+	}
 }
 
 // Resource conversion
 
+// ConvertFromDescriptorResource converts a descriptor Resource to runtime Resource.
+// Returns nil if the input is nil.
+func ConvertFromDescriptorResource(resource *descriptor.Resource) *Resource {
+	if resource == nil {
+		return nil
+	}
+	target := &Resource{
+		ElementMeta: ConvertElementMetaFromDescriptor(resource.ElementMeta),
+		Type:        resource.Type,
+		Relation:    ResourceRelation(resource.Relation),
+	}
+
+	if resource.SourceRefs != nil {
+		target.SourceRefs = ConvertFromDescriptorSourceRefs(resource.SourceRefs)
+	}
+
+	target.AccessOrInput = ConvertAccessFromDescriptor(resource.Access)
+	return target
+}
+
+// ConvertToDescriptorResource converts a runtime Resource to descriptor Resource.
+// Returns nil if the input is nil.
 func ConvertToDescriptorResource(resource *Resource) *descriptor.Resource {
 	if resource == nil {
 		return nil
 	}
 	target := &descriptor.Resource{
-		ElementMeta: convertElementMetaToDescriptor(resource.ElementMeta),
+		ElementMeta: ConvertElementMetaToDescriptor(resource.ElementMeta),
 		Type:        resource.Type,
 		Relation:    descriptor.ResourceRelation(resource.Relation),
 	}
 
 	if resource.SourceRefs != nil {
-		target.SourceRefs = ConvertFromSourceRefs(resource.SourceRefs)
+		target.SourceRefs = ConvertToDescriptorSourceRefs(resource.SourceRefs)
 	}
 
-	target.Access = handleAccessOrInputToDescriptor(resource.AccessOrInput)
+	target.Access = ConvertAccessToDescriptor(resource.AccessOrInput)
 	return target
 }
 
 // Source conversion
 
+// ConvertToDescriptorSource converts a runtime Source to descriptor Source.
+// Returns nil if the input is nil.
 func ConvertToDescriptorSource(source *Source) *descriptor.Source {
 	if source == nil {
 		return nil
 	}
 	target := &descriptor.Source{
-		ElementMeta: convertElementMetaToDescriptor(source.ElementMeta),
+		ElementMeta: ConvertElementMetaToDescriptor(source.ElementMeta),
 		Type:        source.Type,
-		Access:      handleAccessOrInputToDescriptor(source.AccessOrInput),
+		Access:      ConvertAccessToDescriptor(source.AccessOrInput),
 	}
 	return target
 }
 
 // Reference conversion
 
+// ConvertToDescriptorReference converts a runtime Reference to descriptor Reference.
+// Returns nil if the input is nil.
 func ConvertToDescriptorReference(reference *Reference) *descriptor.Reference {
 	if reference == nil {
 		return nil
 	}
 	target := &descriptor.Reference{
-		ElementMeta: convertElementMetaToDescriptor(reference.ElementMeta),
+		ElementMeta: ConvertElementMetaToDescriptor(reference.ElementMeta),
 		Component:   reference.Component,
 	}
 	return target
 }
 
 // Provider conversion
-func convertProviderToDescriptor(provider Provider) (descriptor.Provider, error) {
+
+// ConvertProviderToDescriptor converts runtime Provider to descriptor Provider.
+// Returns an error if the conversion fails.
+func ConvertProviderToDescriptor(provider Provider) (descriptor.Provider, error) {
 	return descriptor.Provider{
 		Name:   provider.Name,
-		Labels: ConvertFromLabels(provider.Labels),
+		Labels: ConvertToDescriptorLabels(provider.Labels),
 	}, nil
 }
 
 // Component conversion
 
+// ConvertToDescriptorComponent converts a runtime Component to descriptor Component.
+// Returns nil if the input is nil.
 func ConvertToDescriptorComponent(component *Component) *descriptor.Component {
 	if component == nil {
 		return nil
 	}
 
-	provider, err := convertProviderToDescriptor(component.Provider)
+	provider, err := ConvertProviderToDescriptor(component.Provider)
 	if err != nil {
 		return nil
 	}
 
 	target := &descriptor.Component{
 		ComponentMeta: descriptor.ComponentMeta{
-			ObjectMeta:   convertObjectMetaToDescriptor(component.ObjectMeta),
+			ObjectMeta:   ConvertObjectMetaToDescriptor(component.ObjectMeta),
 			CreationTime: component.CreationTime,
 		},
 		Provider: provider,
@@ -153,8 +234,8 @@ func ConvertToDescriptorComponent(component *Component) *descriptor.Component {
 	return target
 }
 
-// Constructor conversion
-
+// ConvertToDescriptor converts a ComponentConstructor to a Descriptor.
+// Returns nil if the input is nil or has no components.
 func ConvertToDescriptor(constructor *ComponentConstructor) *descriptor.Descriptor {
 	if constructor == nil || len(constructor.Components) == 0 {
 		return nil
@@ -170,14 +251,30 @@ func ConvertToDescriptor(constructor *ComponentConstructor) *descriptor.Descript
 
 // SourceRef conversion
 
-func ConvertFromSourceRefs(refs []SourceRef) []descriptor.SourceRef {
+// ConvertToDescriptorSourceRefs converts runtime SourceRefs to descriptor SourceRefs.
+// Returns nil if the input slice is nil.
+func ConvertToDescriptorSourceRefs(refs []SourceRef) []descriptor.SourceRef {
 	if refs == nil {
 		return nil
 	}
 	n := make([]descriptor.SourceRef, len(refs))
 	for i := range refs {
 		n[i].IdentitySelector = maps.Clone(refs[i].IdentitySelector)
-		n[i].Labels = ConvertFromLabels(refs[i].Labels)
+		n[i].Labels = ConvertToDescriptorLabels(refs[i].Labels)
+	}
+	return n
+}
+
+// ConvertFromDescriptorSourceRefs converts descriptor SourceRefs to runtime SourceRefs.
+// Returns nil if the input slice is nil.
+func ConvertFromDescriptorSourceRefs(refs []descriptor.SourceRef) []SourceRef {
+	if refs == nil {
+		return nil
+	}
+	n := make([]SourceRef, len(refs))
+	for i := range refs {
+		n[i].IdentitySelector = maps.Clone(refs[i].IdentitySelector)
+		n[i].Labels = ConvertFromDescriptorLabels(refs[i].Labels)
 	}
 	return n
 }
