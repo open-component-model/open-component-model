@@ -1,12 +1,14 @@
 package blob_test
 
 import (
+	"bytes"
 	"io"
 	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 )
@@ -109,5 +111,57 @@ func TestBufferedReader(t *testing.T) {
 		br := blob.NewEagerBufferedReader(closableReader)
 		err := br.Close()
 		assert.NoError(t, err)
+	})
+}
+
+func TestBufferMemory_RepeatedReads(t *testing.T) {
+	data := []byte("test data")
+	var err error
+	buffered := blob.NewDirectReadOnlyBlob(bytes.NewReader(data))
+
+	t.Run("First Read", func(t *testing.T) {
+		r := require.New(t)
+		var buf1 bytes.Buffer
+		err = blob.Copy(&buf1, buffered)
+		r.NoError(err)
+		r.Equal(data, buf1.Bytes())
+	})
+
+	t.Run("Second Read", func(t *testing.T) {
+		r := require.New(t)
+		var buf2 bytes.Buffer
+		err = blob.Copy(&buf2, buffered)
+		r.NoError(err)
+		r.Equal(data, buf2.Bytes())
+	})
+
+	// Third read with partial read
+	t.Run("Third Read with Partial Read", func(t *testing.T) {
+		r := require.New(t)
+		reader, err := buffered.ReadCloser()
+		r.NoError(err)
+		defer reader.Close()
+
+		partial := make([]byte, 4)
+		n, err := reader.Read(partial)
+		r.NoError(err)
+		r.Equal(4, n)
+		r.Equal(data[:4], partial)
+
+		// Read the rest
+		rest := make([]byte, len(data)-4)
+		n, err = reader.Read(rest)
+		r.NoError(err)
+		r.Equal(len(data)-4, n)
+		r.Equal(data[4:], rest)
+	})
+
+	// Final read to ensure all data is read after partial read completed
+	t.Run("Final Read After Partial Read", func(t *testing.T) {
+		r := require.New(t)
+		var buf3 bytes.Buffer
+		err = blob.Copy(&buf3, buffered)
+		r.NoError(err)
+		r.Equal(data, buf3.Bytes())
 	})
 }

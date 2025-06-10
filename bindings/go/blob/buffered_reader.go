@@ -22,12 +22,13 @@ func NewEagerBufferedReader(r io.Reader) *EagerBufferedReader {
 // be careful when using this without considering the potential size of the data.
 type EagerBufferedReader struct {
 	mu        sync.RWMutex
-	buf       *bytes.Buffer
+	buf       []byte
 	digest    string
 	size      int64
 	loaded    bool
 	reader    io.Reader
 	mediaType string
+	cursor    int64
 }
 
 var (
@@ -38,6 +39,8 @@ var (
 
 	// We can also set the media type of the buffer if needed
 	_ MediaTypeAware = &EagerBufferedReader{}
+
+	_ io.ReadSeeker = &EagerBufferedReader{}
 )
 
 func (b *EagerBufferedReader) LoadEagerly() error {
@@ -48,19 +51,24 @@ func (b *EagerBufferedReader) LoadEagerly() error {
 	defer b.mu.Unlock()
 
 	if b.buf == nil {
-		b.buf = &bytes.Buffer{}
+		// Initialize the buffer with a reasonable size
+		b.buf = make([]byte, 0)
 	}
-	if b.reader != nil {
-		b.reader = io.MultiReader(b.buf, b.reader)
+
+	buffer := bytes.NewBuffer(b.buf)
+	if n, err := io.Copy(buffer, b.reader); err != nil {
+		return err
+	} else {
+		b.size = n
+		b.buf = buffer.Bytes()
 	}
-	dig, err := digest.FromReader(io.TeeReader(b.reader, b.buf))
+
+	// Calculate digest from the buffer
+	dig, err := digest.FromReader(bytes.NewReader(b.buf))
 	if err != nil {
 		return err
 	}
 	b.digest = dig.String()
-	if newSize := int64(b.buf.Len()); newSize > b.size {
-		b.size = newSize
-	}
 	b.loaded = true
 	return nil
 }
@@ -77,7 +85,44 @@ func (b *EagerBufferedReader) Read(p []byte) (n int, err error) {
 		// can cause panic in read implementations in stdlib.
 		return 0, err
 	}
-	return b.buf.Read(p)
+	reader := bytes.NewReader(b.buf)
+	n, err = reader.ReadAt(p, b.cursor)
+	if err != nil {
+		return n, err
+	}
+	b.cursor += int64(n)
+	if b.cursor >= int64(len(b.buf)) {
+		_, err = b.Seek(0, io.SeekStart) // auto-reset cursor if we are at the end of the buffer
+	}
+	return n, err
+}
+
+func (b *EagerBufferedReader) Seek(offset int64, whence int) (int64, error) {
+	if err := b.LoadEagerly(); err != nil {
+		return 0, err
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	switch whence {
+	default:
+		fallthrough
+	case io.SeekStart:
+		b.cursor = offset
+	case io.SeekCurrent:
+		b.cursor += offset
+	case io.SeekEnd:
+		b.cursor = int64(len(b.buf)) + offset
+	}
+
+	if b.cursor < 0 {
+		return 0, io.ErrUnexpectedEOF
+	}
+	if b.cursor >= int64(len(b.buf)) {
+		b.cursor = 0 // reset cursor if it goes beyond the buffer length
+	}
+	return b.cursor, nil
 }
 
 func (b *EagerBufferedReader) Close() error {
