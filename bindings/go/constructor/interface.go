@@ -147,6 +147,7 @@ type TargetRepositoryProvider interface {
 }
 
 type ResourceRepository interface {
+	// GetCredentialConsumerIdentity retrieves the identity of given resource to use for credential resolution.
 	GetCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)
 	// DownloadResource downloads a resource from the repository.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error)
