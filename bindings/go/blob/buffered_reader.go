@@ -50,17 +50,12 @@ func (b *EagerBufferedReader) LoadEagerly() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.buf == nil {
-		// Initialize the buffer with a reasonable size
-		b.buf = make([]byte, 0)
-	}
-
-	buffer := bytes.NewBuffer(b.buf)
-	if n, err := io.Copy(buffer, b.reader); err != nil {
+	var buf bytes.Buffer
+	if n, err := io.Copy(&buf, b.reader); err != nil {
 		return err
 	} else {
 		b.size = n
-		b.buf = buffer.Bytes()
+		b.buf = buf.Bytes()
 	}
 
 	// Calculate digest from the buffer
@@ -107,9 +102,14 @@ func (b *EagerBufferedReader) Seek(offset int64, whence int) (int64, error) {
 
 	switch whence {
 	default:
+		// default to start if whence is invalid
 		fallthrough
 	case io.SeekStart:
-		b.cursor = offset
+		if offset > int64(len(b.buf)) {
+			return 0, io.ErrUnexpectedEOF
+		} else {
+			b.cursor = offset
+		}
 	case io.SeekCurrent:
 		b.cursor += offset
 	case io.SeekEnd:
@@ -118,9 +118,6 @@ func (b *EagerBufferedReader) Seek(offset int64, whence int) (int64, error) {
 
 	if b.cursor < 0 {
 		return 0, io.ErrUnexpectedEOF
-	}
-	if b.cursor >= int64(len(b.buf)) {
-		b.cursor = 0 // reset cursor if it goes beyond the buffer length
 	}
 	return b.cursor, nil
 }
