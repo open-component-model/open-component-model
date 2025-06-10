@@ -171,6 +171,37 @@ func ConvertToDescriptorReference(reference *Reference) *descriptor.Reference {
 	return target
 }
 
+// ConvertFromDescriptorSource converts a descriptor Source to runtime Source.
+// Returns nil if the input is nil.
+func ConvertFromDescriptorSource(source *descriptor.Source) *Source {
+	if source == nil {
+		return nil
+	}
+	target := &Source{
+		ElementMeta: ConvertElementMetaFromDescriptor(source.ElementMeta),
+		Type:        source.Type,
+	}
+	if source.Access != nil {
+		target.AccessOrInput = AccessOrInput{
+			Access: source.Access.DeepCopyTyped(),
+		}
+	}
+	return target
+}
+
+// ConvertFromDescriptorReference converts a descriptor Reference to runtime Reference.
+// Returns nil if the input is nil.
+func ConvertFromDescriptorReference(reference *descriptor.Reference) *Reference {
+	if reference == nil {
+		return nil
+	}
+	target := &Reference{
+		ElementMeta: ConvertElementMetaFromDescriptor(reference.ElementMeta),
+		Component:   reference.Component,
+	}
+	return target
+}
+
 // Provider conversion
 
 // ConvertProviderToDescriptor converts runtime Provider to descriptor Provider.
@@ -191,9 +222,9 @@ func ConvertToDescriptorComponent(component *Component) *descriptor.Component {
 		return nil
 	}
 
-	provider, err := ConvertProviderToDescriptor(component.Provider)
-	if err != nil {
-		return nil
+	provider := descriptor.Provider{
+		Name:   component.Provider.Name,
+		Labels: ConvertToDescriptorLabels(component.Provider.Labels),
 	}
 
 	target := &descriptor.Component{
@@ -226,6 +257,56 @@ func ConvertToDescriptorComponent(component *Component) *descriptor.Component {
 		target.References = make([]descriptor.Reference, len(component.References))
 		for i, reference := range component.References {
 			if converted := ConvertToDescriptorReference(&reference); converted != nil {
+				target.References[i] = *converted
+			}
+		}
+	}
+
+	return target
+}
+
+// ConvertFromDescriptorComponent converts a descriptor Component to runtime Component.
+// Returns nil if the input is nil.
+func ConvertFromDescriptorComponent(component *descriptor.Component) *Component {
+	if component == nil {
+		return nil
+	}
+
+	provider := Provider{
+		Name:   component.Provider.Name,
+		Labels: ConvertFromDescriptorLabels(component.Provider.Labels),
+	}
+
+	target := &Component{
+		ComponentMeta: ComponentMeta{
+			ObjectMeta:   ConvertObjectMetaFromDescriptor(component.ObjectMeta),
+			CreationTime: component.CreationTime,
+		},
+		Provider: provider,
+	}
+
+	if component.Resources != nil {
+		target.Resources = make([]Resource, len(component.Resources))
+		for i, resource := range component.Resources {
+			if converted := ConvertFromDescriptorResource(&resource); converted != nil {
+				target.Resources[i] = *converted
+			}
+		}
+	}
+
+	if component.Sources != nil {
+		target.Sources = make([]Source, len(component.Sources))
+		for i, source := range component.Sources {
+			if converted := ConvertFromDescriptorSource(&source); converted != nil {
+				target.Sources[i] = *converted
+			}
+		}
+	}
+
+	if component.References != nil {
+		target.References = make([]Reference, len(component.References))
+		for i, reference := range component.References {
+			if converted := ConvertFromDescriptorReference(&reference); converted != nil {
 				target.References[i] = *converted
 			}
 		}

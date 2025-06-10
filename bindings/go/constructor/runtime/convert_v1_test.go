@@ -62,9 +62,15 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				Relation: v1.LocalRelation,
 				SourceRefs: []v1.SourceRef{
 					{
-						IdentitySelector: map[string]string{"name": "test"},
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
 						Labels: []v1.Label{
-							{Name: "test", Value: "value"},
+							{
+								Name:    "source-label",
+								Value:   "source-value",
+								Signing: true,
+							},
 						},
 					},
 				},
@@ -80,9 +86,15 @@ func TestConvertToRuntimeResource(t *testing.T) {
 				Relation: LocalRelation,
 				SourceRefs: []SourceRef{
 					{
-						IdentitySelector: map[string]string{"name": "test"},
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
 						Labels: []Label{
-							{Name: "test", Value: "value"},
+							{
+								Name:    "source-label",
+								Value:   "source-value",
+								Signing: true,
+							},
 						},
 					},
 				},
@@ -535,6 +547,965 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 					assert.Equal(t, tt.want.Components[0].Sources[0].Type, got.Components[0].Sources[0].Type)
 				}
 			}
+		})
+	}
+}
+
+func TestConvertToV1Component(t *testing.T) {
+	tests := []struct {
+		name      string
+		component *Component
+		want      *v1.Component
+		wantErr   bool
+	}{
+		{
+			name:      "nil component",
+			component: nil,
+			want:      nil,
+			wantErr:   false,
+		},
+		{
+			name: "basic component",
+			component: &Component{
+				ComponentMeta: ComponentMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+						Labels: []Label{
+							{Name: "test", Value: "value", Signing: true},
+						},
+					},
+					CreationTime: "2024-01-01T00:00:00Z",
+				},
+				Provider: Provider{
+					Name: "test-provider",
+					Labels: []Label{
+						{Name: "test", Value: "value"},
+					},
+				},
+			},
+			want: &v1.Component{
+				ComponentMeta: v1.ComponentMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+						Labels: []v1.Label{
+							{Name: "test", Value: "value", Signing: true},
+						},
+					},
+					CreationTime: "2024-01-01T00:00:00Z",
+				},
+				Provider: v1.Provider{
+					Name: "test-provider",
+					Labels: []v1.Label{
+						{Name: "test", Value: "value"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "component with resources and sources",
+			component: &Component{
+				ComponentMeta: ComponentMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Provider: Provider{
+					Name: "test-provider",
+				},
+				Resources: []Resource{
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-resource",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: LocalRelation,
+						AccessOrInput: AccessOrInput{
+							Access: &rt.Raw{
+								Type: rt.NewUnversionedType("test-access"),
+								Data: []byte(`{"test": "value"}`),
+							},
+						},
+					},
+				},
+				Sources: []Source{
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-source",
+								Version: "1.0.0",
+							},
+						},
+						Type: "git",
+						AccessOrInput: AccessOrInput{
+							Access: &rt.Raw{
+								Type: rt.NewUnversionedType("test-access"),
+								Data: []byte(`{"test": "value"}`),
+							},
+						},
+					},
+				},
+			},
+			want: &v1.Component{
+				ComponentMeta: v1.ComponentMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Provider: v1.Provider{
+					Name: "test-provider",
+				},
+				Resources: []v1.Resource{
+					{
+						ElementMeta: v1.ElementMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-resource",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: v1.LocalRelation,
+						AccessOrInput: v1.AccessOrInput{
+							Access: &rt.Raw{
+								Type: rt.NewUnversionedType("test-access"),
+								Data: []byte(`{"test": "value"}`),
+							},
+						},
+					},
+				},
+				Sources: []v1.Source{
+					{
+						ElementMeta: v1.ElementMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-source",
+								Version: "1.0.0",
+							},
+						},
+						Type: "git",
+						AccessOrInput: v1.AccessOrInput{
+							Access: &rt.Raw{
+								Type: rt.NewUnversionedType("test-access"),
+								Data: []byte(`{"test": "value"}`),
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "component with references",
+			component: &Component{
+				ComponentMeta: ComponentMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Provider: Provider{
+					Name: "test-provider",
+				},
+				References: []Reference{
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-ref",
+								Version: "1.0.0",
+								Labels: []Label{
+									{Name: "ref-label", Value: "ref-value", Signing: true},
+								},
+							},
+							ExtraIdentity: rt.Identity{
+								"namespace": "test-namespace",
+							},
+						},
+						Component: "referenced-component",
+					},
+				},
+			},
+			want: &v1.Component{
+				ComponentMeta: v1.ComponentMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Provider: v1.Provider{
+					Name: "test-provider",
+				},
+				References: []v1.Reference{
+					{
+						ElementMeta: v1.ElementMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-ref",
+								Version: "1.0.0",
+								Labels: []v1.Label{
+									{Name: "ref-label", Value: "ref-value", Signing: true},
+								},
+							},
+							ExtraIdentity: rt.Identity{
+								"namespace": "test-namespace",
+							},
+						},
+						Component: "referenced-component",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "component with input resources",
+			component: &Component{
+				ComponentMeta: ComponentMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Provider: Provider{
+					Name: "test-provider",
+				},
+				Resources: []Resource{
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-resource",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: LocalRelation,
+						AccessOrInput: AccessOrInput{
+							Input: &rt.Raw{
+								Type: rt.NewUnversionedType("test-input"),
+								Data: []byte(`{"input": "value"}`),
+							},
+						},
+					},
+				},
+				Sources: []Source{
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-source",
+								Version: "1.0.0",
+							},
+						},
+						Type: "git",
+						AccessOrInput: AccessOrInput{
+							Input: &rt.Raw{
+								Type: rt.NewUnversionedType("test-input"),
+								Data: []byte(`{"input": "value"}`),
+							},
+						},
+					},
+				},
+			},
+			want: &v1.Component{
+				ComponentMeta: v1.ComponentMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Provider: v1.Provider{
+					Name: "test-provider",
+				},
+				Resources: []v1.Resource{
+					{
+						ElementMeta: v1.ElementMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-resource",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: v1.LocalRelation,
+						AccessOrInput: v1.AccessOrInput{
+							Input: &rt.Raw{
+								Type: rt.NewUnversionedType("test-input"),
+								Data: []byte(`{"input": "value"}`),
+							},
+						},
+					},
+				},
+				Sources: []v1.Source{
+					{
+						ElementMeta: v1.ElementMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-source",
+								Version: "1.0.0",
+							},
+						},
+						Type: "git",
+						AccessOrInput: v1.AccessOrInput{
+							Input: &rt.Raw{
+								Type: rt.NewUnversionedType("test-input"),
+								Data: []byte(`{"input": "value"}`),
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "component with mixed access and input",
+			component: &Component{
+				ComponentMeta: ComponentMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Provider: Provider{
+					Name: "test-provider",
+				},
+				Resources: []Resource{
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-resource-access",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: LocalRelation,
+						AccessOrInput: AccessOrInput{
+							Access: &rt.Raw{
+								Type: rt.NewUnversionedType("test-access"),
+								Data: []byte(`{"access": "value"}`),
+							},
+						},
+					},
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-resource-input",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: LocalRelation,
+						AccessOrInput: AccessOrInput{
+							Input: &rt.Raw{
+								Type: rt.NewUnversionedType("test-input"),
+								Data: []byte(`{"input": "value"}`),
+							},
+						},
+					},
+				},
+			},
+			want: &v1.Component{
+				ComponentMeta: v1.ComponentMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Provider: v1.Provider{
+					Name: "test-provider",
+				},
+				Resources: []v1.Resource{
+					{
+						ElementMeta: v1.ElementMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-resource-access",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: v1.LocalRelation,
+						AccessOrInput: v1.AccessOrInput{
+							Access: &rt.Raw{
+								Type: rt.NewUnversionedType("test-access"),
+								Data: []byte(`{"access": "value"}`),
+							},
+						},
+					},
+					{
+						ElementMeta: v1.ElementMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-resource-input",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: v1.LocalRelation,
+						AccessOrInput: v1.AccessOrInput{
+							Input: &rt.Raw{
+								Type: rt.NewUnversionedType("test-input"),
+								Data: []byte(`{"input": "value"}`),
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ConvertToV1Component(tt.component)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConvertToV1Reference(t *testing.T) {
+	tests := []struct {
+		name      string
+		reference *Reference
+		want      *v1.Reference
+		wantErr   bool
+	}{
+		{
+			name:      "nil reference",
+			reference: nil,
+			want:      nil,
+			wantErr:   false,
+		},
+		{
+			name: "basic reference",
+			reference: &Reference{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+						Labels: []Label{
+							{Name: "test", Value: "value", Signing: true},
+						},
+					},
+				},
+				Component: "test-component",
+			},
+			want: &v1.Reference{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+						Labels: []v1.Label{
+							{Name: "test", Value: "value", Signing: true},
+						},
+					},
+				},
+				Component: "test-component",
+			},
+			wantErr: false,
+		},
+		{
+			name: "reference with extra identity",
+			reference: &Reference{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+					ExtraIdentity: rt.Identity{
+						"namespace": "test-namespace",
+					},
+				},
+				Component: "test-component",
+			},
+			want: &v1.Reference{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+					ExtraIdentity: rt.Identity{
+						"namespace": "test-namespace",
+					},
+				},
+				Component: "test-component",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ConvertToV1Reference(tt.reference)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConvertToV1Resource(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource *Resource
+		want     *v1.Resource
+		wantErr  bool
+	}{
+		{
+			name:     "nil resource",
+			resource: nil,
+			want:     nil,
+			wantErr:  false,
+		},
+		{
+			name: "basic resource",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+						Labels: []Label{
+							{Name: "test", Value: "value", Signing: true},
+						},
+					},
+				},
+				Type:     "test-type",
+				Relation: LocalRelation,
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+						Labels: []v1.Label{
+							{Name: "test", Value: "value", Signing: true},
+						},
+					},
+				},
+				Type:     "test-type",
+				Relation: v1.LocalRelation,
+			},
+			wantErr: false,
+		},
+		{
+			name: "resource with source refs",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: LocalRelation,
+				SourceRefs: []SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
+						Labels: []Label{
+							{
+								Name:    "source-label",
+								Value:   "source-value",
+								Signing: true,
+							},
+						},
+					},
+				},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: v1.LocalRelation,
+				SourceRefs: []v1.SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
+						Labels: []v1.Label{
+							{
+								Name:    "source-label",
+								Value:   "source-value",
+								Signing: true,
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "resource with multiple source refs",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: LocalRelation,
+				SourceRefs: []SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "source1",
+						},
+						Labels: []Label{
+							{
+								Name:    "label1",
+								Value:   "value1",
+								Signing: true,
+							},
+						},
+					},
+					{
+						IdentitySelector: map[string]string{
+							"name": "source2",
+						},
+						Labels: []Label{
+							{
+								Name:    "label2",
+								Value:   "value2",
+								Signing: false,
+							},
+						},
+					},
+				},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: v1.LocalRelation,
+				SourceRefs: []v1.SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "source1",
+						},
+						Labels: []v1.Label{
+							{
+								Name:    "label1",
+								Value:   "value1",
+								Signing: true,
+							},
+						},
+					},
+					{
+						IdentitySelector: map[string]string{
+							"name": "source2",
+						},
+						Labels: []v1.Label{
+							{
+								Name:    "label2",
+								Value:   "value2",
+								Signing: false,
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "resource with source refs and access",
+			resource: &Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: LocalRelation,
+				SourceRefs: []SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
+					},
+				},
+				AccessOrInput: AccessOrInput{
+					Access: &rt.Raw{
+						Type: rt.NewUnversionedType("test-access"),
+						Data: []byte(`{"test": "value"}`),
+					},
+				},
+			},
+			want: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: v1.LocalRelation,
+				SourceRefs: []v1.SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
+					},
+				},
+				AccessOrInput: v1.AccessOrInput{
+					Access: &rt.Raw{
+						Type: rt.NewUnversionedType("test-access"),
+						Data: []byte(`{"test": "value"}`),
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ConvertToV1Resource(tt.resource)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConvertFromV1Resource(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource *v1.Resource
+		want     Resource
+	}{
+		{
+			name:     "nil resource",
+			resource: nil,
+			want:     Resource{},
+		},
+		{
+			name: "basic resource",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+						Labels: []v1.Label{
+							{Name: "test", Value: "value", Signing: true},
+						},
+					},
+				},
+				Type:     "test-type",
+				Relation: v1.LocalRelation,
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+						Labels: []Label{
+							{Name: "test", Value: "value", Signing: true},
+						},
+					},
+				},
+				Type:     "test-type",
+				Relation: LocalRelation,
+			},
+		},
+		{
+			name: "resource with source refs",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: v1.LocalRelation,
+				SourceRefs: []v1.SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
+						Labels: []v1.Label{
+							{
+								Name:    "source-label",
+								Value:   "source-value",
+								Signing: true,
+							},
+						},
+					},
+				},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: LocalRelation,
+				SourceRefs: []SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
+						Labels: []Label{
+							{
+								Name:    "source-label",
+								Value:   "source-value",
+								Signing: true,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "resource with multiple source refs",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: v1.LocalRelation,
+				SourceRefs: []v1.SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "source1",
+						},
+						Labels: []v1.Label{
+							{
+								Name:    "label1",
+								Value:   "value1",
+								Signing: true,
+							},
+						},
+					},
+					{
+						IdentitySelector: map[string]string{
+							"name": "source2",
+						},
+						Labels: []v1.Label{
+							{
+								Name:    "label2",
+								Value:   "value2",
+								Signing: false,
+							},
+						},
+					},
+				},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: LocalRelation,
+				SourceRefs: []SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "source1",
+						},
+						Labels: []Label{
+							{
+								Name:    "label1",
+								Value:   "value1",
+								Signing: true,
+							},
+						},
+					},
+					{
+						IdentitySelector: map[string]string{
+							"name": "source2",
+						},
+						Labels: []Label{
+							{
+								Name:    "label2",
+								Value:   "value2",
+								Signing: false,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "resource with source refs and access",
+			resource: &v1.Resource{
+				ElementMeta: v1.ElementMeta{
+					ObjectMeta: v1.ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: v1.LocalRelation,
+				SourceRefs: []v1.SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
+					},
+				},
+				AccessOrInput: v1.AccessOrInput{
+					Access: &rt.Raw{
+						Type: rt.NewUnversionedType("test-access"),
+						Data: []byte(`{"test": "value"}`),
+					},
+				},
+			},
+			want: Resource{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test",
+						Version: "1.0.0",
+					},
+				},
+				Type:     "test-type",
+				Relation: LocalRelation,
+				SourceRefs: []SourceRef{
+					{
+						IdentitySelector: map[string]string{
+							"name": "test-source",
+						},
+					},
+				},
+				AccessOrInput: AccessOrInput{
+					Access: &rt.Raw{
+						Type: rt.NewUnversionedType("test-access"),
+						Data: []byte(`{"test": "value"}`),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ConvertFromV1Resource(tt.resource)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

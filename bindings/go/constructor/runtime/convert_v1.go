@@ -140,20 +140,18 @@ func ConvertToV1Resource(resource *Resource) (*v1.Resource, error) {
 		}
 	}
 
-	if resource.HasAccess() {
-		var raw runtime.Raw
-		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(resource.Access, &raw); err != nil {
-			return nil, err
-		}
-		target.Access = &raw
-	}
-
 	if resource.HasInput() {
 		var raw runtime.Raw
 		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(resource.Input, &raw); err != nil {
 			return nil, err
 		}
 		target.Input = &raw
+	} else if resource.HasAccess() {
+		var raw runtime.Raw
+		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(resource.Access, &raw); err != nil {
+			return nil, err
+		}
+		target.Access = &raw
 	}
 
 	return &target, nil
@@ -195,20 +193,18 @@ func ConvertToV1Source(source *Source) (*v1.Source, error) {
 		Type:        source.Type,
 	}
 
-	if source.HasAccess() {
-		var raw runtime.Raw
-		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(source.Access, &raw); err != nil {
-			return nil, err
-		}
-		target.Access = &raw
-	}
-
 	if source.HasInput() {
 		var raw runtime.Raw
 		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(source.Input, &raw); err != nil {
 			return nil, err
 		}
 		target.Input = &raw
+	} else if source.HasAccess() {
+		var raw runtime.Raw
+		if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(source.Access, &raw); err != nil {
+			return nil, err
+		}
+		target.Access = &raw
 	}
 
 	return &target, nil
@@ -388,4 +384,73 @@ func ConvertToRuntimeConstructor(constructor *v1.ComponentConstructor) *Componen
 	}
 
 	return target
+}
+
+// ConvertToV1Component converts a runtime Component to v1 Component.
+// Returns nil if the input is nil.
+func ConvertToV1Component(component *Component) (*v1.Component, error) {
+	if component == nil {
+		return nil, nil
+	}
+
+	target := v1.Component{
+		ComponentMeta: v1.ComponentMeta{
+			ObjectMeta:   ConvertToV1ObjectMeta(component.ObjectMeta),
+			CreationTime: component.CreationTime,
+		},
+		Provider: v1.Provider{
+			Name:   component.Provider.Name,
+			Labels: ConvertToV1Labels(component.Provider.Labels),
+		},
+	}
+
+	if component.Resources != nil {
+		target.Resources = make([]v1.Resource, len(component.Resources))
+		for i, resource := range component.Resources {
+			v1Resource, err := ConvertToV1Resource(&resource)
+			if err != nil {
+				return nil, err
+			}
+			target.Resources[i] = *v1Resource
+		}
+	}
+
+	if component.Sources != nil {
+		target.Sources = make([]v1.Source, len(component.Sources))
+		for i, source := range component.Sources {
+			v1Source, err := ConvertToV1Source(&source)
+			if err != nil {
+				return nil, err
+			}
+			target.Sources[i] = *v1Source
+		}
+	}
+
+	if component.References != nil {
+		target.References = make([]v1.Reference, len(component.References))
+		for i, reference := range component.References {
+			v1Reference, err := ConvertToV1Reference(&reference)
+			if err != nil {
+				return nil, err
+			}
+			target.References[i] = *v1Reference
+		}
+	}
+
+	return &target, nil
+}
+
+// ConvertToV1Reference converts a runtime Reference to v1 Reference.
+// Returns nil if the input is nil.
+func ConvertToV1Reference(reference *Reference) (*v1.Reference, error) {
+	if reference == nil {
+		return nil, nil
+	}
+
+	target := v1.Reference{
+		ElementMeta: ConvertToV1ElementMeta(reference.ElementMeta),
+		Component:   reference.Component,
+	}
+
+	return &target, nil
 }
