@@ -107,11 +107,11 @@ func ConvertFromV1Resource(resource *v1.Resource) Resource {
 		}
 	}
 
-	if resource.AccessOrInput.Access != nil {
-		target.Access = resource.AccessOrInput.Access.DeepCopy()
+	if resource.Access != nil {
+		target.Access = resource.Access.DeepCopy()
 	}
-	if resource.AccessOrInput.Input != nil {
-		target.Input = resource.AccessOrInput.Input.DeepCopy()
+	if resource.Input != nil {
+		target.Input = resource.Input.DeepCopy()
 	}
 
 	return target
@@ -171,11 +171,11 @@ func ConvertFromV1Source(source *v1.Source) Source {
 		Type:        source.Type,
 	}
 
-	if source.AccessOrInput.Access != nil {
-		target.Access = source.AccessOrInput.Access.DeepCopy()
+	if source.Access != nil {
+		target.Access = source.Access.DeepCopy()
 	}
-	if source.AccessOrInput.Input != nil {
-		target.Input = source.AccessOrInput.Input.DeepCopy()
+	if source.Input != nil {
+		target.Input = source.Input.DeepCopy()
 	}
 
 	return target
