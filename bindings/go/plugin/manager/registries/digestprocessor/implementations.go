@@ -33,6 +33,8 @@ var (
 	_ v1.ResourceDigestProcessorContract = (*RepositoryPlugin)(nil)
 )
 
+// NewDigestProcessorPlugin creates a new digest processor plugin instance with the provided configuration.
+// It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
 func NewDigestProcessorPlugin(client *http.Client, id string, path string, config mtypes.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,

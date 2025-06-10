@@ -34,6 +34,8 @@ var (
 	_ v1.InputPluginContract = (*RepositoryPlugin)(nil)
 )
 
+// NewConstructionRepositoryPlugin creates a new input method plugin instance with the provided configuration.
+// It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
 func NewConstructionRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
