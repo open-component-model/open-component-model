@@ -61,7 +61,13 @@ type mockResourceRepository struct {
 	fail         bool
 }
 
-func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource) (blob.ReadOnlyBlob, error) {
+func (m *mockResourceRepository) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+	identity = runtime.Identity{}
+	identity.SetType(runtime.NewVersionedType("mock", "v1"))
+	return identity, nil
+}
+
+func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	if m.fail {
 		return nil, fmt.Errorf("simulated download failure")
 	}

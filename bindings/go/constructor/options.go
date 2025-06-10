@@ -46,4 +46,24 @@ type Options struct {
 	// to limit the number of concurrent operations.
 	// The ConcurrencyLimit is OPTIONAL, if not provided, the constructor library will use the number of CPU cores.
 	ConcurrencyLimit int
+
+	// While constructing a component version, the constructor library will use the policy to determine how to handle conflicts
+	// of component versions when interacting with the target repository.
+	ComponentVersionConflictPolicy
 }
+
+// ComponentVersionConflictPolicy defines the policy for handling component version conflicts
+// when interacting with the target repository.
+// If the constructor library encounters a component version that already exists in the target repository.
+type ComponentVersionConflictPolicy int
+
+const (
+	// ComponentVersionConflictAbortAndFail will abort the construction process if a component version already exists in the target repository.
+	// This is the default policy.
+	ComponentVersionConflictAbortAndFail ComponentVersionConflictPolicy = iota
+	// ComponentVersionConflictReplace will replace the existing component version in the target repository with the new one.
+	// This will overwrite the existing component version.
+	ComponentVersionConflictReplace
+	// ComponentVersionConflictSkip will skip the construction of the component version if it already exists in the target repository.
+	ComponentVersionConflictSkip
+)

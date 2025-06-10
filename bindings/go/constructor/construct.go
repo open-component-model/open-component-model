@@ -32,9 +32,6 @@ type DefaultConstructor struct {
 func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
 	logger := log.Base().With("operation", "construct")
 
-	if err := constructor.Validate(); err != nil {
-		return nil, err
-	}
 	if c.opts.ResourceInputMethodProvider == nil {
 		logger.Debug("using default resource input method provider")
 		c.opts.ResourceInputMethodProvider = DefaultInputMethodRegistry
@@ -52,7 +49,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 
 	for i, component := range constructor.Components {
 		componentLogger := logger.With("component", component.Name, "version", component.Version)
-		componentLogger.Debug("processing component")
+		componentLogger.Info("constructing component")
 
 		eg.Go(func() error {
 			desc, err := c.construct(egctx, &component)
@@ -88,18 +85,28 @@ func NewDefaultConstructor(opts Options) Constructor {
 // and adds the final component version to the target repository.
 func (c *DefaultConstructor) construct(ctx context.Context, component *constructor.Component) (*descriptor.Descriptor, error) {
 	logger := log.Base().With("component", component.Name, "version", component.Version)
-	logger.Debug("starting component construction")
-
-	if err := component.Validate(); err != nil {
-		return nil, err
-	}
-
 	desc := createBaseDescriptor(component)
 	logger.Debug("created base descriptor")
 
 	repo, err := c.opts.GetTargetRepository(ctx, component)
 	if err != nil {
 		return nil, fmt.Errorf("error getting target repository for component %q: %w", component.Name, err)
+	}
+
+	// decide how to handle existing component versions in the target repository
+	// based on the configured conflict policy.
+	switch c.opts.ComponentVersionConflictPolicy {
+	case ComponentVersionConflictAbortAndFail, ComponentVersionConflictSkip:
+		logger.DebugContext(ctx, "checking for existing component version in target repository", "component", component.Name, "version", component.Version)
+		if existing, err := repo.GetComponentVersion(ctx, component.Name, component.Version); err == nil {
+			if c.opts.ComponentVersionConflictPolicy == ComponentVersionConflictAbortAndFail {
+				return nil, fmt.Errorf("component version %q already exists in target repository", component.ToIdentity())
+			}
+			logger.WarnContext(ctx, "component version already exists in target repository, skipping construction", "component", component.Name, "version", component.Version)
+			return existing, nil
+		}
+	case ComponentVersionConflictReplace:
+		logger.WarnContext(ctx, "REPLACING component version in target repository, old component version will no longer be available if it was present before.")
 	}
 
 	if err := c.processDescriptor(ctx, repo, component, desc); err != nil {
@@ -110,7 +117,6 @@ func (c *DefaultConstructor) construct(ctx context.Context, component *construct
 		return nil, fmt.Errorf("error adding component version to target: %w", err)
 	}
 
-	logger.Debug("component construction completed successfully")
 	return desc, nil
 }
 
@@ -142,7 +148,7 @@ func (c *DefaultConstructor) processDescriptor(
 
 	for i, resource := range component.Resources {
 		resourceLogger := logger.With("resource", resource.ToIdentity())
-		resourceLogger.Debug("processing resource")
+		resourceLogger.Info("processing resource")
 
 		eg.Go(func() error {
 			res, err := c.processResource(egctx, targetRepo, &resource, component.Name, component.Version)
@@ -159,7 +165,7 @@ func (c *DefaultConstructor) processDescriptor(
 
 	for i, source := range component.Sources {
 		sourceLogger := logger.With("source", source.ToIdentity())
-		sourceLogger.Debug("processing source")
+		sourceLogger.Info("processing source")
 
 		eg.Go(func() error {
 			src, err := c.processSource(egctx, targetRepo, &source, component.Name, component.Version)
@@ -240,8 +246,21 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 		return nil, err
 	}
 
+	var creds map[string]string
+	if c.opts.CredentialProvider != nil {
+		identity, err := repository.GetCredentialConsumerIdentity(ctx, resource)
+		if err != nil {
+			return nil, fmt.Errorf("error getting credential consumer identity of access type %q: %w", resource.Access.GetType(), err)
+		}
+
+		if creds, err = c.opts.Resolve(ctx, identity); err != nil {
+			return nil, fmt.Errorf("error resolving credentials for input method of access type %q: %w", resource.Access.GetType(), err)
+		}
+	}
+
 	converted := constructor.ConvertToDescriptorResource(resource)
-	data, err := repository.DownloadResource(ctx, converted)
+
+	data, err := repository.DownloadResource(ctx, converted, creds)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}
@@ -367,13 +386,6 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	return processedResource, nil
 }
 
-// Validate performs validation checks on a component specification.
-// It validates all resources and sources in the component, collecting any validation errors
-// and returning them as a single joined error.
-func Validate(component *constructor.Component) error {
-	return component.Validate()
-}
-
 // addColocatedResourceLocalBlob adds a local blob to the component version repository and defaults fields relevant
 // to declare the spec.LocalRelation to the component version as well as default the resource version and media type:
 //
@@ -390,19 +402,28 @@ func addColocatedResourceLocalBlob(
 	data blob.ReadOnlyBlob,
 ) (processed *descriptor.Resource, err error) {
 	localBlob := &descriptor.LocalBlob{}
+	localBlob.SetType(descriptor.GetLocalBlobAccessType())
 
 	if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
 		localBlob.MediaType, _ = mediaTypeAware.MediaType()
 	}
+	if localBlob.MediaType == "" {
+		// If the media type is not set, default to application/octet-stream, which is a common fallback
+		// for binary data. This is a safe default for local blobs that do not have a specific media type,
+		// as it is never truly "wrong".
+		localBlob.MediaType = "application/octet-stream"
+	}
 
 	// if the resource doesn't have any information about its relation to the component
-	// default to a local resource.
+	// default to a local resource. This means that if not specified, we assume the resource is co-created
+	// with the component and is not an external resource.
 	if resource.Relation == "" {
 		resource.Relation = constructor.LocalRelation
 	}
 
 	// if the resource doesn't have any information about its version,
-	// default to the component version.
+	// default to the component version. This is useful for resources that are colocated
+	// and constructed alongside the component.
 	if resource.Version == "" {
 		resource.Version = version
 	}

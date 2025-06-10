@@ -26,6 +26,18 @@ type mockTargetRepository struct {
 	addedVersions       []*descriptor.Descriptor
 }
 
+func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
+	if len(m.addedVersions) == 0 {
+		return nil, fmt.Errorf("no versions added")
+	}
+	for _, v := range m.addedVersions {
+		if v.Component.Name == component && v.Component.Version == version {
+			return v, nil
+		}
+	}
+	return nil, fmt.Errorf("version %s of component %s not found", version, component)
+}
+
 func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, component *constructorv1.Component) (TargetRepository, error) {
 	return m, nil
 }
