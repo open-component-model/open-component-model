@@ -6,6 +6,8 @@ import (
 	"io"
 	"maps"
 	"reflect"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
@@ -21,6 +23,32 @@ type Scheme struct {
 	allowUnknown bool
 	aliases      map[Type]Type
 	defaults     map[Type]Typed
+}
+
+// GetTypes returns a map of all registered types.
+// The keys are the default types, and the values are slices containing all aliases for that type.
+// If a type has no aliases, it will have an empty slice as its value.
+// The slices of aliases are always sorted for consistent ordering.
+func (r *Scheme) GetTypes() map[Type][]Type {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	types := make(map[Type][]Type, len(r.defaults))
+	// process aliases first
+	for alias, def := range r.aliases {
+		types[def] = append(types[def], alias)
+		// ensure the slice is always sorted for comparability.
+		slices.SortFunc(types[def], func(a, b Type) int {
+			return strings.Compare(a.String(), b.String())
+		})
+	}
+	// if there are any types left with no aliases, add them with an empty slice
+	for def := range r.defaults {
+		if _, exists := types[def]; !exists {
+			types[def] = nil
+		}
+	}
+	return types
 }
 
 // NewScheme creates a new registry.
@@ -52,6 +80,68 @@ func (r *Scheme) Clone() *Scheme {
 	maps.Copy(clone.defaults, r.defaults)
 	maps.Copy(clone.aliases, r.aliases)
 	return clone
+}
+
+// RegisterSchemes calls RegisterScheme for each scheme in the list, registering all types from each scheme.
+// Conflicts between Scheme's passed will result in an error on the first conflict found.
+// Registration might still have occurred for some types before the error is returned.
+func (r *Scheme) RegisterSchemes(schemes ...*Scheme) error {
+	for _, scheme := range schemes {
+		if err := r.RegisterScheme(scheme); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// RegisterScheme adds all types from the given scheme to the given scheme, and fails if any of the types already exist.
+func (r *Scheme) RegisterScheme(scheme *Scheme) error {
+	if scheme == nil {
+		return nil
+	}
+
+	// Register each type from the source scheme
+	for typ := range scheme.defaults {
+		if err := r.RegisterSchemeType(scheme, typ); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// RegisterSchemeType adds a single type from the given scheme to the current scheme
+func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if scheme == nil {
+		return fmt.Errorf("cannot add to nil scheme")
+	}
+
+	if _, exists := r.defaults[typ]; exists {
+		return fmt.Errorf("type %q already registered", typ)
+	}
+
+	prototype, ok := scheme.defaults[typ]
+	if !ok {
+		return fmt.Errorf("type %q not found in the provided scheme", typ)
+	}
+
+	r.defaults[typ] = prototype
+
+	// now copy aliases if they exist
+	for alias, forTyp := range scheme.aliases {
+		if forTyp.Equal(typ) {
+			if _, exists := r.aliases[alias]; exists {
+				return fmt.Errorf("alias %q already registered, cannot register for type %q", alias, typ)
+			}
+			r.aliases[alias] = typ
+		}
+	}
+
+	return nil
 }
 
 // RegisterWithAlias registers a new type with the registry.
@@ -94,11 +184,6 @@ func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
 	defer r.mu.RUnlock()
 
 	for typ, proto := range r.defaults {
-		// if there is an unversioned type registered, do not use it
-		// TODO find a way to avoid this or to fallback to the fully qualified type instead of unqualified ones
-		if !typ.HasVersion() {
-			continue
-		}
 		if reflect.TypeOf(prototype).Elem() == reflect.TypeOf(proto).Elem() {
 			return typ, nil
 		}
