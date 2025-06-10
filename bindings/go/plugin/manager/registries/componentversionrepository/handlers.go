@@ -84,6 +84,8 @@ func ListComponentVersionsHandlerFunc[T runtime.Typed](f func(ctx context.Contex
 	}
 }
 
+// AddComponentVersionHandlerFunc creates an HTTP handler for adding component versions.
+// It handles authentication and request body parsing for the plugin implementation.
 func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, r v1.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
@@ -104,6 +106,8 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	}
 }
 
+// GetLocalResourceHandlerFunc creates an HTTP handler for retrieving local resources.
+// It handles authentication, query parameter parsing, and response encoding for the plugin implementation.
 func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalResourceRequest[T], credentials map[string]string) (v1.GetLocalResourceResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
@@ -149,6 +153,8 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 	}
 }
 
+// GetIdentityHandlerFunc creates an HTTP handler for retrieving identity information.
+// It handles request processing and response encoding for the plugin implementation.
 func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1.GetIdentityRequest[T]) (*v1.GetIdentityResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		// TODO: Figure this out
@@ -171,6 +177,8 @@ func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1
 	}
 }
 
+// AddLocalResourceHandlerFunc creates an HTTP handler for adding local resources.
+// It handles authentication, request body parsing, and resource conversion for the plugin implementation.
 func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))

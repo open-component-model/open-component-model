@@ -31,6 +31,8 @@ var (
 	_ v1.CredentialRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
+// NewCredentialRepositoryPlugin creates a new credential repository plugin instance with the provided configuration.
+// It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
 func NewCredentialRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
