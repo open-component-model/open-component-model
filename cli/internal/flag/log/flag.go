@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"ocm.software/open-component-model/cli/internal/enum"
+	"ocm.software/open-component-model/cli/internal/flag/enum"
 )
 
 // Log format constants
@@ -68,9 +68,9 @@ func RegisterLoggingFlags(flagset *pflag.FlagSet) {
    text: Output logs in human-readable text format, suitable for console output`)
 
 	enum.Var(flagset, LevelFlagName, []string{
-		LevelWarn,
-		LevelDebug,
 		LevelInfo,
+		LevelDebug,
+		LevelWarn,
 		LevelError,
 	}, `sets the logging level
    debug: Show all logs including detailed debugging information
