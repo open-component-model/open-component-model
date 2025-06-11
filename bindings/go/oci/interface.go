@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -34,11 +32,11 @@ type ComponentVersionRepository interface {
 	AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error
 
 	// GetComponentVersion retrieves a component version from the repository.
-	// Returns the descriptor from the most recent AddComponentVersion call for that component and version.
+	// Returns the descriptor for the given component name and version.
 	// If the component version does not exist, it returns ErrNotFound.
 	GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error)
 
-	// ListComponentVersions lists all component versions for a given component.
+	// ListComponentVersions lists all versions for a given component.
 	// Returns a list of version strings, sorted on best effort by loose semver specification.
 	// Note: Listing of Component Versions does not directly translate to an OCI Call.
 	// Thus there are two approaches to list component versions:
@@ -147,36 +145,4 @@ type Resolver interface {
 	// format represents a valid reference that can be used for a given store returned
 	// by StoreForReference.
 	Reference(reference string) (fmt.Stringer, error)
-}
-
-// Repository implements the ComponentVersionRepository interface using OCI registries.
-// Each component may be stored in a separate OCI repository, but ultimately the storage is determined by the Resolver.
-//
-// This Repository implementation synchronizes OCI Manifests through the concepts of LocalManifestCache.
-// Through this any local blob added with AddLocalResource will be added to the memory until
-// AddComponentVersion is called with a reference to that resource.
-// This allows the repository to associate newly added blobs with the component version and still upload them
-// when AddLocalResource is called.
-//
-// Note: Store implementations are expected to either allow orphaned local resources or
-// regularly issue an async garbage collection to remove them due to this behavior.
-// This however should not be an issue since all OCI registries implement such a garbage collection mechanism.
-type Repository struct {
-	scheme *runtime.Scheme
-
-	// localArtifactManifestCache temporarily stores manifests for local artifacts until they are added to a component version.
-	localArtifactManifestCache cache.OCIDescriptorCache
-	// localArtifactLayerCache temporarily stores layers for local artifacts until they are added to a component version.
-	localArtifactLayerCache cache.OCIDescriptorCache
-
-	// resolver resolves component version references to OCI stores.
-	resolver Resolver
-
-	// creatorAnnotation is the annotation used to identify the creator of the component version.
-	// see OCMCreator for more information.
-	creatorAnnotation string
-
-	// ResourceCopyOptions are the options used for copying resources between stores.
-	// These options are used in copyResource.
-	resourceCopyOptions oras.CopyOptions
 }

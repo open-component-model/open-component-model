@@ -20,6 +20,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
+	"ocm.software/open-component-model/bindings/go/oci/cache"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
@@ -38,6 +39,38 @@ import (
 )
 
 var _ ComponentVersionRepository = (*Repository)(nil)
+
+// Repository implements the ComponentVersionRepository interface using OCI registries.
+// Each component may be stored in a separate OCI repository, but ultimately the storage is determined by the Resolver.
+//
+// This Repository implementation synchronizes OCI Manifests through the concepts of LocalManifestCache.
+// Through this any local blob added with AddLocalResource will be added to the memory until
+// AddComponentVersion is called with a reference to that resource.
+// This allows the repository to associate newly added blobs with the component version and still upload them
+// when AddLocalResource is called.
+//
+// Note: Store implementations are expected to either allow orphaned local resources or
+// regularly issue an async garbage collection to remove them due to this behavior.
+// This however should not be an issue since all OCI registries implement such a garbage collection mechanism.
+type Repository struct {
+	scheme *runtime.Scheme
+
+	// localArtifactManifestCache temporarily stores manifests for local artifacts until they are added to a component version.
+	localArtifactManifestCache cache.OCIDescriptorCache
+	// localArtifactLayerCache temporarily stores layers for local artifacts until they are added to a component version.
+	localArtifactLayerCache cache.OCIDescriptorCache
+
+	// resolver resolves component version references to OCI stores.
+	resolver Resolver
+
+	// creatorAnnotation is the annotation used to identify the creator of the component version.
+	// see OCMCreator for more information.
+	creatorAnnotation string
+
+	// ResourceCopyOptions are the options used for copying resources between stores.
+	// These options are used in copyResource.
+	resourceCopyOptions oras.CopyOptions
+}
 
 // AddComponentVersion adds a new component version to the repository.
 func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) (err error) {
