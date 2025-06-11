@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"ocm.software/open-component-model/cli/internal/flags/internal"
+	"ocm.software/open-component-model/cli/internal/flags"
 )
 
 const Type = "enum"
@@ -48,7 +48,7 @@ func (f *Flag) Set(value string) error {
 }
 
 func Get(f *pflag.FlagSet, name string) (string, error) {
-	return internal.Get[string](f, name, Type, func(sval string) (string, error) {
+	return flags.Get[string](f, name, Type, func(sval string) (string, error) {
 		return sval, nil
 	})
 }

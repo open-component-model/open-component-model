@@ -6,6 +6,8 @@ import (
 	"io"
 	"maps"
 	"reflect"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
@@ -21,6 +23,32 @@ type Scheme struct {
 	allowUnknown bool
 	aliases      map[Type]Type
 	defaults     map[Type]Typed
+}
+
+// GetTypes returns a map of all registered types.
+// The keys are the default types, and the values are slices containing all aliases for that type.
+// If a type has no aliases, it will have an empty slice as its value.
+// The slices of aliases are always sorted for consistent ordering.
+func (r *Scheme) GetTypes() map[Type][]Type {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	types := make(map[Type][]Type, len(r.defaults))
+	// process aliases first
+	for alias, def := range r.aliases {
+		types[def] = append(types[def], alias)
+		// ensure the slice is always sorted for comparability.
+		slices.SortFunc(types[def], func(a, b Type) int {
+			return strings.Compare(a.String(), b.String())
+		})
+	}
+	// if there are any types left with no aliases, add them with an empty slice
+	for def := range r.defaults {
+		if _, exists := types[def]; !exists {
+			types[def] = nil
+		}
+	}
+	return types
 }
 
 // NewScheme creates a new registry.
@@ -54,33 +82,37 @@ func (r *Scheme) Clone() *Scheme {
 	return clone
 }
 
-// AddToScheme adds all types from the given scheme to the given scheme, and fails if any of the types already exist.
-func (r *Scheme) AddToScheme(scheme *Scheme) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if scheme == nil {
-		return fmt.Errorf("cannot add to nil scheme")
-	}
-
-	for typ, prototype := range scheme.defaults {
-		if _, exists := r.defaults[typ]; exists {
-			return fmt.Errorf("cannot add already existing type %T", typ)
+// RegisterSchemes calls RegisterScheme for each scheme in the list, registering all types from each scheme.
+// Conflicts between Scheme's passed will result in an error on the first conflict found.
+// Registration might still have occurred for some types before the error is returned.
+func (r *Scheme) RegisterSchemes(schemes ...*Scheme) error {
+	for _, scheme := range schemes {
+		if err := r.RegisterScheme(scheme); err != nil {
+			return err
 		}
-		r.defaults[typ] = prototype
-	}
-
-	for alias, def := range scheme.aliases {
-		if _, exists := r.aliases[alias]; exists {
-			return fmt.Errorf("cannot add already existing alias %q for type %q", alias, def)
-		}
-		r.aliases[alias] = def
 	}
 
 	return nil
 }
 
-func (r *Scheme) AddTypeFromScheme(scheme *Scheme, typ Type) error {
+// RegisterScheme adds all types from the given scheme to the given scheme, and fails if any of the types already exist.
+func (r *Scheme) RegisterScheme(scheme *Scheme) error {
+	if scheme == nil {
+		return nil
+	}
+
+	// Register each type from the source scheme
+	for typ := range scheme.defaults {
+		if err := r.RegisterSchemeType(scheme, typ); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// RegisterSchemeType adds a single type from the given scheme to the current scheme
+func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

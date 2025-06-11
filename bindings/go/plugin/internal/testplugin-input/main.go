@@ -29,6 +29,11 @@ func (m *TestPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest
 }
 
 func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceResponse, error) {
+	tmp, err := os.CreateTemp("", "test-resource-file")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temp file: %w", err)
+	}
+	_ = tmp.Close()
 	return &v1.ProcessResourceResponse{
 		Resource: &constructorv1.Resource{
 			ElementMeta: constructorv1.ElementMeta{
@@ -42,12 +47,17 @@ func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessRes
 		},
 		Location: &types.Location{
 			LocationType: types.LocationTypeLocalFile,
-			Value:        "/tmp/to/file",
+			Value:        tmp.Name(),
 		},
 	}, nil
 }
 
 func (m *TestPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceResponse, error) {
+	tmp, err := os.CreateTemp("", "test-source-file")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temp file: %w", err)
+	}
+	_ = tmp.Close()
 	return &v1.ProcessSourceResponse{
 		Source: &constructorv1.Source{
 			ElementMeta: constructorv1.ElementMeta{
@@ -60,7 +70,7 @@ func (m *TestPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourc
 		},
 		Location: &types.Location{
 			LocationType: types.LocationTypeLocalFile,
-			Value:        "/tmp/to/file",
+			Value:        tmp.Name(),
 		},
 	}, nil
 }

@@ -90,7 +90,8 @@ func handleAddGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.Han
 	}
 }
 
-// RegisterResourcePlugin registers the resource plugin endpoints.
+// RegisterResourcePlugin registers the resource plugin endpoints with the endpoint builder.
+// It sets up HTTP handlers for identity, get resource, and add resource operations.
 func RegisterResourcePlugin[T runtime.Typed](
 	proto T,
 	plugin v1.ReadWriteResourcePluginContract,
@@ -127,7 +128,7 @@ func RegisterResourcePlugin[T runtime.Typed](
 	}
 
 	// Add resource type to the plugin's types
-	c.CurrentTypes.Types[types.ResourceRepositoryPluginType] = append(c.CurrentTypes.Types[types.ResourceRepositoryPluginType], types.Type{
+	c.CurrentTypes.Types[types.ResourcePluginType] = append(c.CurrentTypes.Types[types.ResourcePluginType], types.Type{
 		Type:       typ,
 		JSONSchema: schema,
 	})

@@ -7,14 +7,19 @@ import (
 )
 
 type GetResourceRequest struct {
+	types.Location
 	// The resource specification to download
 	*v2.Resource `json:"resource"`
+}
+
+type GetResourceResponse struct {
+	// Location where the resource will be downloaded to and can be accessed.
+	Location types.Location `json:"location"`
 }
 
 type PostResourceRequest struct {
 	// The ResourceLocation of the Local Resource
 	ResourceLocation types.Location `json:"resourceLocation"`
-	TargetAccess     runtime.Typed  `json:"targetAccess"`
 	Resource         *v2.Resource   `json:"resource"`
 }
 
@@ -27,9 +32,5 @@ type GetIdentityResponse struct {
 }
 
 type GetGlobalResourceResponse struct {
-	ResourceLocation types.Location `json:"resourceLocation"`
-}
-
-type AddGlobalResourceResponse struct {
 	Resource *v2.Resource `json:"resource"`
 }

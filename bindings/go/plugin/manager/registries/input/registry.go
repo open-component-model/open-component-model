@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"ocm.software/open-component-model/bindings/go/constructor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -17,22 +18,25 @@ import (
 // NewInputRepositoryRegistry creates a new registry and initializes maps.
 func NewInputRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
-		ctx:                       ctx,
-		registry:                  make(map[runtime.Type]types.Plugin),
-		repositoryScheme:          runtime.NewScheme(),
-		internalRepositoryPlugins: make(map[runtime.Type]v1.InputPluginContract),
-		constructedPlugins:        make(map[string]*constructedPlugin),
+		ctx: ctx,
+		// Registry contains external plugins ONLY. Internal plugins that already have the implementation are in internalRepositoryPlugins.
+		registry:                               make(map[runtime.Type]types.Plugin),
+		repositoryScheme:                       runtime.NewScheme(runtime.WithAllowUnknown()),
+		internalResourceInputRepositoryPlugins: make(map[runtime.Type]constructor.ResourceInputMethod),
+		internalSourceInputRepositoryPlugins:   make(map[runtime.Type]constructor.SourceInputMethod),
+		constructedPlugins:                     make(map[string]*constructedPlugin),
 	}
 }
 
 // RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
 type RepositoryRegistry struct {
-	ctx                       context.Context
-	mu                        sync.Mutex
-	registry                  map[runtime.Type]types.Plugin
-	internalRepositoryPlugins map[runtime.Type]v1.InputPluginContract
-	repositoryScheme          *runtime.Scheme
-	constructedPlugins        map[string]*constructedPlugin // running plugins
+	ctx                                    context.Context
+	mu                                     sync.Mutex
+	registry                               map[runtime.Type]types.Plugin
+	internalResourceInputRepositoryPlugins map[runtime.Type]constructor.ResourceInputMethod
+	internalSourceInputRepositoryPlugins   map[runtime.Type]constructor.SourceInputMethod
+	repositoryScheme                       *runtime.Scheme
+	constructedPlugins                     map[string]*constructedPlugin // running plugins
 }
 
 // InputRepositoryScheme returns the scheme used by the ResourceInput registry.
@@ -56,41 +60,19 @@ func (r *RepositoryRegistry) AddPlugin(plugin types.Plugin, constructionType run
 }
 
 // GetResourceInputPlugin returns ResourceInput plugins for a specific type.
-func (r *RepositoryRegistry) GetResourceInputPlugin(ctx context.Context, spec runtime.Typed) (v1.ResourceInputPluginContract, error) {
+func (r *RepositoryRegistry) GetResourceInputPlugin(ctx context.Context, spec runtime.Typed) (constructor.ResourceInputMethod, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	plugin, err := r.getPlugin(ctx, spec)
-	if err != nil {
-		return nil, err
+	// look for an internal implementation that actually implements the interface
+	// return internalPluginThatImplementsTheInterface, nil
+	if _, err := r.repositoryScheme.DefaultType(spec); err != nil {
+		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
 	}
 
-	return plugin, nil
-}
-
-// GetSourceInputPlugin returns SourceInput plugins for a specific type.
-func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runtime.Typed) (v1.SourceInputPluginContract, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	plugin, err := r.getPlugin(ctx, spec)
-	if err != nil {
-		return nil, err
-	}
-
-	return plugin, nil
-}
-
-// getPlugin returns a Construction plugin for a given type using a specific plugin storage map. It will also first look
-// for existing registered internal plugins based on the type and the same registry name.
-func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (v1.InputPluginContract, error) {
-	obj, err := r.repositoryScheme.NewObject(spec.GetType())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new object for type %T: %w", spec, err)
-	}
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.repositoryScheme.TypeForPrototype(obj); err == nil {
-		p, ok := r.internalRepositoryPlugins[typ]
+	if typ, err := r.repositoryScheme.TypeForPrototype(spec); err == nil {
+		p, ok := r.internalResourceInputRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
 		}
@@ -98,6 +80,47 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) 
 		return p, nil
 	}
 
+	plugin, err := r.getPlugin(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	// return this plugin wrapped with an ExternalPluginConverter
+	return r.externalToResourceInputPluginConverter(plugin, r.repositoryScheme), nil
+}
+
+// GetSourceInputPlugin returns SourceInput plugins for a specific type.
+func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runtime.Typed) (constructor.SourceInputMethod, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// look for an internal implementation that actually implements the interface
+	// return internalPluginThatImplementsTheInterface, nil
+	if _, err := r.repositoryScheme.DefaultType(spec); err != nil {
+		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
+	}
+
+	// if we find the type has been registered internally, we look for internal plugins for it.
+	if typ, err := r.repositoryScheme.TypeForPrototype(spec); err == nil {
+		p, ok := r.internalSourceInputRepositoryPlugins[typ]
+		if !ok {
+			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
+		}
+
+		return p, nil
+	}
+
+	plugin, err := r.getPlugin(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.externalToSourceInputPluginConverter(plugin, r.repositoryScheme), nil
+}
+
+// getPlugin returns a Construction plugin for a given type using a specific plugin storage map. It will also first look
+// for existing registered internal plugins based on the type and the same registry name.
+func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (v1.InputPluginContract, error) {
 	// if we don't find the type registered internally, we look for external plugins by using the type
 	// from the specification.
 	typ := spec.GetType()
@@ -117,11 +140,11 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) 
 	return startAndReturnPlugin(ctx, r, &plugin)
 }
 
-// RegisterInternalInputPlugin is called to register an internal implementation for an input plugin.
-func RegisterInternalInputPlugin(
+// RegisterInternalResourceInputPlugin is called to register an internal implementation for an input plugin.
+func RegisterInternalResourceInputPlugin(
 	scheme *runtime.Scheme,
 	r *RepositoryRegistry,
-	plugin v1.InputPluginContract,
+	plugin constructor.ResourceInputMethod,
 	proto runtime.Typed,
 ) error {
 	r.mu.Lock()
@@ -132,15 +155,40 @@ func RegisterInternalInputPlugin(
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
 	}
 
-	r.internalRepositoryPlugins[typ] = plugin
+	r.internalResourceInputRepositoryPlugins[typ] = plugin
 
-	if err := r.repositoryScheme.AddTypeFromScheme(scheme, typ); err != nil {
+	if err := r.repositoryScheme.RegisterWithAlias(proto, typ); err != nil {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
 	return nil
 }
 
+// RegisterInternalSourcePlugin is called to register an internal implementation for an input plugin.
+func RegisterInternalSourcePlugin(
+	scheme *runtime.Scheme,
+	r *RepositoryRegistry,
+	plugin constructor.SourceInputMethod,
+	proto runtime.Typed,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	typ, err := scheme.TypeForPrototype(proto)
+	if err != nil {
+		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
+	}
+
+	r.internalSourceInputRepositoryPlugins[typ] = plugin
+
+	if err := r.repositoryScheme.RegisterWithAlias(proto, typ); err != nil {
+		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+	}
+
+	return nil
+}
+
+// constructedPlugin only contains EXTERNAL plugins that have been started and need to be shut down.
 type constructedPlugin struct {
 	Plugin v1.InputPluginContract
 	cmd    *exec.Cmd

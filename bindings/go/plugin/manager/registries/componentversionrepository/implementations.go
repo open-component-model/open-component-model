@@ -51,6 +51,8 @@ var (
 	_ v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
+// NewComponentVersionRepositoryPlugin creates a new component version repository plugin instance with the provided configuration.
+// It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
 func NewComponentVersionRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,

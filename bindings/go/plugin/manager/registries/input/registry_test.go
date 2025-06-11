@@ -11,10 +11,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	constructor2 "ocm.software/open-component-model/bindings/go/constructor"
+	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -74,54 +74,112 @@ func TestPluginFlow(t *testing.T) {
 	require.NoError(t, err)
 	retrievedResourcePlugin, err := registry.GetResourceInputPlugin(ctx, p)
 	require.NoError(t, err)
-	require.NoError(t, retrievedResourcePlugin.Ping(ctx))
-	resource, err := retrievedResourcePlugin.ProcessResource(ctx, &v1.ProcessResourceInputRequest{
-		Resource: &constructorv1.Resource{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
-					Name:    "test-resource-1",
-					Version: "0.1.0",
-				},
+	resource, err := retrievedResourcePlugin.ProcessResource(ctx, &constructor.Resource{
+		ElementMeta: constructor.ElementMeta{
+			ObjectMeta: constructor.ObjectMeta{
+				Name:    "test-resource-1",
+				Version: "0.1.0",
 			},
-			Type:     "type",
-			Relation: "local",
-			AccessOrInput: constructorv1.AccessOrInput{
-				Access: &runtime.Raw{
-					Type: runtime.Type{
-						Version: "test-access",
-						Name:    "v1",
-					},
-					Data: []byte(`{ "access": "v1" }`),
+		},
+		Type:     "type",
+		Relation: "local",
+		AccessOrInput: constructor.AccessOrInput{
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Version: "test-access",
+					Name:    "v1",
 				},
+				Data: []byte(`{ "access": "v1" }`),
 			},
 		},
 	}, map[string]string{})
 	require.NoError(t, err)
-	require.Equal(t, "test-resource", resource.Resource.Name)
+	require.Equal(t, "test-resource", resource.ProcessedResource.Name)
 
 	retrievedSourcePlugin, err := registry.GetSourceInputPlugin(ctx, p)
 	require.NoError(t, err)
-	require.NoError(t, retrievedSourcePlugin.Ping(ctx))
-	source, err := retrievedSourcePlugin.ProcessSource(ctx, &v1.ProcessSourceInputRequest{
-		Source: &constructorv1.Source{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
-					Name:    "test-source-1",
-					Version: "0.1.0",
-				},
+	source, err := retrievedSourcePlugin.ProcessSource(ctx, &constructor.Source{
+		ElementMeta: constructor.ElementMeta{
+			ObjectMeta: constructor.ObjectMeta{
+				Name:    "test-source-1",
+				Version: "0.1.0",
 			},
-			Type: "type",
-			AccessOrInput: constructorv1.AccessOrInput{
-				Access: &runtime.Raw{
-					Type: runtime.Type{
-						Version: "test-access",
-						Name:    "v1",
-					},
-					Data: []byte(`{ "access": "v1" }`),
+		},
+		Type: "type",
+		AccessOrInput: constructor.AccessOrInput{
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Version: "test-access",
+					Name:    "v1",
 				},
+				Data: []byte(`{ "access": "v1" }`),
 			},
 		},
 	}, map[string]string{})
 	require.NoError(t, err)
-	require.Equal(t, "test-source", source.Source.Name)
+	require.Equal(t, "test-source", source.ProcessedSource.Name)
 }
+
+func TestRegisterInternalResourceInputPlugin(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	dummytype.MustAddToScheme(scheme)
+	registry := NewInputRepositoryRegistry(ctx)
+	p := &mockResourceInputPlugin{}
+	require.NoError(t, RegisterInternalResourceInputPlugin(scheme, registry, p, &dummyv1.Repository{}))
+	retrievedPlugin, err := registry.GetResourceInputPlugin(ctx, &dummyv1.Repository{})
+	require.NoError(t, err)
+	require.Equal(t, p, retrievedPlugin)
+	_, err = retrievedPlugin.ProcessResource(ctx, &constructor.Resource{}, nil)
+	require.NoError(t, err)
+	require.True(t, p.processCalled)
+}
+
+func TestRegisterInternalSourceInputPlugin(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	dummytype.MustAddToScheme(scheme)
+	registry := NewInputRepositoryRegistry(ctx)
+	p := &mockSourceInputPlugin{}
+	require.NoError(t, RegisterInternalSourcePlugin(scheme, registry, p, &dummyv1.Repository{}))
+	retrievedPlugin, err := registry.GetSourceInputPlugin(ctx, &dummyv1.Repository{})
+	require.NoError(t, err)
+	require.Equal(t, p, retrievedPlugin)
+	_, err = retrievedPlugin.ProcessSource(ctx, &constructor.Source{}, nil)
+	require.NoError(t, err)
+	require.True(t, p.processCalled)
+}
+
+type mockResourceInputPlugin struct {
+	credCalled    bool
+	processCalled bool
+}
+
+func (m *mockResourceInputPlugin) GetCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error) {
+	m.credCalled = true
+	return nil, nil
+}
+
+func (m *mockResourceInputPlugin) ProcessResource(ctx context.Context, resource *constructor.Resource, credentials map[string]string) (result *constructor2.ResourceInputMethodResult, err error) {
+	m.processCalled = true
+	return nil, nil
+}
+
+var _ constructor2.ResourceInputMethod = (*mockResourceInputPlugin)(nil)
+
+type mockSourceInputPlugin struct {
+	credCalled    bool
+	processCalled bool
+}
+
+func (m *mockSourceInputPlugin) GetCredentialConsumerIdentity(ctx context.Context, source *constructor.Source) (identity runtime.Identity, err error) {
+	m.credCalled = true
+	return nil, nil
+}
+
+func (m *mockSourceInputPlugin) ProcessSource(ctx context.Context, resource *constructor.Source, credentials map[string]string) (result *constructor2.SourceInputMethodResult, err error) {
+	m.processCalled = true
+	return nil, nil
+}
+
+var _ constructor2.SourceInputMethod = (*mockSourceInputPlugin)(nil)
