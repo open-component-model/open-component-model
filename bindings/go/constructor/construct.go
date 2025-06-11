@@ -97,23 +97,8 @@ func (c *DefaultConstructor) construct(ctx context.Context, component *construct
 
 	// decide how to handle existing component versions in the target repository
 	// based on the configured conflict policy.
-	switch c.opts.ComponentVersionConflictPolicy {
-	case ComponentVersionConflictAbortAndFail, ComponentVersionConflictSkip:
-		logger.DebugContext(ctx, "checking for existing component version in target repository", "component", component.Name, "version", component.Version)
-		switch existing, err := repo.GetComponentVersion(ctx, component.Name, component.Version); {
-		case err == nil:
-			if c.opts.ComponentVersionConflictPolicy == ComponentVersionConflictAbortAndFail {
-				return nil, fmt.Errorf("component version %q already exists in target repository", component.ToIdentity())
-			}
-			logger.WarnContext(ctx, "component version already exists in target repository, skipping construction", "component", component.Name, "version", component.Version)
-			return existing, nil
-		case !errors.Is(err, oci.ErrNotFound):
-			return nil, fmt.Errorf("error checking for existing component version in target repository: %w", err)
-		default:
-			logger.DebugContext(ctx, "no existing component version found in target repository, continuing with construction", "component", component.Name, "version", component.Version)
-		}
-	case ComponentVersionConflictReplace:
-		logger.WarnContext(ctx, "REPLACING component version in target repository, old component version will no longer be available if it was present before.")
+	if err := c.processConflictStrategy(ctx, repo, component); err != nil {
+		return nil, err
 	}
 
 	if err := c.processDescriptor(ctx, repo, component, desc); err != nil {
@@ -125,6 +110,29 @@ func (c *DefaultConstructor) construct(ctx context.Context, component *construct
 	}
 
 	return desc, nil
+}
+
+func (c *DefaultConstructor) processConflictStrategy(ctx context.Context, repo TargetRepository, component *constructor.Component) error {
+	logger := log.Base().With("component", component.Name, "version", component.Version)
+	switch c.opts.ComponentVersionConflictPolicy {
+	case ComponentVersionConflictAbortAndFail, ComponentVersionConflictSkip:
+		logger.DebugContext(ctx, "checking for existing component version in target repository", "component", component.Name, "version", component.Version)
+		switch _, err := repo.GetComponentVersion(ctx, component.Name, component.Version); {
+		case err == nil:
+			if c.opts.ComponentVersionConflictPolicy == ComponentVersionConflictAbortAndFail {
+				return fmt.Errorf("component version %q already exists in target repository", component.ToIdentity())
+			}
+			logger.WarnContext(ctx, "component version already exists in target repository, skipping construction", "component", component.Name, "version", component.Version)
+			return nil
+		case !errors.Is(err, oci.ErrNotFound):
+			return fmt.Errorf("error checking for existing component version in target repository: %w", err)
+		default:
+			logger.DebugContext(ctx, "no existing component version found in target repository, continuing with construction", "component", component.Name, "version", component.Version)
+		}
+	case ComponentVersionConflictReplace:
+		logger.WarnContext(ctx, "REPLACING component version in target repository, old component version will no longer be available if it was present before.")
+	}
+	return nil
 }
 
 // createBaseDescriptor initializes a new descriptor with the basic component metadata.
