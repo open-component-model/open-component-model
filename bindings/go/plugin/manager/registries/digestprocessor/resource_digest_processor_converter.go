@@ -16,63 +16,29 @@ type resourceDigestProcessorPluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
-func (r *resourceDigestProcessorPluginConverter) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource) (*descriptor.Resource, error) {
-	var labels []descriptorv2.Label
-	for _, v := range resource.Labels {
-		labels = append(labels, descriptorv2.Label{
-			Name:    v.Name,
-			Value:   v.Value,
-			Signing: v.Signing,
-		})
-	}
-	var sourceRefs []descriptorv2.SourceRef
-	for _, v := range resource.SourceRefs {
-		var sourceLabels []descriptorv2.Label
-		for _, l := range v.Labels {
-			sourceLabels = append(sourceLabels, descriptorv2.Label{
-				Name:    l.Name,
-				Value:   l.Value,
-				Signing: l.Signing,
-			})
-		}
-		sourceRefs = append(sourceRefs, descriptorv2.SourceRef{
-			IdentitySelector: v.IdentitySelector,
-			Labels:           sourceLabels,
-		})
-	}
-	convertResource := &descriptorv2.Resource{
-		ElementMeta: descriptorv2.ElementMeta{
-			ObjectMeta: descriptorv2.ObjectMeta{
-				Name:    resource.Name,
-				Version: resource.Version,
-				Labels:  labels,
-			},
-			ExtraIdentity: resource.ExtraIdentity,
-		},
-		SourceRefs: sourceRefs,
-		Type:       resource.Type,
-		Relation:   descriptorv2.ResourceRelation(resource.Relation),
-		Size:       resource.Size,
-	}
-	if resource.Digest != nil {
-		digest := &descriptorv2.Digest{
-			HashAlgorithm:          resource.Digest.HashAlgorithm,
-			NormalisationAlgorithm: resource.Digest.NormalisationAlgorithm,
-			Value:                  resource.Digest.Value,
-		}
-		convertResource.Digest = digest
+func (r *resourceDigestProcessorPluginConverter) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
+	request := &v1.GetIdentityRequest[runtime.Typed]{
+		Typ: resource.Access,
 	}
 
-	var raw runtime.Raw
-	if err := r.scheme.Convert(resource.Access, &raw); err == nil {
-		convertResource.Access = &raw
+	result, err := r.externalPlugin.GetIdentity(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get identity: %w", err)
+	}
+
+	return result.Identity, nil
+}
+
+func (r *resourceDigestProcessorPluginConverter) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
+	resources, err := descriptor.ConvertToV2Resources(r.scheme, []descriptor.Resource{*resource})
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert resource: %w", err)
 	}
 
 	request := &v1.ProcessResourceDigestRequest{
-		Resource: convertResource,
+		Resource: &resources[0],
 	}
-	// TODO: Figure out the credential.
-	response, err := r.externalPlugin.ProcessResourceDigest(ctx, request, map[string]string{})
+	response, err := r.externalPlugin.ProcessResourceDigest(ctx, request, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process resource digest: %w", err)
 	}

@@ -92,7 +92,7 @@ func TestPluginFlow(t *testing.T) {
 			},
 			Data: []byte(`{ "access": "v1" }`),
 		},
-	})
+	}, nil)
 	require.NoError(t, err)
 	require.Equal(t, "test-resource", resource.Name)
 }
@@ -155,9 +155,28 @@ func TestShutdown(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, registry.Shutdown(ctx))
 	require.Eventually(t, func() bool {
-		_, err = retrievedResourcePlugin.ProcessResourceDigest(ctx, &descriptor.Resource{})
+		_, err = retrievedResourcePlugin.ProcessResourceDigest(ctx, &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-resource-1",
+					Version: "0.1.0",
+				},
+			},
+			Type:     "type",
+			Relation: "local",
+			Access: &runtime.Raw{
+				Type: runtime.Type{},
+				Data: []byte("{}"),
+			},
+		}, nil)
 		if err != nil {
-			return strings.Contains(err.Error(), "failed to send request to plugin")
+			if strings.Contains(err.Error(), "failed to send request to plugin") {
+				return true
+			}
+
+			t.Logf("error: %v", err)
+
+			return false
 		}
 
 		return false
@@ -174,7 +193,7 @@ func TestRegisterInternalDigestProcessorPlugin(t *testing.T) {
 	retrievedPlugin, err := registry.GetPlugin(ctx, &dummyv1.Repository{})
 	require.NoError(t, err)
 	require.Equal(t, p, retrievedPlugin)
-	_, err = retrievedPlugin.ProcessResourceDigest(ctx, &descriptor.Resource{})
+	_, err = retrievedPlugin.ProcessResourceDigest(ctx, &descriptor.Resource{}, nil)
 	require.NoError(t, err)
 	require.True(t, p.called)
 }
@@ -183,7 +202,11 @@ type mockDigestProcessorPlugin struct {
 	called bool
 }
 
-func (m *mockDigestProcessorPlugin) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource) (*descriptor.Resource, error) {
+func (m *mockDigestProcessorPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
+	return nil, nil
+}
+
+func (m *mockDigestProcessorPlugin) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
 	m.called = true
 
 	return nil, nil
