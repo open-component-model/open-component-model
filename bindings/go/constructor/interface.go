@@ -43,8 +43,9 @@ type ResourceInputMethodResult struct {
 // The resolved credentials MAY be passed to the input method via the credentials map, but a method MAY
 // work without credentials as well.
 type ResourceInputMethod interface {
-	// GetResourceCredentialConsumerIdentity retrieves the identity of given resource to use for credential resolution.
-	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)
+	// ResourceConsumerIdentityProvider that resolves the identity of the given resource to use for credential resolution.
+	// These can then be passed to ProcessResource.
+	ResourceConsumerIdentityProvider
 	ProcessResource(ctx context.Context, resource *constructor.Resource, credentials map[string]string) (result *ResourceInputMethodResult, err error)
 }
 
