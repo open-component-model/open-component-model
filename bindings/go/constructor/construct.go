@@ -2,6 +2,7 @@ package constructor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci"
 )
 
 type Constructor interface {
@@ -98,12 +100,17 @@ func (c *DefaultConstructor) construct(ctx context.Context, component *construct
 	switch c.opts.ComponentVersionConflictPolicy {
 	case ComponentVersionConflictAbortAndFail, ComponentVersionConflictSkip:
 		logger.DebugContext(ctx, "checking for existing component version in target repository", "component", component.Name, "version", component.Version)
-		if existing, err := repo.GetComponentVersion(ctx, component.Name, component.Version); err == nil {
+		switch existing, err := repo.GetComponentVersion(ctx, component.Name, component.Version); {
+		case err == nil:
 			if c.opts.ComponentVersionConflictPolicy == ComponentVersionConflictAbortAndFail {
 				return nil, fmt.Errorf("component version %q already exists in target repository", component.ToIdentity())
 			}
 			logger.WarnContext(ctx, "component version already exists in target repository, skipping construction", "component", component.Name, "version", component.Version)
 			return existing, nil
+		case !errors.Is(err, oci.ErrNotFound):
+			return nil, fmt.Errorf("error checking for existing component version in target repository: %w", err)
+		default:
+			logger.DebugContext(ctx, "no existing component version found in target repository, continuing with construction", "component", component.Name, "version", component.Version)
 		}
 	case ComponentVersionConflictReplace:
 		logger.WarnContext(ctx, "REPLACING component version in target repository, old component version will no longer be available if it was present before.")
@@ -218,7 +225,18 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 				var digestProcessor ResourceDigestProcessor
 				if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
 					logger.Debug("processing resource digest")
-					if res, err = digestProcessor.ProcessResourceDigest(ctx, res); err != nil {
+					var creds map[string]string
+					if c.opts.CredentialProvider != nil {
+						identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res)
+						if err != nil {
+							return nil, fmt.Errorf("error getting credential consumer identity of access type %q: %w", resource.Access.GetType(), err)
+						}
+
+						if creds, err = c.opts.Resolve(ctx, identity); err != nil {
+							return nil, fmt.Errorf("error resolving credentials for input method of access type %q: %w", resource.Access.GetType(), err)
+						}
+					}
+					if res, err = digestProcessor.ProcessResourceDigest(ctx, res, creds); err != nil {
 						return nil, fmt.Errorf("error processing resource %q with digest processor: %w", resource.ToIdentity(), err)
 					}
 				}
@@ -248,7 +266,7 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 
 	var creds map[string]string
 	if c.opts.CredentialProvider != nil {
-		identity, err := repository.GetCredentialConsumerIdentity(ctx, resource)
+		identity, err := repository.GetResourceCredentialConsumerIdentity(ctx, resource)
 		if err != nil {
 			return nil, fmt.Errorf("error getting credential consumer identity of access type %q: %w", resource.Access.GetType(), err)
 		}
@@ -309,7 +327,7 @@ func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetR
 
 	var creds map[string]string
 	if c.opts.CredentialProvider != nil {
-		identity, err := method.GetCredentialConsumerIdentity(ctx, src)
+		identity, err := method.GetSourceCredentialConsumerIdentity(ctx, src)
 		if err != nil {
 			return nil, fmt.Errorf("error getting credential consumer identity of type %q: %w", src.Input.GetType(), err)
 		}
@@ -353,7 +371,7 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 
 	var creds map[string]string
 	if c.opts.CredentialProvider != nil {
-		identity, err := method.GetCredentialConsumerIdentity(ctx, resource)
+		identity, err := method.GetResourceCredentialConsumerIdentity(ctx, resource)
 		if err != nil {
 			return nil, fmt.Errorf("error getting credential consumer identity of type %q: %w", resource.Input.GetType(), err)
 		}

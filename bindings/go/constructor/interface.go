@@ -43,7 +43,8 @@ type ResourceInputMethodResult struct {
 // The resolved credentials MAY be passed to the input method via the credentials map, but a method MAY
 // work without credentials as well.
 type ResourceInputMethod interface {
-	GetCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)
+	// GetResourceCredentialConsumerIdentity retrieves the identity of given resource to use for credential resolution.
+	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)
 	ProcessResource(ctx context.Context, resource *constructor.Resource, credentials map[string]string) (result *ResourceInputMethodResult, err error)
 }
 
@@ -81,7 +82,9 @@ type SourceInputMethodResult struct {
 // The resolved credentials MAY be passed to the input method via the credentials map, but a method MAY
 // work without credentials as well.
 type SourceInputMethod interface {
-	GetCredentialConsumerIdentity(ctx context.Context, source *constructor.Source) (identity runtime.Identity, err error)
+	// SourceConsumerIdentityProvider that resolves the identity of the given source to use for credential resolution.
+	// These can then be passed to ProcessSource.
+	SourceConsumerIdentityProvider
 	ProcessSource(ctx context.Context, source *constructor.Source, credentials map[string]string) (result *SourceInputMethodResult, err error)
 }
 
@@ -96,10 +99,15 @@ type SourceInputMethodProvider interface {
 }
 
 type ResourceDigestProcessor interface {
+	// GetResourceDigestProcessorCredentialConsumerIdentity resolves the identity of the given resource to use for credential resolution
+	// for the digest processor. The identity returned MAY be used to resolve credentials for the digest processor.
+	// Note that this is not the same as ResourceConsumerIdentityProvider, because it uses the descriptor resource,
+	// and not the constructor resource.
+	GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error)
 	// ProcessResourceDigest processes the given resource and returns a new resource with the digest information set.
 	// The resource returned MUST have its digest information filled appropriately or the method MUST return an error.
 	// The resource passed MUST have an access set that can be used to interpret the resource and provide the digest.
-	ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource) (*descriptor.Resource, error)
+	ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error)
 }
 
 type ResourceDigestProcessorProvider interface {
@@ -147,8 +155,9 @@ type TargetRepositoryProvider interface {
 }
 
 type ResourceRepository interface {
-	// GetCredentialConsumerIdentity retrieves the identity of given resource to use for credential resolution.
-	GetCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)
+	// ResourceConsumerIdentityProvider that resolves the identity of the given resource to use for credential resolution.
+	// These can then be passed to DownloadResource.
+	ResourceConsumerIdentityProvider
 	// DownloadResource downloads a resource from the repository.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error)
 }
@@ -161,4 +170,14 @@ type ResourceRepositoryProvider interface {
 type CredentialProvider interface {
 	// Resolve attempts to resolve credentials for the given identity.
 	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
+}
+
+type ResourceConsumerIdentityProvider interface {
+	// GetResourceCredentialConsumerIdentity resolves the identity of the given [constructor.Resource] to use for credential resolution.
+	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)
+}
+
+type SourceConsumerIdentityProvider interface {
+	// GetSourceCredentialConsumerIdentity resolves the identity of the given [constructor.Source] to use for credential resolution.
+	GetSourceCredentialConsumerIdentity(ctx context.Context, source *constructor.Source) (identity runtime.Identity, err error)
 }

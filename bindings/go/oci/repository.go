@@ -14,6 +14,7 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -41,6 +42,8 @@ import (
 // LocalBlob represents a blob that is stored locally in the OCI repository.
 // It provides methods to access the blob's metadata and content.
 type LocalBlob fetch.LocalBlob
+
+var ErrNotFound = errors.New("not found")
 
 // ComponentVersionRepository defines the interface for storing and retrieving OCM component versions
 // and their associated resources in a Store.
@@ -281,7 +284,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	}
 
 	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
-	return desc, err
+	return desc, wrapError(err)
 }
 
 // AddLocalResource adds a local resource to the repository.
@@ -741,4 +744,15 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		return ociImageSpecV1.Manifest{}, nil, err
 	}
 	return manifest, index, nil
+}
+
+func wrapError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, errdef.ErrNotFound) {
+		return errors.Join(ErrNotFound, err)
+	}
+
+	return nil
 }
