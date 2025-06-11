@@ -239,6 +239,9 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 			Version: "v2",
 		},
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "ocm.software/open-component-model/bindings/go/oci/integration/test",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    component,
@@ -378,6 +381,7 @@ func uploadDownloadBarebonesComponentVersion(t *testing.T, repo oci.ComponentVer
 	desc.Component.Name = name
 	desc.Component.Version = version
 	desc.Component.Labels = append(desc.Component.Labels, descriptor.Label{Name: "foo", Value: "bar"})
+	desc.Component.Provider.Name = "ocm.software/open-component-model/bindings/go/oci/integration/test"
 
 	r.NoError(repo.AddComponentVersion(ctx, &desc))
 
@@ -512,6 +516,9 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 			Version: "v2",
 		},
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "ocm.software/open-component-model/bindings/go/oci/integration/test",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    name,
@@ -585,6 +592,9 @@ func uploadDownloadLocalSource(t *testing.T, repo oci.ComponentVersionRepository
 			Version: "v2",
 		},
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "ocm.software/open-component-model/bindings/go/oci/integration/test",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    name,

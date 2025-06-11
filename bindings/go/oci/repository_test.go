@@ -58,6 +58,9 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 	// Create a test component descriptor
 	desc := &descriptor.Descriptor{
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "test-provider",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    "test-component",
@@ -101,6 +104,9 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 	// Create a test component descriptor
 	desc = &descriptor.Descriptor{
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "test-provider",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    "test-component",
