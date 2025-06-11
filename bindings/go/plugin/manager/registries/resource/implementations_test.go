@@ -61,7 +61,7 @@ func TestGetGlobalResource(t *testing.T) {
 
 func TestAddGlobalResource(t *testing.T) {
 	// Setup test server
-	response := &v1.GetGlobalResourceResponse{}
+	response := &v1.PostResourceResponse{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == AddGlobalResource && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode(response)

@@ -31,6 +31,6 @@ type GetIdentityResponse struct {
 	Identity map[string]string `json:"identity"`
 }
 
-type GetGlobalResourceResponse struct {
+type PostResourceResponse struct {
 	Resource *v2.Resource `json:"resource"`
 }

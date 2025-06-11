@@ -66,7 +66,7 @@ func (p *ResourceRepositoryPlugin) GetIdentity(_ context.Context, req *resourcev
 	}
 }
 
-func (p *ResourceRepositoryPlugin) GetGlobalResource(ctx context.Context, request *resourcev1.GetResourceRequest, credentials map[string]string) (*resourcev1.GetGlobalResourceResponse, error) {
+func (p *ResourceRepositoryPlugin) GetGlobalResource(ctx context.Context, request *resourcev1.GetResourceRequest, credentials map[string]string) (*resourcev1.PostResourceResponse, error) {
 	t := request.Access.GetType()
 	obj, err := p.scheme.NewObject(t)
 	if err != nil {
@@ -99,7 +99,7 @@ func (p *ResourceRepositoryPlugin) GetGlobalResource(ctx context.Context, reques
 			return nil, fmt.Errorf("error copying blob to OS path: %w", err)
 		}
 
-		return &resourcev1.GetGlobalResourceResponse{
+		return &resourcev1.PostResourceResponse{
 			ResourceLocation: types.Location{
 				LocationType: types.LocationTypeLocalFile,
 				Value:        path,
