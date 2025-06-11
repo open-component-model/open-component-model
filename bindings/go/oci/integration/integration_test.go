@@ -39,10 +39,12 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -121,6 +123,57 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 		out, err := exec.CommandContext(t.Context(), cliPath, "version").CombinedOutput()
 		r.NoError(err)
 		r.Contains(string(out), version)
+	})
+}
+
+func Test_Integration_Specification_based_Repository(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	t.Logf("Starting OCI integration test")
+
+	// Setup credentials and htpasswd
+	password := generateRandomPassword(t, passwordLength)
+	htpasswd := generateHtpasswd(t, testUsername, password)
+
+	// Start containerized registry
+	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
+	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
+		registry.WithHtpasswd(htpasswd),
+		testcontainers.WithEnv(map[string]string{
+			"REGISTRY_VALIDATION_DISABLED": "true",
+			"REGISTRY_LOG_LEVEL":           "debug",
+		}),
+		testcontainers.WithLogger(log.TestLogger(t)),
+	)
+	r.NoError(err)
+	t.Cleanup(func() {
+		r.NoError(testcontainers.TerminateContainer(registryContainer))
+	})
+	t.Logf("Test registry started")
+
+	registryAddress, err := registryContainer.Address(ctx)
+	r.NoError(err)
+
+	t.Run("basic connectivity and resolution failure", func(t *testing.T) {
+		repoProvider := provider.NewComponentVersionRepositoryProvider()
+		repoSpec := &ocirepospecv1.Repository{BaseUrl: registryAddress}
+		id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
+		r.NoError(err)
+
+		url, err := ocmruntime.ParseURLAndAllowNoScheme(registryAddress)
+		r.NoError(err)
+		r.Equal(id[ocmruntime.IdentityAttributeHostname], url.Hostname())
+		r.Equal(id[ocmruntime.IdentityAttributePort], url.Port())
+		r.Equal(id[ocmruntime.IdentityAttributeScheme], url.Scheme)
+
+		repo, err := repoProvider.GetComponentVersionRepository(ctx, repoSpec, map[string]string{
+			"username": testUsername,
+			"password": password,
+		})
+		r.NoError(err)
+
+		uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
 	})
 }
 
