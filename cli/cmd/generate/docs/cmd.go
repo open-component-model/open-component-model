@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 
-	"ocm.software/open-component-model/cli/internal/enum"
+	"ocm.software/open-component-model/cli/internal/flag/enum"
 )
 
 const (
