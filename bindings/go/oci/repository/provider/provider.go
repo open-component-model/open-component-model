@@ -24,9 +24,9 @@ import (
 // - An authorization cache for auth tokens
 // - A shared HTTP client with retry capabilities
 type CachingComponentVersionRepositoryProvider struct {
-	scheme *runtime.Scheme
-	*credentialCache
-	*ociCache
+	scheme             *runtime.Scheme
+	credentialCache    *credentialCache
+	ociCache           *ociCache
 	authorizationCache auth.Cache
 	httpClient         *http.Client
 }
