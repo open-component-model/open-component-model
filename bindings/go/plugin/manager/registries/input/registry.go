@@ -79,6 +79,12 @@ func (r *RepositoryRegistry) GetResourceInputPlugin(ctx context.Context, spec ru
 		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
 	}
 
+	if converted, err := r.repositoryScheme.NewObject(spec.GetType()); err == nil {
+		if err := r.repositoryScheme.Convert(spec, converted); err == nil {
+			spec = converted
+		}
+	}
+
 	// if we find the type has been registered internally, we look for internal plugins for it.
 	if typ, err := r.repositoryScheme.TypeForPrototype(spec); err == nil {
 		p, ok := r.internalResourceInputRepositoryPlugins[typ]
