@@ -21,12 +21,13 @@ func Register(
 	repository.MustAddToScheme(scheme)
 	access.MustAddToScheme(scheme)
 
-	memory := inmemory.New()
+	manifests := inmemory.New()
+	layers := inmemory.New()
 
 	repoCache := newRepoCache()
 
-	cvRepoPlugin := ComponentVersionRepositoryPlugin{scheme: scheme, memory: memory, repoCache: repoCache}
-	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, memory: memory, repoCache: repoCache}
+	cvRepoPlugin := ComponentVersionRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, repoCache: repoCache}
+	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, repoCache: repoCache}
 
 	return errors.Join(
 		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(

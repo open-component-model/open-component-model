@@ -22,9 +22,9 @@ import (
 
 type ResourceRepositoryPlugin struct {
 	contracts.EmptyBasePlugin
-	scheme    *runtime.Scheme
-	memory    cache.OCIDescriptorCache
-	repoCache *repoCache
+	scheme            *runtime.Scheme
+	manifests, layers cache.OCIDescriptorCache
+	repoCache         *repoCache
 }
 
 // TODO Repeated calls with separate credentials will always use the first credentials set.
@@ -35,7 +35,7 @@ func (p *ResourceRepositoryPlugin) getRepository(spec *ociv1.Repository, creds m
 	if repo, ok := p.repoCache.Get(key); ok {
 		return repo, nil
 	}
-	repo, err := createRepository(spec, creds, p.scheme, p.memory)
+	repo, err := createRepository(spec, creds, p.scheme, p.manifests, p.layers)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -67,7 +67,7 @@ func (p *ResourceRepositoryPlugin) GetIdentity(_ context.Context, req *resourcev
 }
 
 func (p *ResourceRepositoryPlugin) GetGlobalResource(ctx context.Context, request *resourcev1.GetGlobalResourceRequest, credentials map[string]string) (*resourcev1.GetGlobalResourceResponse, error) {
-	t := request.Access.GetType()
+	t := request.Resource.Access.GetType()
 	obj, err := p.scheme.NewObject(t)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)

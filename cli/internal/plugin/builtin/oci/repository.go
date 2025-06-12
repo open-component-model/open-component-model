@@ -25,7 +25,8 @@ func createRepository(
 	spec *ociv1.Repository,
 	credentials map[string]string,
 	scheme *runtime.Scheme,
-	memory cache.OCIDescriptorCache,
+	manifests cache.OCIDescriptorCache,
+	layers cache.OCIDescriptorCache,
 ) (Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
@@ -45,7 +46,8 @@ func createRepository(
 		oci.WithResolver(urlResolver),
 		oci.WithScheme(scheme),
 		oci.WithCreator(Creator),
-		oci.WithOCIDescriptorCache(memory),
+		oci.WithManifestCache(manifests),
+		oci.WithLayerCache(layers),
 	)
 	return repo, err
 }
