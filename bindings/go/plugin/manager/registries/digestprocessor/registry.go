@@ -48,8 +48,11 @@ func RegisterInternalDigestProcessorPlugin(
 	}
 
 	r.internalDigestProcessorPlugins[typ] = p
+	for _, alias := range scheme.GetTypes()[typ] {
+		r.internalDigestProcessorPlugins[alias] = r.internalDigestProcessorPlugins[typ]
+	}
 
-	if err := r.scheme.RegisterWithAlias(prototype, typ); err != nil {
+	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
 		return fmt.Errorf("failed to register prototype %T: %w", prototype, err)
 	}
 

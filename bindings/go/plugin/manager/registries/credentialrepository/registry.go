@@ -103,8 +103,11 @@ func RegisterInternalCredentialRepositoryPlugin[T runtime.Typed](
 	}
 
 	r.internalCredentialRepositoryPlugins[typ] = &TypeToUntypedPlugin[T]{plugin}
+	for _, alias := range scheme.GetTypes()[typ] {
+		r.internalCredentialRepositoryPlugins[alias] = r.internalCredentialRepositoryPlugins[typ]
+	}
 
-	if err := r.scheme.RegisterWithAlias(cfg, typ); err != nil {
+	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", cfg, typ, err)
 	}
 
