@@ -75,7 +75,7 @@ func (p *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 
 // GetGlobalResource retrieves a global resource.
 func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *v1.GetGlobalResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
-	if err := p.validateEndpoint(req.Access, p.jsonSchema); err != nil {
+	if err := p.validateEndpoint(req.Resource.Access, p.jsonSchema); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 

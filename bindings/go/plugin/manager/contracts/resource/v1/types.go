@@ -8,20 +8,23 @@ import (
 
 type GetGlobalResourceRequest struct {
 	// The resource specification to download
-	*v2.Resource `json:"resource"`
+	Resource *v2.Resource `json:"resource"`
 }
 type GetGlobalResourceResponse struct {
+	// Location of the data downloaded based on the GetGlobalResourceRequest.Resource specification.
 	Location types.Location `json:"location"`
 }
 
 type AddGlobalResourceRequest struct {
+	// The ResourceLocation of the Local data to be uploaded under the given Resource specification.
+	ResourceLocation types.Location `json:"resourceLocation"`
+	// Resource specification that describes the resource that should be uploaded.
 	Resource *v2.Resource `json:"resource"`
 }
 
 type AddGlobalResourceResponse struct {
-	// The ResourceLocation of the Local Resource
-	ResourceLocation types.Location `json:"resourceLocation"`
-	Resource         *v2.Resource   `json:"resource"`
+	// Resource specification that describes the resource after it was uploaded.
+	Resource *v2.Resource `json:"resource"`
 }
 
 type GetIdentityRequest[T runtime.Typed] struct {
