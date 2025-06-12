@@ -236,6 +236,7 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 		existing       bool
 		expectError    bool
 		expectReplaced bool
+		components     []*constructorruntime.Component
 	}{
 		{
 			name:           "AbortAndFail with existing component",
@@ -243,6 +244,16 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			existing:       true,
 			expectError:    true,
 			expectReplaced: false,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component",
+							Version: "1.0.0",
+						},
+					},
+				},
+			},
 		},
 		{
 			name:           "AbortAndFail with no existing component",
@@ -250,6 +261,16 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			existing:       false,
 			expectError:    false,
 			expectReplaced: false,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component",
+							Version: "1.0.0",
+						},
+					},
+				},
+			},
 		},
 		{
 			name:           "Skip with existing component",
@@ -257,6 +278,16 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			existing:       true,
 			expectError:    false,
 			expectReplaced: false,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component",
+							Version: "1.0.0",
+						},
+					},
+				},
+			},
 		},
 		{
 			name:           "Skip with no existing component",
@@ -264,6 +295,16 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			existing:       false,
 			expectError:    false,
 			expectReplaced: false,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component",
+							Version: "1.0.0",
+						},
+					},
+				},
+			},
 		},
 		{
 			name:           "Replace with existing component",
@@ -271,6 +312,16 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			existing:       true,
 			expectError:    false,
 			expectReplaced: true,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component",
+							Version: "1.0.0",
+						},
+					},
+				},
+			},
 		},
 		{
 			name:           "Replace with no existing component",
@@ -278,6 +329,116 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			existing:       false,
 			expectError:    false,
 			expectReplaced: false,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component",
+							Version: "1.0.0",
+						},
+					},
+				},
+			},
+		},
+		{
+			name:           "Multiple components with different versions",
+			policy:         ComponentVersionConflictReplace,
+			existing:       true,
+			expectError:    false,
+			expectReplaced: true,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component-1",
+							Version: "1.0.0",
+						},
+					},
+				},
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component-2",
+							Version: "2.0.0",
+						},
+					},
+				},
+			},
+		},
+		{
+			name:           "Same component different versions",
+			policy:         ComponentVersionConflictReplace,
+			existing:       true,
+			expectError:    false,
+			expectReplaced: true,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component",
+							Version: "1.0.0",
+						},
+					},
+				},
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component",
+							Version: "2.0.0",
+						},
+					},
+				},
+			},
+		},
+		{
+			name:           "Empty component list",
+			policy:         ComponentVersionConflictReplace,
+			existing:       false,
+			expectError:    false,
+			expectReplaced: false,
+			components:     []*constructorruntime.Component{},
+		},
+		{
+			name:           "Invalid component version",
+			policy:         ComponentVersionConflictReplace,
+			existing:       false,
+			expectError:    false,
+			expectReplaced: false,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component",
+							Version: "", // Empty version
+						},
+					},
+				},
+			},
+		},
+		{
+			name:           "Multiple components with mixed policies",
+			policy:         ComponentVersionConflictReplace,
+			existing:       true,
+			expectError:    false,
+			expectReplaced: true,
+			components: []*constructorruntime.Component{
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component-1",
+							Version: "1.0.0",
+						},
+					},
+				},
+				{
+					ComponentMeta: constructorruntime.ComponentMeta{
+						ObjectMeta: constructorruntime.ObjectMeta{
+							Name:    "test-component-2",
+							Version: "1.0.0",
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -289,55 +450,55 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 				TargetRepositoryProvider:       &mockTargetRepositoryProvider{repo: repo},
 			}
 
-			component := &constructorruntime.Component{
-				ComponentMeta: constructorruntime.ComponentMeta{
-					ObjectMeta: constructorruntime.ObjectMeta{
-						Name:    "test-component",
-						Version: "1.0.0",
-					},
-				},
-			}
-
 			if tt.existing {
-				existingDesc := &descriptor.Descriptor{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
-								Name:    component.Name,
-								Version: component.Version,
+				for _, component := range tt.components {
+					existingDesc := &descriptor.Descriptor{
+						Component: descriptor.Component{
+							ComponentMeta: descriptor.ComponentMeta{
+								ObjectMeta: descriptor.ObjectMeta{
+									Name:    component.Name,
+									Version: component.Version,
+								},
 							},
 						},
-					},
+					}
+					err := repo.AddComponentVersion(t.Context(), existingDesc)
+					require.NoError(t, err)
 				}
-				err := repo.AddComponentVersion(context.Background(), existingDesc)
-				require.NoError(t, err)
 			}
 
 			constructor := NewDefaultConstructor(opts)
 			compConstructor := &constructorruntime.ComponentConstructor{
-				Components: []constructorruntime.Component{*component},
+				Components: make([]constructorruntime.Component, len(tt.components)),
+			}
+			for i, comp := range tt.components {
+				compConstructor.Components[i] = *comp
 			}
 
-			descriptors, err := constructor.Construct(context.Background(), compConstructor)
+			descriptors, err := constructor.Construct(t.Context(), compConstructor)
 
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, descriptors)
 			} else {
 				assert.NoError(t, err)
-				assert.Len(t, descriptors, 1)
-				assert.Equal(t, component.Name, descriptors[0].Component.Name)
-				assert.Equal(t, component.Version, descriptors[0].Component.Version)
+				if len(tt.components) > 0 {
+					assert.Len(t, descriptors, len(tt.components))
+					for i, component := range tt.components {
+						assert.Equal(t, component.Name, descriptors[i].Component.Name)
+						assert.Equal(t, component.Version, descriptors[i].Component.Version)
+					}
+				} else {
+					assert.Empty(t, descriptors)
+				}
 			}
 
-			if tt.expectReplaced {
-				desc, err := repo.GetComponentVersion(context.Background(), component.Name, component.Version)
-				require.NoError(t, err)
-				assert.NotNil(t, desc)
-			} else if tt.existing && tt.policy == ComponentVersionConflictSkip {
-				desc, err := repo.GetComponentVersion(context.Background(), component.Name, component.Version)
-				require.NoError(t, err)
-				assert.NotNil(t, desc)
+			if tt.expectReplaced || tt.existing && tt.policy == ComponentVersionConflictSkip {
+				for _, component := range tt.components {
+					desc, err := repo.GetComponentVersion(t.Context(), component.Name, component.Version)
+					require.NoError(t, err)
+					assert.NotNil(t, desc)
+				}
 			}
 		})
 	}
