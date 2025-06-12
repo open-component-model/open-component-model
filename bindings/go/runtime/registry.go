@@ -122,7 +122,7 @@ func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
 	}
 
 	if _, exists := r.defaults[typ]; exists {
-		return fmt.Errorf("type %q already registered", typ)
+		return TypeAlreadyRegisteredError(typ)
 	}
 
 	prototype, ok := scheme.defaults[typ]
@@ -136,7 +136,7 @@ func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
 	for alias, forTyp := range scheme.aliases {
 		if forTyp.Equal(typ) {
 			if _, exists := r.aliases[alias]; exists {
-				return fmt.Errorf("alias %q already registered, cannot register for type %q", alias, typ)
+				return fmt.Errorf("%w: cannot register for type %q", TypeAlreadyRegisteredError(alias), typ)
 			}
 			r.aliases[alias] = typ
 		}
@@ -145,26 +145,22 @@ func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
 	return nil
 }
 
-type ErrTypeAlreadyRegistered struct {
-	Type Type
+// TypeAlreadyRegisteredError is returned when a type is already registered in the scheme.
+// It contains the type that was attempted to be registered.
+//
+// Use IsTypeAlreadyRegisteredError to check for this error type.
+type TypeAlreadyRegisteredError Type
+
+func (e TypeAlreadyRegisteredError) Error() string {
+	return fmt.Sprintf("type %q is already registered", Type(e))
 }
 
-func (e *ErrTypeAlreadyRegistered) Error() string {
-	return fmt.Sprintf("type %q is already registered", e.Type)
-}
-
-func NewErrAlreadyRegistered(typ Type) *ErrTypeAlreadyRegistered {
-	return &ErrTypeAlreadyRegistered{
-		Type: typ,
-	}
-}
-
-func IsErrTypeAlreadyRegistered(err error) bool {
+// IsTypeAlreadyRegisteredError checks if the error is of type TypeAlreadyRegisteredError.
+func IsTypeAlreadyRegisteredError(err error) bool {
 	if err == nil {
 		return false
 	}
-	var e *ErrTypeAlreadyRegistered
-	return errors.As(err, &e)
+	return errors.As(err, new(TypeAlreadyRegisteredError))
 }
 
 // RegisterWithAlias registers a new type with the registry.
@@ -177,10 +173,10 @@ func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
 
 	for i, typ := range types {
 		if prototype, exists := r.defaults[typ]; exists {
-			return fmt.Errorf("%w: default for %T", NewErrAlreadyRegistered(typ), prototype)
+			return fmt.Errorf("%w: as default for %T", TypeAlreadyRegisteredError(typ), prototype)
 		}
 		if def, ok := r.aliases[typ]; ok {
-			return fmt.Errorf("%w: alias for %q", NewErrAlreadyRegistered(typ), def)
+			return fmt.Errorf("%w: as alias for %q", TypeAlreadyRegisteredError(typ), def)
 		}
 		if i == 0 {
 			// first type is the def type
