@@ -30,8 +30,8 @@ func (m *TestPlugin) GetGlobalResource(ctx context.Context, request *v1.GetResou
 	}, nil
 }
 
-func (m *TestPlugin) AddGlobalResource(ctx context.Context, request *v1.PostResourceRequest, credentials map[string]string) (*v1.PostResourceResponse, error) {
-	return &v1.PostResourceResponse{
+func (m *TestPlugin) AddGlobalResource(ctx context.Context, request *v1.PostResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
+	return &v1.GetGlobalResourceResponse{
 		Resource: &descriptorv2.Resource{
 			ElementMeta: descriptorv2.ElementMeta{
 				ObjectMeta: descriptorv2.ObjectMeta{

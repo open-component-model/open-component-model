@@ -92,7 +92,7 @@ func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *v1.GetRes
 }
 
 // AddGlobalResource adds a global resource.
-func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *v1.PostResourceRequest, credentials map[string]string) (*v1.PostResourceResponse, error) {
+func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *v1.PostResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
 	if err := p.validateEndpoint(req.Resource.Access, p.jsonSchema); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
@@ -102,7 +102,7 @@ func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *v1.PostRe
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	var response v1.PostResourceResponse
+	var response v1.GetGlobalResourceResponse
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, AddGlobalResource, http.MethodPost, plugins.WithPayload(req), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to add global resource to plugin %q: %w", p.ID, err)
 	}

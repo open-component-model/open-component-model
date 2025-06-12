@@ -155,7 +155,7 @@ type mockResourceInputPlugin struct {
 	processCalled bool
 }
 
-func (m *mockResourceInputPlugin) GetCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error) {
+func (m *mockResourceInputPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error) {
 	m.credCalled = true
 	return nil, nil
 }
@@ -172,7 +172,7 @@ type mockSourceInputPlugin struct {
 	processCalled bool
 }
 
-func (m *mockSourceInputPlugin) GetCredentialConsumerIdentity(ctx context.Context, source *constructor.Source) (identity runtime.Identity, err error) {
+func (m *mockSourceInputPlugin) GetSourceCredentialConsumerIdentity(ctx context.Context, source *constructor.Source) (identity runtime.Identity, err error) {
 	m.credCalled = true
 	return nil, nil
 }

@@ -157,7 +157,7 @@ func (m *mockResourcePlugin) GetGlobalResource(ctx context.Context, request *v1.
 	return nil, nil
 }
 
-func (m *mockResourcePlugin) AddGlobalResource(ctx context.Context, request *v1.PostResourceRequest, creds map[string]string) (*v1.PostResourceResponse, error) {
+func (m *mockResourcePlugin) AddGlobalResource(ctx context.Context, request *v1.PostResourceRequest, creds map[string]string) (*v1.GetGlobalResourceResponse, error) {
 	return nil, nil
 }
 
