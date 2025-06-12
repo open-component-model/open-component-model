@@ -16,6 +16,7 @@ import (
 	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
 
@@ -24,7 +25,7 @@ type CopyToOCILayoutOptions struct {
 	Tags []string
 }
 
-func CopyToOCILayoutInMemory(ctx context.Context, src content.ReadOnlyStorage, base ociImageSpecV1.Descriptor, opts CopyToOCILayoutOptions) (b *blob.DirectReadOnlyBlob, err error) {
+func CopyToOCILayoutInMemory(ctx context.Context, src content.ReadOnlyStorage, base ociImageSpecV1.Descriptor, opts CopyToOCILayoutOptions) (b *inmemory.Blob, err error) {
 	var buf bytes.Buffer
 
 	h := sha256.New()
@@ -66,7 +67,7 @@ func CopyToOCILayoutInMemory(ctx context.Context, src content.ReadOnlyStorage, b
 		return nil, fmt.Errorf("failed to close writers: %w", err)
 	}
 
-	downloaded := blob.NewDirectReadOnlyBlob(&buf)
+	downloaded := inmemory.New(&buf)
 
 	downloaded.SetPrecalculatedSize(int64(buf.Len()))
 	downloaded.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)

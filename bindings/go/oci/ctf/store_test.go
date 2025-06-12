@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
@@ -58,7 +58,7 @@ func TestFetch(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -96,7 +96,7 @@ func TestExists(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -153,7 +153,7 @@ func TestResolve(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -197,7 +197,7 @@ func TestTag(t *testing.T) {
 	ctx := t.Context()
 	reference := "test-tag"
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -225,7 +225,7 @@ func TestFetchReference(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -268,7 +268,7 @@ func TestTags(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -344,7 +344,7 @@ func TestResolveWithRegistry(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
