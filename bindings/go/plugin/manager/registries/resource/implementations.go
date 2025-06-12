@@ -74,7 +74,7 @@ func (p *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 }
 
 // GetGlobalResource retrieves a global resource.
-func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *v1.GetResourceRequest, credentials map[string]string) (*v1.GetResourceResponse, error) {
+func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *v1.GetGlobalResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
 	if err := p.validateEndpoint(req.Access, p.jsonSchema); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
@@ -84,7 +84,7 @@ func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *v1.GetRes
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	var response v1.GetResourceResponse
+	var response v1.GetGlobalResourceResponse
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, GetGlobalResource, http.MethodPost, plugins.WithPayload(req), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to get global resource from plugin %q: %w", p.ID, err)
 	}
@@ -92,7 +92,7 @@ func (p *RepositoryPlugin) GetGlobalResource(ctx context.Context, req *v1.GetRes
 }
 
 // AddGlobalResource adds a global resource.
-func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *v1.PostResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
+func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *v1.AddGlobalResourceRequest, credentials map[string]string) (*v1.AddGlobalResourceResponse, error) {
 	if err := p.validateEndpoint(req.Resource.Access, p.jsonSchema); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
@@ -102,7 +102,7 @@ func (p *RepositoryPlugin) AddGlobalResource(ctx context.Context, req *v1.PostRe
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	var response v1.GetGlobalResourceResponse
+	var response v1.AddGlobalResourceResponse
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, AddGlobalResource, http.MethodPost, plugins.WithPayload(req), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to add global resource to plugin %q: %w", p.ID, err)
 	}

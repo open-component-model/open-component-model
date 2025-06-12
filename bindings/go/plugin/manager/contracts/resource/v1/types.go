@@ -6,18 +6,19 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type GetResourceRequest struct {
-	types.Location
+type GetGlobalResourceRequest struct {
 	// The resource specification to download
 	*v2.Resource `json:"resource"`
 }
-
-type GetResourceResponse struct {
-	// Location where the resource will be downloaded to and can be accessed.
+type GetGlobalResourceResponse struct {
 	Location types.Location `json:"location"`
 }
 
-type PostResourceRequest struct {
+type AddGlobalResourceRequest struct {
+	Resource *v2.Resource `json:"resource"`
+}
+
+type AddGlobalResourceResponse struct {
 	// The ResourceLocation of the Local Resource
 	ResourceLocation types.Location `json:"resourceLocation"`
 	Resource         *v2.Resource   `json:"resource"`
@@ -29,8 +30,4 @@ type GetIdentityRequest[T runtime.Typed] struct {
 
 type GetIdentityResponse struct {
 	Identity map[string]string `json:"identity"`
-}
-
-type GetGlobalResourceResponse struct {
-	Resource *v2.Resource `json:"resource"`
 }

@@ -19,15 +19,15 @@ type mockPlugin struct {
 	contracts.EmptyBasePlugin
 }
 
-func (m *mockPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+func (m mockPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
 	return nil, nil
 }
 
-func (m *mockPlugin) GetGlobalResource(ctx context.Context, request *v1.GetResourceRequest, credentials map[string]string) (*v1.GetResourceResponse, error) {
+func (m mockPlugin) GetGlobalResource(ctx context.Context, request *v1.GetGlobalResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
 	return nil, nil
 }
 
-func (m *mockPlugin) AddGlobalResource(ctx context.Context, request *v1.PostResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
+func (m mockPlugin) AddGlobalResource(ctx context.Context, request *v1.AddGlobalResourceRequest, credentials map[string]string) (*v1.AddGlobalResourceResponse, error) {
 	return nil, nil
 }
 

@@ -17,7 +17,7 @@ import (
 
 func TestGetGlobalResource(t *testing.T) {
 	// Setup test server
-	response := &v1.GetResourceResponse{}
+	response := &v1.GetGlobalResourceRequest{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == GetGlobalResource && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode(response)
@@ -33,11 +33,11 @@ func TestGetGlobalResource(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourcePluginType,
+		PluginType: types.ResourceRepositoryPluginType,
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
-	_, err := plugin.GetGlobalResource(ctx, &v1.GetResourceRequest{
+	_, err := plugin.GetGlobalResource(ctx, &v1.GetGlobalResourceRequest{
 		Resource: &descriptorv2.Resource{
 			ElementMeta: descriptorv2.ElementMeta{
 				ObjectMeta: descriptorv2.ObjectMeta{
@@ -77,11 +77,11 @@ func TestAddGlobalResource(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourcePluginType,
+		PluginType: types.ResourceRepositoryPluginType,
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
-	_, err := plugin.AddGlobalResource(ctx, &v1.PostResourceRequest{
+	_, err := plugin.AddGlobalResource(ctx, &v1.AddGlobalResourceRequest{
 		Resource: &descriptorv2.Resource{
 			ElementMeta: descriptorv2.ElementMeta{
 				ObjectMeta: descriptorv2.ObjectMeta{
@@ -119,7 +119,7 @@ func TestPing(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourcePluginType,
+		PluginType: types.ResourceRepositoryPluginType,
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
@@ -147,7 +147,7 @@ func TestValidateEndpoint(t *testing.T) {
 	plugin := NewResourceRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ResourcePluginType,
+		PluginType: types.ResourceRepositoryPluginType,
 	}, server.URL, []byte(validSchema))
 
 	// Test valid object

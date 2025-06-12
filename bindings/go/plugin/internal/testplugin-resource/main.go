@@ -21,8 +21,8 @@ import (
 
 type TestPlugin struct{}
 
-func (m *TestPlugin) GetGlobalResource(ctx context.Context, request *v1.GetResourceRequest, credentials map[string]string) (*v1.GetResourceResponse, error) {
-	return &v1.GetResourceResponse{
+func (m *TestPlugin) GetGlobalResource(ctx context.Context, request *v1.GetGlobalResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
+	return &v1.GetGlobalResourceResponse{
 		Location: types.Location{
 			LocationType: types.LocationTypeLocalFile,
 			Value:        "/tmp/to/file",
@@ -30,8 +30,8 @@ func (m *TestPlugin) GetGlobalResource(ctx context.Context, request *v1.GetResou
 	}, nil
 }
 
-func (m *TestPlugin) AddGlobalResource(ctx context.Context, request *v1.PostResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
-	return &v1.GetGlobalResourceResponse{
+func (m *TestPlugin) AddGlobalResource(ctx context.Context, request *v1.AddGlobalResourceRequest, credentials map[string]string) (*v1.AddGlobalResourceResponse, error) {
+	return &v1.AddGlobalResourceResponse{
 		Resource: &descriptorv2.Resource{
 			ElementMeta: descriptorv2.ElementMeta{
 				ObjectMeta: descriptorv2.ObjectMeta{

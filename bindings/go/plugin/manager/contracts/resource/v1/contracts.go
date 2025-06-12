@@ -17,13 +17,13 @@ type IdentityProvider[T runtime.Typed] interface {
 type ReadResourcePluginContract interface {
 	contracts.PluginBase
 	IdentityProvider[runtime.Typed]
-	GetGlobalResource(ctx context.Context, request *GetResourceRequest, credentials map[string]string) (*GetResourceResponse, error)
+	GetGlobalResource(ctx context.Context, request *GetGlobalResourceRequest, credentials map[string]string) (*GetGlobalResourceResponse, error)
 }
 
 type WriteResourcePluginContract interface {
 	contracts.PluginBase
 	IdentityProvider[runtime.Typed]
-	AddGlobalResource(ctx context.Context, request *PostResourceRequest, credentials map[string]string) (*GetGlobalResourceResponse, error)
+	AddGlobalResource(ctx context.Context, request *AddGlobalResourceRequest, credentials map[string]string) (*AddGlobalResourceResponse, error)
 }
 
 // ReadWriteResourcePluginContract is the contract defining Add and Get global resources.
