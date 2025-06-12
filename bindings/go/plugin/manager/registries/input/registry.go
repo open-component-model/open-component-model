@@ -65,13 +65,10 @@ func (r *RepositoryRegistry) GetResourceInputPlugin(ctx context.Context, spec ru
 	defer r.mu.Unlock()
 
 	// look for an internal implementation that actually implements the interface
-	// return internalPluginThatImplementsTheInterface, nil
-	if _, err := r.scheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
-	}
-
+	_, _ = r.scheme.DefaultType(spec)
+	typ := spec.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.scheme.TypeForPrototype(spec); err == nil {
+	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalResourceInputRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
@@ -95,13 +92,10 @@ func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runt
 	defer r.mu.Unlock()
 
 	// look for an internal implementation that actually implements the interface
-	// return internalPluginThatImplementsTheInterface, nil
-	if _, err := r.scheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
-	}
-
+	_, _ = r.scheme.DefaultType(spec)
+	typ := spec.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.scheme.TypeForPrototype(spec); err == nil {
+	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalSourceInputRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
@@ -156,8 +150,11 @@ func RegisterInternalResourceInputPlugin(
 	}
 
 	r.internalResourceInputRepositoryPlugins[typ] = plugin
+	for _, alias := range scheme.GetTypes()[typ] {
+		r.internalResourceInputRepositoryPlugins[alias] = r.internalResourceInputRepositoryPlugins[typ]
+	}
 
-	if err := r.scheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
@@ -180,8 +177,11 @@ func RegisterInternalSourcePlugin(
 	}
 
 	r.internalSourceInputRepositoryPlugins[typ] = plugin
+	for _, alias := range scheme.GetTypes()[typ] {
+		r.internalSourceInputRepositoryPlugins[alias] = r.internalSourceInputRepositoryPlugins[typ]
+	}
 
-	if err := r.scheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
