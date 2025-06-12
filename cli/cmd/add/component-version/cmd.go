@@ -1,7 +1,6 @@
 package componentversion
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -21,10 +20,8 @@ import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -160,7 +157,10 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, constructor.Options{
 		TargetRepositoryProvider:    instance,
 		ResourceRepositoryProvider:  instance,
-		ResourceInputMethodProvider: instance,
+		SourceInputMethodProvider:   pluginManager.InputRegistry,
+		ResourceInputMethodProvider: pluginManager.InputRegistry,
+		CredentialProvider:          credentialGraph,
+
 		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return copyResources
 		},
@@ -221,7 +221,6 @@ func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentC
 }
 
 var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
-var _ constructor.ResourceInputMethodProvider = (*constructorProvider)(nil)
 
 type constructorProvider struct {
 	cache          string
@@ -230,134 +229,11 @@ type constructorProvider struct {
 	*credentials.Graph
 }
 
-type resourceInputMethod struct {
-	plugin inputv1.ResourceInputPluginContract
-}
-
-func (r resourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	res, err := r.plugin.GetIdentity(ctx, &inputv1.GetIdentityRequest[runtime.Typed]{Typ: resource.Input})
-	if err != nil {
-		return nil, fmt.Errorf("getting identity for resource %q failed: %w", resource.ToIdentity().String(), err)
-	}
-	return res.Identity, nil
-}
-
-func (r resourceInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
-	v1resource, err := constructorruntime.ConvertToV1Resource(resource)
-	if err != nil {
-		return nil, fmt.Errorf("converting resource %q to v1 failed: %w", resource.ToIdentity().String(), err)
-	}
-
-	res, err := r.plugin.ProcessResource(ctx, &inputv1.ProcessResourceInputRequest{
-		Resource: v1resource,
-	}, credentials)
-	if err != nil {
-		return nil, fmt.Errorf("processing resource %q failed: %w", resource.ToIdentity().String(), err)
-	}
-
-	switch {
-	case res.Resource != nil:
-		runtimeResource := descriptor.ConvertFromV2Resources([]v2.Resource{*res.Resource})[0]
-		return &constructor.ResourceInputMethodResult{
-			ProcessedResource: &runtimeResource,
-		}, nil
-	case res.Location != nil:
-		if res.Location.LocationType != types.LocationTypeLocalFile {
-			return nil, fmt.Errorf("resource location type %q is not yet supported by this plugin", resource.ToIdentity().String())
-		}
-		b, err := filesystem.GetBlobFromOSPath(res.Location.Value)
-		if err != nil {
-			return nil, fmt.Errorf("getting blob from resource location %q failed: %w", res.Location.Value, err)
-		}
-		defer func() {
-			// remove the path after we are done with it, so it does not linger around.
-			if err := os.Remove(res.Location.Value); err != nil && !os.IsNotExist(err) {
-				slog.WarnContext(ctx, "failed removing temporary resource file after processing through input method", "path", res.Location.Value, "error", err)
-			}
-		}()
-		// hot load the blob so we can remove the path afterwards.
-		var buf bytes.Buffer
-		if err := blob.Copy(&buf, b); err != nil {
-			return nil, fmt.Errorf("copying blob data from resource location %q failed: %w", res.Location.Value, err)
-		}
-		return &constructor.ResourceInputMethodResult{
-			ProcessedBlobData: blob.NewDirectReadOnlyBlob(&buf),
-		}, nil
-	default:
-		return nil, fmt.Errorf("no resource or location returned by plugin for resource %q", resource.ToIdentity().String())
-	}
-}
-
-func (prov *constructorProvider) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceInputMethod, error) {
-	plugin, err := prov.PluginManager.InputRegistry.GetResourceInputPlugin(ctx, resource.Input)
-	if err != nil {
-		return nil, fmt.Errorf("getting plugin for resource %q failed: %w", resource.ToIdentity().String(), err)
-	}
-
-	return &resourceInputMethod{plugin}, nil
-}
-
-type sourceInputMethod struct {
-	plugin inputv1.SourceInputPluginContract
-}
-
-func (s sourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
-	res, err := s.plugin.GetIdentity(ctx, &inputv1.GetIdentityRequest[runtime.Typed]{Typ: source.Input})
-	if err != nil {
-		return nil, fmt.Errorf("getting identity for source %q failed: %w", source.ToIdentity().String(), err)
-	}
-	return res.Identity, nil
-}
-
-func (s sourceInputMethod) ProcessSource(ctx context.Context, source *constructorruntime.Source, credentials map[string]string) (result *constructor.SourceInputMethodResult, err error) {
-	v1source, err := constructorruntime.ConvertToV1Source(source)
-	if err != nil {
-		return nil, fmt.Errorf("converting resource %q to v1 failed: %w", source.ToIdentity().String(), err)
-	}
-
-	res, err := s.plugin.ProcessSource(ctx, &inputv1.ProcessSourceInputRequest{
-		Source: v1source,
-	}, credentials)
-	if err != nil {
-		return nil, fmt.Errorf("processing source %q failed: %w", source.ToIdentity().String(), err)
-	}
-
-	switch {
-	case res.Source != nil:
-		runtimeSource := descriptor.ConvertFromV2Sources([]v2.Source{*res.Source})[0]
-		return &constructor.SourceInputMethodResult{
-			ProcessedSource: &runtimeSource,
-		}, nil
-	case res.Location != nil:
-		if res.Location.LocationType != types.LocationTypeLocalFile {
-			return nil, fmt.Errorf("source location type %q is not yet supported by this plugin", source.ToIdentity().String())
-		}
-		b, err := filesystem.GetBlobFromOSPath(res.Location.Value)
-		if err != nil {
-			return nil, fmt.Errorf("getting blob from source location %q failed: %w", res.Location.Value, err)
-		}
-		return &constructor.SourceInputMethodResult{
-			ProcessedBlobData: b,
-		}, nil
-	default:
-		return nil, fmt.Errorf("no source or location returned by plugin for source %q", source.ToIdentity().String())
-	}
-}
-
-func (prov *constructorProvider) GetSourceInputMethod(ctx context.Context, resource *constructorruntime.Source) (constructor.SourceInputMethod, error) {
-	plugin, err := prov.PluginManager.InputRegistry.GetSourceInputPlugin(ctx, resource.Input)
-	if err != nil {
-		return nil, fmt.Errorf("getting plugin for source %q failed: %w", resource.ToIdentity().String(), err)
-	}
-
-	return &sourceInputMethod{plugin}, nil
-}
-
 type resourceRepository struct {
 	plugin resourcev1.ReadWriteResourcePluginContract
 }
 
-func (r *resourceRepository) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (r *resourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	res, err := r.plugin.GetIdentity(ctx, &resourcev1.GetIdentityRequest[runtime.Typed]{Typ: resource.Access})
 	if err != nil {
 		return nil, fmt.Errorf("getting identity for resource %q failed: %w", resource.ToIdentity().String(), err)
@@ -366,16 +242,16 @@ func (r *resourceRepository) GetCredentialConsumerIdentity(ctx context.Context, 
 }
 
 func (r *resourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error) {
-	response, err := r.plugin.GetGlobalResource(ctx, &resourcev1.GetResourceRequest{}, credentials)
+	response, err := r.plugin.GetGlobalResource(ctx, &resourcev1.GetGlobalResourceRequest{}, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("getting resource %q failed: %w", res.ToIdentity().String(), err)
 	}
-	if response.ResourceLocation.LocationType != types.LocationTypeLocalFile {
+	if response.Location.LocationType != types.LocationTypeLocalFile {
 		return nil, fmt.Errorf("resource location type %q is not yet supported by this plugin", res.ToIdentity().String())
 	}
-	content, err = filesystem.GetBlobFromOSPath(response.ResourceLocation.Value)
+	content, err = filesystem.GetBlobFromOSPath(response.Location.Value)
 	if err != nil {
-		return nil, fmt.Errorf("getting blob from resource location %q failed: %w", response.ResourceLocation.Value, err)
+		return nil, fmt.Errorf("getting blob from resource location %q failed: %w", response.Location.Value, err)
 	}
 
 	return content, nil
@@ -391,7 +267,7 @@ func (prov *constructorProvider) GetResourceRepository(ctx context.Context, reso
 	default:
 		return nil, fmt.Errorf("resource %q has no access or input defined", resource.ToIdentity().String())
 	}
-	plugin, err := prov.PluginManager.ResourceRepositoryRegistry.GetResourcePlugin(ctx, candidate)
+	plugin, err := prov.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, candidate)
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for resource %q failed: %w", resource.ToIdentity().String(), err)
 	}

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
+	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -57,6 +58,14 @@ func (r *RepositoryRegistry) AddPlugin(plugin types.Plugin, constructionType run
 	r.registry[constructionType] = plugin
 
 	return nil
+}
+
+func (r *RepositoryRegistry) GetSourceInputMethod(ctx context.Context, src *constructorruntime.Source) (constructor.SourceInputMethod, error) {
+	return r.GetSourceInputPlugin(ctx, src.Input)
+}
+
+func (r *RepositoryRegistry) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceInputMethod, error) {
+	return r.GetResourceInputPlugin(ctx, resource.Input)
 }
 
 // GetResourceInputPlugin returns ResourceInput plugins for a specific type.
@@ -157,7 +166,7 @@ func RegisterInternalResourceInputPlugin(
 
 	r.internalResourceInputRepositoryPlugins[typ] = plugin
 
-	if err := r.repositoryScheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.repositoryScheme.RegisterWithAlias(proto, typ); err != nil && !runtime.IsErrTypeAlreadyRegistered(err) {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
@@ -181,7 +190,7 @@ func RegisterInternalSourcePlugin(
 
 	r.internalSourceInputRepositoryPlugins[typ] = plugin
 
-	if err := r.repositoryScheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.repositoryScheme.RegisterWithAlias(proto, typ); err != nil && !runtime.IsErrTypeAlreadyRegistered(err) {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 

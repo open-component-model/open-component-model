@@ -15,7 +15,7 @@ import (
 
 func Register(
 	compverRegistry *componentversionrepository.RepositoryRegistry,
-	resRegistry *resource.RepositoryRegistry,
+	resRegistry *resource.ResourceRegistry,
 ) error {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -144,6 +145,28 @@ func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
 	return nil
 }
 
+type ErrTypeAlreadyRegistered struct {
+	Type Type
+}
+
+func (e *ErrTypeAlreadyRegistered) Error() string {
+	return fmt.Sprintf("type %q is already registered", e.Type)
+}
+
+func NewErrAlreadyRegistered(typ Type) *ErrTypeAlreadyRegistered {
+	return &ErrTypeAlreadyRegistered{
+		Type: typ,
+	}
+}
+
+func IsErrTypeAlreadyRegistered(err error) bool {
+	if err == nil {
+		return false
+	}
+	var e *ErrTypeAlreadyRegistered
+	return errors.As(err, &e)
+}
+
 // RegisterWithAlias registers a new type with the registry.
 // The first type is the default type and all other types are aliases.
 // Note that if Scheme.RegisterWithAlias or Scheme.MustRegister were called before,
@@ -154,10 +177,10 @@ func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
 
 	for i, typ := range types {
 		if prototype, exists := r.defaults[typ]; exists {
-			return fmt.Errorf("type %q is already registered as default for %T", typ, prototype)
+			return fmt.Errorf("%w: default for %T", NewErrAlreadyRegistered(typ), prototype)
 		}
 		if def, ok := r.aliases[typ]; ok {
-			return fmt.Errorf("type %q is already registered as alias for %q", typ, def)
+			return fmt.Errorf("%w: alias for %q", NewErrAlreadyRegistered(typ), def)
 		}
 		if i == 0 {
 			// first type is the def type

@@ -9,6 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -23,9 +24,20 @@ func init() {
 	scheme.MustRegisterWithAlias(&File{}, runtime.NewVersionedType(Type, Version), runtime.NewUnversionedType(Type))
 }
 
+func Register(inputRegistry *input.RepositoryRegistry) error {
+	if err := input.RegisterInternalResourceInputPlugin(scheme, inputRegistry, &ResourceInputMethod{}, &File{}); err != nil {
+		return fmt.Errorf("could not register file resource input method: %w", err)
+	}
+	if err := input.RegisterInternalSourcePlugin(scheme, inputRegistry, &SourceInputMethod{}, &File{}); err != nil {
+		return fmt.Errorf("could not register file source input method: %w", err)
+	}
+
+	return nil
+}
+
 type ResourceInputMethod struct{}
 
-func (i *ResourceInputMethod) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (i *ResourceInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	return nil, fmt.Errorf("files do not require credentials")
 }
 
@@ -48,7 +60,7 @@ func (i *ResourceInputMethod) ProcessResource(ctx context.Context, resource *con
 type SourceInputMethod struct {
 }
 
-func (i *SourceInputMethod) GetCredentialConsumerIdentity(context.Context, *constructorruntime.Source) (identity runtime.Identity, err error) {
+func (i *SourceInputMethod) GetSourceCredentialConsumerIdentity(ctx context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
 	return nil, fmt.Errorf("files do not require credentials")
 }
 

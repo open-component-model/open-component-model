@@ -55,7 +55,7 @@ func handleGetIdentity(plugin v1.ReadWriteResourcePluginContract) http.HandlerFu
 // handleGetGlobalResource handles the GetGlobalResource endpoint
 func handleGetGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var request v1.GetResourceRequest
+		var request v1.GetGlobalResourceRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
@@ -74,7 +74,7 @@ func handleGetGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.Han
 // handleAddGlobalResource handles the AddGlobalResource endpoint
 func handleAddGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var request v1.PostResourceRequest
+		var request v1.AddGlobalResourceRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
