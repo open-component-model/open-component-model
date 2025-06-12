@@ -28,13 +28,13 @@ func (m *TestPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest
 	return nil, nil
 }
 
-func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceResponse, error) {
+func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
 	tmp, err := os.CreateTemp("", "test-resource-file")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temp file: %w", err)
 	}
 	_ = tmp.Close()
-	return &v1.ProcessResourceResponse{
+	return &v1.ProcessResourceInputResponse{
 		Resource: &constructorv1.Resource{
 			ElementMeta: constructorv1.ElementMeta{
 				ObjectMeta: constructorv1.ObjectMeta{
@@ -52,13 +52,13 @@ func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessRes
 	}, nil
 }
 
-func (m *TestPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceResponse, error) {
+func (m *TestPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
 	tmp, err := os.CreateTemp("", "test-source-file")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temp file: %w", err)
 	}
 	_ = tmp.Close()
-	return &v1.ProcessSourceResponse{
+	return &v1.ProcessSourceInputResponse{
 		Source: &constructorv1.Source{
 			ElementMeta: constructorv1.ElementMeta{
 				ObjectMeta: constructorv1.ObjectMeta{

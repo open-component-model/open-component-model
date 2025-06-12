@@ -16,7 +16,7 @@ import (
 
 func TestProcessResourceHandler(t *testing.T) {
 	// Setup test server
-	response := &v1.ProcessResourceResponse{}
+	response := &v1.ProcessResourceInputResponse{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == ProcessResource && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode(response)

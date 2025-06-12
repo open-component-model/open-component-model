@@ -33,8 +33,8 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 		{
 			name: "ResourceInputProcessorHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials map[string]string) (*inputv1.ProcessResourceResponse, error) {
-					return &inputv1.ProcessResourceResponse{}, nil
+				handler := ResourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials map[string]string) (*inputv1.ProcessResourceInputResponse, error) {
+					return &inputv1.ProcessResourceInputResponse{}, nil
 				}, scheme, &dummyv1.Repository{})
 
 				return handler
@@ -56,8 +56,8 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 		{
 			name: "ResourceInputProcessorHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ResourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials map[string]string) (*inputv1.ProcessResourceResponse, error) {
-					return &inputv1.ProcessResourceResponse{
+				handler := ResourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials map[string]string) (*inputv1.ProcessResourceInputResponse, error) {
+					return &inputv1.ProcessResourceInputResponse{
 						Resource: &constructorv1.Resource{
 							ElementMeta: constructorv1.ElementMeta{
 								ObjectMeta: constructorv1.ObjectMeta{
@@ -141,8 +141,8 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 		{
 			name: "SourceInputProcessorHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := SourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials map[string]string) (*inputv1.ProcessSourceResponse, error) {
-					return &inputv1.ProcessSourceResponse{}, nil
+				handler := SourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials map[string]string) (*inputv1.ProcessSourceInputResponse, error) {
+					return &inputv1.ProcessSourceInputResponse{}, nil
 				}, scheme, &dummyv1.Repository{})
 
 				return handler
@@ -164,8 +164,8 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 		{
 			name: "SourceInputProcessorHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := SourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials map[string]string) (*inputv1.ProcessSourceResponse, error) {
-					return &inputv1.ProcessSourceResponse{
+				handler := SourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials map[string]string) (*inputv1.ProcessSourceInputResponse, error) {
+					return &inputv1.ProcessSourceInputResponse{
 						Source: &constructorv1.Source{
 							ElementMeta: constructorv1.ElementMeta{
 								ObjectMeta: constructorv1.ObjectMeta{

@@ -16,15 +16,15 @@ import (
 // ResourceInputProcessorHandlerFunc is a wrapper around calling the interface method ProcessResource for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func ResourceInputProcessorHandlerFunc(f func(ctx context.Context, r *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
-	return inputProcessorHandlerFunc[v1.ProcessResourceInputRequest, v1.ProcessResourceResponse](f)
+func ResourceInputProcessorHandlerFunc(f func(ctx context.Context, r *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
+	return inputProcessorHandlerFunc[v1.ProcessResourceInputRequest, v1.ProcessResourceInputResponse](f)
 }
 
 // SourceInputProcessorHandlerFunc is a wrapper around calling the interface method ProcessSource for the plugin.
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
-func SourceInputProcessorHandlerFunc(f func(ctx context.Context, r *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
-	return inputProcessorHandlerFunc[v1.ProcessSourceInputRequest, v1.ProcessSourceResponse](f)
+func SourceInputProcessorHandlerFunc(f func(ctx context.Context, r *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error), scheme *runtime.Scheme, typ runtime.Typed) http.HandlerFunc {
+	return inputProcessorHandlerFunc[v1.ProcessSourceInputRequest, v1.ProcessSourceInputResponse](f)
 }
 
 func inputProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, r *REQ, credentials map[string]string) (*RES, error)) http.HandlerFunc {

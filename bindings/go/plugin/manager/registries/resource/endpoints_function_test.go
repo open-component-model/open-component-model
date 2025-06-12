@@ -19,7 +19,7 @@ type mockPlugin struct {
 	contracts.EmptyBasePlugin
 }
 
-func (m mockPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[T]) (*v1.GetIdentityResponse, error) {
+func (m mockPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
 	return nil, nil
 }
 

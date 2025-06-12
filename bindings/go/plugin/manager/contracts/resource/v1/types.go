@@ -15,9 +15,7 @@ type GetGlobalResourceResponse struct {
 }
 
 type AddGlobalResourceRequest struct {
-	// The ResourceLocation of the Local Resource
-	ResourceLocation types.Location `json:"resourceLocation"`
-	Resource         *v2.Resource   `json:"resource"`
+	Resource *v2.Resource `json:"resource"`
 }
 
 type AddGlobalResourceResponse struct {

@@ -31,7 +31,7 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         "test-plugin-1-resource",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.ResourcePluginType,
+		PluginType: mtypes.ResourceRepositoryPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -56,10 +56,10 @@ func TestPluginFlow(t *testing.T) {
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-resource",
 			Type:       mtypes.Socket,
-			PluginType: mtypes.ResourcePluginType,
+			PluginType: mtypes.ResourceRepositoryPluginType,
 		},
 		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.ResourcePluginType: {
+			mtypes.ResourceRepositoryPluginType: {
 				{
 					Type:       typ,
 					JSONSchema: []byte(`{}`),
@@ -153,11 +153,11 @@ func (m *mockResourcePlugin) GetIdentity(ctx context.Context, request *v1.GetIde
 	return nil, nil
 }
 
-func (m *mockResourcePlugin) GetGlobalResource(ctx context.Context, request *v1.GetGlobalResourceRequest, creds map[string]string) (*v1.GetGlobalResourceRequest, error) {
+func (m *mockResourcePlugin) GetGlobalResource(ctx context.Context, request *v1.GetGlobalResourceRequest, creds map[string]string) (*v1.GetGlobalResourceResponse, error) {
 	return nil, nil
 }
 
-func (m *mockResourcePlugin) AddGlobalResource(ctx context.Context, request *v1.AddGlobalResourceRequest, creds map[string]string) (*v1.GetGlobalResourceResponse, error) {
+func (m *mockResourcePlugin) AddGlobalResource(ctx context.Context, request *v1.AddGlobalResourceRequest, creds map[string]string) (*v1.AddGlobalResourceResponse, error) {
 	return nil, nil
 }
 

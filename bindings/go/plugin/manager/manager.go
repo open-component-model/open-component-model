@@ -258,8 +258,8 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, pl
 			if err := pm.DigestProcessorRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
-		case mtypes.ResourcePluginType:
-			slog.DebugContext(ctx, "adding digest processor plugin", "id", plugin.ID)
+		case mtypes.ResourceRepositoryPluginType:
+			slog.DebugContext(ctx, "adding resource repository plugin", "id", plugin.ID)
 			if err := pm.ResourcePluginRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}

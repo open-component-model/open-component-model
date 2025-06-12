@@ -22,7 +22,7 @@ func (r *RepositoryRegistry) GetRepositoryPlugin(ctx context.Context, consumer r
 
 	base, ok := r.internalCredentialRepositoryPlugins[typ]
 	if ok {
-		return &credentialGraphPlugin{r.internalCredentialRepositoryScheme, base}, nil
+		return &credentialGraphPlugin{r.scheme, base}, nil
 	}
 
 	plugin, ok := r.registry[typ]
@@ -31,7 +31,7 @@ func (r *RepositoryRegistry) GetRepositoryPlugin(ctx context.Context, consumer r
 	}
 
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
-		return &credentialGraphPlugin{r.internalCredentialRepositoryScheme, existingPlugin.Plugin}, nil
+		return &credentialGraphPlugin{r.scheme, existingPlugin.Plugin}, nil
 	}
 
 	started, err := startAndReturnPlugin(ctx, r, &plugin)
@@ -39,7 +39,7 @@ func (r *RepositoryRegistry) GetRepositoryPlugin(ctx context.Context, consumer r
 		return nil, fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 	}
 
-	return &credentialGraphPlugin{r.internalCredentialRepositoryScheme, started}, nil
+	return &credentialGraphPlugin{r.scheme, started}, nil
 }
 
 type credentialGraphPlugin struct {
