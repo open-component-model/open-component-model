@@ -23,7 +23,7 @@ type mockInputMethod struct {
 	processedBlob     blob.ReadOnlyBlob
 }
 
-func (m *mockInputMethod) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
+func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	id := runtime.Identity{}
 	id.SetType(runtime.NewVersionedType("mock", "v1"))
 	return id, nil
@@ -61,7 +61,19 @@ type mockResourceRepository struct {
 	fail         bool
 }
 
-func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource) (blob.ReadOnlyBlob, error) {
+func (m *mockResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+	identity = runtime.Identity{}
+	identity.SetType(runtime.NewVersionedType("mock", "v1"))
+	return identity, nil
+}
+
+func (m *mockResourceRepository) GetCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+	identity = runtime.Identity{}
+	identity.SetType(runtime.NewVersionedType("mock", "v1"))
+	return identity, nil
+}
+
+func (m *mockResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	if m.fail {
 		return nil, fmt.Errorf("simulated download failure")
 	}
@@ -107,7 +119,13 @@ type mockDigestProcessor struct {
 	processedDigest *descriptor.Digest
 }
 
-func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource) (*descriptor.Resource, error) {
+func (m *mockDigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
+	identity = runtime.Identity{}
+	identity.SetType(runtime.NewVersionedType("mock", "v1"))
+	return identity, nil
+}
+
+func (m *mockDigestProcessor) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
 	if m.processedDigest != nil {
 		resource.Digest = m.processedDigest
 	}
@@ -201,7 +219,7 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -246,7 +264,7 @@ func TestConstructWithResourceAccess(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -328,7 +346,7 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -400,7 +418,7 @@ func TestConstructWithResourceByValue(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockTargetRepo := &mockTargetRepository{}
+	mockTargetRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -461,7 +479,7 @@ func TestConstructWithResourceDigest(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockTargetRepo := &mockTargetRepository{}
+	mockTargetRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -511,7 +529,7 @@ func TestConstructWithInvalidInputMethod(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -559,7 +577,7 @@ func TestConstructWithMissingAccess(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -614,7 +632,7 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -654,7 +672,7 @@ func TestConstructWithResourceByValueFailure(t *testing.T) {
 `)
 
 	// Create a mock target repository
-	mockTargetRepo := &mockTargetRepository{}
+	mockTargetRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{
@@ -742,7 +760,7 @@ components:
 	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
 
 	// Create a mock target repository
-	mockRepo := &mockTargetRepository{}
+	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
 	opts := Options{

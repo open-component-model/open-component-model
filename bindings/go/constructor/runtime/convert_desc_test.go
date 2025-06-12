@@ -659,3 +659,593 @@ func TestConvertToDescriptorReference(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertFromDescriptorSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *descriptor.Source
+		expected *Source
+	}{
+		{
+			name:     "nil source",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name: "basic source",
+			input: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-source",
+						Version: "1.0.0",
+					},
+				},
+				Type: "git",
+				Access: &runtime.Raw{
+					Type: runtime.Type{
+						Version: "v1alpha1",
+						Name:    "Typ",
+					},
+					Data: []byte(`{"type": "Typ/v1alpha1"}`),
+				},
+			},
+			expected: &Source{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test-source",
+						Version: "1.0.0",
+					},
+				},
+				Type: "git",
+				AccessOrInput: AccessOrInput{
+					Access: &runtime.Raw{
+						Type: runtime.Type{
+							Version: "v1alpha1",
+							Name:    "Typ",
+						},
+						Data: []byte(`{"type": "Typ/v1alpha1"}`),
+					},
+				},
+			},
+		},
+		{
+			name: "source with labels",
+			input: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-source",
+						Version: "1.0.0",
+						Labels: []descriptor.Label{
+							{
+								Name:    "test-label",
+								Value:   "test-value",
+								Signing: true,
+							},
+						},
+					},
+				},
+				Type: "git",
+			},
+			expected: &Source{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test-source",
+						Version: "1.0.0",
+						Labels: []Label{
+							{
+								Name:    "test-label",
+								Value:   "test-value",
+								Signing: true,
+							},
+						},
+					},
+				},
+				Type: "git",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertFromDescriptorSource(tt.input)
+			if tt.expected == nil {
+				assert.Nil(t, result)
+				return
+			}
+
+			assert.Equal(t, tt.expected.Name, result.Name)
+			assert.Equal(t, tt.expected.Version, result.Version)
+			assert.Equal(t, tt.expected.Type, result.Type)
+			assert.Equal(t, tt.expected.Labels, result.Labels)
+			if tt.expected.AccessOrInput.Access != nil {
+				assert.NotNil(t, result.AccessOrInput.Access)
+				assert.Equal(t, tt.expected.AccessOrInput.Access.GetType(), result.AccessOrInput.Access.GetType())
+			} else {
+				assert.Nil(t, result.AccessOrInput.Access)
+			}
+		})
+	}
+}
+
+func TestConvertFromDescriptorReference(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *descriptor.Reference
+		expected *Reference
+	}{
+		{
+			name:     "nil reference",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name: "basic reference",
+			input: &descriptor.Reference{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-reference",
+						Version: "1.0.0",
+					},
+				},
+				Component: "test-component",
+			},
+			expected: &Reference{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test-reference",
+						Version: "1.0.0",
+					},
+				},
+				Component: "test-component",
+			},
+		},
+		{
+			name: "reference with labels",
+			input: &descriptor.Reference{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-reference",
+						Version: "1.0.0",
+						Labels: []descriptor.Label{
+							{
+								Name:    "test-label",
+								Value:   "test-value",
+								Signing: true,
+							},
+						},
+					},
+				},
+				Component: "test-component",
+			},
+			expected: &Reference{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test-reference",
+						Version: "1.0.0",
+						Labels: []Label{
+							{
+								Name:    "test-label",
+								Value:   "test-value",
+								Signing: true,
+							},
+						},
+					},
+				},
+				Component: "test-component",
+			},
+		},
+		{
+			name: "reference with extra identity",
+			input: &descriptor.Reference{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-reference",
+						Version: "1.0.0",
+					},
+					ExtraIdentity: runtime.Identity{
+						"key1": "value1",
+						"key2": "value2",
+					},
+				},
+				Component: "test-component",
+			},
+			expected: &Reference{
+				ElementMeta: ElementMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test-reference",
+						Version: "1.0.0",
+					},
+					ExtraIdentity: runtime.Identity{
+						"key1": "value1",
+						"key2": "value2",
+					},
+				},
+				Component: "test-component",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertFromDescriptorReference(tt.input)
+			if tt.expected == nil {
+				assert.Nil(t, result)
+				return
+			}
+
+			assert.Equal(t, tt.expected.Name, result.Name)
+			assert.Equal(t, tt.expected.Version, result.Version)
+			assert.Equal(t, tt.expected.Component, result.Component)
+			assert.Equal(t, tt.expected.Labels, result.Labels)
+			assert.Equal(t, tt.expected.ExtraIdentity, result.ExtraIdentity)
+		})
+	}
+}
+
+func TestConvertFromDescriptorComponent(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *descriptor.Component
+		expected *Component
+	}{
+		{
+			name:     "nil component",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name: "basic component",
+			input: &descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-component",
+						Version: "1.0.0",
+					},
+					CreationTime: "2024-01-01T00:00:00Z",
+				},
+				Provider: descriptor.Provider{
+					Name: "test-provider",
+				},
+			},
+			expected: &Component{
+				ComponentMeta: ComponentMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test-component",
+						Version: "1.0.0",
+					},
+					CreationTime: "2024-01-01T00:00:00Z",
+				},
+				Provider: Provider{
+					Name: "test-provider",
+				},
+			},
+		},
+		{
+			name: "component with resources and sources",
+			input: &descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-component",
+						Version: "1.0.0",
+					},
+					CreationTime: "2024-01-01T00:00:00Z",
+				},
+				Provider: descriptor.Provider{
+					Name: "test-provider",
+				},
+				Resources: []descriptor.Resource{
+					{
+						ElementMeta: descriptor.ElementMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    "test-resource",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: descriptor.LocalRelation,
+					},
+				},
+				Sources: []descriptor.Source{
+					{
+						ElementMeta: descriptor.ElementMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    "test-source",
+								Version: "1.0.0",
+							},
+						},
+						Type: "git",
+					},
+				},
+			},
+			expected: &Component{
+				ComponentMeta: ComponentMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test-component",
+						Version: "1.0.0",
+					},
+					CreationTime: "2024-01-01T00:00:00Z",
+				},
+				Provider: Provider{
+					Name: "test-provider",
+				},
+				Resources: []Resource{
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-resource",
+								Version: "1.0.0",
+							},
+						},
+						Type:     "blob",
+						Relation: LocalRelation,
+					},
+				},
+				Sources: []Source{
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-source",
+								Version: "1.0.0",
+							},
+						},
+						Type: "git",
+					},
+				},
+			},
+		},
+		{
+			name: "component with references",
+			input: &descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-component",
+						Version: "1.0.0",
+					},
+					CreationTime: "2024-01-01T00:00:00Z",
+				},
+				Provider: descriptor.Provider{
+					Name: "test-provider",
+				},
+				References: []descriptor.Reference{
+					{
+						ElementMeta: descriptor.ElementMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    "test-reference",
+								Version: "1.0.0",
+							},
+						},
+						Component: "referenced-component",
+					},
+				},
+			},
+			expected: &Component{
+				ComponentMeta: ComponentMeta{
+					ObjectMeta: ObjectMeta{
+						Name:    "test-component",
+						Version: "1.0.0",
+					},
+					CreationTime: "2024-01-01T00:00:00Z",
+				},
+				Provider: Provider{
+					Name: "test-provider",
+				},
+				References: []Reference{
+					{
+						ElementMeta: ElementMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-reference",
+								Version: "1.0.0",
+							},
+						},
+						Component: "referenced-component",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertFromDescriptorComponent(tt.input)
+			if tt.expected == nil {
+				assert.Nil(t, result)
+				return
+			}
+
+			assert.Equal(t, tt.expected.Name, result.Name)
+			assert.Equal(t, tt.expected.Version, result.Version)
+			assert.Equal(t, tt.expected.CreationTime, result.CreationTime)
+			assert.Equal(t, tt.expected.Provider, result.Provider)
+			assert.Equal(t, len(tt.expected.Resources), len(result.Resources))
+			assert.Equal(t, len(tt.expected.Sources), len(result.Sources))
+			assert.Equal(t, len(tt.expected.References), len(result.References))
+
+			// Check resources if present
+			if tt.expected.Resources != nil {
+				for i := range tt.expected.Resources {
+					assert.Equal(t, tt.expected.Resources[i].Name, result.Resources[i].Name)
+					assert.Equal(t, tt.expected.Resources[i].Version, result.Resources[i].Version)
+					assert.Equal(t, tt.expected.Resources[i].Type, result.Resources[i].Type)
+					assert.Equal(t, tt.expected.Resources[i].Relation, result.Resources[i].Relation)
+				}
+			}
+
+			// Check sources if present
+			if tt.expected.Sources != nil {
+				for i := range tt.expected.Sources {
+					assert.Equal(t, tt.expected.Sources[i].Name, result.Sources[i].Name)
+					assert.Equal(t, tt.expected.Sources[i].Version, result.Sources[i].Version)
+					assert.Equal(t, tt.expected.Sources[i].Type, result.Sources[i].Type)
+				}
+			}
+
+			// Check references if present
+			if tt.expected.References != nil {
+				for i := range tt.expected.References {
+					assert.Equal(t, tt.expected.References[i].Name, result.References[i].Name)
+					assert.Equal(t, tt.expected.References[i].Version, result.References[i].Version)
+					assert.Equal(t, tt.expected.References[i].Component, result.References[i].Component)
+				}
+			}
+		})
+	}
+}
+
+func TestConvertFromDescriptorSourceRefs(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []descriptor.SourceRef
+		expected []SourceRef
+	}{
+		{
+			name:     "nil refs",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "empty refs",
+			input:    []descriptor.SourceRef{},
+			expected: []SourceRef{},
+		},
+		{
+			name: "single ref",
+			input: []descriptor.SourceRef{
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source",
+					},
+					Labels: []descriptor.Label{
+						{
+							Name:    "test-label",
+							Value:   "test-value",
+							Signing: true,
+						},
+					},
+				},
+			},
+			expected: []SourceRef{
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source",
+					},
+					Labels: []Label{
+						{
+							Name:    "test-label",
+							Value:   "test-value",
+							Signing: true,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "multiple refs",
+			input: []descriptor.SourceRef{
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source-1",
+					},
+					Labels: []descriptor.Label{
+						{
+							Name:    "test-label-1",
+							Value:   "test-value-1",
+							Signing: true,
+						},
+					},
+				},
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source-2",
+					},
+					Labels: []descriptor.Label{
+						{
+							Name:    "test-label-2",
+							Value:   "test-value-2",
+							Signing: false,
+						},
+					},
+				},
+			},
+			expected: []SourceRef{
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source-1",
+					},
+					Labels: []Label{
+						{
+							Name:    "test-label-1",
+							Value:   "test-value-1",
+							Signing: true,
+						},
+					},
+				},
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source-2",
+					},
+					Labels: []Label{
+						{
+							Name:    "test-label-2",
+							Value:   "test-value-2",
+							Signing: false,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "ref with empty labels",
+			input: []descriptor.SourceRef{
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source",
+					},
+					Labels: []descriptor.Label{},
+				},
+			},
+			expected: []SourceRef{
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source",
+					},
+					Labels: []Label{},
+				},
+			},
+		},
+		{
+			name: "ref with nil labels",
+			input: []descriptor.SourceRef{
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source",
+					},
+					Labels: nil,
+				},
+			},
+			expected: []SourceRef{
+				{
+					IdentitySelector: map[string]string{
+						"name": "test-source",
+					},
+					Labels: nil,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertFromDescriptorSourceRefs(tt.input)
+			if tt.expected == nil {
+				assert.Nil(t, result)
+				return
+			}
+
+			assert.Equal(t, len(tt.expected), len(result))
+			for i := range tt.expected {
+				assert.Equal(t, tt.expected[i].IdentitySelector, result[i].IdentitySelector)
+				assert.Equal(t, tt.expected[i].Labels, result[i].Labels)
+			}
+		})
+	}
+}
