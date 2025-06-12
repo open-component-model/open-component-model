@@ -104,7 +104,7 @@ add component-version ./path/to/%[1]s ./path/to/%[2]s.yaml
 	file.VarP(cmd.Flags(), FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "path to the repository")
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the repository")
 	cmd.Flags().Bool(FlagCopyResources, false, "copy external resources by-value to the archive")
-	cmd.Flags().String(FlagBlobCacheDirectory, "blobs", "path to the blob cache directory")
+	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionOverridePolicies(), "policy to apply when a component version already exists in the repository")
 
 	return cmd
@@ -157,10 +157,9 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, constructor.Options{
 		TargetRepositoryProvider:    instance,
 		ResourceRepositoryProvider:  instance,
-		SourceInputMethodProvider:   pluginManager.InputRegistry,
-		ResourceInputMethodProvider: pluginManager.InputRegistry,
+		SourceInputMethodProvider:   instance,
+		ResourceInputMethodProvider: instance,
 		CredentialProvider:          credentialGraph,
-
 		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return copyResources
 		},
@@ -227,6 +226,14 @@ type constructorProvider struct {
 	targetRepoSpec runtime.Typed
 	*manager.PluginManager
 	*credentials.Graph
+}
+
+func (prov *constructorProvider) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceInputMethod, error) {
+	return prov.PluginManager.InputRegistry.GetResourceInputPlugin(ctx, resource.Input)
+}
+
+func (prov *constructorProvider) GetSourceInputMethod(ctx context.Context, src *constructorruntime.Source) (constructor.SourceInputMethod, error) {
+	return prov.PluginManager.InputRegistry.GetSourceInputPlugin(ctx, src.Input)
 }
 
 type resourceRepository struct {
@@ -308,7 +315,7 @@ func (t targetRepo) AddLocalResource(ctx context.Context, component, version str
 		return nil, fmt.Errorf("getting absolute path for cache file %q failed: %w", cacheFileName, err)
 	}
 
-	if err := os.MkdirAll(t.cache, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cacheFileName), 0755); err != nil {
 		return nil, fmt.Errorf("creating cache directory %q failed: %w", t.cache, err)
 	}
 
