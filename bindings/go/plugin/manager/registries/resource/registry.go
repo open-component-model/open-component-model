@@ -19,7 +19,7 @@ func NewResourceRegistry(ctx context.Context) *ResourceRegistry {
 	return &ResourceRegistry{
 		ctx:                ctx,
 		registry:           make(map[runtime.Type]types.Plugin),
-		resourceScheme:     runtime.NewScheme(runtime.WithAllowUnknown()),
+		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),
 		internalPlugins:    make(map[runtime.Type]v1.ReadWriteResourcePluginContract),
 		constructedPlugins: make(map[string]*constructedPlugin),
 	}
@@ -31,13 +31,13 @@ type ResourceRegistry struct {
 	mu                 sync.Mutex
 	registry           map[runtime.Type]types.Plugin
 	internalPlugins    map[runtime.Type]v1.ReadWriteResourcePluginContract
-	resourceScheme     *runtime.Scheme
+	scheme             *runtime.Scheme
 	constructedPlugins map[string]*constructedPlugin // running plugins
 }
 
 // ResourceScheme returns the scheme used by the Resource registry.
 func (r *ResourceRegistry) ResourceScheme() *runtime.Scheme {
-	return r.resourceScheme
+	return r.scheme
 }
 
 // AddPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
@@ -71,24 +71,17 @@ func (r *ResourceRegistry) GetResourcePlugin(ctx context.Context, spec runtime.T
 // getPlugin returns a Resource plugin for a given type using a specific plugin storage map. It will also first look
 // for existing registered internal plugins based on the type and the same registry name.
 func (r *ResourceRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (v1.ReadWriteResourcePluginContract, error) {
-	if _, err := r.resourceScheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
-	}
+	// look for an internal implementation that actually implements the interface
+	_, _ = r.scheme.DefaultType(spec)
+	typ := spec.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.resourceScheme.TypeForPrototype(spec); err == nil {
+	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
 		}
 
 		return p, nil
-	}
-
-	// if we don't find the type registered internally, we look for external plugins by using the type
-	// from the specification.
-	typ := spec.GetType()
-	if typ.IsEmpty() {
-		return nil, fmt.Errorf("external plugins can not be fetched without a type %T", spec)
 	}
 
 	plugin, ok := r.registry[typ]
@@ -120,7 +113,7 @@ func RegisterInternalResourcePlugin(
 
 	r.internalPlugins[typ] = plugin
 
-	if err := r.resourceScheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.scheme.RegisterWithAlias(proto, typ); err != nil {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
