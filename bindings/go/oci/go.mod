@@ -13,7 +13,7 @@ require (
 	ocm.software/open-component-model/bindings/go/ctf v0.0.1
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250611060114-f4d9dc7752dd
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
-	ocm.software/open-component-model/bindings/go/runtime v0.0.1
+	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -26,7 +26,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	golang.org/x/text v0.25.0 // indirect
