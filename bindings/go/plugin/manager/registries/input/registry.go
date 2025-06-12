@@ -21,7 +21,7 @@ func NewInputRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 		ctx: ctx,
 		// Registry contains external plugins ONLY. Internal plugins that already have the implementation are in internalRepositoryPlugins.
 		registry:                               make(map[runtime.Type]types.Plugin),
-		repositoryScheme:                       runtime.NewScheme(runtime.WithAllowUnknown()),
+		scheme:                                 runtime.NewScheme(runtime.WithAllowUnknown()),
 		internalResourceInputRepositoryPlugins: make(map[runtime.Type]constructor.ResourceInputMethod),
 		internalSourceInputRepositoryPlugins:   make(map[runtime.Type]constructor.SourceInputMethod),
 		constructedPlugins:                     make(map[string]*constructedPlugin),
@@ -33,15 +33,15 @@ type RepositoryRegistry struct {
 	ctx                                    context.Context
 	mu                                     sync.Mutex
 	registry                               map[runtime.Type]types.Plugin
+	scheme                                 *runtime.Scheme
 	internalResourceInputRepositoryPlugins map[runtime.Type]constructor.ResourceInputMethod
 	internalSourceInputRepositoryPlugins   map[runtime.Type]constructor.SourceInputMethod
-	repositoryScheme                       *runtime.Scheme
 	constructedPlugins                     map[string]*constructedPlugin // running plugins
 }
 
 // InputRepositoryScheme returns the scheme used by the ResourceInput registry.
 func (r *RepositoryRegistry) InputRepositoryScheme() *runtime.Scheme {
-	return r.repositoryScheme
+	return r.scheme
 }
 
 // AddPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
@@ -66,12 +66,12 @@ func (r *RepositoryRegistry) GetResourceInputPlugin(ctx context.Context, spec ru
 
 	// look for an internal implementation that actually implements the interface
 	// return internalPluginThatImplementsTheInterface, nil
-	if _, err := r.repositoryScheme.DefaultType(spec); err != nil {
+	if _, err := r.scheme.DefaultType(spec); err != nil {
 		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
 	}
 
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.repositoryScheme.TypeForPrototype(spec); err == nil {
+	if typ, err := r.scheme.TypeForPrototype(spec); err == nil {
 		p, ok := r.internalResourceInputRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
@@ -86,7 +86,7 @@ func (r *RepositoryRegistry) GetResourceInputPlugin(ctx context.Context, spec ru
 	}
 
 	// return this plugin wrapped with an ExternalPluginConverter
-	return r.externalToResourceInputPluginConverter(plugin, r.repositoryScheme), nil
+	return r.externalToResourceInputPluginConverter(plugin, r.scheme), nil
 }
 
 // GetSourceInputPlugin returns SourceInput plugins for a specific type.
@@ -96,12 +96,12 @@ func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runt
 
 	// look for an internal implementation that actually implements the interface
 	// return internalPluginThatImplementsTheInterface, nil
-	if _, err := r.repositoryScheme.DefaultType(spec); err != nil {
+	if _, err := r.scheme.DefaultType(spec); err != nil {
 		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
 	}
 
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.repositoryScheme.TypeForPrototype(spec); err == nil {
+	if typ, err := r.scheme.TypeForPrototype(spec); err == nil {
 		p, ok := r.internalSourceInputRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
@@ -115,7 +115,7 @@ func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runt
 		return nil, err
 	}
 
-	return r.externalToSourceInputPluginConverter(plugin, r.repositoryScheme), nil
+	return r.externalToSourceInputPluginConverter(plugin, r.scheme), nil
 }
 
 // getPlugin returns a Construction plugin for a given type using a specific plugin storage map. It will also first look
@@ -157,7 +157,7 @@ func RegisterInternalResourceInputPlugin(
 
 	r.internalResourceInputRepositoryPlugins[typ] = plugin
 
-	if err := r.repositoryScheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.scheme.RegisterWithAlias(proto, typ); err != nil {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
@@ -181,7 +181,7 @@ func RegisterInternalSourcePlugin(
 
 	r.internalSourceInputRepositoryPlugins[typ] = plugin
 
-	if err := r.repositoryScheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.scheme.RegisterWithAlias(proto, typ); err != nil {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 

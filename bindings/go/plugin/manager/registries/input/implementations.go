@@ -70,7 +70,7 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 	return &identity, nil
 }
 
-func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceResponse, error) {
+func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
 	if err := r.validateEndpoint(request.Resource.Input, r.jsonSchema); err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.Proc
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	body := v1.ProcessResourceResponse{}
+	body := v1.ProcessResourceInputResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ProcessResource, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&body), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to process resource input %s: %w", r.ID, err)
 	}
@@ -88,7 +88,7 @@ func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.Proc
 	return &body, nil
 }
 
-func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceResponse, error) {
+func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
 	if err := r.validateEndpoint(request.Source.Input, r.jsonSchema); err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *v1.Proces
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	body := v1.ProcessSourceResponse{}
+	body := v1.ProcessSourceInputResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ProcessSource, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&body), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to process resource input %s: %w", r.ID, err)
 	}

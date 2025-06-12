@@ -24,11 +24,10 @@ type constructedPlugin struct {
 func NewDigestProcessorRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
 		ctx:                            ctx,
+		scheme:                         runtime.NewScheme(runtime.WithAllowUnknown()),
 		registry:                       make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins:             make(map[string]*constructedPlugin),
 		internalDigestProcessorPlugins: make(map[runtime.Type]constructor.ResourceDigestProcessor),
-		internalDigestProcessorScheme:  runtime.NewScheme(runtime.WithAllowUnknown()),
-		repositoryScheme:               runtime.NewScheme(runtime.WithAllowUnknown()),
 	}
 }
 
@@ -50,7 +49,7 @@ func RegisterInternalDigestProcessorPlugin(
 
 	r.internalDigestProcessorPlugins[typ] = p
 
-	if err := r.internalDigestProcessorScheme.RegisterWithAlias(prototype, typ); err != nil {
+	if err := r.scheme.RegisterWithAlias(prototype, typ); err != nil {
 		return fmt.Errorf("failed to register prototype %T: %w", prototype, err)
 	}
 
@@ -61,11 +60,10 @@ func RegisterInternalDigestProcessorPlugin(
 type RepositoryRegistry struct {
 	ctx                            context.Context
 	mu                             sync.Mutex
+	scheme                         *runtime.Scheme
 	registry                       map[runtime.Type]mtypes.Plugin
 	constructedPlugins             map[string]*constructedPlugin
 	internalDigestProcessorPlugins map[runtime.Type]constructor.ResourceDigestProcessor
-	internalDigestProcessorScheme  *runtime.Scheme
-	repositoryScheme               *runtime.Scheme
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
@@ -128,11 +126,11 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.internalDigestProcessorScheme.DefaultType(spec); err != nil {
+	if _, err := r.scheme.DefaultType(spec); err != nil {
 		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
 	}
 
-	if typ, err := r.internalDigestProcessorScheme.TypeForPrototype(spec); err == nil {
+	if typ, err := r.scheme.TypeForPrototype(spec); err == nil {
 		p, ok := r.internalDigestProcessorPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
@@ -150,7 +148,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
 	}
 
-	return r.externalToResourceDigestProcessorPluginConverter(plugin, r.repositoryScheme), nil
+	return r.externalToResourceDigestProcessorPluginConverter(plugin, r.scheme), nil
 }
 
 func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (v1.ResourceDigestProcessorContract, error) {
