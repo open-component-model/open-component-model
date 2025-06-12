@@ -13,18 +13,28 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// cachedCredential represents a single credential entry in the cache,
+// associating a runtime identity with its corresponding authentication credential.
 type cachedCredential struct {
 	identity   runtime.Identity
 	credential auth.Credential
 }
+
+// credentialCache provides a thread-safe cache for repository credentials.
+// It maintains a list of credentials indexed by repository identity (hostname and port).
+// The cache supports multiple credential types including username/password,
+// refresh tokens, and access tokens.
 type credentialCache struct {
 	mu          sync.RWMutex
 	credentials []cachedCredential
 }
 
+// get retrieves credentials for a given hostport string.
+// It performs a thread-safe lookup in the cache using the hostname and port
+// to match against stored identities.
 func (cache *credentialCache) get(_ context.Context, hostport string) (auth.Credential, error) {
 	cache.mu.RLock()
-	cache.mu.RUnlock()
+	defer cache.mu.RUnlock()
 
 	host, port, err := net.SplitHostPort(hostport)
 	if err != nil {
@@ -43,6 +53,9 @@ func (cache *credentialCache) get(_ context.Context, hostport string) (auth.Cred
 	return auth.EmptyCredential, nil
 }
 
+// add stores credentials for an OCI repository specification.
+// If credentials already exist for the same identity, they will be overwritten
+// if they are different from the new credentials.
 func (cache *credentialCache) add(spec *ocirepospecv1.Repository, credentials map[string]string) error {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
@@ -77,6 +90,7 @@ func (cache *credentialCache) add(spec *ocirepospecv1.Repository, credentials ma
 	return nil
 }
 
+// toCredential converts a map of credential key-value pairs into an auth.Credential.
 func toCredential(credentials map[string]string) auth.Credential {
 	cred := auth.Credential{}
 	if username, ok := credentials["username"]; ok {
@@ -94,6 +108,7 @@ func toCredential(credentials map[string]string) auth.Credential {
 	return cred
 }
 
+// equalCredentials compares two auth.Credential instances for equality.
 func equalCredentials(a, b auth.Credential) bool {
 	return a.Username == b.Username &&
 		a.Password == b.Password &&
