@@ -274,13 +274,10 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 
 	var creds map[string]string
 	if c.opts.CredentialProvider != nil {
-		identity, err := repository.GetResourceCredentialConsumerIdentity(ctx, resource)
-		if err != nil {
-			return nil, fmt.Errorf("error getting credential consumer identity of access type %q: %w", resource.Access.GetType(), err)
-		}
-
-		if creds, err = c.opts.Resolve(ctx, identity); err != nil {
-			return nil, fmt.Errorf("error resolving credentials for input method of access type %q: %w", resource.Access.GetType(), err)
+		if identity, err := repository.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+			if creds, err = c.opts.Resolve(ctx, identity); err != nil {
+				return nil, fmt.Errorf("error resolving credentials for input method of type %q: %w", resource.Input.GetType(), err)
+			}
 		}
 	}
 
@@ -335,13 +332,10 @@ func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetR
 
 	var creds map[string]string
 	if c.opts.CredentialProvider != nil {
-		identity, err := method.GetSourceCredentialConsumerIdentity(ctx, src)
-		if err != nil {
-			return nil, fmt.Errorf("error getting credential consumer identity of type %q: %w", src.Input.GetType(), err)
-		}
-
-		if creds, err = c.opts.Resolve(ctx, identity); err != nil {
-			return nil, fmt.Errorf("error resolving credentials for input method of type %q: %w", src.Input.GetType(), err)
+		if identity, err := method.GetSourceCredentialConsumerIdentity(ctx, src); err == nil {
+			if creds, err = c.opts.Resolve(ctx, identity); err != nil {
+				return nil, fmt.Errorf("error resolving credentials for input method of type %q: %w", src.Input.GetType(), err)
+			}
 		}
 	}
 
@@ -379,13 +373,10 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 
 	var creds map[string]string
 	if c.opts.CredentialProvider != nil {
-		identity, err := method.GetResourceCredentialConsumerIdentity(ctx, resource)
-		if err != nil {
-			return nil, fmt.Errorf("error getting credential consumer identity of type %q: %w", resource.Input.GetType(), err)
-		}
-
-		if creds, err = c.opts.Resolve(ctx, identity); err != nil {
-			return nil, fmt.Errorf("error resolving credentials for input method of type %q: %w", resource.Input.GetType(), err)
+		if identity, err := method.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+			if creds, err = c.opts.Resolve(ctx, identity); err != nil {
+				return nil, fmt.Errorf("error resolving credentials for input method of type %q: %w", resource.Input.GetType(), err)
+			}
 		}
 	}
 
