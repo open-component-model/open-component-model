@@ -65,17 +65,10 @@ func (r *RepositoryRegistry) GetResourceInputPlugin(ctx context.Context, spec ru
 	defer r.mu.Unlock()
 
 	// look for an internal implementation that actually implements the interface
-	// return internalPluginThatImplementsTheInterface, nil
-	if _, err := r.scheme.DefaultType(spec); err == nil {
-		if typed, err := r.scheme.NewObject(spec.GetType()); err == nil {
-			if err := r.scheme.Convert(spec, typed); err == nil {
-				spec = typed // use the converted type as the spec
-			}
-		}
-	}
-
+	_, _ = r.scheme.DefaultType(spec)
+	typ := spec.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.scheme.TypeForPrototype(spec); err == nil {
+	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalResourceInputRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
@@ -99,17 +92,10 @@ func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runt
 	defer r.mu.Unlock()
 
 	// look for an internal implementation that actually implements the interface
-	// return internalPluginThatImplementsTheInterface, nil
-	if _, err := r.scheme.DefaultType(spec); err == nil {
-		if typed, err := r.scheme.NewObject(spec.GetType()); err == nil {
-			if err := r.scheme.Convert(spec, typed); err == nil {
-				spec = typed // use the converted type as the spec
-			}
-		}
-	}
-
+	_, _ = r.scheme.DefaultType(spec)
+	typ := spec.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.scheme.TypeForPrototype(spec); err == nil {
+	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalSourceInputRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
