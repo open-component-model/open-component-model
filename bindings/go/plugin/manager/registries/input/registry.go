@@ -66,8 +66,12 @@ func (r *RepositoryRegistry) GetResourceInputPlugin(ctx context.Context, spec ru
 
 	// look for an internal implementation that actually implements the interface
 	// return internalPluginThatImplementsTheInterface, nil
-	if _, err := r.scheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
+	if _, err := r.scheme.DefaultType(spec); err == nil {
+		if typed, err := r.scheme.NewObject(spec.GetType()); err == nil {
+			if err := r.scheme.Convert(spec, typed); err == nil {
+				spec = typed // use the converted type as the spec
+			}
+		}
 	}
 
 	// if we find the type has been registered internally, we look for internal plugins for it.
@@ -96,8 +100,12 @@ func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runt
 
 	// look for an internal implementation that actually implements the interface
 	// return internalPluginThatImplementsTheInterface, nil
-	if _, err := r.scheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
+	if _, err := r.scheme.DefaultType(spec); err == nil {
+		if typed, err := r.scheme.NewObject(spec.GetType()); err == nil {
+			if err := r.scheme.Convert(spec, typed); err == nil {
+				spec = typed // use the converted type as the spec
+			}
+		}
 	}
 
 	// if we find the type has been registered internally, we look for internal plugins for it.
@@ -157,7 +165,7 @@ func RegisterInternalResourceInputPlugin(
 
 	r.internalResourceInputRepositoryPlugins[typ] = plugin
 
-	if err := r.scheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.scheme.RegisterWithAlias(proto, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
@@ -181,7 +189,7 @@ func RegisterInternalSourcePlugin(
 
 	r.internalSourceInputRepositoryPlugins[typ] = plugin
 
-	if err := r.scheme.RegisterWithAlias(proto, typ); err != nil {
+	if err := r.scheme.RegisterWithAlias(proto, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
 	}
 
