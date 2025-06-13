@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -10,7 +11,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
-	"ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
@@ -64,10 +64,10 @@ func ReferenceTagVersionResolver(store content.Resolver) lister.TagVersionResolv
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve tag %q: %w", tag, err)
 		}
-		legacy := desc.MediaType == ociImageSpecV1.MediaTypeImageManifest && desc.ArtifactType == ""
-		current := desc.MediaType == ociImageSpecV1.MediaTypeImageManifest && desc.ArtifactType == descriptor.MediaTypeComponentDescriptorV2 ||
-			desc.MediaType == ociImageSpecV1.MediaTypeImageIndex && desc.ArtifactType == descriptor.MediaTypeComponentDescriptorV2
-		if !legacy && !current {
+		if !slices.Contains([]string{
+			ociImageSpecV1.MediaTypeImageManifest,
+			ociImageSpecV1.MediaTypeImageIndex,
+		}, desc.MediaType) {
 			return "", fmt.Errorf("not recognized as valid top level descriptor type: %w", lister.ErrSkip)
 		}
 
