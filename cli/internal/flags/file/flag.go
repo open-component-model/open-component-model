@@ -3,40 +3,36 @@ package file
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strings"
 
 	"github.com/spf13/pflag"
 )
 
+// Type is the type name for the path flag.
+// It represents a flag that holds a file path.
 const Type = "path"
 
 // Flag defines a path flag that checks if the value is an existing file.
 type Flag struct {
-	path      *string
-	isRegular bool
-	isDir     bool
-	exists    bool
+	path *string
+	fs.FileInfo
 }
 
 func (f *Flag) String() string {
+	if f.path == nil {
+		return ""
+	}
 	return *f.path
 }
 
-func (f *Flag) IsRegularFile() bool {
-	return f.isRegular
-}
-
-func (f *Flag) IsDir() bool {
-	return f.isDir
-}
-
 func (f *Flag) Exists() bool {
-	return f.exists
+	return f.FileInfo != nil
 }
 
 func (f *Flag) Open() (io.ReadCloser, error) {
-	if f.exists {
+	if f.Exists() {
 		return os.Open(*f.path)
 	}
 	return nil, fmt.Errorf("file %q does not exist", *f.path)
@@ -48,20 +44,10 @@ func (f *Flag) Set(s string) error {
 	}
 	*f.path = s
 	info, err := os.Stat(s)
-	if err != nil {
-		if os.IsNotExist(err) {
-			f.exists = false
-		} else {
-			return fmt.Errorf("unable to stat path %q: %w", f.path, err)
-		}
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("unable to stat path %q: %w", *f.path, err)
 	} else {
-		if f.isRegular = info.Mode().IsRegular(); !f.isRegular {
-			return fmt.Errorf("path %q is not a regular file", f.path)
-		}
-		if f.isDir = info.IsDir(); f.isDir {
-			return fmt.Errorf("path %q is a directory", f.path)
-		}
-		f.exists = true
+		f.FileInfo = info
 	}
 	return nil
 }
@@ -72,14 +58,15 @@ func (f *Flag) Type() string {
 
 func Var(f *pflag.FlagSet, name string, value string, usage string) {
 	actual := strings.Clone(value)
-	flag := Flag{path: &actual}
-	f.Var(&flag, name, usage)
+	flag := &Flag{}
+	_ = flag.Set(actual) // Set with the default value
+	f.Var(flag, name, usage)
 }
 
 func VarP(f *pflag.FlagSet, name, shorthand string, value string, usage string) {
 	actual := strings.Clone(value)
 	flag := &Flag{}
-	_ = flag.Set(actual)
+	_ = flag.Set(actual) // Set with the default value
 	f.VarP(flag, name, shorthand, usage)
 }
 
