@@ -48,8 +48,8 @@ gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntN
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-ocm.software/open-component-model/bindings/go/blob v0.0.2 h1:YBAXJ1m8PE/WiXNqGggCBwb48rlMKAsF7/x51gBvEGI=
-ocm.software/open-component-model/bindings/go/blob v0.0.2/go.mod h1:XHcaZ3WihLLswm+dNDs7QrAHu4M0zaNTy2nErUkZNLU=
+ocm.software/open-component-model/bindings/go/blob v0.0.3 h1:gd33Yt3ZuVgP/ysp7DqcNgiFazWEdwdXSUtBbmWyaGg=
+ocm.software/open-component-model/bindings/go/blob v0.0.3/go.mod h1:XHcaZ3WihLLswm+dNDs7QrAHu4M0zaNTy2nErUkZNLU=
 ocm.software/open-component-model/bindings/go/ctf v0.0.1 h1:Zuiiih2M753jEktj5FH+epIQCbE56atAqAVvSzdFAX8=
 ocm.software/open-component-model/bindings/go/ctf v0.0.1/go.mod h1:1RYP75q41GGtxzNYM9QtoUDnnkKH0AnEgoc5K7NzQ8A=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250611113202-e434a7b3e969 h1:eKdhZ0F2Py63e1M2kEmEwXOEYBhgA34ay+YNodNlwoA=
