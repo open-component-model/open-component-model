@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"ocm.software/open-component-model/cli/internal/flag/enum"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 )
 
 // Log format constants
