@@ -455,7 +455,7 @@ func TestConstructWithSourceCredentialResolutionError(t *testing.T) {
 	// Process the constructor and expect an error
 	_, err := ctor.Construct(t.Context(), constructor)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error resolving credentials for input method")
+	assert.Contains(t, err.Error(), "error resolving credentials for source input method")
 }
 
 func TestConstructWithMultipleSources(t *testing.T) {

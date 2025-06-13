@@ -645,7 +645,7 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 	// Process the constructor and expect an error
 	_, err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error resolving credentials for input method")
+	assert.Contains(t, err.Error(), "error resolving credentials for resource input method")
 }
 
 func TestConstructWithResourceByValueFailure(t *testing.T) {
