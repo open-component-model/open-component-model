@@ -24,7 +24,6 @@ type Repository interface {
 func createRepository(
 	spec *ociv1.Repository,
 	credentials map[string]string,
-	scheme *runtime.Scheme,
 	manifests cache.OCIDescriptorCache,
 	layers cache.OCIDescriptorCache,
 ) (Repository, error) {
@@ -44,7 +43,6 @@ func createRepository(
 	})
 	repo, err := oci.NewRepository(
 		oci.WithResolver(urlResolver),
-		oci.WithScheme(scheme),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(manifests),
 		oci.WithLayerCache(layers),

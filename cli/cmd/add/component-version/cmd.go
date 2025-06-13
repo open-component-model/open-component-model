@@ -151,6 +151,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		cache:          cacheDir,
 		targetRepoSpec: repoSpec,
 		PluginManager:  pluginManager,
+		Graph:          credentialGraph,
 	}
 
 	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, constructor.Options{

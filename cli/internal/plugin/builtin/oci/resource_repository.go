@@ -12,12 +12,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type ResourceRepositoryPlugin struct {
-	contracts.EmptyBasePlugin
 	scheme            *runtime.Scheme
 	manifests, layers cache.OCIDescriptorCache
 	repoCache         *repoCache
@@ -91,7 +89,7 @@ func (p *ResourceRepositoryPlugin) getRepository(spec *ociv1.Repository, creds m
 	if repo, ok := p.repoCache.Get(key); ok {
 		return repo, nil
 	}
-	repo, err := createRepository(spec, creds, p.scheme, p.manifests, p.layers)
+	repo, err := createRepository(spec, creds, p.manifests, p.layers)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}

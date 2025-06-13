@@ -19,7 +19,6 @@ import (
 
 type ComponentVersionRepositoryPlugin struct {
 	contracts.EmptyBasePlugin
-	scheme    *runtime.Scheme
 	manifests cache.OCIDescriptorCache
 	layers    cache.OCIDescriptorCache
 	repoCache *repoCache
@@ -33,7 +32,7 @@ func (p *ComponentVersionRepositoryPlugin) getRepository(spec *ociv1.Repository,
 	if repo, ok := p.repoCache.Get(key); ok {
 		return repo, nil
 	}
-	repo, err := createRepository(spec, creds, p.scheme, p.manifests, p.layers)
+	repo, err := createRepository(spec, creds, p.manifests, p.layers)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
