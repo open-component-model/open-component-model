@@ -22,10 +22,17 @@ import (
 type TestPlugin struct{}
 
 func (m *TestPlugin) GetGlobalResource(ctx context.Context, request *v1.GetGlobalResourceRequest, credentials map[string]string) (*v1.GetGlobalResourceResponse, error) {
+	file, err := os.CreateTemp("", "test-resource-file")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temp file: %w", err)
+	}
+	_, _ = file.Write([]byte("test-resource"))
+	_ = file.Close()
+	logger.Debug("GetGlobalResource", "location", file.Name())
 	return &v1.GetGlobalResourceResponse{
 		Location: types.Location{
 			LocationType: types.LocationTypeLocalFile,
-			Value:        "/tmp/to/file",
+			Value:        file.Name(),
 		},
 	}, nil
 }
