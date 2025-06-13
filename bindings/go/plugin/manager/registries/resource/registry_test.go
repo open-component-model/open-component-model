@@ -100,28 +100,6 @@ func TestPluginFlow(t *testing.T) {
 	content, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.Equal(t, "test-resource", string(content))
-	//require.Equal(t, "/tmp/to/file", resource.Value)
-
-	//Test adding a resource
-	addedResource, err := retrievedPlugin.UploadResource(ctx, proto, &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    "test-resource-2",
-				Version: "0.1.0",
-			},
-		},
-		Type:     "type",
-		Relation: "local",
-		Access: &runtime.Raw{
-			Type: runtime.Type{
-				Version: "test-access",
-				Name:    "v1",
-			},
-			Data: []byte(`{ "access": "v1" }`),
-		},
-	}, blob.NewDirectReadOnlyBlob(bytes.NewBufferString("test-resource")), map[string]string{})
-	require.NoError(t, err)
-	require.Equal(t, "test-global-resource", addedResource.Name)
 }
 
 func TestRegisterInternalResourcePlugin(t *testing.T) {
@@ -156,10 +134,6 @@ var _ Repository = (*mockResourcePlugin)(nil)
 
 func (m *mockResourcePlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
 	return nil, nil
-}
-
-func (m *mockResourcePlugin) UploadResource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
-	return &descriptor.Resource{}, nil
 }
 
 func (m *mockResourcePlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
