@@ -137,6 +137,72 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 	})
 }
 
+func (repo *Repository) ProcessDigest(ctx context.Context, res *descriptor.Resource) (*descriptor.Resource, error) {
+	done := log.Operation(ctx, "process resource digest",
+		log.IdentityLogAttr("resource", res.ToIdentity()))
+	defer func() {
+		done(nil)
+	}()
+	res = res.DeepCopy()
+	access := res.Access
+	typed, err := repo.scheme.NewObject(access.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("error creating resource access: %w", err)
+	}
+	if err := repo.scheme.Convert(access, typed); err != nil {
+		return nil, fmt.Errorf("error converting resource access: %w", err)
+	}
+
+	switch typed := typed.(type) {
+	case *accessv1.OCIImage:
+		src, err := repo.resolver.StoreForReference(ctx, typed.ImageReference)
+		if err != nil {
+			return nil, err
+		}
+
+		resolved, err := repo.resolver.Reference(typed.ImageReference)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
+		}
+
+		reference := resolved.String()
+
+		// reference is not a FQDN because it can be pinned, for resolving, use the FQDN part of the reference
+		fqdn := reference
+		pinnedDigest := ""
+		if index := strings.IndexByte(reference, '@'); index != -1 {
+			fqdn = reference[index+1:]
+			pinnedDigest = reference[:index]
+		}
+
+		desc, err := src.Resolve(ctx, fqdn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
+		}
+
+		if res.Digest == nil {
+			res.Digest = &descriptor.Digest{}
+			if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
+				return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+			}
+		} else {
+			// TODO prohibit not matching digest algorithms.
+		}
+
+		if pinnedDigest != "" {
+			if pinnedDigest != desc.Digest.String() {
+				return nil, fmt.Errorf("expected pinned digest %q (derived from %q) but got %q", pinnedDigest, reference, desc.Digest)
+			}
+		}
+		typed.ImageReference = fqdn + "@" + desc.Digest.String()
+		res.Access = typed
+
+		return res, nil
+	default:
+		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
+	}
+}
+
 // GetComponentVersion retrieves a component version from the repository.
 func (repo *Repository) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
 	done := log.Operation(ctx, "get component version",

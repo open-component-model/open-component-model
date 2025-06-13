@@ -18,6 +18,7 @@ func Register(manager *manager.PluginManager) error {
 	if err := ociplugin.Register(
 		manager.ComponentVersionRepositoryRegistry,
 		manager.ResourcePluginRegistry,
+		manager.DigestProcessorRegistry,
 	); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt plugin: %w", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -16,6 +17,7 @@ import (
 func Register(
 	compverRegistry *componentversionrepository.RepositoryRegistry,
 	resRegistry *resource.ResourceRegistry,
+	digRegistry *digestprocessor.RepositoryRegistry,
 ) error {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
@@ -39,6 +41,12 @@ func Register(
 		resource.RegisterInternalResourcePlugin(
 			scheme,
 			resRegistry,
+			&resourceRepoPlugin,
+			&v1.OCIImage{},
+		),
+		digestprocessor.RegisterInternalDigestProcessorPlugin(
+			scheme,
+			digRegistry,
 			&resourceRepoPlugin,
 			&v1.OCIImage{},
 		),

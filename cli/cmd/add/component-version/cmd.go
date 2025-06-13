@@ -37,6 +37,7 @@ const (
 	FlagCopyResources                  = "copy-resources"
 	FlagBlobCacheDirectory             = "blob-cache-directory"
 	FlagComponentVersionConflictPolicy = "component-version-conflict-policy"
+	FlagSkipReferenceDigestProcessing  = "skip-reference-digest-processing"
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
@@ -105,6 +106,7 @@ add component-version ./path/to/%[1]s ./path/to/%[2]s.yaml
 	cmd.Flags().Bool(FlagCopyResources, false, "copy external resources by-value to the archive")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionOverridePolicies(), "policy to apply when a component version already exists in the repository")
+	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
 
 	return cmd
 }
@@ -130,6 +132,11 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting copy-resources flag failed: %w", err)
 	}
 
+	skipReferenceDigestProcessing, err := cmd.Flags().GetBool(FlagSkipReferenceDigestProcessing)
+	if err != nil {
+		return fmt.Errorf("getting skip-reference-digest-processing flag failed: %w", err)
+	}
+
 	cvConflictPolicy, err := enum.Get(cmd.Flags(), FlagComponentVersionConflictPolicy)
 	if err != nil {
 		return fmt.Errorf("getting component-version-override-policy flag failed: %w", err)
@@ -141,6 +148,9 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	}
 
 	cacheDir, err := cmd.Flags().GetString(FlagBlobCacheDirectory)
+	if err != nil {
+		return fmt.Errorf("getting blob cache directory flag failed: %w", err)
+	}
 
 	constructorSpec, err := GetComponentConstructor(cmd)
 	if err != nil {
@@ -154,18 +164,24 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		Graph:          credentialGraph,
 	}
 
-	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, constructor.Options{
+	opts := constructor.Options{
 		TargetRepositoryProvider:    instance,
 		ResourceRepositoryProvider:  instance,
 		SourceInputMethodProvider:   instance,
 		ResourceInputMethodProvider: instance,
-		CredentialProvider:          credentialGraph,
+		CredentialProvider:          instance,
 		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
 			return copyResources
 		},
 		ConcurrencyLimit:               concurrencyLimit,
 		ComponentVersionConflictPolicy: ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
-	})
+	}
+
+	if !skipReferenceDigestProcessing {
+		opts.ResourceDigestProcessorProvider = instance
+	}
+
+	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
 
 	return err
 }
@@ -191,10 +207,10 @@ func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentC
 	if err != nil {
 		return nil, fmt.Errorf("getting component constructor path flag failed: %w", err)
 	}
-	if constructorFlag.IsDir() {
-		return nil, fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
-	} else if !constructorFlag.Exists() {
+	if !constructorFlag.Exists() {
 		return nil, fmt.Errorf("component constructor %q does not exist", constructorFlag.String())
+	} else if constructorFlag.IsDir() {
+		return nil, fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
 	}
 	constructorStream, err := constructorFlag.Open()
 	if err != nil {
@@ -228,6 +244,10 @@ type constructorProvider struct {
 	*credentials.Graph
 }
 
+func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {
+	return prov.PluginManager.DigestProcessorRegistry.GetPlugin(ctx, resource.Access)
+}
+
 func (prov *constructorProvider) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceInputMethod, error) {
 	return prov.PluginManager.InputRegistry.GetResourceInputPlugin(ctx, resource.Input)
 }
@@ -237,15 +257,7 @@ func (prov *constructorProvider) GetSourceInputMethod(ctx context.Context, src *
 }
 
 func (prov *constructorProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceRepository, error) {
-	if !resource.HasAccess() {
-		return nil, fmt.Errorf("resource %q has no access defined", resource.ToIdentity().String())
-	}
-	plugin, err := prov.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
-	if err != nil {
-		return nil, fmt.Errorf("getting plugin for resource %q failed: %w", resource.ToIdentity().String(), err)
-	}
-
-	return plugin, nil
+	return prov.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {

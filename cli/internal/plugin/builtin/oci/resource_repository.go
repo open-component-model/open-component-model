@@ -21,7 +21,31 @@ type ResourceRepositoryPlugin struct {
 	repoCache         *repoCache
 }
 
+func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
+	t := resource.Access.GetType()
+	obj, err := p.scheme.NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.scheme.Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	return p.getIdentity(obj)
+}
+
 func (p *ResourceRepositoryPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
+	t := resource.Access.GetType()
+	obj, err := p.scheme.NewObject(t)
+	if err != nil {
+		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
+	}
+	if err := p.scheme.Convert(resource.Access, obj); err != nil {
+		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
+	}
+	return p.getIdentity(obj)
+}
+
+func (p *ResourceRepositoryPlugin) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
 	t := resource.Access.GetType()
 	obj, err := p.scheme.NewObject(t)
 	if err != nil {
@@ -36,6 +60,32 @@ func (p *ResourceRepositoryPlugin) GetResourceCredentialConsumerIdentity(ctx con
 		if err != nil {
 			return nil, fmt.Errorf("error creating oci image access: %w", err)
 		}
+
+		repo, err := p.getRepository(&ociv1.Repository{
+			BaseUrl: baseURL,
+		}, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error creating repository: %w", err)
+		}
+
+		resource, err := repo.ProcessDigest(ctx, resource)
+		if err != nil {
+			return nil, fmt.Errorf("error downloading resource: %w", err)
+		}
+
+		return resource, nil
+	default:
+		return nil, fmt.Errorf("unsupported type %s for downloading the resource", t)
+	}
+}
+
+func (p *ResourceRepositoryPlugin) getIdentity(obj runtime.Typed) (runtime.Identity, error) {
+	switch access := obj.(type) {
+	case *v1.OCIImage:
+		baseURL, err := ociImageAccessToBaseURL(access)
+		if err != nil {
+			return nil, fmt.Errorf("error creating oci image access: %w", err)
+		}
 		identity, err := runtime.ParseURLToIdentity(baseURL)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing URL to identity: %w", err)
@@ -43,7 +93,7 @@ func (p *ResourceRepositoryPlugin) GetResourceCredentialConsumerIdentity(ctx con
 		identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
 		return identity, nil
 	default:
-		return nil, fmt.Errorf("unsupported type %s for getting identity", t)
+		return nil, fmt.Errorf("unsupported type %s for getting identity", obj.GetType())
 	}
 }
 
