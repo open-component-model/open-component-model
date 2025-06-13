@@ -21,6 +21,9 @@ type Flag struct {
 }
 
 func (f *Flag) String() string {
+	if f.path == nil {
+		return ""
+	}
 	return *f.path
 }
 
@@ -55,14 +58,15 @@ func (f *Flag) Type() string {
 
 func Var(f *pflag.FlagSet, name string, value string, usage string) {
 	actual := strings.Clone(value)
-	flag := Flag{path: &actual}
-	f.Var(&flag, name, usage)
+	flag := &Flag{}
+	_ = flag.Set(actual) // Set with the default value
+	f.Var(flag, name, usage)
 }
 
 func VarP(f *pflag.FlagSet, name, shorthand string, value string, usage string) {
 	actual := strings.Clone(value)
 	flag := &Flag{}
-	_ = flag.Set(actual)
+	_ = flag.Set(actual) // Set with the default value
 	f.VarP(flag, name, shorthand, usage)
 }
 
