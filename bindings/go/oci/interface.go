@@ -103,6 +103,13 @@ type ResourceRepository interface {
 	// The blob.ReadOnlyBlob returned will always be an OCI Layout, readable by [tar.ReadOCILayout].
 	// For more information on the download procedure, see [tar.NewOCILayoutWriter].
 	DownloadResource(ctx context.Context, res *descriptor.Resource) (content blob.ReadOnlyBlob, err error)
+
+	// ProcessDigest processes, verifies and appends the [*descriptor.Resource.Digest] with information fetched
+	// from the repository.
+	// Under certain circumstances, it can also process the access of the resource, e.g. to ensure that the digest
+	// is pinned. This way the access will always reference the content described by the digest and cannot be mutated.
+	// The resource MUST contain a valid v1.OCIImage specification that exists in the Store.
+	ProcessDigest(ctx context.Context, res *descriptor.Resource) (*descriptor.Resource, error)
 }
 
 type SourceRepository interface {

@@ -236,6 +236,14 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 		logger.Debug("processing resource with input method")
 		res, err = c.processResourceWithInput(ctx, targetRepo, resource, component, version)
 	case resource.HasAccess():
+		if resource.Relation == "" {
+			logger.Debug("defaulting resource relation to external as resource is accessed by reference")
+			resource.Relation = constructor.ExternalRelation
+		}
+		if resource.Version == "" {
+			logger.Debug("defaulting resource version to component version as no resource version was set")
+			resource.Version = version
+		}
 		if byValue := c.opts.ProcessResourceByValue != nil && c.opts.ProcessResourceByValue(resource); byValue {
 			logger.Debug("processing resource by value")
 			res, err = c.processResourceByValue(ctx, targetRepo, resource, component, version)
