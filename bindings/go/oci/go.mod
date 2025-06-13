@@ -9,8 +9,8 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.15.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.2
-	ocm.software/open-component-model/bindings/go/ctf v0.0.1
+	ocm.software/open-component-model/bindings/go/blob v0.0.3
+	ocm.software/open-component-model/bindings/go/ctf v0.0.2
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250611060114-f4d9dc7752dd
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
