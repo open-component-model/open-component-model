@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"sync"
 
-	"ocm.software/open-component-model/bindings/go/constructor"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -21,7 +20,7 @@ func NewResourceRegistry(ctx context.Context) *ResourceRegistry {
 		ctx:                ctx,
 		registry:           make(map[runtime.Type]types.Plugin),
 		resourceScheme:     runtime.NewScheme(runtime.WithAllowUnknown()),
-		internalPlugins:    make(map[runtime.Type]constructor.ResourceRepository),
+		internalPlugins:    make(map[runtime.Type]Repository),
 		constructedPlugins: make(map[string]*constructedPlugin),
 	}
 }
@@ -31,7 +30,7 @@ type ResourceRegistry struct {
 	ctx                context.Context
 	mu                 sync.Mutex
 	registry           map[runtime.Type]types.Plugin
-	internalPlugins    map[runtime.Type]constructor.ResourceRepository
+	internalPlugins    map[runtime.Type]Repository
 	resourceScheme     *runtime.Scheme
 	constructedPlugins map[string]*constructedPlugin // running plugins
 }
@@ -57,7 +56,7 @@ func (r *ResourceRegistry) AddPlugin(plugin types.Plugin, constructionType runti
 }
 
 // GetResourcePlugin returns Resource plugins for a specific type.
-func (r *ResourceRegistry) GetResourcePlugin(ctx context.Context, spec runtime.Typed) (constructor.ResourceRepository, error) {
+func (r *ResourceRegistry) GetResourcePlugin(ctx context.Context, spec runtime.Typed) (Repository, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -108,7 +107,7 @@ func (r *ResourceRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (v
 func RegisterInternalResourcePlugin(
 	scheme *runtime.Scheme,
 	r *ResourceRegistry,
-	plugin constructor.ResourceRepository,
+	plugin Repository,
 	proto runtime.Typed,
 ) error {
 	r.mu.Lock()

@@ -15,7 +15,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -103,28 +102,26 @@ func TestPluginFlow(t *testing.T) {
 	require.Equal(t, "test-resource", string(content))
 	//require.Equal(t, "/tmp/to/file", resource.Value)
 
-	// Test adding a resource
-	//addedResource, err := retrievedPlugin.AddGlobalResource(ctx, &v1.AddGlobalResourceRequest{
-	//	Resource: &descriptorv2.Resource{
-	//		ElementMeta: descriptorv2.ElementMeta{
-	//			ObjectMeta: descriptorv2.ObjectMeta{
-	//				Name:    "test-resource-2",
-	//				Version: "0.1.0",
-	//			},
-	//		},
-	//		Type:     "type",
-	//		Relation: "local",
-	//		Access: &runtime.Raw{
-	//			Type: runtime.Type{
-	//				Version: "test-access",
-	//				Name:    "v1",
-	//			},
-	//			Data: []byte(`{ "access": "v1" }`),
-	//		},
-	//	},
-	//}, map[string]string{})
-	//require.NoError(t, err)
-	//require.Equal(t, "test-global-resource", addedResource.Resource.Name)
+	//Test adding a resource
+	addedResource, err := retrievedPlugin.UploadResource(ctx, proto, &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource-2",
+				Version: "0.1.0",
+			},
+		},
+		Type:     "type",
+		Relation: "local",
+		Access: &runtime.Raw{
+			Type: runtime.Type{
+				Version: "test-access",
+				Name:    "v1",
+			},
+			Data: []byte(`{ "access": "v1" }`),
+		},
+	}, blob.NewDirectReadOnlyBlob(bytes.NewBufferString("test-resource")), map[string]string{})
+	require.NoError(t, err)
+	require.Equal(t, "test-global-resource", addedResource.Name)
 }
 
 func TestRegisterInternalResourcePlugin(t *testing.T) {
@@ -155,10 +152,16 @@ func TestRegisterInternalResourcePlugin(t *testing.T) {
 
 type mockResourcePlugin struct{}
 
-func (m *mockResourcePlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+var _ Repository = (*mockResourcePlugin)(nil)
+
+func (m *mockResourcePlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
 	return nil, nil
 }
 
-func (m *mockResourcePlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error) {
+func (m *mockResourcePlugin) UploadResource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+	return &descriptor.Resource{}, nil
+}
+
+func (m *mockResourcePlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	return blob.NewDirectReadOnlyBlob(bytes.NewBufferString("test-resource")), nil
 }

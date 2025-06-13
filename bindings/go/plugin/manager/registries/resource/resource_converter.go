@@ -3,12 +3,13 @@ package resource
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -54,6 +55,49 @@ func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource
 	return rBlob, nil
 }
 
+func (r *resourcePluginConverter) UploadResource(ctx context.Context, targetAccess runtime.Typed, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials map[string]string) (*descriptor.Resource, error) {
+	file, err := os.CreateTemp("", "resource")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer func() {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+	}()
+
+	reader, err := content.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read blob: %w", err)
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+	if _, err := io.Copy(file, reader); err != nil {
+		return nil, fmt.Errorf("failed to copy blob: %w", err)
+	}
+
+	convert, err := descriptor.ConvertToV2Resources(r.scheme, []descriptor.Resource{*resource})
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert resource: %w", err)
+	}
+
+	request := &v1.AddGlobalResourceRequest{
+		ResourceLocation: types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        file.Name(),
+		},
+		Resource: &convert[0],
+	}
+
+	result, err := r.externalPlugin.AddGlobalResource(ctx, request, credentials)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add global resource: %w", err)
+	}
+
+	convertedResult := descriptor.ConvertFromV2Resources([]descriptorv2.Resource{*result.Resource})
+	return &convertedResult[0], nil
+}
+
 func (r *resourcePluginConverter) createBlobData(location types.Location) (blob.ReadOnlyBlob, error) {
 	var rBlob blob.ReadOnlyBlob
 
@@ -69,7 +113,7 @@ func (r *resourcePluginConverter) createBlobData(location types.Location) (blob.
 	return rBlob, nil
 }
 
-var _ constructor.ResourceRepository = (*resourcePluginConverter)(nil)
+var _ Repository = (*resourcePluginConverter)(nil)
 
 func (r *ResourceRegistry) externalToResourcePluginConverter(plugin v1.ReadWriteResourcePluginContract, scheme *runtime.Scheme) *resourcePluginConverter {
 	return &resourcePluginConverter{
