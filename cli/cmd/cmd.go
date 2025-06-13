@@ -11,7 +11,7 @@ import (
 	"ocm.software/open-component-model/cli/cmd/generate"
 	"ocm.software/open-component-model/cli/cmd/get"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
-	"ocm.software/open-component-model/cli/internal/flag/log"
+	"ocm.software/open-component-model/cli/internal/flags/log"
 )
 
 // Execute adds all child commands to the Cmd command and sets flags appropriately.

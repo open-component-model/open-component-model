@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/cli/cmd"
-	"ocm.software/open-component-model/cli/internal/flag/log"
+	"ocm.software/open-component-model/cli/internal/flags/log"
 )
 
 // Options holds configuration for executing OCM CLI commands in tests
