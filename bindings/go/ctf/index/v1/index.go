@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
+	"sync"
 )
 
 const (
@@ -22,6 +24,7 @@ type Index interface {
 }
 
 type index struct {
+	mu        sync.RWMutex
 	Versioned `json:",inline"`
 	Artifacts []ArtifactMetadata `json:"artifacts"`
 }
@@ -78,10 +81,43 @@ func NewIndex() Index {
 	}
 }
 
+// AddArtifact adds an ArtifactMetadata to the index.
+//
+// If an artifact with the same digest already exists, its tag is updated (if provided).
+// If a tag already exists in the same repository but points to a different digest, it is cleared ("retag" scenario).
+// If no artifact with the same digest exists, the artifact is added to the index.
 func (i *index) AddArtifact(a ArtifactMetadata) {
-	i.Artifacts = append(i.Artifacts, a)
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	newArtifact := true
+	// If we have a tag, lets compare it with existing artifacts in our index.
+	for idx, art := range i.Artifacts {
+		if art.Repository != a.Repository {
+			continue
+		}
+		if art.Tag == a.Tag && art.Digest != a.Digest {
+			// "retag" scenario to new digest: tag exists with different digest → clear old tag
+			i.Artifacts[idx].Tag = ""
+		}
+		if art.Digest == a.Digest {
+			//  "same digest" scenario: artifact already exists with same digest.
+			newArtifact = false
+			if a.Tag != "" {
+				// "tag" scenario: digest is equivalent but there is now a tag.
+				i.Artifacts[idx].Tag = a.Tag
+			}
+		}
+	}
+
+	if newArtifact {
+		// Add new artifact
+		i.Artifacts = append(i.Artifacts, a)
+	}
 }
 
 func (i *index) GetArtifacts() []ArtifactMetadata {
-	return i.Artifacts
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	return slices.Clone(i.Artifacts)
 }
