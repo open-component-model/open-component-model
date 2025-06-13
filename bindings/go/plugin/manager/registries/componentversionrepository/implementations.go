@@ -51,6 +51,8 @@ var (
 	_ v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
+// NewComponentVersionRepositoryPlugin creates a new component version repository plugin instance with the provided configuration.
+// It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
 func NewComponentVersionRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
@@ -202,17 +204,17 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetL
 	return response, nil
 }
 
-func (r *RepositoryPlugin) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
-	if err := r.validateEndpoint(typ.Typ, r.jsonSchema); err != nil {
+func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+	if err := r.validateEndpoint(request.Typ, r.jsonSchema); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
 	}
 
-	identity := &runtime.Identity{}
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(typ), plugins.WithResult(identity)); err != nil {
+	identity := v1.GetIdentityResponse{}
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
 	}
 
-	return nil, nil
+	return &identity, nil
 }
 
 func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {

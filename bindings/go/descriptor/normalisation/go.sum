@@ -40,7 +40,7 @@ ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250526
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250526130658-2a15446778e5/go.mod h1:bLZiz+oKvnptoZTvN19bOTbjqyuZFEFzfq8m4Eor49Q=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1 h1:pUb745PA/ZmNvWQK5d18gy5RvicLEPO3+c+ouChTkT4=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1/go.mod h1:unxxoxXRk5k8PzhLxWPuGOVd7cRL9/QK5xO7enmsJ7s=
-ocm.software/open-component-model/bindings/go/runtime v0.0.1 h1:QY5pOl6UYIpmOP4GMTTGRCsWjk276vEEc9WtdoHXpCE=
-ocm.software/open-component-model/bindings/go/runtime v0.0.1/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
+ocm.software/open-component-model/bindings/go/runtime v0.0.2 h1:YA20enOxMsk4gDWF+Anltwkc616dXebfgPz/0Bl0EKE=
+ocm.software/open-component-model/bindings/go/runtime v0.0.2/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 sigs.k8s.io/yaml v1.4.0 h1:Mk1wCc2gy/F0THH0TAp1QYyJNzRm2KCLy3o5ASXVI5E=
 sigs.k8s.io/yaml v1.4.0/go.mod h1:Ejl7/uTz7PSA4eKMyQCUTnhZYNmLIl+5c2lQPGR2BPY=

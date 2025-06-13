@@ -49,10 +49,17 @@ func WithScheme(scheme *runtime.Scheme) RepositoryOption {
 	}
 }
 
-// WithOCIDescriptorCache sets the local oci descriptor cache for the repository.
-func WithOCIDescriptorCache(memory cache.OCIDescriptorCache) RepositoryOption {
+// WithManifestCache sets the local oci descriptor cache for manifests.
+func WithManifestCache(memory cache.OCIDescriptorCache) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.LocalManifestCache = memory
+	}
+}
+
+// WithLayerCache sets the local oci descriptor cache for the layers.
+func WithLayerCache(memory cache.OCIDescriptorCache) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.LocalLayerCache = memory
 	}
 }
 

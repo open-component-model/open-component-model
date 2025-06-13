@@ -39,10 +39,13 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -127,7 +130,6 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 func Test_Integration_OCIRepository(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	r := require.New(t)
 
 	t.Logf("Starting OCI integration test")
 
@@ -145,50 +147,84 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		}),
 		testcontainers.WithLogger(log.TestLogger(t)),
 	)
+	r := require.New(t)
 	r.NoError(err)
 	t.Cleanup(func() {
 		r.NoError(testcontainers.TerminateContainer(registryContainer))
 	})
 	t.Logf("Test registry started")
 
-	registryAddress, err := registryContainer.HostAddress(ctx)
-	r.NoError(err)
+	t.Run("direct", func(t *testing.T) {
+		r := require.New(t)
+		registryAddress, err := registryContainer.HostAddress(ctx)
+		r.NoError(err)
 
-	reference := func(ref string) string {
-		return fmt.Sprintf("%s/%s", registryAddress, ref)
-	}
+		reference := func(ref string) string {
+			return fmt.Sprintf("%s/%s", registryAddress, ref)
+		}
 
-	client := createAuthClient(registryAddress, testUsername, password)
+		client := createAuthClient(registryAddress, testUsername, password)
 
-	resolver := urlresolver.New(registryAddress)
-	resolver.SetClient(client)
-	resolver.PlainHTTP = true
+		resolver := urlresolver.New(registryAddress)
+		resolver.SetClient(client)
+		resolver.PlainHTTP = true
 
-	repo, err := oci.NewRepository(oci.WithResolver(resolver))
-	r.NoError(err)
+		repo, err := oci.NewRepository(oci.WithResolver(resolver))
+		r.NoError(err)
 
-	t.Run("basic connectivity and resolution failure", func(t *testing.T) {
-		testResolverConnectivity(t, registryAddress, reference("target:latest"), client)
+		t.Run("basic connectivity and resolution failure", func(t *testing.T) {
+			testResolverConnectivity(t, registryAddress, reference("target:latest"), client)
+		})
+
+		t.Run("basic upload and download of a component version", func(t *testing.T) {
+			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+		})
+
+		t.Run("basic upload and download of a barebones resource that is compatible with OCI registries", func(t *testing.T) {
+			uploadDownloadBarebonesOCIImage(t, repo, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
+		})
+
+		t.Run("local resource blob upload and download", func(t *testing.T) {
+			uploadDownloadLocalResource(t, repo, "test-component", "v1.0.0")
+		})
+
+		t.Run("local resource oci layout upload and download", func(t *testing.T) {
+			uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v1.0.0")
+		})
+
+		t.Run("local source blob upload and download", func(t *testing.T) {
+			uploadDownloadLocalSource(t, repo, "test-component", "v1.0.0")
+		})
 	})
 
-	t.Run("basic upload and download of a component version", func(t *testing.T) {
-		uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
-	})
+	t.Run("specification-based", func(t *testing.T) {
+		r := require.New(t)
 
-	t.Run("basic upload and download of a barebones resource that is compatible with OCI registries", func(t *testing.T) {
-		uploadDownloadBarebonesOCIImage(t, repo, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
-	})
+		registryAddress, err := registryContainer.Address(ctx)
+		r.NoError(err)
 
-	t.Run("local resource blob upload and download", func(t *testing.T) {
-		uploadDownloadLocalResource(t, repo, "test-component", "v1.0.0")
-	})
+		t.Run("basic connectivity and resolution failure", func(t *testing.T) {
+			repoProvider := provider.NewComponentVersionRepositoryProvider()
+			repoSpec := &ocirepospecv1.Repository{BaseUrl: registryAddress}
+			id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
+			r.NoError(err)
 
-	t.Run("local resource oci layout upload and download", func(t *testing.T) {
-		uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v1.0.0")
-	})
+			url, err := ocmruntime.ParseURLAndAllowNoScheme(registryAddress)
+			r.NoError(err)
+			r.Equal(id[ocmruntime.IdentityAttributeHostname], url.Hostname())
+			r.Equal(id[ocmruntime.IdentityAttributePort], url.Port())
+			r.Equal(id[ocmruntime.IdentityAttributeScheme], url.Scheme)
 
-	t.Run("local source blob upload and download", func(t *testing.T) {
-		uploadDownloadLocalSource(t, repo, "test-component", "v1.0.0")
+			repo, err := repoProvider.GetComponentVersionRepository(ctx, repoSpec, map[string]string{
+				"username": testUsername,
+				"password": password,
+			})
+			r.NoError(err)
+
+			t.Run("basic upload and download of a component version", func(t *testing.T) {
+				uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+			})
+		})
 	})
 }
 
@@ -196,30 +232,48 @@ func Test_Integration_CTF(t *testing.T) {
 	t.Parallel()
 	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
 	require.NoError(t, err)
-	archive := ctf.NewFileSystemCTF(fs)
-	store := ocictf.NewFromCTF(archive)
 
-	repo, err := oci.NewRepository(oci.WithResolver(store))
-	require.NoError(t, err)
+	t.Run("direct", func(t *testing.T) {
+		archive := ctf.NewFileSystemCTF(fs)
+		store := ocictf.NewFromCTF(archive)
+		repo, err := oci.NewRepository(oci.WithResolver(store))
+		require.NoError(t, err)
+		t.Run("basic upload and download of a component version", func(t *testing.T) {
+			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+		})
 
-	t.Run("basic upload and download of a component version", func(t *testing.T) {
-		uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+		t.Run("basic upload and download of a barebones resource that is compatible with OCI registries", func(t *testing.T) {
+			uploadDownloadBarebonesOCIImage(t, repo, "ghcr.io/test:v1.0.0", "new-test:v1.0.0")
+		})
+
+		t.Run("local resource blob upload and download", func(t *testing.T) {
+			uploadDownloadLocalResource(t, repo, "test-component", "v2.0.0")
+		})
+
+		t.Run("local resource oci layout upload and download", func(t *testing.T) {
+			uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v3.0.0")
+		})
+
+		t.Run("local source blob upload and download", func(t *testing.T) {
+			uploadDownloadLocalSource(t, repo, "test-component", "v4.0.0")
+		})
 	})
 
-	t.Run("basic upload and download of a barebones resource that is compatible with OCI registries", func(t *testing.T) {
-		uploadDownloadBarebonesOCIImage(t, repo, "ghcr.io/test:v1.0.0", "new-test:v1.0.0")
-	})
+	t.Run("specification-based", func(t *testing.T) {
+		r := require.New(t)
+		repoProvider := provider.NewComponentVersionRepositoryProvider()
+		repoSpec := &ctfrepospecv1.Repository{Path: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
+		id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
+		r.NoError(err)
 
-	t.Run("local resource blob upload and download", func(t *testing.T) {
-		uploadDownloadLocalResource(t, repo, "test-component", "v2.0.0")
-	})
+		r.Equal(id[ocmruntime.IdentityAttributePath], fs.String())
 
-	t.Run("local resource oci layout upload and download", func(t *testing.T) {
-		uploadDownloadLocalResourceOCILayout(t, repo, "test-component", "v3.0.0")
-	})
+		repo, err := repoProvider.GetComponentVersionRepository(t.Context(), repoSpec, nil)
+		r.NoError(err)
 
-	t.Run("local source blob upload and download", func(t *testing.T) {
-		uploadDownloadLocalSource(t, repo, "test-component", "v4.0.0")
+		t.Run("basic upload and download of a component version", func(t *testing.T) {
+			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v5.0.0")
+		})
 	})
 }
 
@@ -239,6 +293,9 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 			Version: "v2",
 		},
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "ocm.software/open-component-model/bindings/go/oci/integration/test",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    component,
@@ -378,6 +435,7 @@ func uploadDownloadBarebonesComponentVersion(t *testing.T, repo oci.ComponentVer
 	desc.Component.Name = name
 	desc.Component.Version = version
 	desc.Component.Labels = append(desc.Component.Labels, descriptor.Label{Name: "foo", Value: "bar"})
+	desc.Component.Provider.Name = "ocm.software/open-component-model/bindings/go/oci/integration/test"
 
 	r.NoError(repo.AddComponentVersion(ctx, &desc))
 
@@ -391,8 +449,7 @@ func uploadDownloadBarebonesComponentVersion(t *testing.T, repo oci.ComponentVer
 
 	versions, err := repo.ListComponentVersions(ctx, name)
 	r.NoError(err)
-	r.Len(versions, 1)
-	r.Equal(version, versions[0])
+	r.Contains(versions, version)
 }
 
 func testResolverConnectivity(t *testing.T, address, reference string, client *auth.Client) {
@@ -512,6 +569,9 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 			Version: "v2",
 		},
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "ocm.software/open-component-model/bindings/go/oci/integration/test",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    name,
@@ -585,6 +645,9 @@ func uploadDownloadLocalSource(t *testing.T, repo oci.ComponentVersionRepository
 			Version: "v2",
 		},
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "ocm.software/open-component-model/bindings/go/oci/integration/test",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    name,

@@ -130,7 +130,7 @@ func TestIdentityFromOCIRepository(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "invalid URL - missing scheme (not absolute)",
+			name: "URL - missing scheme (not absolute)",
 			repository: oci.Repository{
 				BaseUrl: "registry.example.com/v2",
 			},
@@ -139,6 +139,20 @@ func TestIdentityFromOCIRepository(t *testing.T) {
 				runtime.IdentityAttributeHostname: "registry.example.com",
 				runtime.IdentityAttributePath:     "/v2",
 				runtime.IdentityAttributePort:     "443",
+				runtime.IdentityAttributeScheme:   "https",
+			},
+			wantErr: false,
+		},
+		{
+			name: "URL - missing scheme (localhost)",
+			repository: oci.Repository{
+				BaseUrl: "localhost:1111/v2",
+			},
+			want: runtime.Identity{
+				runtime.IdentityAttributeType:     Type.String(),
+				runtime.IdentityAttributeHostname: "localhost",
+				runtime.IdentityAttributePath:     "/v2",
+				runtime.IdentityAttributePort:     "1111",
 				runtime.IdentityAttributeScheme:   "https",
 			},
 			wantErr: false,
@@ -163,7 +177,7 @@ func TestIdentityFromOCIRepository(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := IdentityFromOCIRepository(tt.repository)
+			got, err := IdentityFromOCIRepository(&tt.repository)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -195,7 +209,7 @@ func TestIdentityFromCTFRepository(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := IdentityFromCTFRepository(tt.repository)
+			got, err := IdentityFromCTFRepository(&tt.repository)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 			assert.Equal(t, Type, got.GetType())

@@ -284,8 +284,13 @@ func TestRegistry_MultipleTypes_With_Alias(t *testing.T) {
 	alias := NewVersionedType("test2", "v1")
 	registry := NewScheme()
 	registry.MustRegisterWithAlias(&TestType{}, def, alias)
-	r.ErrorContains(registry.RegisterWithAlias(&TestType{}, def), "already registered as default")
-	r.ErrorContains(registry.RegisterWithAlias(&TestType{}, alias), "already registered as alias")
+	err := registry.RegisterWithAlias(&TestType{}, def)
+	r.ErrorContains(err, "already registered: as default")
+	r.True(IsTypeAlreadyRegisteredError(err))
+
+	err = registry.RegisterWithAlias(&TestType{}, alias)
+	r.ErrorContains(err, "already registered: as alias")
+	r.True(IsTypeAlreadyRegisteredError(err))
 }
 
 func TestRegistry_NewObject_Based_On_Alias(t *testing.T) {
@@ -535,8 +540,6 @@ func TestScheme_GetTypes(t *testing.T) {
 }
 
 func TestRegistry_RegisterSchemes(t *testing.T) {
-	r := require.New(t)
-
 	// Create test types
 	typ1 := NewVersionedType("test1", "v1")
 	typ2 := NewVersionedType("test2", "v1")
@@ -554,6 +557,7 @@ func TestRegistry_RegisterSchemes(t *testing.T) {
 
 	// Test successful registration of multiple schemes
 	t.Run("successful registration", func(t *testing.T) {
+		r := require.New(t)
 		registry := NewScheme()
 		err := registry.RegisterSchemes(scheme1, scheme2, scheme3)
 		r.NoError(err)
@@ -566,6 +570,7 @@ func TestRegistry_RegisterSchemes(t *testing.T) {
 
 	// Test handling nil schemes
 	t.Run("nil schemes", func(t *testing.T) {
+		r := require.New(t)
 		registry := NewScheme()
 		err := registry.RegisterSchemes(nil, scheme1, nil, scheme2)
 		r.NoError(err)
@@ -577,6 +582,7 @@ func TestRegistry_RegisterSchemes(t *testing.T) {
 
 	// Test handling conflicts between schemes
 	t.Run("conflicting schemes", func(t *testing.T) {
+		r := require.New(t)
 		registry := NewScheme()
 		registry.MustRegisterWithAlias(&TestType{}, typ1) // Register typ1 first
 
@@ -587,7 +593,8 @@ func TestRegistry_RegisterSchemes(t *testing.T) {
 		// Try to register schemes, including one with conflict
 		err := registry.RegisterSchemes(scheme2, conflictingScheme, scheme3)
 		r.Error(err)
-		r.Contains(err.Error(), "type \"test1/v1\" already registered")
+		r.Contains(err.Error(), "type \"test1/v1\" is already registered")
+		r.True(IsTypeAlreadyRegisteredError(err))
 
 		// Verify only the first scheme was registered
 		r.True(registry.IsRegistered(typ1))
@@ -597,6 +604,7 @@ func TestRegistry_RegisterSchemes(t *testing.T) {
 
 	// Test partial registration
 	t.Run("partial registration", func(t *testing.T) {
+		r := require.New(t)
 		registry := NewScheme()
 		registry.MustRegisterWithAlias(&TestType{}, typ1) // Register typ1 first
 

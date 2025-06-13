@@ -21,7 +21,8 @@ type KV struct {
 	Value string
 }
 
-// WaitForPlugin sets up the HTTP client for the plugin or returns it, based on how I'm going to extract this.
+// WaitForPlugin sets up the HTTP client for the plugin and waits for it to become available.
+// It returns the configured HTTP client, the plugin location, and any error encountered.
 func WaitForPlugin(ctx context.Context, plugin *types.Plugin) (*http.Client, string, error) {
 	interval := 100 * time.Millisecond
 	timer := time.NewTicker(interval)

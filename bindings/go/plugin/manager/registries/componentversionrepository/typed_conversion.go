@@ -61,8 +61,8 @@ func (r *TypeToUntypedPlugin[T]) ListComponentVersions(ctx context.Context, requ
 	return r.base.ListComponentVersions(ctx, req, credentials)
 }
 
-func (r *TypeToUntypedPlugin[T]) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
-	return r.base.GetIdentity(ctx, v1.GetIdentityRequest[T]{
+func (r *TypeToUntypedPlugin[T]) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+	return r.base.GetIdentity(ctx, &v1.GetIdentityRequest[T]{
 		Typ: typ.Typ.(T),
 	})
 }

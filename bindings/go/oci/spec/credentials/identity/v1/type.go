@@ -14,8 +14,8 @@ import (
 // used when translating from a repository type into a consumer identity.
 var Type = runtime.NewUnversionedType("OCIRepository")
 
-func IdentityFromOCIRepository(repository oci.Repository) (runtime.Identity, error) {
-	repoURL, err := url.Parse(repository.BaseUrl)
+func IdentityFromOCIRepository(repository *oci.Repository) (runtime.Identity, error) {
+	repoURL, err := runtime.ParseURLAndAllowNoScheme(repository.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse OCI repository URL: %w", err)
 	}
@@ -50,7 +50,7 @@ func IdentityFromOCIRepository(repository oci.Repository) (runtime.Identity, err
 	return identity, nil
 }
 
-func IdentityFromCTFRepository(repository ctf.Repository) (runtime.Identity, error) {
+func IdentityFromCTFRepository(repository *ctf.Repository) (runtime.Identity, error) {
 	identity := runtime.Identity{
 		runtime.IdentityAttributePath: repository.Path,
 	}

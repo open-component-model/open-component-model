@@ -49,6 +49,10 @@ func RegisterComponentVersionRepository[T runtime.Typed](
 		endpoints.Handler{
 			Handler:  AddLocalResourceHandlerFunc(handler.AddLocalResource, c.Scheme),
 			Location: UploadLocalResource,
+		},
+		endpoints.Handler{
+			Handler:  GetIdentityHandlerFunc(handler.GetIdentity, c.Scheme, proto),
+			Location: Identity,
 		})
 
 	schema, err := runtime.GenerateJSONSchemaForType(proto)
