@@ -23,7 +23,6 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
-	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -236,50 +235,16 @@ func (prov *constructorProvider) GetSourceInputMethod(ctx context.Context, src *
 	return prov.PluginManager.InputRegistry.GetSourceInputPlugin(ctx, src.Input)
 }
 
-type resourceRepository struct {
-	plugin resourcev1.ReadWriteResourcePluginContract
-}
-
-func (r *resourceRepository) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
-	res, err := r.plugin.GetIdentity(ctx, &resourcev1.GetIdentityRequest[runtime.Typed]{Typ: resource.Access})
-	if err != nil {
-		return nil, fmt.Errorf("getting identity for resource %q failed: %w", resource.ToIdentity().String(), err)
-	}
-	return res.Identity, nil
-}
-
-func (r *resourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error) {
-	response, err := r.plugin.GetGlobalResource(ctx, &resourcev1.GetGlobalResourceRequest{}, credentials)
-	if err != nil {
-		return nil, fmt.Errorf("getting resource %q failed: %w", res.ToIdentity().String(), err)
-	}
-	if response.Location.LocationType != types.LocationTypeLocalFile {
-		return nil, fmt.Errorf("resource location type %q is not yet supported by this plugin", res.ToIdentity().String())
-	}
-	content, err = filesystem.GetBlobFromOSPath(response.Location.Value)
-	if err != nil {
-		return nil, fmt.Errorf("getting blob from resource location %q failed: %w", response.Location.Value, err)
-	}
-
-	return content, nil
-}
-
 func (prov *constructorProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceRepository, error) {
-	var candidate runtime.Typed
-	switch {
-	case resource.HasAccess():
-		candidate = resource.Access
-	case resource.HasInput():
-		candidate = resource.Input
-	default:
-		return nil, fmt.Errorf("resource %q has no access or input defined", resource.ToIdentity().String())
+	if !resource.HasAccess() {
+		return nil, fmt.Errorf("resource %q has no access defined", resource.ToIdentity().String())
 	}
-	plugin, err := prov.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, candidate)
+	plugin, err := prov.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for resource %q failed: %w", resource.ToIdentity().String(), err)
 	}
 
-	return &resourceRepository{plugin}, nil
+	return plugin, nil
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
