@@ -19,7 +19,14 @@ var ErrSchemaVersionMismatch = fmt.Errorf("schema version mismatch, only %v is s
 // It is used to store metadata about the artifacts in a CTF and used for discovery purposes
 // The Index is canonically stored in the root of a CTF as ArtifactIndexFileName with SchemaVersion.
 type Index interface {
+	// AddArtifact adds an ArtifactMetadata to the index.
+	//
+	// If an artifact with the same digest already exists, its tag is updated (if provided).
+	// If a tag already exists in the same repository but points to a different digest, it is cleared ("retag" scenario).
+	// If no artifact with the same digest exists, the artifact is added to the index.
 	AddArtifact(a ArtifactMetadata)
+	// GetArtifacts returns a slice of ArtifactMetadata that are stored in the index at the time of the call.
+	// It is not guaranteed to be consistent with later calls as it is a snapshot of the current state.
 	GetArtifacts() []ArtifactMetadata
 }
 
