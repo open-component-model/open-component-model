@@ -150,6 +150,9 @@ func RegisterInternalResourceInputPlugin(
 	}
 
 	r.internalResourceInputRepositoryPlugins[typ] = plugin
+	for _, alias := range scheme.GetTypes()[typ] {
+		r.internalResourceInputRepositoryPlugins[alias] = r.internalResourceInputRepositoryPlugins[typ]
+	}
 
 	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
 		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)

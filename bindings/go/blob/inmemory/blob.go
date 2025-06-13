@@ -10,7 +10,7 @@ import (
 )
 
 // New forwards a given [io.Reader] to be able to be used as a ReadOnlyBlob.
-// It does this by wrapping the [io.Reader] in a Blob, to allow for catching information such as
+// It does this by wrapping the [io.Reader] in a Blob, to allow for caching information such as
 // the digest and size of the blob, as well as independent repeated access to the blob data.
 // Note that this should only be used without MemoryBlobOption if no sizing and digest information is present.
 // Otherwise, use WithSize, WithDigest, or WithMediaType to set the size, digest, and media type of the blob in advance.
@@ -40,7 +40,7 @@ type Blob struct {
 // It is the caller's responsibility to close the reader.
 //
 // ReadCloser MUST be safe for concurrent use, serializing access as necessary.
-// ReadCloser MUST be able to be called multiple times, which each invocation
+// ReadCloser MUST be able to be called multiple times, with each invocation
 // returning a new reader, that starts from the beginning of the blob.
 //
 // Note that this behavior is not parallel to WriteableBlob.WriteCloser

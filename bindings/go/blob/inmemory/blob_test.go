@@ -357,3 +357,132 @@ func TestMemoryBlobOptions(t *testing.T) {
 	})
 
 }
+
+func TestConcurrentAndSerialReads(t *testing.T) {
+	data := "test data for concurrent and serial reads"
+	blob := New(strings.NewReader(data))
+	expectedData := []byte(data)
+
+	t.Run("Serial Reads", func(t *testing.T) {
+		r := require.New(t)
+		// Perform multiple serial reads
+		for range 5 {
+			reader, err := blob.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() {
+				r.NoError(reader.Close())
+			})
+
+			buf := make([]byte, len(data))
+			n, err := reader.Read(buf)
+			r.NoError(err)
+			r.Equal(len(data), n)
+			r.Equal(expectedData, buf)
+		}
+	})
+
+	t.Run("Concurrent Reads", func(t *testing.T) {
+		r := require.New(t)
+		const numGoroutines = 10
+		done := make(chan struct{})
+
+		for range numGoroutines {
+			go func() {
+				defer func() { done <- struct{}{} }()
+
+				reader, err := blob.ReadCloser()
+				r.NoError(err)
+				defer reader.Close()
+
+				buf := make([]byte, len(data))
+				n, err := reader.Read(buf)
+				r.NoError(err)
+				r.Equal(len(data), n)
+				r.Equal(expectedData, buf)
+			}()
+		}
+
+		// Wait for all goroutines to complete
+		for range numGoroutines {
+			<-done
+		}
+	})
+
+	t.Run("Mixed Concurrent and Serial Reads", func(t *testing.T) {
+		r := require.New(t)
+		const numGoroutines = 5
+		done := make(chan struct{})
+
+		// Start concurrent reads
+		for range numGoroutines {
+			go func() {
+				defer func() { done <- struct{}{} }()
+
+				reader, err := blob.ReadCloser()
+				r.NoError(err)
+				defer reader.Close()
+
+				buf := make([]byte, len(data))
+				n, err := reader.Read(buf)
+				r.NoError(err)
+				r.Equal(len(data), n)
+				r.Equal(expectedData, buf)
+			}()
+		}
+
+		// Perform serial reads while concurrent reads are happening
+		for range 3 {
+			reader, err := blob.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() {
+				r.NoError(reader.Close())
+			})
+
+			buf := make([]byte, len(data))
+			n, err := reader.Read(buf)
+			r.NoError(err)
+			r.Equal(len(data), n)
+			r.Equal(expectedData, buf)
+		}
+
+		// Wait for all goroutines to complete
+		for range numGoroutines {
+			<-done
+		}
+	})
+
+	t.Run("Concurrent Partial Reads", func(t *testing.T) {
+		r := require.New(t)
+		const numGoroutines = 5
+		done := make(chan struct{})
+
+		for range numGoroutines {
+			go func() {
+				defer func() { done <- struct{}{} }()
+
+				reader, err := blob.ReadCloser()
+				r.NoError(err)
+				defer reader.Close()
+
+				// Read first half
+				firstHalf := make([]byte, len(data)/2)
+				n, err := reader.Read(firstHalf)
+				r.NoError(err)
+				r.Equal(len(data)/2, n)
+				r.Equal(expectedData[:len(data)/2], firstHalf)
+
+				// Read second half
+				secondHalf := make([]byte, len(data)-len(data)/2)
+				n, err = reader.Read(secondHalf)
+				r.NoError(err)
+				r.Equal(len(data)-len(data)/2, n)
+				r.Equal(expectedData[len(data)/2:], secondHalf)
+			}()
+		}
+
+		// Wait for all goroutines to complete
+		for range numGoroutines {
+			<-done
+		}
+	})
+}
