@@ -12,7 +12,7 @@ require (
 	golang.org/x/crypto v0.39.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
 	ocm.software/open-component-model/bindings/go/ctf v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250611060114-f4d9dc7752dd
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250613154705-6c64b1f26475
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
 	ocm.software/open-component-model/bindings/go/oci v0.0.0
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
