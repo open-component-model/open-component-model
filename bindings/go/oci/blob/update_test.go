@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
@@ -28,7 +27,7 @@ func TestUpdateArtifactWithInformationFromBlob(t *testing.T) {
 			artifact: &descriptor.Resource{
 				Size: 2048,
 			},
-			blob:         inmemory.New(bytes.NewReader([]byte("test data"))),
+			blob:         blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test data"))),
 			expectedSize: 2048,
 			expectedDigest: &descriptor.Digest{
 				HashAlgorithm: internaldigest.HashAlgorithmSHA256,
@@ -39,7 +38,7 @@ func TestUpdateArtifactWithInformationFromBlob(t *testing.T) {
 		{
 			name:           "source artifact (should not be updated)",
 			artifact:       &descriptor.Source{},
-			blob:           inmemory.New(bytes.NewReader([]byte("test data"))),
+			blob:           blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test data"))),
 			expectedSize:   0,
 			expectedDigest: nil,
 			expectError:    false,

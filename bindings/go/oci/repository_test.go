@@ -19,7 +19,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -374,7 +373,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			}(t),
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
 				r := require.New(t)
-				store, err := tar.ReadOCILayout(t.Context(), inmemory.New(bytes.NewReader(original)))
+				store, err := tar.ReadOCILayout(t.Context(), blob.NewDirectReadOnlyBlob(bytes.NewReader(original)))
 				r.NoError(err, "Failed to read OCI layout")
 				t.Cleanup(func() {
 					r.NoError(store.Close(), "Failed to close blob reader")
@@ -419,7 +418,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			// Setup component if needed
 			if tc.setupComponent {
 				// Add the resource first
-				b := inmemory.New(bytes.NewReader(tc.content))
+				b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
 				newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.resource, b)
 				r.NoError(err, "Failed to add test resource")
 				r.NotNil(newRes, "Resource should not be nil after adding")
@@ -551,7 +550,7 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 			// Add the resource to the component descriptor
 			desc.Component.Resources = append(desc.Component.Resources, *tc.resource)
 
-			b := inmemory.New(bytes.NewReader(tc.content))
+			b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
 
 			var downloadedRes blob.ReadOnlyBlob
 			if tc.useLocalUpload {
@@ -595,7 +594,7 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 				r.NoError(store.Close())
 
 				// Upload the resource with the store content
-				b := inmemory.New(buf)
+				b := blob.NewDirectReadOnlyBlob(buf)
 				newRes, err := repo.UploadResource(ctx, tc.resource.Access, tc.resource, b)
 				r.NoError(err, "Failed to upload test resource")
 				r.NotNil(newRes, "Resource should not be nil after uploading")
@@ -738,7 +737,7 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 			// Add the source to the component descriptor
 			desc.Component.Sources = append(desc.Component.Sources, *tc.source)
 
-			b := inmemory.New(bytes.NewReader(tc.content))
+			b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
 
 			var downloadedSrc blob.ReadOnlyBlob
 			if tc.useLocalUpload {
@@ -782,7 +781,7 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 				r.NoError(store.Close())
 
 				// Upload the source with the store content
-				b := inmemory.New(buf)
+				b := blob.NewDirectReadOnlyBlob(buf)
 				newSrc, err := repo.UploadSource(ctx, tc.source.Access, tc.source, b)
 				r.NoError(err, "Failed to upload test source")
 				r.NotNil(newSrc, "Source should not be nil after uploading")
@@ -892,7 +891,7 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	desc.Component.Resources = append(desc.Component.Resources, *resource)
 
 	// Add the OCI layout as a local resource
-	b := inmemory.New(bytes.NewReader(data))
+	b := blob.NewDirectReadOnlyBlob(bytes.NewReader(data))
 	newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, resource, b)
 	r.NoError(err, "Failed to add OCI layout resource")
 	r.NotNil(newRes, "Resource should not be nil after adding")
@@ -968,7 +967,7 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	desc.Component.Resources = append(desc.Component.Resources, *resource)
 
 	// Add the OCI image layer as a local resource
-	b := inmemory.New(bytes.NewReader(content))
+	b := blob.NewDirectReadOnlyBlob(bytes.NewReader(content))
 	newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, resource, b)
 	r.NoError(err, "Failed to add OCI image layer resource")
 	r.NotNil(newRes, "Resource should not be nil after adding")
@@ -1332,7 +1331,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			}(t),
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
 				r := require.New(t)
-				store, err := tar.ReadOCILayout(t.Context(), inmemory.New(bytes.NewReader(original)))
+				store, err := tar.ReadOCILayout(t.Context(), blob.NewDirectReadOnlyBlob(bytes.NewReader(original)))
 				r.NoError(err, "Failed to read OCI layout")
 				t.Cleanup(func() {
 					r.NoError(store.Close(), "Failed to close blob reader")
@@ -1377,7 +1376,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			// Setup component if needed
 			if tc.setupComponent {
 				// Add the source first
-				b := inmemory.New(bytes.NewReader(tc.content))
+				b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
 				newSrc, err := repo.AddLocalSource(ctx, desc.Component.Name, desc.Component.Version, tc.source, b)
 				r.NoError(err, "Failed to add test source")
 				r.NotNil(newSrc, "Source should not be nil after adding")

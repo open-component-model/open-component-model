@@ -34,7 +34,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -286,7 +285,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 
 	data, _ := createSingleLayerOCIImage(t, originalData)
 
-	blob := inmemory.New(bytes.NewReader(data))
+	blob := blob.NewDirectReadOnlyBlob(bytes.NewReader(data))
 
 	// Create a simple component descriptor
 	cd := &descriptor.Descriptor{
@@ -360,7 +359,7 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, 
 
 	data, access := createSingleLayerOCIImage(t, originalData, from)
 
-	blob := inmemory.New(bytes.NewReader(data))
+	blob := blob.NewDirectReadOnlyBlob(bytes.NewReader(data))
 
 	resource := descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
@@ -612,7 +611,7 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 	// Add resource to component descriptor
 	cd.Component.Resources = append(cd.Component.Resources, *resource)
 
-	testBlob := inmemory.New(bytes.NewReader(testData))
+	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
 	testBlob.SetMediaType("application/json")
 
 	// Add local resource
@@ -687,7 +686,7 @@ func uploadDownloadLocalSource(t *testing.T, repo oci.ComponentVersionRepository
 	// Add source to component descriptor
 	cd.Component.Sources = append(cd.Component.Sources, *source)
 
-	testBlob := inmemory.New(bytes.NewReader(testData))
+	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
 	testBlob.SetMediaType("application/json")
 
 	// Add local source

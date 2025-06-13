@@ -88,11 +88,6 @@ func NewIndex() Index {
 	}
 }
 
-// AddArtifact adds an ArtifactMetadata to the index.
-//
-// If an artifact with the same digest already exists, its tag is updated (if provided).
-// If a tag already exists in the same repository but points to a different digest, it is cleared ("retag" scenario).
-// If no artifact with the same digest exists, the artifact is added to the index.
 func (i *index) AddArtifact(a ArtifactMetadata) {
 	i.mu.Lock()
 	defer i.mu.Unlock()

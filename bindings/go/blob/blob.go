@@ -1,10 +1,6 @@
 package blob
 
-import (
-	"io"
-
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
-)
+import "io"
 
 // Blob is an interface that represents a Binary Large Object.
 // It's main purpose is to provide an abstraction over purpose to be able to only
@@ -105,11 +101,4 @@ type MediaTypeOverrideable interface {
 	// It MUST be safe for concurrent use, serializing as necessary.
 	// It MUST be safe to call multiple times, overwriting the mediaType every time.
 	SetMediaType(mediaType string)
-}
-
-// NewDirectReadOnlyBlob is a form of memory-blob creation. See [inmemory.New] for more information.
-//
-// Deprecated: NewDirectReadOnlyBlob is deprecated and will be removed in a future release.
-func NewDirectReadOnlyBlob(r io.Reader) *inmemory.Blob {
-	return inmemory.New(r)
 }

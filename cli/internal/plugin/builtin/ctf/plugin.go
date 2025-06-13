@@ -134,7 +134,7 @@ func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionR
 		ocictf.WithCTF(ocictf.NewFromCTF(archive)),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifests),
-		oci.WithManifestCache(p.layers),
+		oci.WithLayerCache(p.layers),
 	)
 	return repo, err
 }
