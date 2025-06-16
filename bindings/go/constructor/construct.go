@@ -56,7 +56,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 
 	for i, component := range constructor.Components {
 		componentLogger := logger.With("component", component.Name, "version", component.Version)
-		componentLogger.Info("constructing component")
+		componentLogger.Debug("constructing component")
 
 		eg.Go(func() error {
 			if c.opts.OnStartComponentConstruct != nil {
@@ -87,7 +87,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 		return nil, fmt.Errorf("error constructing components: %w", err)
 	}
 
-	logger.Info("component construction completed successfully", "num_components", len(descriptors))
+	logger.Debug("component construction completed successfully", "num_components", len(descriptors))
 	return descriptors, nil
 }
 
@@ -187,7 +187,7 @@ func (c *DefaultConstructor) processDescriptor(
 
 	for i, resource := range component.Resources {
 		resourceLogger := logger.With("resource", resource.ToIdentity())
-		resourceLogger.Info("processing resource")
+		resourceLogger.Debug("processing resource")
 
 		eg.Go(func() error {
 			if c.opts.OnStartResourceConstruct != nil {
@@ -214,7 +214,7 @@ func (c *DefaultConstructor) processDescriptor(
 
 	for i, source := range component.Sources {
 		sourceLogger := logger.With("source", source.ToIdentity())
-		sourceLogger.Info("processing source")
+		sourceLogger.Debug("processing source")
 
 		eg.Go(func() error {
 			if c.opts.OnStartSourceConstruct != nil {
