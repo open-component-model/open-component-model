@@ -1,7 +1,10 @@
 package constructor
 
 import (
+	"context"
+
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
 // Options are the options for construction based on a *constructor.Constructor.
@@ -50,6 +53,30 @@ type Options struct {
 	// While constructing a component version, the constructor library will use the policy to determine how to handle conflicts
 	// of component versions when interacting with the target repository.
 	ComponentVersionConflictPolicy
+
+	// While constructing a component version, the constructor library will use the given callbacks to notify about
+	// the construction process. This can be used to implement custom logging or other actions such as progress trackers.
+	ComponentConstructionCallbacks
+}
+
+type ComponentConstructionCallbacks struct {
+	// OnStartComponentConstruct is called before the construction of a component version starts.
+	OnStartComponentConstruct func(ctx context.Context, component *constructor.Component) error
+	// OnEndComponentConstruct is called after the construction of a component version ends.
+	// If an error occurs during the construction, the error is passed as a parameter.
+	OnEndComponentConstruct func(ctx context.Context, descriptor *descriptor.Descriptor, err error) error
+
+	// OnStartResourceConstruct is called before the construction of a resource starts.
+	OnStartResourceConstruct func(ctx context.Context, resource *constructor.Resource) error
+	// OnEndResourceConstruct is called after the construction of a resource ends.
+	// If an error occurs during the construction, the error is passed as a parameter.
+	OnEndResourceConstruct func(ctx context.Context, resource *descriptor.Resource, err error) error
+
+	// OnStartSourceConstruct is called before the construction of a source starts.
+	OnStartSourceConstruct func(ctx context.Context, source *constructor.Source) error
+	// OnEndSourceConstruct is called after the construction of a source ends.
+	// If an error occurs during the construction, the error is passed as a parameter.
+	OnEndSourceConstruct func(ctx context.Context, source *descriptor.Source, err error) error
 }
 
 // ComponentVersionConflictPolicy defines the policy for handling component version conflicts

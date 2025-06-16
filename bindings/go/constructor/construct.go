@@ -59,7 +59,17 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 		componentLogger.Info("constructing component")
 
 		eg.Go(func() error {
+			if c.opts.OnStartComponentConstruct != nil {
+				if err := c.opts.OnStartComponentConstruct(egctx, &component); err != nil {
+					return fmt.Errorf("error starting component construction for %q: %w", component.ToIdentity(), err)
+				}
+			}
 			desc, err := c.construct(egctx, &component)
+			if c.opts.OnEndComponentConstruct != nil {
+				if err := c.opts.OnEndComponentConstruct(egctx, desc, err); err != nil {
+					return fmt.Errorf("error ending component construction for %q: %w", component.ToIdentity(), err)
+				}
+			}
 			if err != nil {
 				return err
 			}
@@ -180,7 +190,17 @@ func (c *DefaultConstructor) processDescriptor(
 		resourceLogger.Info("processing resource")
 
 		eg.Go(func() error {
+			if c.opts.OnStartResourceConstruct != nil {
+				if err := c.opts.OnStartResourceConstruct(egctx, &resource); err != nil {
+					return fmt.Errorf("error starting resource construction for %q: %w", resource.ToIdentity(), err)
+				}
+			}
 			res, err := c.processResource(egctx, targetRepo, &resource, component.Name, component.Version)
+			if c.opts.OnEndResourceConstruct != nil {
+				if err := c.opts.OnEndResourceConstruct(egctx, res, err); err != nil {
+					return fmt.Errorf("error ending resource construction for %q: %w", resource.ToIdentity(), err)
+				}
+			}
 			if err != nil {
 				return fmt.Errorf("error processing resource %q at index %d: %w", resource.ToIdentity(), i, err)
 			}
@@ -197,7 +217,17 @@ func (c *DefaultConstructor) processDescriptor(
 		sourceLogger.Info("processing source")
 
 		eg.Go(func() error {
+			if c.opts.OnStartSourceConstruct != nil {
+				if err := c.opts.OnStartSourceConstruct(egctx, &source); err != nil {
+					return fmt.Errorf("error starting source construction for %q: %w", source.ToIdentity(), err)
+				}
+			}
 			src, err := c.processSource(egctx, targetRepo, &source, component.Name, component.Version)
+			if c.opts.OnEndSourceConstruct != nil {
+				if err := c.opts.OnEndSourceConstruct(egctx, src, err); err != nil {
+					return fmt.Errorf("error ending source construction for %q: %w", source.ToIdentity(), err)
+				}
+			}
 			if err != nil {
 				return fmt.Errorf("error processing source %q at index %d: %w", source.ToIdentity(), i, err)
 			}
