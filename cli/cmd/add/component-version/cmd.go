@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
@@ -176,13 +178,15 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		ConcurrencyLimit:               concurrencyLimit,
 		ComponentVersionConflictPolicy: ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 	}
-
 	if !skipReferenceDigestProcessing {
 		opts.ResourceDigestProcessorProvider = instance
 	}
 
-	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
+	opts, stop := registerConstructorProgressTracker(cmd.OutOrStdout(), opts)
 
+	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
+	stop()
+	time.Sleep(10 * time.Millisecond)
 	return err
 }
 
@@ -342,4 +346,55 @@ func (t targetRepo) GetComponentVersion(ctx context.Context, component, version 
 		return nil, fmt.Errorf("getting component version %q/%q from %q failed: %w", component, version, t.spec.GetType(), err)
 	}
 	return cv, nil
+}
+
+func registerConstructorProgressTracker(out io.Writer, options constructor.Options) (opts constructor.Options, stop func()) {
+	pw := progress.NewWriter()
+	pw.SetOutputWriter(out)
+	pw.SetStyle(progress.StyleRhombus)
+	pw.SetUpdateFrequency(100 * time.Millisecond)
+	pw.SetAutoStop(false)
+	trackers := map[string]*progress.Tracker{}
+	options.OnStartedConstructing = func(descriptor *constructorruntime.Component) error {
+		total := int64(len(descriptor.Resources) + len(descriptor.Sources) + 1)
+		key := descriptor.Name + "/" + descriptor.Version
+		tracker := &progress.Tracker{
+			Message: "component " + key,
+			Total:   total,
+			Units: progress.Units{
+				Formatter: func(value int64) string {
+					base := fmt.Sprintf("%d descriptor element", value)
+					if value > 1 {
+						base += "s"
+					}
+					return base
+				},
+			},
+		}
+		trackers[key] = tracker
+		pw.AppendTracker(tracker)
+		return nil
+	}
+	options.OnFinishedConstructed = func(descriptor *descriptor.Descriptor) error {
+		tracker := trackers[descriptor.Component.Name+"/"+descriptor.Component.Version]
+		tracker.UpdateMessage(tracker.Message + " constructed")
+		tracker.Increment(1)
+		tracker.MarkAsDone()
+		return nil
+	}
+	options.OnFinishedProcessingSource = func(component *constructorruntime.Component, source *descriptor.Source) error {
+		trackers[component.Name+"/"+component.Version].Increment(1)
+		return nil
+	}
+	options.OnFinishedProcessingResource = func(component *constructorruntime.Component, resource *descriptor.Resource) error {
+		trackers[component.Name+"/"+component.Version].Increment(1)
+		return nil
+	}
+	go func() {
+		for _, tracker := range trackers {
+			tracker.Start()
+		}
+		pw.Render()
+	}()
+	return options, pw.Stop
 }

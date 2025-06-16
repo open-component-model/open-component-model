@@ -2,6 +2,7 @@ package constructor
 
 import (
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
 // Options are the options for construction based on a *constructor.Constructor.
@@ -50,6 +51,13 @@ type Options struct {
 	// While constructing a component version, the constructor library will use the policy to determine how to handle conflicts
 	// of component versions when interacting with the target repository.
 	ComponentVersionConflictPolicy
+
+	OnFinishedConstructed        func(descriptor *runtime.Descriptor) error
+	OnStartedConstructing        func(component *constructor.Component) error
+	OnStartedProcessingResource  func(component *constructor.Component, resource *constructor.Resource) error
+	OnStartedProcessingSource    func(component *constructor.Component, source *constructor.Source) error
+	OnFinishedProcessingResource func(component *constructor.Component, resource *runtime.Resource) error
+	OnFinishedProcessingSource   func(component *constructor.Component, source *runtime.Source) error
 }
 
 // ComponentVersionConflictPolicy defines the policy for handling component version conflicts

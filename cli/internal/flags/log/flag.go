@@ -68,9 +68,9 @@ func RegisterLoggingFlags(flagset *pflag.FlagSet) {
    text: Output logs in human-readable text format, suitable for console output`)
 
 	enum.Var(flagset, LevelFlagName, []string{
+		LevelWarn,
 		LevelInfo,
 		LevelDebug,
-		LevelWarn,
 		LevelError,
 	}, `sets the logging level
    debug: Show all logs including detailed debugging information

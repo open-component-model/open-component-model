@@ -59,6 +59,12 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 		componentLogger.Info("constructing component")
 
 		eg.Go(func() error {
+			if c.opts.OnStartedConstructing != nil {
+				if err := c.opts.OnStartedConstructing(&component); err != nil {
+					return fmt.Errorf("error executing OnFinishedConstructed callback for component %q: %w", component.ToIdentity(), err)
+				}
+			}
+
 			desc, err := c.construct(egctx, &component)
 			if err != nil {
 				return err
@@ -67,6 +73,13 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 			descLock.Lock()
 			defer descLock.Unlock()
 			descriptors[i] = desc
+
+			if c.opts.OnFinishedConstructed != nil {
+				if err := c.opts.OnFinishedConstructed(desc); err != nil {
+					return fmt.Errorf("error executing OnFinishedConstructed callback for component %q: %w", component.ToIdentity(), err)
+				}
+			}
+
 			componentLogger.Debug("component constructed successfully")
 
 			return nil
@@ -180,9 +193,19 @@ func (c *DefaultConstructor) processDescriptor(
 		resourceLogger.Info("processing resource")
 
 		eg.Go(func() error {
+			if c.opts.OnStartedProcessingResource != nil {
+				if err := c.opts.OnStartedProcessingResource(component, &resource); err != nil {
+					return fmt.Errorf("error executing OnStartedProcessingResource callback for resource %q: %w", resource.ToIdentity(), err)
+				}
+			}
 			res, err := c.processResource(egctx, targetRepo, &resource, component.Name, component.Version)
 			if err != nil {
 				return fmt.Errorf("error processing resource %q at index %d: %w", resource.ToIdentity(), i, err)
+			}
+			if c.opts.OnFinishedProcessingResource != nil {
+				if err := c.opts.OnFinishedProcessingResource(component, &desc.Component.Resources[i]); err != nil {
+					return fmt.Errorf("error executing OnStartedProcessingResource callback for resource %q: %w", resource.ToIdentity(), err)
+				}
 			}
 			descLock.Lock()
 			defer descLock.Unlock()
@@ -197,9 +220,19 @@ func (c *DefaultConstructor) processDescriptor(
 		sourceLogger.Info("processing source")
 
 		eg.Go(func() error {
+			if c.opts.OnStartedProcessingSource != nil {
+				if err := c.opts.OnStartedProcessingSource(component, &source); err != nil {
+					return fmt.Errorf("error executing OnStartedProcessingSource callback for source %q: %w", source.ToIdentity(), err)
+				}
+			}
 			src, err := c.processSource(egctx, targetRepo, &source, component.Name, component.Version)
 			if err != nil {
 				return fmt.Errorf("error processing source %q at index %d: %w", source.ToIdentity(), i, err)
+			}
+			if c.opts.OnFinishedProcessingSource != nil {
+				if err := c.opts.OnFinishedProcessingSource(component, &desc.Component.Sources[i]); err != nil {
+					return fmt.Errorf("error executing OnStartedProcessingResource callback for source %q: %w", source.ToIdentity(), err)
+				}
 			}
 			descLock.Lock()
 			defer descLock.Unlock()
