@@ -29,6 +29,7 @@ type AddDescriptorOptions struct {
 	Author                        string
 	AdditionalDescriptorManifests []ociImageSpecV1.Descriptor
 	AdditionalLayers              []ociImageSpecV1.Descriptor
+	ReferrerTrackingPolicy        ReferrerTrackingPolicy
 }
 
 // AddDescriptorToStore uploads a component descriptor to any given Store.
@@ -41,12 +42,14 @@ func AddDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 	// we can concurrently upload certain parts of the descriptor!
 	eg, egctx := errgroup.WithContext(ctx)
 
-	eg.Go(func() error {
-		if err := indexv1.CreateIfNotExists(egctx, store); err != nil {
-			return fmt.Errorf("failed to create index: %w", err)
-		}
-		return nil
-	})
+	if opts.ReferrerTrackingPolicy == ReferrerTrackingPolicyByIndexAndSubject {
+		eg.Go(func() error {
+			if err := indexv1.CreateIfNotExists(egctx, store); err != nil {
+				return fmt.Errorf("failed to create index: %w", err)
+			}
+			return nil
+		})
+	}
 
 	// Encode and upload the descriptor
 	descriptorEncoding, descriptorBuffer, err := tar.SingleFileTAREncodeV2Descriptor(opts.Scheme, descriptor)
@@ -108,8 +111,10 @@ It is used to store the component descriptor in an OCI registry and can be refer
 			ociImageSpecV1.AnnotationSource:        "https://github.com/open-component-model/open-component-model",
 			ociImageSpecV1.AnnotationVersion:       version,
 		},
-		Layers:  append([]ociImageSpecV1.Descriptor{descriptorOCIDescriptor}, opts.AdditionalLayers...),
-		Subject: &indexv1.Descriptor,
+		Layers: append([]ociImageSpecV1.Descriptor{descriptorOCIDescriptor}, opts.AdditionalLayers...),
+	}
+	if opts.ReferrerTrackingPolicy == ReferrerTrackingPolicyByIndexAndSubject {
+		manifest.Subject = &indexv1.Descriptor
 	}
 	manifestRaw, err := json.Marshal(manifest)
 	if err != nil {
@@ -143,7 +148,6 @@ It is used to store the component descriptor in an OCI registry and can be refer
 			// These are stored within the main index
 			opts.AdditionalDescriptorManifests...,
 		),
-		Subject: &indexv1.Descriptor,
 		Annotations: map[string]string{
 			annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation(component, version),
 			annotations.OCMCreator:          opts.Author,
@@ -159,6 +163,10 @@ It is used to store the component descriptor manifest and other related blob man
 			ociImageSpecV1.AnnotationVersion:       version,
 		},
 	}
+	if opts.ReferrerTrackingPolicy == ReferrerTrackingPolicyByIndexAndSubject {
+		idx.Subject = &indexv1.Descriptor
+	}
+
 	idxRaw, err := json.Marshal(idx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal index: %w", err)

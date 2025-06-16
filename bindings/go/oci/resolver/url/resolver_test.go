@@ -12,13 +12,14 @@ import (
 
 func TestNewURLPathResolver(t *testing.T) {
 	baseURL := "http://example.com"
-	resolver := url.New(baseURL)
+	resolver, err := url.New(url.WithBaseURL(baseURL))
+	assert.NoError(t, err)
 	assert.NotNil(t, resolver)
-	assert.Equal(t, baseURL, resolver.BaseURL)
 }
 
 func TestURLPathResolver_SetClient(t *testing.T) {
-	resolver := url.New("http://example.com")
+	resolver, err := url.New(url.WithBaseURL("http://example.com"))
+	assert.NoError(t, err)
 	repo, err := remote.NewRepository("example.com/test")
 	assert.NoError(t, err)
 
@@ -31,7 +32,8 @@ func TestURLPathResolver_SetClient(t *testing.T) {
 	assert.NotNil(t, store)
 }
 func TestURLPathResolver_ComponentVersionReference(t *testing.T) {
-	resolver := url.New("http://example.com")
+	resolver, err := url.New(url.WithBaseURL("http://example.com"))
+	assert.NoError(t, err)
 	component := "test-component"
 	version := "v1.0.0"
 	expected := "http://example.com/component-descriptors/test-component:v1.0.0"
@@ -59,7 +61,8 @@ func TestURLPathResolver_StoreForReference(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolver := url.New("http://example.com")
+			resolver, err := url.New(url.WithBaseURL("http://example.com"))
+			assert.NoError(t, err)
 			store, err := resolver.StoreForReference(context.Background(), tt.reference)
 
 			if tt.expectError {

@@ -73,7 +73,8 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 
 	reg := "ghcr.io/open-component-model/ocm"
 
-	resolver := urlresolver.New(reg)
+	resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
+	r.NoError(err)
 	resolver.SetClient(createAuthClient(reg, user, password))
 
 	scheme := ocmruntime.NewScheme()
@@ -166,9 +167,12 @@ func Test_Integration_OCIRepository(t *testing.T) {
 
 		client := createAuthClient(registryAddress, testUsername, password)
 
-		resolver := urlresolver.New(registryAddress)
-		resolver.SetClient(client)
-		resolver.PlainHTTP = true
+		resolver, err := urlresolver.New(
+			urlresolver.WithBaseURL(registryAddress),
+			urlresolver.WithPlainHTTP(true),
+			urlresolver.WithBaseClient(client),
+		)
+		r.NoError(err)
 
 		repo, err := oci.NewRepository(oci.WithResolver(resolver))
 		r.NoError(err)
@@ -178,6 +182,12 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		})
 
 		t.Run("basic upload and download of a component version", func(t *testing.T) {
+			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+		})
+
+		t.Run("basic upload and download of a component version", func(t *testing.T) {
+			repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(oci.ReferrerTrackingPolicyByIndexAndSubject))
+			r.NoError(err)
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
 		})
 
@@ -457,9 +467,12 @@ func testResolverConnectivity(t *testing.T, address, reference string, client *a
 	ctx := t.Context()
 	r := require.New(t)
 
-	resolver := urlresolver.New(address)
-	resolver.SetClient(client)
-	resolver.PlainHTTP = true
+	resolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(address),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(client),
+	)
+	r.NoError(err)
 
 	store, err := resolver.StoreForReference(ctx, reference)
 	r.NoError(err)

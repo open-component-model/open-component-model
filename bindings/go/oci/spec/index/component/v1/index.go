@@ -23,6 +23,8 @@ const MediaType = "application/vnd.ocm.software.component-index.v1+json"
 
 // Manifest defines the OCI manifest structure for the Component Index.
 // It is an empty JSON manifest that serves as a referrer for OCM component descriptors.
+// Manifest is hard-coded against Descriptor and MUST never change.
+// This is because the Index for the Referrer API must remain stable.
 var Manifest = ociImageSpecV1.Manifest{
 	Versioned: specs.Versioned{
 		SchemaVersion: 2,
@@ -47,8 +49,10 @@ var Manifest = ociImageSpecV1.Manifest{
 var Descriptor = ociImageSpecV1.Descriptor{
 	MediaType:    Manifest.MediaType,
 	ArtifactType: Manifest.ArtifactType,
-	Digest:       "sha256:9717cda41c478af11cba7ed29f4aa3e4882bab769d006788169cbccafc0fcd05",
-	Size:         837,
+	// Digest is calculated from the Manifest JSON representation and MUST never change.
+	Digest: "sha256:9717cda41c478af11cba7ed29f4aa3e4882bab769d006788169cbccafc0fcd05",
+	// Size is calculated from the Manifest JSON representation and MUST never change.
+	Size: 837,
 }
 
 // Store defines the interface for interacting with the OCI content store.

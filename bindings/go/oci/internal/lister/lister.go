@@ -35,6 +35,8 @@ const (
 	// LookupPolicyReferrerWithTagFallback first attempts to find versions using referrers,
 	// and falls back to tag-based listing if no referrers are found or an error occurred.
 	LookupPolicyReferrerWithTagFallback LookupPolicy = iota
+	// LookupPolicyTagOnly only uses tag-based listing, ignoring referrers, even if they are available.
+	LookupPolicyTagOnly // LookupPolicyTagOnly only uses tag-based listing, ignoring referrers.
 )
 
 // SortPolicy defines how discovered versions should be sorted.
@@ -133,6 +135,13 @@ func (lister *Lister) listUnsorted(ctx context.Context, opts Options) ([]string,
 		tags, terr := listViaTags(ctx, lister.tagLister, opts.TagListerOptions)
 		if terr != nil {
 			return nil, fmt.Errorf("could not list versions via referrers or tags: %w", errors.Join(err, terr))
+		}
+
+		return tags, nil
+	case LookupPolicyTagOnly:
+		tags, err := listViaTags(ctx, lister.tagLister, opts.TagListerOptions)
+		if err != nil {
+			return nil, fmt.Errorf("could not list versions via tags alone: %w", err)
 		}
 
 		return tags, nil

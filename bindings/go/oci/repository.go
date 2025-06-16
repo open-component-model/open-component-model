@@ -70,6 +70,9 @@ type Repository struct {
 	// ResourceCopyOptions are the options used for copying resources between stores.
 	// These options are used in copyResource.
 	resourceCopyOptions oras.CopyOptions
+
+	// referrerTrackingPolicy defines how OCI referrers are used to track component versions.
+	referrerTrackingPolicy ReferrerTrackingPolicy
 }
 
 // AddComponentVersion adds a new component version to the repository.
@@ -90,6 +93,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		Author:                        repo.creatorAnnotation,
 		AdditionalDescriptorManifests: repo.localArtifactManifestCache.Get(reference),
 		AdditionalLayers:              repo.localArtifactLayerCache.Get(reference),
+		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
@@ -123,9 +127,8 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 		return nil, fmt.Errorf("failed to create lister: %w", err)
 	}
 
-	return list.List(ctx, lister.Options{
-		SortPolicy:   lister.SortPolicyLooseSemverDescending,
-		LookupPolicy: lister.LookupPolicyReferrerWithTagFallback,
+	opts := lister.Options{
+		SortPolicy: lister.SortPolicyLooseSemverDescending,
 		TagListerOptions: lister.TagListerOptions{
 			VersionResolver: complister.ReferenceTagVersionResolver(store),
 		},
@@ -134,7 +137,16 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 			Subject:         indexv1.Descriptor,
 			VersionResolver: complister.ReferrerAnnotationVersionResolver(component),
 		},
-	})
+	}
+
+	switch repo.referrerTrackingPolicy {
+	case ReferrerTrackingPolicyByIndexAndSubject:
+		opts.LookupPolicy = lister.LookupPolicyReferrerWithTagFallback
+	case ReferrerTrackingPolicyNone:
+		opts.LookupPolicy = lister.LookupPolicyTagOnly
+	}
+
+	return list.List(ctx, opts)
 }
 
 // GetComponentVersion retrieves a component version from the repository.
