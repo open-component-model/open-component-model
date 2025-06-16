@@ -215,6 +215,29 @@ func TestGetLocalResource(t *testing.T) {
 			LocationType: types.LocationTypeLocalFile,
 			Value:        f.Name(),
 		},
+		Resource: &v2.Resource{
+			ElementMeta: v2.ElementMeta{
+				ObjectMeta: v2.ObjectMeta{
+					Name:    "test-resource",
+					Version: "v0.0.1",
+				},
+			},
+			Type:     "resource-type",
+			Relation: "local",
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "test-access",
+					Version: "v1",
+				},
+				Data: []byte(`{ "access": "v1" }`),
+			},
+			Digest: &v2.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: "jsonNormalisation/v1",
+				Value:                  "test-value",
+			},
+			Size: 12345,
+		},
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == DownloadLocalResource && r.Method == http.MethodGet {
@@ -253,6 +276,7 @@ func TestGetLocalResource(t *testing.T) {
 	require.Equal(t, "test", string(content))
 	require.Equal(t, types.LocationTypeLocalFile, resp.Location.LocationType)
 	require.Equal(t, f.Name(), resp.Location.Value)
+	require.Equal(t, response.Resource.String(), resp.Resource.String())
 }
 
 func defaultDescriptor() *v2.Descriptor {

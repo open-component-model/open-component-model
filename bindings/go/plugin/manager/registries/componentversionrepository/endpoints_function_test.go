@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 
@@ -55,6 +56,29 @@ func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResour
 		Location: types.Location{
 			LocationType: types.LocationTypeLocalFile,
 			Value:        "/dummy/local-file",
+		},
+		Resource: &v2.Resource{
+			ElementMeta: v2.ElementMeta{
+				ObjectMeta: v2.ObjectMeta{
+					Name:    "test-resource",
+					Version: "v0.0.1",
+				},
+			},
+			Type:     "resource-type",
+			Relation: "local",
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "test-access",
+					Version: "v1",
+				},
+				Data: []byte(`{ "access": "v1" }`),
+			},
+			Digest: &v2.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: "jsonNormalisation/v1",
+				Value:                  "test-value",
+			},
+			Size: 12345,
 		},
 	}, nil
 }

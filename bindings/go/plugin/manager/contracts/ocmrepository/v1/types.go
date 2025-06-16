@@ -42,6 +42,7 @@ type GetLocalResourceRequest[T runtime.Typed] struct {
 type GetLocalResourceResponse struct {
 	// Location where the local resource will be downloaded to and can be accessed.
 	Location types.Location `json:"location"`
+	Resource *v2.Resource   `json:"resource"`
 }
 
 type PostLocalResourceRequest[T runtime.Typed] struct {

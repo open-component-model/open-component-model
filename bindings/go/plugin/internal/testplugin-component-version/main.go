@@ -9,6 +9,7 @@ import (
 	"os"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
@@ -81,11 +82,38 @@ func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLoc
 		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error write to temp file: %w", err)
 	}
 
+	if err := f.Close(); err != nil {
+		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error closing temp file: %w", err)
+	}
+
 	logger.Debug("writing local file here", "location", f.Name())
 	return repov1.GetLocalResourceResponse{
 		Location: types.Location{
 			Value:        f.Name(),
 			LocationType: types.LocationTypeLocalFile,
+		},
+		Resource: &v2.Resource{
+			ElementMeta: v2.ElementMeta{
+				ObjectMeta: v2.ObjectMeta{
+					Name:    "test-resource",
+					Version: "v0.0.1",
+				},
+			},
+			Type:     "resource-type",
+			Relation: "local",
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "test-access",
+					Version: "v1",
+				},
+				Data: []byte(`{ "access": "v1" }`),
+			},
+			Digest: &v2.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: "jsonNormalisation/v1",
+				Value:                  "test-value",
+			},
+			Size: 12345,
 		},
 	}, nil
 }
