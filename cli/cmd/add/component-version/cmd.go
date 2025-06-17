@@ -30,6 +30,7 @@ import (
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
+	"ocm.software/open-component-model/cli/internal/flags/log"
 )
 
 const (
@@ -182,10 +183,16 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		opts.ResourceDigestProcessorProvider = instance
 	}
 
-	opts, stop := registerConstructorProgressTracker(cmd.OutOrStdout(), opts)
+	opts, stop, err := registerConstructorProgressTracker(cmd, opts)
+	if err != nil {
+		return fmt.Errorf("registering constructor progress tracker failed: %w", err)
+	}
 
 	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
-	stop()
+	if stop != nil {
+		stop()
+	}
+
 	time.Sleep(10 * time.Millisecond)
 	return err
 }
@@ -306,6 +313,10 @@ func (t targetRepo) AddLocalResource(ctx context.Context, component, version str
 	}
 	defer func() {
 		_ = os.Remove(cacheFileName)
+		// if last entry was removed, remove the cache directory as well
+		if entries, err := os.ReadDir(t.cache); err == nil && len(entries) == 0 {
+			_ = os.Remove(t.cache)
+		}
 	}()
 
 	v2res, err := descriptor.ConvertToV2Resources(runtime.NewScheme(runtime.WithAllowUnknown()), []descriptor.Resource{*res})
@@ -348,53 +359,86 @@ func (t targetRepo) GetComponentVersion(ctx context.Context, component, version 
 	return cv, nil
 }
 
-func registerConstructorProgressTracker(out io.Writer, options constructor.Options) (opts constructor.Options, stop func()) {
-	pw := progress.NewWriter()
-	pw.SetOutputWriter(out)
-	pw.SetStyle(progress.StyleRhombus)
-	pw.SetUpdateFrequency(100 * time.Millisecond)
-	pw.SetAutoStop(false)
-	trackers := map[string]*progress.Tracker{}
-	options.OnStartedConstructing = func(descriptor *constructorruntime.Component) error {
-		total := int64(len(descriptor.Resources) + len(descriptor.Sources) + 1)
-		key := descriptor.Name + "/" + descriptor.Version
-		tracker := &progress.Tracker{
-			Message: "component " + key,
-			Total:   total,
-			Units: progress.Units{
-				Formatter: func(value int64) string {
-					base := fmt.Sprintf("%d descriptor element", value)
-					if value > 1 {
-						base += "s"
-					}
-					return base
+func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.Options) (opts constructor.Options, stop func(), err error) {
+	format, err := enum.Get(cmd.Flags(), log.FormatFlagName)
+	if err != nil {
+		return opts, nil, fmt.Errorf("failed to get the log format from the command flag: %w", err)
+	}
+
+	switch format {
+	case log.FormatText:
+		pw := progress.NewWriter()
+		pw.SetOutputWriter(cmd.OutOrStdout())
+		pw.SetUpdateFrequency(100 * time.Millisecond)
+		pw.SetAutoStop(false)
+		trackers := map[string]*progress.Tracker{}
+		options.OnStartComponentConstruct = func(_ context.Context, component *constructorruntime.Component) error {
+			key := component.Name + "/" + component.Version
+			tracker := &progress.Tracker{
+				Message: "component " + key,
+				Total:   1,
+				Units: progress.Units{
+					Formatter: func(value int64) string {
+						base := fmt.Sprintf("%d component version", value)
+						if value > 1 {
+							base += "s"
+						}
+						return base
+					},
 				},
-			},
+			}
+			trackers[key] = tracker
+			pw.AppendTracker(tracker)
+			return nil
 		}
-		trackers[key] = tracker
-		pw.AppendTracker(tracker)
-		return nil
-	}
-	options.OnFinishedConstructed = func(descriptor *descriptor.Descriptor) error {
-		tracker := trackers[descriptor.Component.Name+"/"+descriptor.Component.Version]
-		tracker.UpdateMessage(tracker.Message + " constructed")
-		tracker.Increment(1)
-		tracker.MarkAsDone()
-		return nil
-	}
-	options.OnFinishedProcessingSource = func(component *constructorruntime.Component, source *descriptor.Source) error {
-		trackers[component.Name+"/"+component.Version].Increment(1)
-		return nil
-	}
-	options.OnFinishedProcessingResource = func(component *constructorruntime.Component, resource *descriptor.Resource) error {
-		trackers[component.Name+"/"+component.Version].Increment(1)
-		return nil
-	}
-	go func() {
-		for _, tracker := range trackers {
-			tracker.Start()
+		options.OnEndComponentConstruct = func(_ context.Context, descriptor *descriptor.Descriptor, err error) error {
+			key := descriptor.Component.Name + "/" + descriptor.Component.Version
+			tracker := trackers[key]
+			if err != nil {
+				tracker.MarkAsErrored()
+				return nil
+			}
+			tracker.UpdateMessage(tracker.Message + " constructed")
+			tracker.Increment(1)
+			tracker.MarkAsDone()
+			return nil
 		}
-		pw.Render()
-	}()
-	return options, pw.Stop
+		// TODO Add Resource and Source tracking in more detail
+		go func() {
+			for _, tracker := range trackers {
+				tracker.Start()
+			}
+			pw.Render()
+		}()
+		return options, pw.Stop, nil
+	case log.FormatJSON:
+		logger, err := log.GetBaseLogger(cmd)
+		if err != nil {
+			return opts, nil, fmt.Errorf("could not retrieve logger: %w", err)
+		}
+		logger = logger.With("realm", "cli")
+		options.OnStartComponentConstruct = func(ctx context.Context, component *constructorruntime.Component) error {
+			logger.InfoContext(ctx, "starting component construction",
+				"component", component.Name,
+				"version", component.Version,
+			)
+			return nil
+		}
+		options.OnEndComponentConstruct = func(ctx context.Context, descriptor *descriptor.Descriptor, err error) error {
+			if err != nil {
+				logger.ErrorContext(ctx, "component construction failed",
+					"error", err,
+				)
+			} else {
+				logger.InfoContext(ctx, "component construction completed",
+					"component", descriptor.Component.Name,
+					"version", descriptor.Component.Version,
+				)
+			}
+			return nil
+		}
+		return options, nil, nil
+	}
+
+	return opts, nil, fmt.Errorf("unknown log format to track component construction: %q", format)
 }
