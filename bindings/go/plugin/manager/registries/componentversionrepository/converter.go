@@ -147,13 +147,64 @@ func (c *componentVersionRepositoryWrapper) GetLocalResource(ctx context.Context
 }
 
 func (c *componentVersionRepositoryWrapper) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	// TODO: Have to add this to the plugin contract.
-	return nil, fmt.Errorf("AddLocalSource not implemented in external plugin contract")
+	sources, err := descriptor.ConvertToV2Sources(c.scheme, []descriptor.Source{*res})
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert source: %w", err)
+	}
+
+	tmp, err := os.CreateTemp("", "source")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	reader, err := content.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read content: %w", err)
+	}
+
+	defer func() {
+		_ = tmp.Close()
+		_ = reader.Close()
+	}()
+
+	if _, err := io.Copy(tmp, reader); err != nil {
+		return nil, fmt.Errorf("failed to copy content: %w", err)
+	}
+
+	request := ocmrepositoryv1.PostLocalSourceRequest[runtime.Typed]{
+		Repository: c.repositorySpecification,
+		Name:       component,
+		Version:    version,
+		Source:     &sources[0],
+		SourceLocation: types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        tmp.Name(),
+		},
+	}
+
+	return c.externalPlugin.AddLocalSource(ctx, request, c.credentials)
 }
 
 func (c *componentVersionRepositoryWrapper) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
-	// TODO: Have to add this to the plugin contract.
-	return nil, nil, fmt.Errorf("GetLocalSource not implemented in external plugin contract")
+	request := ocmrepositoryv1.GetLocalSourceRequest[runtime.Typed]{
+		Repository: c.repositorySpecification,
+		Name:       component,
+		Version:    version,
+		Identity:   identity,
+	}
+
+	response, err := c.externalPlugin.GetLocalSource(ctx, request, c.credentials)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	rBlob, err := c.createBlobData(response.Location)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create blob data: %w", err)
+	}
+
+	convert := descriptor.ConvertFromV2Sources([]descriptorv2.Source{*response.Source})
+
+	return rBlob, &convert[0], nil
 }
 
 func (c *componentVersionRepositoryWrapper) createBlobData(location types.Location) (blob.ReadOnlyBlob, error) {

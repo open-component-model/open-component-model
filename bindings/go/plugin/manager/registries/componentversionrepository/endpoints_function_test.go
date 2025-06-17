@@ -27,6 +27,10 @@ func (m *mockPlugin) AddLocalResource(_ context.Context, _ repov1.PostLocalResou
 	return &descriptor.Resource{}, nil
 }
 
+func (m *mockPlugin) AddLocalSource(_ context.Context, _ repov1.PostLocalSourceRequest[*dummyv1.Repository], _ map[string]string) (*descriptor.Source, error) {
+	return &descriptor.Source{}, nil
+}
+
 func (m *mockPlugin) AddComponentVersion(_ context.Context, _ repov1.PostComponentVersionRequest[*dummyv1.Repository], _ map[string]string) error {
 	return nil
 }
@@ -83,6 +87,31 @@ func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResour
 	}, nil
 }
 
+func (m *mockPlugin) GetLocalSource(_ context.Context, _ repov1.GetLocalSourceRequest[*dummyv1.Repository], _ map[string]string) (repov1.GetLocalSourceResponse, error) {
+	return repov1.GetLocalSourceResponse{
+		Location: types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        "/dummy/local-file",
+		},
+		Source: &v2.Source{
+			ElementMeta: v2.ElementMeta{
+				ObjectMeta: v2.ObjectMeta{
+					Name:    "test-source",
+					Version: "v0.0.1",
+				},
+			},
+			Type: "source-type",
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "test-access",
+					Version: "v1",
+				},
+				Data: []byte(`{ "access": "v1" }`),
+			},
+		},
+	}, nil
+}
+
 func (m *mockPlugin) GetIdentity(ctx context.Context, typ *repov1.GetIdentityRequest[*dummyv1.Repository]) (*repov1.GetIdentityResponse, error) {
 	return nil, nil
 }
@@ -103,16 +132,22 @@ func TestRegisterComponentVersionRepository(t *testing.T) {
 	r.Equal(`{"types":{"componentVersionRepository":[{"type":"DummyRepository/v1","jsonSchema":"eyIkc2NoZW1hIjoiaHR0cHM6Ly9qc29uLXNjaGVtYS5vcmcvZHJhZnQvMjAyMC0xMi9zY2hlbWEiLCIkaWQiOiJodHRwczovL29jbS5zb2Z0d2FyZS9vcGVuLWNvbXBvbmVudC1tb2RlbC9iaW5kaW5ncy9nby9wbHVnaW4vaW50ZXJuYWwvZHVtbXl0eXBlL3YxL3JlcG9zaXRvcnkiLCIkcmVmIjoiIy8kZGVmcy9SZXBvc2l0b3J5IiwiJGRlZnMiOnsiUmVwb3NpdG9yeSI6eyJwcm9wZXJ0aWVzIjp7InR5cGUiOnsidHlwZSI6InN0cmluZyIsInBhdHRlcm4iOiJeKFthLXpBLVowLTldW2EtekEtWjAtOS5dKikoPzovKHZbMC05XSsoPzphbHBoYVswLTldK3xiZXRhWzAtOV0rKT8pKT8ifSwiYmFzZVVybCI6eyJ0eXBlIjoic3RyaW5nIn19LCJhZGRpdGlvbmFsUHJvcGVydGllcyI6ZmFsc2UsInR5cGUiOiJvYmplY3QiLCJyZXF1aXJlZCI6WyJ0eXBlIiwiYmFzZVVybCJdfX19"}]}}`, string(content))
 
 	handlers := builder.GetHandlers()
-	r.Len(handlers, 6)
+	r.Len(handlers, 8)
 	handler0 := handlers[0]
 	handler1 := handlers[1]
 	handler2 := handlers[2]
 	handler3 := handlers[3]
 	handler4 := handlers[4]
+	handler5 := handlers[5]
+	handler6 := handlers[6]
+	handler7 := handlers[7]
 
 	r.Equal(DownloadComponentVersion, handler0.Location)
 	r.Equal(ListComponentVersions, handler1.Location)
 	r.Equal(DownloadLocalResource, handler2.Location)
 	r.Equal(UploadComponentVersion, handler3.Location)
 	r.Equal(UploadLocalResource, handler4.Location)
+	r.Equal(Identity, handler5.Location)
+	r.Equal(UploadLocalSource, handler6.Location)
+	r.Equal(DownloadLocalSource, handler7.Location)
 }

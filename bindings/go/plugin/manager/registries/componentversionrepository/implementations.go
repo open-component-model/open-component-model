@@ -23,6 +23,10 @@ const (
 	UploadLocalResource = "/local-resource/upload"
 	// DownloadLocalResource defines the endpoint to download a local resource.
 	DownloadLocalResource = "/local-resource/download"
+	// UploadLocalSource defines the endpoint to upload a local source to.
+	UploadLocalSource = "/local-source/upload"
+	// DownloadLocalSource defines the endpoint to download a local source.
+	DownloadLocalSource = "/local-source/download"
 	// UploadComponentVersion defines the endpoint to upload component versions to.
 	UploadComponentVersion = "/component-version/upload"
 	// DownloadComponentVersion defines the endpoint to download component versions.
@@ -199,6 +203,62 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetL
 
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, DownloadLocalResource, http.MethodGet, plugins.WithQueryParams(params), plugins.WithHeader(credHeader), plugins.WithResult(&response)); err != nil {
 		return response, fmt.Errorf("failed to get local resource %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
+	}
+
+	return response, nil
+}
+
+func (r *RepositoryPlugin) AddLocalSource(ctx context.Context, request v1.PostLocalSourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Source, error) {
+	credHeader, err := toCredentials(credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	// We know we only have this single schema for all endpoints which require validation.
+	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+		return nil, err
+	}
+
+	sourceV2 := &v2.Source{}
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, UploadLocalSource, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(sourceV2), plugins.WithHeader(credHeader)); err != nil {
+		return nil, fmt.Errorf("failed to add local source %s: %w", r.ID, err)
+	}
+
+	sources := descriptor.ConvertFromV2Sources([]v2.Source{*sourceV2})
+	if len(sources) == 0 {
+		return nil, errors.New("number of converted sources is zero")
+	}
+
+	return &sources[0], nil
+}
+
+func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request v1.GetLocalSourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalSourceResponse, error) {
+	var params []plugins.KV
+	addParam := func(k, v string) {
+		params = append(params, plugins.KV{Key: k, Value: v})
+	}
+	addParam("name", request.Name)
+	addParam("version", request.Version)
+	identityEncoded, err := json.Marshal(request.Identity)
+	var response v1.GetLocalSourceResponse
+	if err != nil {
+		return response, err
+	}
+	identityBase64 := base64.StdEncoding.EncodeToString(identityEncoded)
+	addParam("identity", identityBase64)
+
+	credHeader, err := toCredentials(credentials)
+	if err != nil {
+		return response, err
+	}
+
+	// We know we only have this single schema for all endpoints which require validation.
+	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+		return response, err
+	}
+
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, DownloadLocalSource, http.MethodGet, plugins.WithQueryParams(params), plugins.WithHeader(credHeader), plugins.WithResult(&response)); err != nil {
+		return response, fmt.Errorf("failed to get local source %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
 	}
 
 	return response, nil

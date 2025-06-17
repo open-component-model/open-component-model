@@ -72,6 +72,15 @@ func TestPluginManager(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "test-resource", string(content))
 	require.Equal(t, "test-resource", response.Name)
+
+	sourceBlob, sourceResponse, err := provider.GetLocalSource(ctx, "test-source", "v0.0.1", nil)
+	require.NoError(t, err)
+	reader, err = sourceBlob.ReadCloser()
+	require.NoError(t, err)
+	content, err = io.ReadAll(reader)
+	require.NoError(t, err)
+	require.Equal(t, "test-source", string(content))
+	require.Equal(t, "test-source", sourceResponse.Name)
 }
 
 func TestConfigurationPassedToPlugin(t *testing.T) {

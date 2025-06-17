@@ -23,6 +23,7 @@ type ReadOCMRepositoryPluginContract[T runtime.Typed] interface {
 	GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error)
 	ListComponentVersions(ctx context.Context, request ListComponentVersionsRequest[T], credentials map[string]string) ([]string, error)
 	GetLocalResource(ctx context.Context, request GetLocalResourceRequest[T], credentials map[string]string) (GetLocalResourceResponse, error)
+	GetLocalSource(ctx context.Context, request GetLocalSourceRequest[T], credentials map[string]string) (GetLocalSourceResponse, error)
 }
 
 // WriteOCMRepositoryPluginContract defines the ability to upload ComponentVersions to a repository with a given Type.
@@ -30,6 +31,7 @@ type WriteOCMRepositoryPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	IdentityProvider[T]
 	AddLocalResource(ctx context.Context, request PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error)
+	AddLocalSource(ctx context.Context, request PostLocalSourceRequest[T], credentials map[string]string) (*descriptor.Source, error)
 	AddComponentVersion(ctx context.Context, request PostComponentVersionRequest[T], credentials map[string]string) error
 }
 

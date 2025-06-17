@@ -118,8 +118,53 @@ func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLoc
 	}, nil
 }
 
+func (m *TestPlugin) GetLocalSource(ctx context.Context, request repov1.GetLocalSourceRequest[*dummyv1.Repository], credentials map[string]string) (repov1.GetLocalSourceResponse, error) {
+	// the plugin decides where things will live.
+	f, err := os.CreateTemp("", "test-source-file")
+	if err != nil {
+		return repov1.GetLocalSourceResponse{}, fmt.Errorf("error creating temp file: %w", err)
+	}
+
+	if err := os.WriteFile(f.Name(), []byte("test-source"), 0o600); err != nil {
+		return repov1.GetLocalSourceResponse{}, fmt.Errorf("error write to temp file: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		return repov1.GetLocalSourceResponse{}, fmt.Errorf("error closing temp file: %w", err)
+	}
+
+	logger.Debug("writing local file here", "location", f.Name())
+	return repov1.GetLocalSourceResponse{
+		Location: types.Location{
+			Value:        f.Name(),
+			LocationType: types.LocationTypeLocalFile,
+		},
+		Source: &v2.Source{
+			ElementMeta: v2.ElementMeta{
+				ObjectMeta: v2.ObjectMeta{
+					Name:    "test-source",
+					Version: "v0.0.1",
+				},
+			},
+			Type: "source-type",
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "test-access",
+					Version: "v1",
+				},
+				Data: []byte(`{ "access": "v1" }`),
+			},
+		},
+	}, nil
+}
+
 func (m *TestPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Resource, error) {
 	logger.Debug("AddLocalResource", "location", request.ResourceLocation)
+	return nil, nil
+}
+
+func (m *TestPlugin) AddLocalSource(ctx context.Context, request repov1.PostLocalSourceRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Source, error) {
+	logger.Debug("AddLocalSource", "location", request.SourceLocation)
 	return nil, nil
 }
 

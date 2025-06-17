@@ -37,6 +37,25 @@ func (r *TypeToUntypedPlugin[T]) AddLocalResource(ctx context.Context, request v
 	}, credentials)
 }
 
+func (r *TypeToUntypedPlugin[T]) GetLocalSource(ctx context.Context, request v1.GetLocalSourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalSourceResponse, error) {
+	return r.base.GetLocalSource(ctx, v1.GetLocalSourceRequest[T]{
+		Repository: request.Repository.(T),
+		Name:       request.Name,
+		Version:    request.Version,
+		Identity:   request.Identity,
+	}, credentials)
+}
+
+func (r *TypeToUntypedPlugin[T]) AddLocalSource(ctx context.Context, request v1.PostLocalSourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Source, error) {
+	return r.base.AddLocalSource(ctx, v1.PostLocalSourceRequest[T]{
+		Repository:     request.Repository.(T),
+		Name:           request.Name,
+		Version:        request.Version,
+		SourceLocation: request.SourceLocation,
+		Source:         request.Source,
+	}, credentials)
+}
+
 func (r *TypeToUntypedPlugin[T]) AddComponentVersion(ctx context.Context, request v1.PostComponentVersionRequest[runtime.Typed], credentials map[string]string) error {
 	return r.base.AddComponentVersion(ctx, v1.PostComponentVersionRequest[T]{
 		Repository: request.Repository.(T),
