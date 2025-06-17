@@ -90,9 +90,12 @@ jobs:
         run: |
           version="${{ steps.get_tag.outputs.version }}"
           bump="${{ inputs.bump }}"
-          major=$(echo "$version" | cut -d. -f1)
-          minor=$(echo "$version" | cut -d. -f2)
-          patch=$(echo "$version" | cut -d. -f3)
+          # Strip leading v and everything after the first non-numeric/dot character,
+          # e.g. v1.2.3-alpha1 => 1.2.3
+          clean_version=$(echo "$version" | sed -E 's/^v//' | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')
+          major=$(echo "$clean_version" | cut -d. -f1)
+          minor=$(echo "$clean_version" | cut -d. -f2)
+          patch=$(echo "$clean_version" | cut -d. -f3)
 
           major=${major:-0}
           minor=${minor:-0}
