@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -107,22 +108,14 @@ func TestRegisterInternalResourcePlugin(t *testing.T) {
 	scheme := runtime.NewScheme()
 	registry := NewResourceRegistry(ctx)
 
-	// Create a mock plugin
 	mockPlugin := &mockResourcePlugin{}
-
-	// Create a prototype
 	proto := &dummyv1.Repository{}
 	scheme.MustRegister(proto, "v1")
-
-	// Register the internal plugin
 	err := RegisterInternalResourcePlugin(scheme, registry, mockPlugin, proto)
 	require.NoError(t, err)
-
-	// Verify the plugin was registered
 	_, err = scheme.TypeForPrototype(proto)
 	require.NoError(t, err)
 
-	// Get the plugin and verify it's the same instance
 	plugin, err := registry.GetResourcePlugin(ctx, proto)
 	require.NoError(t, err)
 	require.Equal(t, mockPlugin, plugin)

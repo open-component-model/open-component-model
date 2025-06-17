@@ -11,6 +11,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -131,7 +132,7 @@ func (c *componentVersionRepositoryWrapper) GetLocalResource(ctx context.Context
 		return nil, nil, err
 	}
 
-	rBlob, err := c.createBlobData(response.Location)
+	rBlob, err := blobs.CreateBlobData(response.Location)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create blob data: %w", err)
 	}
@@ -187,7 +188,7 @@ func (c *componentVersionRepositoryWrapper) GetLocalSource(ctx context.Context, 
 		return nil, nil, err
 	}
 
-	rBlob, err := c.createBlobData(response.Location)
+	rBlob, err := blobs.CreateBlobData(response.Location)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create blob data: %w", err)
 	}
@@ -195,24 +196,6 @@ func (c *componentVersionRepositoryWrapper) GetLocalSource(ctx context.Context, 
 	convert := descriptor.ConvertFromV2Sources([]descriptorv2.Source{*response.Source})
 
 	return rBlob, &convert[0], nil
-}
-
-func (c *componentVersionRepositoryWrapper) createBlobData(location types.Location) (blob.Blob, error) {
-	if location.LocationType == types.LocationTypeLocalFile {
-		file, err := os.Open(location.Value)
-		if err != nil {
-			return nil, err
-		}
-
-		fileBlob, err := filesystem.GetBlobFromOSPath(file.Name())
-		if err != nil {
-			return nil, err
-		}
-
-		return fileBlob, nil
-	}
-
-	return nil, fmt.Errorf("unsupported location type: %s", location.LocationType)
 }
 
 func (r *RepositoryRegistry) externalToComponentVersionRepositoryProviderConverter(plugin ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], scheme *runtime.Scheme) *componentVersionRepositoryProviderConverter {

@@ -3,14 +3,11 @@ package input
 import (
 	"context"
 	"fmt"
-	"os"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -50,7 +47,7 @@ func (r *resourceInputPluginConverter) ProcessResource(ctx context.Context, reso
 		return nil, err
 	}
 
-	rBlob, err := r.createBlobData(result.Location)
+	rBlob, err := blobs.CreateBlobData(*result.Location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create blob data: %w", err)
 	}
@@ -63,24 +60,6 @@ func (r *resourceInputPluginConverter) ProcessResource(ctx context.Context, reso
 	}
 
 	return resourceInputMethodResult, nil
-}
-
-func (r *resourceInputPluginConverter) createBlobData(location *types.Location) (blob.Blob, error) {
-	if location.LocationType == types.LocationTypeLocalFile {
-		file, err := os.Open(location.Value)
-		if err != nil {
-			return nil, err
-		}
-
-		fileBlob, err := filesystem.GetBlobFromOSPath(file.Name())
-		if err != nil {
-			return nil, err
-		}
-
-		return fileBlob, nil
-	}
-
-	return nil, fmt.Errorf("unsupported location type: %s", location.LocationType)
 }
 
 func (r *RepositoryRegistry) externalToResourceInputPluginConverter(plugin v1.ResourceInputPluginContract, scheme *runtime.Scheme) *resourceInputPluginConverter {
