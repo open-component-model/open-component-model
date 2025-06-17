@@ -56,16 +56,20 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 
 	for i, component := range constructor.Components {
 		componentLogger := logger.With("component", component.Name, "version", component.Version)
-		componentLogger.Info("constructing component")
+		componentLogger.Debug("constructing component")
 
 		eg.Go(func() error {
-			if c.opts.OnStartedConstructing != nil {
-				if err := c.opts.OnStartedConstructing(&component); err != nil {
-					return fmt.Errorf("error executing OnFinishedConstructed callback for component %q: %w", component.ToIdentity(), err)
+			if c.opts.OnStartComponentConstruct != nil {
+				if err := c.opts.OnStartComponentConstruct(egctx, &component); err != nil {
+					return fmt.Errorf("error starting component construction for %q: %w", component.ToIdentity(), err)
 				}
 			}
-
 			desc, err := c.construct(egctx, &component)
+			if c.opts.OnEndComponentConstruct != nil {
+				if err := c.opts.OnEndComponentConstruct(egctx, desc, err); err != nil {
+					return fmt.Errorf("error ending component construction for %q: %w", component.ToIdentity(), err)
+				}
+			}
 			if err != nil {
 				return err
 			}
@@ -73,13 +77,6 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 			descLock.Lock()
 			defer descLock.Unlock()
 			descriptors[i] = desc
-
-			if c.opts.OnFinishedConstructed != nil {
-				if err := c.opts.OnFinishedConstructed(desc); err != nil {
-					return fmt.Errorf("error executing OnFinishedConstructed callback for component %q: %w", component.ToIdentity(), err)
-				}
-			}
-
 			componentLogger.Debug("component constructed successfully")
 
 			return nil
@@ -90,7 +87,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 		return nil, fmt.Errorf("error constructing components: %w", err)
 	}
 
-	logger.Info("component construction completed successfully", "num_components", len(descriptors))
+	logger.Debug("component construction completed successfully", "num_components", len(descriptors))
 	return descriptors, nil
 }
 
@@ -190,22 +187,22 @@ func (c *DefaultConstructor) processDescriptor(
 
 	for i, resource := range component.Resources {
 		resourceLogger := logger.With("resource", resource.ToIdentity())
-		resourceLogger.Info("processing resource")
+		resourceLogger.Debug("processing resource")
 
 		eg.Go(func() error {
-			if c.opts.OnStartedProcessingResource != nil {
-				if err := c.opts.OnStartedProcessingResource(component, &resource); err != nil {
-					return fmt.Errorf("error executing OnStartedProcessingResource callback for resource %q: %w", resource.ToIdentity(), err)
+			if c.opts.OnStartResourceConstruct != nil {
+				if err := c.opts.OnStartResourceConstruct(egctx, &resource); err != nil {
+					return fmt.Errorf("error starting resource construction for %q: %w", resource.ToIdentity(), err)
 				}
 			}
 			res, err := c.processResource(egctx, targetRepo, &resource, component.Name, component.Version)
+			if c.opts.OnEndResourceConstruct != nil {
+				if err := c.opts.OnEndResourceConstruct(egctx, res, err); err != nil {
+					return fmt.Errorf("error ending resource construction for %q: %w", resource.ToIdentity(), err)
+				}
+			}
 			if err != nil {
 				return fmt.Errorf("error processing resource %q at index %d: %w", resource.ToIdentity(), i, err)
-			}
-			if c.opts.OnFinishedProcessingResource != nil {
-				if err := c.opts.OnFinishedProcessingResource(component, &desc.Component.Resources[i]); err != nil {
-					return fmt.Errorf("error executing OnStartedProcessingResource callback for resource %q: %w", resource.ToIdentity(), err)
-				}
 			}
 			descLock.Lock()
 			defer descLock.Unlock()
@@ -217,22 +214,22 @@ func (c *DefaultConstructor) processDescriptor(
 
 	for i, source := range component.Sources {
 		sourceLogger := logger.With("source", source.ToIdentity())
-		sourceLogger.Info("processing source")
+		sourceLogger.Debug("processing source")
 
 		eg.Go(func() error {
-			if c.opts.OnStartedProcessingSource != nil {
-				if err := c.opts.OnStartedProcessingSource(component, &source); err != nil {
-					return fmt.Errorf("error executing OnStartedProcessingSource callback for source %q: %w", source.ToIdentity(), err)
+			if c.opts.OnStartSourceConstruct != nil {
+				if err := c.opts.OnStartSourceConstruct(egctx, &source); err != nil {
+					return fmt.Errorf("error starting source construction for %q: %w", source.ToIdentity(), err)
 				}
 			}
 			src, err := c.processSource(egctx, targetRepo, &source, component.Name, component.Version)
+			if c.opts.OnEndSourceConstruct != nil {
+				if err := c.opts.OnEndSourceConstruct(egctx, src, err); err != nil {
+					return fmt.Errorf("error ending source construction for %q: %w", source.ToIdentity(), err)
+				}
+			}
 			if err != nil {
 				return fmt.Errorf("error processing source %q at index %d: %w", source.ToIdentity(), i, err)
-			}
-			if c.opts.OnFinishedProcessingSource != nil {
-				if err := c.opts.OnFinishedProcessingSource(component, &desc.Component.Sources[i]); err != nil {
-					return fmt.Errorf("error executing OnStartedProcessingResource callback for source %q: %w", source.ToIdentity(), err)
-				}
 			}
 			descLock.Lock()
 			defer descLock.Unlock()

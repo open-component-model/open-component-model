@@ -25,8 +25,8 @@ const (
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:        "component-version {reference}",
-		Aliases:    []string{"cv", "component-versions", "cvs"},
-		SuggestFor: []string{"component", "components", "version", "versions"},
+		Aliases:    []string{"cv", "component-versions", "cvs", "componentversion", "componentversions", "component", "components", "comp", "comps", "c"},
+		SuggestFor: []string{"version", "versions"},
 		Short:      "Get component version(s) from an OCM repository",
 		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
 		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
