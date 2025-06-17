@@ -157,11 +157,12 @@ func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 	// if we do not have a pure digest, we need to parse the reference
 	// loosely because it could be that registry/repository information is prefixed to the actual reference.
 	if _, err := digest.Parse(reference); err != nil {
-		if idx := strings.Index(reference, ":"); idx != -1 {
-			reference = reference[idx+1:]
-		}
+		// if we have an encoded digest, prefer to use that one only,
+		// else if we have a tag, use that one.
 		if idx := strings.Index(reference, "@"); idx != -1 {
-			reference = reference[:idx]
+			reference = reference[idx+1:]
+		} else if idx := strings.Index(reference, ":"); idx != -1 {
+			reference = reference[idx+1:]
 		}
 	}
 

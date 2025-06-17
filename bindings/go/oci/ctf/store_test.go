@@ -168,26 +168,22 @@ func TestResolve(t *testing.T) {
 	})
 	require.NoError(t, ctf.SetIndex(ctx, index))
 
-	t.Run("successful resolve", func(t *testing.T) {
-		desc, err := store.Resolve(ctx, "v1.0.0")
-		assert.NoError(t, err)
-		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
-		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
-	})
+	expectedOkResolves := []string{
+		"v1.0.0",
+		"test-repo:v1.0.0",
+		digestStr,
+		"test-repo@" + digestStr,
+		"test-repo:v1.0.0@" + digestStr,
+	}
 
-	t.Run("successful resolve with full repo", func(t *testing.T) {
-		desc, err := store.Resolve(ctx, "test-repo:v1.0.0")
-		assert.NoError(t, err)
-		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
-		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
-	})
-
-	t.Run("successful resolve with digest", func(t *testing.T) {
-		desc, err := store.Resolve(ctx, digestStr)
-		assert.NoError(t, err)
-		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
-		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
-	})
+	for _, tc := range expectedOkResolves {
+		t.Run(fmt.Sprintf("%s", tc), func(t *testing.T) {
+			desc, err := store.Resolve(ctx, tc)
+			assert.NoError(t, err)
+			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+			assert.Equal(t, digest.Digest(digestStr), desc.Digest)
+		})
+	}
 
 	t.Run("invalid reference", func(t *testing.T) {
 		desc, err := store.Resolve(ctx, "invalid")
