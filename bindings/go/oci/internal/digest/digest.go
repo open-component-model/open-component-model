@@ -45,7 +45,11 @@ func Verify(target *runtime.Digest, digest digest.Digest) error {
 	if target.Value != digest.Encoded() {
 		return fmt.Errorf("digest value mismatch: expected %s, got %s", target.Value, digest.Encoded())
 	}
-	if target.HashAlgorithm != ReverseSHAMapping[digest.Algorithm()] {
+	algo, ok := ReverseSHAMapping[digest.Algorithm()]
+	if !ok {
+		return fmt.Errorf("unknown algorithm in digest: %s", digest.Algorithm())
+	}
+	if target.HashAlgorithm != algo {
 		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, ReverseSHAMapping[digest.Algorithm()])
 	}
 	return nil
