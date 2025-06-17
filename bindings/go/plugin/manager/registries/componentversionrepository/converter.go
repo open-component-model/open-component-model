@@ -2,11 +2,12 @@ package componentversionrepository
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
@@ -85,7 +86,7 @@ func (c *componentVersionRepositoryWrapper) ListComponentVersions(ctx context.Co
 	return c.externalPlugin.ListComponentVersions(ctx, request, c.credentials)
 }
 
-func (c *componentVersionRepositoryWrapper) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+func (c *componentVersionRepositoryWrapper) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (_ *descriptor.Resource, err error) {
 	resources, err := descriptor.ConvertToV2Resources(c.scheme, []descriptor.Resource{*res})
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert resource: %w", err)
@@ -95,18 +96,12 @@ func (c *componentVersionRepositoryWrapper) AddLocalResource(ctx context.Context
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
-	reader, err := content.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read content: %w", err)
-	}
-
 	defer func() {
-		_ = tmp.Close()
-		_ = reader.Close()
+		err = errors.Join(err, tmp.Close())
 	}()
 
-	if _, err := io.Copy(tmp, reader); err != nil {
-		return nil, fmt.Errorf("failed to copy content: %w", err)
+	if err := filesystem.CopyBlobToOSPath(content, tmp.Name()); err != nil {
+		return nil, fmt.Errorf("failed to copy blob to OS path: %w", err)
 	}
 
 	request := ocmrepositoryv1.PostLocalResourceRequest[runtime.Typed]{
@@ -146,7 +141,7 @@ func (c *componentVersionRepositoryWrapper) GetLocalResource(ctx context.Context
 	return rBlob, &convert[0], nil
 }
 
-func (c *componentVersionRepositoryWrapper) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
+func (c *componentVersionRepositoryWrapper) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (_ *descriptor.Source, err error) {
 	sources, err := descriptor.ConvertToV2Sources(c.scheme, []descriptor.Source{*res})
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert source: %w", err)
@@ -156,18 +151,13 @@ func (c *componentVersionRepositoryWrapper) AddLocalSource(ctx context.Context, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
-	reader, err := content.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read content: %w", err)
-	}
 
 	defer func() {
-		_ = tmp.Close()
-		_ = reader.Close()
+		err = errors.Join(err, tmp.Close())
 	}()
 
-	if _, err := io.Copy(tmp, reader); err != nil {
-		return nil, fmt.Errorf("failed to copy content: %w", err)
+	if err := filesystem.CopyBlobToOSPath(content, tmp.Name()); err != nil {
+		return nil, fmt.Errorf("failed to copy blob to OS path: %w", err)
 	}
 
 	request := ocmrepositoryv1.PostLocalSourceRequest[runtime.Typed]{
@@ -207,19 +197,22 @@ func (c *componentVersionRepositoryWrapper) GetLocalSource(ctx context.Context, 
 	return rBlob, &convert[0], nil
 }
 
-func (c *componentVersionRepositoryWrapper) createBlobData(location types.Location) (blob.ReadOnlyBlob, error) {
-	var rBlob blob.ReadOnlyBlob
-
+func (c *componentVersionRepositoryWrapper) createBlobData(location types.Location) (blob.Blob, error) {
 	if location.LocationType == types.LocationTypeLocalFile {
 		file, err := os.Open(location.Value)
 		if err != nil {
 			return nil, err
 		}
 
-		rBlob = blob.NewDirectReadOnlyBlob(file)
+		fileBlob, err := filesystem.GetBlobFromOSPath(file.Name())
+		if err != nil {
+			return nil, err
+		}
+
+		return fileBlob, nil
 	}
 
-	return rBlob, nil
+	return nil, fmt.Errorf("unsupported location type: %s", location.LocationType)
 }
 
 func (r *RepositoryRegistry) externalToComponentVersionRepositoryProviderConverter(plugin ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], scheme *runtime.Scheme) *componentVersionRepositoryProviderConverter {

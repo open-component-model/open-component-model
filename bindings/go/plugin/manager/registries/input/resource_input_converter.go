@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -64,19 +65,22 @@ func (r *resourceInputPluginConverter) ProcessResource(ctx context.Context, reso
 	return resourceInputMethodResult, nil
 }
 
-func (r *resourceInputPluginConverter) createBlobData(location *types.Location) (blob.ReadOnlyBlob, error) {
-	var rBlob blob.ReadOnlyBlob
-
+func (r *resourceInputPluginConverter) createBlobData(location *types.Location) (blob.Blob, error) {
 	if location.LocationType == types.LocationTypeLocalFile {
 		file, err := os.Open(location.Value)
 		if err != nil {
 			return nil, err
 		}
 
-		rBlob = blob.NewDirectReadOnlyBlob(file)
+		fileBlob, err := filesystem.GetBlobFromOSPath(file.Name())
+		if err != nil {
+			return nil, err
+		}
+
+		return fileBlob, nil
 	}
 
-	return rBlob, nil
+	return nil, fmt.Errorf("unsupported location type: %s", location.LocationType)
 }
 
 func (r *RepositoryRegistry) externalToResourceInputPluginConverter(plugin v1.ResourceInputPluginContract, scheme *runtime.Scheme) *resourceInputPluginConverter {
