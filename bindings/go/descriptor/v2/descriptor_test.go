@@ -106,6 +106,12 @@ component:
   version: v1.0.0
   provider: weaveworks
   labels:
+    - name: cloud.gardener.cnudie/dso/scanning-hints/source_analysis/v1
+      signing: true
+      value:
+        comment: |
+          we use gosec for sast scanning. See attached log.
+        policy: skip
     - name: link-to-documentation
       value: https://github.com/weaveworks/weave-gitops
   repositoryContexts:
@@ -212,7 +218,7 @@ func TestComponent_String(t *testing.T) {
 				Name:    "test-component",
 				Version: "1.0.0",
 				Labels: []descriptorv2.Label{
-					{Name: "env", Value: "prod"},
+					{Name: "env", Value: descriptorv2.MustAsRawMessage("prod")},
 				},
 			},
 		},
@@ -222,7 +228,7 @@ func TestComponent_String(t *testing.T) {
 	result := comp.String()
 
 	// Assert
-	expected := "test-component:1.0.0+labels([{env prod false}])"
+	expected := "test-component:1.0.0+labels([label{env=prod}])"
 	assert.Equal(t, expected, result)
 }
 
@@ -253,11 +259,11 @@ func TestObjectMeta_String(t *testing.T) {
 				Name:    "test-object",
 				Version: "1.0.0",
 				Labels: []descriptorv2.Label{
-					{Name: "type", Value: "library"},
-					{Name: "priority", Value: "high"},
+					{Name: "type", Value: descriptorv2.MustAsRawMessage("library")},
+					{Name: "priority", Value: descriptorv2.MustAsRawMessage("high")},
 				},
 			},
-			expected: "test-object:1.0.0+labels([{type library false} {priority high false}])",
+			expected: "test-object:1.0.0+labels([label{type=library} label{priority=high}])",
 		},
 	}
 
@@ -276,7 +282,7 @@ func TestElementMeta_String(t *testing.T) {
 			Name:    "test-element",
 			Version: "2.0.0",
 			Labels: []descriptorv2.Label{
-				{Name: "type", Value: "backend"},
+				{Name: "type", Value: descriptorv2.MustAsRawMessage("backend")},
 			},
 		},
 		ExtraIdentity: runtime.Identity{
@@ -290,7 +296,7 @@ func TestElementMeta_String(t *testing.T) {
 
 	// Assert
 	assert.Contains(t, result, "test-element:2.0.0")
-	assert.Contains(t, result, "+labels([{type backend false}])")
+	assert.Contains(t, result, "+labels([label{type=backend}])")
 	assert.Contains(t, result, "+extraIdentity(")
 	assert.Contains(t, result, "namespace=system")
 	assert.Contains(t, result, "platform=linux")
@@ -336,7 +342,7 @@ func TestComponentMeta_ToIdentity(t *testing.T) {
 			Name:    "test-component",
 			Version: "3.0.0",
 			Labels: []descriptorv2.Label{
-				{Name: "stage", Value: "dev"},
+				{Name: "stage", Value: descriptorv2.MustAsRawMessage("dev")},
 			},
 		},
 	}
@@ -1021,7 +1027,7 @@ func TestSchemaConformance(t *testing.T) {
 			{
 				name: "MissingName",
 				label: descriptorv2.Label{
-					Value: "test-value",
+					Value: descriptorv2.MustAsRawMessage("test-value"),
 				},
 				expect: assert.Error,
 			},
