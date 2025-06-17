@@ -148,7 +148,7 @@ func TestPush(t *testing.T) {
 func TestResolve(t *testing.T) {
 	ctf := setupTestCTF(t)
 	provider := NewFromCTF(ctf)
-	store, err := provider.StoreForReference(t.Context(), "test-repo:v1.0.0")
+	store, err := provider.StoreForReference(t.Context(), "localhost:5000/test-repo:v1.0.0")
 	require.NoError(t, err)
 
 	ctx := t.Context()
@@ -174,6 +174,8 @@ func TestResolve(t *testing.T) {
 		digestStr,
 		"test-repo@" + digestStr,
 		"test-repo:v1.0.0@" + digestStr,
+		"localhost:5000/test-repo:v1.0.0",
+		"localhost:5000/test-repo:v1.0.0@" + digestStr,
 	}
 
 	for _, tc := range expectedOkResolves {
