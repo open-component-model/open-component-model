@@ -474,7 +474,6 @@ func TestResource_Struct(t *testing.T) {
 			NormalisationAlgorithm: "OciArtifactDigest",
 			Value:                  "abcdef1234567890",
 		},
-		Size: 1024,
 	}
 
 	// Test
@@ -488,7 +487,6 @@ func TestResource_Struct(t *testing.T) {
 	assert.Contains(t, string(jsonData), `"relation":"local"`)
 	assert.Contains(t, string(jsonData), `"access":{"type":"ociArtifact","imageReference":"test/image:1.0"}`)
 	assert.Contains(t, string(jsonData), `"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"OciArtifactDigest","value":"abcdef1234567890"}`)
-	assert.Contains(t, string(jsonData), `"size":1024`)
 }
 
 func TestSource_Struct(t *testing.T) {

@@ -94,8 +94,6 @@ type Resource struct {
 	Access *runtime.Raw `json:"access"`
 	// Digest is the optional digest of the referenced resource.
 	Digest *Digest `json:"digest,omitempty"`
-	// Size of the resource blob.
-	Size int64 `json:"size,omitempty"`
 	// CreationTime of the resource.
 	CreationTime *Timestamp `json:"creationTime,omitempty"`
 }
