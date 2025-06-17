@@ -137,6 +137,8 @@ func (s *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 
 // Resolve resolves a reference string to its corresponding descriptor in the CTF archive.
 // The reference should be in the format "repository:tag" so it will be resolved against the index.
+// The reference can also be just a tag or a digest, in which case the repository is based on the base repository.
+// Alternatively, it is also possible to provide a digest directly, e.g., "sha256:abc123...".
 // If a full reference is given, it will be resolved against the blob Repository immediately.
 // Returns the descriptor if found, or an error if the reference is invalid or not found.
 func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
@@ -152,11 +154,15 @@ func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 
 	repo := s.repo
 
-	if prefix := wellKnownRegistryCTF + "/"; strings.HasPrefix(reference, prefix) {
-		reference = strings.TrimPrefix(reference, prefix)
-	}
-	if prefix := repo + ":"; strings.HasPrefix(reference, prefix) {
-		reference = strings.TrimPrefix(reference, prefix)
+	// if we do not have a pure digest, we need to parse the reference
+	// loosely because it could be that registry/repository information is prefixed to the actual reference.
+	if _, err := digest.Parse(reference); err != nil {
+		if idx := strings.Index(reference, ":"); idx != -1 {
+			reference = reference[idx+1:]
+		}
+		if idx := strings.Index(reference, "@"); idx != -1 {
+			reference = reference[:idx]
+		}
 	}
 
 	for _, artifact := range idx.GetArtifacts() {
@@ -202,7 +208,7 @@ func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 }
 
 // Tag associates a descriptor with a reference in the CTF archive's index.
-// The reference should be in the format "repository:tag".
+// The reference should be in the format "repository:tag", but can also be just a tag or digest.
 // This operation updates the index to maintain the mapping between references and their corresponding descriptors.
 func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	s.indexMu.Lock()
@@ -215,24 +221,50 @@ func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 
 	repo := s.repo
 
-	ref := registry.Reference{Reference: reference}
-
 	var meta v1.ArtifactMetadata
-	if err := ref.ValidateReferenceAsTag(); err == nil {
-		meta = v1.ArtifactMetadata{
-			Repository: repo,
-			Tag:        reference,
-			Digest:     desc.Digest.String(),
-			MediaType:  desc.MediaType,
+
+	if ref, err := looseref.ParseReference(reference); err == nil {
+		if err := ref.ValidateReferenceAsTag(); err == nil {
+			meta = v1.ArtifactMetadata{
+				Repository: repo,
+				Tag:        reference,
+				Digest:     desc.Digest.String(),
+				MediaType:  desc.MediaType,
+			}
+		} else if err := ref.ValidateReferenceAsDigest(); err == nil {
+			meta = v1.ArtifactMetadata{
+				Repository: repo,
+				Digest:     desc.Digest.String(),
+				MediaType:  desc.MediaType,
+			}
+		} else {
+			ref := registry.Reference{Reference: reference}
+			if err := ref.ValidateReferenceAsTag(); err == nil {
+				meta = v1.ArtifactMetadata{
+					Repository: repo,
+					Tag:        reference,
+					Digest:     desc.Digest.String(),
+					MediaType:  desc.MediaType,
+				}
+			} else if err := ref.ValidateReferenceAsDigest(); err == nil {
+				meta = v1.ArtifactMetadata{
+					Repository: repo,
+					Digest:     desc.Digest.String(),
+					MediaType:  desc.MediaType,
+				}
+			} else {
+				return fmt.Errorf("invalid raw reference %q: %w", reference, err)
+			}
 		}
-	} else if err := ref.ValidateReferenceAsDigest(); err == nil {
-		meta = v1.ArtifactMetadata{
-			Repository: repo,
-			Digest:     desc.Digest.String(),
-			MediaType:  desc.MediaType,
-		}
-	} else {
-		return fmt.Errorf("invalid reference %q: %w", reference, err)
+	}
+
+	ok, err := s.Exists(ctx, desc)
+	if err != nil {
+		return fmt.Errorf("unable to check if descriptor exists: %w", err)
+	}
+	if !ok {
+		// if the descriptor does not exist, we cannot tag it
+		return fmt.Errorf("descriptor %s does not exist in the archive", desc.Digest)
 	}
 
 	slog.Info("adding artifact to index", "meta", meta)

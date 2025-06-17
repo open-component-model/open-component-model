@@ -35,6 +35,22 @@ func Apply(target *runtime.Digest, digest digest.Digest) error {
 	return nil
 }
 
+// Verify checks if the target digest matches the provided digest.
+// It compares the Value and HashAlgorithm fields of the target
+// with the encoded value and algorithm of the provided digest.
+func Verify(target *runtime.Digest, digest digest.Digest) error {
+	if target == nil {
+		return fmt.Errorf("target digest is nil")
+	}
+	if target.Value != digest.Encoded() {
+		return fmt.Errorf("digest value mismatch: expected %s, got %s", target.Value, digest.Encoded())
+	}
+	if target.HashAlgorithm != ReverseSHAMapping[digest.Algorithm()] {
+		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, ReverseSHAMapping[digest.Algorithm()])
+	}
+	return nil
+}
+
 func reverseMap[K, V comparable](m map[K]V) map[V]K {
 	reversed := make(map[V]K)
 	for k, v := range m {

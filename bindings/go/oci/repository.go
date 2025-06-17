@@ -197,6 +197,101 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 	return source, nil
 }
 
+func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource) (_ *descriptor.Resource, err error) {
+	done := log.Operation(ctx, "process resource digest",
+		log.IdentityLogAttr("resource", res.ToIdentity()))
+	defer func() {
+		done(err)
+	}()
+	res = res.DeepCopy()
+	access := res.Access
+	if _, err = repo.scheme.DefaultType(access); err != nil {
+		return nil, fmt.Errorf("error defaulting resource access type: %w", err)
+	}
+	typed, err := repo.scheme.NewObject(access.GetType())
+	if err != nil {
+		return nil, fmt.Errorf("error creating resource access: %w", err)
+	}
+	if err := repo.scheme.Convert(access, typed); err != nil {
+		return nil, fmt.Errorf("error converting resource access: %w", err)
+	}
+
+	switch typed := typed.(type) {
+	case *v2.LocalBlob:
+		if typed.GlobalAccess == nil {
+			return nil, fmt.Errorf("local blob access does not have a global access and cannot be used")
+		}
+		globalAccess, err := repo.scheme.NewObject(typed.GlobalAccess.GetType())
+		if err != nil {
+			return nil, fmt.Errorf("error creating typed global blob access with help of scheme: %w", err)
+		}
+		if err := repo.scheme.Convert(typed.GlobalAccess, globalAccess); err != nil {
+			return nil, fmt.Errorf("error converting global blob access: %w", err)
+		}
+		res.Access = globalAccess
+		return repo.ProcessResourceDigest(ctx, res)
+	case *accessv1.OCIImage:
+		return repo.processOCIImageDigest(ctx, res, typed)
+	default:
+		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
+	}
+}
+
+func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImage) (*descriptor.Resource, error) {
+	src, err := repo.resolver.StoreForReference(ctx, typed.ImageReference)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved, err := repo.resolver.Reference(typed.ImageReference)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
+	}
+
+	reference := resolved.String()
+
+	// reference is not a FQDN because it can be pinned, for resolving, use the FQDN part of the reference
+	fqdn := reference
+	pinnedDigest := ""
+	if index := strings.IndexByte(reference, '@'); index != -1 {
+		fqdn = reference[:index]
+		pinnedDigest = reference[index+1:]
+	}
+
+	var desc ociImageSpecV1.Descriptor
+
+	if pinnedDigest == "" {
+		if desc, err = src.Resolve(ctx, fqdn); err != nil {
+			return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
+		}
+	} else {
+		if desc, err = src.Resolve(ctx, fqdn); err != nil {
+			return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
+		}
+	}
+
+	// if the resource did not have a digest, we apply the digest from the descriptor
+	// if it did, we verify it against the received descriptor.
+	if res.Digest == nil {
+		res.Digest = &descriptor.Digest{}
+		if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
+	} else if err := internaldigest.Verify(res.Digest, desc.Digest); err != nil {
+		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	}
+
+	if pinnedDigest != "" && pinnedDigest != desc.Digest.String() {
+		return nil, fmt.Errorf("expected pinned digest %q (derived from %q) but got %q", pinnedDigest, reference, desc.Digest)
+	}
+
+	// in any case, after successful processing, we can pin the access
+	typed.ImageReference = fqdn + "@" + desc.Digest.String()
+	res.Access = typed
+
+	return res, nil
+}
+
 func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, component string, version string, artifact descriptor.Artifact, b blob.ReadOnlyBlob) error {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
