@@ -185,7 +185,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
 		})
 
-		t.Run("basic upload and download of a component version", func(t *testing.T) {
+		t.Run("basic upload and download of a component version (with index based referrer tracking)", func(t *testing.T) {
 			repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(oci.ReferrerTrackingPolicyByIndexAndSubject))
 			r.NoError(err)
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")

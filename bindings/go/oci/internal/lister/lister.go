@@ -36,7 +36,7 @@ const (
 	// and falls back to tag-based listing if no referrers are found or an error occurred.
 	LookupPolicyReferrerWithTagFallback LookupPolicy = iota
 	// LookupPolicyTagOnly only uses tag-based listing, ignoring referrers, even if they are available.
-	LookupPolicyTagOnly // LookupPolicyTagOnly only uses tag-based listing, ignoring referrers.
+	LookupPolicyTagOnly
 )
 
 // SortPolicy defines how discovered versions should be sorted.
