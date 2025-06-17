@@ -196,6 +196,10 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		t.Run("local source blob upload and download", func(t *testing.T) {
 			uploadDownloadLocalSource(t, repo, "test-component", "v1.0.0")
 		})
+
+		t.Run("oci image digest processing", func(t *testing.T) {
+			processResourceDigest(t, repo, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
+		})
 	})
 
 	t.Run("specification-based", func(t *testing.T) {
@@ -257,6 +261,10 @@ func Test_Integration_CTF(t *testing.T) {
 
 		t.Run("local source blob upload and download", func(t *testing.T) {
 			uploadDownloadLocalSource(t, repo, "test-component", "v4.0.0")
+		})
+
+		t.Run("oci image digest processing", func(t *testing.T) {
+			processResourceDigest(t, repo, "ghcr.io/test:v1.0.0", "new-test:v1.0.0")
 		})
 	})
 
@@ -426,6 +434,53 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, 
 	r.NoError(err)
 
 	r.Equal(originalData, dataFromBlob)
+}
+
+func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	originalData := []byte("foobar")
+
+	data, access := createSingleLayerOCIImage(t, originalData, from, to)
+
+	blob := inmemory.New(bytes.NewReader(data))
+
+	resource := descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{
+				Name:    "test-resource",
+				Version: "v1.0.0",
+			},
+		},
+		Type:         "some-arbitrary-type-packed-in-image",
+		Access:       access,
+		Size:         int64(len(data)),
+		CreationTime: descriptor.CreationTime(time.Now()),
+	}
+
+	targetAccess := resource.Access.DeepCopyTyped()
+	targetAccess.(*v1.OCIImage).ImageReference = to
+
+	newRes, err := repo.UploadResource(ctx, targetAccess, &resource, blob)
+	r.NoError(err)
+	resource = *newRes
+
+	r.NotNil(resource.Digest)
+
+	resource.Digest = nil
+
+	newRes, err = repo.ProcessResourceDigest(ctx, &resource)
+	r.NoError(err)
+	resource = *newRes
+
+	r.Contains(resource.Access.(*v1.OCIImage).ImageReference, "test:v1.0.0@sha256:0aa67467eee1b66c5e549e6b67226e226778f689ccdb46c39fe706b6428c98a5")
+
+	r.Equal(resource.Digest.Value, "0aa67467eee1b66c5e549e6b67226e226778f689ccdb46c39fe706b6428c98a5")
+	r.Equal(resource.Digest.HashAlgorithm, "SHA-256")
+	r.Equal(resource.Digest.NormalisationAlgorithm, "genericBlobDigest/v1")
+
+	r.NotNil(resource.Digest)
 }
 
 func uploadDownloadBarebonesComponentVersion(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {

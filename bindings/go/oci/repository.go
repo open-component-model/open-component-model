@@ -259,15 +259,8 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 	}
 
 	var desc ociImageSpecV1.Descriptor
-
-	if pinnedDigest == "" {
-		if desc, err = src.Resolve(ctx, fqdn); err != nil {
-			return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
-		}
-	} else {
-		if desc, err = src.Resolve(ctx, fqdn); err != nil {
-			return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
-		}
+	if desc, err = src.Resolve(ctx, fqdn); err != nil {
+		return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
 	}
 
 	// if the resource did not have a digest, we apply the digest from the descriptor
