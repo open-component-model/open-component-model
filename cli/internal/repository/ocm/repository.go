@@ -29,9 +29,9 @@ type ComponentRepository struct {
 	credentials map[string]string                                      // Credentials for repository access
 }
 
-// New creates a new ComponentRepository instance for the given component reference.
+// NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func New(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
+func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
@@ -43,9 +43,9 @@ func New(ctx context.Context, manager *manager.PluginManager, graph *credentials
 		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", repositorySpec, err)
 	}
 	var creds map[string]string
-	identity, err := plugin.GetIdentity(ctx, v1.GetIdentityRequest[runtime.Typed]{Typ: repositorySpec})
+	identity, err := plugin.GetIdentity(ctx, &v1.GetIdentityRequest[runtime.Typed]{Typ: repositorySpec})
 	if err == nil {
-		if creds, err = graph.Resolve(ctx, identity); err != nil {
+		if creds, err = graph.Resolve(ctx, identity.Identity); err != nil {
 			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", repositorySpec, err)
 		}
 	}

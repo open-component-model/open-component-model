@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -62,6 +63,16 @@ func ConvertToV2(scheme *runtime.Scheme, descriptor *Descriptor) (*v2.Descriptor
 		return nil, fmt.Errorf("could not convert repository contexts: %w", err)
 	}
 
+	labels, err := ConvertToV2Labels(descriptor.Component.Labels)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert component labels: %w", err)
+	}
+
+	references, err := ConvertToV2References(descriptor.Component.References)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert references: %w", err)
+	}
+
 	return &v2.Descriptor{
 		Meta: v2.Meta{
 			Version: descriptor.Meta.Version,
@@ -71,7 +82,7 @@ func ConvertToV2(scheme *runtime.Scheme, descriptor *Descriptor) (*v2.Descriptor
 				ObjectMeta: v2.ObjectMeta{
 					Name:    descriptor.Component.Name,
 					Version: descriptor.Component.Version,
-					Labels:  ConvertToV2Labels(descriptor.Component.Labels),
+					Labels:  labels,
 				},
 				CreationTime: descriptor.Component.CreationTime,
 			},
@@ -79,7 +90,7 @@ func ConvertToV2(scheme *runtime.Scheme, descriptor *Descriptor) (*v2.Descriptor
 			Provider:           provider,
 			Resources:          res,
 			Sources:            srcs,
-			References:         ConvertToV2References(descriptor.Component.References),
+			References:         references,
 		},
 		Signatures: ConvertToV2Signatures(descriptor.Signatures),
 	}, nil
@@ -133,7 +144,7 @@ func ConvertFromV2Labels(labels []v2.Label) []Label {
 	n := make([]Label, len(labels))
 	for i := range labels {
 		n[i].Name = labels[i].Name
-		n[i].Value = labels[i].Value
+		n[i].Value = bytes.Clone(labels[i].Value)
 		n[i].Signing = labels[i].Signing
 	}
 	return n
@@ -167,7 +178,6 @@ func ConvertFromV2Resources(resources []v2.Resource) []Resource {
 		if resources[i].ExtraIdentity != nil {
 			n[i].ExtraIdentity = resources[i].ExtraIdentity.DeepCopy()
 		}
-		n[i].Size = resources[i].Size
 		n[i].Relation = ResourceRelation(resources[i].Relation)
 	}
 	return n
@@ -269,9 +279,13 @@ func ConvertToV2Provider(provider Provider) (string, error) {
 		Name   string     `json:"name"`
 		Labels []v2.Label `json:"labels,omitempty"`
 	}
+	labels, err := ConvertToV2Labels(provider.Labels)
+	if err != nil {
+		return "", fmt.Errorf("could not convert provider labels: %w", err)
+	}
 	providerJSON, err := json.Marshal(&providerStruct{
 		Name:   provider.Name,
-		Labels: ConvertToV2Labels(provider.Labels),
+		Labels: labels,
 	})
 	if err != nil {
 		return "", fmt.Errorf("could not marshal provider to JSON: %w", err)
@@ -295,17 +309,17 @@ func ConvertToV2RepositoryContexts(scheme *runtime.Scheme, contexts []runtime.Ty
 }
 
 // ConvertToV2Labels converts internal labels to v2.Label format.
-func ConvertToV2Labels(labels []Label) []v2.Label {
+func ConvertToV2Labels(labels []Label) ([]v2.Label, error) {
 	if labels == nil {
-		return nil
+		return nil, nil
 	}
 	n := make([]v2.Label, len(labels))
 	for i := range labels {
 		n[i].Name = labels[i].Name
-		n[i].Value = labels[i].Value
+		n[i].Value = bytes.Clone(labels[i].Value)
 		n[i].Signing = labels[i].Signing
 	}
-	return n
+	return n, nil
 }
 
 // ConvertToV2Resources converts internal resources to v2 resources.
@@ -321,32 +335,43 @@ func ConvertToV2Resources(scheme *runtime.Scheme, resources []Resource) ([]v2.Re
 		if time.Time(resources[i].CreationTime) != (time.Time{}) {
 			n[i].CreationTime = &v2.Timestamp{Time: v2.Time{Time: time.Time(resources[i].CreationTime)}}
 		}
-		n[i].Labels = ConvertToV2Labels(resources[i].Labels)
+		l, err := ConvertToV2Labels(resources[i].Labels)
+		if err != nil {
+			return nil, fmt.Errorf("could not convert labels for resource %q: %w", resources[i].Name, err)
+		}
+		n[i].Labels = l
 		n[i].Digest = ConvertToV2Digest(resources[i].Digest)
-		n[i].SourceRefs = ConvertToV2SourceRefs(resources[i].SourceRefs)
+		srcRefs, err := ConvertToV2SourceRefs(resources[i].SourceRefs)
+		if err != nil {
+			return nil, fmt.Errorf("could not convert source refs for resource %q: %w", resources[i].Name, err)
+		}
+		n[i].SourceRefs = srcRefs
 		n[i].Access = &runtime.Raw{}
 		// Use runtime.Scheme to convert custom access types.
 		if err := scheme.Convert(resources[i].Access, n[i].Access); err != nil {
 			return nil, fmt.Errorf("could not convert access %q: %w", resources[i].String(), err)
 		}
 		n[i].ExtraIdentity = resources[i].ExtraIdentity.DeepCopy()
-		n[i].Size = resources[i].Size
 		n[i].Relation = v2.ResourceRelation(resources[i].Relation)
 	}
 	return n, nil
 }
 
 // ConvertToV2SourceRefs converts internal source references to v2 format.
-func ConvertToV2SourceRefs(refs []SourceRef) []v2.SourceRef {
+func ConvertToV2SourceRefs(refs []SourceRef) ([]v2.SourceRef, error) {
 	if refs == nil {
-		return nil
+		return nil, nil
 	}
 	n := make([]v2.SourceRef, len(refs))
 	for i := range refs {
 		n[i].IdentitySelector = maps.Clone(refs[i].IdentitySelector)
-		n[i].Labels = ConvertToV2Labels(refs[i].Labels)
+		l, err := ConvertToV2Labels(refs[i].Labels)
+		if err != nil {
+			return nil, fmt.Errorf("could not convert labels for source ref %q: %w", refs[i].IdentitySelector, err)
+		}
+		n[i].Labels = l
 	}
-	return n
+	return n, nil
 }
 
 // ConvertToV2Digest converts an internal digest to v2 format.
@@ -370,7 +395,11 @@ func ConvertToV2Sources(scheme *runtime.Scheme, sources []Source) ([]v2.Source, 
 	for i := range sources {
 		n[i].Name = sources[i].Name
 		n[i].Version = sources[i].Version
-		n[i].Labels = ConvertToV2Labels(sources[i].Labels)
+		l, err := ConvertToV2Labels(sources[i].Labels)
+		if err != nil {
+			return nil, fmt.Errorf("could not convert labels for source %q: %w", sources[i].Name, err)
+		}
+		n[i].Labels = l
 		n[i].ExtraIdentity = sources[i].ExtraIdentity.DeepCopy()
 		n[i].Access = &runtime.Raw{}
 		// Use runtime.Scheme to convert custom access types.
@@ -383,20 +412,24 @@ func ConvertToV2Sources(scheme *runtime.Scheme, sources []Source) ([]v2.Source, 
 }
 
 // ConvertToV2References converts internal references to v2 references.
-func ConvertToV2References(references []Reference) []v2.Reference {
+func ConvertToV2References(references []Reference) ([]v2.Reference, error) {
 	if references == nil {
-		return nil
+		return nil, nil
 	}
 	n := make([]v2.Reference, len(references))
 	for i := range references {
 		n[i].Name = references[i].Name
 		n[i].Version = references[i].Version
-		n[i].Labels = ConvertToV2Labels(references[i].Labels)
+		l, err := ConvertToV2Labels(references[i].Labels)
+		if err != nil {
+			return nil, fmt.Errorf("could not convert labels for reference %q: %w", references[i].Name, err)
+		}
+		n[i].Labels = l
 		n[i].ExtraIdentity = references[i].ExtraIdentity.DeepCopy()
 		n[i].Component = references[i].Component
 		n[i].Digest = *ConvertToV2Digest(&references[i].Digest)
 	}
-	return n
+	return n, nil
 }
 
 // ConvertToV2Signatures converts internal signatures to v2 format.

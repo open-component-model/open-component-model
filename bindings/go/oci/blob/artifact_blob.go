@@ -42,17 +42,6 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 	// lets do additional defaulting and verification of the resulting blob
 	// if we have a resource, because a resource contains more data than a generic artifact
 	if resource, ok := artifact.(*descriptor.Resource); ok {
-		if size == blob.SizeUnknown {
-			// if we dont have a size information from the blob yet,
-			// but we do have one in the resource,
-			// use that
-			if resource.Size > 0 {
-				size = resource.Size
-			}
-		} else if size != resource.Size {
-			// mismatches are never okay!
-			return nil, fmt.Errorf("resource size mismatch: resource %d vs blob %d", resource.Size, size)
-		}
 		if digAware, ok := b.(blob.DigestAware); ok {
 			if blobDig, ok := digAware.Digest(); ok {
 				if resource.Digest != nil {
@@ -188,9 +177,6 @@ func (r *ArtifactBlob) HasPrecalculatedSize() bool {
 // SetPrecalculatedSize sets the pre-calculated size value for the resource.
 // This method allows updating the size value when it's known beforehand.
 func (r *ArtifactBlob) SetPrecalculatedSize(size int64) {
-	if resource, ok := r.Artifact.(*descriptor.Resource); ok {
-		resource.Size = size
-	}
 	r.size = size
 }
 

@@ -21,9 +21,6 @@ func UpdateArtifactWithInformationFromBlob(artifact descriptor.Artifact, b blob.
 				size = blobSize
 			}
 		}
-		if typed.Size == 0 && size > blob.SizeUnknown {
-			typed.Size = size
-		}
 		if typed.Digest == nil {
 			if digAware, ok := b.(blob.DigestAware); ok {
 				if dig, ok := digAware.Digest(); ok {
