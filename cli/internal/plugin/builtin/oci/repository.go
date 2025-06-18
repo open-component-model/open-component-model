@@ -33,14 +33,18 @@ func createRepository(
 	}
 	urlString := url.Host + url.Path
 
-	urlResolver := urlresolver.New(urlString)
-	urlResolver.SetClient(&auth.Client{
-		Client: retry.DefaultClient,
-		Header: map[string][]string{
-			"User-Agent": {Creator},
-		},
-		Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
-	})
+	urlResolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(urlString),
+		urlresolver.WithBaseClient(&auth.Client{
+			Client: retry.DefaultClient,
+			Header: map[string][]string{
+				"User-Agent": {Creator},
+			},
+			Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
+		}))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
+	}
 	repo, err := oci.NewRepository(
 		oci.WithResolver(urlResolver),
 		oci.WithCreator(Creator),
