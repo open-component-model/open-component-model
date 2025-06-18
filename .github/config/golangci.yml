@@ -73,6 +73,7 @@ linters:
       disable-builtin: true
       exclusions:
         - '*.UnmarshalJSON'
+        - '*.String'
     varnamelen:
       ignore-names:
         - err

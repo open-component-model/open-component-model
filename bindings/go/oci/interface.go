@@ -49,6 +49,7 @@ type ComponentVersionRepository interface {
 
 	LocalResourceRepository
 	LocalSourceRepository
+	ResourceDigestProcessor
 }
 
 type LocalResourceRepository interface {
@@ -136,6 +137,15 @@ type SourceRepository interface {
 	// The blob.ReadOnlyBlob returned will always be an OCI Layout, readable by [tar.ReadOCILayout].
 	// For more information on the download procedure, see [tar.NewOCILayoutWriter].
 	DownloadSource(ctx context.Context, res *descriptor.Source) (content blob.ReadOnlyBlob, err error)
+}
+
+type ResourceDigestProcessor interface {
+	// ProcessResourceDigest processes, verifies and appends the [*descriptor.Resource.Digest] with information fetched
+	// from the repository.
+	// Under certain circumstances, it can also process the [*descriptor.Resource.Access] of the resource,
+	// e.g. to ensure that the digest is pinned after digest information was appended.
+	// As a result, after processing, the access MUST always reference the content described by the digest and cannot be mutated.
+	ProcessResourceDigest(ctx context.Context, res *descriptor.Resource) (*descriptor.Resource, error)
 }
 
 // Resolver defines the interface for resolving references to OCI stores.
