@@ -83,7 +83,6 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	if resolver.baseClient != nil {
 		repo.Client = resolver.baseClient
 	}
-	repo.SkipReferrersGC = true
 
 	resolver.addToCache(key, repo)
 
