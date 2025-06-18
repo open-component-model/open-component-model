@@ -81,9 +81,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 				mediaType: "application/vnd.test",
 				digest:    digest.FromBytes([]byte("test content")),
 			},
-			res: &descriptor.Resource{
-				Size: blob.SizeUnknown,
-			},
+			res: &descriptor.Resource{},
 			opts: ResourceBlobOCILayerOptions{
 				BlobMediaType: "application/vnd.test",
 				BlobDigest:    digest.FromBytes([]byte("test content")),
@@ -466,9 +464,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				mediaType: "application/vnd.test",
 				digest:    digest,
 			},
-			resource: &descriptor.Resource{
-				Size: blob.SizeUnknown,
-			},
+			resource: &descriptor.Resource{},
 			access: &descriptor.LocalBlob{
 				MediaType:      "application/vnd.test",
 				LocalReference: digest.String(),
