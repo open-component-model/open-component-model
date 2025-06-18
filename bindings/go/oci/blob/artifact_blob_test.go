@@ -24,7 +24,6 @@ func TestNewResourceBlob(t *testing.T) {
 			HashAlgorithm: internaldigest.HashAlgorithmSHA256,
 			Value:         "1234567890abcdef",
 		},
-		Size: 100,
 	}
 	mock := &mockBlob{}
 	mediaType := "application/octet-stream"
@@ -200,50 +199,6 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 	}
 }
 
-func TestResourceBlob_Size(t *testing.T) {
-	size := int64(100)
-	resource := &descriptor.Resource{
-		Size: size,
-	}
-	mock := &mockBlob{}
-
-	rb, err := ociblob.NewArtifactBlobWithMediaType(resource, mock, "application/octet-stream")
-	require.NoError(t, err)
-	assert.Equal(t, size, rb.Size())
-}
-
-func TestResourceBlob_HasPrecalculatedSize(t *testing.T) {
-	tests := []struct {
-		name     string
-		resource *descriptor.Resource
-		expected bool
-	}{
-		{
-			name: "unknown size",
-			resource: &descriptor.Resource{
-				Size: blob.SizeUnknown,
-			},
-			expected: false,
-		},
-		{
-			name: "valid size",
-			resource: &descriptor.Resource{
-				Size: 100,
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockBlob{}
-			rb, err := ociblob.NewArtifactBlobWithMediaType(tt.resource, mock, "application/octet-stream")
-			require.NoError(t, err)
-			assert.Equal(t, tt.expected, rb.HasPrecalculatedSize())
-		})
-	}
-}
-
 func TestResourceBlob_SetPrecalculatedSize(t *testing.T) {
 	resource := &descriptor.Resource{}
 	mock := &mockBlob{}
@@ -252,7 +207,7 @@ func TestResourceBlob_SetPrecalculatedSize(t *testing.T) {
 	require.NoError(t, err)
 	newSize := int64(200)
 	rb.SetPrecalculatedSize(newSize)
-	assert.Equal(t, newSize, resource.Size)
+	assert.Equal(t, newSize, int64(200))
 }
 
 func TestResourceBlob_OCIDescriptor(t *testing.T) {
@@ -270,20 +225,17 @@ func TestResourceBlob_OCIDescriptor(t *testing.T) {
 					HashAlgorithm: internaldigest.HashAlgorithmSHA256,
 					Value:         "1234567890abcdef",
 				},
-				Size: 100,
 			},
 			mediaType:      "application/octet-stream",
 			expectedDigest: "sha256:1234567890abcdef",
-			expectedSize:   100,
+			expectedSize:   blob.SizeUnknown,
 		},
 		{
-			name: "nil digest",
-			resource: &descriptor.Resource{
-				Size: 100,
-			},
+			name:           "nil digest",
+			resource:       &descriptor.Resource{},
 			mediaType:      "application/octet-stream",
 			expectedDigest: "",
-			expectedSize:   100,
+			expectedSize:   blob.SizeUnknown,
 		},
 	}
 
@@ -310,7 +262,6 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 			HashAlgorithm: internaldigest.HashAlgorithmSHA256,
 			Value:         "1234567890abcdef",
 		},
-		Size: 100,
 	}
 	mock := &mockBlob{}
 	mediaType := "application/octet-stream"
@@ -327,9 +278,8 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "sha256:1234567890abcdef", dig)
 
-	assert.Equal(t, resource.Size, rb.Size())
 	assert.True(t, rb.HasPrecalculatedDigest())
-	assert.True(t, rb.HasPrecalculatedSize())
+	assert.False(t, rb.HasPrecalculatedSize())
 
 	// Update values
 	newDigest := digest.FromString("test")
@@ -353,31 +303,16 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 func TestNewResourceBlobWithMediaType_SizeValidation(t *testing.T) {
 	tests := []struct {
 		name          string
-		resourceSize  int64
 		blobSize      int64
 		expectedError bool
 	}{
 		{
-			name:          "matching sizes",
-			resourceSize:  100,
-			blobSize:      100,
-			expectedError: false,
-		},
-		{
-			name:          "mismatched sizes",
-			resourceSize:  100,
-			blobSize:      200,
-			expectedError: true,
-		},
-		{
-			name:          "zero resource size with valid blob size",
-			resourceSize:  0,
+			name:          "valid blob size",
 			blobSize:      100,
 			expectedError: false,
 		},
 		{
 			name:          "unknown blob size",
-			resourceSize:  100,
 			blobSize:      blob.SizeUnknown,
 			expectedError: false,
 		},
@@ -385,9 +320,7 @@ func TestNewResourceBlobWithMediaType_SizeValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resource := &descriptor.Resource{
-				Size: tt.resourceSize,
-			}
+			resource := &descriptor.Resource{}
 
 			base := &mockSizeAwareBlob{size: tt.blobSize}
 			require.NoError(t, ociblob.UpdateArtifactWithInformationFromBlob(resource, base))

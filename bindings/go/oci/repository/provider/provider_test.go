@@ -45,7 +45,7 @@ func Test_Provider_Smoke(t *testing.T) {
 		desc := descriptor.Descriptor{}
 		desc.Component.Name = name
 		desc.Component.Version = version
-		desc.Component.Labels = append(desc.Component.Labels, descriptor.Label{Name: "foo", Value: "bar"})
+		desc.Component.Labels = append(desc.Component.Labels, descriptor.Label{Name: "foo", Value: []byte(`"bar"`)})
 		desc.Component.Provider.Name = "ocm.software/open-component-model/bindings/go/oci/integration/test"
 
 		r.NoError(repo1.AddComponentVersion(ctx, &desc))

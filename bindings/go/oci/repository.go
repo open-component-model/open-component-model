@@ -483,7 +483,6 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
 
-	res.Size = desc.Size
 	if res.Digest == nil {
 		res.Digest = &descriptor.Digest{}
 	}

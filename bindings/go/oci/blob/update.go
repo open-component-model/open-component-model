@@ -15,15 +15,6 @@ func UpdateArtifactWithInformationFromBlob(artifact descriptor.Artifact, b blob.
 	//nolint:gocritic // we have only resource for now but there might be more in the future
 	switch typed := artifact.(type) {
 	case *descriptor.Resource:
-		size := blob.SizeUnknown
-		if sizeAware, ok := b.(blob.SizeAware); ok {
-			if blobSize := sizeAware.Size(); blobSize != size {
-				size = blobSize
-			}
-		}
-		if typed.Size == 0 && size > blob.SizeUnknown {
-			typed.Size = size
-		}
 		if typed.Digest == nil {
 			if digAware, ok := b.(blob.DigestAware); ok {
 				if dig, ok := digAware.Digest(); ok {

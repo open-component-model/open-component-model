@@ -11,9 +11,9 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.37.0
 	golang.org/x/crypto v0.39.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
-	ocm.software/open-component-model/bindings/go/ctf v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250611060114-f4d9dc7752dd
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
+	ocm.software/open-component-model/bindings/go/ctf v0.0.3
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250618130025-c8cb6945ee30
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha2
 	ocm.software/open-component-model/bindings/go/oci v0.0.0
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
@@ -63,7 +63,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.3 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect

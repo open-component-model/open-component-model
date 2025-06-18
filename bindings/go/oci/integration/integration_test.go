@@ -389,7 +389,6 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, 
 		},
 		Type:         "some-arbitrary-type-packed-in-image",
 		Access:       access,
-		Size:         int64(len(data)),
 		CreationTime: descriptor.CreationTime(time.Now()),
 	}
 
@@ -465,7 +464,6 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 		},
 		Type:         "some-arbitrary-type-packed-in-image",
 		Access:       access,
-		Size:         int64(len(data)),
 		CreationTime: descriptor.CreationTime(time.Now()),
 	}
 
@@ -500,7 +498,7 @@ func uploadDownloadBarebonesComponentVersion(t *testing.T, repo oci.ComponentVer
 	desc := descriptor.Descriptor{}
 	desc.Component.Name = name
 	desc.Component.Version = version
-	desc.Component.Labels = append(desc.Component.Labels, descriptor.Label{Name: "foo", Value: "bar"})
+	desc.Component.Labels = append(desc.Component.Labels, descriptor.Label{Name: "foo", Value: []byte(`"bar"`)})
 	desc.Component.Provider.Name = "ocm.software/open-component-model/bindings/go/oci/integration/test"
 
 	r.NoError(repo.AddComponentVersion(ctx, &desc))
