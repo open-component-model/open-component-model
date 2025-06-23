@@ -14,10 +14,10 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.1
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/ctf v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250526130658-2a15446778e5
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250611123713-bf94006044ed
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha1
-	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250528115839-6767834fc6fe
-	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250603203851-b484405ddc31
+	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250611113202-e434a7b3e969
+	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250623110822-9dca0bcd1765
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.4.0
@@ -41,7 +41,8 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
-	golang.org/x/text v0.25.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250611123713-bf94006044ed // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.1 // indirect
 )
