@@ -20,12 +20,14 @@ const (
 )
 
 // ComponentConstructor defines a constructor for creating component versions.
+// +k8s:deepcopy-gen=true
 type ComponentConstructor struct {
 	Components []Component `json:"-"`
 }
 
 // Component defines a named and versioned component containing dependencies such as sources, resources and
 // references pointing to further component versions.
+// +k8s:deepcopy-gen=true
 type Component struct {
 	ComponentMeta `json:",inline"`
 	Provider      Provider    `json:"-"`
@@ -34,6 +36,7 @@ type Component struct {
 	References    []Reference `json:"-"`
 }
 
+// +k8s:deepcopy-gen=true
 type Provider struct {
 	Name   string  `json:"-"`
 	Labels []Label `json:"-"`
@@ -55,6 +58,7 @@ const (
 // relevant for a deployment mechanism.
 // For example, installation procedures or meta-model descriptions controlling orchestration and/or deployment mechanisms.
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#resources
+// +k8s:deepcopy-gen=true
 type Resource struct {
 	ElementMeta `json:",inline"`
 	// SourceRefs defines a list of source names.
@@ -74,6 +78,7 @@ type Resource struct {
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
 // Source elements do not have specific additional formal attributes.
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#sources
+// +k8s:deepcopy-gen=true
 type Source struct {
 	ElementMeta `json:",inline"`
 	Type        string `json:"-"`
@@ -84,6 +89,7 @@ type Source struct {
 
 // AccessOrInput describes the access or input information of a resource or source.
 // In a component constructor, there is only one access or input information.
+// +k8s:deepcopy-gen=true
 type AccessOrInput struct {
 	Access runtime.Typed `json:"-"`
 	Input  runtime.Typed `json:"-"`
@@ -109,6 +115,7 @@ func (a *AccessOrInput) Validate() error {
 
 // Reference describes the reference to another component in the registry.
 // A component version may refer to other component versions by adding a reference to the component version.
+// +k8s:deepcopy-gen=true
 type Reference struct {
 	ElementMeta `json:",inline"`
 	// Component describes the remote name of the referenced object.
@@ -116,6 +123,7 @@ type Reference struct {
 }
 
 // SourceRef defines a reference to a source.
+// +k8s:deepcopy-gen=true
 type SourceRef struct {
 	// IdentitySelector provides selection means for sources.
 	IdentitySelector map[string]string `json:"-"`
@@ -124,6 +132,7 @@ type SourceRef struct {
 }
 
 // Meta defines the metadata of the component descriptor.
+// +k8s:deepcopy-gen=true
 type Meta struct {
 	// Version is the schema version of the component descriptor.
 	Version string `json:"-"`
@@ -131,6 +140,7 @@ type Meta struct {
 
 // ObjectMeta defines an object that is uniquely identified by its name and version.
 // Additionally the object can be defined by an optional set of labels.
+// +k8s:deepcopy-gen=true
 type ObjectMeta struct {
 	// Name is the context unique name of the object.
 	Name string `json:"-"`
@@ -144,6 +154,7 @@ type ObjectMeta struct {
 // ElementMeta defines an object with name and version containing labels.
 // It is an implementation of the Element Identity as per
 // https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#element-identity
+// +k8s:deepcopy-gen=true
 type ElementMeta struct {
 	ObjectMeta `json:",inline"`
 	// ExtraIdentity is the identity of an object.
@@ -165,6 +176,7 @@ func (m *ElementMeta) ToIdentity() runtime.Identity {
 }
 
 // ComponentMeta defines the metadata of a component.
+// +k8s:deepcopy-gen=true
 type ComponentMeta struct {
 	ObjectMeta `json:",inline"`
 	// CreationTime is the creation time of the component version
@@ -186,13 +198,13 @@ func (r *ComponentMeta) ToIdentity() runtime.Identity {
 // +k8s:deepcopy-gen=true
 type Label struct {
 	// Name is the unique name of the label.
-	Name string `json:"name"`
+	Name string `json:"-"`
 	// Value is the json/yaml data of the label
-	Value json.RawMessage `json:"value"`
+	Value json.RawMessage `json:"-"`
 	// Signing describes whether the label should be included into the signature
-	Signing bool `json:"signing,omitempty"`
+	Signing bool `json:"-"`
 	// Version is the optional specification version of the attribute value
-	Version string `json:"version,omitempty"`
+	Version string `json:"-"`
 }
 
 // String is a custom string representation of the Label that takes into account the raw string value of the label

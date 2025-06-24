@@ -31,16 +31,16 @@ func Register(registry *componentversionrepository.RepositoryRegistry) error {
 	return componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		scheme,
 		registry,
-		&Plugin{scheme: scheme, manifests: inmemory.New(), layers: inmemory.New()},
+		&Plugin{scheme: scheme, manifestCache: inmemory.New(), layerCache: inmemory.New()},
 		&ctfv1.Repository{},
 	)
 }
 
 type Plugin struct {
 	contracts.EmptyBasePlugin
-	scheme    *runtime.Scheme
-	manifests cache.OCIDescriptorCache
-	layers    cache.OCIDescriptorCache
+	scheme        *runtime.Scheme
+	manifestCache cache.OCIDescriptorCache
+	layerCache    cache.OCIDescriptorCache
 }
 
 func (p *Plugin) GetIdentity(_ context.Context, _ *contractsv1.GetIdentityRequest[*ctfv1.Repository]) (*contractsv1.GetIdentityResponse, error) {
@@ -133,8 +133,8 @@ func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionR
 	repo, err := oci.NewRepository(
 		ocictf.WithCTF(ocictf.NewFromCTF(archive)),
 		oci.WithCreator(Creator),
-		oci.WithManifestCache(p.manifests),
-		oci.WithLayerCache(p.layers),
+		oci.WithManifestCache(p.manifestCache),
+		oci.WithLayerCache(p.layerCache),
 	)
 	return repo, err
 }

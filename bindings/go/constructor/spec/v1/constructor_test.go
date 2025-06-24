@@ -203,11 +203,11 @@ func TestObjectMeta_String(t *testing.T) {
 				Name:    "test-object",
 				Version: "1.0.0",
 				Labels: []v1.Label{
-					{Name: "type", Value: "library"},
-					{Name: "priority", Value: "high"},
+					{Name: "type", Value: []byte("library")},
+					{Name: "priority", Value: []byte("high")},
 				},
 			},
-			expected: "test-object:1.0.0+labels([{type library false} {priority high false}])",
+			expected: "test-object:1.0.0+labels([label{type=library} label{priority=high}])",
 		},
 	}
 
@@ -225,7 +225,7 @@ func TestElementMeta_String(t *testing.T) {
 			Name:    "test-element",
 			Version: "2.0.0",
 			Labels: []v1.Label{
-				{Name: "type", Value: "backend"},
+				{Name: "type", Value: []byte("backend")},
 			},
 		},
 		ExtraIdentity: runtime.Identity{
@@ -236,7 +236,7 @@ func TestElementMeta_String(t *testing.T) {
 
 	result := elemMeta.String()
 	assert.Contains(t, result, "test-element:2.0.0")
-	assert.Contains(t, result, "+labels([{type backend false}])")
+	assert.Contains(t, result, "+labels([label{type=backend}])")
 	assert.Contains(t, result, "+extraIdentity(")
 	assert.Contains(t, result, "namespace=system")
 	assert.Contains(t, result, "platform=linux")
@@ -401,7 +401,7 @@ func TestProvider_Struct(t *testing.T) {
 	provider := v1.Provider{
 		Name: "test-provider",
 		Labels: []v1.Label{
-			{Name: "type", Value: "infrastructure"},
+			{Name: "type", Value: []byte(`"infrastructure"`)},
 		},
 	}
 
@@ -414,7 +414,7 @@ func TestProvider_Struct(t *testing.T) {
 func TestLabel_Struct(t *testing.T) {
 	label := v1.Label{
 		Name:    "environment",
-		Value:   "production",
+		Value:   []byte(`"production"`),
 		Signing: true,
 	}
 

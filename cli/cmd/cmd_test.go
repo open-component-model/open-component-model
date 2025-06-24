@@ -54,6 +54,9 @@ func createTestDescriptor(name, version string) *descriptor.Descriptor {
 					Version: version,
 				},
 			},
+			Provider: descriptor.Provider{
+				Name: "ocm.software",
+			},
 		},
 	}
 }
@@ -84,9 +87,9 @@ func Test_Get_Component_Version_Formats(t *testing.T) {
 			name: "Default Options (Table)",
 			args: []string{"get", "cv", path},
 			expectedOutput: `
- COMPONENT                   │ VERSION │ PROVIDER 
-─────────────────────────────┼─────────┼──────────
- ocm.software/test-component │ 0.0.1   │
+COMPONENT                   │ VERSION │ PROVIDER     
+─────────────────────────────┼─────────┼──────────────
+ ocm.software/test-component │ 0.0.1   │ ocm.software
 `,
 			expectedError: false,
 		},
@@ -97,7 +100,7 @@ func Test_Get_Component_Version_Formats(t *testing.T) {
 component:
   componentReferences: null
   name: ocm.software/test-component
-  provider: ""
+  provider: ocm.software
   repositoryContexts: null
   resources: null
   sources: null
@@ -148,7 +151,7 @@ meta:
 					"component": map[string]any{
 						"componentReferences": nil,
 						"name":                "ocm.software/test-component",
-						"provider":            "",
+						"provider":            "ocm.software",
 						"repositoryContexts":  nil,
 						"resources":           nil,
 						"sources":             nil,
@@ -194,10 +197,10 @@ func Test_List_Component_Version_Variations(t *testing.T) {
 			name: "Default Options (Table) - all versions",
 			args: []string{"get", "cv", path},
 			expectedOutput: `
- COMPONENT                   │ VERSION │ PROVIDER 
-─────────────────────────────┼─────────┼──────────
- ocm.software/test-component │ 0.0.2   │          
-                             │ 0.0.1   │          
+COMPONENT                   │ VERSION │ PROVIDER     
+─────────────────────────────┼─────────┼──────────────
+ ocm.software/test-component │ 0.0.2   │ ocm.software 
+                             │ 0.0.1   │     
 `,
 			expectedError: false,
 		},
@@ -205,9 +208,9 @@ func Test_List_Component_Version_Variations(t *testing.T) {
 			name: "Latest version only",
 			args: []string{"get", "cv", path, "--latest"},
 			expectedOutput: `
- COMPONENT                   │ VERSION │ PROVIDER 
-─────────────────────────────┼─────────┼──────────
- ocm.software/test-component │ 0.0.2   │          
+COMPONENT                   │ VERSION │ PROVIDER     
+─────────────────────────────┼─────────┼──────────────
+ ocm.software/test-component │ 0.0.2   │ ocm.software
 `,
 			expectedError: false,
 		},
@@ -215,9 +218,9 @@ func Test_List_Component_Version_Variations(t *testing.T) {
 			name: "Semver constraint",
 			args: []string{"get", "cv", path, "--semver-constraint", "< 0.0.2"},
 			expectedOutput: `
- COMPONENT                   │ VERSION │ PROVIDER 
-─────────────────────────────┼─────────┼──────────
- ocm.software/test-component │ 0.0.1   │          
+COMPONENT                   │ VERSION │ PROVIDER     
+─────────────────────────────┼─────────┼──────────────
+ ocm.software/test-component │ 0.0.1   │ ocm.software
 `,
 			expectedError: false,
 		},

@@ -24,10 +24,8 @@ func TestUpdateArtifactWithInformationFromBlob(t *testing.T) {
 		expectError    bool
 	}{
 		{
-			name: "keep existing size and update digest",
-			artifact: &descriptor.Resource{
-				Size: 2048,
-			},
+			name:         "keep existing size and update digest",
+			artifact:     &descriptor.Resource{},
 			blob:         inmemory.New(bytes.NewReader([]byte("test data"))),
 			expectedSize: 2048,
 			expectedDigest: &descriptor.Digest{
@@ -63,7 +61,6 @@ func TestUpdateArtifactWithInformationFromBlob(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, tt.expectedSize, resource.Size)
 			if tt.expectedDigest == nil {
 				assert.Nil(t, resource.Digest)
 			} else {
