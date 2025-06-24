@@ -1,6 +1,7 @@
 package annotations
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,25 +52,47 @@ func TestParseComponentVersionAnnotation(t *testing.T) {
 		expectedError string
 	}{
 		{
-			name:         "valid annotation",
+			name:         "valid annotation (prefixed)",
 			annotation:   "component-descriptors/test-component:1.0.0",
 			expectedComp: "test-component",
 			expectedVer:  "1.0.0",
 		},
 		{
+			name:         "valid annotation",
+			annotation:   "test-component:1.0.0",
+			expectedComp: "test-component",
+			expectedVer:  "1.0.0",
+		},
+		{
+			name:         "valid annotation (name without prefix but with slash)",
+			annotation:   "ocm.software/abc/def/test-component:1.0.0",
+			expectedComp: "ocm.software/abc/def/test-component",
+			expectedVer:  "1.0.0",
+		},
+		{
+			name:         "valid annotation (name without prefix but with slash and prefix)",
+			annotation:   "component-descriptors/ocm.software/abc/def/test-component:1.0.0",
+			expectedComp: "ocm.software/abc/def/test-component",
+			expectedVer:  "1.0.0",
+		},
+		{
 			name:          "invalid format - missing colon",
 			annotation:    "component-descriptors/test-component",
-			expectedError: "\"component-descriptors/test-component\" is not considered a valid \"software.ocm.componentversion\" annotation",
+			expectedError: fmt.Sprintf("%q is not considered a valid %q annotation, not exactly 2 parts: [%[1]q]", "test-component", OCMComponentVersion),
 		},
 		{
 			name:          "invalid format - empty version",
 			annotation:    "component-descriptors/test-component:",
-			expectedError: "version parsed from \"component-descriptors/test-component:\" in \"software.ocm.componentversion\" annotation is empty but should not be",
+			expectedError: "version parsed from \"test-component:\" in \"software.ocm.componentversion\" annotation is empty but should not be",
 		},
 		{
-			name:          "invalid format - wrong prefix",
-			annotation:    "wrong-prefix/test-component:1.0.0",
-			expectedError: "\"wrong-prefix/test-component:1.0.0\" is not considered a valid \"software.ocm.componentversion\" annotation because of a bad prefix, expected \"component-descriptors/\"",
+			name:       "invalid format - multiple separators",
+			annotation: "wrong/test-component:1.0.0:1.0.0",
+			expectedError: fmt.Sprintf("%q is not considered a valid %q annotation, not exactly 2 parts: %q",
+				"wrong/test-component:1.0.0:1.0.0",
+				OCMComponentVersion,
+				[]string{"wrong/test-component", "1.0.0", "1.0.0"},
+			),
 		},
 	}
 
