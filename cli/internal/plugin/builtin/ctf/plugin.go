@@ -42,7 +42,7 @@ type Plugin struct {
 	memory cache.OCIDescriptorCache
 }
 
-func (p *Plugin) GetIdentity(_ context.Context, _ contractsv1.GetIdentityRequest[*ctfv1.Repository]) (runtime.Identity, error) {
+func (p *Plugin) GetIdentity(_ context.Context, _ *contractsv1.GetIdentityRequest[*ctfv1.Repository]) (*contractsv1.GetIdentityResponse, error) {
 	return nil, fmt.Errorf("not implemented because ctfs do not need consumer identity based credentials")
 }
 
