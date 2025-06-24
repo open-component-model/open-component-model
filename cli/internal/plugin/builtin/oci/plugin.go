@@ -139,7 +139,11 @@ func (p *Plugin) createRepository(spec *ociv1.Repository, credentials map[string
 	}
 	urlString := url.Host + url.Path
 
-	urlResolver := urlresolver.New(urlString)
+	urlResolver, err := urlresolver.New(urlresolver.WithBaseURL(urlString))
+	if err != nil {
+		return nil, fmt.Errorf("error creating URL resolver: %w", err)
+	}
+
 	urlResolver.SetClient(&auth.Client{
 		Client: retry.DefaultClient,
 		Header: map[string][]string{
@@ -151,7 +155,7 @@ func (p *Plugin) createRepository(spec *ociv1.Repository, credentials map[string
 		oci.WithResolver(urlResolver),
 		oci.WithScheme(p.scheme),
 		oci.WithCreator(Creator),
-		oci.WithOCIDescriptorCache(p.memory),
+		oci.WithManifestCache(p.memory),
 	)
 	return repo, err
 }
