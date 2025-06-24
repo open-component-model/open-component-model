@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,6 +23,7 @@ import (
 
 // mockTargetRepository implements TargetRepository for testing
 type mockTargetRepository struct {
+	mu                  sync.Mutex
 	components          map[string]*descriptor.Descriptor
 	addedLocalResources []*descriptor.Resource
 	addedSources        []*descriptor.Source
@@ -35,6 +37,8 @@ func newMockTargetRepository() *mockTargetRepository {
 }
 
 func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	key := name + ":" + version
 	if desc, exists := m.components[key]; exists {
 		return desc, nil
@@ -47,16 +51,22 @@ func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, componen
 }
 
 func (m *mockTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.addedLocalResources = append(m.addedLocalResources, resource)
 	return resource, nil
 }
 
 func (m *mockTargetRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, data blob.ReadOnlyBlob) (*descriptor.Source, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.addedSources = append(m.addedSources, source)
 	return source, nil
 }
 
 func (m *mockTargetRepository) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.addedVersions = append(m.addedVersions, desc)
 	key := desc.Component.Name + ":" + desc.Component.Version
 	m.components[key] = desc
@@ -70,21 +80,6 @@ type mockTargetRepositoryProvider struct {
 
 func (m *mockTargetRepositoryProvider) GetTargetRepository(ctx context.Context, component *constructorruntime.Component) (TargetRepository, error) {
 	return m.repo, nil
-}
-
-// mockCredentialProviderBasic implements CredentialProvider for testing
-type mockCredentialProviderBasic struct {
-	called      map[string]int
-	credentials map[string]map[string]string
-	fail        bool
-}
-
-func (m *mockCredentialProviderBasic) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
-	m.called[identity.GetType().String()]++
-	if m.fail {
-		return nil, fmt.Errorf("simulated credential resolution failure")
-	}
-	return m.credentials[identity.GetType().String()], nil
 }
 
 // mockBlob implements blob.ReadOnlyBlob for testing
