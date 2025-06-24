@@ -69,7 +69,7 @@ func TestConvertToDescriptorResource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -86,7 +86,7 @@ func TestConvertToDescriptorResource(t *testing.T) {
 						Labels: []descriptor.Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -177,7 +177,7 @@ func TestConvertToDescriptorSource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -193,7 +193,7 @@ func TestConvertToDescriptorSource(t *testing.T) {
 						Labels: []descriptor.Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -439,14 +439,14 @@ func TestConvertFromLabels(t *testing.T) {
 			input: []Label{
 				{
 					Name:    "test-label",
-					Value:   "test-value",
+					Value:   []byte("test-value"),
 					Signing: true,
 				},
 			},
 			expected: []descriptor.Label{
 				{
 					Name:    "test-label",
-					Value:   "test-value",
+					Value:   []byte("test-value"),
 					Signing: true,
 				},
 			},
@@ -456,24 +456,24 @@ func TestConvertFromLabels(t *testing.T) {
 			input: []Label{
 				{
 					Name:    "label1",
-					Value:   "value1",
+					Value:   []byte("value1"),
 					Signing: true,
 				},
 				{
 					Name:    "label2",
-					Value:   "value2",
+					Value:   []byte("value2"),
 					Signing: false,
 				},
 			},
 			expected: []descriptor.Label{
 				{
 					Name:    "label1",
-					Value:   "value1",
+					Value:   []byte("value1"),
 					Signing: true,
 				},
 				{
 					Name:    "label2",
-					Value:   "value2",
+					Value:   []byte("value2"),
 					Signing: false,
 				},
 			},
@@ -514,7 +514,7 @@ func TestConvertFromSourceRefs(t *testing.T) {
 					Labels: []Label{
 						{
 							Name:    "test-label",
-							Value:   "test-value",
+							Value:   []byte("test-value"),
 							Signing: true,
 						},
 					},
@@ -528,7 +528,7 @@ func TestConvertFromSourceRefs(t *testing.T) {
 					Labels: []descriptor.Label{
 						{
 							Name:    "test-label",
-							Value:   "test-value",
+							Value:   []byte("test-value"),
 							Signing: true,
 						},
 					},
@@ -587,7 +587,7 @@ func TestConvertToDescriptorReference(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -603,7 +603,7 @@ func TestConvertToDescriptorReference(t *testing.T) {
 						Labels: []descriptor.Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -718,7 +718,7 @@ func TestConvertFromDescriptorSource(t *testing.T) {
 						Labels: []descriptor.Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -734,7 +734,7 @@ func TestConvertFromDescriptorSource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -809,7 +809,7 @@ func TestConvertFromDescriptorReference(t *testing.T) {
 						Labels: []descriptor.Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -825,7 +825,7 @@ func TestConvertFromDescriptorReference(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "test-label",
-								Value:   "test-value",
+								Value:   []byte("test-value"),
 								Signing: true,
 							},
 						},
@@ -1117,7 +1117,7 @@ func TestConvertFromDescriptorSourceRefs(t *testing.T) {
 					Labels: []descriptor.Label{
 						{
 							Name:    "test-label",
-							Value:   "test-value",
+							Value:   []byte("test-value"),
 							Signing: true,
 						},
 					},
@@ -1131,7 +1131,7 @@ func TestConvertFromDescriptorSourceRefs(t *testing.T) {
 					Labels: []Label{
 						{
 							Name:    "test-label",
-							Value:   "test-value",
+							Value:   []byte("test-value"),
 							Signing: true,
 						},
 					},
@@ -1148,7 +1148,7 @@ func TestConvertFromDescriptorSourceRefs(t *testing.T) {
 					Labels: []descriptor.Label{
 						{
 							Name:    "test-label-1",
-							Value:   "test-value-1",
+							Value:   []byte("test-value-1"),
 							Signing: true,
 						},
 					},
@@ -1160,7 +1160,7 @@ func TestConvertFromDescriptorSourceRefs(t *testing.T) {
 					Labels: []descriptor.Label{
 						{
 							Name:    "test-label-2",
-							Value:   "test-value-2",
+							Value:   []byte("test-value-2"),
 							Signing: false,
 						},
 					},
@@ -1174,7 +1174,7 @@ func TestConvertFromDescriptorSourceRefs(t *testing.T) {
 					Labels: []Label{
 						{
 							Name:    "test-label-1",
-							Value:   "test-value-1",
+							Value:   []byte("test-value-1"),
 							Signing: true,
 						},
 					},
@@ -1186,7 +1186,7 @@ func TestConvertFromDescriptorSourceRefs(t *testing.T) {
 					Labels: []Label{
 						{
 							Name:    "test-label-2",
-							Value:   "test-value-2",
+							Value:   []byte("test-value-2"),
 							Signing: false,
 						},
 					},
