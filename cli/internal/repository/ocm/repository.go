@@ -17,6 +17,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
+	resolverv1 "ocm.software/open-component-model/cli/internal/reference/resolver/config/v1"
 )
 
 // ComponentRepository is a wrapper around the [v1.ReadWriteOCMRepositoryPluginContract] that provides
@@ -31,8 +32,10 @@ type ComponentRepository struct {
 
 // New creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func New(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
-	ref, err := compref.Parse(componentReference)
+func New(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string, resolverCfg *resolverv1.Config) (*ComponentRepository, error) {
+	ref, err := compref.Parse(componentReference, &compref.ParseOptions{
+		Aliases: resolverCfg.Aliases,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
