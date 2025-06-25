@@ -263,6 +263,10 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 
 	switch {
 	case resource.HasInput():
+		if resource.CopyPolicy != "" && resource.CopyPolicy != constructor.CopyPolicyByValue {
+			return nil, fmt.Errorf("invalid copy policy %q for resource %q, "+
+				"due to an input specification an empty policy or %q is expected", resource.CopyPolicy, resource.ToIdentity(), constructor.CopyPolicyByValue)
+		}
 		logger.Debug("processing resource with input method")
 		res, err = c.processResourceWithInput(ctx, targetRepo, resource, component, version)
 	case resource.HasAccess():
@@ -274,7 +278,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 			logger.Debug("defaulting resource version to component version as no resource version was set")
 			resource.Version = version
 		}
-		if byValue := c.opts.ProcessResourceByValue != nil && c.opts.ProcessResourceByValue(resource); byValue {
+		if byValue := resource.CopyPolicy == constructor.CopyPolicyByValue; byValue {
 			logger.Debug("processing resource by value")
 			res, err = c.processResourceByValue(ctx, targetRepo, resource, component, version)
 		} else {

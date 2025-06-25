@@ -181,9 +181,6 @@ components:
 		SourceInputMethodProvider:   sourceProvider,
 		ResourceInputMethodProvider: resourceProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
-			return true
-		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 

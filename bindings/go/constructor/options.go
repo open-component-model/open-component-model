@@ -40,11 +40,6 @@ type Options struct {
 	// The CredentialProvider is OPTIONAL, if not provided, the constructor library will not resolve credentials.
 	CredentialProvider
 
-	// While constructing a component version, the constructor library will use the given function
-	// to determine if a resource should be processed by value.
-	// The ProcessResourceByValue is OPTIONAL, if not provided, the constructor library will not process resources by value.
-	ProcessResourceByValue func(resource *constructor.Resource) bool
-
 	// While constructing a component version, the constructor library will use the given concurrency limit
 	// to limit the number of concurrent operations.
 	// The ConcurrencyLimit is OPTIONAL, if not provided, the constructor library will use the number of CPU cores.
