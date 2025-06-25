@@ -130,7 +130,7 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 	opts := lister.Options{
 		SortPolicy: lister.SortPolicyLooseSemverDescending,
 		TagListerOptions: lister.TagListerOptions{
-			VersionResolver: complister.ReferenceTagVersionResolver(store),
+			VersionResolver: complister.ReferenceTagVersionResolver(component, store),
 		},
 		ReferrerListerOptions: lister.ReferrerListerOptions{
 			ArtifactType:    descriptor2.MediaTypeComponentDescriptorV2,
