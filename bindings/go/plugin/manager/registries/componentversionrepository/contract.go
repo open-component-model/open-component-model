@@ -55,6 +55,8 @@ type ComponentVersionRepository interface {
 	LocalSourceRepository
 }
 
+// LocalResourceRepository defines the interface for managing local resources within a component version repository.
+// Local resources are artifacts that are stored directly in the repository rather than referenced externally.
 type LocalResourceRepository interface {
 	// AddLocalResource adds a local [descriptor.Resource] to the repository.
 	// The resource must be referenced in the [descriptor.Descriptor].
@@ -68,6 +70,8 @@ type LocalResourceRepository interface {
 	GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error)
 }
 
+// LocalSourceRepository defines the interface for managing local sources within a component version repository.
+// Local sources are source code artifacts that are stored directly in the repository rather than referenced externally.
 type LocalSourceRepository interface {
 	// AddLocalSource adds a local [descriptor.Source] to the repository.
 	// The source must be referenced in the [descriptor.Descriptor].

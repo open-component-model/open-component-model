@@ -133,6 +133,9 @@ loop:
 	return repoPlugin, nil
 }
 
+// GetPlugin retrieves a plugin for the given specification type.
+// It first checks for internal plugins registered via RegisterInternalComponentVersionRepositoryPlugin,
+// then falls back to external plugins if no internal plugin is found.
 func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (ComponentVersionRepositoryProvider, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

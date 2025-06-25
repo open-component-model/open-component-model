@@ -1,26 +1,32 @@
-// Package componentversionrepository provides an implementation for the OCMComponentVersionRepository contract.
-// It defines handlers, implementations, and a registry to interact with a repository.
-// The registry supports registering outside plugins backed by a binary implementation and internal plugins using
-// RegisterInternalComponentVersionRepositoryPlugin function. The usage of that function would look something like this:
+// Package componentversionrepository implements a plugin-based system for managing OCM component version repositories.
+// It provides a registry that supports both internal (Go-based) and external (binary) plugins through a unified interface.
+//
+// The system implements CRUD operations for component versions, local resources, and sources with credential management
+// and type-safe plugin registration. External plugins communicate via UDS or TCP with JSON schema validation if defined.
+//
+// Register internal plugins using RegisterInternalComponentVersionRepositoryPlugin:
 //
 //	scheme := runtime.NewScheme()
 //	repository.MustAddToScheme(scheme)
 //	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 //		scheme,
+//		registry,
 //		&Plugin{scheme: scheme, memory: inmemory.New()},
 //		&v1.OCIRepository{},
 //	); err != nil {
 //		panic(err)
 //	}
 //
-// The package includes functionality for:
-//   - Adding and retrieving component versions
-//   - Handling local resources related to component versions
-//   - Plugin-based registry for managing repository plugins
-//   - Type-safe plugin wrappers for interacting with repository resources
+// Functionality:
+//   - Component version lifecycle management (add, get, list)
+//   - Local resource and source storage with blob handling
+//   - Plugin discovery and credential consumer identity resolution
+//   - External plugin communication with automatic lifecycle management
+//   - Type conversion between internal runtime types and plugin contract types
 //
-// The package is divided into three key sections:
-// - **Handlers**: Functions that handle HTTP requests related to component version and resource operations.
-// - **Implementations**: Core logic for interacting with the repository and executing component version and resource operations.
-// - **Registry**: Mechanisms for managing plugins and their registrations within the repository system.
+// Architecture components:
+//   - Registry: Plugin registration, lifecycle management, and thread-safe access
+//   - Handlers: HTTP request/response processing with authentication and validation
+//   - Converters: Data transformation between internal and external plugin formats
+//   - Contracts: Type-safe interfaces defining plugin capabilities
 package componentversionrepository

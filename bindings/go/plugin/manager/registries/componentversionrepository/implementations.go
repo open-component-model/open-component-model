@@ -33,9 +33,13 @@ const (
 	DownloadComponentVersion = "/component-version/download"
 	// ListComponentVersions defines the endpoint to list component versions.
 	ListComponentVersions = "/component-versions"
-	Identity              = "/identity"
+	// Identity defines the endpoint to retrieve credential consumer identity.
+	Identity = "/identity"
 )
 
+// RepositoryPlugin implements the ReadWriteOCMRepositoryPluginContract for external plugin communication.
+// It handles REST-based communication with external repository plugins, including request validation,
+// credential management, and data format conversion.
 type RepositoryPlugin struct {
 	ID string
 
@@ -277,6 +281,8 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 	return &identity, nil
 }
 
+// validateEndpoint uses the provided JSON schema and the runtime.Typed and, using the JSON schema, validates that the
+// underlying runtime.Type conforms to the provided schema.
 func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
 	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
 	if err != nil {

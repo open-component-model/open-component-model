@@ -8,6 +8,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// TypeToUntypedPlugin is a wrapper that converts typed plugin contracts to untyped runtime.Typed contracts.
+// It allows typed plugins to be used with the untyped plugin registry system by performing type assertions
+// and delegating calls to the underlying typed plugin implementation.
 type TypeToUntypedPlugin[T runtime.Typed] struct {
 	base v1.ReadWriteOCMRepositoryPluginContract[T]
 }
