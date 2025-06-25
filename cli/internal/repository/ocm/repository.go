@@ -14,7 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
@@ -23,10 +23,11 @@ import (
 // useful CLI relevant helper functions that make high level operations easier.
 // It manages component references, repository specifications, and credentials for OCM operations.
 type ComponentRepository struct {
-	ref         *compref.Ref                                           // Component reference containing repository and component information
-	spec        runtime.Typed                                          // Repository specification
-	base        v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed] // Base repository plugin contract
-	credentials map[string]string                                      // Credentials for repository access
+	ref  *compref.Ref                                          // Component reference containing repository and component information
+	spec runtime.Typed                                         // Repository specification
+	base componentversionrepository.ComponentVersionRepository // Base repository plugin contract
+
+	credentials map[string]string // Credentials for repository access
 }
 
 // New creates a new ComponentRepository instance for the given component reference.
@@ -42,17 +43,24 @@ func New(ctx context.Context, manager *manager.PluginManager, graph *credentials
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", repositorySpec, err)
 	}
+
 	var creds map[string]string
-	identity, err := plugin.GetIdentity(ctx, &v1.GetIdentityRequest[runtime.Typed]{Typ: repositorySpec})
+	identity, err := plugin.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repositorySpec)
 	if err == nil {
-		if creds, err = graph.Resolve(ctx, identity.Identity); err != nil {
+		if creds, err = graph.Resolve(ctx, identity); err != nil {
 			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", repositorySpec, err)
 		}
 	}
+
+	provider, err := plugin.GetComponentVersionRepository(ctx, repositorySpec, creds)
+	if err != nil {
+		return nil, fmt.Errorf("getting repository %q failed: %w", repositorySpec, err)
+	}
+
 	return &ComponentRepository{
 		ref:         ref,
 		spec:        repositorySpec,
-		base:        plugin,
+		base:        provider,
 		credentials: creds,
 	}, nil
 }
@@ -83,11 +91,7 @@ func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts 
 	eg.SetLimit(opts.ConcurrencyLimit)
 	for i, version := range versions {
 		eg.Go(func() error {
-			desc, err := repo.base.GetComponentVersion(ctx, v1.GetComponentVersionRequest[runtime.Typed]{
-				Repository: repo.spec,
-				Name:       repo.ref.Component,
-				Version:    version,
-			}, repo.credentials)
+			desc, err := repo.base.GetComponentVersion(ctx, repo.ref.Component, version)
 			if err != nil {
 				return fmt.Errorf("getting component version failed: %w", err)
 			}
@@ -113,17 +117,14 @@ type VersionOptions struct {
 	LatestOnly       bool   // If true, only return the latest version
 }
 
-// Versions retrieves available versions for the component based on the provided options.
+// Versions retrieve available versions for the component based on the provided options.
 // It supports filtering by semantic version constraints and retrieving only the latest version.
 func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptions) ([]string, error) {
 	if repo.ref.Version != "" {
 		return []string{repo.ref.Version}, nil
 	}
 
-	versions, err := repo.base.ListComponentVersions(ctx, v1.ListComponentVersionsRequest[runtime.Typed]{
-		Repository: repo.spec,
-		Name:       repo.ref.Component,
-	}, repo.credentials)
+	versions, err := repo.base.ListComponentVersions(ctx, repo.ref.Component)
 	if err != nil {
 		return nil, fmt.Errorf("listing component versions failed: %w", err)
 	}
