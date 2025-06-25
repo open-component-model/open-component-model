@@ -28,7 +28,7 @@ func TestConvertToRuntimeResource(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []v1.Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -41,7 +41,7 @@ func TestConvertToRuntimeResource(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -68,7 +68,7 @@ func TestConvertToRuntimeResource(t *testing.T) {
 						Labels: []v1.Label{
 							{
 								Name:    "source-label",
-								Value:   "source-value",
+								Value:   []byte("source-value"),
 								Signing: true,
 							},
 						},
@@ -92,7 +92,7 @@ func TestConvertToRuntimeResource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "source-label",
-								Value:   "source-value",
+								Value:   []byte("source-value"),
 								Signing: true,
 							},
 						},
@@ -164,7 +164,7 @@ func TestConvertToRuntimeSource(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []v1.Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -176,7 +176,7 @@ func TestConvertToRuntimeSource(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -246,7 +246,7 @@ func TestConvertToRuntimeReference(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []v1.Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -258,7 +258,7 @@ func TestConvertToRuntimeReference(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -294,7 +294,7 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []v1.Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 					CreationTime: "2024-01-01T00:00:00Z",
@@ -302,7 +302,7 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 				Provider: v1.Provider{
 					Name: "test-provider",
 					Labels: []v1.Label{
-						{Name: "test", Value: "value"},
+						{Name: "test", Value: []byte("value")},
 					},
 				},
 			},
@@ -312,7 +312,7 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 					CreationTime: "2024-01-01T00:00:00Z",
@@ -320,7 +320,7 @@ func TestConvertToRuntimeComponent(t *testing.T) {
 				Provider: Provider{
 					Name: "test-provider",
 					Labels: []Label{
-						{Name: "test", Value: "value"},
+						{Name: "test", Value: []byte("value")},
 					},
 				},
 			},
@@ -474,7 +474,7 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 							Labels: []v1.Label{
 								{
 									Name:    "provider-label",
-									Value:   "provider-value",
+									Value:   []byte("provider-value"),
 									Signing: true,
 								},
 							},
@@ -496,7 +496,7 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 							Labels: []Label{
 								{
 									Name:    "provider-label",
-									Value:   "provider-value",
+									Value:   []byte("provider-value"),
 									Signing: true,
 								},
 							},
@@ -572,7 +572,7 @@ func TestConvertToV1Component(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 					CreationTime: "2024-01-01T00:00:00Z",
@@ -580,7 +580,7 @@ func TestConvertToV1Component(t *testing.T) {
 				Provider: Provider{
 					Name: "test-provider",
 					Labels: []Label{
-						{Name: "test", Value: "value"},
+						{Name: "test", Value: []byte("value")},
 					},
 				},
 			},
@@ -590,7 +590,7 @@ func TestConvertToV1Component(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []v1.Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 					CreationTime: "2024-01-01T00:00:00Z",
@@ -598,7 +598,7 @@ func TestConvertToV1Component(t *testing.T) {
 				Provider: v1.Provider{
 					Name: "test-provider",
 					Labels: []v1.Label{
-						{Name: "test", Value: "value"},
+						{Name: "test", Value: []byte("value")},
 					},
 				},
 			},
@@ -719,7 +719,7 @@ func TestConvertToV1Component(t *testing.T) {
 								Name:    "test-ref",
 								Version: "1.0.0",
 								Labels: []Label{
-									{Name: "ref-label", Value: "ref-value", Signing: true},
+									{Name: "ref-label", Value: []byte("ref-value"), Signing: true},
 								},
 							},
 							ExtraIdentity: rt.Identity{
@@ -747,7 +747,7 @@ func TestConvertToV1Component(t *testing.T) {
 								Name:    "test-ref",
 								Version: "1.0.0",
 								Labels: []v1.Label{
-									{Name: "ref-label", Value: "ref-value", Signing: true},
+									{Name: "ref-label", Value: []byte("ref-value"), Signing: true},
 								},
 							},
 							ExtraIdentity: rt.Identity{
@@ -986,7 +986,7 @@ func TestConvertToV1Reference(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -998,7 +998,7 @@ func TestConvertToV1Reference(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []v1.Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -1070,7 +1070,7 @@ func TestConvertToV1Resource(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -1083,7 +1083,7 @@ func TestConvertToV1Resource(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []v1.Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -1111,7 +1111,7 @@ func TestConvertToV1Resource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "source-label",
-								Value:   "source-value",
+								Value:   []byte("source-value"),
 								Signing: true,
 							},
 						},
@@ -1135,7 +1135,7 @@ func TestConvertToV1Resource(t *testing.T) {
 						Labels: []v1.Label{
 							{
 								Name:    "source-label",
-								Value:   "source-value",
+								Value:   []byte("source-value"),
 								Signing: true,
 							},
 						},
@@ -1163,7 +1163,7 @@ func TestConvertToV1Resource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "label1",
-								Value:   "value1",
+								Value:   []byte("value1"),
 								Signing: true,
 							},
 						},
@@ -1175,7 +1175,7 @@ func TestConvertToV1Resource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "label2",
-								Value:   "value2",
+								Value:   []byte("value2"),
 								Signing: false,
 							},
 						},
@@ -1199,7 +1199,7 @@ func TestConvertToV1Resource(t *testing.T) {
 						Labels: []v1.Label{
 							{
 								Name:    "label1",
-								Value:   "value1",
+								Value:   []byte("value1"),
 								Signing: true,
 							},
 						},
@@ -1211,7 +1211,7 @@ func TestConvertToV1Resource(t *testing.T) {
 						Labels: []v1.Label{
 							{
 								Name:    "label2",
-								Value:   "value2",
+								Value:   []byte("value2"),
 								Signing: false,
 							},
 						},
@@ -1304,7 +1304,7 @@ func TestConvertFromV1Resource(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []v1.Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -1317,7 +1317,7 @@ func TestConvertFromV1Resource(t *testing.T) {
 						Name:    "test",
 						Version: "1.0.0",
 						Labels: []Label{
-							{Name: "test", Value: "value", Signing: true},
+							{Name: "test", Value: []byte("value"), Signing: true},
 						},
 					},
 				},
@@ -1344,7 +1344,7 @@ func TestConvertFromV1Resource(t *testing.T) {
 						Labels: []v1.Label{
 							{
 								Name:    "source-label",
-								Value:   "source-value",
+								Value:   []byte("source-value"),
 								Signing: true,
 							},
 						},
@@ -1368,7 +1368,7 @@ func TestConvertFromV1Resource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "source-label",
-								Value:   "source-value",
+								Value:   []byte("source-value"),
 								Signing: true,
 							},
 						},
@@ -1395,7 +1395,7 @@ func TestConvertFromV1Resource(t *testing.T) {
 						Labels: []v1.Label{
 							{
 								Name:    "label1",
-								Value:   "value1",
+								Value:   []byte("value1"),
 								Signing: true,
 							},
 						},
@@ -1407,7 +1407,7 @@ func TestConvertFromV1Resource(t *testing.T) {
 						Labels: []v1.Label{
 							{
 								Name:    "label2",
-								Value:   "value2",
+								Value:   []byte("value2"),
 								Signing: false,
 							},
 						},
@@ -1431,7 +1431,7 @@ func TestConvertFromV1Resource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "label1",
-								Value:   "value1",
+								Value:   []byte("value1"),
 								Signing: true,
 							},
 						},
@@ -1443,7 +1443,7 @@ func TestConvertFromV1Resource(t *testing.T) {
 						Labels: []Label{
 							{
 								Name:    "label2",
-								Value:   "value2",
+								Value:   []byte("value2"),
 								Signing: false,
 							},
 						},

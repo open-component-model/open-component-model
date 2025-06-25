@@ -33,24 +33,25 @@ func Register(registry *componentversionrepository.RepositoryRegistry) error {
 	return componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		scheme,
 		registry,
-		&Plugin{scheme: scheme, memory: inmemory.New()},
+		&Plugin{scheme: scheme, manifestCache: inmemory.New(), layerCache: inmemory.New()},
 		&ociv1.Repository{},
 	)
 }
 
 type Plugin struct {
 	contracts.EmptyBasePlugin
-	scheme *runtime.Scheme
-	memory cache.OCIDescriptorCache
+	scheme        *runtime.Scheme
+	manifestCache cache.OCIDescriptorCache
+	layerCache    cache.OCIDescriptorCache
 }
 
-func (p *Plugin) GetIdentity(_ context.Context, typ contractsv1.GetIdentityRequest[*ociv1.Repository]) (runtime.Identity, error) {
+func (p *Plugin) GetIdentity(_ context.Context, typ *contractsv1.GetIdentityRequest[*ociv1.Repository]) (*contractsv1.GetIdentityResponse, error) {
 	identity, err := runtime.ParseURLToIdentity(typ.Typ.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
 	}
 	identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
-	return identity, nil
+	return &contractsv1.GetIdentityResponse{Identity: identity}, nil
 }
 
 func (p *Plugin) GetComponentVersion(ctx context.Context, request contractsv1.GetComponentVersionRequest[*ociv1.Repository], credentials map[string]string) (*descriptor.Descriptor, error) {
@@ -139,7 +140,11 @@ func (p *Plugin) createRepository(spec *ociv1.Repository, credentials map[string
 	}
 	urlString := url.Host + url.Path
 
-	urlResolver := urlresolver.New(urlString)
+	urlResolver, err := urlresolver.New(urlresolver.WithBaseURL(urlString))
+	if err != nil {
+		return nil, fmt.Errorf("error creating URL resolver: %w", err)
+	}
+
 	urlResolver.SetClient(&auth.Client{
 		Client: retry.DefaultClient,
 		Header: map[string][]string{
@@ -151,7 +156,8 @@ func (p *Plugin) createRepository(spec *ociv1.Repository, credentials map[string
 		oci.WithResolver(urlResolver),
 		oci.WithScheme(p.scheme),
 		oci.WithCreator(Creator),
-		oci.WithOCIDescriptorCache(p.memory),
+		oci.WithManifestCache(p.manifestCache),
+		oci.WithLayerCache(p.layerCache),
 	)
 	return repo, err
 }

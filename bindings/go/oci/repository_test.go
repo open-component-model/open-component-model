@@ -1426,3 +1426,162 @@ func TestRepository_GetLocalSource(t *testing.T) {
 		})
 	}
 }
+
+func TestRepository_ProcessResourceDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	ctf := ctf.NewFileSystemCTF(fs)
+	store := ocictf.NewFromCTF(ctf)
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	testdata := []byte("test content")
+	dig := digest.FromBytes(testdata)
+
+	tests := []struct {
+		name     string
+		resource *descriptor.Resource
+		setup    func(t *testing.T)
+		check    func(*descriptor.Resource) error
+		err      assert.ErrorAssertionFunc
+	}{
+		{
+			name: "local blob without global access",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v2.LocalBlob{
+					LocalReference: "test-ref",
+					MediaType:      "application/octet-stream",
+				},
+			},
+			err: assert.Error,
+		},
+		{
+			name: "oci image with differing actual content and specified digest",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v1.OCIImage{
+					ImageReference: "test-registry/test-image:v2.0.0@" + dig.String(),
+				},
+			},
+			setup: func(t *testing.T) {
+				ctx := t.Context()
+				r := require.New(t)
+				store, err := store.StoreForReference(ctx, "test-registry/test-image:v2.0.0")
+				r.NoError(err, "Failed to get store for test registry")
+
+				testdata := []byte("test content with differing digest")
+				desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+				data := bytes.NewReader(testdata)
+
+				r.NoError(store.Push(ctx, desc, data))
+				r.NoError(store.Tag(ctx, desc, "v2.0.0"))
+			},
+			err: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.ErrorContains(t, err, "expected pinned digest")
+			},
+		},
+		{
+			name: "oci image with digest",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v1.OCIImage{
+					ImageReference: "test-registry/test-image:v2.0.0@" + dig.String(),
+				},
+			},
+			setup: func(t *testing.T) {
+				ctx := t.Context()
+				r := require.New(t)
+				store, err := store.StoreForReference(ctx, "test-registry/test-image:v2.0.0")
+				r.NoError(err, "Failed to get store for test registry")
+
+				desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+				data := bytes.NewReader(testdata)
+
+				r.NoError(store.Push(ctx, desc, data))
+				r.NoError(store.Tag(ctx, desc, "v2.0.0"))
+			},
+			check: func(resource *descriptor.Resource) error {
+				r := require.New(t)
+				// Check if the resource has the expected access
+				ociImage, ok := resource.Access.(*v1.OCIImage)
+				r.True(ok, "Access should be of type v1.OCIImage")
+				r.Equal("test-registry/test-image:v2.0.0@"+dig.String(), ociImage.ImageReference, "Image reference should match expected value")
+				return nil
+			},
+		},
+		{
+			name: "oci image without digest gets processed and is validated",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v1.OCIImage{
+					ImageReference: "test-registry/test-image:v2.0.0",
+				},
+			},
+			setup: func(t *testing.T) {
+				ctx := t.Context()
+				r := require.New(t)
+				store, err := store.StoreForReference(ctx, "test-registry/test-image:v2.0.0")
+				r.NoError(err, "Failed to get store for test registry")
+
+				desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+				data := bytes.NewReader(testdata)
+
+				r.NoError(store.Push(ctx, desc, data))
+				r.NoError(store.Tag(ctx, desc, "v2.0.0"))
+			},
+			check: func(resource *descriptor.Resource) error {
+				r := require.New(t)
+				// Check if the resource has the expected access
+				ociImage, ok := resource.Access.(*v1.OCIImage)
+				r.True(ok, "Access should be of type v1.OCIImage")
+				r.Equal("test-registry/test-image:v2.0.0@"+dig.String(), ociImage.ImageReference, "Image reference should match expected value")
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				tt.setup(t)
+			}
+
+			res, err := repo.ProcessResourceDigest(ctx, tt.resource)
+			if tt.err != nil && !tt.err(t, err) {
+				return
+			}
+
+			if tt.check != nil {
+				err := tt.check(res)
+				r.NoError(err)
+			}
+		})
+	}
+}

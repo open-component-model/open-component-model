@@ -37,7 +37,32 @@ type RepositoryOptions struct {
 
 	// CopyOptions are the options for copying resources between sources and targets
 	ResourceCopyOptions *oras.CopyOptions
+
+	// ReferrerTrackingPolicy defines how OCI referrers are used to track component versions.
+	ReferrerTrackingPolicy ReferrerTrackingPolicy
 }
+
+// ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
+// see https://github.com/opencontainers/distribution-spec/blob/main/spec.md#listing-referrers
+type ReferrerTrackingPolicy int
+
+const (
+	// ReferrerTrackingPolicyNone means that no referrers are tracked.
+	// This is the default policy and means that no referrers are used to track component versions.
+	//
+	// This is generally less accurate and efficient, but will work with any OCI repository that only
+	// contains OCM component versions as tags.
+	ReferrerTrackingPolicyNone ReferrerTrackingPolicy = iota
+	// ReferrerTrackingPolicyByIndexAndSubject
+	// means that added manifests are tracked using a static index and referencing that in the subject.
+	//
+	// If the index / subject can be stored via OCI referrers API, it will be used.
+	//
+	// If not, a new manifest with the index will be created and tagged with the digest of the index.
+	// see https://github.com/opencontainers/distribution-spec/blob/main/spec.md#backwards-compatibility
+	// for details on backwards-compatibility and behavior.
+	ReferrerTrackingPolicyByIndexAndSubject ReferrerTrackingPolicy = iota
+)
 
 // RepositoryOption is a function that modifies RepositoryOptions.
 type RepositoryOption func(*RepositoryOptions)
@@ -74,6 +99,13 @@ func WithCreator(creator string) RepositoryOption {
 func WithResolver(resolver Resolver) RepositoryOption {
 	return func(o *RepositoryOptions) {
 		o.Resolver = resolver
+	}
+}
+
+// WithReferrerTrackingPolicy sets the ReferrerTrackingPolicy for the repository.
+func WithReferrerTrackingPolicy(policy ReferrerTrackingPolicy) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.ReferrerTrackingPolicy = policy
 	}
 }
 
@@ -132,5 +164,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		resolver:                   options.Resolver,
 		creatorAnnotation:          options.Creator,
 		resourceCopyOptions:        *options.ResourceCopyOptions,
+		referrerTrackingPolicy:     options.ReferrerTrackingPolicy,
 	}, nil
 }

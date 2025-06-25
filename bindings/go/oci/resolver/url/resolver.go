@@ -12,19 +12,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
-func New(baseURL string) *CachingResolver {
-	return &CachingResolver{
-		BaseURL: baseURL,
+func New(opts ...Option) (*CachingResolver, error) {
+	resolver := &CachingResolver{}
+	for _, opt := range opts {
+		opt.Apply(resolver)
 	}
+
+	if resolver.baseURL == "" {
+		return nil, fmt.Errorf("base URL must be set")
+	}
+
+	return resolver, nil
 }
 
 // CachingResolver is a Resolver that resolves references to URLs for Component Versions and Resources.
-// It uses a BaseURL and a BaseClient to get a remote store for a reference.
+// It uses a baseURL and a baseClient to get a remote store for a reference.
 // each repository is only created once per reference.
 type CachingResolver struct {
-	BaseURL    string
-	BaseClient remote.Client
-	PlainHTTP  bool
+	baseURL    string
+	baseClient remote.Client
+	plainHTTP  bool
 
 	DisableCacheProxy bool
 
@@ -33,11 +40,11 @@ type CachingResolver struct {
 }
 
 func (resolver *CachingResolver) SetClient(client remote.Client) {
-	resolver.BaseClient = client
+	resolver.baseClient = client
 }
 
 func (resolver *CachingResolver) BasePath() string {
-	return resolver.BaseURL + "/" + path.DefaultComponentDescriptorPath
+	return resolver.baseURL + "/" + path.DefaultComponentDescriptorPath
 }
 
 func (resolver *CachingResolver) ComponentVersionReference(component, version string) string {
@@ -60,11 +67,21 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		return store, nil
 	}
 
-	repo := &remote.Repository{Reference: ref}
+	repo := &remote.Repository{
+		Reference: ref,
+		// to remain fully compatible with all OCI repositories, we MUST skip referrers GC.
+		// this is because most "classic" OCI repositories such as Docker or GHCR that were
+		// developed before the referrers API ALSO do not provide delete support for manifests.
+		// see https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#deleting-manifests
+		//
+		// This means that by default, we cannot delete referrers from the repository.
+		// This is a limitation of the OCI distribution spec implementors and not specific to this resolver.
+		SkipReferrersGC: true,
+	}
 
-	repo.PlainHTTP = resolver.PlainHTTP
-	if resolver.BaseClient != nil {
-		repo.Client = resolver.BaseClient
+	repo.PlainHTTP = resolver.plainHTTP
+	if resolver.baseClient != nil {
+		repo.Client = resolver.baseClient
 	}
 
 	resolver.addToCache(key, repo)

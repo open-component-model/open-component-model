@@ -75,7 +75,7 @@ func encodeDescriptorsAsTable(descriptor []*descruntime.Descriptor) ([]byte, err
 	t.SetOutputMirror(&buf)
 	t.AppendHeader(table.Row{"Component", "Version", "Provider"})
 	for _, desc := range descriptor {
-		t.AppendRow(table.Row{desc.Component.Name, desc.Component.Version, desc.Component.Provider.String()})
+		t.AppendRow(table.Row{desc.Component.Name, desc.Component.Version, desc.Component.Provider.Name})
 	}
 	t.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, AutoMerge: true},

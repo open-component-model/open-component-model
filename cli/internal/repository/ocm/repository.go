@@ -43,9 +43,9 @@ func New(ctx context.Context, manager *manager.PluginManager, graph *credentials
 		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", repositorySpec, err)
 	}
 	var creds map[string]string
-	identity, err := plugin.GetIdentity(ctx, v1.GetIdentityRequest[runtime.Typed]{Typ: repositorySpec})
+	identity, err := plugin.GetIdentity(ctx, &v1.GetIdentityRequest[runtime.Typed]{Typ: repositorySpec})
 	if err == nil {
-		if creds, err = graph.Resolve(ctx, identity); err != nil {
+		if creds, err = graph.Resolve(ctx, identity.Identity); err != nil {
 			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", repositorySpec, err)
 		}
 	}

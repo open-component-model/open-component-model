@@ -148,7 +148,7 @@ func TestPush(t *testing.T) {
 func TestResolve(t *testing.T) {
 	ctf := setupTestCTF(t)
 	provider := NewFromCTF(ctf)
-	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	store, err := provider.StoreForReference(t.Context(), "localhost:5000/test-repo:v1.0.0")
 	require.NoError(t, err)
 
 	ctx := t.Context()
@@ -162,18 +162,30 @@ func TestResolve(t *testing.T) {
 	index := v1.NewIndex()
 	index.AddArtifact(v1.ArtifactMetadata{
 		Repository: "test-repo",
-		Tag:        "test-tag",
+		Tag:        "v1.0.0",
 		Digest:     digestStr,
 		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
 	})
 	require.NoError(t, ctf.SetIndex(ctx, index))
 
-	t.Run("successful resolve", func(t *testing.T) {
-		desc, err := store.Resolve(ctx, "test-tag")
-		assert.NoError(t, err)
-		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
-		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
-	})
+	expectedOkResolves := []string{
+		"v1.0.0",
+		"test-repo:v1.0.0",
+		digestStr,
+		"test-repo@" + digestStr,
+		"test-repo:v1.0.0@" + digestStr,
+		"localhost:5000/test-repo:v1.0.0",
+		"localhost:5000/test-repo:v1.0.0@" + digestStr,
+	}
+
+	for _, tc := range expectedOkResolves {
+		t.Run(fmt.Sprintf("%s", tc), func(t *testing.T) {
+			desc, err := store.Resolve(ctx, tc)
+			assert.NoError(t, err)
+			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+			assert.Equal(t, digest.Digest(digestStr), desc.Digest)
+		})
+	}
 
 	t.Run("invalid reference", func(t *testing.T) {
 		desc, err := store.Resolve(ctx, "invalid")
@@ -329,7 +341,7 @@ func TestPushWithManifest(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, exists)
 
-		// Verify the tag was created
+		// Verify the digest is resolvable
 		resolvedDesc, err := store.Resolve(ctx, desc.Digest.String())
 		assert.NoError(t, err)
 		assert.Equal(t, desc.Digest, resolvedDesc.Digest)

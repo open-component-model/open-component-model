@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
@@ -32,7 +32,7 @@ func Test_CTF_ReadWrite(t *testing.T) {
 			}[format]
 			path := filepath.Join(t.TempDir(), name)
 
-			testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test")))
+			testBlob := inmemory.New(bytes.NewReader([]byte("test")))
 			digest, _ := testBlob.Digest()
 
 			err := ctf.WorkWithinCTF(ctx, path, ctf.O_CREATE|ctf.O_RDWR, func(ctx context.Context, ctf ctf.CTF) error {

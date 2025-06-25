@@ -48,23 +48,27 @@ func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, c
 		return nil, fmt.Errorf("a base url is required")
 	}
 
-	var ociResolver *urlresolver.CachingResolver
 	purl, err := runtime.ParseURLAndAllowNoScheme(repository.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse OCI repository URL %q: %w", repository.BaseUrl, err)
 	}
 
+	var opts []urlresolver.Option
 	if purl.Scheme != "" {
-		resolver := urlresolver.New(strings.TrimPrefix(purl.String(), purl.Scheme+"://"))
+		opts = append(opts, urlresolver.WithBaseURL(strings.TrimPrefix(purl.String(), purl.Scheme+"://")))
 		if purl.Scheme == "http" {
-			resolver.PlainHTTP = true
+			opts = append(opts, urlresolver.WithPlainHTTP(true))
 		}
-		ociResolver = resolver
 	} else {
-		ociResolver = urlresolver.New(repository.BaseUrl)
+		opts = append(opts, urlresolver.WithBaseURL(repository.BaseUrl))
 	}
 
-	ociResolver.BaseClient = client
+	opts = append(opts, urlresolver.WithBaseClient(client))
 
-	return oci.NewRepository(append(options, oci.WithResolver(ociResolver))...)
+	resolver, err := urlresolver.New(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("could not create URL resolver for OCI repository %q: %w", repository.BaseUrl, err)
+	}
+
+	return oci.NewRepository(append(options, oci.WithResolver(resolver))...)
 }
