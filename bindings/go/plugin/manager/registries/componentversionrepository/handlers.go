@@ -157,11 +157,6 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 // It handles request processing and response encoding for the plugin implementation.
 func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1.GetIdentityRequest[T]) (*v1.GetIdentityResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		// TODO: Figure this out
-		// query := request.URL.Query()
-		// name := query.Get("name")
-		// version := query.Get("version")
-
 		response, err := f(request.Context(), &v1.GetIdentityRequest[T]{
 			Typ: proto,
 		})
