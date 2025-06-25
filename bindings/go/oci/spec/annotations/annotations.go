@@ -28,7 +28,8 @@ func NewComponentVersionAnnotation(component, version string) string {
 }
 
 // ParseComponentVersionAnnotation parses the component version annotation and returns the component name and version.
-// It can identify a possible
+// It can identify a possible prefix of the annotation, which is the default component descriptor path and exclude
+// it from the component name. (this can be present in CTFs.)
 func ParseComponentVersionAnnotation(annotation string) (string, string, error) {
 	prefix := path.DefaultComponentDescriptorPath + "/"
 	if withoutPrefix := strings.TrimPrefix(annotation, prefix); withoutPrefix != annotation {

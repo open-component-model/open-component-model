@@ -193,7 +193,7 @@ func listViaReferrrers(ctx context.Context, lister registry.ReferrerLister, opts
 		return nil, errors.New("referrer lister is not available")
 	}
 
-	// every time we get a callback for descriptors (i.e.g from a paginated list),
+	// every time we get a callback for descriptors (i.e. from a paginated list),
 	// we will spawn a goroutine for each descriptor to resolve it to a version
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.SetLimit(runtime.NumCPU())

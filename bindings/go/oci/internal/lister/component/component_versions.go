@@ -56,7 +56,7 @@ func ReferrerAnnotationVersionResolver(component string) lister.ReferrerVersionR
 // The resolver will:
 //   - Parse the provided reference
 //   - Resolve the tag to a descriptor
-//   - Validate the descriptor's media type.
+//   - Validate the descriptor's media type
 //   - Return the tag if valid, or an error if invalid
 func ReferenceTagVersionResolver(component string, store interface {
 	content.Resolver
@@ -105,8 +105,8 @@ func ReferenceTagVersionResolver(component string, store interface {
 			return "", fmt.Errorf("failed to parse component version annotation: %w", err)
 		}
 
-		if redundantPrefix := path.DefaultComponentDescriptorPath + "/"; strings.HasPrefix(component, redundantPrefix) {
-			component = strings.TrimPrefix(component, redundantPrefix)
+		if strings.HasPrefix(component, path.DefaultComponentDescriptorPath+"/") {
+			component = strings.TrimPrefix(component, path.DefaultComponentDescriptorPath+"/")
 		}
 
 		if candidate != component {
