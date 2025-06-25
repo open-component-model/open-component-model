@@ -82,7 +82,6 @@ func (m *mockPlugin) GetLocalResource(_ context.Context, _ repov1.GetLocalResour
 				NormalisationAlgorithm: "jsonNormalisation/v1",
 				Value:                  "test-value",
 			},
-			Size: 12345,
 		},
 	}, nil
 }

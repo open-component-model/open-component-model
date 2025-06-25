@@ -236,7 +236,6 @@ func TestGetLocalResource(t *testing.T) {
 				NormalisationAlgorithm: "jsonNormalisation/v1",
 				Value:                  "test-value",
 			},
-			Size: 12345,
 		},
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -376,7 +375,6 @@ func defaultDescriptor() *v2.Descriptor {
 						NormalisationAlgorithm: "OciArtifactDigest",
 						Value:                  "abcdef1234567890",
 					},
-					Size: 1024,
 				},
 			},
 		},

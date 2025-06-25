@@ -60,7 +60,6 @@ func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.Get
 						NormalisationAlgorithm: "OciArtifactDigest",
 						Value:                  "abcdef1234567890",
 					},
-					Size: 1024,
 				},
 			},
 		},
@@ -113,7 +112,6 @@ func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLoc
 				NormalisationAlgorithm: "jsonNormalisation/v1",
 				Value:                  "test-value",
 			},
-			Size: 12345,
 		},
 	}, nil
 }
