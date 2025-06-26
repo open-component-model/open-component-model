@@ -150,7 +150,7 @@ func (p *Plugin) listen(ctx context.Context) error {
 
 	m := http.NewServeMux()
 	for _, h := range p.handlers {
-		m.HandleFunc(h.Location, h.Handler)
+		m.HandleFunc(h.Location, p.panicRecovery(h.Handler))
 	}
 
 	m.HandleFunc("/shutdown", p.Shutdown)
@@ -184,6 +184,22 @@ func (p *Plugin) listen(ctx context.Context) error {
 	}
 
 	return server.Serve(conn)
+}
+
+func (p *Plugin) panicRecovery(f func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				p.logger.ErrorContext(r.Context(), "panic recovered", "error", err)
+				plugins.NewError(
+					errors.New("panic recovered"),
+					http.StatusInternalServerError).
+					Write(w)
+			}
+		}()
+
+		f(w, r)
+	}
 }
 
 func (p *Plugin) determineLocation() (_ string, err error) {

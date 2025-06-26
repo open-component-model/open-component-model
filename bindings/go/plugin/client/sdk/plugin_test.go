@@ -201,6 +201,45 @@ func TestHealthCheckInvalidMethod(t *testing.T) {
 	r.Contains(string(content), "this endpoint may only be called with either HEAD or GET method")
 }
 
+func TestPanicRecovery(t *testing.T) {
+	r := require.New(t)
+	location := "/tmp/test-plugin-panic-plugin.socket"
+	output := bytes.NewBuffer(nil)
+	ctx := context.Background()
+	p := NewPlugin(ctx, slog.Default(), types.Config{
+		ID:         "test-plugin-panic",
+		Type:       types.Socket,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+	}, output)
+
+	t.Cleanup(func() {
+		r.NoError(os.RemoveAll(location))
+	})
+
+	r.NoError(p.RegisterHandlers(endpoints.Handler{
+		Handler: func(writer http.ResponseWriter, request *http.Request) {
+			panic("test panic")
+		},
+		Location: "/panic-endpoint",
+	}))
+
+	go func() {
+		_ = p.Start(ctx)
+	}()
+
+	httpClient := createHttpClient(location)
+	waitForPlugin(r, httpClient)
+
+	resp, err := httpClient.Get("http://unix/panic-endpoint")
+	r.NoError(err)
+	r.Equal(http.StatusInternalServerError, resp.StatusCode)
+	content, err := io.ReadAll(resp.Body)
+	r.NoError(err)
+	r.Contains(string(content), "panic recovered")
+
+	r.NoError(p.GracefulShutdown(ctx))
+}
+
 func waitForPlugin(r *require.Assertions, httpClient *http.Client) {
 	r.Eventually(func() bool {
 		resp, err := httpClient.Get("http://unix/healthz")
