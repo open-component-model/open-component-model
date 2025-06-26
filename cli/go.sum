@@ -86,8 +86,8 @@ ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha2 h1:MxD
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha2/go.mod h1:R9ftu3At27fJJ6kwoKTW08y8vjZKC1hCQT+GfGB0bBY=
 ocm.software/open-component-model/bindings/go/oci v0.0.0-20250623110822-9dca0bcd1765 h1:K9NEfqlPwzogbQe5BlxSz4mTRJI+AOIZxuETazCgQ3s=
 ocm.software/open-component-model/bindings/go/oci v0.0.0-20250623110822-9dca0bcd1765/go.mod h1:uLpZBfclPZg63R4kNM5nXC2VtJNlQN1LsKQROEa2qTI=
-ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250625093947-0b8e05cba06e h1:8yHsIwthiOUZAqYznDljLikWAjvr86IQUb23fc5yxec=
-ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250625093947-0b8e05cba06e/go.mod h1:Ox2MFTetYL+Jeu4BWB/5cN+JdAIPrcwwI4moSaiPtBA=
+ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250626125027-c7f0912ab5fd h1:LvmZ6uqYXC5WchMjVPzsikLggNGKH3KFxkFbwc0gKQc=
+ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250626125027-c7f0912ab5fd/go.mod h1:Ox2MFTetYL+Jeu4BWB/5cN+JdAIPrcwwI4moSaiPtBA=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2 h1:YA20enOxMsk4gDWF+Anltwkc616dXebfgPz/0Bl0EKE=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
