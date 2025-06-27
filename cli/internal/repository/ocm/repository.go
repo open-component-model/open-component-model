@@ -162,9 +162,3 @@ func filterBySemver(versions []string, constraint string) ([]string, error) {
 	}
 	return filteredVersions, nil
 }
-
-// Validate checks if the repository is accessible and properly configured.
-// It delegates to the underlying repository implementation for technology-specific validation.
-func (repo *ComponentRepository) Validate(ctx context.Context) error {
-	return repo.base.Validate(ctx)
-}

@@ -96,10 +96,6 @@ func (w *wrapper) GetLocalSource(ctx context.Context, component, version string,
 	return w.repo.GetLocalSource(ctx, component, version, identity)
 }
 
-func (w *wrapper) Validate(ctx context.Context) error {
-	return w.repo.Validate(ctx)
-}
-
 func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionRepository, error) {
 	archive, err := ctf.OpenCTFFromOSPath(spec.Path, spec.AccessMode.ToAccessBitmask())
 	if err != nil {

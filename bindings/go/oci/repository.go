@@ -148,15 +148,8 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 	return list.List(ctx, opts)
 }
 
-// Validate checks if the OCI repository is accessible and properly configured.
-func (repo *Repository) Validate(ctx context.Context) (err error) {
-	done := log.Operation(ctx, "validate repository")
-	defer func() {
-		done(err)
-	}()
-
-	// Use a test component reference to validate repository access
-	// Use a valid component name format for the test
+// HealthCheck checks if the repository is accessible and properly configured.
+func (repo *Repository) HealthCheck(ctx context.Context) (err error) {
 	testReference := repo.resolver.ComponentVersionReference("example.com/validation-test", "1.0.0")
 	store, err := repo.resolver.StoreForReference(ctx, testReference)
 	if err != nil {

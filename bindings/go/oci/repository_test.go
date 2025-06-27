@@ -1534,7 +1534,7 @@ func TestRepository_Validate(t *testing.T) {
 		)
 
 		// Test validation
-		err = repo.Validate(ctx)
+		err = repo.HealthCheck(ctx)
 		r.NoError(err, "CTF repository validation should succeed")
 	})
 
@@ -1554,7 +1554,7 @@ func TestRepository_Validate(t *testing.T) {
 		)
 
 		// Test validation - this should fail because the filesystem is invalid
-		err = repo.Validate(ctx)
+		err = repo.HealthCheck(ctx)
 		r.Error(err, "Repository validation should fail with invalid filesystem")
 	})
 }
