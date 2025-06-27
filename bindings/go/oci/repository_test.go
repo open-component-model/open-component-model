@@ -1515,3 +1515,46 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 		})
 	}
 }
+
+func TestRepository_Validate(t *testing.T) {
+	ctx := context.Background()
+	r := require.New(t)
+
+	t.Run("CTF validation", func(t *testing.T) {
+		// Create a temporary CTF repository
+		tmpdir := t.TempDir()
+		fs, err := filesystem.NewFS(tmpdir, os.O_RDWR)
+		r.NoError(err, "Failed to create filesystem")
+		archive := ctf.NewFileSystemCTF(fs)
+
+		// Create repository with CTF
+		repo := Repository(t,
+			ocictf.WithCTF(ocictf.NewFromCTF(archive)),
+			oci.WithScheme(testScheme),
+		)
+
+		// Test validation
+		err = repo.Validate(ctx)
+		r.NoError(err, "CTF repository validation should succeed")
+	})
+
+	t.Run("Invalid repository validation", func(t *testing.T) {
+		// Create an invalid filesystem to cause CTF operations to fail
+		fs, err := filesystem.NewFS("/invalid/nonexistent/path", os.O_RDONLY)
+		// This will succeed in creating the filesystem object, but operations will fail
+		if err != nil {
+			// If we can't even create the filesystem, skip this test
+			t.Skip("Cannot create invalid filesystem for test")
+		}
+		archive := ctf.NewFileSystemCTF(fs)
+
+		repo := Repository(t,
+			ocictf.WithCTF(ocictf.NewFromCTF(archive)),
+			oci.WithScheme(testScheme),
+		)
+
+		// Test validation - this should fail because the filesystem is invalid
+		err = repo.Validate(ctx)
+		r.Error(err, "Repository validation should fail with invalid filesystem")
+	})
+}

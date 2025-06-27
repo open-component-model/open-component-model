@@ -148,6 +148,33 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 	return list.List(ctx, opts)
 }
 
+// Validate checks if the OCI repository is accessible and properly configured.
+func (repo *Repository) Validate(ctx context.Context) (err error) {
+	done := log.Operation(ctx, "validate repository")
+	defer func() {
+		done(err)
+	}()
+
+	// Use a test component reference to validate repository access
+	// Use a valid component name format for the test
+	testReference := repo.resolver.ComponentVersionReference("example.com/validation-test", "1.0.0")
+	store, err := repo.resolver.StoreForReference(ctx, testReference)
+	if err != nil {
+		return fmt.Errorf("failed to resolve test reference for validation: %w", err)
+	}
+
+	// Perform a lightweight operation to test connectivity and authentication
+	// We use Resolve() with a non-existent reference to test basic connectivity
+	// A successful connection will return ErrNotFound, while connection failures
+	// will return network/authentication errors
+	_, err = store.Resolve(ctx, "validation-test")
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("failed to validate OCI repository connectivity: %w", err)
+	}
+
+	return nil
+}
+
 // GetComponentVersion retrieves a component version from the repository.
 func (repo *Repository) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
 	done := log.Operation(ctx, "get component version",
