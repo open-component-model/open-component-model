@@ -409,3 +409,29 @@ func TestResolveWithEmptyMediaType(t *testing.T) {
 		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
 	})
 }
+
+func TestResolveWithCompatibilityCTFTestdata(t *testing.T) {
+	ctfPath := "testdata/compatibility/01/transport-archive"
+	ctfInstance, err := ctf.OpenCTFFromOSPath(ctfPath, ctf.O_RDONLY)
+	require.NoError(t, err)
+
+	t.Run("testdata compatibility CTF resolves with correct media type", func(t *testing.T) {
+		index, err := ctfInstance.GetIndex(t.Context())
+		require.NoError(t, err)
+		artifacts := index.GetArtifacts()
+		require.Len(t, artifacts, 1, "expected 1 artifact in compatibility CTF")
+
+		artifact := artifacts[0]
+		assert.Empty(t, artifact.MediaType, "compatibility CTF should have empty MediaType")
+
+		store := &Repository{
+			archive: ctfInstance,
+			repo:    artifact.Repository,
+		}
+
+		desc, err := store.Resolve(t.Context(), artifact.Tag)
+		assert.NoError(t, err)
+		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+		assert.Equal(t, string(artifact.Digest), desc.Digest.String())
+	})
+}
