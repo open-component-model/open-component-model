@@ -11,6 +11,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/runtime"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -410,28 +412,20 @@ func TestResolveWithEmptyMediaType(t *testing.T) {
 	})
 }
 
-func TestResolveWithCompatibilityCTFTestdata(t *testing.T) {
+func TestMediaTypeDefaulting(t *testing.T) {
+	r := require.New(t)
 	ctfPath := "testdata/compatibility/01/transport-archive"
-	ctfInstance, err := ctf.OpenCTFFromOSPath(ctfPath, ctf.O_RDONLY)
-	require.NoError(t, err)
+	scheme := runtime.NewScheme()
 
-	t.Run("testdata compatibility CTF resolves with correct media type", func(t *testing.T) {
-		index, err := ctfInstance.GetIndex(t.Context())
-		require.NoError(t, err)
-		artifacts := index.GetArtifacts()
-		require.Len(t, artifacts, 1, "expected 1 artifact in compatibility CTF")
-
-		artifact := artifacts[0]
-		assert.Empty(t, artifact.MediaType, "compatibility CTF should have empty MediaType")
-
-		store := &Repository{
-			archive: ctfInstance,
-			repo:    artifact.Repository,
-		}
-
-		desc, err := store.Resolve(t.Context(), artifact.Tag)
-		assert.NoError(t, err)
-		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
-		assert.Equal(t, string(artifact.Digest), desc.Digest.String())
-	})
+	archive, err := ctf.OpenCTFFromOSPath(ctfPath, ctf.O_RDONLY)
+	r.NoError(err)
+	repo, err := oci.NewRepository(
+		WithCTF(NewFromCTF(archive)),
+		oci.WithScheme(scheme),
+		oci.WithCreator("I am the Creator"),
+	)
+	r.NoError(err)
+	cv, err := repo.GetComponentVersion(t.Context(), "github.com/acme.org/helloworld", "1.0.0")
+	r.NoError(err)
+	r.Equal("github.com/acme.org/helloworld", cv.Component.Name)
 }
