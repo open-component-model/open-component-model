@@ -12,12 +12,10 @@ import (
 
 var ErrFilesDoNotRequireCredentials = fmt.Errorf("files do not require credentials")
 
-var (
-	_ interface {
-		constructor.ResourceInputMethod
-		constructor.SourceInputMethod
-	} = (*InputMethod)(nil)
-)
+var _ interface {
+	constructor.ResourceInputMethod
+	constructor.SourceInputMethod
+} = (*InputMethod)(nil)
 
 var scheme = runtime.NewScheme()
 
