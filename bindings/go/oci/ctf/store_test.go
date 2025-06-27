@@ -378,3 +378,34 @@ func TestResolveWithRegistry(t *testing.T) {
 		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
 	})
 }
+
+func TestResolveWithEmptyMediaType(t *testing.T) {
+	ctf := setupTestCTF(t)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	content := "test"
+	blob := inmemory.New(strings.NewReader(content))
+	digestStr, known := blob.Digest()
+	require.True(t, known)
+	require.NoError(t, ctf.SaveBlob(ctx, blob))
+
+	// Create and set up the index with empty MediaType to simulate old CTF
+	index := v1.NewIndex()
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo",
+		Tag:        "test-tag",
+		Digest:     digestStr,
+		MediaType:  "", // Set to Empty on purpose to signify test.
+	})
+	require.NoError(t, ctf.SetIndex(ctx, index))
+
+	t.Run("resolve with empty media type defaults to image manifest", func(t *testing.T) {
+		desc, err := store.Resolve(ctx, "test-tag")
+		assert.NoError(t, err)
+		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
+	})
+}
