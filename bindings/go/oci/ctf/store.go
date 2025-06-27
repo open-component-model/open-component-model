@@ -74,7 +74,8 @@ func (s *Store) Reference(reference string) (fmt.Stringer, error) {
 
 // ComponentVersionReference creates a reference string for a component version in the format "component-descriptors/component:version".
 func (s *Store) ComponentVersionReference(component, version string) string {
-	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, version)
+	tag := oci.ToTag(version)
+	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, tag)
 }
 
 // Repository implements the spec.Store interface for a CTF OCI Repository.

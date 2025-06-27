@@ -8,6 +8,7 @@ import (
 	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
 
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
@@ -48,7 +49,8 @@ func (resolver *CachingResolver) BasePath() string {
 }
 
 func (resolver *CachingResolver) ComponentVersionReference(component, version string) string {
-	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, version)
+	tag := oci.ToTag(version)
+	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, tag)
 }
 
 func (resolver *CachingResolver) Reference(reference string) (fmt.Stringer, error) {
