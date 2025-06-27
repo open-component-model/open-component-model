@@ -198,6 +198,21 @@ func (c *componentVersionRepositoryWrapper) GetLocalSource(ctx context.Context, 
 	return rBlob, &convert[0], nil
 }
 
+func (c *componentVersionRepositoryWrapper) Validate(ctx context.Context) error {
+	// For external plugins, we perform a simple test by attempting to list component versions
+	// for a non-existent component. This tests the repository connectivity and authentication
+	// without requiring specific content to exist.
+	_, err := c.ListComponentVersions(ctx, "validation-test-component")
+	
+	// We expect either a successful response (empty list) or a not found error
+	// Any other error indicates a validation failure
+	if err != nil {
+		return fmt.Errorf("failed to validate external plugin repository: %w", err)
+	}
+	
+	return nil
+}
+
 func (r *RepositoryRegistry) externalToComponentVersionRepositoryProviderConverter(plugin ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], scheme *runtime.Scheme) *componentVersionRepositoryProviderConverter {
 	return &componentVersionRepositoryProviderConverter{
 		externalPlugin: plugin,

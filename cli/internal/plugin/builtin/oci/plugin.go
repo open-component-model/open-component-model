@@ -109,6 +109,10 @@ func (w *wrapper) GetLocalSource(ctx context.Context, component, version string,
 	return w.repo.GetLocalSource(ctx, component, version, identity)
 }
 
+func (w *wrapper) Validate(ctx context.Context) error {
+	return w.repo.Validate(ctx)
+}
+
 // TODO(jakobmoellerdev): add identity mapping function from OCI package here as soon as we have the conversion function
 func (p *Plugin) createRepository(spec *ociv1.Repository, credentials map[string]string) (oci.ComponentVersionRepository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
