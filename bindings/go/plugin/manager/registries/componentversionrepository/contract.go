@@ -51,12 +51,6 @@ type ComponentVersionRepository interface {
 	// - Listing all referrers of the component index and filtering them based on the resolved media type / artifact type
 	ListComponentVersions(ctx context.Context, component string) ([]string, error)
 
-	// Validate checks if the repository is accessible and properly configured.
-	// This method performs technology-specific validation to ensure the repository can be used.
-	// For example, for OCI repositories it verifies the registry is reachable and accessible,
-	// while for CTF repositories it checks file system paths and permissions.
-	Validate(ctx context.Context) error
-
 	LocalResourceRepository
 	LocalSourceRepository
 }
