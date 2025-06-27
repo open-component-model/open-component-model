@@ -3,13 +3,12 @@ package resource
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -45,24 +44,9 @@ func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource
 		return nil, err
 	}
 
-	rBlob, err := r.createBlobData(result.Location)
+	rBlob, err := blobs.CreateBlobData(result.Location)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create blob data: %w", err)
-	}
-
-	return rBlob, nil
-}
-
-func (r *resourcePluginConverter) createBlobData(location types.Location) (blob.ReadOnlyBlob, error) {
-	var rBlob blob.ReadOnlyBlob
-
-	if location.LocationType == types.LocationTypeLocalFile {
-		file, err := os.Open(location.Value)
-		if err != nil {
-			return nil, err
-		}
-
-		rBlob = blob.NewDirectReadOnlyBlob(file)
 	}
 
 	return rBlob, nil

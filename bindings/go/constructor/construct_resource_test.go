@@ -225,9 +225,6 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
-			return true
-		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 
@@ -269,9 +266,6 @@ func TestConstructWithResourceAccess(t *testing.T) {
 	// Create the constructor with our mocks
 	opts := Options{
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
-		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
-			return false // Don't process by value for this test
-		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 
@@ -353,9 +347,6 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 		CredentialProvider:          mockCredProvider,
-		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
-			return true
-		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 
@@ -410,6 +401,7 @@ func TestConstructWithResourceByValue(t *testing.T) {
         version: v1.0.0
         relation: external
         type: blob
+        copyPolicy: byValue
         access:
           type: mock/v1
           mediaType: application/octet-stream
@@ -424,9 +416,6 @@ func TestConstructWithResourceByValue(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceRepositoryProvider: mockRepoProvider,
-		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
-			return true // Always process by value for this test
-		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 
@@ -485,9 +474,6 @@ func TestConstructWithResourceDigest(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider:        &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceDigestProcessorProvider: mockDigestProvider,
-		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
-			return false // Don't process by value for this test
-		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 
@@ -665,6 +651,7 @@ func TestConstructWithResourceByValueFailure(t *testing.T) {
         version: v1.0.0
         relation: external
         type: blob
+        copyPolicy: byValue
         access:
           type: mock/v1
           mediaType: application/octet-stream
@@ -678,9 +665,6 @@ func TestConstructWithResourceByValueFailure(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceRepositoryProvider: mockRepoProvider,
-		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
-			return true // Always process by value for this test
-		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 
@@ -766,9 +750,6 @@ components:
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
-			return true
-		},
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 

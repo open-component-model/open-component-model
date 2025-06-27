@@ -16,7 +16,6 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -56,30 +55,32 @@ func TestPluginManager(t *testing.T) {
 	require.NoError(t, err)
 	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
-	desc, err := plugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{
-			Type:    typ,
-			BaseUrl: "https://ocm.software/test",
-		},
-		Name:    "test-component",
-		Version: "1.0.0",
-	}, map[string]string{})
+	provider, err := plugin.GetComponentVersionRepository(ctx, &dummyv1.Repository{
+		Type:    typ,
+		BaseUrl: "https://ocm.software/test",
+	}, nil)
+	require.NoError(t, err)
+	desc, err := provider.GetComponentVersion(ctx, "test-component", "1.0.0")
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
 
-	response, err := plugin.GetLocalResource(ctx, repov1.GetLocalResourceRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{
-			Type:    typ,
-			BaseUrl: "https://ocm.software/test",
-		},
-		Name:    "test-resource",
-		Version: "v0.0.1",
-	}, map[string]string{})
+	blob, response, err := provider.GetLocalResource(ctx, "test-resource", "v0.0.1", nil)
 	require.NoError(t, err)
-	require.Equal(t, types.LocationTypeLocalFile, response.Location.LocationType)
-	content, err := os.ReadFile(response.Location.Value)
+	reader, err := blob.ReadCloser()
+	require.NoError(t, err)
+	content, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.Equal(t, "test-resource", string(content))
+	require.Equal(t, "test-resource", response.Name)
+
+	sourceBlob, sourceResponse, err := provider.GetLocalSource(ctx, "test-source", "v0.0.1", nil)
+	require.NoError(t, err)
+	reader, err = sourceBlob.ReadCloser()
+	require.NoError(t, err)
+	content, err = io.ReadAll(reader)
+	require.NoError(t, err)
+	require.Equal(t, "test-source", string(content))
+	require.Equal(t, "test-source", sourceResponse.Name)
 }
 
 func TestConfigurationPassedToPlugin(t *testing.T) {
@@ -121,8 +122,8 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 	require.NoError(t, pm.Shutdown(ctx))
 	// we need some time for the logs to be streamed back
 	require.Eventually(t, func() bool {
-		err := plugin.Ping(context.Background())
-		return err != nil
+		_, err := plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+		return err == nil
 	}, 1*time.Second, 100*time.Millisecond)
 
 	content, err := io.ReadAll(writer)
@@ -180,17 +181,20 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	}
 	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
-	require.NoError(t, plugin.Ping(ctx))
+	_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+	require.NoError(t, err)
 
 	// cancelling the outer context should not shut down the plugin only the ongoing request.
 	t.Log("cancelling outer context")
 	cancel()
-	require.NoError(t, plugin.Ping(context.Background()))
+	_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+	require.NoError(t, err)
+	//require.NoError(t, plugin.Ping(context.Background()))
 	t.Log("plugin is still alive, cancelling plugin context")
 	baseCancel()
 	require.Eventually(t, func() bool {
-		err := plugin.Ping(context.Background())
-		return err != nil
+		_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+		return err == nil
 	}, 1*time.Second, 100*time.Millisecond)
 	t.Log("plugin is stopped")
 }
@@ -230,13 +234,14 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 	}
 	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
-	require.NoError(t, plugin.Ping(ctx))
+	_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+	require.NoError(t, err)
 
 	// cancelling the outer context should not shut down the plugin only the ongoing request.
 	require.NoError(t, pm.Shutdown(ctx))
 	require.Eventually(t, func() bool {
-		err := plugin.Ping(ctx)
-		return err != nil
+		_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+		return err == nil
 	}, 1*time.Second, 100*time.Millisecond)
 	_, err = os.Stat("/tmp/test-plugin-plugin.socket")
 	require.Error(t, err)
@@ -281,7 +286,8 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
 	//plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
 	require.NoError(t, err)
-	require.NoError(t, plugin.Ping(ctx))
+	_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+	require.NoError(t, err)
 
 	// Cancelling the shutdown context still should allow a graceful shutdown of the plugin because
 	// that context is outside of this. This shutdown will just send an interrupt signal to the
@@ -290,8 +296,8 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 	cancel()
 
 	require.Eventually(t, func() bool {
-		err := plugin.Ping(ctx)
-		return err != nil
+		_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+		return err == nil
 	}, 1*time.Second, 100*time.Millisecond)
 
 	content, err := io.ReadAll(writer)

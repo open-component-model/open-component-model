@@ -4,21 +4,23 @@ import (
 	"context"
 	"fmt"
 
+	"oras.land/oras-go/v2/registry/remote/auth"
+	"oras.land/oras-go/v2/registry/remote/retry"
+
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
-	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const Creator = "CTF Repository"
+const Creator = "OCI Repository TypeToUntypedPlugin"
 
 func Register(registry *componentversionrepository.RepositoryRegistry) error {
 	scheme := runtime.NewScheme()
@@ -27,7 +29,7 @@ func Register(registry *componentversionrepository.RepositoryRegistry) error {
 		scheme,
 		registry,
 		&Plugin{scheme: scheme, manifestCache: inmemory.New(), layerCache: inmemory.New()},
-		&ctfv1.Repository{},
+		&ociv1.Repository{},
 	)
 }
 
@@ -38,17 +40,28 @@ type Plugin struct {
 	layerCache    cache.OCIDescriptorCache
 }
 
-func (p *Plugin) GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, _ runtime.Typed) (runtime.Identity, error) {
-	return nil, fmt.Errorf("not implemented because ctfs do not need consumer identity based credentials")
-}
-
-func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentversionrepository.ComponentVersionRepository, error) {
-	ctfRepoSpec, ok := repositorySpecification.(*ctfv1.Repository)
+func (p *Plugin) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
+	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
 	if !ok {
 		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
 	}
 
-	repo, err := p.createRepository(ctfRepoSpec)
+	identity, err := runtime.ParseURLToIdentity(ociRepoSpec.BaseUrl)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
+	}
+	identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
+
+	return identity, nil
+}
+
+func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentversionrepository.ComponentVersionRepository, error) {
+	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
+	}
+
+	repo, err := p.createRepository(ociRepoSpec, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -96,16 +109,49 @@ func (w *wrapper) GetLocalSource(ctx context.Context, component, version string,
 	return w.repo.GetLocalSource(ctx, component, version, identity)
 }
 
-func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionRepository, error) {
-	archive, err := ctf.OpenCTFFromOSPath(spec.Path, spec.AccessMode.ToAccessBitmask())
+// TODO(jakobmoellerdev): add identity mapping function from OCI package here as soon as we have the conversion function
+func (p *Plugin) createRepository(spec *ociv1.Repository, credentials map[string]string) (oci.ComponentVersionRepository, error) {
+	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
-		return nil, fmt.Errorf("error opening CTF archive: %w", err)
+		return nil, fmt.Errorf("invalid URL %q: %w", spec.BaseUrl, err)
 	}
+	urlString := url.Host + url.Path
+
+	urlResolver, err := urlresolver.New(urlresolver.WithBaseURL(urlString))
+	if err != nil {
+		return nil, fmt.Errorf("error creating URL resolver: %w", err)
+	}
+
+	urlResolver.SetClient(&auth.Client{
+		Client: retry.DefaultClient,
+		Header: map[string][]string{
+			"User-Agent": {Creator},
+		},
+		Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
+	})
 	repo, err := oci.NewRepository(
-		ocictf.WithCTF(ocictf.NewFromCTF(archive)),
+		oci.WithResolver(urlResolver),
+		oci.WithScheme(p.scheme),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifestCache),
 		oci.WithLayerCache(p.layerCache),
 	)
 	return repo, err
+}
+
+func clientCredentials(credentials map[string]string) auth.Credential {
+	cred := auth.Credential{}
+	if username, ok := credentials["username"]; ok {
+		cred.Username = username
+	}
+	if password, ok := credentials["password"]; ok {
+		cred.Password = password
+	}
+	if refreshToken, ok := credentials["refresh_token"]; ok {
+		cred.RefreshToken = refreshToken
+	}
+	if accessToken, ok := credentials["access_token"]; ok {
+		cred.AccessToken = accessToken
+	}
+	return cred
 }
