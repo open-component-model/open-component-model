@@ -47,6 +47,11 @@ type ComponentVersionRepository interface {
 	// https://github.com/opencontainers/distribution-spec/blob/v1.1.0/spec.md#listing-referrers
 	ListComponentVersions(ctx context.Context, component string) ([]string, error)
 
+	// Validate checks if the OCI repository is accessible and properly configured.
+	// This method verifies that the underlying OCI registry is reachable and that authentication
+	// is properly configured. It performs a lightweight check without modifying the repository.
+	Validate(ctx context.Context) error
+
 	LocalResourceRepository
 	LocalSourceRepository
 	ResourceDigestProcessor
