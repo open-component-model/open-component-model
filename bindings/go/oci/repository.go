@@ -38,15 +38,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// plusSubstitute is used to substitute the plus character ('+') in OCI tags.
-// An OCM version is allowed to contain the plus character, but OCI tags do not allow it.
-// Because the OCI tag of an artifact representing an OCM component is derived from the respective component
-// version, this replacement is required.
-const (
-	plusSubstitute = ".build-"
-	plus           = "+"
-)
-
 var _ ComponentVersionRepository = (*Repository)(nil)
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -109,10 +100,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	}
 
 	// Tag the manifest with the reference
-	tag := ToTag(version)
-	if tag != version {
-		log.Base().Log(ctx, slog.LevelWarn, "component version contains discouraged character", "cv", version, "character", plus)
-	}
+	tag := LooseSemverToOCITag(version)
 	if err := store.Tag(ctx, *manifest, tag); err != nil {
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
@@ -174,9 +162,6 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
 		return nil, err
-	}
-	if !strings.HasSuffix(reference, version) {
-		log.Base().Log(ctx, slog.LevelWarn, "component version contains discouraged character", "cv", version, "character", plus)
 	}
 
 	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
@@ -727,9 +712,4 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		return ociImageSpecV1.Manifest{}, nil, err
 	}
 	return manifest, index, nil
-}
-
-// ToTag converts an OCM version to a valid OCI tag by replacing possible '+' characters.
-func ToTag(version string) string {
-	return strings.ReplaceAll(version, plus, plusSubstitute)
 }
