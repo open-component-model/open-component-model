@@ -49,8 +49,7 @@ func (resolver *CachingResolver) BasePath() string {
 }
 
 func (resolver *CachingResolver) ComponentVersionReference(component, version string) string {
-	// Make the reference compliant with requirements for OCI tags.
-	tag := oci.LooseSemverToOCITag(version)
+	tag := oci.LooseSemverToOCITag(version) // Remove prohibited characters.
 	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, tag)
 }
 
