@@ -10,7 +10,7 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.1
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250625081434-d598b670071d
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250625081434-d598b670071d
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250629062021-12c0b47f0135
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha2
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
