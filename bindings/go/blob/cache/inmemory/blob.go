@@ -24,7 +24,6 @@ func Cache(b blob.ReadOnlyBlob) *Blob {
 // subsequent access. The implementation is thread-safe.
 type Blob struct {
 	blob.ReadOnlyBlob
-
 	data []byte
 	mu   sync.RWMutex
 }
@@ -52,20 +51,16 @@ func (c *Blob) ReadCloser() (io.ReadCloser, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		c.setData(data)
-
 		return io.NopCloser(bytes.NewReader(data)), nil
 	}
 
 	// Create buffer with exact size
 	buf := make([]byte, size)
-	if _, err := io.ReadFull(reader, buf); err != nil {
+	if _, err = io.ReadFull(reader, buf); err != nil {
 		return nil, err
 	}
-
 	c.setData(buf)
-
 	return io.NopCloser(bytes.NewReader(buf)), nil
 }
 
@@ -90,14 +85,11 @@ func (c *Blob) Size() int64 {
 		return blob.SizeUnknown
 	}
 	defer reader.Close()
-
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		return blob.SizeUnknown
 	}
-
 	c.setData(data)
-
 	return int64(len(data))
 }
 
@@ -124,22 +116,18 @@ func (c *Blob) Digest() (string, bool) {
 	if size != blob.SizeUnknown {
 		// If we know the size, use a buffer of exact size
 		buf := make([]byte, size)
-
 		teeReader := io.TeeReader(reader, hasher.Hash())
 		if _, err := io.ReadFull(teeReader, buf); err != nil {
 			return "", false
 		}
-
 		c.setData(buf)
 	} else {
 		// For unknown size, use a buffer to store the data
 		var buf bytes.Buffer
-
 		teeReader := io.TeeReader(reader, hasher.Hash())
 		if _, err := io.Copy(&buf, teeReader); err != nil {
 			return "", false
 		}
-
 		c.setData(buf.Bytes())
 	}
 
@@ -153,7 +141,6 @@ func (c *Blob) MediaType() (mediaType string, known bool) {
 	if mediaTypeAware, ok := c.ReadOnlyBlob.(blob.MediaTypeAware); ok {
 		return mediaTypeAware.MediaType()
 	}
-
 	return "", false
 }
 
@@ -180,20 +167,16 @@ func (c *Blob) Data() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		c.setData(data)
-
 		return data, nil
 	}
 
 	// Create buffer with exact size
 	buf := make([]byte, size)
-	if _, err := io.ReadFull(reader, buf); err != nil {
+	if _, err = io.ReadFull(reader, buf); err != nil {
 		return nil, err
 	}
-
 	c.setData(buf)
-
 	return buf, nil
 }
 
@@ -202,7 +185,6 @@ func (c *Blob) Data() ([]byte, error) {
 func (c *Blob) setData(data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
 	c.data = data
 }
 
@@ -211,7 +193,6 @@ func (c *Blob) setData(data []byte) {
 func (c *Blob) getData() []byte {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-
 	return c.data
 }
 
@@ -219,6 +200,5 @@ func (c *Blob) getData() []byte {
 func (c *Blob) ClearCache() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
 	c.data = nil
 }

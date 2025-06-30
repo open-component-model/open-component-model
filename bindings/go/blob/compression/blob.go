@@ -38,7 +38,6 @@ func Compress(b blob.ReadOnlyBlob) *Blob {
 // It implements the MediaTypeAware interface and provides compression functionality.
 type Blob struct {
 	blob.ReadOnlyBlob
-
 	CompressionMethod Method
 }
 
@@ -53,14 +52,12 @@ func (b *Blob) MediaType() (mediaType string, known bool) {
 // It handles different compression methods and returns the appropriate media type string.
 func mediaTypeForBlob(b blob.ReadOnlyBlob, method Method) string {
 	var mediaType string
-
 	switch method {
 	case MethodGzip:
 		fallthrough
 	default:
 		mediaType = getMediaType(b, MediaTypeGzipSuffix, MediaTypeGzip)
 	}
-
 	return mediaType
 }
 
@@ -74,11 +71,9 @@ func getMediaType(b blob.ReadOnlyBlob, ext, def string) string {
 			mediaType += ext
 		}
 	}
-
 	if mediaType == "" {
 		mediaType = def
 	}
-
 	return mediaType
 }
 
@@ -101,7 +96,6 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 // compress compresses the data from the reader with the specified compression method and writes it to the writer.
 func compress(reader io.ReadCloser, writer *io.PipeWriter, method Method) {
 	var compressed io.WriteCloser
-
 	switch method {
 	case MethodGzip:
 		fallthrough
@@ -125,30 +119,23 @@ func compress(reader io.ReadCloser, writer *io.PipeWriter, method Method) {
 //   - A ReadOnlyBlob that provides access to the decompressed data
 //   - An error if the blob cannot be decompressed
 func Decompress(b blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
-	var (
-		method    Method
-		mediaType string
-	)
-
+	var method Method
+	var mediaType string
 	if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
 		if mediaType, ok = mediaTypeAware.MediaType(); ok {
 			if isGzip := mediaType == MediaTypeGzip || strings.HasSuffix(mediaType, MediaTypeGzipSuffix); isGzip {
 				method = MethodGzip
-
 				if mediaType == MediaTypeGzip {
 					mediaType = "application/octet-stream"
 				}
-
 				mediaType = strings.TrimSuffix(mediaType, MediaTypeGzipSuffix)
 			}
 		}
 	}
-
 	if method == "" {
 		// we can return the data as is because it is not knowingly compressed
 		return b, nil
 	}
-
 	return &DecompressedBlob{
 		ReadOnlyBlob:      b,
 		compressionMethod: method,
@@ -160,7 +147,6 @@ func Decompress(b blob.ReadOnlyBlob) (blob.ReadOnlyBlob, error) {
 // It wraps the original compressed blob and provides transparent access to the decompressed data.
 type DecompressedBlob struct {
 	blob.ReadOnlyBlob
-
 	compressionMethod Method
 	mediaType         string
 }
@@ -195,7 +181,6 @@ func (d *DecompressedBlob) ReadCloser() (io.ReadCloser, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error creating gzip reader: %w", err)
 		}
-
 		decompressed = gzReader
 	}
 

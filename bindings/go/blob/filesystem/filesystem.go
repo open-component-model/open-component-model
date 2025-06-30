@@ -81,13 +81,11 @@ func NewFS(base string, flag int) (FileSystem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to get absolute path: %w", err)
 	}
-
 	fi, err := os.Stat(base)
 	if os.IsNotExist(err) {
 		if flag&os.O_CREATE == 0 {
 			return nil, fmt.Errorf("path does not exist: %s", base)
 		}
-
 		if err = os.MkdirAll(base, 0o755); err != nil {
 			return nil, fmt.Errorf("failed to create path: %w", err)
 		}
@@ -99,7 +97,6 @@ func NewFS(base string, flag int) (FileSystem, error) {
 	if fi != nil && !fi.IsDir() {
 		return nil, fmt.Errorf("path is not a directory: %s", base)
 	}
-
 	return &osFileSystem{base: base, flag: flag}, nil
 }
 
@@ -121,7 +118,6 @@ func (s *osFileSystem) Remove(name string) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
-
 	return os.Remove(filepath.Join(s.base, name))
 }
 
@@ -129,7 +125,6 @@ func (s *osFileSystem) OpenFile(name string, flag int, perm os.FileMode) (fs.Fil
 	if s.ReadOnly() && !isFlagReadOnly(flag) {
 		return nil, ErrReadOnly
 	}
-
 	return os.OpenFile(filepath.Join(s.base, name), flag, perm)
 }
 
@@ -145,7 +140,6 @@ func (s *osFileSystem) MkdirAll(name string, perm os.FileMode) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
-
 	return os.MkdirAll(filepath.Join(s.base, name), perm)
 }
 
@@ -153,7 +147,6 @@ func (s *osFileSystem) RemoveAll(path string) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
-
 	return os.RemoveAll(filepath.Join(s.base, path))
 }
 
@@ -164,14 +157,12 @@ func (s *osFileSystem) Stat(name string) (fs.FileInfo, error) {
 func (s *osFileSystem) ReadOnly() bool {
 	s.flagMu.RLock()
 	defer s.flagMu.RUnlock()
-
 	return isFlagReadOnly(s.flag)
 }
 
 func (s *osFileSystem) ForceReadOnly() {
 	s.flagMu.Lock()
 	defer s.flagMu.Unlock()
-
 	s.flag &= os.O_RDONLY
 }
 

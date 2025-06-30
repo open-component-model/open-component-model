@@ -19,7 +19,6 @@ func New(r io.Reader, opts ...MemoryBlobOption) *Blob {
 	for _, opt := range opts {
 		opt.ApplyToMemoryBlob(b)
 	}
-
 	return b
 }
 
@@ -46,8 +45,7 @@ type Blob struct {
 //
 // Note that this behavior is not parallel to WriteableBlob.WriteCloser
 func (b *Blob) ReadCloser() (io.ReadCloser, error) {
-	err := b.Load()
-	if err != nil {
+	if err := b.Load(); err != nil {
 		return nil, err
 	}
 
@@ -62,16 +60,13 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 // If the data is already loaded, it returns nil without reloading, as a reload is not necessary.
 func (b *Blob) Load() (err error) {
 	b.mu.RLock()
-
 	if b.loaded {
 		b.mu.RUnlock()
 		return b.err // already loaded
 	}
-
 	b.mu.RUnlock()
 
 	b.mu.Lock()
-
 	defer func() {
 		b.loaded = true
 		b.err = err // store the error if any occurred because Load should not be called again
@@ -90,7 +85,6 @@ func (b *Blob) Load() (err error) {
 		_, err = io.Copy(&data, sourceWithDigest)
 		b.size = int64(data.Len())
 	}
-
 	if err != nil {
 		return err
 	}
@@ -121,14 +115,12 @@ func (b *Blob) Size() int64 {
 func (b *Blob) HasPrecalculatedSize() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-
 	return b.size > -1
 }
 
 func (b *Blob) SetPrecalculatedSize(size int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
 	b.size = size
 }
 
@@ -139,35 +131,30 @@ func (b *Blob) Digest() (string, bool) {
 
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-
 	return b.digest.String(), true
 }
 
 func (b *Blob) HasPrecalculatedDigest() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-
 	return b.digest != ""
 }
 
 func (b *Blob) SetPrecalculatedDigest(dig string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
 	b.digest = digest.Digest(dig)
 }
 
 func (b *Blob) MediaType() (string, bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-
 	return b.mediaType, true
 }
 
 func (b *Blob) SetMediaType(mediaType string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
 	b.mediaType = mediaType
 }
 

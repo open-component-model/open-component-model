@@ -23,12 +23,10 @@ func ArchiveBlob(name string, size int64, digest string, b ReadOnlyBlob, writer 
 	}); err != nil {
 		return fmt.Errorf("unable to write blob header: %w", err)
 	}
-
 	data, err := b.ReadCloser()
 	if err != nil {
 		return fmt.Errorf("unable to read blob %s: %w", digest, err)
 	}
-
 	defer func() {
 		err = errors.Join(err, data.Close())
 	}()

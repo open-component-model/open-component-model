@@ -72,7 +72,6 @@ func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) 
 	if _, exists := d.Vertices[id]; exists {
 		return fmt.Errorf("node %v already exists", id)
 	}
-
 	d.Vertices[id] = &Vertex[T]{
 		ID:         id,
 		Attributes: make(map[string]any),
@@ -85,7 +84,6 @@ func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) 
 
 	d.OutDegree[id] = 0
 	d.InDegree[id] = 0
-
 	return nil
 }
 
@@ -128,15 +126,12 @@ func formatCycle(cycle []string) string {
 func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]any) error {
 	fromNode, fromExists := d.Vertices[from]
 	_, toExists := d.Vertices[to]
-
 	if !fromExists {
 		return fmt.Errorf("node %v does not exist", from)
 	}
-
 	if !toExists {
 		return fmt.Errorf("node %v does not exist", to)
 	}
-
 	if from == to {
 		return ErrSelfReference
 	}
@@ -155,7 +150,6 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 		if hasCycle {
 			// Ehmmm, we have a cycle, let's remove the edge we just added
 			delete(fromNode.Edges, to)
-
 			d.OutDegree[from]--
 			d.InDegree[to]--
 
@@ -174,13 +168,11 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 
 func (d *DirectedAcyclicGraph[T]) Roots() []T {
 	var roots []T
-
 	for node, degree := range d.InDegree {
 		if degree == 0 {
 			roots = append(roots, node)
 		}
 	}
-
 	return roots
 }
 
@@ -192,14 +184,12 @@ func (d *DirectedAcyclicGraph[T]) TopologicalSort() ([]T, error) {
 	}
 
 	visited := make(map[T]bool)
-
 	var order []T
 
 	// Get a sorted list of all vertices
 	vertices := d.GetVertices()
 
 	var dfs func(T)
-
 	dfs = func(node T) {
 		visited[node] = true
 
@@ -208,7 +198,6 @@ func (d *DirectedAcyclicGraph[T]) TopologicalSort() ([]T, error) {
 		for neighbor := range d.Vertices[node].Edges {
 			neighbors = append(neighbors, neighbor)
 		}
-
 		slices.Sort(neighbors)
 
 		for _, neighbor := range neighbors {
@@ -216,7 +205,6 @@ func (d *DirectedAcyclicGraph[T]) TopologicalSort() ([]T, error) {
 				dfs(neighbor)
 			}
 		}
-
 		order = append(order, node)
 	}
 
@@ -241,40 +229,33 @@ func (d *DirectedAcyclicGraph[T]) GetVertices() []T {
 	// Ensure deterministic order. This is important for TopologicalSort
 	// to return a deterministic result.
 	slices.Sort(nodes)
-
 	return nodes
 }
 
 // GetEdges returns the edges in the graph in sorted order...
 func (d *DirectedAcyclicGraph[T]) GetEdges() [][2]T {
 	var edges [][2]T
-
 	for from, node := range d.Vertices {
 		for to := range node.Edges {
 			edges = append(edges, [2]T{from, to})
 		}
 	}
-
 	sort.Slice(edges, func(i, j int) bool {
 		// Sort by from node first
 		if edges[i][0] == edges[j][0] {
 			return edges[i][1] < edges[j][1]
 		}
-
 		return edges[i][0] < edges[j][0]
 	})
-
 	return edges
 }
 
 func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 	visited := make(map[T]bool)
 	recStack := make(map[T]bool)
-
 	var cyclePath []string
 
 	var dfs func(T) bool
-
 	dfs = func(node T) bool {
 		visited[node] = true
 		recStack[node] = true
@@ -294,25 +275,21 @@ func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 
 		recStack[node] = false
 		cyclePath = cyclePath[:len(cyclePath)-1]
-
 		return false
 	}
 
 	for node := range d.Vertices {
 		if !visited[node] {
 			cyclePath = []string{}
-
 			if dfs(node) {
 				// Trim the cycle path to start from the repeated node
 				start := 0
-
 				for i, v := range cyclePath[:len(cyclePath)-1] {
 					if v == cyclePath[len(cyclePath)-1] {
 						start = i
 						break
 					}
 				}
-
 				return true, cyclePath[start:]
 			}
 		}
@@ -333,8 +310,7 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 
 	// Ensure all vertices exist in the new graph
 	for _, parent := range d.Vertices {
-		err := reverse.AddVertex(parent.ID)
-		if err != nil {
+		if err := reverse.AddVertex(parent.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -342,8 +318,7 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 	// Reverse the edges: Child -> Parent instead of Parent -> Child
 	for _, parent := range d.Vertices {
 		for child := range parent.Edges {
-			err := reverse.AddEdge(child, parent.ID)
-			if err != nil {
+			if err := reverse.AddEdge(child, parent.ID); err != nil {
 				return nil, err
 			}
 		}

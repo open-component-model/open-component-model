@@ -37,7 +37,6 @@ func Copy(dst io.Writer, src ReadOnlyBlob) (err error) {
 	if err != nil {
 		return err
 	}
-
 	defer func() {
 		err = errors.Join(err, data.Close())
 	}()
@@ -46,14 +45,12 @@ func Copy(dst io.Writer, src ReadOnlyBlob) (err error) {
 
 	if digestAware, ok := src.(DigestAware); ok {
 		if digRaw, known := digestAware.Digest(); known {
-			dig, err := digest.Parse(digRaw)
-			if err != nil {
+			var dig digest.Digest
+			if dig, err = digest.Parse(digRaw); err != nil {
 				return err
 			}
-
 			verifier := dig.Verifier()
 			reader = io.TeeReader(reader, verifier)
-
 			defer func() {
 				if !verifier.Verified() {
 					err = errors.Join(err, errors.New("blob digest verification failed"))
