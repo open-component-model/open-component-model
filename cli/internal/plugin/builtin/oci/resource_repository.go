@@ -68,6 +68,9 @@ func (p *ResourceRepositoryPlugin) ProcessResourceDigest(ctx context.Context, re
 			return nil, fmt.Errorf("error creating repository: %w", err)
 		}
 
+		resource = resource.DeepCopy()
+		resource.Access = access
+
 		resource, err := repo.ProcessResourceDigest(ctx, resource)
 		if err != nil {
 			return nil, fmt.Errorf("error downloading resource: %w", err)
