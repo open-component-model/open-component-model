@@ -1,0 +1,6 @@
+{
+  "tools": {
+    "golangci-lint": "2.2.1",
+    "deepcopy-gen": "v0.32.3"
+  }
+}

@@ -40,6 +40,7 @@ func (f *Blob) ReadCloser() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to open file %q: %w", f.path, err)
 	}
+
 	return file, nil
 }
 
@@ -48,14 +49,17 @@ func (f *Blob) WriteCloser() (io.WriteCloser, error) {
 	if !ok {
 		return nil, fmt.Errorf("filesystem %T does not support stat", f.fileSystem)
 	}
+
 	fi, err := statFS.Stat(f.path)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("unable to stat file %q: %w", f.path, err)
 	}
+
 	var mode fs.FileMode = 0o600
 	if err == nil && fi.Mode()&fs.ModeNamedPipe != 0 {
 		mode = fs.ModeNamedPipe
 	}
+
 	ofFS, ok := f.fileSystem.(OpenFileFS)
 	if !ok {
 		return nil, fmt.Errorf("filesystem %T does not support open file", f.fileSystem)
@@ -65,10 +69,12 @@ func (f *Blob) WriteCloser() (io.WriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	writeable, ok := file.(io.WriteCloser)
 	if !ok {
 		return nil, errors.New("file is read only")
 	}
+
 	return writeable, nil
 }
 
@@ -77,10 +83,12 @@ func (f *Blob) Size() int64 {
 	if !ok {
 		return blob.SizeUnknown
 	}
+
 	fi, err := statFS.Stat(f.path)
 	if err != nil {
 		return blob.SizeUnknown
 	}
+
 	return fi.Size()
 }
 
@@ -89,13 +97,17 @@ func (f *Blob) Digest() (string, bool) {
 	if err != nil {
 		return "", false
 	}
+
 	defer func() {
 		_ = data.Close()
 	}()
+
 	var buf bytes.Buffer
+
 	d, err := digest.FromReader(io.TeeReader(data, &buf))
 	if err != nil {
 		return "", false
 	}
+
 	return d.String(), true
 }

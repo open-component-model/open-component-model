@@ -40,6 +40,7 @@ linters:
     - nilerr
     - nilnil
     - nlreturn
+    - noinlineerr
     - nonamedreturns
     - paralleltest
     - perfsprint

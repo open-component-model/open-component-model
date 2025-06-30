@@ -35,11 +35,13 @@ func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get resource data: %w", err)
 	}
+
 	defer func() {
 		err = errors.Join(err, data.Close())
 	}()
 
 	var isNamedPipe bool
+
 	fi, err := os.Stat(path)
 	if err == nil {
 		isNamedPipe = fi.Mode()&os.ModeNamedPipe != 0
@@ -51,16 +53,19 @@ func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) error {
 	} else {
 		mode = 0o600
 	}
+
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, mode)
 	if err != nil {
 		return fmt.Errorf("failed to open target file %s: %w", path, err)
 	}
+
 	defer func() {
 		err = errors.Join(err, file.Close())
 	}()
 
 	buf := ioBufPool.Get().(*[]byte)
 	defer ioBufPool.Put(buf)
+
 	if _, err := io.CopyBuffer(file, data, *buf); err != nil {
 		return fmt.Errorf("failed to copy resource data: %w", err)
 	}

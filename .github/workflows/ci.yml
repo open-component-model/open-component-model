@@ -175,10 +175,13 @@ jobs:
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
+      - name: Read tool versions
+        id: versions
+        run: echo "golangci_lint=$(jq -r '.tools["golangci-lint"]' .github/config/tools-versions.json)" >> $GITHUB_OUTPUT
       - name: golangci-lint ${{ matrix.modules }}
         uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         with:
-          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          version: v${{ steps.versions.outputs.golangci_lint }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
           args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml
 

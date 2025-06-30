@@ -1,8 +1,11 @@
 version: '3'
 
 vars:
-  DEEPCOPY_GEN_TARGET_VERSION: v0.32.3
-  GOLANGCI_LINT_TARGET_VERSION: 2.2.1
+  VERSIONS_FILE: '{{.ROOT_DIR}}/.github/config/tools-versions.json'
+  DEEPCOPY_GEN_TARGET_VERSION:
+    sh: 'jq -r ".tools[\"deepcopy-gen\"]" {{.VERSIONS_FILE}}'
+  GOLANGCI_LINT_TARGET_VERSION:
+    sh: 'jq -r ".tools[\"golangci-lint\"]" {{.VERSIONS_FILE}}'
 
 tasks:
   deepcopy-gen/generate-deepcopy:
