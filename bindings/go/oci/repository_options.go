@@ -16,6 +16,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+var DefaultRepositoryScheme = runtime.NewScheme()
+
+func init() {
+	ocmoci.MustAddToScheme(DefaultRepositoryScheme)
+	v2.MustAddToScheme(DefaultRepositoryScheme)
+}
+
 // RepositoryOptions defines the options for creating a new Repository.
 type RepositoryOptions struct {
 	// Scheme is the runtime scheme used for type conversion.
@@ -121,9 +128,7 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	}
 
 	if options.Scheme == nil {
-		options.Scheme = runtime.NewScheme()
-		ocmoci.MustAddToScheme(options.Scheme)
-		v2.MustAddToScheme(options.Scheme)
+		options.Scheme = DefaultRepositoryScheme
 	}
 
 	if options.LocalManifestCache == nil {

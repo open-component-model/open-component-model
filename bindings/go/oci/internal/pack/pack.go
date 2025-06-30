@@ -49,31 +49,14 @@ type Options struct {
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
 func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
-	access := b.GetAccess()
-	if access == nil || access.GetType().IsEmpty() {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("resource access or access type is empty")
+	localBlob, ok := b.GetAccess().(*v2.LocalBlob)
+	if !ok {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("artifact access is not a local blob access: %T", b.GetAccess())
 	}
-	typed, err := opts.AccessScheme.NewObject(access.GetType())
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("error creating resource access: %w", err)
-	}
-	if err := opts.AccessScheme.Convert(access, typed); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource access: %w", err)
-	}
-
-	switch access := typed.(type) {
-	case *v2.LocalBlob:
-		internal, err := descriptor.ConvertFromV2LocalBlob(opts.AccessScheme, access)
-		if err != nil {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource local blob access in version 2 to internal representation: %w", err)
-		}
-		return ResourceLocalBlob(ctx, storage, b, internal, opts)
-	default:
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported access type: %T", access)
-	}
+	return ResourceLocalBlob(ctx, storage, b, localBlob, opts)
 }
 
-func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *descriptor.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
+func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
 	switch mediaType := access.MediaType; mediaType {
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
 		return ResourceLocalBlobOCILayout(ctx, storage, b, opts)
@@ -82,7 +65,7 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.
 	}
 }
 
-func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *descriptor.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
 	layer, err := NewBlobOCILayer(b, ResourceBlobOCILayerOptions{
 		BlobMediaType: access.MediaType,
 		BlobDigest:    digest.Digest(access.LocalReference),
