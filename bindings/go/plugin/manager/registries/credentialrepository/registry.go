@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -180,4 +181,10 @@ loop:
 
 	// wrap the untyped internal plugin into a typed representation.
 	return repoPlugin, nil
+}
+
+// ToRepositoryPluginConverter creates a converter that wraps an internal credentials.RepositoryPlugin
+// to implement the external CredentialRepositoryPluginContract interface.
+func (r *RepositoryRegistry) ToRepositoryPluginConverter(plugin credentials.RepositoryPlugin) v1.CredentialRepositoryPluginContract[runtime.Typed] {
+	return NewRepositoryPluginConverter(plugin)
 }
