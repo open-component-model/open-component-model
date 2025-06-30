@@ -22,7 +22,7 @@ func NewCredentialRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 		registry:                            make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins:                  make(map[string]*constructedPlugin), // running plugins
 		consumerTypeRegistrations:           make(map[runtime.Type]runtime.Type),
-		internalCredentialRepositoryPlugins: make(map[runtime.Type]v1.CredentialRepositoryPluginContract[runtime.Typed]),
+		internalCredentialRepositoryPlugins: make(map[runtime.Type]credentials.RepositoryPlugin),
 		scheme:                              runtime.NewScheme(),
 	}
 }
@@ -37,7 +37,7 @@ type RepositoryRegistry struct {
 	constructedPlugins        map[string]*constructedPlugin // running plugins
 	consumerTypeRegistrations map[runtime.Type]runtime.Type
 	// internalCredentialRepositoryPlugins contains all plugins that have been registered using internally import statement.
-	internalCredentialRepositoryPlugins map[runtime.Type]v1.CredentialRepositoryPluginContract[runtime.Typed]
+	internalCredentialRepositoryPlugins map[runtime.Type]credentials.RepositoryPlugin
 }
 
 func (r *RepositoryRegistry) RepositoryScheme() *runtime.Scheme {
@@ -61,7 +61,7 @@ func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, consumerIdentityTyp
 	return nil
 }
 
-func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (v1.CredentialRepositoryPluginContract[runtime.Typed], error) {
+func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (credentials.RepositoryPlugin, error) {
 	if _, err := r.scheme.DefaultType(spec); err != nil {
 		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
 	}
@@ -87,10 +87,16 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 	}
 
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
-		return existingPlugin.Plugin, nil
+		// Convert the external plugin to internal interface using the converter
+		return NewCredentialRepositoryPluginConverter(existingPlugin.Plugin), nil
 	}
 
-	return startAndReturnPlugin(ctx, r, &plugin)
+	externalPlugin, err := startAndReturnPlugin(ctx, r, &plugin)
+	if err != nil {
+		return nil, err
+	}
+	// Convert the external plugin to internal interface using the converter
+	return NewCredentialRepositoryPluginConverter(externalPlugin), nil
 }
 
 // RegisterInternalCredentialRepositoryPlugin can be called by actual implementations in the source.
@@ -98,7 +104,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 func RegisterInternalCredentialRepositoryPlugin[T runtime.Typed](
 	scheme *runtime.Scheme,
 	r *RepositoryRegistry,
-	plugin v1.CredentialRepositoryPluginContract[T],
+	plugin credentials.RepositoryPlugin,
 	cfg T,
 	consumerTypes []runtime.Type,
 ) error {
@@ -110,7 +116,7 @@ func RegisterInternalCredentialRepositoryPlugin[T runtime.Typed](
 		return fmt.Errorf("failed to get type for prototype %T: %w", cfg, err)
 	}
 
-	r.internalCredentialRepositoryPlugins[typ] = &TypeToUntypedPlugin[T]{plugin}
+	r.internalCredentialRepositoryPlugins[typ] = plugin
 	for _, alias := range scheme.GetTypes()[typ] {
 		r.internalCredentialRepositoryPlugins[alias] = r.internalCredentialRepositoryPlugins[typ]
 	}
@@ -181,10 +187,4 @@ loop:
 
 	// wrap the untyped internal plugin into a typed representation.
 	return repoPlugin, nil
-}
-
-// ToRepositoryPluginConverter creates a converter that wraps an internal credentials.RepositoryPlugin
-// to implement the external CredentialRepositoryPluginContract interface.
-func (r *RepositoryRegistry) ToRepositoryPluginConverter(plugin credentials.RepositoryPlugin) v1.CredentialRepositoryPluginContract[runtime.Typed] {
-	return NewRepositoryPluginConverter(plugin)
 }
