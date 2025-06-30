@@ -215,13 +215,7 @@ func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descript
 		done(err)
 	}()
 	res = res.DeepCopy()
-	access := res.Access
-	converted, err := repo.scheme.ConvertOneOf(access, &v2.LocalBlob{}, &accessv1.OCIImage{})
-	if err != nil {
-		return nil, fmt.Errorf("error converting resource access: %w", err)
-	}
-
-	switch typed := converted.(type) {
+	switch typed := res.Access.(type) {
 	case *v2.LocalBlob:
 		if typed.GlobalAccess == nil {
 			return nil, fmt.Errorf("local blob access does not have a global access and cannot be used")

@@ -275,14 +275,14 @@ func TestResourceBlob(t *testing.T) {
 				digest:    digest,
 			},
 			resource: &descriptor.Resource{
-				Access: &v2.LocalBlob{
+				Access: &runtime.Raw{
 					Type: runtime.NewVersionedType("unsupported", "v1"),
 				},
 			},
 			opts: Options{
 				AccessScheme: runtime.NewScheme(),
 			},
-			expectedError: "error converting resource access: cannot decode from unregistered type: unsupported/v1",
+			expectedError: "artifact access is not a local blob access",
 		},
 	}
 
@@ -340,7 +340,7 @@ func TestResourceLocalBlob(t *testing.T) {
 		name          string
 		blob          *testBlob
 		resource      *descriptor.Resource
-		access        *descriptor.LocalBlob
+		access        *v2.LocalBlob
 		opts          Options
 		expectedError string
 	}{
@@ -352,7 +352,7 @@ func TestResourceLocalBlob(t *testing.T) {
 				digest:    dig,
 			},
 			resource: &descriptor.Resource{},
-			access: &descriptor.LocalBlob{
+			access: &v2.LocalBlob{
 				MediaType: "application/vnd.oci.image.layout.v1+tar",
 			},
 			opts: Options{
@@ -368,7 +368,7 @@ func TestResourceLocalBlob(t *testing.T) {
 				digest:    dig,
 			},
 			resource: &descriptor.Resource{},
-			access: &descriptor.LocalBlob{
+			access: &v2.LocalBlob{
 				MediaType: "application/vnd.test",
 			},
 			opts: Options{
@@ -422,7 +422,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 		name          string
 		blob          *testBlob
 		resource      *descriptor.Resource
-		access        *descriptor.LocalBlob
+		access        *v2.LocalBlob
 		opts          Options
 		expectedError string
 	}{
@@ -434,7 +434,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				digest:    digest,
 			},
 			resource: &descriptor.Resource{},
-			access: &descriptor.LocalBlob{
+			access: &v2.LocalBlob{
 				MediaType:      "application/vnd.test",
 				LocalReference: digest.String(),
 			},
@@ -451,7 +451,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				digest:    digest,
 			},
 			resource: &descriptor.Resource{},
-			access: &descriptor.LocalBlob{
+			access: &v2.LocalBlob{
 				MediaType:      "application/vnd.test",
 				LocalReference: digest.String(),
 			},
@@ -469,7 +469,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				digest:    digest,
 			},
 			resource: &descriptor.Resource{},
-			access: &descriptor.LocalBlob{
+			access: &v2.LocalBlob{
 				MediaType:      "application/vnd.test",
 				LocalReference: digest.String(),
 			},

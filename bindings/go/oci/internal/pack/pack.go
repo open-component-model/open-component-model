@@ -49,19 +49,14 @@ type Options struct {
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
 func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
-	var typed v2.LocalBlob
-	if err := opts.AccessScheme.Convert(b.GetAccess(), &typed); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource access: %w", err)
+	localBlob, ok := b.Artifact.GetAccess().(*v2.LocalBlob)
+	if !ok {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("artifact access is not a local blob access: %T", b.Artifact.GetAccess())
 	}
-
-	internal, err := descriptor.ConvertFromV2LocalBlob(opts.AccessScheme, &typed)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource local blob access in version 2 to internal representation: %w", err)
-	}
-	return ResourceLocalBlob(ctx, storage, b, internal, opts)
+	return ResourceLocalBlob(ctx, storage, b, localBlob, opts)
 }
 
-func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *descriptor.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
+func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
 	switch mediaType := access.MediaType; mediaType {
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
 		return ResourceLocalBlobOCILayout(ctx, storage, b, opts)
@@ -70,7 +65,7 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.
 	}
 }
 
-func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *descriptor.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
+func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
 	layer, err := NewBlobOCILayer(b, ResourceBlobOCILayerOptions{
 		BlobMediaType: access.MediaType,
 		BlobDigest:    digest.Digest(access.LocalReference),
