@@ -189,7 +189,7 @@ func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 		// we can thus assume that any CTF we encounter in the wild that does not have this media type field
 		// is actually a CTF generated with OCMv1. in this case we know it is an embedded ArtifactSet
 		if artifact.MediaType == "" {
-			artifact.MediaType = ctf.ArtifactSetMediaType
+			artifact.MediaType = ociImageSpecV1.MediaTypeImageManifest
 		}
 
 		return ociImageSpecV1.Descriptor{

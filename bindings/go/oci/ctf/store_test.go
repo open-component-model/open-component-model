@@ -11,6 +11,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/runtime"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -377,4 +379,53 @@ func TestResolveWithRegistry(t *testing.T) {
 		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
 		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
 	})
+}
+
+func TestResolveWithEmptyMediaType(t *testing.T) {
+	ctf := setupTestCTF(t)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	content := "test"
+	blob := inmemory.New(strings.NewReader(content))
+	digestStr, known := blob.Digest()
+	require.True(t, known)
+	require.NoError(t, ctf.SaveBlob(ctx, blob))
+
+	// Create and set up the index with empty MediaType to simulate old CTF
+	index := v1.NewIndex()
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo",
+		Tag:        "test-tag",
+		Digest:     digestStr,
+		MediaType:  "", // Set to Empty on purpose to signify test.
+	})
+	require.NoError(t, ctf.SetIndex(ctx, index))
+
+	t.Run("resolve with empty media type defaults to image manifest", func(t *testing.T) {
+		desc, err := store.Resolve(ctx, "test-tag")
+		assert.NoError(t, err)
+		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
+	})
+}
+
+func TestMediaTypeDefaulting(t *testing.T) {
+	r := require.New(t)
+	ctfPath := "testdata/compatibility/01/transport-archive"
+	scheme := runtime.NewScheme()
+
+	archive, err := ctf.OpenCTFFromOSPath(ctfPath, ctf.O_RDONLY)
+	r.NoError(err)
+	repo, err := oci.NewRepository(
+		WithCTF(NewFromCTF(archive)),
+		oci.WithScheme(scheme),
+		oci.WithCreator("I am the Creator"),
+	)
+	r.NoError(err)
+	cv, err := repo.GetComponentVersion(t.Context(), "github.com/acme.org/helloworld", "1.0.0")
+	r.NoError(err)
+	r.Equal("github.com/acme.org/helloworld", cv.Component.Name)
 }
