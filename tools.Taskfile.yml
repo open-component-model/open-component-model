@@ -2,7 +2,7 @@ version: '3'
 
 vars:
   DEEPCOPY_GEN_TARGET_VERSION: v0.32.3
-  GOLANGCI_LINT_TARGET_VERSION: 2.1.6
+  GOLANGCI_LINT_TARGET_VERSION: 2.2.1
 
 tasks:
   deepcopy-gen/generate-deepcopy:
