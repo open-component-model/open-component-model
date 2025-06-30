@@ -16,10 +16,6 @@ const (
 	plus           = "+"
 )
 
-// versionsWithPlus cache is used to keep track of version numbers, a warning has already been logged for.
-// The intention is to avoid logging the same warning multiple times for the same version number.
-var versionsWithPlus = make(map[string]string)
-
 // LooseSemverToOCITag converts an OCM version to a valid OCI tag by replacing 1 possible occurrence of the '+' character.
 // If there is more than one occurrence of the '+' character, the expectation is that this is caught later by the
 // OCI tag validation.
@@ -27,14 +23,10 @@ var versionsWithPlus = make(map[string]string)
 // - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/oci.md#version-mapping
 // - https://semver.org/#spec-item-10
 func LooseSemverToOCITag(version string) string {
-	idx := strings.LastIndex(version, plus)
-	if idx == -1 {
-		return version
-	}
-	if _, cached := versionsWithPlus[version]; !cached {
-		versionsWithPlus[version] = ""
+	tag := strings.Replace(version, plus, plusSubstitute, 1)
+	if tag != version {
 		log.Base().Warn("component version contains discouraged character", "version", version, "character", plus)
 	}
 
-	return version[:idx] + plusSubstitute + version[idx+len(plus):]
+	return tag
 }
