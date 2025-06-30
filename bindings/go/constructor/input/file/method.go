@@ -20,10 +20,10 @@ var _ interface {
 	constructor.SourceInputMethod
 } = (*InputMethod)(nil)
 
-var scheme = runtime.NewScheme()
+var Scheme = runtime.NewScheme()
 
 func init() {
-	scheme.MustRegisterWithAlias(&v1.File{},
+	Scheme.MustRegisterWithAlias(&v1.File{},
 		runtime.NewVersionedType(v1.Type, v1.Version),
 		runtime.NewUnversionedType(v1.Type),
 	)
@@ -61,7 +61,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 //  3. Returns the processed blob data wrapped in a ResourceInputMethodResult
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	file := v1.File{}
-	if err := scheme.Convert(resource.Input, &file); err != nil {
+	if err := Scheme.Convert(resource.Input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
@@ -93,7 +93,7 @@ func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, sou
 //  3. Returns the processed blob data wrapped in a SourceInputMethodResult
 func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.Source, _ map[string]string) (result *constructor.SourceInputMethodResult, err error) {
 	file := v1.File{}
-	if err := scheme.Convert(src.Input, &file); err != nil {
+	if err := Scheme.Convert(src.Input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
