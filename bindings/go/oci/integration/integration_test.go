@@ -185,6 +185,14 @@ func Test_Integration_OCIRepository(t *testing.T) {
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
 		})
 
+		t.Run("basic upload and download of a component with complex version", func(t *testing.T) {
+			uploadDownloadBarebonesComponentVersion(t, repo, "test-component-build", "0.0.1-dev-20250121095708.build-b6544da")
+		})
+
+		t.Run("basic upload and download of a component with plus character", func(t *testing.T) {
+			uploadDownloadBarebonesComponentVersion(t, repo, "test-component-plus", "0.0.2-dev-20250121095708+b6544da")
+		})
+
 		t.Run("basic upload and download of a component version (with index based referrer tracking)", func(t *testing.T) {
 			repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(oci.ReferrerTrackingPolicyByIndexAndSubject))
 			r.NoError(err)
@@ -255,6 +263,14 @@ func Test_Integration_CTF(t *testing.T) {
 		require.NoError(t, err)
 		t.Run("basic upload and download of a component version", func(t *testing.T) {
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+		})
+
+		t.Run("basic upload and download of a component with complex version", func(t *testing.T) {
+			uploadDownloadBarebonesComponentVersion(t, repo, "test-component-build", "0.0.1-dev-20250121095708.build-b6544da")
+		})
+
+		t.Run("basic upload and download of a component with plus character", func(t *testing.T) {
+			uploadDownloadBarebonesComponentVersion(t, repo, "test-component-plus", "0.0.2-dev-20250121095708+b6544da")
 		})
 
 		t.Run("basic upload and download of a barebones resource that is compatible with OCI registries", func(t *testing.T) {

@@ -74,7 +74,8 @@ func (s *Store) Reference(reference string) (fmt.Stringer, error) {
 
 // ComponentVersionReference creates a reference string for a component version in the format "component-descriptors/component:version".
 func (s *Store) ComponentVersionReference(component, version string) string {
-	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, version)
+	tag := oci.LooseSemverToOCITag(version) // Remove prohibited characters.
+	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, tag)
 }
 
 // Repository implements the spec.Store interface for a CTF OCI Repository.
@@ -188,7 +189,7 @@ func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 		// we can thus assume that any CTF we encounter in the wild that does not have this media type field
 		// is actually a CTF generated with OCMv1. in this case we know it is an embedded ArtifactSet
 		if artifact.MediaType == "" {
-			artifact.MediaType = ctf.ArtifactSetMediaType
+			artifact.MediaType = ociImageSpecV1.MediaTypeImageManifest
 		}
 
 		return ociImageSpecV1.Descriptor{
@@ -229,7 +230,7 @@ func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		if err := ref.ValidateReferenceAsTag(); err == nil {
 			meta = v1.ArtifactMetadata{
 				Repository: repo,
-				Tag:        reference,
+				Tag:        ref.Tag,
 				Digest:     desc.Digest.String(),
 				MediaType:  desc.MediaType,
 			}
