@@ -99,9 +99,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
 	}
 
-	// Tag the manifest with the version, but first remove prohibited characters.
-	tag := LooseSemverToOCITag(version)
-	if err := store.Tag(ctx, *manifest, tag); err != nil {
+	if err := store.Tag(ctx, *manifest, reference); err != nil {
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
 	// Cleanup local blob memory as all layers have been pushed

@@ -230,7 +230,7 @@ func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		if err := ref.ValidateReferenceAsTag(); err == nil {
 			meta = v1.ArtifactMetadata{
 				Repository: repo,
-				Tag:        reference,
+				Tag:        ref.Tag,
 				Digest:     desc.Digest.String(),
 				MediaType:  desc.MediaType,
 			}
