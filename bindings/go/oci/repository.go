@@ -216,18 +216,12 @@ func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descript
 	}()
 	res = res.DeepCopy()
 	access := res.Access
-	if _, err = repo.scheme.DefaultType(access); err != nil {
-		return nil, fmt.Errorf("error defaulting resource access type: %w", err)
-	}
-	typed, err := repo.scheme.NewObject(access.GetType())
+	converted, err := repo.scheme.ConvertOneOf(access, &v2.LocalBlob{}, &accessv1.OCIImage{})
 	if err != nil {
-		return nil, fmt.Errorf("error creating resource access: %w", err)
-	}
-	if err := repo.scheme.Convert(access, typed); err != nil {
 		return nil, fmt.Errorf("error converting resource access: %w", err)
 	}
 
-	switch typed := typed.(type) {
+	switch typed := converted.(type) {
 	case *v2.LocalBlob:
 		if typed.GlobalAccess == nil {
 			return nil, fmt.Errorf("local blob access does not have a global access and cannot be used")

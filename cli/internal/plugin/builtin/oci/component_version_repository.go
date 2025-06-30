@@ -3,25 +3,56 @@ package plugin
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
+	"oras.land/oras-go/v2/registry/remote/auth"
+	"oras.land/oras-go/v2/registry/remote/retry"
+
+	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
+	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
-	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/cli/internal/plugin/builtin/location"
 )
 
 type ComponentVersionRepositoryPlugin struct {
 	contracts.EmptyBasePlugin
+	scheme    *runtime.Scheme
 	manifests cache.OCIDescriptorCache
 	layers    cache.OCIDescriptorCache
 	repoCache *repoCache
+}
+
+func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
+	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
+	}
+
+	identity, err := runtime.ParseURLToIdentity(ociRepoSpec.BaseUrl)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
+	}
+	identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
+
+	return identity, nil
+}
+
+func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentversionrepository.ComponentVersionRepository, error) {
+	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
+	}
+
+	repo, err := p.createRepository(ociRepoSpec, credentials)
+	if err != nil {
+		return nil, fmt.Errorf("error creating repository: %w", err)
+	}
+
+	return &wrapper{repo: repo}, nil
 }
 
 // TODO Repeated calls with separate credentials will always use the first credentials set.
@@ -40,87 +71,72 @@ func (p *ComponentVersionRepositoryPlugin) getRepository(spec *ociv1.Repository,
 	return repo, nil
 }
 
-func (p *ComponentVersionRepositoryPlugin) GetIdentity(_ context.Context, typ *repov1.GetIdentityRequest[*ociv1.Repository]) (*repov1.GetIdentityResponse, error) {
-	identity, err := runtime.ParseURLToIdentity(typ.Typ.BaseUrl)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
-	}
-	identity.SetType(runtime.NewVersionedType(ociv1.Type, ociv1.Version))
-	return &repov1.GetIdentityResponse{Identity: identity}, nil
+var (
+	_ componentversionrepository.ComponentVersionRepositoryProvider = (*ComponentVersionRepositoryPlugin)(nil)
+	_ componentversionrepository.ComponentVersionRepository         = (*wrapper)(nil)
+)
+
+// wrapper wraps a repo into returning the component version repository ComponentVersionRepositoryPlugin.
+// That's because the plugin interface uses ReadyOnlyBlob while the oci.ComponentVersionRepositoryPlugin uses LocalBlob
+// specific to OCI and CTF.
+type wrapper struct {
+	repo oci.ComponentVersionRepository
 }
 
-func (p *ComponentVersionRepositoryPlugin) GetComponentVersion(ctx context.Context, request repov1.GetComponentVersionRequest[*ociv1.Repository], credentials map[string]string) (*descriptor.Descriptor, error) {
-	repo, err := p.getRepository(request.Repository, credentials)
-	if err != nil {
-		return nil, fmt.Errorf("error creating repository: %w", err)
-	}
-	return repo.GetComponentVersion(ctx, request.Name, request.Version)
+func (w *wrapper) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
+	return w.repo.AddComponentVersion(ctx, descriptor)
 }
 
-func (p *ComponentVersionRepositoryPlugin) ListComponentVersions(ctx context.Context, request repov1.ListComponentVersionsRequest[*ociv1.Repository], credentials map[string]string) ([]string, error) {
-	repo, err := p.getRepository(request.Repository, credentials)
-	if err != nil {
-		return nil, fmt.Errorf("error creating repository: %w", err)
-	}
-	return repo.ListComponentVersions(ctx, request.Name)
+func (w *wrapper) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+	return w.repo.GetComponentVersion(ctx, component, version)
 }
 
-func (p *ComponentVersionRepositoryPlugin) AddComponentVersion(ctx context.Context, request repov1.PostComponentVersionRequest[*ociv1.Repository], credentials map[string]string) error {
-	repo, err := p.getRepository(request.Repository, credentials)
-	if err != nil {
-		return fmt.Errorf("error creating repository: %w", err)
-	}
-	desc, err := descriptor.ConvertFromV2(request.Descriptor)
-	if err != nil {
-		return fmt.Errorf("error converting descriptor: %w", err)
-	}
-	return repo.AddComponentVersion(ctx, desc)
+func (w *wrapper) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
+	return w.repo.ListComponentVersions(ctx, component)
 }
 
-func (p *ComponentVersionRepositoryPlugin) AddLocalResource(ctx context.Context, request repov1.PostLocalResourceRequest[*ociv1.Repository], credentials map[string]string) (*descriptor.Resource, error) {
-	repo, err := p.getRepository(request.Repository, credentials)
-	if err != nil {
-		return nil, fmt.Errorf("error creating repository: %w", err)
-	}
-	resource := descriptor.ConvertFromV2Resources([]v2.Resource{*request.Resource})[0]
-
-	b, err := location.Read(request.ResourceLocation)
-	if err != nil {
-		return nil, fmt.Errorf("error reading blob from location: %w", err)
-	}
-
-	newRes, err := repo.AddLocalResource(ctx, request.Name, request.Version, &resource, b)
-	if err != nil {
-		return nil, fmt.Errorf("error adding local resource: %w", err)
-	}
-	return newRes, nil
+func (w *wrapper) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	return w.repo.AddLocalResource(ctx, component, version, res, content)
 }
 
-func (p *ComponentVersionRepositoryPlugin) GetLocalResource(ctx context.Context, request repov1.GetLocalResourceRequest[*ociv1.Repository], credentials map[string]string) (repov1.GetLocalResourceResponse, error) {
-	repo, err := p.getRepository(request.Repository, credentials)
+func (w *wrapper) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+	return w.repo.GetLocalResource(ctx, component, version, identity)
+}
+
+func (w *wrapper) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
+	return w.repo.AddLocalSource(ctx, component, version, res, content)
+}
+
+func (w *wrapper) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
+	return w.repo.GetLocalSource(ctx, component, version, identity)
+}
+
+// TODO(jakobmoellerdev): add identity mapping function from OCI package here as soon as we have the conversion function
+func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Repository, credentials map[string]string) (oci.ComponentVersionRepository, error) {
+	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
-		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error creating repository: %w", err)
+		return nil, fmt.Errorf("invalid URL %q: %w", spec.BaseUrl, err)
 	}
-	b, res, err := repo.GetLocalResource(ctx, request.Name, request.Version, request.Identity)
+	urlString := url.Host + url.Path
+
+	urlResolver, err := urlresolver.New(urlresolver.WithBaseURL(urlString))
 	if err != nil {
-		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error getting local resource: %w", err)
+		return nil, fmt.Errorf("error creating URL resolver: %w", err)
 	}
 
-	path := filepath.Join(os.TempDir(), fmt.Sprintf("ocm-local-resource-%d", res.ToIdentity().CanonicalHashV1()))
-	tmp, err := os.Create(path)
-	if err != nil {
-		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error creating buffer file: %w", err)
-	}
-	_ = tmp.Close() // Ensure the file is closed after creation
-
-	loc := types.Location{
-		LocationType: types.LocationTypeLocalFile,
-		Value:        path,
-	}
-
-	if err := location.Write(loc, b); err != nil {
-		return repov1.GetLocalResourceResponse{}, fmt.Errorf("error writing blob to location: %w", err)
-	}
-
-	return repov1.GetLocalResourceResponse{Location: loc}, nil
+	urlResolver.SetClient(&auth.Client{
+		Client: retry.DefaultClient,
+		Header: map[string][]string{
+			"User-Agent": {Creator},
+		},
+		Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
+	})
+	repo, err := oci.NewRepository(
+		oci.WithResolver(urlResolver),
+		oci.WithScheme(p.scheme),
+		oci.WithCreator(Creator),
+		oci.WithManifestCache(p.manifests),
+		oci.WithLayerCache(p.layers),
+	)
+	return repo, err
 }

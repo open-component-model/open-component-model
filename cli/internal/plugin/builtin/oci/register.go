@@ -28,7 +28,7 @@ func Register(
 
 	repoCache := newRepoCache()
 
-	cvRepoPlugin := ComponentVersionRepositoryPlugin{manifests: manifests, layers: layers, repoCache: repoCache}
+	cvRepoPlugin := ComponentVersionRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, repoCache: repoCache}
 	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, repoCache: repoCache}
 
 	return errors.Join(

@@ -1097,6 +1097,7 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 	r.NoError(repoStore.Push(ctx, layerDesc, bytes.NewReader(content)))
 
 	topDesc, err := oci.AddDescriptorToStore(ctx, repoStore, desc, oci.AddDescriptorOptions{
+		Scheme:           runtime.NewScheme(runtime.WithAllowUnknown()),
 		Author:           "OLD OCM",
 		AdditionalLayers: []ociImageSpecV1.Descriptor{layerDesc},
 	})

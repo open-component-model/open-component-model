@@ -250,7 +250,7 @@ func TestResourceBlob(t *testing.T) {
 			},
 		},
 		{
-			name: "error on empty access type",
+			name: "empty type but typed access",
 			blob: &testBlob{
 				content:   content,
 				mediaType: "application/vnd.test",
@@ -258,28 +258,14 @@ func TestResourceBlob(t *testing.T) {
 			},
 			resource: &descriptor.Resource{
 				Access: &v2.LocalBlob{
-					Type: runtime.NewVersionedType("", ""),
+					LocalReference: digest.String(),
+					MediaType:      "application/vnd.test",
 				},
 			},
 			opts: Options{
-				AccessScheme: runtime.NewScheme(),
+				AccessScheme:  runtime.NewScheme(),
+				BaseReference: "test-ref",
 			},
-			expectedError: "resource access or access type is empty",
-		},
-		{
-			name: "error on nil access",
-			blob: &testBlob{
-				content:   content,
-				mediaType: "application/vnd.test",
-				digest:    digest,
-			},
-			resource: &descriptor.Resource{
-				Access: nil,
-			},
-			opts: Options{
-				AccessScheme: runtime.NewScheme(),
-			},
-			expectedError: "resource access or access type is empty",
 		},
 		{
 			name: "error on unsupported access type",
@@ -296,7 +282,7 @@ func TestResourceBlob(t *testing.T) {
 			opts: Options{
 				AccessScheme: runtime.NewScheme(),
 			},
-			expectedError: "error creating resource access: unsupported type: unsupported/v1",
+			expectedError: "error converting resource access: cannot decode from unregistered type: unsupported/v1",
 		},
 	}
 

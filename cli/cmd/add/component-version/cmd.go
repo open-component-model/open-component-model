@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,8 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
@@ -24,8 +20,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -106,7 +100,6 @@ add component-version ./path/to/%[1]s ./path/to/%[2]s.yaml
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	file.VarP(cmd.Flags(), FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "path to the repository")
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the repository")
-	cmd.Flags().Bool(FlagCopyResources, false, "copy external resources by-value to the archive")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionOverridePolicies(), "policy to apply when a component version already exists in the repository")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
@@ -128,11 +121,6 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
 	if err != nil {
 		return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
-	}
-
-	copyResources, err := cmd.Flags().GetBool(FlagCopyResources)
-	if err != nil {
-		return fmt.Errorf("getting copy-resources flag failed: %w", err)
 	}
 
 	skipReferenceDigestProcessing, err := cmd.Flags().GetBool(FlagSkipReferenceDigestProcessing)
@@ -168,14 +156,11 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	}
 
 	opts := constructor.Options{
-		TargetRepositoryProvider:    instance,
-		ResourceRepositoryProvider:  instance,
-		SourceInputMethodProvider:   instance,
-		ResourceInputMethodProvider: instance,
-		CredentialProvider:          instance,
-		ProcessResourceByValue: func(resource *constructorruntime.Resource) bool {
-			return copyResources
-		},
+		TargetRepositoryProvider:       instance,
+		ResourceRepositoryProvider:     instance,
+		SourceInputMethodProvider:      instance,
+		ResourceInputMethodProvider:    instance,
+		CredentialProvider:             instance,
 		ConcurrencyLimit:               concurrencyLimit,
 		ComponentVersionConflictPolicy: ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 	}
@@ -277,86 +262,17 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", prov.targetRepoSpec, err)
 	}
 	var creds map[string]string
-	identity, err := plugin.GetIdentity(ctx, &v1.GetIdentityRequest[runtime.Typed]{Typ: prov.targetRepoSpec})
+	identity, err := plugin.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
 	if err == nil {
-		if creds, err = prov.Graph.Resolve(ctx, identity.Identity); err != nil {
+		if creds, err = prov.Graph.Resolve(ctx, identity); err != nil {
 			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", prov.targetRepoSpec, err)
 		}
 	}
-	return &targetRepo{prov.cache, prov.targetRepoSpec, creds, plugin}, nil
-}
-
-type targetRepo struct {
-	cache       string
-	spec        runtime.Typed
-	credentials map[string]string
-	v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed]
-}
-
-func (t targetRepo) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (newRes *descriptor.Source, err error) {
-	return nil, fmt.Errorf("adding local sources is not yet supported in this command")
-}
-
-func (t targetRepo) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {
-	cacheFileName := filepath.Join(t.cache, strconv.FormatUint(res.ToIdentity().CanonicalHashV1(), 10))
-	cacheFileName, err = filepath.Abs(cacheFileName)
+	repo, err := plugin.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
 	if err != nil {
-		return nil, fmt.Errorf("getting absolute path for cache file %q failed: %w", cacheFileName, err)
+		return nil, fmt.Errorf("getting component version repository for %q failed: %w", prov.targetRepoSpec, err)
 	}
-
-	if err := os.MkdirAll(filepath.Dir(cacheFileName), 0755); err != nil {
-		return nil, fmt.Errorf("creating cache directory %q failed: %w", t.cache, err)
-	}
-
-	if err := filesystem.CopyBlobToOSPath(content, cacheFileName); err != nil {
-		return nil, fmt.Errorf("copying blob to cache file %q failed: %w", cacheFileName, err)
-	}
-	defer func() {
-		_ = os.Remove(cacheFileName)
-		// if last entry was removed, remove the cache directory as well
-		if entries, err := os.ReadDir(t.cache); err == nil && len(entries) == 0 {
-			_ = os.Remove(t.cache)
-		}
-	}()
-
-	v2res, err := descriptor.ConvertToV2Resources(runtime.NewScheme(runtime.WithAllowUnknown()), []descriptor.Resource{*res})
-	if err != nil {
-		return nil, fmt.Errorf("converting resource to resourcev1 failed: %w", err)
-	}
-
-	return t.ReadWriteOCMRepositoryPluginContract.AddLocalResource(ctx, v1.PostLocalResourceRequest[runtime.Typed]{
-		Repository: t.spec,
-		Name:       component,
-		Version:    version,
-		ResourceLocation: types.Location{
-			LocationType: types.LocationTypeLocalFile,
-			Value:        cacheFileName,
-		},
-		Resource: &v2res[0],
-	}, t.credentials)
-}
-
-func (t targetRepo) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
-	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
-	if err != nil {
-		return fmt.Errorf("converting descriptor to resourcev1 failed: %w", err)
-	}
-	return t.ReadWriteOCMRepositoryPluginContract.AddComponentVersion(ctx, v1.PostComponentVersionRequest[runtime.Typed]{
-		Repository: t.spec,
-		Descriptor: v2desc,
-	}, t.credentials)
-}
-
-func (t targetRepo) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
-	cv, err := t.ReadWriteOCMRepositoryPluginContract.GetComponentVersion(ctx, v1.GetComponentVersionRequest[runtime.Typed]{
-		Repository: t.spec,
-		Name:       component,
-		Version:    version,
-	}, t.credentials)
-	if err != nil {
-		return nil, fmt.Errorf("getting component version %q/%q from %q failed: %w", component, version, t.spec.GetType(), err)
-	}
-	return cv, nil
+	return repo, err
 }
 
 func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.Options) (opts constructor.Options, stop func(), err error) {
@@ -392,12 +308,11 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 			return nil
 		}
 		options.OnEndComponentConstruct = func(_ context.Context, descriptor *descriptor.Descriptor, err error) error {
-			key := descriptor.Component.Name + "/" + descriptor.Component.Version
-			tracker := trackers[key]
 			if err != nil {
-				tracker.MarkAsErrored()
 				return nil
 			}
+			key := descriptor.Component.Name + "/" + descriptor.Component.Version
+			tracker := trackers[key]
 			tracker.UpdateMessage(tracker.Message + " constructed")
 			tracker.Increment(1)
 			tracker.MarkAsDone()

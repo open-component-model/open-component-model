@@ -14,7 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const Creator = "OCI Repository ComponentVersionRepositoryPlugin"
+const Creator = "Builtin OCI Repository Plugin"
 
 type Repository interface {
 	oci.ResourceRepository

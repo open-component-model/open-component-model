@@ -49,28 +49,16 @@ type Options struct {
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
 func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
-	access := b.GetAccess()
-	if access == nil || access.GetType().IsEmpty() {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("resource access or access type is empty")
-	}
-	typed, err := opts.AccessScheme.NewObject(access.GetType())
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("error creating resource access: %w", err)
-	}
-	if err := opts.AccessScheme.Convert(access, typed); err != nil {
+	var typed v2.LocalBlob
+	if err := opts.AccessScheme.Convert(b.GetAccess(), &typed); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource access: %w", err)
 	}
 
-	switch access := typed.(type) {
-	case *v2.LocalBlob:
-		internal, err := descriptor.ConvertFromV2LocalBlob(opts.AccessScheme, access)
-		if err != nil {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource local blob access in version 2 to internal representation: %w", err)
-		}
-		return ResourceLocalBlob(ctx, storage, b, internal, opts)
-	default:
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unsupported access type: %T", access)
+	internal, err := descriptor.ConvertFromV2LocalBlob(opts.AccessScheme, &typed)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("error converting resource local blob access in version 2 to internal representation: %w", err)
 	}
+	return ResourceLocalBlob(ctx, storage, b, internal, opts)
 }
 
 func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *descriptor.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {

@@ -6,7 +6,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/credentials/oci"
 	ctfplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/ctf"
-	filev1 "ocm.software/open-component-model/cli/internal/plugin/builtin/input/file/v1"
+	filev1 "ocm.software/open-component-model/cli/internal/plugin/builtin/input/file"
 	ociplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/oci"
 )
 
