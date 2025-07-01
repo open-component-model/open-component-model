@@ -5,14 +5,10 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var (
-	_ credentials.RepositoryPluginProvider = &RepositoryRegistry{}
-	_ credentials.RepositoryPlugin         = &credentialGraphPlugin{}
-)
+var _ credentials.RepositoryPluginProvider = &RepositoryRegistry{}
 
 func (r *RepositoryRegistry) GetRepositoryPlugin(ctx context.Context, consumer runtime.Typed) (credentials.RepositoryPlugin, error) {
 	typ, ok := r.consumerTypeRegistrations[consumer.GetType()]
@@ -22,7 +18,7 @@ func (r *RepositoryRegistry) GetRepositoryPlugin(ctx context.Context, consumer r
 
 	base, ok := r.internalCredentialRepositoryPlugins[typ]
 	if ok {
-		return &credentialGraphPlugin{r.scheme, base}, nil
+		return base, nil
 	}
 
 	plugin, ok := r.registry[typ]
@@ -31,7 +27,7 @@ func (r *RepositoryRegistry) GetRepositoryPlugin(ctx context.Context, consumer r
 	}
 
 	if existingPlugin, ok := r.constructedPlugins[plugin.ID]; ok {
-		return &credentialGraphPlugin{r.scheme, existingPlugin.Plugin}, nil
+		return NewCredentialRepositoryPluginConverter(existingPlugin.Plugin), nil
 	}
 
 	started, err := startAndReturnPlugin(ctx, r, &plugin)
@@ -39,27 +35,5 @@ func (r *RepositoryRegistry) GetRepositoryPlugin(ctx context.Context, consumer r
 		return nil, fmt.Errorf("failed to start plugin %s: %w", plugin.ID, err)
 	}
 
-	return &credentialGraphPlugin{r.scheme, started}, nil
-}
-
-type credentialGraphPlugin struct {
-	scheme *runtime.Scheme
-	v1.CredentialRepositoryPluginContract[runtime.Typed]
-}
-
-func (p *credentialGraphPlugin) ConsumerIdentityForConfig(ctx context.Context, cfg runtime.Typed) (runtime.Identity, error) {
-	return p.CredentialRepositoryPluginContract.ConsumerIdentityForConfig(ctx, v1.ConsumerIdentityForConfigRequest[runtime.Typed]{
-		Config: cfg,
-	})
-}
-
-func (p *credentialGraphPlugin) Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
-	return p.CredentialRepositoryPluginContract.Resolve(ctx, v1.ResolveRequest[runtime.Typed]{
-		Config:   cfg,
-		Identity: identity,
-	}, credentials)
-}
-
-func (p *credentialGraphPlugin) SupportedRepositoryConfigTypes() []runtime.Type {
-	return nil
+	return NewCredentialRepositoryPluginConverter(started), nil
 }

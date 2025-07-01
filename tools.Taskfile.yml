@@ -31,21 +31,27 @@ tasks:
 
   golangci-lint/run:
     desc: "Run golangci-lint on all go modules"
-    deps:
-        - for: { var: GO_MODULES }
-          task: 'golangci-lint/module'
-          vars:
-            ITEM: '{{ .ITEM }}'
-        - task: 'golangci-lint/module'
-          vars:
-            ITEM: 'cli'
+    deps: [golangci-lint/install]
+    cmds:
+      - task: golangci-lint/run-concurrent
     aliases:
       - "lint"
+
+  golangci-lint/run-concurrent:
+    desc: "Run golangci-lint on all modules concurrently after install"
+    internal: true
+    deps: 
+      - for: { var: GO_MODULES }
+        task: 'golangci-lint/module'
+        vars:
+          ITEM: '{{ .ITEM }}'
+      - task: 'golangci-lint/module'
+        vars:
+          ITEM: 'cli'
 
   golangci-lint/module:
     desc: "Run golangci-lint on a single go module specified by ITEM"
     internal: true
-    deps: [golangci-lint/install]
     cmd: |
       cd {{.ITEM}} && 
         {{ .ROOT_DIR }}/tmp/bin/golangci-lint run \

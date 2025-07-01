@@ -1,28 +1,41 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   extends: [
     'config:recommended',
     'config:best-practices',
     'security:openssf-scorecard',
     'helpers:pinGitHubActionDigests',
-    ':rebaseStalePrs',
+    ':rebaseStalePrs'
   ],
   'git-submodules': {
-    enabled: true,
+    enabled: true
   },
-  postUpdateOptions: [
-    'gomodTidy',
-  ],
   packageRules: [
     {
+      "matchCategories": [
+        "golang"
+      ],
+      "postUpdateOptions": [
+        "gomodTidy"
+      ],
+      "enabled": true
+    },
+    {
       matchManagers: [
-        'gomod',
+        'gomod'
       ],
       groupName: 'OCM Monorepo Go Module Dependencies',
       groupSlug: 'ocm-monorepo',
-      automerge: true,
       matchPackageNames: [
-        '//^ocm.software/open-component-model///',
-      ],
-    },
+        'ocm.software/open-component-model/**'
+      ]
+    }
   ],
+  "postUpgradeTasks": {
+    "commands": [
+      "find . -name \"go.mod\" -type f -path '*/integration/*' -exec dirname {} \\; | while read dir; do echo \"Running explicit go mod tidy for integration test in $dir\"; cd \"$dir\" && go mod tidy && cd - > /dev/null; done"
+    ],
+    "fileFilters": ["**/go.mod", "**/go.sum"],
+    "executionMode": "branch"
+  },
 }
