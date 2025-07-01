@@ -62,7 +62,7 @@ type LocalResourceRepository interface {
 
 	// GetLocalResource retrieves a local [descriptor.Resource] from the repository.
 	// The [runtime.Identity] must match a resource in the [descriptor.Descriptor].
-	GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Resource, error)
+	GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error)
 }
 
 type LocalSourceRepository interface {
@@ -75,7 +75,7 @@ type LocalSourceRepository interface {
 
 	// GetLocalSource retrieves a local [descriptor.Source] from the repository.
 	// The [runtime.Identity] must match a source in the [descriptor.Descriptor].
-	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Source, error)
+	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error)
 }
 
 // ResourceRepository defines the interface for storing and retrieving OCM resources

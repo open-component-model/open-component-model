@@ -331,7 +331,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 }
 
 // GetLocalResource retrieves a local resource from the repository.
-func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Resource, error) {
+func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
 	var err error
 	done := log.Operation(ctx, "get local resource",
 		slog.String("component", component),
@@ -349,7 +349,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	return b, artifact.(*descriptor.Resource), nil
 }
 
-func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Source, error) {
+func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	var err error
 	done := log.Operation(ctx, "get local source",
 		slog.String("component", component),
