@@ -1,13 +1,43 @@
 {
   "branchPrefix": "renovate/",
   "dryRun": "full",
-  "username": "Renovate",
-  "gitAuthor": "Renovate Bot <bot@renovateapp.com>",
+  "username": "ocmbot",
+  "gitAuthor": "GitHub Actions Bot <41898282+github-actions[bot]@users.noreply.github.com>",
   "onboarding": false,
   "platform": "github",
   "forkProcessing": "enabled",
   "repositories": [
     "open-component-model/open-component-model",
   ],
-  "packageRules": []
+  extends: [
+    'config:recommended',
+    'config:best-practices',
+    'security:openssf-scorecard',
+    'helpers:pinGitHubActionDigests',
+    ':rebaseStalePrs',
+  ],
+  'git-submodules': {
+    enabled: true,
+  },
+  packageRules: [
+    {
+      "matchCategories": [
+        "golang"
+      ],
+      "postUpdateOptions": [
+        "gomodTidy"
+      ],
+      "enabled": true
+    },
+    {
+      matchManagers: [
+        'gomod',
+      ],
+      groupName: 'OCM Monorepo Go Module Dependencies',
+      groupSlug: 'ocm-monorepo',
+      matchPackageNames: [
+        'ocm.software/open-component-model/**',
+      ],
+    },
+  ]
 }

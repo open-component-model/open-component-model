@@ -8,7 +8,7 @@ on:
         - main
 jobs:
   renovate:
-    runs-on: large_runner
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4.2.2
@@ -20,6 +20,9 @@ jobs:
           private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
       - name: Self-hosted Renovate
         uses: renovatebot/github-action@v43.0.1
+        env:
+          RENOVATE_PLATFORM_COMMIT: 'true'
+          LOG_LEVEL: 'debug'
         with:
           docker-cmd-file: .github/renovate-entrypoint.sh
           docker-user: root
