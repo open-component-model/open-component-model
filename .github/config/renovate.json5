@@ -1,6 +1,6 @@
 {
   "branchPrefix": "renovate/",
-  "username": "ocmbot",
+  "username": "ocmbot[bot]",
   "gitAuthor": "GitHub Actions Bot <41898282+github-actions[bot]@users.noreply.github.com>",
   "onboarding": false,
   "platform": "github",
