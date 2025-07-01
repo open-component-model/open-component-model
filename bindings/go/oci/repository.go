@@ -161,11 +161,8 @@ func (repo *Repository) HealthCheck(ctx context.Context) (err error) {
 	// A successful connection will return ErrNotFound, while connection failures
 	// will return network/authentication errors
 	_, err = store.Resolve(ctx, "validation-test")
-	if err != nil && !errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("failed to validate OCI repository connectivity: %w", err)
-	}
 
-	return nil
+	return err
 }
 
 // GetComponentVersion retrieves a component version from the repository.

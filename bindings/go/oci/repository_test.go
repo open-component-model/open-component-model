@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -1516,18 +1517,16 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 	}
 }
 
-func TestRepository_Validate(t *testing.T) {
+func TestRepositoryHealthCheck(t *testing.T) {
 	ctx := context.Background()
-	r := require.New(t)
-
 	t.Run("CTF validation", func(t *testing.T) {
 		// Create a temporary CTF repository
 		tmpdir := t.TempDir()
 		fs, err := filesystem.NewFS(tmpdir, os.O_RDWR)
-		r.NoError(err, "Failed to create filesystem")
+		require.NoError(t, err, "Failed to create filesystem")
 		archive := ctf.NewFileSystemCTF(fs)
 
-		// Create repository with CTF
+		// Create a repository with CTF
 		repo := Repository(t,
 			ocictf.WithCTF(ocictf.NewFromCTF(archive)),
 			oci.WithScheme(testScheme),
@@ -1535,18 +1534,12 @@ func TestRepository_Validate(t *testing.T) {
 
 		// Test validation
 		err = repo.HealthCheck(ctx)
-		r.NoError(err, "CTF repository validation should succeed")
+		require.ErrorIs(t, err, errdef.ErrNotFound)
 	})
 
 	t.Run("Invalid repository validation", func(t *testing.T) {
 		// Create an invalid filesystem to cause CTF operations to fail
-		fs, err := filesystem.NewFS("/invalid/nonexistent/path", os.O_RDONLY)
-		// This will succeed in creating the filesystem object, but operations will fail
-		if err != nil {
-			// If we can't even create the filesystem, skip this test
-			t.Skip("Cannot create invalid filesystem for test")
-		}
-		archive := ctf.NewFileSystemCTF(fs)
+		archive := ctf.NewFileSystemCTF(nil)
 
 		repo := Repository(t,
 			ocictf.WithCTF(ocictf.NewFromCTF(archive)),
@@ -1554,7 +1547,7 @@ func TestRepository_Validate(t *testing.T) {
 		)
 
 		// Test validation - this should fail because the filesystem is invalid
-		err = repo.HealthCheck(ctx)
-		r.Error(err, "Repository validation should fail with invalid filesystem")
+		err := repo.HealthCheck(ctx)
+		require.Error(t, err)
 	})
 }
