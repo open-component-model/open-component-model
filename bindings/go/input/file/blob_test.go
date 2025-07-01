@@ -13,8 +13,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	. "ocm.software/open-component-model/bindings/go/constructor/input/file"
-	v1 "ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
+	"ocm.software/open-component-model/bindings/go/input/file"
+	v1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -58,7 +58,7 @@ func TestInputFileBlob_MediaType(t *testing.T) {
 			require.NoError(t, err)
 
 			// Create InputFileBlob
-			inputBlob := &InputFileBlob{
+			inputBlob := &file.InputFileBlob{
 				Blob:          fsBlob,
 				FileMediaType: tt.mediaType,
 			}
@@ -83,7 +83,7 @@ func TestInputFileBlob_InterfaceCompliance(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create InputFileBlob
-	inputBlob := &InputFileBlob{
+	inputBlob := &file.InputFileBlob{
 		Blob:          fsBlob,
 		FileMediaType: "text/plain",
 	}
@@ -176,7 +176,7 @@ func TestGetV1FileBlob_Success(t *testing.T) {
 			}
 
 			// Get blob
-			b, err := GetV1FileBlob(fileSpec)
+			b, err := file.GetV1FileBlob(fileSpec)
 			require.NoError(t, err)
 			require.NotNil(t, b)
 
@@ -238,7 +238,7 @@ func TestGetV1FileBlob_FileNotFound(t *testing.T) {
 	}
 
 	// Get blob should fail
-	blob, err := GetV1FileBlob(fileSpec)
+	blob, err := file.GetV1FileBlob(fileSpec)
 	assert.Error(t, err)
 	assert.Nil(t, blob)
 	assert.Contains(t, err.Error(), "path does not exist")
@@ -252,7 +252,7 @@ func TestGetV1FileBlob_EmptyPath(t *testing.T) {
 	}
 
 	// Get blob should fail
-	blob, err := GetV1FileBlob(fileSpec)
+	blob, err := file.GetV1FileBlob(fileSpec)
 	assert.Error(t, err)
 	assert.Nil(t, blob)
 }
@@ -275,7 +275,7 @@ func TestGetV1FileBlob_BinaryFile(t *testing.T) {
 	}
 
 	// Get blob
-	b, err := GetV1FileBlob(fileSpec)
+	b, err := file.GetV1FileBlob(fileSpec)
 	require.NoError(t, err)
 	require.NotNil(t, b)
 
@@ -314,7 +314,7 @@ func TestGetV1FileBlob_MultipleReads(t *testing.T) {
 	}
 
 	// Get blob
-	blob, err := GetV1FileBlob(fileSpec)
+	blob, err := file.GetV1FileBlob(fileSpec)
 	require.NoError(t, err)
 	require.NotNil(t, blob)
 
@@ -349,7 +349,7 @@ func TestGetV1FileBlob_Compression(t *testing.T) {
 		Compress:  false,
 	}
 
-	blobUncompressed, err := GetV1FileBlob(fileSpecUncompressed)
+	blobUncompressed, err := file.GetV1FileBlob(fileSpecUncompressed)
 	require.NoError(t, err)
 
 	readerUncompressed, err := blobUncompressed.ReadCloser()
@@ -368,7 +368,7 @@ func TestGetV1FileBlob_Compression(t *testing.T) {
 		Compress:  true,
 	}
 
-	blobCompressed, err := GetV1FileBlob(fileSpecCompressed)
+	blobCompressed, err := file.GetV1FileBlob(fileSpecCompressed)
 	require.NoError(t, err)
 
 	readerCompressed, err := blobCompressed.ReadCloser()

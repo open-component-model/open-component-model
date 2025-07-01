@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
-	v1 "ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	v1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
