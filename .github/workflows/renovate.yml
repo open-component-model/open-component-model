@@ -7,40 +7,12 @@ on:
         branches:
         - main
 
-env:
-  cache_archive: renovate_cache.tar.gz
-  # This is the dir renovate provides -- if we set our own directory via cacheDir, we can run into permissions issues.
-  # It is also possible to cache a higher level of the directory, but it has minimal benefit. While renovate execution
-  # time gets faster, it also takes longer to upload the cache as it grows bigger.
-  cache_dir: /tmp/renovate/cache/renovate/repository
-  # This can be manually changed to bust the cache if neccessary.
-  cache_key: renovate-cache
-
 jobs:
   renovate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4.2.2
-
-      - name: Download renovate cache artifact (if exists)
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: ${{ env.cache_key }}
-          path: cache-download
-
-      - name: Extract renovate cache
-        run: |
-          set -x
-          if [ ! -d cache-download ]; then
-            echo "No cache found."
-            exit 0
-          fi
-          mkdir -p $cache_dir
-          tar -xzf cache-download/$cache_archive -C $cache_dir
-          sudo chown -R 12021:0 /tmp/renovate/
-          ls -R $cache_dir
 
       - name: Generate token
         id: generate_token
@@ -51,21 +23,7 @@ jobs:
       - name: Self-hosted Renovate
         uses: renovatebot/github-action@v43.0.2
         env:
-          # This enables the cache -- if this is set, it's not necessary to add it to renovate.json.
-          RENOVATE_REPOSITORY_CACHE: 'enabled'
           RENOVATE_PLATFORM_COMMIT: 'true'
         with:
           configurationFile: .github/config/renovate.json5
           token: ${{ steps.generate_token.outputs.token }}
-
-      - name: Compress renovate cache
-        run: |
-          ls $cache_dir
-          tar -czvf $cache_archive -C $cache_dir .
-
-      - name: Upload renovate cache artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.cache_key }}
-          path: ${{ env.cache_archive }}
-          retention-days: 1
