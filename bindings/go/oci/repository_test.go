@@ -13,10 +13,6 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/errdef"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -32,6 +28,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 )
 
 var testScheme = runtime.NewScheme()
@@ -1534,20 +1532,6 @@ func TestRepositoryHealthCheck(t *testing.T) {
 
 		// Test validation
 		err = repo.HealthCheck(ctx)
-		require.ErrorIs(t, err, errdef.ErrNotFound)
-	})
-
-	t.Run("Invalid repository validation", func(t *testing.T) {
-		// Create an invalid filesystem to cause CTF operations to fail
-		archive := ctf.NewFileSystemCTF(nil)
-
-		repo := Repository(t,
-			ocictf.WithCTF(ocictf.NewFromCTF(archive)),
-			oci.WithScheme(testScheme),
-		)
-
-		// Test validation - this should fail because the filesystem is invalid
-		err := repo.HealthCheck(ctx)
-		require.Error(t, err)
+		require.NoError(t, err)
 	})
 }

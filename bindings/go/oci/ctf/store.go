@@ -54,6 +54,10 @@ type Store struct {
 	archive ctf.CTF
 }
 
+func (s *Store) Ping(ctx context.Context) error {
+	return nil
+}
+
 // StoreForReference returns a new Store instance for a specific repository within the CTF archive.
 func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
 	rawRef, err := s.Reference(reference)

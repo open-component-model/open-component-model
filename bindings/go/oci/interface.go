@@ -160,4 +160,9 @@ type Resolver interface {
 	// format represents a valid reference that can be used for a given store returned
 	// by StoreForReference.
 	Reference(reference string) (fmt.Stringer, error)
+
+	// Ping does a healthcheck for the underlying registry. The implementation varies based on the implementing
+	// technology. For OCI this means a spec check on the registry, which also does an authenticated call if credentials
+	// are configured. For CTF we return true.
+	Ping(ctx context.Context) error
 }

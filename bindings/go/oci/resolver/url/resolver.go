@@ -57,6 +57,14 @@ func (resolver *CachingResolver) Reference(reference string) (fmt.Stringer, erro
 	return registry.ParseReference(reference)
 }
 
+func (resolver *CachingResolver) Ping(ctx context.Context) error {
+	r, err := remote.NewRegistry(resolver.baseURL)
+	if err != nil {
+		return fmt.Errorf("failed to create registry client: %w", err)
+	}
+	return r.Ping(ctx)
+}
+
 func (resolver *CachingResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
 	rawRef, err := resolver.Reference(reference)
 	if err != nil {
