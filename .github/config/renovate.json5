@@ -3,6 +3,7 @@
   "username": "ocmbot",
   "gitAuthor": "GitHub Actions Bot <41898282+github-actions[bot]@users.noreply.github.com>",
   "onboarding": false,
+  dryRun: "full",
   "platform": "github",
   prHourlyLimit: 0,
   "repositories": [
@@ -35,5 +36,8 @@
         'ocm.software/open-component-model/**',
       ],
     },
+  ],
+  "allowedCommands": [
+    "^find\\s\\.\\s-name.+go\\.mod.+-path.+integration.+go\\smod\\stidy"
   ]
 }

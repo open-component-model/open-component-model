@@ -10,15 +10,6 @@
   'git-submodules': {
     enabled: true
   },
-  onboardingConfig: {
-    extends: [
-      'config:recommended',
-      'config:best-practices',
-      'security:openssf-scorecard',
-      'helpers:pinGitHubActionDigests',
-      ':rebaseStalePrs',
-    ]
-  },
   packageRules: [
     {
       "matchCategories": [
@@ -39,5 +30,12 @@
         'ocm.software/open-component-model/**'
       ]
     }
-  ]
+  ],
+  "postUpgradeTasks": {
+    "commands": [
+      "find . -name \"go.mod\" -type f -path '*/integration/*' -exec dirname {} \\; | while read dir; do echo \"Running explicit go mod tidy for integration test in $dir\"; cd \"$dir\" && go mod tidy && cd - > /dev/null; done"
+    ],
+    "fileFilters": ["**/go.mod", "**/go.sum"],
+    "executionMode": "branch"
+  },
 }
