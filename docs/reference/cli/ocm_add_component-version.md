@@ -35,20 +35,20 @@ ocm add component-version [flags]
 ```
 Adding component versions to a non-default CTF named "transport-archive" based on a non-default default "component-constructor" file:
 
-add component-version ./path/to/transport-archive ./path/to/component-constructor.yaml
+add component-version  --repository ./path/to/transport-archive --constructor ./path/to/component-constructor.yaml
 ```
 
 ### Options
 
 ```
-      --blob-cache-directory string              path to the blob cache directory (default "blobs")
+      --blob-cache-directory string              path to the blob cache directory (default ".ocm/cache")
       --component-version-conflict-policy enum   policy to apply when a component version already exists in the repository
                                                  (must be one of [abort-and-fail replace skip]) (default abort-and-fail)
       --concurrency-limit int                    maximum amount of parallel requests to the repository for resolving component versions (default 4)
   -c, --constructor path                         path to the repository (default component-constructor.yaml)
-      --copy-resources                           copy external resources by-value to the archive
   -h, --help                                     help for component-version
   -r, --repository path                          path to the repository (default transport-archive)
+      --skip-reference-digest-processing         skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.
 ```
 
 ### Options inherited from parent commands

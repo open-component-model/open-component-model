@@ -69,7 +69,7 @@ func ComponentVersionOverridePolicies() []string {
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:        fmt.Sprintf("component-version"),
+		Use:        "component-version",
 		Aliases:    []string{"cv", "component-versions", "cvs"},
 		SuggestFor: []string{"component", "components", "version", "versions"},
 		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a %[1]q file", DefaultComponentConstructorBaseName),
@@ -89,10 +89,10 @@ In case the component archive does not exist, it will be created by default.
 			DefaultComponentConstructorBaseName,
 		),
 		Example: strings.TrimSpace(fmt.Sprintf(`
-Adding component versions to a non-default CTF named %[1]q based on a non-default default %[2]q file:
+Adding component versions to a non-default CTF named %[2]q based on a non-default default %[4]q file:
 
-add component-version ./path/to/%[1]s ./path/to/%[2]s.yaml
-`, LegacyDefaultArchiveName, DefaultComponentConstructorBaseName)),
+add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
+`, FlagRepositoryRef, LegacyDefaultArchiveName, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
 		RunE:              AddComponentVersion,
 		DisableAutoGenTag: true,
 	}
@@ -151,8 +151,8 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	instance := &constructorProvider{
 		cache:          cacheDir,
 		targetRepoSpec: repoSpec,
-		PluginManager:  pluginManager,
-		Graph:          credentialGraph,
+		pluginManager:  pluginManager,
+		graph:          credentialGraph,
 	}
 
 	opts := constructor.Options{
@@ -160,7 +160,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		ResourceRepositoryProvider:     instance,
 		SourceInputMethodProvider:      instance,
 		ResourceInputMethodProvider:    instance,
-		CredentialProvider:             instance,
+		CredentialProvider:             instance.graph,
 		ConcurrencyLimit:               concurrencyLimit,
 		ComponentVersionConflictPolicy: ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 	}
@@ -236,35 +236,35 @@ var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
 type constructorProvider struct {
 	cache          string
 	targetRepoSpec runtime.Typed
-	*manager.PluginManager
-	*credentials.Graph
+	pluginManager  *manager.PluginManager
+	graph          *credentials.Graph
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {
-	return prov.PluginManager.DigestProcessorRegistry.GetPlugin(ctx, resource.Access)
+	return prov.pluginManager.DigestProcessorRegistry.GetPlugin(ctx, resource.Access)
 }
 
 func (prov *constructorProvider) GetResourceInputMethod(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceInputMethod, error) {
-	return prov.PluginManager.InputRegistry.GetResourceInputPlugin(ctx, resource.Input)
+	return prov.pluginManager.InputRegistry.GetResourceInputPlugin(ctx, resource.Input)
 }
 
 func (prov *constructorProvider) GetSourceInputMethod(ctx context.Context, src *constructorruntime.Source) (constructor.SourceInputMethod, error) {
-	return prov.PluginManager.InputRegistry.GetSourceInputPlugin(ctx, src.Input)
+	return prov.pluginManager.InputRegistry.GetSourceInputPlugin(ctx, src.Input)
 }
 
 func (prov *constructorProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceRepository, error) {
-	return prov.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
+	return prov.pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
-	plugin, err := prov.PluginManager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, prov.targetRepoSpec)
+	plugin, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, prov.targetRepoSpec)
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", prov.targetRepoSpec, err)
 	}
 	var creds map[string]string
 	identity, err := plugin.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
 	if err == nil {
-		if creds, err = prov.Graph.Resolve(ctx, identity); err != nil {
+		if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
 			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", prov.targetRepoSpec, err)
 		}
 	}

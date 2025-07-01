@@ -55,22 +55,6 @@ func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx con
 	return &wrapper{repo: repo}, nil
 }
 
-// TODO Repeated calls with separate credentials will always use the first credentials set.
-//
-//	we need to be able to dynamically inject credentials to an existing repository instance.
-func (p *ComponentVersionRepositoryPlugin) getRepository(spec *ociv1.Repository, creds map[string]string) (Repository, error) {
-	key := spec.BaseUrl
-	if repo, ok := p.repoCache.Get(key); ok {
-		return repo, nil
-	}
-	repo, err := createRepository(spec, creds, p.manifests, p.layers)
-	if err != nil {
-		return nil, fmt.Errorf("error creating repository: %w", err)
-	}
-	p.repoCache.Set(key, repo)
-	return repo, nil
-}
-
 var (
 	_ componentversionrepository.ComponentVersionRepositoryProvider = (*ComponentVersionRepositoryPlugin)(nil)
 	_ componentversionrepository.ComponentVersionRepository         = (*wrapper)(nil)
