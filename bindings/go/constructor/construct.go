@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -474,8 +475,7 @@ func addColocatedResourceLocalBlob(
 	resource *constructor.Resource,
 	data blob.ReadOnlyBlob,
 ) (processed *descriptor.Resource, err error) {
-	localBlob := &descriptor.LocalBlob{}
-	localBlob.SetType(descriptor.GetLocalBlobAccessType())
+	localBlob := &v2.LocalBlob{}
 
 	if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
 		localBlob.MediaType, _ = mediaTypeAware.MediaType()
