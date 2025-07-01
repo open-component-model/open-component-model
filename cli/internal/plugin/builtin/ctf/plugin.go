@@ -80,6 +80,10 @@ func (w *wrapper) ListComponentVersions(ctx context.Context, component string) (
 	return w.repo.ListComponentVersions(ctx, component)
 }
 
+func (w *wrapper) HealthCheck(ctx context.Context) error {
+	return w.repo.HealthCheck(ctx)
+}
+
 func (w *wrapper) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
 	return w.repo.AddLocalResource(ctx, component, version, res, content)
 }
