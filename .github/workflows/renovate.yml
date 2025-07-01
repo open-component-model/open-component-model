@@ -23,5 +23,5 @@ jobs:
         with:
           docker-cmd-file: .github/renovate-entrypoint.sh
           docker-user: root
-          configurationFile: renovate.json5
+          configurationFile: .github/config/renovate.json5
           token: ${{ steps.generate_token.outputs.token }}

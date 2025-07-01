@@ -1,0 +1,13 @@
+{
+  "branchPrefix": "renovate/",
+  "dryRun": "full",
+  "username": "Renovate",
+  "gitAuthor": "Renovate Bot <bot@renovateapp.com>",
+  "onboarding": false,
+  "platform": "github",
+  "forkProcessing": "enabled",
+  "repositories": [
+    "open-component-model/open-component-model",
+  ],
+  "packageRules": []
+}
