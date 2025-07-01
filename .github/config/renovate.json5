@@ -1,11 +1,10 @@
 {
   "branchPrefix": "renovate/",
-  "dryRun": "full",
   "username": "ocmbot",
   "gitAuthor": "GitHub Actions Bot <41898282+github-actions[bot]@users.noreply.github.com>",
   "onboarding": false,
   "platform": "github",
-  "forkProcessing": "enabled",
+  prHourlyLimit: 0,
   "repositories": [
     "open-component-model/open-component-model",
   ],
@@ -16,9 +15,6 @@
     'helpers:pinGitHubActionDigests',
     ':rebaseStalePrs',
   ],
-  'git-submodules': {
-    enabled: true,
-  },
   packageRules: [
     {
       "matchCategories": [

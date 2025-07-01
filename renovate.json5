@@ -5,25 +5,39 @@
     'config:best-practices',
     'security:openssf-scorecard',
     'helpers:pinGitHubActionDigests',
-    ':rebaseStalePrs',
+    ':rebaseStalePrs'
   ],
   'git-submodules': {
-    enabled: true,
+    enabled: true
   },
-  postUpdateOptions: [
-    'gomodTidy',
-  ],
+  onboardingConfig: {
+    extends: [
+      'config:recommended',
+      'config:best-practices',
+      'security:openssf-scorecard',
+      'helpers:pinGitHubActionDigests',
+      ':rebaseStalePrs',
+    ]
+  },
   packageRules: [
     {
+      "matchCategories": [
+        "golang"
+      ],
+      "postUpdateOptions": [
+        "gomodTidy"
+      ],
+      "enabled": true
+    },
+    {
       matchManagers: [
-        'gomod',
+        'gomod'
       ],
       groupName: 'OCM Monorepo Go Module Dependencies',
       groupSlug: 'ocm-monorepo',
-      automerge: true,
       matchPackageNames: [
-        'ocm.software/open-component-model/**',
-      ],
-    },
-  ],
+        'ocm.software/open-component-model/**'
+      ]
+    }
+  ]
 }

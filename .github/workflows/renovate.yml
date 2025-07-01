@@ -19,10 +19,9 @@ jobs:
           app_id: ${{ secrets.OCMBOT_APP_ID }}
           private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
       - name: Self-hosted Renovate
-        uses: renovatebot/github-action@v43.0.1
+        uses: renovatebot/github-action@v43.0.2
         env:
           RENOVATE_PLATFORM_COMMIT: 'true'
-          LOG_LEVEL: 'debug'
         with:
           configurationFile: .github/config/renovate.json5
           token: ${{ steps.generate_token.outputs.token }}
