@@ -24,7 +24,5 @@ jobs:
           RENOVATE_PLATFORM_COMMIT: 'true'
           LOG_LEVEL: 'debug'
         with:
-          docker-cmd-file: .github/renovate-entrypoint.sh
-          docker-user: root
           configurationFile: .github/config/renovate.json5
           token: ${{ steps.generate_token.outputs.token }}
