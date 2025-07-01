@@ -3,6 +3,8 @@
   "username": "ocmbot[bot]",
   "gitAuthor": "GitHub Actions Bot <41898282+github-actions[bot]@users.noreply.github.com>",
   "onboarding": false,
+  prConcurrentLimit: 0,
+  prHourlyLimit: 0,
   "platform": "github",
   "repositories": [
     "open-component-model/open-component-model",
