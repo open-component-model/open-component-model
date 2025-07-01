@@ -7,6 +7,7 @@
     'helpers:pinGitHubActionDigests',
     ':rebaseStalePrs'
   ],
+  prHourlyLimit: 0,
   'git-submodules': {
     enabled: true
   },

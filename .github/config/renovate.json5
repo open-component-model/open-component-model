@@ -4,9 +4,11 @@
   "gitAuthor": "GitHub Actions Bot <41898282+github-actions[bot]@users.noreply.github.com>",
   "onboarding": false,
   "platform": "github",
-  prHourlyLimit: 0,
   "repositories": [
     "open-component-model/open-component-model",
+  ],
+  "gitIgnoredAuthors": [
+    "41898282+github-actions[bot]@users.noreply.github.com"
   ],
   extends: [
     'config:recommended',
