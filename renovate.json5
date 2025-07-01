@@ -1,4 +1,5 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   extends: [
     'config:recommended',
     'config:best-practices',
@@ -21,7 +22,7 @@
       groupSlug: 'ocm-monorepo',
       automerge: true,
       matchPackageNames: [
-        '//^ocm.software/open-component-model///',
+        'ocm.software/open-component-model/**',
       ],
     },
   ],
