@@ -1,0 +1,27 @@
+name: Renovate OCM
+on:
+    schedule:
+        - cron: '0 0 * * 0' # Every Sunday at midnight UTC
+    workflow_dispatch:
+    push:
+        branches:
+        - main
+jobs:
+  renovate:
+    runs-on: large_runner
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+      - name: Generate token
+        id: generate_token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        with:
+          app_id: ${{ secrets.OCMBOT_APP_ID }}
+          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+      - name: Self-hosted Renovate
+        uses: renovatebot/github-action@v43.0.1
+        with:
+          docker-cmd-file: .github/renovate-entrypoint.sh
+          docker-user: root
+          configurationFile: renovate.json5
+          token: ${{ steps.generate_token.outputs.token }}
