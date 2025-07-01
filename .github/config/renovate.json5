@@ -1,7 +1,7 @@
 {
   "branchPrefix": "renovate/",
   "username": "ocmbot[bot]",
-  "gitAuthor": "GitHub Actions Bot <41898282+github-actions[bot]@users.noreply.github.com>",
+  "gitAuthor": "ocmbot[bot] <125909804+ocmbot[bot]@users.noreply.github.com>",
   "onboarding": false,
   prConcurrentLimit: 0,
   prHourlyLimit: 0,
@@ -10,7 +10,7 @@
     "open-component-model/open-component-model",
   ],
   "gitIgnoredAuthors": [
-    "41898282+github-actions[bot]@users.noreply.github.com"
+    "125909804+ocmbot[bot]@users.noreply.github.com"
   ],
   extends: [
     'config:recommended',
