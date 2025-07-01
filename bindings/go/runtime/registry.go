@@ -234,25 +234,6 @@ func (r *Scheme) IsRegistered(typ Type) bool {
 	return exists
 }
 
-func (r *Scheme) PrototypeForType(typ Type) (Typed, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if proto, exists := r.defaults[typ]; exists {
-		return proto.DeepCopyTyped(), nil
-	}
-
-	if def, ok := r.aliases[typ]; ok {
-		return r.defaults[def].DeepCopyTyped(), nil
-	}
-
-	if r.allowUnknown {
-		return &Raw{}, nil
-	}
-
-	return nil, fmt.Errorf("type %q is not registered", typ)
-}
-
 func (r *Scheme) MustRegisterWithAlias(prototype Typed, types ...Type) {
 	if err := r.RegisterWithAlias(prototype, types...); err != nil {
 		panic(err)
@@ -359,9 +340,6 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		from.SetType(typ)
 	}
 	fromType := from.GetType()
-	if !r.IsRegistered(fromType) && !r.allowUnknown {
-		return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
-	}
 
 	// Case 1: Raw -> Raw or Raw -> Typed
 	if rawFrom, ok := from.(*Raw); ok {
@@ -371,15 +349,10 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 			return nil
 		}
 
-		instance, err := r.PrototypeForType(fromType)
-		if err != nil {
-			// If allowUnknown is true, we can still convert to Raw.
-			into = &Raw{Type: fromType}
-		} else if reflect.TypeOf(into) != reflect.TypeOf(instance) {
-			return fmt.Errorf("cannot convert from %T to %T: type mismatch", from, into)
-		}
-
 		// Raw → Typed: Unmarshal the Raw.Data into the target.
+		if !r.IsRegistered(fromType) && !r.allowUnknown {
+			return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
+		}
 		if err := json.Unmarshal(rawFrom.Data, into); err != nil {
 			return fmt.Errorf("failed to unmarshal from raw: %w", err)
 		}
@@ -388,6 +361,9 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 
 	// Case 2: Typed -> Raw
 	if rawInto, ok := into.(*Raw); ok {
+		if !r.IsRegistered(fromType) && !r.allowUnknown {
+			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
+		}
 		data, err := json.Marshal(from)
 		if err != nil {
 			return fmt.Errorf("failed to marshal into raw: %w", err)
@@ -417,19 +393,4 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 	}
 	intoElem.Set(copiedVal)
 	return nil
-}
-
-func (r *Scheme) ConvertOneOf(from Typed, into ...Typed) (Typed, error) {
-	if len(into) == 0 {
-		return nil, fmt.Errorf("no target types provided for conversion")
-	}
-
-	for _, target := range into {
-		if err := r.Convert(from, target); err != nil {
-			continue // try the next target type
-		}
-		return target, nil // return the first successful conversion
-	}
-
-	return nil, fmt.Errorf("failed to convert from %T to any of the provided types", from)
 }
