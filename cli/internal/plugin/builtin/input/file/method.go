@@ -3,8 +3,8 @@ package file
 import (
 	"fmt"
 
-	"ocm.software/open-component-model/bindings/go/constructor/input/file"
-	filev1 "ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
+	"ocm.software/open-component-model/bindings/go/input/file"
+	filev1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 )
 
