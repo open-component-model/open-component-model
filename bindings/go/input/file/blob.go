@@ -8,7 +8,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	v1 "ocm.software/open-component-model/bindings/go/constructor/input/file/spec/v1"
+	v1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 )
 
 // InputFileBlob wraps a filesystem blob and provides an additional media type for interpretation of the file content.
