@@ -87,13 +87,6 @@ func (c *componentVersionRepositoryWrapper) ListComponentVersions(ctx context.Co
 	return c.externalPlugin.ListComponentVersions(ctx, request, c.credentials)
 }
 
-func (c *componentVersionRepositoryWrapper) HealthCheck(ctx context.Context) error {
-	// External plugins don't currently support HealthCheck in their contract.
-	// For now, we assume the plugin is healthy if it was successfully instantiated.
-	// In the future, this could be enhanced to call a plugin-specific health check method.
-	return nil
-}
-
 func (c *componentVersionRepositoryWrapper) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (_ *descriptor.Resource, err error) {
 	resources, err := descriptor.ConvertToV2Resources(c.scheme, []descriptor.Resource{*res})
 	if err != nil {

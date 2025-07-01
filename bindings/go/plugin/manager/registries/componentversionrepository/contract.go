@@ -51,11 +51,6 @@ type ComponentVersionRepository interface {
 	// - Listing all referrers of the component index and filtering them based on the resolved media type / artifact type
 	ListComponentVersions(ctx context.Context, component string) ([]string, error)
 
-	// HealthCheck checks if the repository is accessible and properly configured.
-	// This method verifies that the underlying storage is reachable and that any required
-	// configuration is properly set. It performs a lightweight check without modifying the repository.
-	HealthCheck(ctx context.Context) error
-
 	LocalResourceRepository
 	LocalSourceRepository
 }
