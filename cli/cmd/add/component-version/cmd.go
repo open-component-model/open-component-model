@@ -309,7 +309,10 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 				return nil
 			}
 			key := descriptor.Component.Name + "/" + descriptor.Component.Version
-			tracker := trackers[key]
+			tracker, ok := trackers[key]
+			if !ok {
+				return fmt.Errorf("tracker for component %q not found", key)
+			}
 			tracker.UpdateMessage(tracker.Message + " constructed")
 			tracker.Increment(1)
 			tracker.MarkAsDone()
