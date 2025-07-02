@@ -270,7 +270,7 @@ func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		return fmt.Errorf("descriptor %s does not exist in the archive", desc.Digest)
 	}
 
-	slog.Info("adding artifact to index", "meta", meta)
+	slog.DebugContext(ctx, "adding artifact to index", "meta", meta)
 
 	addOrUpdateArtifactMetadataInIndex(idx, meta)
 
