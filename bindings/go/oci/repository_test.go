@@ -1518,7 +1518,7 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 
 func TestRepositoryHealthCheck(t *testing.T) {
 	ctx := context.Background()
-	
+
 	t.Run("CTF health check succeeds", func(t *testing.T) {
 		// Create a temporary CTF repository
 		tmpdir := t.TempDir()
@@ -1533,7 +1533,7 @@ func TestRepositoryHealthCheck(t *testing.T) {
 		)
 
 		// Test health check - should always succeed for CTF
-		err = repo.HealthCheck(ctx)
+		err = repo.CheckHealth(ctx)
 		require.NoError(t, err)
 	})
 
@@ -1548,7 +1548,7 @@ func TestRepositoryHealthCheck(t *testing.T) {
 		)
 
 		// Test health check - should fail for unreachable URL
-		err = repo.HealthCheck(ctx)
+		err = repo.CheckHealth(ctx)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to create registry client")
 	})
@@ -1564,7 +1564,7 @@ func TestRepositoryHealthCheck(t *testing.T) {
 		)
 
 		// Test health check - should fail for malformed URL
-		err = repo.HealthCheck(ctx)
+		err = repo.CheckHealth(ctx)
 		require.Error(t, err)
 	})
 }

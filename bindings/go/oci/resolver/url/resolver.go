@@ -57,17 +57,17 @@ func (resolver *CachingResolver) Reference(reference string) (fmt.Stringer, erro
 	return registry.ParseReference(reference)
 }
 
+// Ping does a resolver.Ping that uses OCI specific technology, in our case it's Oras. Oras' Ping
+// does make sure that authentication is working and that the registry is available.
 func (resolver *CachingResolver) Ping(ctx context.Context) error {
 	r, err := remote.NewRegistry(resolver.baseURL)
 	if err != nil {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
-	
 	r.PlainHTTP = resolver.plainHTTP
 	if resolver.baseClient != nil {
 		r.Client = resolver.baseClient
 	}
-	
 	return r.Ping(ctx)
 }
 

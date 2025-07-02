@@ -148,8 +148,8 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 	return list.List(ctx, opts)
 }
 
-// HealthCheck checks if the repository is accessible and properly configured.
-func (repo *Repository) HealthCheck(ctx context.Context) (err error) {
+// CheckHealth checks if the repository is accessible and properly configured.
+func (repo *Repository) CheckHealth(ctx context.Context) (err error) {
 	return repo.resolver.Ping(ctx)
 }
 

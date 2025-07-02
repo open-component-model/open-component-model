@@ -54,6 +54,8 @@ type Store struct {
 	archive ctf.CTF
 }
 
+// Ping for CTF return always true. This is because if it doesn't exist it will be created. If it does exist
+// it's all good. Which means it doesn't make any sense to check it.
 func (s *Store) Ping(ctx context.Context) error {
 	return nil
 }
