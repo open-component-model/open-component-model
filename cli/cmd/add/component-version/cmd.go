@@ -178,7 +178,6 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		stop()
 	}
 
-	time.Sleep(10 * time.Millisecond)
 	return err
 }
 
@@ -226,9 +225,7 @@ func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentC
 		return nil, fmt.Errorf("unmarshalling component constructor %q failed: %w", constructorFlag.String(), err)
 	}
 
-	converted := constructorruntime.ConvertToRuntimeConstructor(&data)
-
-	return converted, nil
+	return constructorruntime.ConvertToRuntimeConstructor(&data), nil
 }
 
 var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
@@ -325,7 +322,27 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 			}
 			pw.Render()
 		}()
-		return options, pw.Stop, nil
+
+		// Stop function to Poll for the progress writer to finish rendering
+		// and to ensure that all renderings are complete before returning.
+		// Bound to the command context to ensure it stops when the command is done and can
+		// be cancelled.
+		stop := func() {
+			pw.Stop()
+		wait:
+			for {
+				select {
+				case <-cmd.Context().Done():
+					return
+				default:
+					if !pw.IsRenderInProgress() {
+						break wait
+					}
+				}
+			}
+		}
+
+		return options, stop, nil
 	case log.FormatJSON:
 		logger, err := log.GetBaseLogger(cmd)
 		if err != nil {
