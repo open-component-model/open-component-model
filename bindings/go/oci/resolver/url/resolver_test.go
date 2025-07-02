@@ -76,3 +76,24 @@ func TestURLPathResolver_StoreForReference(t *testing.T) {
 		})
 	}
 }
+
+func TestURLPathResolver_Ping(t *testing.T) {
+	ctx := context.Background()
+	
+	t.Run("ping with invalid URL fails", func(t *testing.T) {
+		resolver, err := url.New(url.WithBaseURL("http://invalid.nonexistent.domain"))
+		assert.NoError(t, err)
+		
+		err = resolver.Ping(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create registry client")
+	})
+	
+	t.Run("ping with malformed URL fails", func(t *testing.T) {
+		resolver, err := url.New(url.WithBaseURL("not-a-valid-url"))
+		assert.NoError(t, err)
+		
+		err = resolver.Ping(ctx)
+		assert.Error(t, err)
+	})
+}
