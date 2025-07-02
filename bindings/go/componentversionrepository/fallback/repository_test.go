@@ -46,11 +46,6 @@ func Test_GetComponentVersion(t *testing.T) {
 		AccessMode: ctfspec.AccessModeReadOnly,
 	}
 
-	//fallbackRepoSpec2 := &ctfspec.Repository{
-	//	Path:       nonExistingTransportArchive,
-	//	AccessMode: ctfspec.AccessModeReadOnly,
-	//}
-
 	cases := []struct {
 		name         string
 		component    string
@@ -163,6 +158,30 @@ func Test_GetComponentVersion(t *testing.T) {
 			expectedRepo: transportArchiveRepoSpec,
 			err:          assert.NoError,
 		},
+		{
+			name:      "not found with fallback",
+			component: "github.com/not-acme.org/non-existing-component",
+			version:   "1.0.0",
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: transportArchiveRepoSpec,
+					Prefix:     "",
+					Priority:   0,
+				},
+				{
+					Repository: transportArchiveCopyRepoSpec,
+					Prefix:     "",
+					Priority:   0,
+				},
+				{
+					Repository: fallbackTransportArchiveRepoSpec,
+					Prefix:     "",
+					Priority:   0,
+				},
+			},
+			expectedRepo: nil,
+			err:          assert.Error,
+		},
 	}
 
 	for _, tc := range cases {
@@ -174,6 +193,9 @@ func Test_GetComponentVersion(t *testing.T) {
 
 			desc, err := fallbackRepo.GetComponentVersion(ctx, tc.component, tc.version)
 			if !tc.err(t, err) {
+				return
+			}
+			if tc.expectedRepo == nil {
 				return
 			}
 			if desc != nil {
