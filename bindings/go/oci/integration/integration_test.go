@@ -181,7 +181,8 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 		r.NoError(err)
-		// No authentication client set
+		// explicitly set default client to avoid token fetch round
+		resolver.SetClient(http.DefaultClient)
 
 		repo, err := oci.NewRepository(oci.WithResolver(resolver))
 		r.NoError(err)
@@ -189,9 +190,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 		// Health check should fail without credentials for ghcr.io
 		// GHCR returns 403 during token exchange when no credentials provided
 		err = repo.CheckHealth(t.Context())
-		r.Error(err)
-		r.True(strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "denied"),
-			"Expected 403 or denied error, got: %v", err)
+		r.ErrorContains(err, "401")
 	})
 
 	t.Run("resolver ping with valid authentication succeeds", func(t *testing.T) {
@@ -216,9 +215,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 		// Direct resolver ping should fail for ghcr.io with invalid credentials
 		// GHCR returns 403 during token exchange when credentials are invalid
 		err = resolver.Ping(t.Context())
-		r.Error(err)
-		r.True(strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "denied"),
-			"Expected 403 or denied error, got: %v", err)
+		r.ErrorContains(err, "403")
 	})
 
 	t.Run("resolver ping without authentication fails", func(t *testing.T) {
@@ -226,13 +223,12 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 		r.NoError(err)
+		resolver.SetClient(http.DefaultClient)
 
 		// Direct resolver ping should fail for ghcr.io without credentials
 		// GHCR returns 403 during token exchange when no credentials provided
 		err = resolver.Ping(t.Context())
-		r.Error(err)
-		r.True(strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "denied"),
-			"Expected 403 or denied error, got: %v", err)
+		r.ErrorContains(err, "401")
 	})
 }
 
