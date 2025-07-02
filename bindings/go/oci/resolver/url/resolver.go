@@ -62,6 +62,12 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
+	
+	r.PlainHTTP = resolver.plainHTTP
+	if resolver.baseClient != nil {
+		r.Client = resolver.baseClient
+	}
+	
 	return r.Ping(ctx)
 }
 
