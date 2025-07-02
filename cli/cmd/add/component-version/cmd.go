@@ -262,6 +262,8 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 		if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
 			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", prov.targetRepoSpec, err)
 		}
+	} else {
+		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", prov.targetRepoSpec, "error", err)
 	}
 	repo, err := plugin.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
 	if err != nil {
