@@ -81,9 +81,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 				mediaType: "application/vnd.test",
 				digest:    digest.FromBytes([]byte("test content")),
 			},
-			res: &descriptor.Resource{
-				Size: blob.SizeUnknown,
-			},
+			res: &descriptor.Resource{},
 			opts: ResourceBlobOCILayerOptions{
 				BlobMediaType: "application/vnd.test",
 				BlobDigest:    digest.FromBytes([]byte("test content")),
@@ -252,7 +250,7 @@ func TestResourceBlob(t *testing.T) {
 			},
 		},
 		{
-			name: "error on empty access type",
+			name: "empty type but typed access",
 			blob: &testBlob{
 				content:   content,
 				mediaType: "application/vnd.test",
@@ -260,28 +258,14 @@ func TestResourceBlob(t *testing.T) {
 			},
 			resource: &descriptor.Resource{
 				Access: &v2.LocalBlob{
-					Type: runtime.NewVersionedType("", ""),
+					LocalReference: digest.String(),
+					MediaType:      "application/vnd.test",
 				},
 			},
 			opts: Options{
-				AccessScheme: runtime.NewScheme(),
+				AccessScheme:  runtime.NewScheme(),
+				BaseReference: "test-ref",
 			},
-			expectedError: "resource access or access type is empty",
-		},
-		{
-			name: "error on nil access",
-			blob: &testBlob{
-				content:   content,
-				mediaType: "application/vnd.test",
-				digest:    digest,
-			},
-			resource: &descriptor.Resource{
-				Access: nil,
-			},
-			opts: Options{
-				AccessScheme: runtime.NewScheme(),
-			},
-			expectedError: "resource access or access type is empty",
 		},
 		{
 			name: "error on unsupported access type",
@@ -291,14 +275,14 @@ func TestResourceBlob(t *testing.T) {
 				digest:    digest,
 			},
 			resource: &descriptor.Resource{
-				Access: &v2.LocalBlob{
+				Access: &runtime.Raw{
 					Type: runtime.NewVersionedType("unsupported", "v1"),
 				},
 			},
 			opts: Options{
 				AccessScheme: runtime.NewScheme(),
 			},
-			expectedError: "error creating resource access: unsupported type: unsupported/v1",
+			expectedError: "artifact access is not a local blob access",
 		},
 	}
 
@@ -356,7 +340,7 @@ func TestResourceLocalBlob(t *testing.T) {
 		name          string
 		blob          *testBlob
 		resource      *descriptor.Resource
-		access        *descriptor.LocalBlob
+		access        *v2.LocalBlob
 		opts          Options
 		expectedError string
 	}{
@@ -368,7 +352,7 @@ func TestResourceLocalBlob(t *testing.T) {
 				digest:    dig,
 			},
 			resource: &descriptor.Resource{},
-			access: &descriptor.LocalBlob{
+			access: &v2.LocalBlob{
 				MediaType: "application/vnd.oci.image.layout.v1+tar",
 			},
 			opts: Options{
@@ -384,7 +368,7 @@ func TestResourceLocalBlob(t *testing.T) {
 				digest:    dig,
 			},
 			resource: &descriptor.Resource{},
-			access: &descriptor.LocalBlob{
+			access: &v2.LocalBlob{
 				MediaType: "application/vnd.test",
 			},
 			opts: Options{
@@ -438,7 +422,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 		name          string
 		blob          *testBlob
 		resource      *descriptor.Resource
-		access        *descriptor.LocalBlob
+		access        *v2.LocalBlob
 		opts          Options
 		expectedError string
 	}{
@@ -450,7 +434,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				digest:    digest,
 			},
 			resource: &descriptor.Resource{},
-			access: &descriptor.LocalBlob{
+			access: &v2.LocalBlob{
 				MediaType:      "application/vnd.test",
 				LocalReference: digest.String(),
 			},
@@ -466,10 +450,8 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				mediaType: "application/vnd.test",
 				digest:    digest,
 			},
-			resource: &descriptor.Resource{
-				Size: blob.SizeUnknown,
-			},
-			access: &descriptor.LocalBlob{
+			resource: &descriptor.Resource{},
+			access: &v2.LocalBlob{
 				MediaType:      "application/vnd.test",
 				LocalReference: digest.String(),
 			},
@@ -487,7 +469,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				digest:    digest,
 			},
 			resource: &descriptor.Resource{},
-			access: &descriptor.LocalBlob{
+			access: &v2.LocalBlob{
 				MediaType:      "application/vnd.test",
 				LocalReference: digest.String(),
 			},

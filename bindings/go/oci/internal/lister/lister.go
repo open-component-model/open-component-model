@@ -10,8 +10,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
@@ -20,6 +22,7 @@ import (
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry"
 
+	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
 )
 
@@ -35,6 +38,8 @@ const (
 	// LookupPolicyReferrerWithTagFallback first attempts to find versions using referrers,
 	// and falls back to tag-based listing if no referrers are found or an error occurred.
 	LookupPolicyReferrerWithTagFallback LookupPolicy = iota
+	// LookupPolicyTagOnly only uses tag-based listing, ignoring referrers, even if they are available.
+	LookupPolicyTagOnly
 )
 
 // SortPolicy defines how discovered versions should be sorted.
@@ -109,10 +114,12 @@ func (lister *Lister) List(ctx context.Context, opts Options) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
+	log.Base().Log(ctx, slog.LevelDebug, "listed version candidates", slog.Int("count", len(candidates)))
 	sorted, err := lister.sort(ctx, opts, candidates)
 	if err != nil {
 		return nil, err
 	}
+	log.Base().Log(ctx, slog.LevelDebug, "sorted version candidates")
 
 	return sorted, nil
 }
@@ -133,6 +140,13 @@ func (lister *Lister) listUnsorted(ctx context.Context, opts Options) ([]string,
 		tags, terr := listViaTags(ctx, lister.tagLister, opts.TagListerOptions)
 		if terr != nil {
 			return nil, fmt.Errorf("could not list versions via referrers or tags: %w", errors.Join(err, terr))
+		}
+
+		return tags, nil
+	case LookupPolicyTagOnly:
+		tags, err := listViaTags(ctx, lister.tagLister, opts.TagListerOptions)
+		if err != nil {
+			return nil, fmt.Errorf("could not list versions via tags alone: %w", err)
 		}
 
 		return tags, nil
@@ -179,10 +193,14 @@ func listViaReferrrers(ctx context.Context, lister registry.ReferrerLister, opts
 		return nil, errors.New("referrer lister is not available")
 	}
 
+	// every time we get a callback for descriptors (i.e. from a paginated list),
+	// we will spawn a goroutine for each descriptor to resolve it to a version
+	wg, ctx := errgroup.WithContext(ctx)
+	wg.SetLimit(runtime.NumCPU())
 	var mu sync.Mutex
+
 	list := func(referrers []ociImageSpecV1.Descriptor) error {
-		wg, ctx := errgroup.WithContext(ctx)
-		wg.SetLimit(runtime.NumCPU())
+		log.Base().Log(ctx, slog.LevelDebug, "listing referrers", slog.Int("count", len(referrers)))
 		for _, referrer := range referrers {
 			wg.Go(func() error {
 				ver, err := opts.VersionResolver(ctx, referrer)
@@ -199,11 +217,15 @@ func listViaReferrrers(ctx context.Context, lister registry.ReferrerLister, opts
 				return nil
 			})
 		}
-		return wg.Wait()
+		return nil
 	}
 
 	if err := lister.Referrers(ctx, indexv1.Descriptor, opts.ArtifactType, list); err != nil {
 		return nil, fmt.Errorf("failed to list referrers: %w", err)
+	}
+
+	if err := wg.Wait(); err != nil {
+		return nil, fmt.Errorf("error while listing referrers: %w", err)
 	}
 
 	return versions, nil
@@ -216,10 +238,14 @@ func listViaTags(ctx context.Context, lister registry.TagLister, opts TagListerO
 		return nil, errors.New("tag lister is not available")
 	}
 
+	wg, ctx := errgroup.WithContext(ctx)
+	wg.SetLimit(runtime.NumCPU())
 	var mu sync.Mutex
+
+	// every time we get a callback for tags (i.e.g from a paginated list),
+	// we will spawn a goroutine for each tag to resolve it to a version
 	list := func(tags []string) error {
-		wg, ctx := errgroup.WithContext(ctx)
-		wg.SetLimit(runtime.NumCPU())
+		log.Base().Log(ctx, slog.LevelDebug, "listing tags", slog.Int("count", len(tags)), slog.String("tags", strings.Join(tags, ",")))
 		for _, tag := range tags {
 			wg.Go(func() error {
 				ver, err := opts.VersionResolver(ctx, tag)
@@ -236,11 +262,15 @@ func listViaTags(ctx context.Context, lister registry.TagLister, opts TagListerO
 				return nil
 			})
 		}
-		return wg.Wait()
+		return nil
 	}
 
 	if err := lister.Tags(ctx, opts.Last, list); err != nil {
 		return nil, fmt.Errorf("failed to list tags: %w", err)
+	}
+
+	if err := wg.Wait(); err != nil {
+		return nil, fmt.Errorf("error while listing tags: %w", err)
 	}
 
 	return versions, nil

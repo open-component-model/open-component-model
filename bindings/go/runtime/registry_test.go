@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -283,8 +284,13 @@ func TestRegistry_MultipleTypes_With_Alias(t *testing.T) {
 	alias := NewVersionedType("test2", "v1")
 	registry := NewScheme()
 	registry.MustRegisterWithAlias(&TestType{}, def, alias)
-	r.ErrorContains(registry.RegisterWithAlias(&TestType{}, def), "already registered as default")
-	r.ErrorContains(registry.RegisterWithAlias(&TestType{}, alias), "already registered as alias")
+	err := registry.RegisterWithAlias(&TestType{}, def)
+	r.ErrorContains(err, "already registered: as default")
+	r.True(IsTypeAlreadyRegisteredError(err))
+
+	err = registry.RegisterWithAlias(&TestType{}, alias)
+	r.ErrorContains(err, "already registered: as alias")
+	r.True(IsTypeAlreadyRegisteredError(err))
 }
 
 func TestRegistry_NewObject_Based_On_Alias(t *testing.T) {
@@ -300,4 +306,319 @@ func TestRegistry_NewObject_Based_On_Alias(t *testing.T) {
 	obj, err = registry.NewObject(alias)
 	r.NoError(err)
 	r.Equal(obj.GetType(), alias)
+}
+
+func TestRegistry_RegisterScheme(t *testing.T) {
+	// Create source scheme with some types
+	sourceScheme := NewScheme()
+	typ1 := NewVersionedType("test1", "v1")
+	typ2 := NewVersionedType("test2", "v1")
+	sourceScheme.MustRegisterWithAlias(&TestType{}, typ1, typ2)
+
+	t.Run("successful registration", func(t *testing.T) {
+		r := require.New(t)
+		targetScheme := NewScheme()
+		err := targetScheme.RegisterScheme(sourceScheme)
+		r.NoError(err)
+
+		// Verify types were registered
+		r.True(targetScheme.IsRegistered(typ1))
+		r.True(targetScheme.IsRegistered(typ2))
+
+		// Verify we can create new objects
+		obj1, err := targetScheme.NewObject(typ1)
+		r.NoError(err)
+		r.IsType(&TestType{}, obj1)
+
+		obj2, err := targetScheme.NewObject(typ2)
+		r.NoError(err)
+		r.IsType(&TestType{}, obj2)
+	})
+
+	t.Run("nil scheme", func(t *testing.T) {
+		r := require.New(t)
+		targetScheme := NewScheme()
+		err := targetScheme.RegisterScheme(nil)
+		r.NoError(err)
+		// Registering nil scheme should not change the target scheme
+		r.Len(targetScheme.defaults, 0)
+		r.Len(targetScheme.aliases, 0)
+	})
+
+	t.Run("duplicate registration", func(t *testing.T) {
+		r := require.New(t)
+		targetScheme := NewScheme()
+		// First registration should succeed
+		err := targetScheme.RegisterScheme(sourceScheme)
+		r.NoError(err)
+
+		// Second registration should fail
+		err = targetScheme.RegisterScheme(sourceScheme)
+		r.Error(err)
+		r.Contains(err.Error(), "already registered")
+	})
+
+	t.Run("alias conflict", func(t *testing.T) {
+		r := require.New(t)
+		targetScheme := NewScheme()
+		// Register a type with an alias that will conflict
+		conflictType := NewVersionedType("conflict", "v1")
+		targetScheme.MustRegisterWithAlias(&TestType{}, conflictType, typ2)
+
+		// Try to register the source scheme which has typ2 as an alias
+		err := targetScheme.RegisterScheme(sourceScheme)
+		r.Error(err)
+		r.Contains(err.Error(), "already registered")
+	})
+}
+
+func TestRegistry_RegisterSchemeType(t *testing.T) {
+	// Create source scheme with a type and its alias
+	sourceScheme := NewScheme()
+	typ1 := NewVersionedType("test1", "v1")
+	typ2 := NewVersionedType("test2", "v1")
+	sourceScheme.MustRegisterWithAlias(&TestType{}, typ1, typ2)
+
+	t.Run("successful registration", func(t *testing.T) {
+		r := require.New(t)
+		targetScheme := NewScheme()
+		err := targetScheme.RegisterSchemeType(sourceScheme, typ1)
+		r.NoError(err)
+
+		// Verify type was registered
+		r.True(targetScheme.IsRegistered(typ1))
+
+		// Verify we can create new object
+		obj, err := targetScheme.NewObject(typ1)
+		r.NoError(err)
+		r.IsType(&TestType{}, obj)
+
+		// Verify alias was also registered
+		r.True(targetScheme.IsRegistered(typ2))
+		obj2, err := targetScheme.NewObject(typ2)
+		r.NoError(err)
+		r.IsType(&TestType{}, obj2)
+	})
+
+	t.Run("nil scheme", func(t *testing.T) {
+		r := require.New(t)
+		targetScheme := NewScheme()
+		err := targetScheme.RegisterSchemeType(nil, typ1)
+		r.Error(err)
+		r.Contains(err.Error(), "cannot add to nil scheme")
+	})
+
+	t.Run("type not found in source scheme", func(t *testing.T) {
+		r := require.New(t)
+		targetScheme := NewScheme()
+		unknownType := NewVersionedType("unknown", "v1")
+		err := targetScheme.RegisterSchemeType(sourceScheme, unknownType)
+		r.Error(err)
+		r.Contains(err.Error(), "not found in the provided scheme")
+	})
+
+	t.Run("duplicate registration", func(t *testing.T) {
+		r := require.New(t)
+		targetScheme := NewScheme()
+		// First registration should succeed
+		err := targetScheme.RegisterSchemeType(sourceScheme, typ1)
+		r.NoError(err)
+
+		// Second registration should fail
+		err = targetScheme.RegisterSchemeType(sourceScheme, typ1)
+		r.Error(err)
+		r.Contains(err.Error(), "already registered")
+	})
+
+	t.Run("alias conflict", func(t *testing.T) {
+		r := require.New(t)
+		targetScheme := NewScheme()
+		// Register a type with an alias that will conflict
+		conflictType := NewVersionedType("conflict", "v1")
+		targetScheme.MustRegisterWithAlias(&TestType{}, conflictType, typ2)
+
+		// Try to register typ1 which has typ2 as an alias
+		err := targetScheme.RegisterSchemeType(sourceScheme, typ1)
+		r.Error(err)
+		r.Contains(err.Error(), "already registered")
+	})
+}
+
+func TestScheme_GetTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(*Scheme)
+		expected map[Type][]Type
+	}{
+		{
+			name: "empty scheme",
+			setup: func(s *Scheme) {
+				// No setup needed
+			},
+			expected: map[Type][]Type{},
+		},
+		{
+			name: "single type with no aliases",
+			setup: func(s *Scheme) {
+				s.MustRegisterWithAlias(&Raw{}, NewVersionedType("Foobar", "v1"))
+			},
+			expected: map[Type][]Type{
+				NewVersionedType("Foobar", "v1"): nil,
+			},
+		},
+		{
+			name: "single type with multiple aliases",
+			setup: func(s *Scheme) {
+				s.MustRegisterWithAlias(
+					&Raw{},
+					NewVersionedType("Foobar", "v1"),
+					NewVersionedType("Foobar", "v1alpha1"),
+					NewVersionedType("Foobar", "v1beta1"),
+				)
+			},
+			expected: map[Type][]Type{
+				NewVersionedType("Foobar", "v1"): {
+					NewVersionedType("Foobar", "v1alpha1"),
+					NewVersionedType("Foobar", "v1beta1"),
+				},
+			},
+		},
+		{
+			name: "multiple types with and without aliases",
+			setup: func(s *Scheme) {
+				// Type 1 with aliases
+				s.MustRegisterWithAlias(
+					&Raw{},
+					NewVersionedType("Foobar", "v1"),
+					NewVersionedType("Foobar", "v1alpha1"),
+				)
+				// Type 2 without aliases
+				s.MustRegisterWithAlias(
+					&Raw{},
+					NewVersionedType("Config", "v1"),
+				)
+			},
+			expected: map[Type][]Type{
+				NewVersionedType("Foobar", "v1"): {
+					NewVersionedType("Foobar", "v1alpha1"),
+				},
+				NewVersionedType("Config", "v1"): nil,
+			},
+		},
+		{
+			name: "types registered through RegisterScheme",
+			setup: func(s *Scheme) {
+				// Create a source scheme
+				source := NewScheme()
+				source.MustRegisterWithAlias(
+					&Raw{},
+					NewVersionedType("Foobar", "v1"),
+					NewVersionedType("Foobar", "v1alpha1"),
+				)
+				// Register the source scheme
+				err := s.RegisterScheme(source)
+				if err != nil {
+					t.Fatal(err)
+				}
+			},
+			expected: map[Type][]Type{
+				NewVersionedType("Foobar", "v1"): {
+					NewVersionedType("Foobar", "v1alpha1"),
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := NewScheme()
+			tt.setup(scheme)
+			result := scheme.GetTypes()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestRegistry_RegisterSchemes(t *testing.T) {
+	// Create test types
+	typ1 := NewVersionedType("test1", "v1")
+	typ2 := NewVersionedType("test2", "v1")
+	typ3 := NewVersionedType("test3", "v1")
+
+	// Create source schemes
+	scheme1 := NewScheme()
+	scheme1.MustRegisterWithAlias(&TestType{}, typ1)
+
+	scheme2 := NewScheme()
+	scheme2.MustRegisterWithAlias(&TestType{}, typ2)
+
+	scheme3 := NewScheme()
+	scheme3.MustRegisterWithAlias(&TestType{}, typ3)
+
+	// Test successful registration of multiple schemes
+	t.Run("successful registration", func(t *testing.T) {
+		r := require.New(t)
+		registry := NewScheme()
+		err := registry.RegisterSchemes(scheme1, scheme2, scheme3)
+		r.NoError(err)
+
+		// Verify all types are registered
+		r.True(registry.IsRegistered(typ1))
+		r.True(registry.IsRegistered(typ2))
+		r.True(registry.IsRegistered(typ3))
+	})
+
+	// Test handling nil schemes
+	t.Run("nil schemes", func(t *testing.T) {
+		r := require.New(t)
+		registry := NewScheme()
+		err := registry.RegisterSchemes(nil, scheme1, nil, scheme2)
+		r.NoError(err)
+
+		// Verify types from non-nil schemes are registered
+		r.True(registry.IsRegistered(typ1))
+		r.True(registry.IsRegistered(typ2))
+	})
+
+	// Test handling conflicts between schemes
+	t.Run("conflicting schemes", func(t *testing.T) {
+		r := require.New(t)
+		registry := NewScheme()
+		registry.MustRegisterWithAlias(&TestType{}, typ1) // Register typ1 first
+
+		// Create a scheme with conflicting type
+		conflictingScheme := NewScheme()
+		conflictingScheme.MustRegisterWithAlias(&TestType{}, typ1)
+
+		// Try to register schemes, including one with conflict
+		err := registry.RegisterSchemes(scheme2, conflictingScheme, scheme3)
+		r.Error(err)
+		r.Contains(err.Error(), "type \"test1/v1\" is already registered")
+		r.True(IsTypeAlreadyRegisteredError(err))
+
+		// Verify only the first scheme was registered
+		r.True(registry.IsRegistered(typ1))
+		r.True(registry.IsRegistered(typ2))
+		r.False(registry.IsRegistered(typ3))
+	})
+
+	// Test partial registration
+	t.Run("partial registration", func(t *testing.T) {
+		r := require.New(t)
+		registry := NewScheme()
+		registry.MustRegisterWithAlias(&TestType{}, typ1) // Register typ1 first
+
+		// Create a scheme with conflicting type
+		conflictingScheme := NewScheme()
+		conflictingScheme.MustRegisterWithAlias(&TestType{}, typ1)
+
+		// Try to register schemes, including one with conflict
+		err := registry.RegisterSchemes(scheme2, conflictingScheme, scheme3)
+		r.Error(err)
+
+		// Verify only the first scheme was registered
+		r.True(registry.IsRegistered(typ1))
+		r.True(registry.IsRegistered(typ2))
+		r.False(registry.IsRegistered(typ3))
+	})
 }

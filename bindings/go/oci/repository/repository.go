@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"path/filepath"
+	"strings"
 
 	"oras.land/oras-go/v2/registry/remote"
 
@@ -14,6 +14,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // NewFromCTFRepoV1 creates a new [*oci.Repository] instance from a CTF repository v1 specification.
@@ -47,13 +48,27 @@ func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, c
 		return nil, fmt.Errorf("a base url is required")
 	}
 
-	resolver := urlresolver.New(repository.BaseUrl)
-
-	if purl, err := url.Parse(repository.BaseUrl); err == nil && purl.Scheme == "http" {
-		resolver.PlainHTTP = true
+	purl, err := runtime.ParseURLAndAllowNoScheme(repository.BaseUrl)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse OCI repository URL %q: %w", repository.BaseUrl, err)
 	}
 
-	resolver.BaseClient = client
+	var opts []urlresolver.Option
+	if purl.Scheme != "" {
+		opts = append(opts, urlresolver.WithBaseURL(strings.TrimPrefix(purl.String(), purl.Scheme+"://")))
+		if purl.Scheme == "http" {
+			opts = append(opts, urlresolver.WithPlainHTTP(true))
+		}
+	} else {
+		opts = append(opts, urlresolver.WithBaseURL(repository.BaseUrl))
+	}
+
+	opts = append(opts, urlresolver.WithBaseClient(client))
+
+	resolver, err := urlresolver.New(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("could not create URL resolver for OCI repository %q: %w", repository.BaseUrl, err)
+	}
 
 	return oci.NewRepository(append(options, oci.WithResolver(resolver))...)
 }

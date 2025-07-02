@@ -5,7 +5,6 @@ import (
 	"time"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ConvertToRuntimeResource converts Resource's to internal representation.
@@ -73,15 +72,14 @@ func ConvertToRuntimeComponent(component Component) descriptor.Component {
 	if component.Labels != nil {
 		target.Labels = ConvertFromLabels(component.Labels)
 	}
-	target.Provider = make(runtime.Identity)
+	target.Provider = descriptor.Provider{}
 	if component.Provider.Name != "" {
-		target.Provider[IdentityAttributeName] = component.Provider.Name
+		target.Provider.Name = component.Provider.Name
 	}
 	if component.Provider.Labels != nil {
-		for _, label := range component.Provider.Labels {
-			target.Provider[label.Name] = label.Value
-		}
+		target.Provider.Labels = ConvertFromLabels(component.Provider.Labels)
 	}
+
 	if component.Resources != nil {
 		target.Resources = make([]descriptor.Resource, len(component.Resources))
 		for i, resource := range component.Resources {

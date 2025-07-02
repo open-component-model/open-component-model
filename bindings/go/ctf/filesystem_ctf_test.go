@@ -18,6 +18,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
@@ -46,7 +47,7 @@ func Test_FileSystemCTF_BasicOperations(t *testing.T) {
 
 	// Test SaveBlob
 	testData := []byte("test blob data")
-	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
+	testBlob := inmemory.New(bytes.NewReader(testData))
 	err = fs.SaveBlob(ctx, testBlob)
 	r.NoError(err)
 
@@ -178,7 +179,7 @@ func Test_FileSystemCTF_ConcurrentOperations(t *testing.T) {
 	blobs := make([]blob.ReadOnlyBlob, 10)
 	for i := 0; i < 10; i++ {
 		data := []byte(fmt.Sprintf("test blob %d", i))
-		blobs[i] = blob.NewDirectReadOnlyBlob(bytes.NewReader(data))
+		blobs[i] = inmemory.New(bytes.NewReader(data))
 	}
 
 	// Save blobs concurrently
@@ -208,7 +209,7 @@ func Test_FileSystemCTF_IndexOperations(t *testing.T) {
 
 	// Create and set an index with artifacts
 	idx := v1.NewIndex()
-	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test")))
+	testBlob := inmemory.New(bytes.NewReader([]byte("test")))
 	digest, _ := testBlob.Digest()
 	err = fs.SaveBlob(ctx, testBlob)
 	r.NoError(err)

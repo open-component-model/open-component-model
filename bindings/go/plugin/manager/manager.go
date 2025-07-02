@@ -18,6 +18,9 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -30,6 +33,9 @@ type PluginManager struct {
 	// plugin manager to locate a required plugin.
 	ComponentVersionRepositoryRegistry *componentversionrepository.RepositoryRegistry
 	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
+	InputRegistry                      *input.RepositoryRegistry
+	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
+	ResourcePluginRegistry             *resource.ResourceRegistry
 
 	mu sync.Mutex
 
@@ -46,6 +52,9 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 	return &PluginManager{
 		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
 		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
+		InputRegistry:                      input.NewInputRepositoryRegistry(ctx),
+		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
+		ResourcePluginRegistry:             resource.NewResourceRegistry(ctx),
 		baseCtx:                            ctx,
 	}
 }
@@ -145,6 +154,10 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, dir string) ([]*mtypes.Plugin, error) {
 	var plugins []*mtypes.Plugin
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if os.IsNotExist(err) {
+			return ErrNoPluginsFound
+		}
+
 		if err != nil {
 			return err
 		}
@@ -233,6 +246,21 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, pl
 		case mtypes.CredentialRepositoryPluginType:
 			slog.DebugContext(ctx, "adding credential repository plugin", "id", plugin.ID)
 			if err := pm.CredentialRepositoryRegistry.AddPlugin(plugin, typs[0].Type, typs[1].Type); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case mtypes.InputPluginType:
+			slog.DebugContext(ctx, "adding construction resource input plugin", "id", plugin.ID)
+			if err := pm.InputRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case mtypes.DigestProcessorPluginType:
+			slog.DebugContext(ctx, "adding digest processor plugin", "id", plugin.ID)
+			if err := pm.DigestProcessorRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case mtypes.ResourceRepositoryPluginType:
+			slog.DebugContext(ctx, "adding resource repository plugin", "id", plugin.ID)
+			if err := pm.ResourcePluginRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		}

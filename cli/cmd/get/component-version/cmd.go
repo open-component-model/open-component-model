@@ -10,7 +10,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
-	"ocm.software/open-component-model/cli/internal/enum"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
@@ -25,8 +25,8 @@ const (
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:        "component-version {reference}",
-		Aliases:    []string{"cv", "component-versions", "cvs"},
-		SuggestFor: []string{"component", "components", "version", "versions"},
+		Aliases:    []string{"cv", "component-versions", "cvs", "componentversion", "componentversions", "component", "components", "comp", "comps", "c"},
+		SuggestFor: []string{"version", "versions"},
 		Short:      "Get component version(s) from an OCM repository",
 		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
 		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.

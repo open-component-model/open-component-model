@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -19,6 +18,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -58,6 +58,9 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 	// Create a test component descriptor
 	desc := &descriptor.Descriptor{
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "test-provider",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    "test-component",
@@ -66,8 +69,14 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 			},
 		},
 	}
+	_, err = repo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
+	r.Error(err)
+	r.ErrorIs(err, oci.ErrNotFound)
 
 	// Test adding component version
+	err = repo.AddComponentVersion(ctx, desc)
+	r.NoError(err, "Failed to add component version when it should succeed")
+
 	err = repo.AddComponentVersion(ctx, desc)
 	r.NoError(err, "Failed to add component version when it should succeed")
 
@@ -95,6 +104,9 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 	// Create a test component descriptor
 	desc = &descriptor.Descriptor{
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "test-provider",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    "test-component",
@@ -139,11 +151,9 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.Type{
-						Name: "localBlob",
-					},
-					Data: []byte(`{"localReference":"sha256:1234567890","mediaType":"application/octet-stream"}`),
+				Access: &v2.LocalBlob{
+					LocalReference: "sha256:1234567890",
+					MediaType:      "application/octet-stream",
 				},
 			},
 			identity: map[string]string{
@@ -166,13 +176,9 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("test content").String(),
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("test content").String(),
+					MediaType:      "application/octet-stream",
 				},
 			},
 			identity: map[string]string{
@@ -198,13 +204,9 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("platform specific content").String(),
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("platform specific content").String(),
+					MediaType:      "application/octet-stream",
 				},
 			},
 			content: []byte("platform specific content"),
@@ -229,13 +231,9 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("legacy content").String(),
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("legacy content").String(),
+					MediaType:      "application/octet-stream",
 				},
 			},
 			content: []byte("legacy content"),
@@ -262,13 +260,9 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("platform specific content").String(),
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("platform specific content").String(),
+					MediaType:      "application/octet-stream",
 				},
 			},
 			identity: map[string]string{
@@ -289,14 +283,9 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("single layer manifest content").String(),
-						ociImageSpecV1.MediaTypeImageManifest,
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("single layer manifest content").String(),
+					MediaType:      ociImageSpecV1.MediaTypeImageManifest,
 				},
 			},
 			content: []byte("single layer manifest content"),
@@ -319,14 +308,9 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("oci layout content").String(),
-						layout.MediaTypeOCIImageLayoutV1+"+tar+gzip",
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("oci layout content").String(),
+					MediaType:      layout.MediaTypeOCIImageLayoutV1 + "+tar+gzip",
 				},
 			},
 			content: func(t *testing.T) []byte {
@@ -361,7 +345,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			}(t),
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
 				r := require.New(t)
-				store, err := tar.ReadOCILayout(t.Context(), blob.NewDirectReadOnlyBlob(bytes.NewReader(original)))
+				store, err := tar.ReadOCILayout(t.Context(), inmemory.New(bytes.NewReader(original)))
 				r.NoError(err, "Failed to read OCI layout")
 				t.Cleanup(func() {
 					r.NoError(store.Close(), "Failed to close blob reader")
@@ -390,6 +374,9 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			// Create a test component descriptor
 			desc := &descriptor.Descriptor{
 				Component: descriptor.Component{
+					Provider: descriptor.Provider{
+						Name: "test-provider",
+					},
 					ComponentMeta: descriptor.ComponentMeta{
 						ObjectMeta: descriptor.ObjectMeta{
 							Name:    "test-component",
@@ -403,7 +390,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			// Setup component if needed
 			if tc.setupComponent {
 				// Add the resource first
-				b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
+				b := inmemory.New(bytes.NewReader(tc.content))
 				newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.resource, b)
 				r.NoError(err, "Failed to add test resource")
 				r.NotNil(newRes, "Resource should not be nil after adding")
@@ -490,14 +477,9 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 					},
 				},
 				Type: "ociImageLayer",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("test layer content").String(),
-						artifactMediaType,
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("test layer content").String(),
+					MediaType:      artifactMediaType,
 				},
 			},
 			content:        []byte("test layer content"),
@@ -520,6 +502,9 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 			// Create a test component descriptor
 			desc := &descriptor.Descriptor{
 				Component: descriptor.Component{
+					Provider: descriptor.Provider{
+						Name: "test-provider",
+					},
 					ComponentMeta: descriptor.ComponentMeta{
 						ObjectMeta: descriptor.ObjectMeta{
 							Name:    "test-component",
@@ -532,7 +517,7 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 			// Add the resource to the component descriptor
 			desc.Component.Resources = append(desc.Component.Resources, *tc.resource)
 
-			b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
+			b := inmemory.New(bytes.NewReader(tc.content))
 
 			var downloadedRes blob.ReadOnlyBlob
 			if tc.useLocalUpload {
@@ -576,7 +561,7 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 				r.NoError(store.Close())
 
 				// Upload the resource with the store content
-				b := blob.NewDirectReadOnlyBlob(buf)
+				b := inmemory.New(buf)
 				newRes, err := repo.UploadResource(ctx, tc.resource.Access, tc.resource, b)
 				r.NoError(err, "Failed to upload test resource")
 				r.NotNil(newRes, "Resource should not be nil after uploading")
@@ -674,14 +659,9 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 					},
 				},
 				Type: "ociImageLayer",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("test layer content").String(),
-						artifactMediaType,
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("test layer content").String(),
+					MediaType:      artifactMediaType,
 				},
 			},
 			content:        []byte("test layer content"),
@@ -704,6 +684,9 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 			// Create a test component descriptor
 			desc := &descriptor.Descriptor{
 				Component: descriptor.Component{
+					Provider: descriptor.Provider{
+						Name: "test-provider",
+					},
 					ComponentMeta: descriptor.ComponentMeta{
 						ObjectMeta: descriptor.ObjectMeta{
 							Name:    "test-component",
@@ -716,7 +699,7 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 			// Add the source to the component descriptor
 			desc.Component.Sources = append(desc.Component.Sources, *tc.source)
 
-			b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
+			b := inmemory.New(bytes.NewReader(tc.content))
 
 			var downloadedSrc blob.ReadOnlyBlob
 			if tc.useLocalUpload {
@@ -760,7 +743,7 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 				r.NoError(store.Close())
 
 				// Upload the source with the store content
-				b := blob.NewDirectReadOnlyBlob(buf)
+				b := inmemory.New(buf)
 				newSrc, err := repo.UploadSource(ctx, tc.source.Access, tc.source, b)
 				r.NoError(err, "Failed to upload test source")
 				r.NotNil(newSrc, "Source should not be nil after uploading")
@@ -832,6 +815,9 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	// Create a test component descriptor
 	desc := &descriptor.Descriptor{
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "test-provider",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    "test-component",
@@ -852,14 +838,9 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 			},
 		},
 		Type: "test-type",
-		Access: &runtime.Raw{
-			Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-			Data: []byte(fmt.Sprintf(
-				`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
-				runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-				digest.FromBytes(data).String(),
-				layout.MediaTypeOCIImageLayoutV1+"+tar",
-			)),
+		Access: &v2.LocalBlob{
+			LocalReference: digest.FromBytes(data).String(),
+			MediaType:      layout.MediaTypeOCIImageLayoutV1 + "+tar",
 		},
 	}
 
@@ -867,7 +848,7 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	desc.Component.Resources = append(desc.Component.Resources, *resource)
 
 	// Add the OCI layout as a local resource
-	b := blob.NewDirectReadOnlyBlob(bytes.NewReader(data))
+	b := inmemory.New(bytes.NewReader(data))
 	newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, resource, b)
 	r.NoError(err, "Failed to add OCI layout resource")
 	r.NotNil(newRes, "Resource should not be nil after adding")
@@ -904,6 +885,9 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	// Create a test component descriptor
 	desc := &descriptor.Descriptor{
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "test-provider",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    "test-component",
@@ -925,14 +909,9 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 			},
 		},
 		Type: "ociImageLayer",
-		Access: &runtime.Raw{
-			Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-			Data: []byte(fmt.Sprintf(
-				`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
-				runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-				contentDigest.String(),
-				ociImageSpecV1.MediaTypeImageLayer,
-			)),
+		Access: &v2.LocalBlob{
+			LocalReference: contentDigest.String(),
+			MediaType:      ociImageSpecV1.MediaTypeImageLayer,
 		},
 	}
 
@@ -940,7 +919,7 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	desc.Component.Resources = append(desc.Component.Resources, *resource)
 
 	// Add the OCI image layer as a local resource
-	b := blob.NewDirectReadOnlyBlob(bytes.NewReader(content))
+	b := inmemory.New(bytes.NewReader(content))
 	newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, resource, b)
 	r.NoError(err, "Failed to add OCI image layer resource")
 	r.NotNil(newRes, "Resource should not be nil after adding")
@@ -1010,6 +989,9 @@ func TestRepository_ListComponentVersions(t *testing.T) {
 	for _, version := range versionsToAdd {
 		desc := &descriptor.Descriptor{
 			Component: descriptor.Component{
+				Provider: descriptor.Provider{
+					Name: "test-provider",
+				},
 				ComponentMeta: descriptor.ComponentMeta{
 					ObjectMeta: descriptor.ObjectMeta{
 						Name:    "test-component",
@@ -1041,6 +1023,9 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 	// Create a descriptor for the component version
 	desc := &descriptor.Descriptor{
 		Component: descriptor.Component{
+			Provider: descriptor.Provider{
+				Name: "test-provider",
+			},
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    "test-component",
@@ -1063,6 +1048,7 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 	r.NoError(repoStore.Push(ctx, layerDesc, bytes.NewReader(content)))
 
 	topDesc, err := oci.AddDescriptorToStore(ctx, repoStore, desc, oci.AddDescriptorOptions{
+		Scheme:           oci.DefaultRepositoryScheme,
 		Author:           "OLD OCM",
 		AdditionalLayers: []ociImageSpecV1.Descriptor{layerDesc},
 	})
@@ -1134,11 +1120,9 @@ func TestRepository_GetLocalSource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.Type{
-						Name: "localBlob",
-					},
-					Data: []byte(`{"localReference":"sha256:1234567890","mediaType":"application/octet-stream"}`),
+				Access: &v2.LocalBlob{
+					LocalReference: "sha256:1234567890",
+					MediaType:      "application/octet-stream",
 				},
 			},
 			identity: map[string]string{
@@ -1161,13 +1145,8 @@ func TestRepository_GetLocalSource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("test content").String(),
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("test content").String(),
 				},
 			},
 			identity: map[string]string{
@@ -1193,13 +1172,8 @@ func TestRepository_GetLocalSource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("platform specific content").String(),
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("platform specific content").String(),
 				},
 			},
 			content: []byte("platform specific content"),
@@ -1228,13 +1202,8 @@ func TestRepository_GetLocalSource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"application/octet-stream"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("platform specific content").String(),
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("platform specific content").String(),
 				},
 			},
 			identity: map[string]string{
@@ -1255,14 +1224,9 @@ func TestRepository_GetLocalSource(t *testing.T) {
 					},
 				},
 				Type: "test-type",
-				Access: &runtime.Raw{
-					Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-					Data: []byte(fmt.Sprintf(
-						`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
-						runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-						digest.FromString("oci layout content").String(),
-						layout.MediaTypeOCIImageLayoutV1+"+tar+gzip",
-					)),
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("oci layout content").String(),
+					MediaType:      layout.MediaTypeOCIImageLayoutV1 + "+tar+gzip",
 				},
 			},
 			content: func(t *testing.T) []byte {
@@ -1298,7 +1262,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			}(t),
 			checkContent: func(t *testing.T, original []byte, actual []byte) {
 				r := require.New(t)
-				store, err := tar.ReadOCILayout(t.Context(), blob.NewDirectReadOnlyBlob(bytes.NewReader(original)))
+				store, err := tar.ReadOCILayout(t.Context(), inmemory.New(bytes.NewReader(original)))
 				r.NoError(err, "Failed to read OCI layout")
 				t.Cleanup(func() {
 					r.NoError(store.Close(), "Failed to close blob reader")
@@ -1327,6 +1291,9 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			// Create a test component descriptor
 			desc := &descriptor.Descriptor{
 				Component: descriptor.Component{
+					Provider: descriptor.Provider{
+						Name: "test-provider",
+					},
 					ComponentMeta: descriptor.ComponentMeta{
 						ObjectMeta: descriptor.ObjectMeta{
 							Name:    "test-component",
@@ -1340,7 +1307,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 			// Setup component if needed
 			if tc.setupComponent {
 				// Add the source first
-				b := blob.NewDirectReadOnlyBlob(bytes.NewReader(tc.content))
+				b := inmemory.New(bytes.NewReader(tc.content))
 				newSrc, err := repo.AddLocalSource(ctx, desc.Component.Name, desc.Component.Version, tc.source, b)
 				r.NoError(err, "Failed to add test source")
 				r.NotNil(newSrc, "Source should not be nil after adding")
@@ -1385,6 +1352,165 @@ func TestRepository_GetLocalSource(t *testing.T) {
 					}
 					tc.checkContent(t, tc.content, content)
 				}
+			}
+		})
+	}
+}
+
+func TestRepository_ProcessResourceDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	ctf := ctf.NewFileSystemCTF(fs)
+	store := ocictf.NewFromCTF(ctf)
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	testdata := []byte("test content")
+	dig := digest.FromBytes(testdata)
+
+	tests := []struct {
+		name     string
+		resource *descriptor.Resource
+		setup    func(t *testing.T)
+		check    func(*descriptor.Resource) error
+		err      assert.ErrorAssertionFunc
+	}{
+		{
+			name: "local blob without global access",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v2.LocalBlob{
+					LocalReference: "test-ref",
+					MediaType:      "application/octet-stream",
+				},
+			},
+			err: assert.Error,
+		},
+		{
+			name: "oci image with differing actual content and specified digest",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v1.OCIImage{
+					ImageReference: "test-registry/test-image:v2.0.0@" + dig.String(),
+				},
+			},
+			setup: func(t *testing.T) {
+				ctx := t.Context()
+				r := require.New(t)
+				store, err := store.StoreForReference(ctx, "test-registry/test-image:v2.0.0")
+				r.NoError(err, "Failed to get store for test registry")
+
+				testdata := []byte("test content with differing digest")
+				desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+				data := bytes.NewReader(testdata)
+
+				r.NoError(store.Push(ctx, desc, data))
+				r.NoError(store.Tag(ctx, desc, "v2.0.0"))
+			},
+			err: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.ErrorContains(t, err, "expected pinned digest")
+			},
+		},
+		{
+			name: "oci image with digest",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v1.OCIImage{
+					ImageReference: "test-registry/test-image:v2.0.0@" + dig.String(),
+				},
+			},
+			setup: func(t *testing.T) {
+				ctx := t.Context()
+				r := require.New(t)
+				store, err := store.StoreForReference(ctx, "test-registry/test-image:v2.0.0")
+				r.NoError(err, "Failed to get store for test registry")
+
+				desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+				data := bytes.NewReader(testdata)
+
+				r.NoError(store.Push(ctx, desc, data))
+				r.NoError(store.Tag(ctx, desc, "v2.0.0"))
+			},
+			check: func(resource *descriptor.Resource) error {
+				r := require.New(t)
+				// Check if the resource has the expected access
+				ociImage, ok := resource.Access.(*v1.OCIImage)
+				r.True(ok, "Access should be of type v1.OCIImage")
+				r.Equal("test-registry/test-image:v2.0.0@"+dig.String(), ociImage.ImageReference, "Image reference should match expected value")
+				return nil
+			},
+		},
+		{
+			name: "oci image without digest gets processed and is validated",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "1.0.0",
+					},
+				},
+				Type: "test-type",
+				Access: &v1.OCIImage{
+					ImageReference: "test-registry/test-image:v2.0.0",
+				},
+			},
+			setup: func(t *testing.T) {
+				ctx := t.Context()
+				r := require.New(t)
+				store, err := store.StoreForReference(ctx, "test-registry/test-image:v2.0.0")
+				r.NoError(err, "Failed to get store for test registry")
+
+				desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+				data := bytes.NewReader(testdata)
+
+				r.NoError(store.Push(ctx, desc, data))
+				r.NoError(store.Tag(ctx, desc, "v2.0.0"))
+			},
+			check: func(resource *descriptor.Resource) error {
+				r := require.New(t)
+				// Check if the resource has the expected access
+				ociImage, ok := resource.Access.(*v1.OCIImage)
+				r.True(ok, "Access should be of type v1.OCIImage")
+				r.Equal("test-registry/test-image:v2.0.0@"+dig.String(), ociImage.ImageReference, "Image reference should match expected value")
+				return nil
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				tt.setup(t)
+			}
+
+			res, err := repo.ProcessResourceDigest(ctx, tt.resource)
+			if tt.err != nil && !tt.err(t, err) {
+				return
+			}
+
+			if tt.check != nil {
+				err := tt.check(res)
+				r.NoError(err)
 			}
 		})
 	}

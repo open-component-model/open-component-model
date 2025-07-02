@@ -120,6 +120,9 @@ func TestSingleFileTAREncodeV2Descriptor(t *testing.T) {
 			name: "successful encode",
 			desc: &descriptor.Descriptor{
 				Component: descriptor.Component{
+					Provider: descriptor.Provider{
+						Name: "test-provider",
+					},
 					ComponentMeta: descriptor.ComponentMeta{
 						ObjectMeta: descriptor.ObjectMeta{
 							Name:    "test-component",

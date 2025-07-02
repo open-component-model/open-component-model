@@ -119,15 +119,9 @@
         "type"
       ]
     },
-    "sourceDefinition": {
+    "commonSourceProperties": {
       "type": "object",
-      "description": "Definition of a source artifact used to generate resources",
-      "required": [
-        "name",
-        "version",
-        "type",
-        "access"
-      ],
+      "required": ["name", "version", "type"],
       "properties": {
         "name": {
           "description": "Name of the source",
@@ -152,12 +146,69 @@
           "items": {
             "$ref": "#/$defs/label"
           }
-        },
-        "access": {
-          "description": "Access specification for the source",
-          "$ref": "#/$defs/access"
         }
       }
+    },
+    "commonResourceProperties": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "description": "Name of the resource",
+          "type": "string",
+          "$ref": "#/$defs/identityAttributeKey"
+        },
+        "extraIdentity": {
+          "description": "Additional identity attributes for the resource",
+          "$ref": "#/$defs/identityAttribute"
+        },
+        "type": {
+          "description": "Type of the resource",
+          "$ref": "#/$defs/ocmType"
+        },
+        "srcRefs": {
+          "description": "References to sources that produced this resource",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/srcRef"
+          }
+        },
+        "labels": {
+          "description": "Labels associated with the resource",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/label"
+          }
+        }
+      }
+    },
+    "sourceDefinition": {
+      "$ref": "#/$defs/commonSourceProperties",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["access"],
+          "properties": {
+            "access": {
+              "description": "Access specification for the source",
+              "$ref": "#/$defs/access"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["input"],
+          "properties": {
+            "input": {
+              "description": "Input specification for the source",
+              "$ref": "#/$defs/input"
+            }
+          }
+        }
+      ]
     },
     "digestSpec": {
       "type": "object",
@@ -271,56 +322,19 @@
       }
     },
     "resourceDefinition": {
+      "$ref": "#/$defs/commonResourceProperties",
       "oneOf": [
         {
-          "type": "object",
-          "description": "a resource that has a predefined access specification",
-          "required": [
-            "name",
-            "version",
-            "type",
-            "relation",
-            "access"
-          ],
+          "required": ["version", "relation", "access"],
           "properties": {
-            "name": {
-              "description": "Name of the resource",
-              "type": "string",
-              "$ref": "#/$defs/identityAttributeKey"
-            },
-            "extraIdentity": {
-              "description": "Additional identity attributes for the resource",
-              "$ref": "#/$defs/identityAttribute"
-            },
             "version": {
               "description": "Version of the resource",
               "$ref": "#/$defs/relaxedSemver"
             },
-            "type": {
-              "description": "Type of the resource",
-              "$ref": "#/$defs/ocmType"
-            },
-            "srcRefs": {
-              "description": "References to sources that produced this resource",
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/srcRef"
-              }
-            },
             "relation": {
               "description": "Relation of the resource to the component (local or external)",
               "type": "string",
-              "enum": [
-                "local",
-                "external"
-              ]
-            },
-            "labels": {
-              "description": "Labels associated with the resource",
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/label"
-              }
+              "enum": ["local", "external"]
             },
             "access": {
               "description": "Access specification for the resource",
@@ -329,59 +343,22 @@
             "digest": {
               "description": "Optional digest of the resource",
               "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/$defs/digestSpec"
-                }
+                { "type": "null" },
+                { "$ref": "#/$defs/digestSpec" }
               ]
             }
           }
         },
         {
-          "type": "object",
-          "description": "a resource that has an input specification",
-          "required": [
-            "name",
-            "type",
-            "input"
-          ],
+          "required": ["relation", "input"],
           "properties": {
-            "name": {
-              "description": "Name of the resource",
-              "type": "string",
-              "$ref": "#/$defs/identityAttributeKey"
-            },
-            "extraIdentity": {
-              "description": "Additional identity attributes for the resource",
-              "$ref": "#/$defs/identityAttribute"
-            },
-            "type": {
-              "description": "Type of the resource",
-              "$ref": "#/$defs/ocmType"
-            },
             "relation": {
               "description": "Relation of the resource to the component (always must be local for input types)",
               "type": "string",
               "const": "local"
             },
-            "srcRefs": {
-              "description": "References to sources that produced this resource",
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/srcRef"
-              }
-            },
-            "labels": {
-              "description": "Labels associated with the resource",
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/label"
-              }
-            },
             "input": {
-              "description": "Access specification for the resource",
+              "description": "Input specification for the resource",
               "$ref": "#/$defs/input"
             }
           }

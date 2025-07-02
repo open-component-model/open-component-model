@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -24,15 +23,23 @@ const (
 	UploadLocalResource = "/local-resource/upload"
 	// DownloadLocalResource defines the endpoint to download a local resource.
 	DownloadLocalResource = "/local-resource/download"
+	// UploadLocalSource defines the endpoint to upload a local source to.
+	UploadLocalSource = "/local-source/upload"
+	// DownloadLocalSource defines the endpoint to download a local source.
+	DownloadLocalSource = "/local-source/download"
 	// UploadComponentVersion defines the endpoint to upload component versions to.
 	UploadComponentVersion = "/component-version/upload"
 	// DownloadComponentVersion defines the endpoint to download component versions.
 	DownloadComponentVersion = "/component-version/download"
 	// ListComponentVersions defines the endpoint to list component versions.
 	ListComponentVersions = "/component-versions"
-	Identity              = "/identity"
+	// Identity defines the endpoint to retrieve credential consumer identity.
+	Identity = "/identity"
 )
 
+// RepositoryPlugin implements the ReadWriteOCMRepositoryPluginContract for external plugin communication.
+// It handles REST-based communication with external repository plugins, including request validation,
+// credential management, and data format conversion.
 type RepositoryPlugin struct {
 	ID string
 
@@ -52,6 +59,8 @@ var (
 	_ v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
+// NewComponentVersionRepositoryPlugin creates a new component version repository plugin instance with the provided configuration.
+// It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
 func NewComponentVersionRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
@@ -171,57 +180,109 @@ func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request v1.Post
 	return &resources[0], nil
 }
 
-func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) error {
+func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalResourceResponse, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
 	}
 	addParam("name", request.Name)
 	addParam("version", request.Version)
-	addParam("target_location_type", string(request.TargetLocation.LocationType))
-	addParam("target_location_value", request.TargetLocation.Value)
 	identityEncoded, err := json.Marshal(request.Identity)
+	var response v1.GetLocalResourceResponse
 	if err != nil {
-		return err
+		return response, err
 	}
 	identityBase64 := base64.StdEncoding.EncodeToString(identityEncoded)
 	addParam("identity", identityBase64)
 
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
-		return err
+		return response, err
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
 	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
-		return err
+		return response, err
 	}
 
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, DownloadLocalResource, http.MethodGet, plugins.WithQueryParams(params), plugins.WithHeader(credHeader)); err != nil {
-		return fmt.Errorf("failed to get local resource %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, DownloadLocalResource, http.MethodGet, plugins.WithQueryParams(params), plugins.WithHeader(credHeader), plugins.WithResult(&response)); err != nil {
+		return response, fmt.Errorf("failed to get local resource %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
 	}
 
-	_, err = os.Stat(request.TargetLocation.Value)
-	if err != nil {
-		return fmt.Errorf("failed to stat target file: %w", err)
-	}
-
-	return nil
+	return response, nil
 }
 
-func (r *RepositoryPlugin) GetIdentity(ctx context.Context, typ v1.GetIdentityRequest[runtime.Typed]) (runtime.Identity, error) {
-	if err := r.validateEndpoint(typ.Typ, r.jsonSchema); err != nil {
+func (r *RepositoryPlugin) AddLocalSource(ctx context.Context, request v1.PostLocalSourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Source, error) {
+	credHeader, err := toCredentials(credentials)
+	if err != nil {
+		return nil, err
+	}
+
+	// We know we only have this single schema for all endpoints which require validation.
+	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+		return nil, err
+	}
+
+	sourceV2 := &v2.Source{}
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, UploadLocalSource, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(sourceV2), plugins.WithHeader(credHeader)); err != nil {
+		return nil, fmt.Errorf("failed to add local source %s: %w", r.ID, err)
+	}
+
+	sources := descriptor.ConvertFromV2Sources([]v2.Source{*sourceV2})
+	if len(sources) == 0 {
+		return nil, errors.New("number of converted sources is zero")
+	}
+
+	return &sources[0], nil
+}
+
+func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request v1.GetLocalSourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalSourceResponse, error) {
+	var params []plugins.KV
+	addParam := func(k, v string) {
+		params = append(params, plugins.KV{Key: k, Value: v})
+	}
+	addParam("name", request.Name)
+	addParam("version", request.Version)
+	identityEncoded, err := json.Marshal(request.Identity)
+	var response v1.GetLocalSourceResponse
+	if err != nil {
+		return response, err
+	}
+	identityBase64 := base64.StdEncoding.EncodeToString(identityEncoded)
+	addParam("identity", identityBase64)
+
+	credHeader, err := toCredentials(credentials)
+	if err != nil {
+		return response, err
+	}
+
+	// We know we only have this single schema for all endpoints which require validation.
+	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+		return response, err
+	}
+
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, DownloadLocalSource, http.MethodGet, plugins.WithQueryParams(params), plugins.WithHeader(credHeader), plugins.WithResult(&response)); err != nil {
+		return response, fmt.Errorf("failed to get local source %s:%s from %s: %w", request.Name, request.Version, r.ID, err)
+	}
+
+	return response, nil
+}
+
+func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+	if err := r.validateEndpoint(request.Typ, r.jsonSchema); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
 	}
 
-	identity := &runtime.Identity{}
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(typ), plugins.WithResult(identity)); err != nil {
+	identity := v1.GetIdentityResponse{}
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
 	}
 
-	return nil, nil
+	return &identity, nil
 }
 
+// validateEndpoint uses the provided JSON schema and the runtime.Typed and, using the JSON schema, validates that the
+// underlying runtime.Type conforms to the provided schema.
 func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
 	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
 	if err != nil {

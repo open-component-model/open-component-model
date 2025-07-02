@@ -167,30 +167,30 @@ func TestConvertFromV2Provider(t *testing.T) {
 	tests := []struct {
 		name     string
 		provider string
-		want     runtime.Identity
+		want     descriptorRuntime.Provider
 		wantErr  bool
 	}{
 		{
 			name:     "simple provider name",
 			provider: "test-provider",
-			want: runtime.Identity{
-				v2.IdentityAttributeName: "test-provider",
+			want: descriptorRuntime.Provider{
+				Name: "test-provider",
 			},
 			wantErr: false,
 		},
 		{
 			name:     "json provider",
-			provider: `{"name": "test-provider", "type": "org"}`,
-			want: runtime.Identity{
-				"name": "test-provider",
-				"type": "org",
+			provider: `{"name": "test-provider", "labels": [{"name": "label1", "value": "value1"}]}`,
+			want: descriptorRuntime.Provider{
+				Name:   "test-provider",
+				Labels: []descriptorRuntime.Label{{Name: "label1", Value: []byte(`"value1"`)}},
 			},
 			wantErr: false,
 		},
 		{
 			name:     "invalid json",
 			provider: `{invalid json}`,
-			want:     nil,
+			want:     descriptorRuntime.Provider{},
 			wantErr:  true,
 		},
 	}
@@ -227,10 +227,10 @@ func TestConvertFromV2Labels(t *testing.T) {
 		{
 			name: "with labels",
 			labels: []v2.Label{
-				{Name: "test", Value: "value", Signing: true},
+				{Name: "test", Value: []byte(`"value"`), Signing: true},
 			},
 			want: []descriptorRuntime.Label{
-				{Name: "test", Value: "value", Signing: true},
+				{Name: "test", Value: []byte(`"value"`), Signing: true},
 			},
 		},
 	}
@@ -298,13 +298,13 @@ func TestConvertFromV2SourceRefs(t *testing.T) {
 			refs: []v2.SourceRef{
 				{
 					IdentitySelector: map[string]string{"name": "test"},
-					Labels:           []v2.Label{{Name: "test", Value: "value"}},
+					Labels:           []v2.Label{{Name: "test", Value: []byte(`"value"`)}},
 				},
 			},
 			want: []descriptorRuntime.SourceRef{
 				{
 					IdentitySelector: map[string]string{"name": "test"},
-					Labels:           []descriptorRuntime.Label{{Name: "test", Value: "value"}},
+					Labels:           []descriptorRuntime.Label{{Name: "test", Value: []byte(`"value"`)}},
 				},
 			},
 		},
@@ -342,7 +342,7 @@ func TestConvertFromV2Sources(t *testing.T) {
 						ObjectMeta: v2.ObjectMeta{
 							Name:    "test",
 							Version: "1.0.0",
-							Labels:  []v2.Label{{Name: "test", Value: "value"}},
+							Labels:  []v2.Label{{Name: "test", Value: []byte(`"value"`)}},
 						},
 					},
 					Type: "test-type",
@@ -354,7 +354,7 @@ func TestConvertFromV2Sources(t *testing.T) {
 						ObjectMeta: descriptorRuntime.ObjectMeta{
 							Name:    "test",
 							Version: "1.0.0",
-							Labels:  []descriptorRuntime.Label{{Name: "test", Value: "value"}},
+							Labels:  []descriptorRuntime.Label{{Name: "test", Value: []byte(`"value"`)}},
 						},
 					},
 					Type: "test-type",
@@ -395,7 +395,7 @@ func TestConvertFromV2References(t *testing.T) {
 						ObjectMeta: v2.ObjectMeta{
 							Name:    "test",
 							Version: "1.0.0",
-							Labels:  []v2.Label{{Name: "test", Value: "value"}},
+							Labels:  []v2.Label{{Name: "test", Value: []byte(`"value"`)}},
 						},
 					},
 					Digest: v2.Digest{
@@ -411,7 +411,7 @@ func TestConvertFromV2References(t *testing.T) {
 						ObjectMeta: descriptorRuntime.ObjectMeta{
 							Name:    "test",
 							Version: "1.0.0",
-							Labels:  []descriptorRuntime.Label{{Name: "test", Value: "value"}},
+							Labels:  []descriptorRuntime.Label{{Name: "test", Value: []byte(`"value"`)}},
 						},
 					},
 					Digest: descriptorRuntime.Digest{
@@ -496,31 +496,39 @@ func TestConvertFromV2Signatures(t *testing.T) {
 func TestConvertToV2Provider(t *testing.T) {
 	tests := []struct {
 		name     string
-		provider runtime.Identity
+		provider descriptorRuntime.Provider
 		want     string
 		wantErr  bool
 	}{
 		{
 			name:     "nil provider",
-			provider: nil,
+			provider: descriptorRuntime.Provider{},
 			want:     "",
-			wantErr:  false,
+			wantErr:  true,
 		},
 		{
 			name: "simple provider",
-			provider: runtime.Identity{
-				v2.IdentityAttributeName: "test-provider",
+			provider: descriptorRuntime.Provider{
+				Name: "test-provider",
 			},
 			want:    "test-provider",
 			wantErr: false,
 		},
 		{
 			name: "provider without name",
-			provider: runtime.Identity{
-				"other": "value",
+			provider: descriptorRuntime.Provider{
+				Labels: []descriptorRuntime.Label{{Name: "test", Value: []byte(`"value"`)}},
 			},
 			want:    "",
 			wantErr: true,
+		},
+		{
+			name: "provider with name and labels",
+			provider: descriptorRuntime.Provider{
+				Name:   "test-provider",
+				Labels: []descriptorRuntime.Label{{Name: "test", Value: []byte(`"value"`)}},
+			},
+			want: `{"name":"test-provider","labels":[{"name":"test","value":"value"}]}`,
 		},
 	}
 
@@ -556,17 +564,18 @@ func TestConvertToV2Labels(t *testing.T) {
 		{
 			name: "with labels",
 			labels: []descriptorRuntime.Label{
-				{Name: "test", Value: "value", Signing: true},
+				{Name: "test", Value: []byte(`"value"`), Signing: true},
 			},
 			want: []v2.Label{
-				{Name: "test", Value: "value", Signing: true},
+				{Name: "test", Value: []byte(`"value"`), Signing: true},
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := descriptorRuntime.ConvertToV2Labels(tt.labels)
+			got, err := descriptorRuntime.ConvertToV2Labels(tt.labels)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -627,13 +636,13 @@ func TestConvertToV2SourceRefs(t *testing.T) {
 			refs: []descriptorRuntime.SourceRef{
 				{
 					IdentitySelector: map[string]string{"name": "test"},
-					Labels:           []descriptorRuntime.Label{{Name: "test", Value: "value"}},
+					Labels:           []descriptorRuntime.Label{{Name: "test", Value: []byte(`"value"`)}},
 				},
 			},
 			want: []v2.SourceRef{
 				{
 					IdentitySelector: map[string]string{"name": "test"},
-					Labels:           []v2.Label{{Name: "test", Value: "value"}},
+					Labels:           []v2.Label{{Name: "test", Value: []byte(`"value"`)}},
 				},
 			},
 		},
@@ -641,7 +650,8 @@ func TestConvertToV2SourceRefs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := descriptorRuntime.ConvertToV2SourceRefs(tt.refs)
+			got, err := descriptorRuntime.ConvertToV2SourceRefs(tt.refs)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -671,7 +681,7 @@ func TestConvertToV2References(t *testing.T) {
 						ObjectMeta: descriptorRuntime.ObjectMeta{
 							Name:    "test",
 							Version: "1.0.0",
-							Labels:  []descriptorRuntime.Label{{Name: "test", Value: "value"}},
+							Labels:  []descriptorRuntime.Label{{Name: "test", Value: []byte(`"value"`)}},
 						},
 					},
 					Digest: descriptorRuntime.Digest{
@@ -687,7 +697,7 @@ func TestConvertToV2References(t *testing.T) {
 						ObjectMeta: v2.ObjectMeta{
 							Name:    "test",
 							Version: "1.0.0",
-							Labels:  []v2.Label{{Name: "test", Value: "value"}},
+							Labels:  []v2.Label{{Name: "test", Value: []byte(`"value"`)}},
 						},
 					},
 					Digest: v2.Digest{
@@ -702,7 +712,8 @@ func TestConvertToV2References(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := descriptorRuntime.ConvertToV2References(tt.references)
+			got, err := descriptorRuntime.ConvertToV2References(tt.references)
+			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -865,4 +876,72 @@ func TestConvertToV2LocalBlob(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestLabels(t *testing.T) {
+	c := descriptorRuntime.Component{
+		ComponentMeta: descriptorRuntime.ComponentMeta{
+			ObjectMeta: descriptorRuntime.ObjectMeta{
+				Labels: []descriptorRuntime.Label{
+					{Name: "test", Value: []byte(`"value"`), Signing: true},
+				},
+			},
+		},
+	}
+
+	t.Run("plain string", func(t *testing.T) {
+		t.Run("get labels from component", func(t *testing.T) {
+			labels := c.Labels
+			assert.Len(t, labels, 1)
+			assert.Equal(t, "test", labels[0].Name)
+			assert.True(t, labels[0].Signing)
+			var val string
+			assert.NoError(t, labels[0].GetValue(&val))
+			assert.Equal(t, "value", val)
+		})
+
+		t.Run("set labels on component", func(t *testing.T) {
+			assert.NoError(t, c.ComponentMeta.Labels[0].SetValue("foobar"))
+			labels := c.Labels
+			assert.Len(t, labels, 1)
+			assert.Equal(t, "test", labels[0].Name)
+			assert.True(t, labels[0].Signing)
+			var val string
+			assert.NoError(t, labels[0].GetValue(&val))
+			assert.Equal(t, "foobar", val)
+		})
+	})
+
+	t.Run("generic object", func(t *testing.T) {
+		t.Run("set labels on component", func(t *testing.T) {
+			assert.NoError(t, c.ComponentMeta.Labels[0].SetValue(map[string]interface{}{"value": "foobar"}))
+			labels := c.Labels
+			assert.Len(t, labels, 1)
+			assert.Equal(t, "test", labels[0].Name)
+			assert.True(t, labels[0].Signing)
+			var val map[string]interface{}
+			assert.NoError(t, labels[0].GetValue(&val))
+			assert.Equal(t, "foobar", val["value"])
+		})
+		t.Run("json string", func(t *testing.T) {
+			c.ComponentMeta.Labels[0].Value = []byte(`{"key": "value"}`)
+			labels := c.Labels
+			assert.Len(t, labels, 1)
+			assert.Equal(t, "test", labels[0].Name)
+			assert.True(t, labels[0].Signing)
+			var val map[string]interface{}
+			assert.NoError(t, labels[0].GetValue(&val))
+			assert.Equal(t, "value", val["key"])
+		})
+		t.Run("yaml string", func(t *testing.T) {
+			c.ComponentMeta.Labels[0].Value = []byte("key: value2")
+			labels := c.Labels
+			assert.Len(t, labels, 1)
+			assert.Equal(t, "test", labels[0].Name)
+			assert.True(t, labels[0].Signing)
+			var val map[string]interface{}
+			assert.NoError(t, labels[0].GetValue(&val))
+			assert.Equal(t, "value2", val["key"])
+		})
+	})
 }

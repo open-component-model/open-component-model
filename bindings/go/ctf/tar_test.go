@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 )
 
@@ -19,7 +19,7 @@ func Test_Archive(t *testing.T) {
 	archive, err := ctf.OpenCTF(ctx, path, ctf.FormatDirectory, ctf.O_RDWR)
 	r.NoError(err)
 
-	testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test")))
+	testBlob := inmemory.New(bytes.NewReader([]byte("test")))
 
 	r.NoError(archive.SaveBlob(ctx, testBlob))
 

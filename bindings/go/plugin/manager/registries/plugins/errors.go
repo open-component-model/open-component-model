@@ -7,6 +7,7 @@ type Error struct {
 	Status int   `json:"status"`
 }
 
+// NewError creates a new Error instance with the provided error and HTTP status code.
 func NewError(err error, status int) *Error {
 	return &Error{Err: err, Status: status}
 }

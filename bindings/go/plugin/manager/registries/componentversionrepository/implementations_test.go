@@ -51,7 +51,7 @@ func TestPing(t *testing.T) {
 func TestAddComponentVersion(t *testing.T) {
 	// Setup test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+UploadComponentVersion && r.Method == http.MethodPost {
+		if r.URL.Path == UploadComponentVersion && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -80,7 +80,7 @@ func TestAddComponentVersion(t *testing.T) {
 func TestAddComponentVersionValidationFail(t *testing.T) {
 	// Setup test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+UploadComponentVersion && r.Method == http.MethodPost {
+		if r.URL.Path == UploadComponentVersion && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -115,7 +115,7 @@ func TestGetComponentVersion(t *testing.T) {
 	// Setup test server
 	response := defaultDescriptor()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+DownloadComponentVersion && r.Method == http.MethodGet {
+		if r.URL.Path == DownloadComponentVersion && r.Method == http.MethodGet {
 			err := json.NewEncoder(w).Encode(response)
 			require.NoError(t, err)
 			return
@@ -146,7 +146,7 @@ func TestGetComponentVersion(t *testing.T) {
 func TestListComponentVersions(t *testing.T) {
 	// Setup test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+ListComponentVersions && r.Method == http.MethodGet {
+		if r.URL.Path == ListComponentVersions && r.Method == http.MethodGet {
 			err := json.NewEncoder(w).Encode([]string{"v0.0.1", "v0.0.2"})
 			require.NoError(t, err)
 			return
@@ -178,7 +178,7 @@ func TestAddLocalResource(t *testing.T) {
 	desc := defaultDescriptor()
 	resource := desc.Component.Resources[0]
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+UploadLocalResource && r.Method == http.MethodPost {
+		if r.URL.Path == UploadLocalResource && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode(resource)
 			require.NoError(t, err)
 			return
@@ -208,12 +208,40 @@ func TestAddLocalResource(t *testing.T) {
 }
 
 func TestGetLocalResource(t *testing.T) {
+	f, err := os.CreateTemp("", "temp_file")
+	require.NoError(t, err)
+	response := &repov1.GetLocalResourceResponse{
+		Location: types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        f.Name(),
+		},
+		Resource: &v2.Resource{
+			ElementMeta: v2.ElementMeta{
+				ObjectMeta: v2.ObjectMeta{
+					Name:    "test-resource",
+					Version: "v0.0.1",
+				},
+			},
+			Type:     "resource-type",
+			Relation: "local",
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "test-access",
+					Version: "v1",
+				},
+				Data: []byte(`{ "access": "v1" }`),
+			},
+			Digest: &v2.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: "jsonNormalisation/v1",
+				Value:                  "test-value",
+			},
+		},
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+DownloadLocalResource && r.Method == http.MethodGet {
-			location := r.URL.Query().Get("target_location_value")
-			require.NoError(t, os.WriteFile(location, []byte(`test`), os.ModePerm))
-
-			w.WriteHeader(http.StatusOK)
+		if r.URL.Path == DownloadLocalResource && r.Method == http.MethodGet {
+			require.NoError(t, os.WriteFile(f.Name(), []byte(`test`), os.ModePerm))
+			require.NoError(t, json.NewEncoder(w).Encode(response))
 
 			return
 		}
@@ -229,28 +257,90 @@ func TestGetLocalResource(t *testing.T) {
 		PluginType: types.ComponentVersionRepositoryPluginType,
 	}, server.URL, []byte(`{}`))
 
-	f, err := os.CreateTemp("", "temp_file")
-	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, f.Close())
 		require.NoError(t, os.Remove(f.Name()))
 	})
 
 	ctx := context.Background()
-	err = plugin.GetLocalResource(ctx, repov1.GetLocalResourceRequest[runtime.Typed]{
+	resp, err := plugin.GetLocalResource(ctx, repov1.GetLocalResourceRequest[runtime.Typed]{
 		Repository: &dummyv1.Repository{},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
-		TargetLocation: types.Location{
-			LocationType: types.LocationTypeLocalFile,
-			Value:        f.Name(),
-		},
 	}, map[string]string{})
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(f.Name())
 	require.NoError(t, err)
 	require.Equal(t, "test", string(content))
+	require.Equal(t, types.LocationTypeLocalFile, resp.Location.LocationType)
+	require.Equal(t, f.Name(), resp.Location.Value)
+	require.Equal(t, response.Resource.String(), resp.Resource.String())
+}
+
+func TestGetLocalSource(t *testing.T) {
+	f, err := os.CreateTemp("", "temp_file")
+	require.NoError(t, err)
+	response := &repov1.GetLocalSourceResponse{
+		Location: types.Location{
+			LocationType: types.LocationTypeLocalFile,
+			Value:        f.Name(),
+		},
+		Source: &v2.Source{
+			ElementMeta: v2.ElementMeta{
+				ObjectMeta: v2.ObjectMeta{
+					Name:    "test-resource",
+					Version: "v0.0.1",
+				},
+			},
+			Type: "resource-type",
+			Access: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "test-access",
+					Version: "v1",
+				},
+				Data: []byte(`{ "access": "v1" }`),
+			},
+		},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == DownloadLocalSource && r.Method == http.MethodGet {
+			require.NoError(t, os.WriteFile(f.Name(), []byte(`test`), os.ModePerm))
+			require.NoError(t, json.NewEncoder(w).Encode(response))
+
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Create plugin
+	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
+		ID:         "test-plugin",
+		Type:       types.TCP,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+	}, server.URL, []byte(`{}`))
+
+	t.Cleanup(func() {
+		require.NoError(t, f.Close())
+		require.NoError(t, os.Remove(f.Name()))
+	})
+
+	ctx := context.Background()
+	resp, err := plugin.GetLocalSource(ctx, repov1.GetLocalSourceRequest[runtime.Typed]{
+		Repository: &dummyv1.Repository{},
+		Name:       "test-plugin",
+		Version:    "v1.0.0",
+	}, map[string]string{})
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(f.Name())
+	require.NoError(t, err)
+	require.Equal(t, "test", string(content))
+	require.Equal(t, types.LocationTypeLocalFile, resp.Location.LocationType)
+	require.Equal(t, f.Name(), resp.Location.Value)
+	require.Equal(t, response.Source.String(), resp.Source.String())
 }
 
 func defaultDescriptor() *v2.Descriptor {
@@ -285,7 +375,6 @@ func defaultDescriptor() *v2.Descriptor {
 						NormalisationAlgorithm: "OciArtifactDigest",
 						Value:                  "abcdef1234567890",
 					},
-					Size: 1024,
 				},
 			},
 		},

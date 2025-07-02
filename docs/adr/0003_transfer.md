@@ -175,7 +175,7 @@ The transformation are implemented as plugins.
 > here. But this part should suffice to illustrate the concept for the basic
 > transfer behavior.  
 > For details about the transformation contract and implementation, refer to
-> the localization adr [here](./0004_localization_at_transfer_time.md).
+> [the localization adr here](./0004_localization_at_transfer_time.md).
 
 **Pro**
 

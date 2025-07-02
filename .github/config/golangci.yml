@@ -13,6 +13,7 @@ linters:
     - depguard
     - dogsled
     - dupl
+    - embeddedstructfieldcheck
     - err113
     - errcheck
     - exhaustive
@@ -40,6 +41,7 @@ linters:
     - nilerr
     - nilnil
     - nlreturn
+    - noinlineerr
     - nonamedreturns
     - paralleltest
     - perfsprint
@@ -54,6 +56,7 @@ linters:
     - wastedassign
     - wrapcheck
     - wsl
+    - wsl_v5
   settings:
     cyclop:
       max-complexity: 15
@@ -73,6 +76,7 @@ linters:
       disable-builtin: true
       exclusions:
         - '*.UnmarshalJSON'
+        - '*.String'
     varnamelen:
       ignore-names:
         - err

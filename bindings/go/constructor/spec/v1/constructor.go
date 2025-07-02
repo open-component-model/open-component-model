@@ -1,10 +1,13 @@
 package v1
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
+
+	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -102,7 +105,32 @@ type Resource struct {
 	Relation ResourceRelation `json:"relation"`
 
 	AccessOrInput `json:",inline"`
+
+	ConstructorAttributes `json:",inline"`
 }
+
+// +k8s:deepcopy-gen=true
+type ConstructorAttributes struct {
+	CopyPolicy `json:"copyPolicy,omitempty"`
+}
+
+// CopyPolicy defines how the given object should be added during the component construction.
+// If set to "reference", the object is copied by reference, otherwise it is copied by value.
+// Note that an object that is copied by reference may still have its access type modified.
+// This can happen when the access is pinned at the point of the component construction.
+//
+//   - A typical example of "by value" copying is an image that should be stored in the component version,
+//     and not in the original registry.
+//   - A typical example of "by reference" copying is an image that is already stored in the correct registry
+//     and should be referenced by the component version.
+type CopyPolicy string
+
+const (
+	// CopyPolicyByReference defines that the resource is copied by reference. See CopyPolicy for details.
+	CopyPolicyByReference CopyPolicy = "byReference"
+	// CopyPolicyByValue defines that the resource is copied by value. See CopyPolicy for details.
+	CopyPolicyByValue CopyPolicy = "byValue"
+)
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
 // Source elements do not have specific additional formal attributes.
@@ -119,6 +147,8 @@ type Source struct {
 	Type        string `json:"type"`
 
 	AccessOrInput `json:",inline"`
+
+	ConstructorAttributes `json:",inline"`
 }
 
 // AccessOrInput describes the access or input information of a resource or source.
@@ -295,8 +325,78 @@ type SignatureInfo struct {
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#labels
 // +k8s:deepcopy-gen=true
 type Label struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	// Name is the unique name of the label.
+	Name string `json:"name"`
+	// Value is the json/yaml data of the label
+	Value json.RawMessage `json:"value"`
 	// Signing describes whether the label should be included into the signature
 	Signing bool `json:"signing,omitempty"`
+	// Version is the optional specification version of the attribute value
+	Version string `json:"version,omitempty"`
+}
+
+// String is a custom string representation of the Label that takes into account the raw string value of the label
+// as well as whether it is signing relevant.
+func (l Label) String() string {
+	base := "label{" + l.Name
+	if len(l.Value) > 0 {
+		base += fmt.Sprintf("=%s", string(l.Value))
+	}
+	if l.Signing {
+		base += "(signing-relevant)"
+	}
+	base += "}"
+	return base
+}
+
+// GetValue returns the label value with the given name as parsed object.
+func (in *Label) GetValue(dest interface{}) error {
+	return yaml.Unmarshal(in.Value, dest)
+}
+
+// SetValue sets the label value by marshalling the given object.
+// A passed byte slice is validated to be valid json.
+func (in *Label) SetValue(value interface{}) error {
+	msg, err := AsRawMessage(value)
+	if err != nil {
+		return err
+	}
+	in.Value = msg
+	return nil
+}
+
+// MustAsRawMessage converts any given value to a json.RawMessage.
+// It panics if the conversion fails, so it should only be used when the conversion is guaranteed to succeed.
+func MustAsRawMessage(value interface{}) json.RawMessage {
+	msg, err := AsRawMessage(value)
+	if err != nil {
+		panic(fmt.Sprintf("cannot convert value %T to json.RawMessage: %v", value, err))
+	}
+	return msg
+}
+
+// AsRawMessage converts any given value to a json.RawMessage.
+func AsRawMessage(value interface{}) (json.RawMessage, error) {
+	if value == nil {
+		return nil, nil
+	}
+	var (
+		data []byte
+		ok   bool
+		err  error
+	)
+
+	if data, ok = value.([]byte); ok {
+		var v interface{}
+		err = yaml.Unmarshal(data, &v)
+		if err != nil {
+			return nil, fmt.Errorf("data cannot be encoded as raw message: %s", string(data))
+		}
+	} else {
+		data, err = yaml.Marshal(value)
+		if err != nil {
+			return nil, fmt.Errorf("data of type %T cannot be encoded as raw message", value)
+		}
+	}
+	return bytes.TrimSpace(data), nil
 }

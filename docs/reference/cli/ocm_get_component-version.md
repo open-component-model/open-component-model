@@ -1,3 +1,12 @@
+---
+title: ocm get component-version
+description: Get component version(s) from an OCM repository.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm get component-version
 
 Get component version(s) from an OCM repository
@@ -82,7 +91,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
                             info:  Show informational messages and above
                             warn:  Show warnings and errors only (default)
                             error: Show errors only
-                         (must be one of [debug error info warn]) (default warn)
+                         (must be one of [debug error info warn]) (default info)
       --logoutput enum   set the log output destination
                             stdout: Write logs to standard output (default)
                             stderr: Write logs to standard error, useful for separating logs from normal output

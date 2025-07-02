@@ -3,24 +3,25 @@ package componentversionrepository
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
-	repov1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestPluginFlow(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-component-version")
 	_, err := os.Stat(path)
-	require.NoError(t, err, "test plugin not found, please build the plugin under plugin/testplugin first")
+	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-component-version first")
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
@@ -45,6 +46,8 @@ func TestPluginFlow(t *testing.T) {
 	})
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)
+	stderr, err := pluginCmd.StderrPipe()
+	require.NoError(t, err)
 	plugin := mtypes.Plugin{
 		ID:   "test-plugin-1",
 		Path: path,
@@ -63,25 +66,35 @@ func TestPluginFlow(t *testing.T) {
 		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
+		Stderr: stderr,
 	}
 	require.NoError(t, registry.AddPlugin(plugin, typ))
 	p, err := scheme.NewObject(typ)
 	require.NoError(t, err)
 	retrievedPlugin, err := registry.GetPlugin(ctx, p)
 	require.NoError(t, err)
-	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{
-			Type: runtime.Type{
-				Name:    "DummyRepository",
-				Version: "v1",
-			},
-			BaseUrl: "base-url",
-		},
-		Name:    "test-component",
-		Version: "1.0.0",
-	}, map[string]string{})
+	provider, err := retrievedPlugin.GetComponentVersionRepository(ctx, &dummyv1.Repository{
+		Type:    typ,
+		BaseUrl: "ghcr.io/open-component/test-component-version-repository",
+	}, nil)
+	require.NoError(t, err)
+	desc, err := provider.GetComponentVersion(ctx, "test-component", "1.0.0")
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
+
+	err = provider.AddComponentVersion(ctx, &descriptor.Descriptor{
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "test-component",
+					Version: "1.0.0",
+				},
+			},
+			Provider: descriptor.Provider{
+				Name: "ocm.software",
+			},
+		}})
+	require.NoError(t, err)
 }
 
 func TestPluginNotFound(t *testing.T) {
@@ -112,6 +125,19 @@ func TestSchemeDoesNotExist(t *testing.T) {
 	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
+type mockPluginProvider struct {
+	// TODO: fill this.
+	mockPlugin ComponentVersionRepository
+}
+
+func (m *mockPluginProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
+	return nil, nil
+}
+
+func (m *mockPluginProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ComponentVersionRepository, error) {
+	return m.mockPlugin, nil
+}
+
 func TestInternalPluginRegistry(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
@@ -124,20 +150,9 @@ func TestInternalPluginRegistry(t *testing.T) {
 		},
 		BaseUrl: "",
 	}
-	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockPlugin{}, proto))
-	retrievedPlugin, err := registry.GetPlugin(ctx, proto)
+	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockPluginProvider{}, proto))
+	retrievedPluginProvider, err := registry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
-	desc, err := retrievedPlugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{
-			Type: runtime.Type{
-				Name:    "DummyRepository",
-				Version: "v1",
-			},
-			BaseUrl: "base-url",
-		},
-		Name:    "test-mock-component",
-		Version: "v1.0.0",
-	}, map[string]string{})
+	_, err = retrievedPluginProvider.GetComponentVersionRepository(ctx, proto, nil)
 	require.NoError(t, err)
-	require.Equal(t, "test-mock-component:v1.0.0 (schema version 1.0.0)", desc.String())
 }

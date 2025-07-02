@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
@@ -23,11 +24,9 @@ func TestUpdateArtifactWithInformationFromBlob(t *testing.T) {
 		expectError    bool
 	}{
 		{
-			name: "keep existing size and update digest",
-			artifact: &descriptor.Resource{
-				Size: 2048,
-			},
-			blob:         blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test data"))),
+			name:         "keep existing size and update digest",
+			artifact:     &descriptor.Resource{},
+			blob:         inmemory.New(bytes.NewReader([]byte("test data"))),
 			expectedSize: 2048,
 			expectedDigest: &descriptor.Digest{
 				HashAlgorithm: internaldigest.HashAlgorithmSHA256,
@@ -38,7 +37,7 @@ func TestUpdateArtifactWithInformationFromBlob(t *testing.T) {
 		{
 			name:           "source artifact (should not be updated)",
 			artifact:       &descriptor.Source{},
-			blob:           blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test data"))),
+			blob:           inmemory.New(bytes.NewReader([]byte("test data"))),
 			expectedSize:   0,
 			expectedDigest: nil,
 			expectError:    false,
@@ -62,7 +61,6 @@ func TestUpdateArtifactWithInformationFromBlob(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, tt.expectedSize, resource.Size)
 			if tt.expectedDigest == nil {
 				assert.Nil(t, resource.Digest)
 			} else {

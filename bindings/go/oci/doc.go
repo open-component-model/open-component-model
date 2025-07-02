@@ -100,7 +100,7 @@
 // Configuration and Options:
 //
 // The package supports flexible configuration through RepositoryOptions:
-//   - WithOCIDescriptorCache: Temporary blob storage for OCI Manifests attached to Component Version Index Files
+//   - WithManifestCache: Temporary blob storage for OCI Manifests attached to Component Version Index Files
 //   - WithResolver: Reference resolution strategy
 //   - WithCreator: Component version creator identification
 //

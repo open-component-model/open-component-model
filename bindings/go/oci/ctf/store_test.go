@@ -11,9 +11,11 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/runtime"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
@@ -58,7 +60,7 @@ func TestFetch(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -96,7 +98,7 @@ func TestExists(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -148,12 +150,12 @@ func TestPush(t *testing.T) {
 func TestResolve(t *testing.T) {
 	ctf := setupTestCTF(t)
 	provider := NewFromCTF(ctf)
-	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	store, err := provider.StoreForReference(t.Context(), "localhost:5000/test-repo:v1.0.0")
 	require.NoError(t, err)
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -162,18 +164,30 @@ func TestResolve(t *testing.T) {
 	index := v1.NewIndex()
 	index.AddArtifact(v1.ArtifactMetadata{
 		Repository: "test-repo",
-		Tag:        "test-tag",
+		Tag:        "v1.0.0",
 		Digest:     digestStr,
 		MediaType:  ociImageSpecV1.MediaTypeImageManifest,
 	})
 	require.NoError(t, ctf.SetIndex(ctx, index))
 
-	t.Run("successful resolve", func(t *testing.T) {
-		desc, err := store.Resolve(ctx, "test-tag")
-		assert.NoError(t, err)
-		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
-		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
-	})
+	expectedOkResolves := []string{
+		"v1.0.0",
+		"test-repo:v1.0.0",
+		digestStr,
+		"test-repo@" + digestStr,
+		"test-repo:v1.0.0@" + digestStr,
+		"localhost:5000/test-repo:v1.0.0",
+		"localhost:5000/test-repo:v1.0.0@" + digestStr,
+	}
+
+	for _, tc := range expectedOkResolves {
+		t.Run(fmt.Sprintf("%s", tc), func(t *testing.T) {
+			desc, err := store.Resolve(ctx, tc)
+			assert.NoError(t, err)
+			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+			assert.Equal(t, digest.Digest(digestStr), desc.Digest)
+		})
+	}
 
 	t.Run("invalid reference", func(t *testing.T) {
 		desc, err := store.Resolve(ctx, "invalid")
@@ -197,7 +211,7 @@ func TestTag(t *testing.T) {
 	ctx := t.Context()
 	reference := "test-tag"
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -225,7 +239,7 @@ func TestFetchReference(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -268,7 +282,7 @@ func TestTags(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -302,7 +316,7 @@ func TestTags(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.ElementsMatch(t, []string{"tag1", "tag2"}, tags)
+		assert.ElementsMatch(t, []string{"tag2"}, tags, "a retag should not return the old tag")
 	})
 }
 
@@ -329,7 +343,7 @@ func TestPushWithManifest(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, exists)
 
-		// Verify the tag was created
+		// Verify the digest is resolvable
 		resolvedDesc, err := store.Resolve(ctx, desc.Digest.String())
 		assert.NoError(t, err)
 		assert.Equal(t, desc.Digest, resolvedDesc.Digest)
@@ -344,7 +358,7 @@ func TestResolveWithRegistry(t *testing.T) {
 
 	ctx := t.Context()
 	content := "test"
-	blob := blob.NewDirectReadOnlyBlob(strings.NewReader(content))
+	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
 	require.True(t, known)
 	require.NoError(t, ctf.SaveBlob(ctx, blob))
@@ -365,4 +379,53 @@ func TestResolveWithRegistry(t *testing.T) {
 		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
 		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
 	})
+}
+
+func TestResolveWithEmptyMediaType(t *testing.T) {
+	ctf := setupTestCTF(t)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	content := "test"
+	blob := inmemory.New(strings.NewReader(content))
+	digestStr, known := blob.Digest()
+	require.True(t, known)
+	require.NoError(t, ctf.SaveBlob(ctx, blob))
+
+	// Create and set up the index with empty MediaType to simulate old CTF
+	index := v1.NewIndex()
+	index.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo",
+		Tag:        "test-tag",
+		Digest:     digestStr,
+		MediaType:  "", // Set to Empty on purpose to signify test.
+	})
+	require.NoError(t, ctf.SetIndex(ctx, index))
+
+	t.Run("resolve with empty media type defaults to image manifest", func(t *testing.T) {
+		desc, err := store.Resolve(ctx, "test-tag")
+		assert.NoError(t, err)
+		assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
+		assert.Equal(t, digest.Digest(digestStr), desc.Digest)
+	})
+}
+
+func TestMediaTypeDefaulting(t *testing.T) {
+	r := require.New(t)
+	ctfPath := "testdata/compatibility/01/transport-archive"
+	scheme := runtime.NewScheme()
+
+	archive, err := ctf.OpenCTFFromOSPath(ctfPath, ctf.O_RDONLY)
+	r.NoError(err)
+	repo, err := oci.NewRepository(
+		WithCTF(NewFromCTF(archive)),
+		oci.WithScheme(scheme),
+		oci.WithCreator("I am the Creator"),
+	)
+	r.NoError(err)
+	cv, err := repo.GetComponentVersion(t.Context(), "github.com/acme.org/helloworld", "1.0.0")
+	r.NoError(err)
+	r.Equal("github.com/acme.org/helloworld", cv.Component.Name)
 }

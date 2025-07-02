@@ -1,3 +1,12 @@
+---
+title: ocm generate
+description: Generate documentation for the OCM CLI.
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
 ## ocm generate
 
 Generate documentation for the OCM CLI
@@ -46,7 +55,7 @@ to quickly create a Cobra application.
                             info:  Show informational messages and above
                             warn:  Show warnings and errors only (default)
                             error: Show errors only
-                         (must be one of [debug error info warn]) (default warn)
+                         (must be one of [debug error info warn]) (default info)
       --logoutput enum   set the log output destination
                             stdout: Write logs to standard output (default)
                             stderr: Write logs to standard error, useful for separating logs from normal output
@@ -56,5 +65,5 @@ to quickly create a Cobra application.
 ### SEE ALSO
 
 * [ocm](ocm.md)	 - The official Open Component Model (OCM) CLI
-* [ocm generate docs](ocm_generate_docs.md)	 - Generation Documentation for the CLI
+* [ocm generate docs](ocm_generate_docs.md)	 - Generate Documentation for the CLI
 

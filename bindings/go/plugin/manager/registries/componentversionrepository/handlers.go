@@ -12,7 +12,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -85,7 +84,9 @@ func ListComponentVersionsHandlerFunc[T runtime.Typed](f func(ctx context.Contex
 	}
 }
 
-func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
+// AddComponentVersionHandlerFunc creates an HTTP handler for adding component versions.
+// It handles authentication and request body parsing for the plugin implementation.
+func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context, r v1.PostComponentVersionRequest[T], credentials map[string]string) error) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
@@ -93,8 +94,7 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
 			return
 		}
-
-		body, err := decodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
+		body, err := plugins.DecodeJSONRequestBody[v1.PostComponentVersionRequest[T]](writer, request)
 		if err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
@@ -106,7 +106,9 @@ func AddComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	}
 }
 
-func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalResourceRequest[T], credentials map[string]string) error, scheme *runtime.Scheme, proto T) http.HandlerFunc {
+// GetLocalResourceHandlerFunc creates an HTTP handler for retrieving local resources.
+// It handles authentication, query parameter parsing, and response encoding for the plugin implementation.
+func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalResourceRequest[T], credentials map[string]string) (v1.GetLocalResourceResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
@@ -118,10 +120,6 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 		query := request.URL.Query()
 		name := query.Get("name")
 		version := query.Get("version")
-		targetLocation := types.Location{
-			LocationType: types.LocationType(query.Get("target_location_type")),
-			Value:        query.Get("target_location_value"),
-		}
 		identityQuery := query.Get("identity")
 		decodedIdentity, err := base64.StdEncoding.DecodeString(identityQuery)
 		if err != nil {
@@ -137,19 +135,92 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			}
 		}
 
-		if err := f(request.Context(), v1.GetLocalResourceRequest[T]{
-			Repository:     proto,
-			Name:           name,
-			Version:        version,
-			Identity:       identity,
-			TargetLocation: targetLocation,
-		}, credentials); err != nil {
+		response, err := f(request.Context(), v1.GetLocalResourceRequest[T]{
+			Repository: proto,
+			Name:       name,
+			Version:    version,
+			Identity:   identity,
+		}, credentials)
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(response); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
 	}
 }
 
+// GetLocalSourceHandlerFunc creates an HTTP handler for retrieving local sources.
+// It handles authentication, query parameter parsing, and response encoding for the plugin implementation.
+func GetLocalSourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.GetLocalSourceRequest[T], credentials map[string]string) (v1.GetLocalSourceResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		rawCredentials := []byte(request.Header.Get("Authorization"))
+		credentials := map[string]string{}
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
+			return
+		}
+
+		query := request.URL.Query()
+		name := query.Get("name")
+		version := query.Get("version")
+		identityQuery := query.Get("identity")
+		decodedIdentity, err := base64.StdEncoding.DecodeString(identityQuery)
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		identity := map[string]string{}
+		if identityQuery != "" {
+			if err := json.Unmarshal(decodedIdentity, &identity); err != nil {
+				plugins.NewError(err, http.StatusBadRequest).Write(writer)
+				return
+			}
+		}
+
+		response, err := f(request.Context(), v1.GetLocalSourceRequest[T]{
+			Repository: proto,
+			Name:       name,
+			Version:    version,
+			Identity:   identity,
+		}, credentials)
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(response); err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+	}
+}
+
+// GetIdentityHandlerFunc creates an HTTP handler for retrieving identity information.
+// It handles request processing and response encoding for the plugin implementation.
+func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1.GetIdentityRequest[T]) (*v1.GetIdentityResponse, error), scheme *runtime.Scheme, proto T) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		response, err := f(request.Context(), &v1.GetIdentityRequest[T]{
+			Typ: proto,
+		})
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(response); err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+	}
+}
+
+// AddLocalResourceHandlerFunc creates an HTTP handler for adding local resources.
+// It handles authentication, request body parsing, and resource conversion for the plugin implementation.
 func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostLocalResourceRequest[T], credentials map[string]string) (*descriptor.Resource, error), scheme *runtime.Scheme) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))
@@ -159,7 +230,7 @@ func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			return
 		}
 
-		body, err := decodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
+		body, err := plugins.DecodeJSONRequestBody[v1.PostLocalResourceRequest[T]](writer, request)
 		if err != nil {
 			slog.Error("failed to decode request body", "error", err)
 			return
@@ -173,6 +244,48 @@ func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 
 		// _Note_: Eventually, this will use a versioned converter.
 		resourceV2, err := descriptor.ConvertToV2Resources(scheme, []descriptor.Resource{*resource})
+		if err != nil {
+			plugins.NewError(fmt.Errorf("failed to convert to v2 resource: %w", err), http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if len(resourceV2) == 0 {
+			plugins.NewError(errors.New("no resources returned during conversion"), http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		if err := json.NewEncoder(writer).Encode(resourceV2[0]); err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+	}
+}
+
+// AddLocalSourceHandlerFunc creates an HTTP handler for adding local sources.
+// It handles authentication, request body parsing, and source conversion for the plugin implementation.
+func AddLocalSourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.PostLocalSourceRequest[T], credentials map[string]string) (*descriptor.Source, error), scheme *runtime.Scheme) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		rawCredentials := []byte(request.Header.Get("Authorization"))
+		credentials := map[string]string{}
+		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
+			plugins.NewError(err, http.StatusUnauthorized).Write(writer)
+			return
+		}
+
+		body, err := plugins.DecodeJSONRequestBody[v1.PostLocalSourceRequest[T]](writer, request)
+		if err != nil {
+			slog.Error("failed to decode request body", "error", err)
+			return
+		}
+
+		resource, err := f(request.Context(), *body, credentials)
+		if err != nil {
+			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		// _Note_: Eventually, this will use a versioned converter.
+		resourceV2, err := descriptor.ConvertToV2Sources(scheme, []descriptor.Source{*resource})
 		if err != nil {
 			plugins.NewError(fmt.Errorf("failed to convert to v2 resource: %w", err), http.StatusInternalServerError).Write(writer)
 			return

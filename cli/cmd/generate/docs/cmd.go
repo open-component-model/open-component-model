@@ -1,24 +1,27 @@
 package docs
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 
-	"ocm.software/open-component-model/cli/internal/enum"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 )
 
 const (
 	FlagDirectory          = "directory"
 	FlagDirectoryShortHand = "d"
-
-	FlagMode = "mode"
+	FlagMode               = "mode"
 )
 
 const (
 	GenerationModeMarkdown     = "markdown"
+	GenerationModeHugo         = "hugo"
 	GenerationModeReStructured = "restructured"
 	GenerationModeMan          = "man"
 	GenerationModeYAML         = "yaml"
@@ -27,9 +30,9 @@ const (
 // New represents the docs command
 func New() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "docs [-d <directory>]",
-		Short: "Generation Documentation for the CLI",
-		Long:  ``,
+		Use:   "docs [-d <directory>] [--mode <format>]",
+		Short: "Generate Documentation for the CLI",
+		Long:  `Generate documentation for the OCM CLI in various formats, including Hugo-compatible markdown.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := cmd.Flags().GetString(FlagDirectory)
 			if err != nil {
@@ -40,6 +43,7 @@ func New() *cobra.Command {
 					return err
 				}
 			}
+
 			if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 				return err
 			}
@@ -57,6 +61,8 @@ func New() *cobra.Command {
 			switch mode {
 			case GenerationModeMarkdown:
 				return doc.GenMarkdownTree(candidate, dir)
+			case GenerationModeHugo:
+				return generateHugoMarkdown(candidate, dir)
 			case GenerationModeReStructured:
 				return doc.GenReSTTree(candidate, dir)
 			case GenerationModeMan:
@@ -71,6 +77,136 @@ func New() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringP(FlagDirectory, FlagDirectoryShortHand, "", "directory to generate docs to. If not set, current working directory is used.")
-	enum.Var(cmd.Flags(), FlagMode, []string{GenerationModeMarkdown, GenerationModeReStructured, GenerationModeMan}, "generation mode to use")
+	enum.Var(cmd.Flags(), FlagMode, []string{GenerationModeMarkdown, GenerationModeHugo, GenerationModeReStructured, GenerationModeMan, GenerationModeYAML}, "generation mode to use")
 	return cmd
+}
+
+// hugoGenerator implements a custom cobra.doc.GenMarkdownCustom generator with Hugo frontmatter
+type hugoGenerator struct {
+	dir string
+}
+
+// generateHugoMarkdownTree generates markdown documentation for a command and all its children
+func generateHugoMarkdownTree(cmd *cobra.Command, generator *hugoGenerator) error {
+	for _, c := range cmd.Commands() {
+		// Skip hidden commands
+		if !c.IsAvailableCommand() || c.IsAdditionalHelpTopicCommand() {
+			continue
+		}
+
+		// Generate markdown for each command
+		if err := generateHugoMarkdownForCommand(c, generator); err != nil {
+			return err
+		}
+
+		// Recursively process children commands
+		if err := generateHugoMarkdownTree(c, generator); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// generateHugoMarkdownForCommand generates a single markdown file for a command with Hugo frontmatter
+func generateHugoMarkdownForCommand(cmd *cobra.Command, generator *hugoGenerator) error {
+	// Create file name based on command path (like standard cobra markdown generator)
+	basename := strings.ReplaceAll(cmd.CommandPath(), " ", "_") + ".md"
+	filename := filepath.Join(generator.dir, basename)
+
+	// Generate the markdown content
+	var markdownBuffer bytes.Buffer
+	if err := doc.GenMarkdown(cmd, &markdownBuffer); err != nil {
+		return fmt.Errorf("failed to generate markdown for %s: %w", cmd.CommandPath(), err)
+	}
+
+	markdownContent := markdownBuffer.String()
+
+	// Use cmd.Short for the description
+	description := cmd.Short
+	if description == "" {
+		description = fmt.Sprintf("Documentation for the %s command", cmd.CommandPath())
+	}
+
+	// Ensure description ends with a period
+	if !strings.HasSuffix(description, ".") {
+		description += "."
+	}
+
+	// Open file for writing
+	f, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file %s: %w", filename, err)
+	}
+	defer f.Close()
+
+	// Generate Hugo frontmatter
+	title := cmd.CommandPath()
+
+	// Create frontmatter
+	frontmatter := fmt.Sprintf(`---
+title: %s
+description: %s
+suppressTitle: true
+toc: true
+sidebar:
+  collapsed: true
+---
+
+`, title, description)
+
+	// Write frontmatter to file
+	if _, err := f.WriteString(frontmatter); err != nil {
+		return fmt.Errorf("failed to write frontmatter to %s: %w", filename, err)
+	}
+
+	// Write the captured output to the file
+	if _, err := f.WriteString(markdownContent); err != nil {
+		return fmt.Errorf("failed to write markdown to %s: %w", filename, err)
+	}
+
+	return nil
+}
+
+// createHugoIndexFile creates an _index.md file for the Hugo site with only frontmatter
+func createHugoIndexFile(dir string) error {
+	// Create index file
+	indexFile := filepath.Join(dir, "_index.md")
+
+	// Use the fixed frontmatter as specified without any additional content
+	content := `---
+title: OCM CLI
+description: Reference Documentation for the OCM CLI.
+suppressTitle: false
+toc: true
+sidebar:
+  collapsed: true
+---
+`
+
+	// Write the index file with only the frontmatter
+	if err := os.WriteFile(indexFile, []byte(content), 0o600); err != nil {
+		return fmt.Errorf("failed to write _index.md: %w", err)
+	}
+
+	return nil
+}
+
+// generateHugoMarkdown generates markdown documentation with Hugo frontmatter
+func generateHugoMarkdown(cmd *cobra.Command, dir string) error {
+	// Create a custom generator for Hugo markdown
+	hugoGen := &hugoGenerator{
+		dir: dir,
+	}
+
+	// Process all commands with custom generator
+	if err := generateHugoMarkdownTree(cmd, hugoGen); err != nil {
+		return fmt.Errorf("failed to generate markdown: %w", err)
+	}
+
+	// Create the _index.md file (special handling)
+	if err := createHugoIndexFile(dir); err != nil {
+		return fmt.Errorf("failed to create index file: %w", err)
+	}
+
+	return nil
 }

@@ -38,134 +38,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// LocalBlob represents a blob that is stored locally in the OCI repository.
-// It provides methods to access the blob's metadata and content.
-type LocalBlob fetch.LocalBlob
-
-// ComponentVersionRepository defines the interface for storing and retrieving OCM component versions
-// and their associated resources in a Store.
-type ComponentVersionRepository interface {
-	// AddComponentVersion adds a new component version to the repository.
-	// If a component version already exists, it will be updated with the new descriptor.
-	// The descriptor internally will be serialized via the runtime package.
-	// The descriptor MUST have its target Name and Version already set as they are used to identify the target
-	// Location in the Store.
-	AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error
-
-	// GetComponentVersion retrieves a component version from the repository.
-	// Returns the descriptor from the most recent AddComponentVersion call for that component and version.
-	GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error)
-
-	// ListComponentVersions lists all component versions for a given component.
-	// Returns a list of version strings, sorted on best effort by loose semver specification.
-	// Note: Listing of Component Versions does not directly translate to an OCI Call.
-	// Thus there are two approaches to list component versions:
-	// - Listing all tags in the OCI repository and filtering them based on the resolved media type / artifact type
-	// - Listing all referrers of the component index and filtering them based on the resolved media type / artifact type
-	//
-	// For more information on Referrer support, see
-	// https://github.com/opencontainers/distribution-spec/blob/v1.1.0/spec.md#listing-referrers
-	ListComponentVersions(ctx context.Context, component string) ([]string, error)
-
-	LocalResourceRepository
-	LocalSourceRepository
-}
-
-type LocalResourceRepository interface {
-	// AddLocalResource adds a local [descriptor.Resource] to the repository.
-	// The resource must be referenced in the [descriptor.Descriptor].
-	// Resources for non-existent component versions may be stored but may be removed during garbage collection.
-	// The Resource given is identified later on by its own Identity ([descriptor.Resource.ToIdentity]) and a collection of a set of reserved identity values
-	// that can have a special meaning.
-	AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error)
-
-	// GetLocalResource retrieves a local [descriptor.Resource] from the repository.
-	// The [runtime.Identity] must match a resource in the [descriptor.Descriptor].
-	GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Resource, error)
-}
-
-type LocalSourceRepository interface {
-	// AddLocalSource adds a local [descriptor.Source] to the repository.
-	// The source must be referenced in the [descriptor.Descriptor].
-	// Sources for non-existent component versions may be stored but may be removed during garbage collection.
-	// The Source given is identified later on by its own Identity ([descriptor.Source.ToIdentity]) and a collection of a set of reserved identity values
-	// that can have a special meaning.
-	AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (newRes *descriptor.Source, err error)
-
-	// GetLocalSource retrieves a local [descriptor.Source] from the repository.
-	// The [runtime.Identity] must match a source in the [descriptor.Descriptor].
-	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Source, error)
-}
-
-// ResourceRepository defines the interface for storing and retrieving OCM resources
-// independently of component versions from a Store Implementation
-type ResourceRepository interface {
-	// UploadResource uploads a [descriptor.Resource] to the repository.
-	// Returns the updated resource with repository-specific information.
-	// The resource must be referenced in the component descriptor.
-	// Note that UploadResource is special in that it considers both
-	// - the Access from [descriptor.Resource.Access]
-	// - the Target Access from the given target specification
-	// It might be that during the upload, the source pointer may be updated with information gathered during upload
-	// (e.g. digest, size, etc).
-	//
-	// The content of form blob.ReadOnlyBlob is expected to be a (optionally gzipped) tar archive that can be read with
-	// tar.ReadOCILayout, which interprets the blob as an OCILayout.
-	//
-	// The given OCI Layout MUST contain the resource described in source with an v1.OCIImage specification,
-	// otherwise the upload will fail
-	UploadResource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Resource, content blob.ReadOnlyBlob) (resourceAfterUpload *descriptor.Resource, err error)
-
-	// DownloadResource downloads a [descriptor.Resource] from the repository.
-	// THe resource MUST contain a valid v1.OCIImage specification that exists in the Store.
-	// Otherwise, the download will fail.
-	//
-	// The blob.ReadOnlyBlob returned will always be an OCI Layout, readable by [tar.ReadOCILayout].
-	// For more information on the download procedure, see [tar.NewOCILayoutWriter].
-	DownloadResource(ctx context.Context, res *descriptor.Resource) (content blob.ReadOnlyBlob, err error)
-}
-
-type SourceRepository interface {
-	// UploadSource uploads a [descriptor.Source] to the repository.
-	// Returns the updated source with repository-specific information.
-	// The source must be referenced in the component descriptor.
-	// Note that UploadSource is special in that it considers both
-	// - the Access from [descriptor.Source.Access]
-	// - the Target Access from the given target specification
-	// It might be that during the upload, the source pointer may be updated with information gathered during upload
-	// (e.g. digest, size, etc).
-	//
-	// The content of form blob.ReadOnlyBlob is expected to be a (optionally gzipped) tar archive that can be read with
-	// tar.ReadOCILayout, which interprets the blob as an OCILayout.
-	//
-	// The given OCI Layout MUST contain the source described in source with an v1.OCIImage specification,
-	// otherwise the upload will fail
-	UploadSource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Source, content blob.ReadOnlyBlob) (sourceAfterUpload *descriptor.Source, err error)
-
-	// DownloadSource downloads a [descriptor.Source] from the repository.
-	// THe resource MUST contain a valid v1.OCIImage specification that exists in the Store.
-	// Otherwise, the download will fail.
-	//
-	// The blob.ReadOnlyBlob returned will always be an OCI Layout, readable by [tar.ReadOCILayout].
-	// For more information on the download procedure, see [tar.NewOCILayoutWriter].
-	DownloadSource(ctx context.Context, res *descriptor.Source) (content blob.ReadOnlyBlob, err error)
-}
-
-// Resolver defines the interface for resolving references to OCI stores.
-type Resolver interface {
-	// StoreForReference resolves a reference to a Store.
-	// Each reference can resolve to a different store.
-	// Note that multiple component versions might share the same store
-	StoreForReference(ctx context.Context, reference string) (spec.Store, error)
-
-	// ComponentVersionReference returns a unique reference for a component version.
-	ComponentVersionReference(component, version string) string
-
-	// Reference resolves a reference string to a fmt.Stringer whose "native"
-	// format represents a valid reference that can be used for a given store returned
-	// by StoreForReference.
-	Reference(reference string) (fmt.Stringer, error)
-}
+var _ ComponentVersionRepository = (*Repository)(nil)
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
 // Each component may be stored in a separate OCI repository, but ultimately the storage is determined by the Resolver.
@@ -197,9 +70,10 @@ type Repository struct {
 	// ResourceCopyOptions are the options used for copying resources between stores.
 	// These options are used in copyResource.
 	resourceCopyOptions oras.CopyOptions
-}
 
-var _ ComponentVersionRepository = (*Repository)(nil)
+	// referrerTrackingPolicy defines how OCI referrers are used to track component versions.
+	referrerTrackingPolicy ReferrerTrackingPolicy
+}
 
 // AddComponentVersion adds a new component version to the repository.
 func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) (err error) {
@@ -219,13 +93,13 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		Author:                        repo.creatorAnnotation,
 		AdditionalDescriptorManifests: repo.localArtifactManifestCache.Get(reference),
 		AdditionalLayers:              repo.localArtifactLayerCache.Get(reference),
+		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
 	}
 
-	// Tag the manifest with the reference
-	if err := store.Tag(ctx, *manifest, version); err != nil {
+	if err := store.Tag(ctx, *manifest, reference); err != nil {
 		return fmt.Errorf("failed to tag manifest: %w", err)
 	}
 	// Cleanup local blob memory as all layers have been pushed
@@ -252,18 +126,26 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 		return nil, fmt.Errorf("failed to create lister: %w", err)
 	}
 
-	return list.List(ctx, lister.Options{
-		SortPolicy:   lister.SortPolicyLooseSemverDescending,
-		LookupPolicy: lister.LookupPolicyReferrerWithTagFallback,
+	opts := lister.Options{
+		SortPolicy: lister.SortPolicyLooseSemverDescending,
 		TagListerOptions: lister.TagListerOptions{
-			VersionResolver: complister.ReferenceTagVersionResolver(store),
+			VersionResolver: complister.ReferenceTagVersionResolver(component, store),
 		},
 		ReferrerListerOptions: lister.ReferrerListerOptions{
 			ArtifactType:    descriptor2.MediaTypeComponentDescriptorV2,
 			Subject:         indexv1.Descriptor,
 			VersionResolver: complister.ReferrerAnnotationVersionResolver(component),
 		},
-	})
+	}
+
+	switch repo.referrerTrackingPolicy {
+	case ReferrerTrackingPolicyByIndexAndSubject:
+		opts.LookupPolicy = lister.LookupPolicyReferrerWithTagFallback
+	case ReferrerTrackingPolicyNone:
+		opts.LookupPolicy = lister.LookupPolicyTagOnly
+	}
+
+	return list.List(ctx, opts)
 }
 
 // GetComponentVersion retrieves a component version from the repository.
@@ -324,6 +206,82 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 	}
 
 	return source, nil
+}
+
+func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource) (_ *descriptor.Resource, err error) {
+	done := log.Operation(ctx, "process resource digest",
+		log.IdentityLogAttr("resource", res.ToIdentity()))
+	defer func() {
+		done(err)
+	}()
+	res = res.DeepCopy()
+	switch typed := res.Access.(type) {
+	case *v2.LocalBlob:
+		if typed.GlobalAccess == nil {
+			return nil, fmt.Errorf("local blob access does not have a global access and cannot be used")
+		}
+		globalAccess, err := repo.scheme.NewObject(typed.GlobalAccess.GetType())
+		if err != nil {
+			return nil, fmt.Errorf("error creating typed global blob access with help of scheme: %w", err)
+		}
+		if err := repo.scheme.Convert(typed.GlobalAccess, globalAccess); err != nil {
+			return nil, fmt.Errorf("error converting global blob access: %w", err)
+		}
+		res.Access = globalAccess
+		return repo.ProcessResourceDigest(ctx, res)
+	case *accessv1.OCIImage:
+		return repo.processOCIImageDigest(ctx, res, typed)
+	default:
+		return nil, fmt.Errorf("unsupported resource access type: %T", typed)
+	}
+}
+
+func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descriptor.Resource, typed *accessv1.OCIImage) (*descriptor.Resource, error) {
+	src, err := repo.resolver.StoreForReference(ctx, typed.ImageReference)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved, err := repo.resolver.Reference(typed.ImageReference)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
+	}
+
+	reference := resolved.String()
+
+	// reference is not a FQDN because it can be pinned, for resolving, use the FQDN part of the reference
+	fqdn := reference
+	pinnedDigest := ""
+	if index := strings.IndexByte(reference, '@'); index != -1 {
+		fqdn = reference[:index]
+		pinnedDigest = reference[index+1:]
+	}
+
+	var desc ociImageSpecV1.Descriptor
+	if desc, err = src.Resolve(ctx, fqdn); err != nil {
+		return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
+	}
+
+	// if the resource did not have a digest, we apply the digest from the descriptor
+	// if it did, we verify it against the received descriptor.
+	if res.Digest == nil {
+		res.Digest = &descriptor.Digest{}
+		if err := internaldigest.Apply(res.Digest, desc.Digest); err != nil {
+			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
+		}
+	} else if err := internaldigest.Verify(res.Digest, desc.Digest); err != nil {
+		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
+	}
+
+	if pinnedDigest != "" && pinnedDigest != desc.Digest.String() {
+		return nil, fmt.Errorf("expected pinned digest %q (derived from %q) but got %q", pinnedDigest, reference, desc.Digest)
+	}
+
+	// in any case, after successful processing, we can pin the access
+	typed.ImageReference = fqdn + "@" + desc.Digest.String()
+	res.Access = typed
+
+	return res, nil
 }
 
 func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, component string, version string, artifact descriptor.Artifact, b blob.ReadOnlyBlob) error {
@@ -512,7 +470,6 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
 
-	res.Size = desc.Size
 	if res.Digest == nil {
 		res.Digest = &descriptor.Digest{}
 	}
