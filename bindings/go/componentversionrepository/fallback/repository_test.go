@@ -1,8 +1,10 @@
 package fallback
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	resolverruntime "ocm.software/open-component-model/bindings/go/componentversionrepository/resolver/config/runtime"
 	ociprovider "ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -10,19 +12,17 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ctfspec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
-	primaryCtfPath   = "./testdata/transport-archive"
-	fallbackCtfPath1 = "./testdata/fallback-transport-archive"
-	fallbackCtfPath2 = "./testdata/non-existing-fallback-transport-archive"
-	componentName    = "github.com/acme.org/helloworld"
-	componentVersion = "1.0.0"
+	transportArchive            = "./testdata/transport-archive"
+	fallbackTransportArchive    = "./testdata/fallback-transport-archive"
+	nonExistingTransportArchive = "./testdata/non-existing-fallback-transport-archive"
+	transportArchiveCopy        = "./testdata/transport-archive-copy"
+	componentName               = "github.com/acme.org/helloworld"
+	componentVersion            = "1.0.0"
 )
-
-func Test_FallbackRepository(t *testing.T) {
-	// can you write a test for the FallbackComponentVersionRepository?
-}
 
 func Test_GetComponentVersion(t *testing.T) {
 	r := require.New(t)
@@ -31,108 +31,157 @@ func Test_GetComponentVersion(t *testing.T) {
 	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
 	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(repository.Scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctf.Repository{}))
 
-	primaryRepoSpec := &ctfspec.Repository{
-		Path:       primaryCtfPath,
+	transportArchiveRepoSpec := &ctfspec.Repository{
+		Path:       transportArchive,
 		AccessMode: ctfspec.AccessModeReadWrite,
 	}
 
-	fallbackRepoSpec1 := &ctfspec.Repository{
-		Path:       fallbackCtfPath1,
+	transportArchiveCopyRepoSpec := &ctfspec.Repository{
+		Path:       transportArchiveCopy,
+		AccessMode: ctfspec.AccessModeReadWrite,
+	}
+
+	fallbackTransportArchiveRepoSpec := &ctfspec.Repository{
+		Path:       fallbackTransportArchive,
 		AccessMode: ctfspec.AccessModeReadOnly,
 	}
 
 	//fallbackRepoSpec2 := &ctfspec.Repository{
-	//	Path:       fallbackCtfPath2,
+	//	Path:       nonExistingTransportArchive,
 	//	AccessMode: ctfspec.AccessModeReadOnly,
 	//}
 
-	t.Run("get component version", func(t *testing.T) {
-		r := require.New(t)
-
-		fallbackRepo, err := New(t.Context(), primaryRepoSpec, registry, nil, &FallbackComponentVersionRepositoryOptions{
-			FallbackResolvers: []*resolverruntime.Resolver{
+	cases := []struct {
+		name         string
+		component    string
+		version      string
+		resolvers    []*resolverruntime.Resolver
+		expectedRepo runtime.Typed
+		err          assert.ErrorAssertionFunc
+	}{
+		{
+			name:      "found without fallback",
+			component: componentName,
+			version:   componentVersion,
+			resolvers: []*resolverruntime.Resolver{
 				{
-					Repository: fallbackRepoSpec1,
+					Repository: transportArchiveRepoSpec,
 					Prefix:     "",
 					Priority:   0,
 				},
 			},
+			expectedRepo: transportArchiveRepoSpec,
+			err:          assert.NoError,
+		},
+		{
+			name:      "found with fallback",
+			component: componentName,
+			version:   componentVersion,
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: fallbackTransportArchiveRepoSpec,
+					Prefix:     "",
+					Priority:   0,
+				},
+				{
+					Repository: transportArchiveRepoSpec,
+					Prefix:     "",
+					Priority:   0,
+				},
+			},
+			expectedRepo: transportArchiveRepoSpec,
+			err:          assert.NoError,
+		},
+		{
+			name:      "higher priority first",
+			component: componentName,
+			version:   componentVersion,
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: transportArchiveCopyRepoSpec,
+					Prefix:     "",
+					Priority:   0,
+				},
+				{
+					Repository: transportArchiveRepoSpec,
+					Prefix:     "",
+					Priority:   20,
+				},
+			},
+			expectedRepo: transportArchiveRepoSpec,
+			err:          assert.NoError,
+		},
+		{
+			name:      "same priority, first in list first",
+			component: componentName,
+			version:   componentVersion,
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: transportArchiveCopyRepoSpec,
+					Prefix:     "",
+					Priority:   0,
+				},
+				{
+					Repository: transportArchiveRepoSpec,
+					Prefix:     "",
+					Priority:   0,
+				},
+			},
+			expectedRepo: transportArchiveCopyRepoSpec,
+			err:          assert.NoError,
+		},
+		{
+			name:      "prefix matched",
+			component: componentName,
+			version:   componentVersion,
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: transportArchiveCopyRepoSpec,
+					Prefix:     "github.com/not-acme.org",
+					Priority:   0,
+				},
+				{
+					Repository: transportArchiveRepoSpec,
+					Prefix:     "github.com/acme.org",
+					Priority:   0,
+				},
+			},
+			expectedRepo: transportArchiveRepoSpec,
+			err:          assert.NoError,
+		},
+		{
+			name:      "partial prefix matched",
+			component: componentName,
+			version:   componentVersion,
+			resolvers: []*resolverruntime.Resolver{
+				{
+					Repository: transportArchiveRepoSpec,
+					Prefix:     "github.com/ac",
+					Priority:   0,
+				},
+			},
+			expectedRepo: transportArchiveRepoSpec,
+			err:          assert.NoError,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
+			fallbackRepo, err := New(t.Context(), tc.resolvers, registry, nil)
+			r.NoError(err)
+
+			desc, err := fallbackRepo.GetComponentVersion(ctx, tc.component, tc.version)
+			if !tc.err(t, err) {
+				return
+			}
+			if desc != nil {
+				r.Equal(tc.component, desc.Component.Name)
+				r.Equal(tc.version, desc.Component.Version)
+			}
+			repo := fallbackRepo.repositoryForComponentCache[tc.component].resolver.Repository
+			assert.True(t, reflect.DeepEqual(repo, tc.expectedRepo))
 		})
-		r.NoError(err)
-
-		desc, err := fallbackRepo.GetComponentVersion(ctx, componentName, componentVersion)
-		r.NoError(err)
-		r.NotNil(desc)
-	})
-
-	//tests := []struct {
-	//	name              string
-	//	mainShouldErr     bool
-	//	fallbackShouldErr bool
-	//	expectFallback    bool
-	//	expectErr         bool
-	//}{
-	//	{
-	//		name:           "found in main",
-	//		mainShouldErr:  false,
-	//		expectFallback: false,
-	//		expectErr:      false,
-	//	},
-	//	{
-	//		name:              "not found in main, found in fallback",
-	//		mainShouldErr:     true,
-	//		fallbackShouldErr: false,
-	//		expectFallback:    true,
-	//		expectErr:         false,
-	//	},
-	//	{
-	//		name:              "not found in main or fallback",
-	//		mainShouldErr:     true,
-	//		fallbackShouldErr: true,
-	//		expectFallback:    true,
-	//		expectErr:         true,
-	//	},
-	//}
-	//
-	//for _, tt := range tests {
-	//	t.Run(tt.name, func(t *testing.T) {
-	//		r := require.New(t)
-	//
-	//		fallbackRepo, err := New(t.Context(), primaryRepoSpec, registry, nil, &FallbackComponentVersionRepositoryOptions{
-	//			FallbackResolvers: []*resolverv1.Resolver{
-	//				{
-	//					Repository: fallbackRepoSpec1,
-	//					Prefix:     "",
-	//					Priority:   0,
-	//				},
-	//			},
-	//		})
-	//		r.NoError(err)
-	//
-	//		repo := &FallbackComponentVersionRepository{
-	//			RepositoryRegistry:      registry,
-	//			repository: mainSpec,
-	//			credentialProvider:                   credentialProvider,
-	//			fallbackRepositorySpecifications: []FallbackRepositorySpecification{
-	//				{RepositorySpecification: fallbackSpec, Prefix: ""},
-	//			},
-	//		}
-	//		desc, err := repo.GetComponentVersion(ctx, "comp", "1.0.0")
-	//		if tt.expectErr {
-	//			if err == nil {
-	//				t.Fatalf("expected error, got nil")
-	//			}
-	//		} else {
-	//			if err != nil {
-	//				t.Fatalf("unexpected error: %v", err)
-	//			}
-	//			if desc == nil {
-	//				t.Fatalf("expected descriptor, got nil")
-	//			}
-	//			if desc.Name != "comp" || desc.Version != "1.0.0" {
-	//				t.Fatalf("unexpected descriptor: %+v", desc)
-	//			}
-	//		}
-	//	})
-	//}
+	}
 }
