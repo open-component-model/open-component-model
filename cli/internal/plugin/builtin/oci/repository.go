@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"fmt"
-	"sync"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
@@ -69,28 +68,4 @@ func clientCredentials(credentials map[string]string) auth.Credential {
 		cred.AccessToken = accessToken
 	}
 	return cred
-}
-
-type repoCache struct {
-	mu    sync.RWMutex
-	cache map[string]Repository
-}
-
-func newRepoCache() *repoCache {
-	return &repoCache{
-		cache: make(map[string]Repository),
-	}
-}
-
-func (c *repoCache) Get(key string) (Repository, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	repo, exists := c.cache[key]
-	return repo, exists
-}
-
-func (c *repoCache) Set(key string, repo Repository) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cache[key] = repo
 }

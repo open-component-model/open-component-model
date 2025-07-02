@@ -172,11 +172,9 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("registering constructor progress tracker failed: %w", err)
 	}
+	defer stop()
 
 	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
-	if stop != nil {
-		stop()
-	}
 
 	return err
 }
@@ -369,7 +367,7 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 			}
 			return nil
 		}
-		return options, nil, nil
+		return options, func() {}, nil
 	}
 
 	return opts, nil, fmt.Errorf("unknown log format to track component construction: %q", format)

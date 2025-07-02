@@ -6,7 +6,7 @@ import (
 	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
 )
 
-// New represents any command that is related to retrieving ( "get"ting ) objects
+// New represents any command that is related to adding ( "add"ing ) objects
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add {component-version|component-versions|cv|cvs}",

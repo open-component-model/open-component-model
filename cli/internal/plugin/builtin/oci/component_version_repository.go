@@ -23,7 +23,6 @@ type ComponentVersionRepositoryPlugin struct {
 	scheme    *runtime.Scheme
 	manifests cache.OCIDescriptorCache
 	layers    cache.OCIDescriptorCache
-	repoCache *repoCache
 }
 
 func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {

@@ -18,7 +18,6 @@ import (
 type ResourceRepositoryPlugin struct {
 	scheme            *runtime.Scheme
 	manifests, layers cache.OCIDescriptorCache
-	repoCache         *repoCache
 }
 
 func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
@@ -138,15 +137,10 @@ func (p *ResourceRepositoryPlugin) DownloadResource(ctx context.Context, resourc
 //
 //	we need to be able to dynamically inject credentials to an existing repository instance.
 func (p *ResourceRepositoryPlugin) getRepository(spec *ociv1.Repository, creds map[string]string) (Repository, error) {
-	key := spec.BaseUrl
-	if repo, ok := p.repoCache.Get(key); ok {
-		return repo, nil
-	}
 	repo, err := createRepository(spec, creds, p.manifests, p.layers)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
-	p.repoCache.Set(key, repo)
 	return repo, nil
 }
 
