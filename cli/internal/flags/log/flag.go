@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"ocm.software/open-component-model/cli/internal/flags/enum"
+	"ocm.software/open-component-model/cli/internal/flags/log/filter"
 )
 
 // Log format constants
@@ -38,6 +39,10 @@ const (
 
 	OutputStdout = "stdout" // Standard output destination, suitable for normal operation
 	OutputStderr = "stderr" // Standard error destination, suitable for error conditions
+)
+
+const (
+	FilterFlagName = "logfilter" // Flag name for log filtering configuration
 )
 
 // RegisterLoggingFlags registers the logging-related flags with the provided cobra command.
@@ -69,8 +74,8 @@ func RegisterLoggingFlags(flagset *pflag.FlagSet) {
 
 	enum.Var(flagset, LevelFlagName, []string{
 		LevelInfo,
-		LevelDebug,
 		LevelWarn,
+		LevelDebug,
 		LevelError,
 	}, `sets the logging level
    debug: Show all logs including detailed debugging information
@@ -84,6 +89,9 @@ func RegisterLoggingFlags(flagset *pflag.FlagSet) {
 	}, `set the log output destination
    stdout: Write logs to standard output (default)
    stderr: Write logs to standard error, useful for separating logs from normal output`)
+
+	flagset.StringSlice(FilterFlagName, nil, `set the log filters to apply.
+Filters are specified as key=value pairs, where the key is the realm name, separated by commas.`)
 }
 
 // GetBaseLogger creates and returns a new slog.Logger instance based on the command's flags.
@@ -104,6 +112,15 @@ func GetBaseLogger(cmd *cobra.Command) (*slog.Logger, error) {
 	output, err := enum.Get(cmd.Flags(), OutputFlagName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get the log output from the command flag: %w", err)
+	}
+
+	rawFilters, err := cmd.Flags().GetStringSlice(FilterFlagName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get filters from the command flag: %w", err)
+	}
+	filters, err := filter.KeyFiltersFromStrings(rawFilters...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse log filters: %w", err)
 	}
 
 	var outputWriter io.Writer
@@ -127,6 +144,8 @@ func GetBaseLogger(cmd *cobra.Command) (*slog.Logger, error) {
 	default:
 		return nil, fmt.Errorf("invalid log format: %s", format)
 	}
+
+	handler = filter.New(handler, filter.LoggingKeyRealm, filters)
 
 	return slog.New(handler), nil
 }
