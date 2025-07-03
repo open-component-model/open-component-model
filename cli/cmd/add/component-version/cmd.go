@@ -25,6 +25,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
+	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
 const (
@@ -284,7 +285,7 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 		pw.SetOutputWriter(cmd.OutOrStdout())
 		pw.SetUpdateFrequency(100 * time.Millisecond)
 		pw.SetAutoStop(false)
-		trackers := map[string]*progress.Tracker{}
+		var trackers ocmsync.Map[string, *progress.Tracker]
 		options.OnStartComponentConstruct = func(_ context.Context, component *constructorruntime.Component) error {
 			key := component.Name + "/" + component.Version
 			tracker := &progress.Tracker{
@@ -300,7 +301,7 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 					},
 				},
 			}
-			trackers[key] = tracker
+			trackers.Store(key, tracker)
 			pw.AppendTracker(tracker)
 			return nil
 		}
@@ -309,7 +310,7 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 				return nil
 			}
 			key := descriptor.Component.Name + "/" + descriptor.Component.Version
-			tracker, ok := trackers[key]
+			tracker, ok := trackers.Load(key)
 			if !ok {
 				return fmt.Errorf("tracker for component %q not found", key)
 			}
@@ -320,9 +321,10 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 		}
 		// TODO Add Resource and Source tracking in more detail
 		go func() {
-			for _, tracker := range trackers {
+			trackers.Range(func(_ string, tracker *progress.Tracker) bool {
 				tracker.Start()
-			}
+				return true // continue iteration
+			})
 			pw.Render()
 		}()
 
