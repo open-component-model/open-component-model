@@ -319,12 +319,9 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 			tracker.MarkAsDone()
 			return nil
 		}
-		// TODO Add Resource and Source tracking in more detail
+		// TODO(jakobmoellerdev): Add Resource and Source tracking in more detail so we can track those as well.
 		go func() {
-			trackers.Range(func(_ string, tracker *progress.Tracker) bool {
-				tracker.Start()
-				return true // continue iteration
-			})
+			// this is the actual blocking loop
 			pw.Render()
 		}()
 
