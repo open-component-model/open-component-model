@@ -12,13 +12,13 @@ require (
 	golang.org/x/sys v0.33.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
 	ocm.software/open-component-model/bindings/go/configuration v0.0.1
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250701144021-7feb2f95f594
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250702150708-1ad638ac9e06
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/ctf v0.0.3
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250701144021-7feb2f95f594
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250702150708-1ad638ac9e06
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha2
-	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250701144021-7feb2f95f594
-	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250701144021-7feb2f95f594
+	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250702150708-1ad638ac9e06
+	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250702150708-1ad638ac9e06
 	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250701144021-7feb2f95f594
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
