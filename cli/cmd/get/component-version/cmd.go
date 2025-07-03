@@ -63,7 +63,6 @@ Specifying types and schemes:
 get cv ctf::github.com/locally-checked-out-repo//ocm.software/ocmcli:0.23.0
 get cvs oci::http://localhost:8080//ocm.software/ocmcli
 `),
-		Version:           "v1alpha1",
 		RunE:              GetComponentVersion,
 		DisableAutoGenTag: true,
 	}
