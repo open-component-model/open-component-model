@@ -3,7 +3,6 @@ version: '3'
 vars:
   CLI_DOCUMENTATION_MODE: "markdown"
   CLI_DOCUMENTATION_DIRECTORY: tmp/docs
-
 tasks:
   tmp:
     cmds:
@@ -21,8 +20,13 @@ tasks:
       - tmp
   build:
     desc: "Build the CLI"
+    vars:
+        DEFAULT_VERSION:
+          sh: |
+            echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)$(git diff --quiet || echo '+dirty')"
+        VERSION: '{{ .CLI_ARGS | default .DEFAULT_VERSION }}'
     cmds:
-      - go build -o {{ .ROOT_DIR }}/tmp/bin/ocm
+      - go build -ldflags "-X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" -o {{ .ROOT_DIR }}/tmp/bin/ocm
 
   generate/docs:
     desc: "Generate CLI Markdown documentation"

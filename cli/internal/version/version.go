@@ -22,25 +22,21 @@ type Info struct {
 	Major      string `json:"major"`
 	Minor      string `json:"minor"`
 	Patch      string `json:"patch"`
-	PreRelease string `json:"prerelease"`
-	Meta       string `json:"meta"`
+	PreRelease string `json:"prerelease,omitempty"`
+	Meta       string `json:"meta,omitempty"`
 	GitVersion string `json:"gitVersion"`
-	GitCommit  string `json:"gitCommit"`
-	BuildDate  string `json:"buildDate"`
+	GitCommit  string `json:"gitCommit,omitempty"`
+	BuildDate  string `json:"buildDate,omitempty"`
 	GoVersion  string `json:"goVersion"`
 	Compiler   string `json:"compiler"`
 	Platform   string `json:"platform"`
 }
 
-// Get returns the overall codebase version. It's for detecting
+// GetLegacyFormat returns the overall codebase version. It's for detecting
 // what code a binary was built from.
 // These variables typically come from -ldflags settings and in
 // their absence fallback to the settings in pkg/version/base.go.
-func Get() (Info, error) {
-	bi, ok := debug.ReadBuildInfo()
-	if !ok {
-		return Info{}, fmt.Errorf("could not read build info")
-	}
+func GetLegacyFormat(bi *debug.BuildInfo) (Info, error) {
 	v, err := semver.NewVersion(bi.Main.Version)
 	if err != nil {
 		return Info{}, fmt.Errorf("could not parse version %q: %w", bi.Main.Version, err)
@@ -62,7 +58,7 @@ func Get() (Info, error) {
 		GitVersion: v.String(),
 		GitCommit:  gitCommit,
 		BuildDate:  buildDate,
-		GoVersion:  bi.GoVersion,
+		GoVersion:  runtime.Version(),
 		Compiler:   runtime.Compiler,
 		Platform:   fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 	}, nil
