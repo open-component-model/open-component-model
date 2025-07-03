@@ -46,6 +46,10 @@ type Context struct {
 	// Once resolved they are passed to the corresponding plugin call.
 	// Usually plugins can return correct consumer identities based on respective endpoints.
 	credentialGraph *credentials.Graph
+
+	// tempDir is the directory to use for temporary files and directories.
+	// If empty, the system default temporary directory will be used.
+	tempDir string
 }
 
 // WithCredentialGraph creates a new context with the given credential graph.
@@ -78,6 +82,17 @@ func WithConfiguration(ctx context.Context, cfg *v1.Config) context.Context {
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
 	ocmctx.configuration = cfg
+	return ctx
+}
+
+// WithTempDir creates a new context with the given temporary directory.
+// After this function is called, the temporary directory can be retrieved from the context
+// using [FromContext] and [Context.TempDir].
+func WithTempDir(ctx context.Context, tempDir string) context.Context {
+	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
+	ocmctx.tempDir = tempDir
 	return ctx
 }
 
@@ -117,6 +132,15 @@ func (ctx *Context) Configuration() *v1.Config {
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.configuration
+}
+
+func (ctx *Context) TempDir() string {
+	if ctx == nil {
+		return ""
+	}
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
+	return ctx.tempDir
 }
 
 // FromContext retrieves the OCM context from the given context.

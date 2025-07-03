@@ -29,7 +29,22 @@ func setupOCMConfig(cmd *cobra.Command) {
 	}
 }
 
+func setupTempDir(cmd *cobra.Command) error {
+	tempDir, err := cmd.Flags().GetString("temp-dir")
+	if err != nil {
+		return fmt.Errorf("could not get temp-dir flag: %w", err)
+	}
+
+	ctx := ocmctx.WithTempDir(cmd.Context(), tempDir)
+	// TODO: set up the oci provider context here as well.
+	cmd.SetContext(ctx)
+
+	return nil
+}
+
 func setupPluginManager(cmd *cobra.Command) error {
+	// TODO: this will passed to `NewPluginManager`
+	// tempDir := ocmctx.FromContext(cmd.Context()).TempDir()
 	pluginManager := manager.NewPluginManager(cmd.Context())
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
