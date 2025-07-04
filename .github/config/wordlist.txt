@@ -391,3 +391,9 @@ tac
 coc
 kunstlaan
 stichting
+gobuildinfo
+gobuildinfojson
+buildDate
+gitCommit
+gitTreeState
+legacyjson
