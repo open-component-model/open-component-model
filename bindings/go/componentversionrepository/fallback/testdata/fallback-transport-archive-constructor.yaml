@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://ocm.software/schemas/configuration-schema.yaml
 components:
-- name: github.com/acme.org/fallback-helloworld
-  version: 1.0.0
+- name: github.com/acme.org/helloworld
+  version: 2.0.0
   provider:
     name: acme.org
   resources:
@@ -10,5 +10,16 @@ components:
       version: 6.7.1
       input:
         type: utf8 
+        text: test
+- name: github.com/acme.org/not-helloworld
+  version: 1.0.0
+  provider:
+    name: acme.org
+  resources:
+    - name: resource
+      type: something
+      version: 6.7.1
+      input:
+        type: utf8
         text: test
 

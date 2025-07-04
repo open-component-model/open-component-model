@@ -1,1 +1,1 @@
-{"schemaVersion":1,"artifacts":[{"repository":"component-descriptors/github.com/acme.org/fallback-helloworld","tag":"1.0.0","digest":"sha256:58a23b79ce381c9c4e99d68b70b39a8cb26d240a1d40cff37c8bc57a8b1e67b1"}]}
+{"schemaVersion":1,"artifacts":[{"repository":"component-descriptors/github.com/acme.org/helloworld","tag":"2.0.0","digest":"sha256:19eb32de61a06c484d205ddf1593c46074e8ce0c8864191376bc219e6b0fa178"},{"repository":"component-descriptors/github.com/acme.org/not-helloworld","tag":"1.0.0","digest":"sha256:045c3d0bfc3305c6b5e434d298b7bc14a200982391edc46b9c4fec1bda22d876"}]}
