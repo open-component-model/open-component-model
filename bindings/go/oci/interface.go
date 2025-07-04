@@ -47,6 +47,11 @@ type ComponentVersionRepository interface {
 	// https://github.com/opencontainers/distribution-spec/blob/v1.1.0/spec.md#listing-referrers
 	ListComponentVersions(ctx context.Context, component string) ([]string, error)
 
+	// CheckHealth checks if the repository is accessible and properly configured.
+	// This method verifies that the underlying OCI registry is reachable and that authentication
+	// is properly configured. It performs a lightweight check without modifying the repository.
+	CheckHealth(ctx context.Context) error
+
 	LocalResourceRepository
 	LocalSourceRepository
 	ResourceDigestProcessor
@@ -155,4 +160,8 @@ type Resolver interface {
 	// format represents a valid reference that can be used for a given store returned
 	// by StoreForReference.
 	Reference(reference string) (fmt.Stringer, error)
+
+	// Ping does a healthcheck for the underlying Store. The implementation varies based on the implementing
+	// technology.
+	Ping(ctx context.Context) error
 }

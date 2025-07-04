@@ -21,7 +21,7 @@ func Base() *slog.Logger {
 func Operation(ctx context.Context, operation string, fields ...slog.Attr) func(error) {
 	start := time.Now()
 	logger := Base().With(slog.String("operation", operation))
-	logger.LogAttrs(ctx, slog.LevelInfo, "operation starting", fields...)
+	logger.LogAttrs(ctx, slog.LevelDebug, "operation starting", fields...)
 
 	return func(err error) {
 		duration := slog.Duration("duration", time.Since(start))
@@ -32,7 +32,7 @@ func Operation(ctx context.Context, operation string, fields ...slog.Attr) func(
 			level, msg = slog.LevelError, "operation failed"
 			fields = append(fields, slog.String("error", err.Error()))
 		} else {
-			level, msg = slog.LevelInfo, "operation completed"
+			level, msg = slog.LevelDebug, "operation completed"
 		}
 
 		logger.LogAttrs(ctx, level, msg, append([]slog.Attr{duration}, fields...)...)

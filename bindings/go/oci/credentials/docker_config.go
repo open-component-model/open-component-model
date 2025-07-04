@@ -149,7 +149,7 @@ func getStore(ctx context.Context, dockerConfig credentialsv1.DockerConfig) (rem
 // createDefaultStore creates a credential store using system default Docker config locations
 // and attempts to use the native host credential store if available.
 func createDefaultStore(ctx context.Context) (remotecredentials.Store, error) {
-	slog.InfoContext(ctx, "attempting to load docker config from default locations or native host store")
+	slog.DebugContext(ctx, "attempting to load docker config from default locations or native host store")
 	store, err := remotecredentials.NewStoreFromDocker(remotecredentials.StoreOptions{
 		DetectDefaultNativeStore: true,
 	})
@@ -162,7 +162,7 @@ func createDefaultStore(ctx context.Context) (remotecredentials.Store, error) {
 // createInlineConfigStore creates a credential store from an inline JSON configuration.
 // It creates a temporary file to store the configuration and loads it into memory.
 func createInlineConfigStore(ctx context.Context, config string) (remotecredentials.Store, error) {
-	slog.InfoContext(ctx, "using docker config from inline config")
+	slog.DebugContext(ctx, "using docker config from inline config")
 	// Create and return the store
 	store, err := remotecredentials.NewMemoryStoreFromDockerConfig([]byte(config))
 	if err != nil {
@@ -174,7 +174,7 @@ func createInlineConfigStore(ctx context.Context, config string) (remotecredenti
 // createFileBasedStore creates a credential store from a specified Docker config file.
 // It handles shell expansion for the file path and validates the file's existence.
 func createFileBasedStore(ctx context.Context, configPath string) (remotecredentials.Store, error) {
-	slog.InfoContext(ctx, "using docker config from file", "file", configPath)
+	slog.DebugContext(ctx, "using docker config from file", "file", configPath)
 
 	// Handle shell expansion for the config path
 	expandedPath, err := expandConfigPath(configPath)

@@ -17,6 +17,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/input/file/Taskfile.yml
     dir: ./bindings/go/input/file
+  bindings/go/input/utf8:
+    optional: true
+    taskfile: ./bindings/go/input/utf8/Taskfile.yml
+    dir: ./bindings/go/input/utf8
   bindings/go/descriptor/v2:
     optional: true
     taskfile: ./bindings/go/descriptor/v2/Taskfile.yml

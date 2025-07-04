@@ -13,9 +13,6 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -25,12 +22,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
+	"ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 )
 
 var testScheme = runtime.NewScheme()
@@ -1514,4 +1514,57 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRepositoryHealthCheck(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("CTF health check succeeds", func(t *testing.T) {
+		// Create a temporary CTF repository
+		tmpdir := t.TempDir()
+		fs, err := filesystem.NewFS(tmpdir, os.O_RDWR)
+		require.NoError(t, err, "Failed to create filesystem")
+		archive := ctf.NewFileSystemCTF(fs)
+
+		// Create a repository with CTF
+		repo := Repository(t,
+			ocictf.WithCTF(ocictf.NewFromCTF(archive)),
+			oci.WithScheme(testScheme),
+		)
+
+		// Test health check - should always succeed for CTF
+		err = repo.CheckHealth(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("URL resolver health check with invalid URL fails", func(t *testing.T) {
+		// Create a repository with URL resolver pointing to invalid URL
+		resolver, err := url.New(url.WithBaseURL("http://invalid.nonexistent.domain"))
+		require.NoError(t, err)
+
+		repo := Repository(t,
+			oci.WithResolver(resolver),
+			oci.WithScheme(testScheme),
+		)
+
+		// Test health check - should fail for unreachable URL
+		err = repo.CheckHealth(ctx)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create registry client")
+	})
+
+	t.Run("URL resolver health check with malformed URL fails", func(t *testing.T) {
+		// Create a repository with URL resolver pointing to malformed URL
+		resolver, err := url.New(url.WithBaseURL("not-a-valid-url"))
+		require.NoError(t, err)
+
+		repo := Repository(t,
+			oci.WithResolver(resolver),
+			oci.WithScheme(testScheme),
+		)
+
+		// Test health check - should fail for malformed URL
+		err = repo.CheckHealth(ctx)
+		require.Error(t, err)
+	})
 }

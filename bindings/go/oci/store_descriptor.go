@@ -127,7 +127,7 @@ It is used to store the component descriptor in an OCI registry and can be refer
 		Size:         int64(len(manifestRaw)),
 		Annotations:  manifest.Annotations,
 	}
-	log.Base().Log(ctx, slog.LevelInfo, "pushing descriptor artifact manifest", log.DescriptorLogAttr(manifestDescriptor))
+	log.Base().Log(ctx, slog.LevelDebug, "pushing descriptor artifact manifest", log.DescriptorLogAttr(manifestDescriptor))
 	if err := store.Push(ctx, manifestDescriptor, bytes.NewReader(manifestRaw)); err != nil {
 		return nil, fmt.Errorf("unable to push manifest: %w", err)
 	}

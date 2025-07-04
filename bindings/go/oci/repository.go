@@ -148,6 +148,11 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 	return list.List(ctx, opts)
 }
 
+// CheckHealth checks if the repository is accessible and properly configured.
+func (repo *Repository) CheckHealth(ctx context.Context) (err error) {
+	return repo.resolver.Ping(ctx)
+}
+
 // GetComponentVersion retrieves a component version from the repository.
 func (repo *Repository) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
 	done := log.Operation(ctx, "get component version",

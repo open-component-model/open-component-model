@@ -19,18 +19,20 @@ func TestOperation(t *testing.T) {
 		slog.SetDefault(def)
 	})
 	var buf bytes.Buffer
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-		if a.Key == "time" {
-			return slog.Attr{}
-		}
-		return a
-	}})))
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == "time" {
+				return slog.Attr{}
+			}
+			return a
+		}})))
 
 	done := Operation(ctx, "test-operation", slog.String("test", "value"))
-	assert.Equal(t, "level=INFO msg=\"operation starting\" realm=oci operation=test-operation test=value\n", buf.String())
+	assert.Equal(t, "level=DEBUG msg=\"operation starting\" realm=oci operation=test-operation test=value\n", buf.String())
 	buf.Reset()
 	done(nil) // No error
-	assert.Contains(t, buf.String(), "level=INFO msg=\"operation completed\" realm=oci operation=test-operation")
+	assert.Contains(t, buf.String(), "level=DEBUG msg=\"operation completed\" realm=oci operation=test-operation")
 	buf.Reset()
 	done(assert.AnError) // With error
 	assert.Contains(t, buf.String(), "level=ERROR msg=\"operation failed\" realm=oci operation=test-operation")
