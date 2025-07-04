@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	ocmrepository "ocm.software/open-component-model/bindings/go/componentversionrepository"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
@@ -33,7 +34,7 @@ type CachingComponentVersionRepositoryProvider struct {
 
 // NewComponentVersionRepositoryProvider creates a new instance of CachingComponentVersionRepositoryProvider
 // with initialized caches and default HTTP client configuration.
-func NewComponentVersionRepositoryProvider() ComponentVersionRepositoryProvider {
+func NewComponentVersionRepositoryProvider() ocmrepository.ComponentVersionRepositoryProvider {
 	return &CachingComponentVersionRepositoryProvider{
 		scheme:             repoSpec.Scheme,
 		credentialCache:    &credentialCache{},
@@ -68,7 +69,7 @@ func GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, 
 
 // GetComponentVersionRepository implements the ComponentVersionRepositoryProvider interface.
 // It retrieves a component version repository with caching support for the given specification and credentials.
-func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (oci.ComponentVersionRepository, error) {
+func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ocmrepository.ComponentVersionRepository, error) {
 	obj, err := getConvertedTypedSpec(b.scheme, repositorySpecification)
 	if err != nil {
 		return nil, err
@@ -105,9 +106,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 // to its corresponding object type in the scheme. It ensures that the type is set correctly
 func getConvertedTypedSpec(scheme *runtime.Scheme, repositorySpecification runtime.Typed) (runtime.Typed, error) {
 	repositorySpecification = repositorySpecification.DeepCopyTyped()
-	if _, err := scheme.DefaultType(repositorySpecification); err != nil {
-		return nil, fmt.Errorf("failed to ensure type for repository specification: %w", err)
-	}
+	_, _ = scheme.DefaultType(repositorySpecification)
 	obj, err := scheme.NewObject(repositorySpecification.GetType())
 	if err != nil {
 		return nil, err

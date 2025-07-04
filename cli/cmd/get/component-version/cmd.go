@@ -7,11 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/bindings/go/componentversionrepository/reference/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
@@ -80,7 +80,7 @@ func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error 
 	if len(args) == 0 {
 		return fmt.Errorf("missing component reference as first positional argument")
 	}
-	if _, err := compref.Parse(args[0]); err != nil {
+	if _, err := compref.Parse(args[0], nil); err != nil {
 		return fmt.Errorf("parsing component reference from first position argument %q failed: %w", args[0], err)
 	}
 	return nil

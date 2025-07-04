@@ -84,3 +84,8 @@ type LocalSourceRepository interface {
 	// The [runtime.Identity] must match a source in the [descriptor.Descriptor].
 	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error)
 }
+
+type CredentialProvider interface {
+	// Resolve attempts to resolve credentials for the given identity.
+	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
+}

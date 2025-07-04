@@ -8,6 +8,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	ocmrepository "ocm.software/open-component-model/bindings/go/componentversionrepository"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
@@ -55,7 +56,7 @@ func (p *Plugin) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx con
 	return identity, nil
 }
 
-func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentversionrepository.ComponentVersionRepository, error) {
+func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ocmrepository.ComponentVersionRepository, error) {
 	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
 	if !ok {
 		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
@@ -70,8 +71,8 @@ func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySp
 }
 
 var (
-	_ componentversionrepository.ComponentVersionRepositoryProvider = (*Plugin)(nil)
-	_ componentversionrepository.ComponentVersionRepository         = (*wrapper)(nil)
+	_ ocmrepository.ComponentVersionRepositoryProvider = (*Plugin)(nil)
+	_ ocmrepository.ComponentVersionRepository         = (*wrapper)(nil)
 )
 
 // wrapper wraps a repo into returning the component version repository ComponentVersionRepository.

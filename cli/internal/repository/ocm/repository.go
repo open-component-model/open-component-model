@@ -11,12 +11,12 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 
+	"ocm.software/open-component-model/bindings/go/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/componentversionrepository/reference/compref"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 // ComponentRepository is a wrapper around the [v1.ReadWriteOCMRepositoryPluginContract] that provides
@@ -33,7 +33,7 @@ type ComponentRepository struct {
 // New creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
 func New(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
-	ref, err := compref.Parse(componentReference)
+	ref, err := compref.Parse(componentReference, nil)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
