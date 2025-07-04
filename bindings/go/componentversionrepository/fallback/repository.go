@@ -33,8 +33,11 @@ type ComponentVersionRepository struct {
 	credentialProvider repository.CredentialProvider
 
 	repositoryForComponentCacheMu sync.RWMutex
-	repositoryForComponentCache   map[string]*repositoryWithResolverRules
-	fallbackRepositories          []*repositoryWithResolverRules
+	// TODO: remove this cache as this might lead to different behavior than
+	//  the legacy resolver (e.g. if you created the component version in a
+	//  higher priority repository, after you fetched it from a lower)
+	repositoryForComponentCache map[string]*repositoryWithResolverRules
+	fallbackRepositories        []*repositoryWithResolverRules
 }
 
 var _ repository.ComponentVersionRepository = (*ComponentVersionRepository)(nil)
@@ -112,7 +115,7 @@ func executeWithFallback[T any](ctx context.Context, fallbackRepo *ComponentVers
 			return result, err
 		}
 	}
-	return zero, fmt.Errorf("component %q not found in repositories", component)
+	return zero, fmt.Errorf("component %q not found in repositories: %w", component, errdef.ErrNotFound)
 }
 
 func (r *ComponentVersionRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
@@ -184,26 +187,25 @@ func (r *ComponentVersionRepository) ListComponentVersions(ctx context.Context, 
 }
 
 func (r *ComponentVersionRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
-	var errGroup errgroup.Group
-	errGroup.SetLimit(goruntime.NumCPU())
+	fallback := r.fallbackRepositories[0]
 
-	for _, componentReference := range descriptor.Component.References {
-		errGroup.Go(func() error {
-			if _, err := r.GetComponentVersion(ctx, componentReference.Component, componentReference.Version); err != nil {
-				return fmt.Errorf("getting referenced component version %q:%s failed: %w", componentReference.Component, componentReference.Version, err)
-			}
-			return nil
-		})
-	}
+	fallback.mu.Lock()
+	defer fallback.mu.Unlock()
+
 	var err error
-	if err = errGroup.Wait(); err != nil {
+	repo := fallback.repository
+	if repo == nil {
+		repo, err = r.getRepositoryForSpecification(ctx, fallback.resolver.Repository)
+		if err != nil {
+			return fmt.Errorf("getting repository for specification %q failed: %w", fallback.resolver.Repository, err)
+		}
+		fallback.repository = repo
+	}
+
+	if err := repo.AddComponentVersion(ctx, descriptor); err != nil {
 		return fmt.Errorf("adding component version %q:%s failed: %w", descriptor.Component.Name, descriptor.Component.Version, err)
 	}
-	repo := r.fallbackRepositories[0]
-	if err := repo.repository.AddComponentVersion(ctx, descriptor); err != nil {
-		return fmt.Errorf("adding component version %q:%s failed: %w", descriptor.Component.Name, descriptor.Component.Version, err)
-	}
-	return err
+	return nil
 }
 
 func (r *ComponentVersionRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
@@ -230,6 +232,7 @@ func (r *ComponentVersionRepository) GetLocalResource(ctx context.Context, compo
 	return result.blob, result.res, nil
 }
 
+// TODO(fabianburth): no fallback behavior - fallback behavior would have to be implemented on cli code level
 func (r *ComponentVersionRepository) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
 	return executeWithFallback[*descriptor.Source](ctx, r, component, func(ctx context.Context, repo repository.ComponentVersionRepository) (*descriptor.Source, error) {
 		return repo.AddLocalSource(ctx, component, version, res, content)

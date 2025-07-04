@@ -65,12 +65,6 @@ type RepositoryRegistry struct {
 	scheme *runtime.Scheme
 }
 
-func (r *RepositoryRegistry) GetScheme() *runtime.Scheme {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.scheme
-}
-
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
 // All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
 // the plugin SDK.
