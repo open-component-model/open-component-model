@@ -396,3 +396,4 @@ gobuildinfojson
 buildDate
 gitCommit
 gitTreeState
+legacyjson

@@ -1,12 +1,13 @@
 package version
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"runtime/debug"
 	"strings"
+
+	_ "embed"
 
 	"github.com/spf13/cobra"
 )
