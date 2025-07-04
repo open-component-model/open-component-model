@@ -14,7 +14,7 @@ import (
 const (
 	FlagFormat                = "format"
 	FlagFormatShortHand       = "f"
-	FlagFormatOCMv1           = "ocmv1"
+	FlagFormatOCMv1           = "legacyjson"
 	FlagFormatGoBuildInfo     = "gobuildinfo"
 	FlagFormatGoBuildInfoJSON = "gobuildinfojson"
 )
@@ -36,24 +36,24 @@ func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Retrieve the build version of the OCM CLI",
-		Long: `The version command retrieves the build version of the OCM CLI.
+		Long: fmt.Sprintf(`The version command retrieves the build version of the OCM CLI.
 
-The build version can be formatted in different ways depending on the specified format flag.
-The default format is 'ocmv1', which outputs the version in a format compatible with OCM v1 specifications,
+The build version can be formatted in different ways depending on the specified %[1]s flag.
+The default format is %[2]q, which outputs the version in a format compatible with OCM v1 specifications,
 with slight modifications:
 
 - "gitTreeState" is removed in favor of "meta" field, which contains the git tree state.
 - "buildDate" and "gitCommit" are derived from the input version string, and are parsed according to the go module version specification.
 
-When the format is set to 'gobuildinfo', it outputs the Go build information as a string. The format is standardized
+When the format is set to %[3]q, it outputs the Go build information as a string. The format is standardized
 and unified across all golang applications.
 
-When the format is set to 'gobuildinfojson', it outputs the Go build information in JSON format.
-This is equivalent to gobuildinfo, but in a structured JSON format.
+When the format is set to %[4]q, it outputs the Go build information in JSON format.
+This is equivalent to %[3]q, but in a structured JSON format.
 
 The build info by default is drawn from the go module build information, which is set at build time of the CLI.
-When officially built, it is possibly overwritten with the released version of the OCM CLI.`,
-		Example: `ocm version --format ocmv1`,
+When officially built, it is possibly overwritten with the released version of the OCM CLI.`, FlagFormat, FlagFormatOCMv1, FlagFormatGoBuildInfo, FlagFormatGoBuildInfoJSON),
+		Example: fmt.Sprintf(`ocm version --format %s`, FlagFormatOCMv1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := cmd.Flags().GetString(FlagFormat)
 			if err != nil {
@@ -88,6 +88,6 @@ When officially built, it is possibly overwritten with the released version of t
 		SilenceUsage:      true,
 	}
 
-	cmd.Flags().StringP(FlagFormat, FlagFormatShortHand, FlagFormatOCMv1, "Format of the generated documentation (default: ocmv1)")
+	cmd.Flags().StringP(FlagFormat, FlagFormatShortHand, FlagFormatOCMv1, "format of the generated documentation")
 	return cmd
 }
