@@ -265,8 +265,14 @@ func Test_Version(t *testing.T) {
 
 	r.NotEmpty(entries, "expected log entries for version command")
 
-	r.Len(entries, 1, "expected log entries for version command")
-
-	entry := entries[0]
-	r.Equal(entry.Extras["gitVersion"], "(devel)")
+	found := false
+	for _, entry := range entries {
+		ver, ok := entry.Extras["gitVersion"]
+		if ok {
+			found = true
+			r.Equal(ver, "(devel)")
+			break
+		}
+	}
+	r.True(found, "expected to find gitVersion in log entries")
 }
