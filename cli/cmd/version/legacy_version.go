@@ -1,12 +1,13 @@
 package version
 
 import (
-	_ "embed"
 	"fmt"
 	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
+
+	_ "embed"
 
 	"github.com/Masterminds/semver/v3"
 )
