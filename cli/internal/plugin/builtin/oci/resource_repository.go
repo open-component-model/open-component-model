@@ -133,9 +133,6 @@ func (p *ResourceRepositoryPlugin) DownloadResource(ctx context.Context, resourc
 	}
 }
 
-// TODO Repeated calls with separate credentials will always use the first credentials set.
-//
-//	we need to be able to dynamically inject credentials to an existing repository instance.
 func (p *ResourceRepositoryPlugin) getRepository(spec *ociv1.Repository, creds map[string]string) (Repository, error) {
 	repo, err := createRepository(spec, creds, p.manifests, p.layers)
 	if err != nil {
