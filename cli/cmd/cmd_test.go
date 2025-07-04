@@ -253,3 +253,20 @@ COMPONENT                   │ VERSION │ PROVIDER
 		})
 	}
 }
+
+func Test_Version(t *testing.T) {
+	r := require.New(t)
+	logs := test.NewJSONLogReader()
+	_, err := test.OCM(t, test.WithArgs("version"), test.WithOutput(logs))
+	r.NoError(err, "failed to run version command")
+
+	entries, err := logs.List()
+	r.NoError(err, "failed to list log entries")
+
+	r.NotEmpty(entries, "expected log entries for version command")
+
+	r.Len(entries, 1, "expected log entries for version command")
+
+	entry := entries[0]
+	r.Equal(entry.Extras["gitVersion"], "(devel)")
+}
