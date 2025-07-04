@@ -35,6 +35,12 @@ When officially built, it is possibly overwritten with the released version of t
 ocm version [flags]
 ```
 
+### Examples
+
+```
+ocm version --format ocmv1
+```
+
 ### Options
 
 ```
