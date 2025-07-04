@@ -53,6 +53,7 @@ This is equivalent to gobuildinfo, but in a structured JSON format.
 
 The build info by default is drawn from the go module build information, which is set at build time of the CLI.
 When officially built, it is possibly overwritten with the released version of the OCM CLI.`,
+		Example: `ocm version --format ocmv1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := cmd.Flags().GetString(FlagFormat)
 			if err != nil {
