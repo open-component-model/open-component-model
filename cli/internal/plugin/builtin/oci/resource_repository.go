@@ -20,7 +20,7 @@ type ResourceRepositoryPlugin struct {
 	manifests, layers cache.OCIDescriptorCache
 }
 
-func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
+func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	t := resource.Access.GetType()
 	obj, err := p.scheme.NewObject(t)
 	if err != nil {
