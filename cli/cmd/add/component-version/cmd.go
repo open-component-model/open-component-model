@@ -60,7 +60,7 @@ func (p ComponentVersionConflictPolicy) ToConstructorConflictPolicy() constructo
 	}
 }
 
-func ComponentVersionOverridePolicies() []string {
+func ComponentVersionConflictPolicies() []string {
 	return []string{
 		string(ComponentVersionConflictPolicyAbortAndFail),
 		string(ComponentVersionConflictPolicySkip),
@@ -98,11 +98,11 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 		DisableAutoGenTag: true,
 	}
 
-	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
+	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of component versions that can be constructed concurrently.")
 	file.VarP(cmd.Flags(), FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "path to the repository")
-	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the repository")
+	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the component constructor file")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
-	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionOverridePolicies(), "policy to apply when a component version already exists in the repository")
+	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
 
 	return cmd
@@ -131,7 +131,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 
 	cvConflictPolicy, err := enum.Get(cmd.Flags(), FlagComponentVersionConflictPolicy)
 	if err != nil {
-		return fmt.Errorf("getting component-version-override-policy flag failed: %w", err)
+		return fmt.Errorf("getting component-version-conflict-policy flag failed: %w", err)
 	}
 
 	repoSpec, err := GetRepositorySpec(cmd)

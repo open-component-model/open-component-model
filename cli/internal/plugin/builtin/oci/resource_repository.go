@@ -149,9 +149,7 @@ func ociImageAccessToBaseURL(access *v1.OCIImage) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error parsing image reference %q: %w", access.ImageReference, err)
 	}
+	// host is the registry with sane defaulting
 	baseURL := ref.Host()
-	if ref.Repository != "" {
-		baseURL += "/" + ref.Repository
-	}
 	return baseURL, nil
 }
