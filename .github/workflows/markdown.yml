@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Run linkspector
-        uses: umbrelladocs/action-linkspector@v1
+        uses: umbrelladocs/action-linkspector@3a951c1f0dca72300c2320d0eb39c2bafe429ab1 # v1
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-check
