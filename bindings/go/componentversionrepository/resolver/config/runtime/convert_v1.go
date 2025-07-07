@@ -40,10 +40,14 @@ func convertResolvers(repositoryScheme *runtime.Scheme, resolvers []*resolverv1.
 		if err := repositoryScheme.Convert(resolver.Repository, convertedRepo); err != nil {
 			return nil, err
 		}
+		priority := resolver.Priority
+		if priority == nil {
+			*priority = resolverv1.DefaultLookupPriority
+		}
 		converted[i] = Resolver{
 			Repository: convertedRepo,
 			Prefix:     resolver.Prefix,
-			Priority:   resolver.Priority,
+			Priority:   *priority,
 		}
 	}
 	return converted, nil

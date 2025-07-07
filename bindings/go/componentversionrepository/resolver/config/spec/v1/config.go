@@ -65,7 +65,7 @@ type Resolver struct {
 
 	// An optional priority can be used to influence the lookup order. Larger value
 	// means higher priority (default DefaultLookupPriority).
-	Priority int `json:"priority,omitempty"`
+	Priority *int `json:"priority,omitempty"`
 }
 
 // Lookup creates a new Config from a central V1 config.

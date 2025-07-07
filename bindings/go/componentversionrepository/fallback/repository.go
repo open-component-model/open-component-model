@@ -22,24 +22,16 @@ import (
 	"oras.land/oras-go/v2/errdef"
 )
 
-const Realm = "componentversionrepository.fallback"
+const (
+	Realm = "componentversionrepository/fallback"
+)
 
 // ComponentVersionRepository implements fallback behavior through repositories.
-// There is no option to add additional repositories after creation because this
-// might cause issues with the cache.
-// If a component has been resolved from a particular repository once, all subsequent
-// requests concerning this component will use the same repository. There will be
-// no more fallbacks for this component.
 type ComponentVersionRepository struct {
 	registry           *componentversionrepository.RepositoryRegistry
 	credentialProvider repository.CredentialProvider
 
-	repositoryForComponentCacheMu sync.RWMutex
-	// TODO: remove this cache as this might lead to different behavior than
-	//  the legacy resolver (e.g. if you created the component version in a
-	//  higher priority repository, after you fetched it from a lower)
-	repositoryForComponentCache map[string]*repositoryWithResolverRules
-	fallbackRepositories        []*repositoryWithResolverRules
+	fallbackRepositories []*repositoryWithResolverRules
 }
 
 var _ repository.ComponentVersionRepository = (*ComponentVersionRepository)(nil)
@@ -58,17 +50,16 @@ type repositoryWithResolverRules struct {
 // add operations (add operation will not fallback).
 func New(_ context.Context, repositories []*resolverruntime.Resolver, registry *componentversionrepository.RepositoryRegistry, credentialProvider repository.CredentialProvider) (*ComponentVersionRepository, error) {
 	fallbackRepo := &ComponentVersionRepository{
-		registry:                    registry,
-		credentialProvider:          credentialProvider,
-		repositoryForComponentCache: make(map[string]*repositoryWithResolverRules),
+		registry:           registry,
+		credentialProvider: credentialProvider,
 	}
-	if err := fallbackRepo.initializeFallbackRepositories(repositories); err != nil {
+	if err := fallbackRepo.AddRepositories(repositories...); err != nil {
 		return nil, fmt.Errorf("setting fallback repositories failed: %w", err)
 	}
 	return fallbackRepo, nil
 }
 
-func executeWithoutFallback[T any](ctx context.Context, fallbackRepo *ComponentVersionRepository, component string, operation func(ctx context.Context, repo repository.ComponentVersionRepository) (T, error)) (T, error) {
+func executeWithoutFallback[T any](ctx context.Context, fallbackRepo *ComponentVersionRepository, operation func(ctx context.Context, repo repository.ComponentVersionRepository) (T, error)) (T, error) {
 	var zero T
 
 	fallback := fallbackRepo.fallbackRepositories[0]
@@ -94,15 +85,6 @@ func executeWithoutFallback[T any](ctx context.Context, fallbackRepo *ComponentV
 
 func executeWithFallback[T any](ctx context.Context, fallbackRepo *ComponentVersionRepository, component string, operation func(ctx context.Context, repo repository.ComponentVersionRepository) (T, error)) (T, error) {
 	var zero T
-
-	fallback, cached := fallbackRepo.getRepositoryForComponentFromCache(component)
-	if cached {
-		result, err := operation(ctx, fallback.repository)
-		if err != nil {
-			return zero, fmt.Errorf("getting component %q from cached repository failed: %w", component, err)
-		}
-		return result, nil
-	}
 
 	for _, fallback := range fallbackRepo.fallbackRepositories {
 		// func() is used to defer the unlock until the end of each loop
@@ -132,11 +114,7 @@ func executeWithFallback[T any](ctx context.Context, fallbackRepo *ComponentVers
 				return false, zero, err
 			}
 			if err == nil {
-				fallbackRepo.repositoryForComponentCacheMu.Lock()
-				defer fallbackRepo.repositoryForComponentCacheMu.Unlock()
-
 				slog.DebugContext(ctx, "repository used for operation", "realm", Realm, "component", component, "repository", fallback.resolver.Repository)
-				fallbackRepo.repositoryForComponentCache[component] = fallback
 				return false, result, nil
 			}
 			return true, zero, nil
@@ -221,7 +199,7 @@ func (r *ComponentVersionRepository) ListComponentVersions(ctx context.Context, 
 }
 
 func (r *ComponentVersionRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
-	if _, err := executeWithoutFallback[any](ctx, r, descriptor.Component.Name, func(ctx context.Context, repo repository.ComponentVersionRepository) (any, error) {
+	if _, err := executeWithoutFallback[any](ctx, r, func(ctx context.Context, repo repository.ComponentVersionRepository) (any, error) {
 		return nil, repo.AddComponentVersion(ctx, descriptor)
 	}); err != nil {
 		return fmt.Errorf("adding component version %q:%s failed: %w", descriptor.Component.Name, descriptor.Component.Version, err)
@@ -230,7 +208,7 @@ func (r *ComponentVersionRepository) AddComponentVersion(ctx context.Context, de
 }
 
 func (r *ComponentVersionRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return executeWithoutFallback[*descriptor.Resource](ctx, r, component, func(ctx context.Context, repo repository.ComponentVersionRepository) (*descriptor.Resource, error) {
+	return executeWithoutFallback[*descriptor.Resource](ctx, r, func(ctx context.Context, repo repository.ComponentVersionRepository) (*descriptor.Resource, error) {
 		resource, err := repo.AddLocalResource(ctx, component, version, res, content)
 		if err != nil {
 			return nil, fmt.Errorf("adding local resource %v to component %q:%s failed: %w", res.ToIdentity(), component, version, err)
@@ -258,7 +236,7 @@ func (r *ComponentVersionRepository) GetLocalResource(ctx context.Context, compo
 }
 
 func (r *ComponentVersionRepository) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	return executeWithoutFallback[*descriptor.Source](ctx, r, component, func(ctx context.Context, repo repository.ComponentVersionRepository) (*descriptor.Source, error) {
+	return executeWithoutFallback[*descriptor.Source](ctx, r, func(ctx context.Context, repo repository.ComponentVersionRepository) (*descriptor.Source, error) {
 		source, err := repo.AddLocalSource(ctx, component, version, res, content)
 		if err != nil {
 			return nil, fmt.Errorf("adding local source %v to component %q:%s failed: %w", res.ToIdentity(), component, version, err)
@@ -285,36 +263,20 @@ func (r *ComponentVersionRepository) GetLocalSource(ctx context.Context, compone
 	return result.blob, result.res, nil
 }
 
-func (r *ComponentVersionRepository) initializeFallbackRepositories(resolvers []*resolverruntime.Resolver) error {
-	if len(resolvers) == 0 {
-		return nil
-	}
-
-	actual := slices.Clone(resolvers)
-
-	slices.SortStableFunc(actual, func(a, b *resolverruntime.Resolver) int {
-		return cmp.Compare(b.Priority, a.Priority)
-	})
-
-	// Create fallback repositories from resolvers
-	fallbackRepositories := make([]*repositoryWithResolverRules, 0, len(actual))
-	for _, resolver := range actual {
-		if resolver.Repository == nil {
-			continue
+func (r *ComponentVersionRepository) AddRepositories(repositories ...*resolverruntime.Resolver) error {
+	for _, repo := range repositories {
+		if repo.Repository == nil {
+			return fmt.Errorf("repository specification for resolver is nil")
 		}
-
-		fallbackRepositories = append(fallbackRepositories, &repositoryWithResolverRules{
-			resolver: &resolverruntime.Resolver{
-				Repository: resolver.Repository,
-				Prefix:     resolver.Prefix,
-				Priority:   resolver.Priority,
-			},
+		fallbackRepository := &repositoryWithResolverRules{
+			resolver:   repo,
 			repository: nil,
+		}
+		r.fallbackRepositories = append(r.fallbackRepositories, fallbackRepository)
+		slices.SortStableFunc(r.fallbackRepositories, func(a, b *repositoryWithResolverRules) int {
+			return cmp.Compare(b.resolver.Priority, a.resolver.Priority)
 		})
 	}
-
-	r.fallbackRepositories = fallbackRepositories
-
 	return nil
 }
 
@@ -338,16 +300,4 @@ func (r *ComponentVersionRepository) getRepositoryForSpecification(ctx context.C
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", specification, err)
 	}
 	return repo, nil
-}
-
-func (r *ComponentVersionRepository) getRepositoryForComponentFromCache(component string) (*repositoryWithResolverRules, bool) {
-	r.repositoryForComponentCacheMu.RLock()
-	defer r.repositoryForComponentCacheMu.RUnlock()
-
-	repo, ok := r.repositoryForComponentCache[component]
-	if !ok {
-		return nil, false
-	}
-	slog.Debug("using cached repository for component", "component", component)
-	return repo, true
 }
