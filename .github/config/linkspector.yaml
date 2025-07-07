@@ -3,4 +3,3 @@ dirs:
 replacementPatterns:
   - pattern: "^/"
     replacement: "{{BASEURL}}/"
-modifiedFilesOnly: true
