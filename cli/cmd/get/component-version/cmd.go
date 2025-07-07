@@ -114,7 +114,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	repo, err := ocm.New(cmd.Context(), pluginManager, credentialGraph, reference)
+	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
