@@ -23,12 +23,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - name: Markdown verify links
-        uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1
+      - name: Run linkspector
+        uses: umbrelladocs/action-linkspector@v1
         with:
-          use-quiet-mode: yes
-          use-verbose-mode: no
-          config-file: .github/config/markdown-link-check.json
+          github_token: ${{ secrets.github_token }}
+          reporter: github-pr-check
+          fail_level: any
+          config_file: .github/config/markdown-link-check.json
+          show_stats: true
   spellcheck:
     name: Spellcheck
     runs-on: ubuntu-latest
