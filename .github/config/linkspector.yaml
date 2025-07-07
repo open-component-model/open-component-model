@@ -1,5 +1,5 @@
+dirs:
+  - ./
 replacementPatterns:
   - pattern: "^/"
     replacement: "{{BASEURL}}/"
-ignorePatterns: []
-modifiedFilesOnly: true
