@@ -11,4 +11,11 @@ components:
       input:
         type: utf8 
         text: test
+  sources:
+    - name: source
+      type: something
+      version: 6.7.1
+      input:
+        type: utf8
+        text: test
 
