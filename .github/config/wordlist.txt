@@ -391,3 +391,5 @@ tac
 coc
 kunstlaan
 stichting
+blobtransformer
+architected
