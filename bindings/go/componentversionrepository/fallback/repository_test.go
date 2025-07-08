@@ -1,870 +1,310 @@
 package fallback
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"log/slog"
-	"os"
+	"context"
+	"slices"
 	"testing"
 
-	"github.com/opencontainers/go-digest"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob"
+	repository "ocm.software/open-component-model/bindings/go/componentversionrepository"
 	resolverruntime "ocm.software/open-component-model/bindings/go/componentversionrepository/resolver/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
-	ociprovider "ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"oras.land/oras-go/v2/errdef"
 )
 
-const (
-	transportArchive            = "./testdata/transport-archive"
-	fallbackTransportArchive    = "./testdata/fallback-transport-archive"
-	nonExistingTransportArchive = "./testdata/non-existing-fallback-transport-archive"
-	transportArchiveCopy        = "./testdata/transport-archive-copy"
-	helloWorldComponentName     = "github.com/acme.org/helloworld"
-	notHelloWorldComponentName  = "github.com/acme.org/not-helloworld"
-	componentVersion            = "1.0.0"
-	resourceName                = "resource"
-	resourceVersion             = "6.7.1"
-	sourceName                  = "source"
-	sourceVersion               = "6.7.1"
-)
-
-func Test_GetComponentVersion(t *testing.T) {
+func Test_AddRepositories(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 
-	var logBuffer bytes.Buffer
-	logHandler := slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+	fallback, err := New(ctx, []*resolverruntime.Resolver{
+		{
+			Repository: &runtime.Raw{
+				Type: runtime.NewUnversionedType("fallback1"),
+			},
+			Prefix:   "",
+			Priority: 1,
+		},
+		{
+			Repository: &runtime.Raw{
+				Type: runtime.NewUnversionedType("fallback3"),
+			},
+			Prefix:   "",
+			Priority: 3,
+		},
+		{
+			Repository: &runtime.Raw{
+				Type: runtime.NewUnversionedType("fallback0"),
+			},
+			Prefix:   "",
+			Priority: 0,
+		},
+	}, nil, nil)
+	r.NoError(err, "failed to create fallback repository when it should succeed")
+
+	actualRepos := fallback.fallbackRepositories
+	expectedRepos := []*repositoryWithResolverRules{
+		{
+			resolver: &resolverruntime.Resolver{
+				Repository: &runtime.Raw{
+					Type: runtime.NewUnversionedType("fallback3"),
+				},
+				Prefix:   "",
+				Priority: 3,
+			},
+			repository: nil,
+		},
+		{
+			resolver: &resolverruntime.Resolver{
+				Repository: &runtime.Raw{
+					Type: runtime.NewUnversionedType("fallback1"),
+				},
+				Prefix:   "",
+				Priority: 1,
+			},
+			repository: nil,
+		},
+		{
+			resolver: &resolverruntime.Resolver{
+				Repository: &runtime.Raw{
+					Type: runtime.NewUnversionedType("fallback0"),
+				},
+				Prefix:   "",
+				Priority: 0,
+			},
+			repository: nil,
+		},
+	}
+
+	r.Equal(expectedRepos, actualRepos, "repositories do not match expected repositories")
+
+	// Test adding a repository with a higher priority
+
+	err = fallback.AddRepositories(&resolverruntime.Resolver{
+		Repository: &runtime.Raw{
+			Type: runtime.NewUnversionedType("fallback5"),
+		},
+		Prefix:   "",
+		Priority: 5,
 	})
-	logger := slog.New(logHandler)
-	slog.SetDefault(logger)
+	r.NoError(err, "failed to add repository when it should succeed")
 
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(repository.Scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
-
-	transportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       transportArchive,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	transportArchiveCopyRepoSpec := &ctfv1.Repository{
-		Path:       transportArchiveCopy,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	fallbackTransportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       fallbackTransportArchive,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	nonExistingTransportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       nonExistingTransportArchive,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	cases := []struct {
-		name         string
-		component    string
-		version      string
-		resolvers    []*resolverruntime.Resolver
-		expectedRepo runtime.Typed
-		err          assert.ErrorAssertionFunc
-	}{
-		{
-			name:      "found without fallback",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
+	actualRepos = fallback.fallbackRepositories
+	expectedRepos = slices.Insert(expectedRepos, 0, &repositoryWithResolverRules{
+		resolver: &resolverruntime.Resolver{
+			Repository: &runtime.Raw{
+				Type: runtime.NewUnversionedType("fallback5"),
 			},
-			expectedRepo: transportArchiveRepoSpec,
-			err:          assert.NoError,
+			Prefix:   "",
+			Priority: 5,
 		},
-		{
-			name:      "found with fallback",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedRepo: transportArchiveRepoSpec,
-			err:          assert.NoError,
-		},
-		{
-			name:      "higher priority first",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveCopyRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   20,
-				},
-			},
-			expectedRepo: transportArchiveRepoSpec,
-			err:          assert.NoError,
-		},
-		{
-			name:      "same priority, first in list first",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveCopyRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedRepo: transportArchiveCopyRepoSpec,
-			err:          assert.NoError,
-		},
-		{
-			name:      "prefix matched",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveCopyRepoSpec,
-					Prefix:     "github.com/not-acme.org",
-					Priority:   0,
-				},
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "github.com/acme.org",
-					Priority:   0,
-				},
-			},
-			expectedRepo: transportArchiveRepoSpec,
-			err:          assert.NoError,
-		},
-		{
-			name:      "partial prefix matched",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "github.com/ac",
-					Priority:   0,
-				},
-			},
-			expectedRepo: transportArchiveRepoSpec,
-			err:          assert.NoError,
-		},
-		{
-			name:      "not found with fallback",
-			component: "github.com/not-acme.org/non-existing-component",
-			version:   componentVersion,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: transportArchiveCopyRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedRepo: nil,
-			err:          assert.Error,
-		},
-		{
-			name:      "fail with non-existing fallback",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: nonExistingTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedRepo: nil,
-			err:          assert.Error,
-		},
-		{
-			name:      "succeed if non-existing fallback is not used",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: nonExistingTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedRepo: nil,
-			err:          assert.NoError,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-
-			fallbackRepo, err := New(t.Context(), tc.resolvers, registry, nil)
-			r.NoError(err)
-
-			desc, err := fallbackRepo.GetComponentVersion(ctx, tc.component, tc.version)
-			if !tc.err(t, err) {
-				return
-			}
-			if tc.expectedRepo == nil {
-				return
-			}
-			r.NotNil(desc, "Expected descriptor to be not nil for component %s and version %s", tc.component, tc.version)
-			r.Equal(tc.component, desc.Component.Name)
-			r.Equal(tc.version, desc.Component.Version)
-
-			expectedRepo, err := json.Marshal(tc.expectedRepo)
-			r.NoError(err, "Failed to marshal expected repository")
-			expectedLog := fmt.Sprintf(`"msg":"repository used for operation","realm":"%s","component":"%s","repository":%s`, Realm, tc.component, expectedRepo)
-			r.Contains(logBuffer.String(), expectedLog)
-		})
-	}
-}
-
-func Test_ListComponentVersion(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(repository.Scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
-
-	transportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       transportArchive,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	transportArchiveCopyRepoSpec := &ctfv1.Repository{
-		Path:       transportArchiveCopy,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	fallbackTransportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       fallbackTransportArchive,
-		AccessMode: ctfv1.AccessModeReadOnly,
-	}
-
-	nonExistingTransportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       nonExistingTransportArchive,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	cases := []struct {
-		name             string
-		component        string
-		resolvers        []*resolverruntime.Resolver
-		expectedVersions []string
-		err              assert.ErrorAssertionFunc
-	}{
-		{
-			name:      "list versions from single repository",
-			component: helloWorldComponentName,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedVersions: []string{"1.0.0"},
-			err:              assert.NoError,
-		},
-		{
-			name:      "deduplicate versions found in multiple repositories",
-			component: helloWorldComponentName,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: transportArchiveCopyRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedVersions: []string{"1.0.0"},
-			err:              assert.NoError,
-		},
-		{
-			name:      "list versions accumulated from multiple repositories",
-			component: helloWorldComponentName,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedVersions: []string{"1.0.0", "2.0.0"},
-			err:              assert.NoError,
-		},
-		{
-			name:      "list versions accumulated from multiple repositories with priorities",
-			component: helloWorldComponentName,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   20,
-				},
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedVersions: []string{"1.0.0", "2.0.0"},
-			err:              assert.NoError,
-		},
-		{
-			name:      "ignore repositories with wrong prefix",
-			component: helloWorldComponentName,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "github.com/not-acme.org",
-					Priority:   20,
-				},
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedVersions: []string{"2.0.0"},
-			err:              assert.NoError,
-		},
-		{
-			name:      "fail entirely if one repository fails",
-			component: helloWorldComponentName,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: nonExistingTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   20,
-				},
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedVersions: nil,
-			err:              assert.Error,
-		},
-		{
-			name:      "fail entirely if one repository fails independent of order",
-			component: helloWorldComponentName,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   20,
-				},
-				{
-					Repository: nonExistingTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedVersions: nil,
-			err:              assert.Error,
-		},
-		{
-			name:      "list versions from fallback repository only",
-			component: notHelloWorldComponentName,
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   20,
-				},
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedVersions: []string{"1.0.0"},
-			err:              assert.NoError,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-
-			fallbackRepo, err := New(t.Context(), tc.resolvers, registry, nil)
-			r.NoError(err)
-
-			versions, err := fallbackRepo.ListComponentVersions(ctx, tc.component)
-			if !tc.err(t, err) {
-				return
-			}
-			r.Equal(tc.expectedVersions, versions, "Expected versions for component %s", tc.component)
-		})
-	}
-}
-
-func Test_AddComponentVersion(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(repository.Scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
-
-	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
-	r.NoError(err)
-
-	repo := ctfv1.Repository{
-		Path:       fs.String(),
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	fallbackRepo, err := New(t.Context(), []*resolverruntime.Resolver{
-		{
-			Repository: &repo,
-			Prefix:     "",
-			Priority:   0,
-		},
-	}, registry, nil)
-	r.NoError(err, "failed to create fallback repository")
-
-	// Create a test component descriptor
-	desc := &descriptor.Descriptor{
-		Component: descriptor.Component{
-			Provider: descriptor.Provider{
-				Name: "test-provider",
-			},
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    "test-component",
-					Version: "1.0.0",
-				},
-			},
-		},
-	}
-	_, err = fallbackRepo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
-	r.Error(err)
-	r.ErrorIs(err, oci.ErrNotFound)
-
-	// Test adding component version
-	err = fallbackRepo.AddComponentVersion(ctx, desc)
-	r.NoError(err, "Failed to add component version when it should succeed")
-
-	err = fallbackRepo.AddComponentVersion(ctx, desc)
-	r.NoError(err, "Failed to add component version when it should succeed")
-
-	desc2, err := fallbackRepo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
-	r.NoError(err, "Failed to get component version after adding it")
-
-	r.NotNil(desc2, "Component version should not be nil after adding it")
-	r.Equal(desc.Component.Name, desc2.Component.Name, "Component name should match")
-}
-
-func Test_GetLocalResource(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	var logBuffer bytes.Buffer
-	logHandler := slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		repository: nil,
 	})
-	logger := slog.New(logHandler)
-	slog.SetDefault(logger)
 
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-	v2.MustAddToScheme(scheme)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
+	r.Equal(expectedRepos, actualRepos, "repositories do not match expected repositories after adding a new one")
 
-	transportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       transportArchive,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	fallbackTransportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       fallbackTransportArchive,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	cases := []struct {
-		name             string
-		component        string
-		version          string
-		resourceIdentity runtime.Identity
-		resolvers        []*resolverruntime.Resolver
-		expectedRepo     runtime.Typed
-		err              assert.ErrorAssertionFunc
-	}{
-		{
-			name:      "found without fallback",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resourceIdentity: map[string]string{
-				descriptor.IdentityAttributeName:    resourceName,
-				descriptor.IdentityAttributeVersion: resourceVersion,
-			},
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedRepo: transportArchiveRepoSpec,
-			err:          assert.NoError,
+	// Test adding a repository with equal priority
+	err = fallback.AddRepositories(&resolverruntime.Resolver{
+		Repository: &runtime.Raw{
+			Type: runtime.NewUnversionedType("fallback55"),
 		},
-		{
-			name:      "found with fallback",
-			component: notHelloWorldComponentName,
-			version:   componentVersion,
-			resourceIdentity: map[string]string{
-				descriptor.IdentityAttributeName:    resourceName,
-				descriptor.IdentityAttributeVersion: resourceVersion,
-			},
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedRepo: fallbackTransportArchiveRepoSpec,
-			err:          assert.NoError,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-
-			fallbackRepo, err := New(t.Context(), tc.resolvers, registry, nil)
-			r.NoError(err)
-
-			blob, resource, err := fallbackRepo.GetLocalResource(ctx, tc.component, tc.version, tc.resourceIdentity)
-			if !tc.err(t, err) {
-				return
-			}
-			if tc.expectedRepo == nil {
-				return
-			}
-			r.Equal(tc.resourceIdentity, resource.ToIdentity(), "Expected resource identity to match %s for component %s and version %s", tc.resourceIdentity, tc.component, tc.version)
-			r.NotNil(blob, "Expected blob to be not nil for component %s and version %s", tc.component, tc.version)
-
-			expectedRepo, err := json.Marshal(tc.expectedRepo)
-			r.NoError(err, "Failed to marshal expected repository")
-			expectedLog := fmt.Sprintf(`"msg":"repository used for operation","realm":"%s","component":"%s","repository":%s`, Realm, tc.component, expectedRepo)
-			r.Contains(logBuffer.String(), expectedLog)
-		})
-	}
-}
-
-func Test_GetLocalSource(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	var logBuffer bytes.Buffer
-	logHandler := slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Prefix:   "",
+		Priority: 5,
 	})
-	logger := slog.New(logHandler)
-	slog.SetDefault(logger)
+	r.NoError(err, "failed to add repository when it should succeed")
 
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-	v2.MustAddToScheme(scheme)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
-
-	transportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       transportArchive,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	fallbackTransportArchiveRepoSpec := &ctfv1.Repository{
-		Path:       fallbackTransportArchive,
-		AccessMode: ctfv1.AccessModeReadWrite,
-	}
-
-	cases := []struct {
-		name             string
-		component        string
-		version          string
-		resourceIdentity runtime.Identity
-		resolvers        []*resolverruntime.Resolver
-		expectedRepo     runtime.Typed
-		err              assert.ErrorAssertionFunc
-	}{
-		{
-			name:      "found without fallback",
-			component: helloWorldComponentName,
-			version:   componentVersion,
-			resourceIdentity: map[string]string{
-				descriptor.IdentityAttributeName:    sourceName,
-				descriptor.IdentityAttributeVersion: sourceVersion,
+	actualRepos = fallback.fallbackRepositories
+	expectedRepos = slices.Insert(expectedRepos, 1, &repositoryWithResolverRules{
+		resolver: &resolverruntime.Resolver{
+			Repository: &runtime.Raw{
+				Type: runtime.NewUnversionedType("fallback55"),
 			},
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedRepo: transportArchiveRepoSpec,
-			err:          assert.NoError,
+			Prefix:   "",
+			Priority: 5,
 		},
-		{
-			name:      "found with fallback",
-			component: notHelloWorldComponentName,
-			version:   componentVersion,
-			resourceIdentity: map[string]string{
-				descriptor.IdentityAttributeName:    sourceName,
-				descriptor.IdentityAttributeVersion: sourceVersion,
-			},
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: transportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: fallbackTransportArchiveRepoSpec,
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedRepo: fallbackTransportArchiveRepoSpec,
-			err:          assert.NoError,
-		},
-	}
+		repository: nil,
+	})
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-
-			fallbackRepo, err := New(t.Context(), tc.resolvers, registry, nil)
-			r.NoError(err)
-
-			blob, source, err := fallbackRepo.GetLocalSource(ctx, tc.component, tc.version, tc.resourceIdentity)
-			if !tc.err(t, err) {
-				return
-			}
-			if tc.expectedRepo == nil {
-				return
-			}
-			r.Equal(tc.resourceIdentity, source.ToIdentity(), "Expected resource identity to match %s for component %s and version %s", tc.resourceIdentity, tc.component, tc.version)
-			r.NotNil(blob, "Expected blob to be not nil for component %s and version %s", tc.component, tc.version)
-
-			expectedRepo, err := json.Marshal(tc.expectedRepo)
-			r.NoError(err, "Failed to marshal expected repository")
-			expectedLog := fmt.Sprintf(`"msg":"repository used for operation","realm":"%s","component":"%s","repository":%s`, Realm, tc.component, expectedRepo)
-			r.Contains(logBuffer.String(), expectedLog)
-		})
-	}
+	r.Equal(expectedRepos, actualRepos, "repositories do not match expected repositories after adding a new one")
 }
 
-func Test_AddLocalResource(t *testing.T) {
+func Test_ExecuteWithFallback(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(repository.Scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
-
-	resourceContentString := "test layer content"
-	resourceContent := inmemory.New(bytes.NewReader([]byte(resourceContentString)))
-	resource := &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    resourceName,
-				Version: resourceVersion,
-			},
-		},
-		Type: "my-type",
-		Access: &runtime.Raw{
-			Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-			Data: []byte(fmt.Sprintf(
-				`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
-				runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-				digest.FromString(resourceContentString).String(),
-				"my-media-type",
-			)),
-		},
-		Digest:       nil,
-		CreationTime: descriptor.CreationTime{},
-	}
-
-	desc := &descriptor.Descriptor{
-		Component: descriptor.Component{
-			Provider: descriptor.Provider{
-				Name: "test-provider",
-			},
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    helloWorldComponentName,
-					Version: componentVersion,
-				},
-			},
-		},
-	}
-
-	t.Run("add local resource without fallback", func(t *testing.T) {
-		r := require.New(t)
-
-		fsWithComponent, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
-		r.NoError(err)
-
-		repoWithComponent := ctfv1.Repository{
-			Path:       fsWithComponent.String(),
-			AccessMode: ctfv1.AccessModeReadWrite,
-		}
-
-		fallbackRepo, err := New(t.Context(), []*resolverruntime.Resolver{
+	fallback := &ComponentVersionRepository{
+		provider:           nil,
+		credentialProvider: nil,
+		fallbackRepositories: []*repositoryWithResolverRules{
 			{
-				Repository: &repoWithComponent,
-				Prefix:     "",
-				Priority:   0,
+				resolver: &resolverruntime.Resolver{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallback2"),
+					},
+					Prefix:   "",
+					Priority: 2,
+				},
+				repository: &MockComponentVersionRepository{
+					typ: "fallback2",
+				},
 			},
-		}, registry, nil)
-		r.NoError(err, "failed to create fallback repository")
-
-		res, err := fallbackRepo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, resource, resourceContent)
-
-		r.NoError(err, "Failed to add local resource when it should succeed")
-		r.NotNil(res, "Expected resource to be not nil after adding it")
-	})
-}
-
-func Test_AddLocalSource(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(repository.Scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
-
-	sourceContentString := "test layer content"
-	sourceContent := inmemory.New(bytes.NewReader([]byte(sourceContentString)))
-	source := &descriptor.Source{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    resourceName,
-				Version: resourceVersion,
-			},
-		},
-		Type: "my-type",
-		Access: &runtime.Raw{
-			Type: runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-			Data: []byte(fmt.Sprintf(
-				`{"type":"%s","localReference":"%s","mediaType":"%s"}`,
-				runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-				digest.FromString(sourceContentString).String(),
-				"my-media-type",
-			)),
-		},
-	}
-
-	desc := &descriptor.Descriptor{
-		Component: descriptor.Component{
-			Provider: descriptor.Provider{
-				Name: "test-provider",
-			},
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    helloWorldComponentName,
-					Version: componentVersion,
+			{
+				resolver: &resolverruntime.Resolver{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallback1"),
+					},
+					Prefix:   "",
+					Priority: 1,
+				},
+				repository: &MockComponentVersionRepository{
+					typ: "fallback1",
 				},
 			},
 		},
 	}
 
-	t.Run("add local source without fallback", func(t *testing.T) {
-		r := require.New(t)
-
-		fsWithComponent, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
-		r.NoError(err)
-
-		repoWithComponent := ctfv1.Repository{
-			Path:       fsWithComponent.String(),
-			AccessMode: ctfv1.AccessModeReadWrite,
+	usedFallbacks := make([]string, 0)
+	result, err := executeWithFallback[string](ctx, fallback, "test", func(ctx context.Context, repo repository.ComponentVersionRepository) (string, error) {
+		typ := repo.(*MockComponentVersionRepository).GetType()
+		usedFallbacks = append(usedFallbacks, typ)
+		if typ == "fallback1" {
+			return "success", nil
 		}
-
-		fallbackRepo, err := New(t.Context(), []*resolverruntime.Resolver{
-			{
-				Repository: &repoWithComponent,
-				Prefix:     "",
-				Priority:   0,
-			},
-		}, registry, nil)
-		r.NoError(err, "failed to create fallback repository")
-
-		res, err := fallbackRepo.AddLocalSource(ctx, desc.Component.Name, desc.Component.Version, source, sourceContent)
-
-		r.NoError(err, "Failed to add local source when it should succeed")
-		r.NotNil(res, "Expected source to be not nil after adding it")
+		return "failure", errdef.ErrNotFound
 	})
+	r.NoError(err, "operation with fallback should succeed")
+	r.Equal([]string{"fallback2", "fallback1"}, usedFallbacks, "used fallbacks do not match expected order")
+	r.Equal("success", result, "result should be success from fallback1")
+}
+
+func Test_ExecuteWithoutFallback(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	t.Run("without fallback and no prefixes", func(t *testing.T) {
+		fallback := &ComponentVersionRepository{
+			provider:           nil,
+			credentialProvider: nil,
+			fallbackRepositories: []*repositoryWithResolverRules{
+				{
+					resolver: &resolverruntime.Resolver{
+						Repository: &runtime.Raw{
+							Type: runtime.NewUnversionedType("fallback2"),
+						},
+						Prefix:   "",
+						Priority: 2,
+					},
+					repository: &MockComponentVersionRepository{
+						typ: "fallback2",
+					},
+				},
+				{
+					resolver: &resolverruntime.Resolver{
+						Repository: &runtime.Raw{
+							Type: runtime.NewUnversionedType("fallback1"),
+						},
+						Prefix:   "",
+						Priority: 1,
+					},
+					repository: &MockComponentVersionRepository{
+						typ: "fallback1",
+					},
+				},
+			},
+		}
+		usedFallbacks := make([]string, 0)
+		result, err := executeWithoutFallback[string](ctx, fallback, "test", func(ctx context.Context, repo repository.ComponentVersionRepository) (string, error) {
+			typ := repo.(*MockComponentVersionRepository).GetType()
+			usedFallbacks = append(usedFallbacks, typ)
+			return "success", nil
+		})
+		r.NoError(err, "operation without fallback should succeed")
+		r.Equal([]string{"fallback2"}, usedFallbacks, "used fallbacks do not match expected order")
+		r.Equal("success", result, "result should be success from fallback2")
+	})
+	t.Run("without fallback and with prefixes", func(t *testing.T) {
+		fallback := &ComponentVersionRepository{
+			provider:           nil,
+			credentialProvider: nil,
+			fallbackRepositories: []*repositoryWithResolverRules{
+				{
+					resolver: &resolverruntime.Resolver{
+						Repository: &runtime.Raw{
+							Type: runtime.NewUnversionedType("fallback2"),
+						},
+						Prefix:   "not-matching-prefix",
+						Priority: 2,
+					},
+					repository: &MockComponentVersionRepository{
+						typ: "fallback2",
+					},
+				},
+				{
+					resolver: &resolverruntime.Resolver{
+						Repository: &runtime.Raw{
+							Type: runtime.NewUnversionedType("fallback1"),
+						},
+						Prefix:   "tes",
+						Priority: 1,
+					},
+					repository: &MockComponentVersionRepository{
+						typ: "fallback1",
+					},
+				},
+			},
+		}
+		usedFallbacks := make([]string, 0)
+		result, err := executeWithoutFallback[string](ctx, fallback, "test", func(ctx context.Context, repo repository.ComponentVersionRepository) (string, error) {
+			typ := repo.(*MockComponentVersionRepository).GetType()
+			usedFallbacks = append(usedFallbacks, typ)
+			return "success", nil
+		})
+		r.NoError(err, "operation without fallback should succeed")
+		r.Equal([]string{"fallback1"}, usedFallbacks, "used fallbacks do not match expected order")
+		r.Equal("success", result, "result should be success from fallback1")
+	})
+}
+
+type MockComponentVersionRepository struct {
+	typ string
+}
+
+func (m *MockComponentVersionRepository) GetType() string {
+	return m.typ
+}
+
+func (m *MockComponentVersionRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockComponentVersionRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockComponentVersionRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockComponentVersionRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockComponentVersionRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockComponentVersionRepository) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockComponentVersionRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
+	//TODO implement me
+	panic("implement me")
 }

@@ -65,6 +65,8 @@ type Resolver struct {
 
 	// An optional priority can be used to influence the lookup order. Larger value
 	// means higher priority (default DefaultLookupPriority).
+	// Pointer because this is optional. To default the priority, we need to be
+	// able to distinguish between "not set" and "set to zero".
 	Priority *int `json:"priority,omitempty"`
 }
 
