@@ -128,7 +128,8 @@ func walkDirContents(currentDir string, baseDir string,
 		if err != nil {
 			return fmt.Errorf("failed to create tar header: %w", err)
 		}
-		// Set header name to the relative path of the entry with respect to the base directory.
+		// Set header name to the relative path of the entry with respect to the base directory,
+		// to preserve the subfolder structure in the tar archive.
 		header.Name = entryPath
 
 		switch {
@@ -179,7 +180,7 @@ func walkDirContents(currentDir string, baseDir string,
 				}
 			} else {
 			}*/
-			return fmt.Errorf("following symlinks not supported yet")
+			return fmt.Errorf("symlinks not supported yet")
 
 		default:
 			return fmt.Errorf("unsupported file type %s in %s", info.Mode().String(), entryPath)
