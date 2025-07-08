@@ -18,6 +18,7 @@ import (
 type ResourceRepositoryPlugin struct {
 	scheme            *runtime.Scheme
 	manifests, layers cache.OCIDescriptorCache
+	configuration     []*runtime.Raw
 }
 
 func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {

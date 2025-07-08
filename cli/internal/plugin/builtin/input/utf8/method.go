@@ -6,9 +6,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/input/utf8"
 	utf8v1 "ocm.software/open-component-model/bindings/go/input/utf8/spec/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func Register(inputRegistry *input.RepositoryRegistry) error {
+func Register(inputRegistry *input.RepositoryRegistry, configs []*runtime.Raw) error {
 	if err := RegisterUTF8InputV1(inputRegistry); err != nil {
 		return err
 	}

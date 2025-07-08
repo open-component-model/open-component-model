@@ -3,6 +3,7 @@ package plugin
 import (
 	"errors"
 
+	configv1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -14,11 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func Register(
-	compverRegistry *componentversionrepository.RepositoryRegistry,
-	resRegistry *resource.ResourceRegistry,
-	digRegistry *digestprocessor.RepositoryRegistry,
-) error {
+func Register(compverRegistry *componentversionrepository.RepositoryRegistry, resRegistry *resource.ResourceRegistry, digRegistry *digestprocessor.RepositoryRegistry, config []*runtime.Raw) error {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	access.MustAddToScheme(scheme)
@@ -26,8 +23,8 @@ func Register(
 	manifests := inmemory.New()
 	layers := inmemory.New()
 
-	cvRepoPlugin := ComponentVersionRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers}
-	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers}
+	cvRepoPlugin := ComponentVersionRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, configuration: config.Configurations}
+	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, configuration: config.Configurations}
 
 	return errors.Join(
 		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(

@@ -41,7 +41,9 @@ func init() {
 //
 // Since files are accessed directly from the local filesystem, no credentials
 // are required for any operations.
-type InputMethod struct{}
+type InputMethod struct {
+	configs []*runtime.Raw
+}
 
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly

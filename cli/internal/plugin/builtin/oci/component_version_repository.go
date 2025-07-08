@@ -20,9 +20,10 @@ import (
 
 type ComponentVersionRepositoryPlugin struct {
 	contracts.EmptyBasePlugin
-	scheme    *runtime.Scheme
-	manifests cache.OCIDescriptorCache
-	layers    cache.OCIDescriptorCache
+	scheme        *runtime.Scheme
+	manifests     cache.OCIDescriptorCache
+	layers        cache.OCIDescriptorCache
+	configuration []*runtime.Raw
 }
 
 func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
@@ -114,12 +115,16 @@ func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Reposito
 		},
 		Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
 	})
-	repo, err := oci.NewRepository(
+
+	// TODO: Add using WithConfiguration
+	opts := []oci.RepositoryOption{
 		oci.WithResolver(urlResolver),
 		oci.WithScheme(p.scheme),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifests),
 		oci.WithLayerCache(p.layers),
-	)
+	}
+
+	repo, err := oci.NewRepository(opts...)
 	return repo, err
 }

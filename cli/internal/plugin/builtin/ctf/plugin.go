@@ -20,13 +20,13 @@ import (
 
 const Creator = "CTF Repository"
 
-func Register(registry *componentversionrepository.RepositoryRegistry) error {
+func Register(registry *componentversionrepository.RepositoryRegistry, configs []*runtime.Raw) error {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	return componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		scheme,
 		registry,
-		&Plugin{scheme: scheme, manifestCache: inmemory.New(), layerCache: inmemory.New()},
+		&Plugin{scheme: scheme, manifestCache: inmemory.New(), layerCache: inmemory.New(), configuration: configs},
 		&ctfv1.Repository{},
 	)
 }
@@ -36,6 +36,7 @@ type Plugin struct {
 	scheme        *runtime.Scheme
 	manifestCache cache.OCIDescriptorCache
 	layerCache    cache.OCIDescriptorCache
+	configuration []*runtime.Raw
 }
 
 func (p *Plugin) GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, _ runtime.Typed) (runtime.Identity, error) {
@@ -101,11 +102,12 @@ func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionR
 	if err != nil {
 		return nil, fmt.Errorf("error opening CTF archive: %w", err)
 	}
-	repo, err := oci.NewRepository(
+
+	return oci.NewRepository([]oci.RepositoryOption{
 		ocictf.WithCTF(ocictf.NewFromCTF(archive)),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifestCache),
 		oci.WithLayerCache(p.layerCache),
-	)
-	return repo, err
+		//oci.WithConfiguration(p.configuration), // TODO: Add this.
+	}...)
 }

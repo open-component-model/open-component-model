@@ -6,18 +6,19 @@ import (
 	"ocm.software/open-component-model/bindings/go/input/file"
 	filev1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func Register(inputRegistry *input.RepositoryRegistry) error {
-	if err := RegisterFileInputV1(inputRegistry); err != nil {
+func Register(inputRegistry *input.RepositoryRegistry, configs []*runtime.Raw) error {
+	if err := RegisterFileInputV1(inputRegistry, configs); err != nil {
 		return err
 	}
 	return nil
 }
 
-func RegisterFileInputV1(inputRegistry *input.RepositoryRegistry) error {
-	method := &file.InputMethod{}
-	spec := &filev1.File{}
+func RegisterFileInputV1(inputRegistry *input.RepositoryRegistry, _ []*runtime.Raw) error {
+	method := &file.InputMethod{} // config is added in this
+	spec := &filev1.File{}        // config is added in this
 	if err := input.RegisterInternalResourceInputPlugin(file.Scheme, inputRegistry, method, spec); err != nil {
 		return fmt.Errorf("could not register file resource input method: %w", err)
 	}
