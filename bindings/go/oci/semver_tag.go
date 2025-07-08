@@ -1,6 +1,7 @@
 package oci
 
 import (
+	"context"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
@@ -25,7 +26,7 @@ const (
 func LooseSemverToOCITag(version string) string {
 	tag := strings.Replace(version, plus, plusSubstitute, 1)
 	if tag != version {
-		log.Base().Warn("component version contains discouraged character", "version", version, "character", plus)
+		log.Base(context.Background()).Warn("component version contains discouraged character", "version", version, "character", plus)
 	}
 
 	return tag

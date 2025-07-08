@@ -12,18 +12,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// internalLogger can be used by outside packages if a configured logger already exists.
-var internalLogger *slog.Logger
+// loggerContextKey is the key for storing loggers in context.
+type loggerContextKey struct{}
 
-// SetBaseLogger sets the base logger.
-func SetBaseLogger(logger *slog.Logger) {
-	internalLogger = logger
+// WithLogger returns a context with the logger attached.
+func WithLogger(ctx context.Context, logger *slog.Logger) context.Context {
+	return context.WithValue(ctx, loggerContextKey{}, logger)
+}
+
+// FromContext returns the logger from the context, or nil if not found.
+func FromContext(ctx context.Context) *slog.Logger {
+	if logger := ctx.Value(loggerContextKey{}); logger != nil {
+		return logger.(*slog.Logger)
+	}
+	return nil
 }
 
 // Base returns a base logger for OCI operations with a default RealmKey.
-func Base() *slog.Logger {
-	if internalLogger != nil {
-		return internalLogger
+func Base(ctx context.Context) *slog.Logger {
+	if logger := FromContext(ctx); logger != nil {
+		return logger
 	}
 
 	return slog.With(slog.String("realm", "oci"))
@@ -32,7 +40,7 @@ func Base() *slog.Logger {
 // Operation is a helper function to log operations with timing and error handling.
 func Operation(ctx context.Context, operation string, fields ...slog.Attr) func(error) {
 	start := time.Now()
-	logger := Base().With(slog.String("operation", operation))
+	logger := Base(ctx).With(slog.String("operation", operation))
 	logger.LogAttrs(ctx, slog.LevelDebug, "operation starting", fields...)
 
 	return func(err error) {

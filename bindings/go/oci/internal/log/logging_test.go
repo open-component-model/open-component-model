@@ -2,6 +2,7 @@ package log
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"testing"
@@ -92,12 +93,7 @@ func TestIdentityLogAttr(t *testing.T) {
 	}
 }
 
-func TestSetBaseLogger(t *testing.T) {
-	originalLogger := internalLogger
-	t.Cleanup(func() {
-		internalLogger = originalLogger
-	})
-
+func TestSetContextLogger(t *testing.T) {
 	var buf bytes.Buffer
 	customLogger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
@@ -109,17 +105,16 @@ func TestSetBaseLogger(t *testing.T) {
 		},
 	}))
 
-	SetBaseLogger(customLogger)
+	ctx := WithLogger(context.Background(), customLogger)
 
-	logger := Base()
-	assert.Equal(t, customLogger, logger, "Base() should return the custom logger after SetBaseLogger")
+	logger := Base(ctx)
+	assert.Equal(t, customLogger, logger, "should return the custom logger")
 
 	logger.Info("test message")
 	assert.Contains(t, buf.String(), "level=INFO msg=\"test message\"")
 
-	SetBaseLogger(nil)
-	logger = Base()
-	assert.NotEqual(t, customLogger, logger, "Base() should return default logger after SetBaseLogger(nil)")
+	logger = Base(context.Background())
+	assert.NotEqual(t, customLogger, logger, "should return default logger")
 }
 
 func TestLogDefer(t *testing.T) {
