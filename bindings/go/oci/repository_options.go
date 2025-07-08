@@ -47,6 +47,10 @@ type RepositoryOptions struct {
 
 	// ReferrerTrackingPolicy defines how OCI referrers are used to track component versions.
 	ReferrerTrackingPolicy ReferrerTrackingPolicy
+
+	// Logger is the logger used for OCI operations.
+	// If not provided, the default logger will be used.
+	Logger *slog.Logger
 }
 
 // ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
@@ -116,6 +120,13 @@ func WithReferrerTrackingPolicy(policy ReferrerTrackingPolicy) RepositoryOption 
 	}
 }
 
+// WithLogger sets the logger for the repository.
+func WithLogger(logger *slog.Logger) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.Logger = logger
+	}
+}
+
 // NewRepository creates a new Repository instance with the given options.
 func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	options := &RepositoryOptions{}
@@ -170,5 +181,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		creatorAnnotation:          options.Creator,
 		resourceCopyOptions:        *options.ResourceCopyOptions,
 		referrerTrackingPolicy:     options.ReferrerTrackingPolicy,
+		logger:                     options.Logger,
 	}, nil
 }
