@@ -12,8 +12,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// internalLogger can be used by outside packages if a configured logger already exists.
+var internalLogger *slog.Logger
+
+// SetBaseLogger sets the base logger.
+func SetBaseLogger(logger *slog.Logger) {
+	internalLogger = logger
+}
+
 // Base returns a base logger for OCI operations with a default RealmKey.
 func Base() *slog.Logger {
+	if internalLogger != nil {
+		return internalLogger
+	}
+
 	return slog.With(slog.String("realm", "oci"))
 }
 

@@ -92,6 +92,36 @@ func TestIdentityLogAttr(t *testing.T) {
 	}
 }
 
+func TestSetBaseLogger(t *testing.T) {
+	originalLogger := internalLogger
+	t.Cleanup(func() {
+		internalLogger = originalLogger
+	})
+
+	var buf bytes.Buffer
+	customLogger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == "time" {
+				return slog.Attr{}
+			}
+			return a
+		},
+	}))
+
+	SetBaseLogger(customLogger)
+
+	logger := Base()
+	assert.Equal(t, customLogger, logger, "Base() should return the custom logger after SetBaseLogger")
+
+	logger.Info("test message")
+	assert.Contains(t, buf.String(), "level=INFO msg=\"test message\"")
+
+	SetBaseLogger(nil)
+	logger = Base()
+	assert.NotEqual(t, customLogger, logger, "Base() should return default logger after SetBaseLogger(nil)")
+}
+
 func TestLogDefer(t *testing.T) {
 	var buf bytes.Buffer
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
