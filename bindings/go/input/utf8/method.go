@@ -48,9 +48,7 @@ func init() {
 //   - Reading the utf8 string
 //   - Processing file metadata and content
 //   - Returning processed blob data for further use
-type InputMethod struct {
-	configs []*runtime.Raw
-}
+type InputMethod struct{}
 
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly

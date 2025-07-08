@@ -84,14 +84,3 @@ type LocalSourceRepository interface {
 	// The [runtime.Identity] must match a source in the [descriptor.Descriptor].
 	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error)
 }
-
-// ConfigurableComponentVersionRepositoryProvider extends ComponentVersionRepositoryProvider with the ability
-// to receive configuration data. Internal plugins should implement this interface to receive
-// configuration from the plugin manager.
-type ConfigurableComponentVersionRepositoryProvider interface {
-	ComponentVersionRepositoryProvider
-	
-	// SetConfiguration sets the configuration for the plugin.
-	// This method is called by the plugin manager to pass configuration data to internal plugins.
-	SetConfiguration(config *runtime.Raw)
-}

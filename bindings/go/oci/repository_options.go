@@ -47,9 +47,6 @@ type RepositoryOptions struct {
 
 	// ReferrerTrackingPolicy defines how OCI referrers are used to track component versions.
 	ReferrerTrackingPolicy ReferrerTrackingPolicy
-
-	// Configuration holds any configuration data to be passed to the repository
-	Configuration []*runtime.Raw
 }
 
 // ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
@@ -119,13 +116,6 @@ func WithReferrerTrackingPolicy(policy ReferrerTrackingPolicy) RepositoryOption 
 	}
 }
 
-// WithConfiguration sets the configuration for the repository.
-func WithConfiguration(config []*runtime.Raw) RepositoryOption {
-	return func(o *RepositoryOptions) {
-		o.Configuration = config
-	}
-}
-
 // NewRepository creates a new Repository instance with the given options.
 func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	options := &RepositoryOptions{}
@@ -180,6 +170,5 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		creatorAnnotation:          options.Creator,
 		resourceCopyOptions:        *options.ResourceCopyOptions,
 		referrerTrackingPolicy:     options.ReferrerTrackingPolicy,
-		configuration:              options.Configuration,
 	}, nil
 }

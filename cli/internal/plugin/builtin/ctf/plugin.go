@@ -109,6 +109,6 @@ func (p *Plugin) createRepository(spec *ctfv1.Repository) (oci.ComponentVersionR
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifestCache),
 		oci.WithLayerCache(p.layerCache),
-		//oci.WithConfiguration(p.configuration), // TODO: Add this.
+		// oci.WithConfiguration(p.configuration), // TODO: Add this.
 	}...)
 }

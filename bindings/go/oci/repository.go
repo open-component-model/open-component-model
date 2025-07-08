@@ -73,9 +73,6 @@ type Repository struct {
 
 	// referrerTrackingPolicy defines how OCI referrers are used to track component versions.
 	referrerTrackingPolicy ReferrerTrackingPolicy
-
-	// configuration holds any configuration data passed to the repository
-	configuration []*runtime.Raw
 }
 
 // AddComponentVersion adds a new component version to the repository.
