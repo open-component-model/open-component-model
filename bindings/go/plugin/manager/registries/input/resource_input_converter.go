@@ -6,6 +6,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -18,13 +19,9 @@ type resourceInputPluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
-func (r *resourceInputPluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
+func (r *resourceInputPluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	request := &v1.GetIdentityRequest[runtime.Typed]{}
-	if resource.HasAccess() {
-		request.Typ = resource.Access
-	} else if resource.HasInput() {
-		request.Typ = resource.Input
-	}
+	request.Typ = resource.Access
 
 	result, err := r.externalPlugin.GetIdentity(ctx, request)
 	if err != nil {

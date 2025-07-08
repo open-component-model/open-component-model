@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/input/utf8/spec/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -53,7 +54,7 @@ type InputMethod struct{}
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
 	return nil, ErrUTF8StringsDoNotRequireCredentials
 }
 
@@ -78,7 +79,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 // GetSourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, source *descriptor.Source) (identity runtime.Identity, err error) {
 	return nil, ErrUTF8StringsDoNotRequireCredentials
 }
 

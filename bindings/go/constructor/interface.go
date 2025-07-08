@@ -175,10 +175,10 @@ type CredentialProvider interface {
 
 type ResourceConsumerIdentityProvider interface {
 	// GetResourceCredentialConsumerIdentity resolves the identity of the given [constructor.Resource] to use for credential resolution.
-	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error)
+	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error)
 }
 
 type SourceConsumerIdentityProvider interface {
 	// GetSourceCredentialConsumerIdentity resolves the identity of the given [constructor.Source] to use for credential resolution.
-	GetSourceCredentialConsumerIdentity(ctx context.Context, source *constructor.Source) (identity runtime.Identity, err error)
+	GetSourceCredentialConsumerIdentity(ctx context.Context, source *descriptor.Source) (identity runtime.Identity, err error)
 }
