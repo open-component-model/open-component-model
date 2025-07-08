@@ -83,11 +83,6 @@ func packDirToTar(path string, opt *v1.Dir) (_ io.Reader, err error) {
 		return nil, fmt.Errorf("failed to package directory contents as a tar archive: %w", err)
 	}
 
-	// Close the tar writer
-	if err := tw.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close tar writer: %w", err)
-	}
-
 	return bytes.NewReader(buf.Bytes()), nil
 }
 
@@ -101,7 +96,7 @@ func walkDirContents(currentDir string, baseDir string,
 	// Read directory contents.
 	dirEntries, err := fs.ReadDir(currentDir)
 	if err != nil {
-		return fmt.Errorf("failed to read directory entries: %w", err)
+		return fmt.Errorf("failed to read directory entries for dirictory %s: %w", currentDir, err)
 	}
 
 	// Iterate over directory entries.
@@ -109,7 +104,7 @@ func walkDirContents(currentDir string, baseDir string,
 		// Get FileInfo for the entry.
 		info, err := entry.Info()
 		if err != nil {
-			return fmt.Errorf("failed to get file information: %w", err)
+			return fmt.Errorf("failed to get information for file %s: %w", entry.Name(), err)
 		}
 
 		// Construct the relative path of the entry with respect to the base directory.
@@ -117,7 +112,7 @@ func walkDirContents(currentDir string, baseDir string,
 		// Check, if the entry should be included in the tar archive.
 		include, err := isPathIncluded(entryPath, opt.ExcludeFiles, opt.IncludeFiles)
 		if err != nil {
-			return fmt.Errorf("failed to check if an entry should be included in the tar archive: %w", err)
+			return fmt.Errorf("failed to check if entry %s should be included in the tar archive: %w", entryPath, err)
 		}
 		if !include {
 			continue
@@ -126,7 +121,7 @@ func walkDirContents(currentDir string, baseDir string,
 		// Create tar header.
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
-			return fmt.Errorf("failed to create tar header: %w", err)
+			return fmt.Errorf("failed to create tar header for file %s: %w", info.Name(), err)
 		}
 		// Set header name to the relative path of the entry with respect to the base directory,
 		// to preserve the subfolder structure in the tar archive.
@@ -143,10 +138,10 @@ func walkDirContents(currentDir string, baseDir string,
 			// Copy file content to the tar archive.
 			file, err := fs.OpenFile(entryPath, os.O_RDONLY, 0o644)
 			if err != nil {
-				return fmt.Errorf("failed to open file: %w", err)
+				return fmt.Errorf("failed to open file %s: %w", entryPath, err)
 			}
 			defer func() {
-				err = errors.Join(err, tw.Close())
+				err = errors.Join(err, file.Close())
 			}()
 
 			if _, err := io.Copy(tw, file); err != nil {
@@ -183,7 +178,7 @@ func walkDirContents(currentDir string, baseDir string,
 			return fmt.Errorf("symlinks not supported yet")
 
 		default:
-			return fmt.Errorf("unsupported file type %s in %s", info.Mode().String(), entryPath)
+			return fmt.Errorf("unsupported file type %s of %s", info.Mode().String(), entryPath)
 		}
 	}
 
