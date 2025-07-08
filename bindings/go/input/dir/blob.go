@@ -131,8 +131,9 @@ func walkDirContents(currentDir string, baseDir string,
 		// Set header name to the relative path of the entry with respect to the base directory.
 		header.Name = entryPath
 
-		if entry.Type().IsRegular() {
-			// If the entry is a file.
+		switch {
+		case entry.Type().IsRegular():
+			// The entry is a regular file.
 			// Write the header to the tar archive.
 			if err := tw.WriteHeader(header); err != nil {
 				return fmt.Errorf("failed to write tar header to tar archive: %w", err)
@@ -150,8 +151,9 @@ func walkDirContents(currentDir string, baseDir string,
 			if _, err := io.Copy(tw, file); err != nil {
 				return fmt.Errorf("failed to write file contents to tar archive: %w", err)
 			}
-		} else if entry.IsDir() {
-			// If the entry is a subdirectory.
+
+		case entry.IsDir():
+			// The entry is a subdirectory.
 			// Write the header to the tar archive.
 			if err := tw.WriteHeader(header); err != nil {
 				return fmt.Errorf("failed to write tar header to tar archive: %w", err)
@@ -161,8 +163,9 @@ func walkDirContents(currentDir string, baseDir string,
 			if err := walkDirContents(entryPath, baseDir, opt, fs, tw); err != nil {
 				return err
 			}
-		} else if header.Typeflag == tar.TypeSymlink {
-			// If the entry is a symlink.
+
+		case header.Typeflag == tar.TypeSymlink:
+			/*// The entry is a symlink.
 			if !opt.FollowSymlinks {
 				absPath := filepath.Join(baseDir, entryPath)
 				link, err := fs.Readlink(absPath)
@@ -175,9 +178,10 @@ func walkDirContents(currentDir string, baseDir string,
 					return fmt.Errorf("failed to write tar header to tar archive: %w", err)
 				}
 			} else {
-				return fmt.Errorf("following symlinks not supported yet")
-			}
-		} else {
+			}*/
+			return fmt.Errorf("following symlinks not supported yet")
+
+		default:
 			return fmt.Errorf("unsupported file type %s in %s", info.Mode().String(), entryPath)
 		}
 	}
