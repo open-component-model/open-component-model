@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -20,13 +21,13 @@ import (
 
 const Creator = "CTF Repository"
 
-func Register(registry *componentversionrepository.RepositoryRegistry, configs []*runtime.Raw) error {
+func Register(registry *componentversionrepository.RepositoryRegistry, logger *slog.Logger) error {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	return componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		scheme,
 		registry,
-		&Plugin{scheme: scheme, manifestCache: inmemory.New(), layerCache: inmemory.New(), configuration: configs},
+		&Plugin{scheme: scheme, manifestCache: inmemory.New(), layerCache: inmemory.New(), logger: logger},
 		&ctfv1.Repository{},
 	)
 }
@@ -36,7 +37,7 @@ type Plugin struct {
 	scheme        *runtime.Scheme
 	manifestCache cache.OCIDescriptorCache
 	layerCache    cache.OCIDescriptorCache
-	configuration []*runtime.Raw
+	logger        *slog.Logger
 }
 
 func (p *Plugin) GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, _ runtime.Typed) (runtime.Identity, error) {

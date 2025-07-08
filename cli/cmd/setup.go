@@ -59,7 +59,7 @@ func setupPluginManager(cmd *cobra.Command) error {
 		configs = append(configs, cfg.Configurations...)
 	}
 
-	if err := builtin.Register(pluginManager, configs); err != nil {
+	if err := builtin.Register(pluginManager, slog.Default()); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 

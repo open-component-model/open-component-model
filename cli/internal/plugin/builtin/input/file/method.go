@@ -2,6 +2,7 @@ package file
 
 import (
 	"fmt"
+	"log/slog"
 
 	"ocm.software/open-component-model/bindings/go/input/file"
 	filev1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
@@ -9,8 +10,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func Register(inputRegistry *input.RepositoryRegistry, configs []*runtime.Raw) error {
-	if err := RegisterFileInputV1(inputRegistry, configs); err != nil {
+func Register(inputRegistry *input.RepositoryRegistry, logger *slog.Logger) error {
+	if err := RegisterFileInputV1(inputRegistry, logger); err != nil {
 		return err
 	}
 	return nil

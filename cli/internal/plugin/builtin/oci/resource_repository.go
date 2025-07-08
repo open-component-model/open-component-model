@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"oras.land/oras-go/v2/registry"
 
@@ -19,6 +20,7 @@ type ResourceRepositoryPlugin struct {
 	scheme            *runtime.Scheme
 	manifests, layers cache.OCIDescriptorCache
 	configuration     []*runtime.Raw
+	logger            *slog.Logger
 }
 
 func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
