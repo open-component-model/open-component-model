@@ -19,5 +19,4 @@ matrix:
             - pre
     sources:
       - '**/*.md'
-      - '!docs/community/README.md'
     default_encoding: utf-8
