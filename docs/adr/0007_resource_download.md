@@ -110,12 +110,13 @@ transformers:
 ```
 
 This allows transformer registration via configuration, enabling portable setups and declarative ocm configuration structures.
+We can achieve this by registering all configurations by their `id` and referencing those identities in the CLI commands.
 
 At the same time, we are able to define a set of default transformers in the CLI that are added on top and can be documented.
 
 ### Using the `BlobTransformer` Infrastructure for OCM CLI
 
-The OCM CLI will leverage the `BlobTransformer` infrastructure to provide a consistent and user-friendly experience for downloading and transforming resources. 
+The OCM CLI will leverage the `BlobTransformer` interface to provide a consistent and user-friendly experience for downloading and transforming resources. 
 Users can specify the desired transformation directly in their CLI commands, allowing for seamless integration with existing workflows.
 The CLI will support any transformer that returns a `blob.ReadOnlyBlob` with the following cases:
 
