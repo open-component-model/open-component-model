@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
@@ -23,6 +24,7 @@ type ComponentVersionRepositoryPlugin struct {
 	scheme    *runtime.Scheme
 	manifests cache.OCIDescriptorCache
 	layers    cache.OCIDescriptorCache
+	logger    *slog.Logger
 }
 
 func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
@@ -114,12 +116,17 @@ func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Reposito
 		},
 		Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
 	})
-	repo, err := oci.NewRepository(
+
+	// TODO: Add using WithConfiguration
+	opts := []oci.RepositoryOption{
 		oci.WithResolver(urlResolver),
 		oci.WithScheme(p.scheme),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifests),
 		oci.WithLayerCache(p.layers),
-	)
+		// oci.WithLogger(p.logger),
+	}
+
+	repo, err := oci.NewRepository(opts...)
 	return repo, err
 }
