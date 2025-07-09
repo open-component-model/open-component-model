@@ -51,6 +51,7 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
+* [ocm add](ocm_add.md)	 - Add anything to OCM
 * [ocm completion](ocm_completion.md)	 - Generate the autocompletion script for the specified shell
 * [ocm generate](ocm_generate.md)	 - Generate documentation for the OCM CLI
 * [ocm get](ocm_get.md)	 - Get anything from OCM

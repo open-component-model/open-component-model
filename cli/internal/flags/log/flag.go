@@ -69,8 +69,8 @@ func RegisterLoggingFlags(flagset *pflag.FlagSet) {
 
 	enum.Var(flagset, LevelFlagName, []string{
 		LevelInfo,
-		LevelDebug,
 		LevelWarn,
+		LevelDebug,
 		LevelError,
 	}, `sets the logging level
    debug: Show all logs including detailed debugging information

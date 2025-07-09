@@ -301,7 +301,7 @@ _There is no way to configure multiple targets for a single component transfer._
   change this behavior and instead upload a resource to a particular target
   storage system during transfer, the user has to register so called
   [**uploadhandlers**](#upload-handlers) (for further details, see
-  [documentation](https://ocm.software/docs/cli-reference/help/ocm-uploadhandlers/)).
+  [documentation](https://ocm.software/docs/reference/ocm-cli/help/ocm-uploadhandlers/)).
   This can be done through the flag `--uploadhandler` or by specifying an
   uploader configuration in the config file.
 

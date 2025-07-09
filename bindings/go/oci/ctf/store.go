@@ -54,6 +54,12 @@ type Store struct {
 	archive ctf.CTF
 }
 
+// Ping for CTF return always true. This is because if it doesn't exist it will be created. If it does exist
+// it's all good. Which means it doesn't make any sense to check it.
+func (s *Store) Ping(ctx context.Context) error {
+	return nil
+}
+
 // StoreForReference returns a new Store instance for a specific repository within the CTF archive.
 func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
 	rawRef, err := s.Reference(reference)
@@ -73,8 +79,9 @@ func (s *Store) Reference(reference string) (fmt.Stringer, error) {
 }
 
 // ComponentVersionReference creates a reference string for a component version in the format "component-descriptors/component:version".
-func (s *Store) ComponentVersionReference(component, version string) string {
-	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, version)
+func (s *Store) ComponentVersionReference(ctx context.Context, component, version string) string {
+	tag := oci.LooseSemverToOCITag(ctx, version) // Remove prohibited characters.
+	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, tag)
 }
 
 // Repository implements the spec.Store interface for a CTF OCI Repository.
@@ -229,7 +236,7 @@ func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		if err := ref.ValidateReferenceAsTag(); err == nil {
 			meta = v1.ArtifactMetadata{
 				Repository: repo,
-				Tag:        reference,
+				Tag:        ref.Tag,
 				Digest:     desc.Digest.String(),
 				MediaType:  desc.MediaType,
 			}
@@ -269,7 +276,7 @@ func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		return fmt.Errorf("descriptor %s does not exist in the archive", desc.Digest)
 	}
 
-	slog.Info("adding artifact to index", "meta", meta)
+	slog.DebugContext(ctx, "adding artifact to index", "meta", meta)
 
 	addOrUpdateArtifactMetadataInIndex(idx, meta)
 
