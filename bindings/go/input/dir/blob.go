@@ -2,8 +2,6 @@ package dir
 
 import (
 	"archive/tar"
-	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -67,25 +65,38 @@ func packDirToTar(path string, opt *v1.Dir) (_ io.Reader, err error) {
 	}
 
 	// Create a new virtual FileSystem instance based on the provided directory path.
-	fs, err := filesystem.NewFS(baseDir, os.O_RDONLY)
+	fileSystem, err := filesystem.NewFS(baseDir, os.O_RDONLY)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create filesystem while trying to access %v: %w", path, err)
 	}
 
-	// Create a new tar writer.
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	defer func() {
-		err = errors.Join(err, tw.Close())
+	// Create a pipe for streaming the tar data
+	pr, pw := io.Pipe()
+
+	// Start a goroutine to create the tar and write the data to the pipe.
+	go func() {
+		defer func() {
+			_ = pw.Close()
+		}()
+
+		// Create tar writer
+		tw := tar.NewWriter(pw)
+		defer func() {
+			_ = tw.Close()
+		}()
+
+		// Walk recursively through directory contents and add it to the tar.
+		err = walkDirContents(subDir, baseDir, opt, fileSystem, tw)
+		if err != nil {
+			_ = pw.CloseWithError(err) // CloseWithError() always returns nil.
+		}
 	}()
 
-	// Walk recursively through directory contents and add it to the tar.
-	err = walkDirContents(subDir, baseDir, opt, fs, tw)
 	if err != nil {
-		return nil, fmt.Errorf("failed to package directory contents as a tar archive: %w", err)
+		return nil, fmt.Errorf("failed to package directory %q as a tar archive: %w", path, err)
 	}
 
-	return bytes.NewReader(buf.Bytes()), nil
+	return pr, nil
 }
 
 // walkDirContents does recursive packaging of the directory contents, while keeping the subfolder structure.
@@ -93,12 +104,12 @@ func packDirToTar(path string, opt *v1.Dir) (_ io.Reader, err error) {
 // creates tar headers for each file and subfolder, and writes the file contents to the tar archive.
 // For subdirectories it calls itself recursively to process the subfolder contents.
 func walkDirContents(currentDir string, baseDir string,
-	opt *v1.Dir, fs filesystem.FileSystem, tw *tar.Writer,
+	opt *v1.Dir, fileSystem filesystem.FileSystem, tw *tar.Writer,
 ) (err error) {
 	// Read directory contents.
-	dirEntries, err := fs.ReadDir(currentDir)
+	dirEntries, err := fileSystem.ReadDir(currentDir)
 	if err != nil {
-		return fmt.Errorf("failed to read directory entries for dirictory %s: %w", currentDir, err)
+		return fmt.Errorf("failed to read directory entries for directory %q: %w", currentDir, err)
 	}
 
 	// Iterate over directory entries.
@@ -106,7 +117,7 @@ func walkDirContents(currentDir string, baseDir string,
 		// Get FileInfo for the entry.
 		info, err := entry.Info()
 		if err != nil {
-			return fmt.Errorf("failed to get information for file %s: %w", entry.Name(), err)
+			return fmt.Errorf("failed to get information for file %q: %w", entry.Name(), err)
 		}
 
 		// Construct the relative path of the entry with respect to the base directory.
@@ -114,7 +125,7 @@ func walkDirContents(currentDir string, baseDir string,
 		// Check, if the entry should be included in the tar archive.
 		include, err := isPathIncluded(entryPath, opt.ExcludeFiles, opt.IncludeFiles)
 		if err != nil {
-			return fmt.Errorf("failed to check if entry %s should be included in the tar archive: %w", entryPath, err)
+			return fmt.Errorf("failed to check if entry %q should be included in the tar archive: %w", entryPath, err)
 		}
 		if !include {
 			continue
@@ -123,7 +134,7 @@ func walkDirContents(currentDir string, baseDir string,
 		// Create tar header.
 		header, err := reproducibleTarHeader(info, "")
 		if err != nil {
-			return fmt.Errorf("failed to create tar header for file %s: %w", info.Name(), err)
+			return fmt.Errorf("failed to create tar header for file %q: %w", info.Name(), err)
 		}
 		// Set header name to the relative path of the entry with respect to the base directory,
 		// to preserve the subfolder structure in the tar archive.
@@ -138,16 +149,16 @@ func walkDirContents(currentDir string, baseDir string,
 			}
 
 			// Copy file content to the tar archive.
-			file, err := fs.OpenFile(entryPath, os.O_RDONLY, 0o644)
+			file, err := fileSystem.OpenFile(entryPath, os.O_RDONLY, 0o644)
 			if err != nil {
-				return fmt.Errorf("failed to open file %s: %w", entryPath, err)
+				return fmt.Errorf("failed to open file %q: %w", entryPath, err)
 			}
-			defer func() {
-				err = errors.Join(err, file.Close())
-			}()
-
 			if _, err := io.Copy(tw, file); err != nil {
-				return fmt.Errorf("failed to write file contents to tar archive: %w", err)
+				_ = file.Close()
+				return fmt.Errorf("failed to write file %q to tar archive: %w", entryPath, err)
+			}
+			if err := file.Close(); err != nil {
+				return fmt.Errorf("unable to close file %q: %w", entryPath, err)
 			}
 
 		case entry.IsDir():
@@ -158,7 +169,7 @@ func walkDirContents(currentDir string, baseDir string,
 			}
 
 			// Process subdirectory contents.
-			if err := walkDirContents(entryPath, baseDir, opt, fs, tw); err != nil {
+			if err := walkDirContents(entryPath, baseDir, opt, fileSystem, tw); err != nil {
 				return err
 			}
 
@@ -166,9 +177,9 @@ func walkDirContents(currentDir string, baseDir string,
 			/*// The entry is a symlink.
 			if !opt.FollowSymlinks {
 				absPath := filepath.Join(baseDir, entryPath)
-				link, err := fs.Readlink(absPath)
+				link, err := fileSystem.Readlink(absPath)
 				if err != nil {
-					return fmt.Errorf("cannot read symlink %s: %w", absPath, err)
+					return fmt.Errorf("cannot read symlink %q: %w", absPath, err)
 				}
 				header.Linkname = link
 				// Write the header to the tar archive.
@@ -180,7 +191,7 @@ func walkDirContents(currentDir string, baseDir string,
 			return fmt.Errorf("symlinks not supported yet")
 
 		default:
-			return fmt.Errorf("unsupported file type %s of %s", info.Mode().String(), entryPath)
+			return fmt.Errorf("unsupported file type %q of file %q", info.Mode().String(), entryPath)
 		}
 	}
 
@@ -227,7 +238,7 @@ func isPathIncluded(path string, excludePatterns, includePatterns []string) (boo
 func reproducibleTarHeader(fi fs.FileInfo, link string) (*tar.Header, error) {
 	h, err := tar.FileInfoHeader(fi, link)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create tar header for file %s: %w", fi.Name(), err)
+		return nil, fmt.Errorf("failed to create tar header for file %q: %w", fi.Name(), err)
 	}
 
 	// Normalize header fields to ensure reproducibility.

@@ -266,11 +266,17 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 		PreserveDir: true,
 	}
 
-	// Get blob should fail. The error:
-	// "failed to add directory contents to tar: open <path>: no such file or directory".
+	// Create the blob.
 	dirBlob, err = dir.GetV1DirBlob(dirSpec)
+	// Expect no error here, because the pipe is not processed yet.
+	require.NoError(t, err)
+	require.NotNil(t, dirBlob)
+
+	// Try to read the data. Expect error propagation from the pipe packaging the tar.
+	// Getting the reader should fail. The error: "... non-existent-path: no such file or directory".
+	reader, err := dirBlob.ReadCloser()
 	assert.Error(t, err)
-	assert.Nil(t, dirBlob)
+	assert.Nil(t, reader)
 }
 
 // extractFileFromTar extracts a specific file from a tar archive and returns its content
