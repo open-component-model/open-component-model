@@ -316,6 +316,38 @@ func TestIdentitySubset(t *testing.T) {
 			},
 			false,
 		},
+		// test cases for identity matching for local blob resource layer
+		// selection for legacy component versions without resource version as
+		// part of the resource identity
+		{
+			"annotation without version",
+			args{
+				sub: runtime.Identity{
+					"name": "resource",
+				},
+				base: runtime.Identity{
+					"name":    "resource",
+					"version": "1.0.0",
+				},
+			},
+			true,
+		},
+		{
+			"annotation with version",
+			args{
+				sub: runtime.Identity{
+					"name":    "resource",
+					"version": "1.0.0",
+					"extraid": "variant-a",
+				},
+				base: runtime.Identity{
+					"name":    "resource",
+					"version": "1.0.0",
+					"extraid": "variant-a",
+				},
+			},
+			true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

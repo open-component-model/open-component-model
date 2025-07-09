@@ -45,6 +45,21 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			err:      assert.NoError,
 		},
 		{
+			name:      "single repository with prefix equal name",
+			component: "prefixA",
+			repos: []*resolverruntime.Resolver{
+				{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallbackWithPriority0"),
+					},
+					Prefix:   "prefixA",
+					Priority: 0,
+				},
+			},
+			expected: []runtime.Type{runtime.NewUnversionedType("fallbackWithPriority0")},
+			err:      assert.NoError,
+		},
+		{
 			name:      "multiple repositories with different priorities",
 			component: "test-component",
 			repos: []*resolverruntime.Resolver{

@@ -31,6 +31,10 @@ type FallbackRepository struct {
 	repositoryProvider repository.ComponentVersionRepositoryProvider
 	credentialProvider repository.CredentialProvider
 
+	// The resolvers slice is a list of resolvers sorted by priority (highest first).
+	// The order in this list determines the order in which repositories are
+	// tried during lookup operations.
+	// This list is immutable after creation.
 	resolvers []*resolverruntime.Resolver
 
 	// This cache is based on index. So, the index of the resolver in the
@@ -39,9 +43,11 @@ type FallbackRepository struct {
 	repositoriesForResolverCache   []repository.ComponentVersionRepository
 }
 
+// NewFallbackRepository creates a new FallbackRepository instance.
 func NewFallbackRepository(_ context.Context, repositoryProvider repository.ComponentVersionRepositoryProvider, credentialProvider repository.CredentialProvider, res ...*resolverruntime.Resolver) (*FallbackRepository, error) {
 	resolvers := make([]*resolverruntime.Resolver, len(res))
-	// Copy the resolvers to ensure immutability
+
+	// copy the resolvers to ensure immutability
 	for index, resolver := range res {
 		r := resolver.DeepCopy()
 		resolvers[index] = r
@@ -58,6 +64,8 @@ func NewFallbackRepository(_ context.Context, repositoryProvider repository.Comp
 	}, nil
 }
 
+// AddComponentVersion adds a new component version to the repository specified
+// by the resolver with the highest priority and matching component prefix.
 func (f *FallbackRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
 	repos := f.RepositoriesForComponentIterator(ctx, descriptor.Component.Name)
 	for repo, err := range repos {
@@ -69,6 +77,9 @@ func (f *FallbackRepository) AddComponentVersion(ctx context.Context, descriptor
 	return fmt.Errorf("no repository found for component %s to add version", descriptor.Component.Name)
 }
 
+// GetComponentVersion iterates through all resolvers with matching component prefix in
+// the order of their priority (higher priorities first) and attempts to
+// retrieve the component version from each repository.
 func (f *FallbackRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -88,6 +99,9 @@ func (f *FallbackRepository) GetComponentVersion(ctx context.Context, component,
 	return nil, fmt.Errorf("component version %s/%s not found in any repository", component, version)
 }
 
+// ListComponentVersions accumulates a deduplicated list of the versions of the
+// given component from all repositories specified by resolvers with a matching
+// component prefix in the order of their priority (higher priorities first).
 func (f *FallbackRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 
@@ -137,6 +151,8 @@ func (f *FallbackRepository) ListComponentVersions(ctx context.Context, componen
 	return versionList, nil
 }
 
+// AddLocalResource adds a local resource to the repository specified
+// by the resolver with the highest priority and matching component prefix.
 func (f *FallbackRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -148,6 +164,9 @@ func (f *FallbackRepository) AddLocalResource(ctx context.Context, component, ve
 	return nil, fmt.Errorf("no repository found for component %s to add local resource", component)
 }
 
+// GetLocalResource iterates through all resolvers with matching component prefix in
+// the order of their priority (higher priorities first) and attempts to
+// retrieve the local resource from each repository.
 func (f *FallbackRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -167,6 +186,8 @@ func (f *FallbackRepository) GetLocalResource(ctx context.Context, component, ve
 	return nil, nil, fmt.Errorf("local resource with identity %v in component version %s/%s not found in any repository", identity, component, version)
 }
 
+// AddLocalSource adds a local source to the repository specified
+// by the resolver with the highest priority and matching component prefix.
 func (f *FallbackRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -178,6 +199,9 @@ func (f *FallbackRepository) AddLocalSource(ctx context.Context, component, vers
 	return nil, fmt.Errorf("no repository found for component %s to add local resource", component)
 }
 
+// GetLocalSource iterates through all resolvers with matching component prefix in
+// the order of their priority (higher priorities first) and attempts to
+// retrieve the local source from each repository.
 func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {

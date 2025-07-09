@@ -38,7 +38,7 @@ type LocalBlob interface {
 //   - A LocalBlob representing the matching layer
 //   - An error if the layer cannot be found or fetched
 func SingleLayerLocalBlobFromManifestByIdentity(ctx context.Context, store oras.ReadOnlyTarget, manifest *ociImageSpecV1.Manifest, identity map[string]string, artifactKind annotations.ArtifactKind) (LocalBlob, error) {
-	// The IdentitySubset matcher is required in order to match with annotations
+	// The runtime.IdentitySubset matcher is required to match with annotations
 	// created by the old ocm cli where the version was only included in the
 	// identity if the identity was not unique without the version.
 	identityMatcher := runtime.IdentityMatchingChainFn(runtime.IdentitySubset)
