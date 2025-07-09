@@ -14,7 +14,6 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -462,7 +461,7 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 }
 
 // UploadResource uploads a [*descriptor.Resource] to the repository.
-func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed, res *descriptor.Resource, b blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {
+func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Resource, b blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {
 	done := log.Operation(ctx, "upload resource", log.IdentityLogAttr("resource", res.ToIdentity()))
 	defer func() {
 		done(err)
@@ -470,7 +469,7 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 
 	res = res.DeepCopy()
 
-	desc, access, err := repo.uploadOCIImage(ctx, res.Access, target, b)
+	desc, access, err := repo.uploadOCIImage(ctx, res.Access, b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
@@ -487,7 +486,7 @@ func (repo *Repository) UploadResource(ctx context.Context, target runtime.Typed
 }
 
 // UploadSource uploads a [*descriptor.Source] to the repository.
-func (repo *Repository) UploadSource(ctx context.Context, target runtime.Typed, src *descriptor.Source, b blob.ReadOnlyBlob) (newSrc *descriptor.Source, err error) {
+func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source, b blob.ReadOnlyBlob) (newSrc *descriptor.Source, err error) {
 	done := log.Operation(ctx, "upload source", log.IdentityLogAttr("source", src.ToIdentity()))
 	defer func() {
 		done(err)
@@ -495,7 +494,7 @@ func (repo *Repository) UploadSource(ctx context.Context, target runtime.Typed, 
 
 	src = src.DeepCopy()
 
-	_, access, err := repo.uploadOCIImage(ctx, src.Access, target, b)
+	_, access, err := repo.uploadOCIImage(ctx, src.Access, b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload source as OCI image: %w", err)
 	}
@@ -504,12 +503,7 @@ func (repo *Repository) UploadSource(ctx context.Context, target runtime.Typed, 
 	return src, nil
 }
 
-func (repo *Repository) uploadOCIImage(ctx context.Context, oldAccess, newAccess runtime.Typed, b blob.ReadOnlyBlob) (ociImageSpecV1.Descriptor, *accessv1.OCIImage, error) {
-	var oldTyped accessv1.OCIImage
-	if err := repo.scheme.Convert(oldAccess, &oldTyped); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource oldAccess to OCI image: %w", err)
-	}
-
+func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob) (ociImageSpecV1.Descriptor, *accessv1.OCIImage, error) {
 	var access accessv1.OCIImage
 	if err := repo.scheme.Convert(newAccess, &access); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
@@ -528,26 +522,11 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, oldAccess, newAccess
 		err = errors.Join(err, ociStore.Close())
 	}()
 
-	// Handle non-absolute reference names for OCI Layouts
-	// This is a workaround for the fact that some tools like ORAS CLI
-	// can generate OCI Layouts that contain relative reference names, aka only tags
-	// and not absolute references.
-	//
-	// An example would be ghcr.io/test:v1.0.0
-	// This could get stored in an OCI Layout as
-	// v1.0.0 only, assuming that it is the only repository in the OCI Layout.
-	srcRef := oldTyped.ImageReference
-	if _, err := ociStore.Resolve(ctx, srcRef); err != nil {
-		parsedSrcRef, pErr := registry.ParseReference(srcRef)
-		if pErr != nil {
-			return ociImageSpecV1.Descriptor{}, nil, errors.Join(err, pErr)
-		}
-		if _, rErr := ociStore.Resolve(ctx, parsedSrcRef.Reference); rErr != nil {
-			return ociImageSpecV1.Descriptor{}, nil, errors.Join(err, rErr)
-		}
-		slog.Info("resolved non-absolute reference name from oci layout", "oldAccess", srcRef, "newAccess", parsedSrcRef.Reference)
-		srcRef = parsedSrcRef.Reference
+	mainArtifacts := ociStore.MainArtifacts(ctx)
+	if len(mainArtifacts) != 1 {
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
 	}
+	main := mainArtifacts[0]
 
 	ref, err := looseref.ParseReference(access.ImageReference)
 	if err != nil {
@@ -557,14 +536,15 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, oldAccess, newAccess
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("can only copy %q if it is tagged: %w", access.ImageReference, err)
 	}
 
-	tag := ref.Tag
-
-	desc, err := oras.Copy(ctx, ociStore, srcRef, store, tag, repo.resourceCopyOptions)
-	if err != nil {
+	if err := oras.CopyGraph(ctx, ociStore, store, main, repo.resourceCopyOptions.CopyGraphOptions); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
 
-	return desc, &access, nil
+	if err := store.Tag(ctx, main, ref.Tag); err != nil {
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to tag main artifact with tag %q: %w", ref.Tag, err)
+	}
+
+	return main, &access, nil
 }
 
 // DownloadResource downloads a [*descriptor.Resource] from the repository.
