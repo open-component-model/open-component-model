@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
@@ -17,7 +16,7 @@ type resourcePluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
-func (r *resourcePluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (r *resourcePluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
 	request := &v1.GetIdentityRequest[runtime.Typed]{
 		Typ: resource.Access,
 	}
