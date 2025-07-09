@@ -8,8 +8,12 @@
 /.github/CODEOWNERS     @open-component-model/admins
 
 # Owners for specific directories
-#/docs/  @<org>/<team>
-#/src/   @<org>/<team>
+
+# The Technical Steering Committee (TSC) is responsible for the overall direction of the Open Component Model.
+# As such all technical decisions, including those related to the codebase, are overseen by the TSC.
+# Additionally, all documentation on the steering committee and architectural decisions is managed by it.
+/docs/steering  @open-component-model/tsc
+/docs/adr       @open-component-model/tsc
 
 # Owners for specific file types
 #*.md    @<org>/<team>
