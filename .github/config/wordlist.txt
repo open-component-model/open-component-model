@@ -393,3 +393,16 @@ kunstlaan
 stichting
 blobtransformer
 architected
+gobuildinfo
+gobuildinfojson
+buildDate
+gitCommit
+gitTreeState
+legacyjson
+offboarding
+onboarded
+ocms
+skarlso
+pcc
+apeirora
+ospo

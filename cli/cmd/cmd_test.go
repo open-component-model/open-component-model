@@ -428,3 +428,26 @@ resources:
 		})
 	})
 }
+
+func Test_Version(t *testing.T) {
+	r := require.New(t)
+	logs := test.NewJSONLogReader()
+	_, err := test.OCM(t, test.WithArgs("version"), test.WithOutput(logs))
+	r.NoError(err, "failed to run version command")
+
+	entries, err := logs.List()
+	r.NoError(err, "failed to list log entries")
+
+	r.NotEmpty(entries, "expected log entries for version command")
+
+	found := false
+	for _, entry := range entries {
+		ver, ok := entry.Extras["gitVersion"]
+		if ok {
+			found = true
+			r.Equal(ver, "(devel)")
+			break
+		}
+	}
+	r.True(found, "expected to find gitVersion in log entries")
+}

@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/generate"
 	"ocm.software/open-component-model/cli/cmd/get"
+	"ocm.software/open-component-model/cli/cmd/version"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )
@@ -44,6 +45,7 @@ func New() *cobra.Command {
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())
 	cmd.AddCommand(add.New())
+	cmd.AddCommand(version.New())
 	return cmd
 }
 

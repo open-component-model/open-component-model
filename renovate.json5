@@ -5,7 +5,8 @@
     'config:best-practices',
     'security:openssf-scorecard',
     'helpers:pinGitHubActionDigests',
-    ':rebaseStalePrs'
+    ':rebaseStalePrs',
+    ':gitSignOff'
   ],
   'git-submodules': {
     enabled: true
