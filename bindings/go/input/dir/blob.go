@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
@@ -119,7 +121,7 @@ func walkDirContents(currentDir string, baseDir string,
 		}
 
 		// Create tar header.
-		header, err := tar.FileInfoHeader(info, "")
+		header, err := reproducibleTarHeader(info, "")
 		if err != nil {
 			return fmt.Errorf("failed to create tar header for file %s: %w", info.Name(), err)
 		}
@@ -218,4 +220,32 @@ func isPathIncluded(path string, excludePatterns, includePatterns []string) (boo
 
 	// Finally return false if no include pattern matched.
 	return false, nil
+}
+
+// reproducibleTarHeader creates a tar header with certain fields normalized.
+// The function relies on tar.FileInfoHeader() for header creation and keeps the other fields intact.
+func reproducibleTarHeader(fi fs.FileInfo, link string) (*tar.Header, error) {
+	h, err := tar.FileInfoHeader(fi, link)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tar header for file %s: %w", fi.Name(), err)
+	}
+
+	// Normalize header fields to ensure reproducibility.
+	timestamp := time.Unix(0, 0).UTC()
+	h.Mode = int64(fs.ModePerm) // Full permissions for everyone.
+	h.Uid = 0                   // Root user.
+	h.Gid = 0                   // Root group.
+	h.Uname = "root"
+	h.Gname = "root"
+	h.ModTime = timestamp
+	h.AccessTime = timestamp
+	h.ChangeTime = timestamp
+
+	// Clear system-specific fields
+	h.Xattrs = nil
+	h.PAXRecords = nil
+	h.Devmajor = 0
+	h.Devminor = 0
+
+	return h, nil
 }
