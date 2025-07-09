@@ -25,7 +25,28 @@ const (
 	Realm = "componentversionrepository/fallback"
 )
 
+type ErrNotFound struct {
+	msg string
+	err error
+}
+
+func (e *ErrNotFound) Error() string {
+	return e.msg
+}
+
+func (e *ErrNotFound) Unwrap() error {
+	return e.err
+}
+
+func NewErrNotFound(msg string, err error) *ErrNotFound {
+	return &ErrNotFound{
+		msg: msg,
+		err: err,
+	}
+}
+
 // ComponentVersionRepository implements fallback behavior through repositories.
+// Deprecated: This is only implemented for backwards compatibility.
 type ComponentVersionRepository struct {
 	provider           repository.ComponentVersionRepositoryProvider
 	credentialProvider repository.CredentialProvider
@@ -45,9 +66,10 @@ type repositoryWithResolverRules struct {
 	repository repository.ComponentVersionRepository
 }
 
-// New creates a new ComponentVersionRepository with the given repositories and provider.
+// New creates a new ComponentVersionRepository with the given repositories and repositoryProvider.
 // The highest priority repository with matching prefix will be used to perform
 // add operations (add operation will not fallback).
+// Deprecated: This is only implemented for backwards compatibility.
 func New(_ context.Context, repositories []*resolverruntime.Resolver, provider repository.ComponentVersionRepositoryProvider, credentialProvider repository.CredentialProvider) (*ComponentVersionRepository, error) {
 	fallbackRepo := &ComponentVersionRepository{
 		provider:           provider,
@@ -67,7 +89,7 @@ func executeWithoutFallback[T any](ctx context.Context, fallbackRepo *ComponentV
 	defer fallbackRepo.fallbackRepositoriesMu.RUnlock()
 
 	for _, fallback := range fallbackRepo.fallbackRepositories {
-		if fallback.resolver.Prefix != "" && strings.HasPrefix(component, fallback.resolver.Prefix) {
+		if fallback.resolver.Prefix == "" || strings.HasPrefix(component, fallback.resolver.Prefix) {
 			repoWithResolverRules = fallback
 			break
 		}
@@ -115,18 +137,13 @@ func executeWithFallback[T any](ctx context.Context, fallbackRepo *ComponentVers
 				}
 			}
 
-			var err error
-			repo := fallback.repository
-			if repo == nil {
-				repo, err = fallbackRepo.getRepositoryForSpecification(ctx, fallback.resolver.Repository)
-				if err != nil {
-					return false, zero, fmt.Errorf("getting repository for specification %q failed: %w", fallback.resolver.Repository, err)
-				}
-				fallback.repository = repo
+			repo, err := fallbackRepo.getOrCreateRepository(ctx, fallback)
+			if err != nil {
+				return false, zero, fmt.Errorf("getting repository for specification %q failed: %w", fallback.resolver.Repository, err)
 			}
 
-			result, err := operation(ctx, fallback.repository)
-			if err != nil && !errors.Is(err, errdef.ErrNotFound) {
+			result, err := operation(ctx, repo)
+			if err != nil && !errors.As(err, new(*ErrNotFound)) {
 				return false, zero, err
 			}
 			if err == nil {
@@ -140,6 +157,23 @@ func executeWithFallback[T any](ctx context.Context, fallbackRepo *ComponentVers
 		}
 	}
 	return zero, fmt.Errorf("component %q not found in repositories: %w", component, errdef.ErrNotFound)
+}
+
+func (r *ComponentVersionRepository) getOrCreateRepository(ctx context.Context, fallback *repositoryWithResolverRules) (repository.ComponentVersionRepository, error) {
+	fallback.mu.Lock()
+	defer fallback.mu.Unlock()
+
+	if fallback.repository != nil {
+		return fallback.repository, nil
+	}
+
+	repo, err := r.getRepositoryForSpecification(ctx, fallback.resolver.Repository)
+	if err != nil {
+		return nil, fmt.Errorf("getting repository for specification %q failed: %w", fallback.resolver.Repository, err)
+	}
+	fallback.repository = repo
+
+	return repo, nil
 }
 
 func (r *ComponentVersionRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
@@ -158,6 +192,10 @@ func (r *ComponentVersionRepository) ListComponentVersions(ctx context.Context, 
 	accumulatedVersions := make(map[string]struct{})
 
 	errGroup.SetLimit(goruntime.NumCPU())
+
+	r.fallbackRepositoriesMu.RLock()
+	defer r.fallbackRepositoriesMu.RUnlock()
+
 	for _, fallback := range r.fallbackRepositories {
 		errGroup.Go(func() error {
 			select {

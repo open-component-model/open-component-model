@@ -13,7 +13,9 @@ import (
 	"strings"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"ocm.software/open-component-model/bindings/go/componentversionrepository/fallback"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -164,6 +166,9 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	}
 
 	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return desc, fallback.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
+	}
 	return desc, err
 }
 
@@ -344,6 +349,9 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	var b LocalBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindResource); err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return nil, nil, fallback.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
+		}
 		return nil, nil, err
 	}
 	return b, artifact.(*descriptor.Resource), nil
@@ -362,6 +370,9 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 	var b LocalBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindSource); err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return nil, nil, fallback.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
+		}
 		return nil, nil, err
 	}
 	return b, artifact.(*descriptor.Source), nil

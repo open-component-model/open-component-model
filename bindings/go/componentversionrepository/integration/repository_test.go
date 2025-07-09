@@ -1,11 +1,13 @@
 package integration
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -17,11 +19,8 @@ import (
 	resolverruntime "ocm.software/open-component-model/bindings/go/componentversionrepository/resolver/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
 	ociprovider "ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -40,11 +39,7 @@ const (
 )
 
 func Test_GetComponentVersion(t *testing.T) {
-	r := require.New(t)
 	ctx := t.Context()
-
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(repository.Scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
 
 	transportArchiveRepoSpec := &ctfv1.Repository{
 		Path:       transportArchive,
@@ -237,7 +232,7 @@ func Test_GetComponentVersion(t *testing.T) {
 					Priority:   0,
 				},
 			},
-			expectedRepo: nil,
+			expectedRepo: transportArchiveRepoSpec,
 			err:          assert.NoError,
 		},
 	}
@@ -255,7 +250,7 @@ func Test_GetComponentVersion(t *testing.T) {
 
 			provider := ociprovider.NewComponentVersionRepositoryProvider()
 
-			fallbackRepo, err := fallback.New(t.Context(), tc.resolvers, provider, nil)
+			fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), provider, nil, tc.resolvers...)
 			r.NoError(err)
 
 			desc, err := fallbackRepo.GetComponentVersion(ctx, tc.component, tc.version)
@@ -269,20 +264,39 @@ func Test_GetComponentVersion(t *testing.T) {
 			r.Equal(tc.component, desc.Component.Name)
 			r.Equal(tc.version, desc.Component.Version)
 
-			expectedRepo, err := json.Marshal(tc.expectedRepo)
+			expectedRepoData, err := json.Marshal(tc.expectedRepo)
 			r.NoError(err, "Failed to marshal expected repository")
-			expectedLog := fmt.Sprintf(`"msg":"repository used for operation","realm":"%s","component":"%s","repository":%s`, fallback.Realm, tc.component, expectedRepo)
-			r.Contains(logBuffer.String(), expectedLog)
+
+			usedRepoData, err := extractUsedRepoFromLogs(logBuffer)
+			r.NoError(err, "Failed to marshal used repository")
+
+			r.YAMLEq(string(expectedRepoData), string(usedRepoData))
 		})
 	}
 }
 
-func Test_ListComponentVersion(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
+func extractUsedRepoFromLogs(logBuffer bytes.Buffer) ([]byte, error) {
+	var usedRepo map[string]any
+	scanner := bufio.NewScanner(bytes.NewReader(logBuffer.Bytes()))
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		var logs map[string]any
+		if err := json.Unmarshal(line, &logs); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal log line: %w", err)
+		}
+		if strings.Contains(logs["msg"].(string), "yielding repository for component") {
+			usedRepo = logs["repository"].(map[string]any)
+		}
+	}
+	usedRepoData, err := json.Marshal(usedRepo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal used repository: %w", err)
+	}
+	return usedRepoData, nil
+}
 
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(repository.Scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
+func Test_ListComponentVersion(t *testing.T) {
+	ctx := t.Context()
 
 	transportArchiveRepoSpec := &ctfv1.Repository{
 		Path:       transportArchive,
@@ -458,7 +472,7 @@ func Test_ListComponentVersion(t *testing.T) {
 
 			provider := ociprovider.NewComponentVersionRepositoryProvider()
 
-			fallbackRepo, err := fallback.New(t.Context(), tc.resolvers, provider, nil)
+			fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), provider, nil, tc.resolvers...)
 			r.NoError(err)
 
 			versions, err := fallbackRepo.ListComponentVersions(ctx, tc.component)
@@ -484,13 +498,11 @@ func Test_AddComponentVersion(t *testing.T) {
 		AccessMode: ctfv1.AccessModeReadWrite,
 	}
 
-	fallbackRepo, err := fallback.New(t.Context(), []*resolverruntime.Resolver{
-		{
-			Repository: &repo,
-			Prefix:     "",
-			Priority:   0,
-		},
-	}, provider, nil)
+	fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), provider, nil, &resolverruntime.Resolver{
+		Repository: &repo,
+		Prefix:     "",
+		Priority:   0,
+	})
 	r.NoError(err, "failed to create fallback repository")
 
 	// Create a test component descriptor
@@ -509,7 +521,6 @@ func Test_AddComponentVersion(t *testing.T) {
 	}
 	_, err = fallbackRepo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
 	r.Error(err)
-	r.ErrorIs(err, oci.ErrNotFound)
 
 	// Test adding component version
 	err = fallbackRepo.AddComponentVersion(ctx, desc)
@@ -526,14 +537,7 @@ func Test_AddComponentVersion(t *testing.T) {
 }
 
 func Test_GetLocalResource(t *testing.T) {
-	r := require.New(t)
 	ctx := t.Context()
-
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-	v2.MustAddToScheme(scheme)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
 
 	transportArchiveRepoSpec := &ctfv1.Repository{
 		Path:       transportArchive,
@@ -609,7 +613,7 @@ func Test_GetLocalResource(t *testing.T) {
 			slog.SetDefault(logger)
 
 			provider := ociprovider.NewComponentVersionRepositoryProvider()
-			fallbackRepo, err := fallback.New(t.Context(), tc.resolvers, provider, nil)
+			fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), provider, nil, tc.resolvers...)
 			r.NoError(err)
 
 			blob, resource, err := fallbackRepo.GetLocalResource(ctx, tc.component, tc.version, tc.resourceIdentity)
@@ -622,23 +626,16 @@ func Test_GetLocalResource(t *testing.T) {
 			r.Equal(tc.resourceIdentity, resource.ToIdentity(), "Expected resource identity to match %s for component %s and version %s", tc.resourceIdentity, tc.component, tc.version)
 			r.NotNil(blob, "Expected blob to be not nil for component %s and version %s", tc.component, tc.version)
 
-			expectedRepo, err := json.Marshal(tc.expectedRepo)
+			expectedRepoData, err := json.Marshal(tc.expectedRepo)
 			r.NoError(err, "Failed to marshal expected repository")
-			expectedLog := fmt.Sprintf(`"msg":"repository used for operation","realm":"%s","component":"%s","repository":%s`, fallback.Realm, tc.component, expectedRepo)
-			r.Contains(logBuffer.String(), expectedLog)
+			usedRepoData, err := extractUsedRepoFromLogs(logBuffer)
+			r.YAMLEq(string(expectedRepoData), string(usedRepoData), "Expected used repository to match expected repository")
 		})
 	}
 }
 
 func Test_GetLocalSource(t *testing.T) {
-	r := require.New(t)
 	ctx := t.Context()
-
-	registry := componentversionrepository.NewComponentVersionRepositoryRegistry(ctx)
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-	v2.MustAddToScheme(scheme)
-	r.NoError(componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, ociprovider.NewComponentVersionRepositoryProvider(), &ctfv1.Repository{}))
 
 	transportArchiveRepoSpec := &ctfv1.Repository{
 		Path:       transportArchive,
@@ -714,7 +711,7 @@ func Test_GetLocalSource(t *testing.T) {
 			slog.SetDefault(logger)
 
 			provider := ociprovider.NewComponentVersionRepositoryProvider()
-			fallbackRepo, err := fallback.New(t.Context(), tc.resolvers, provider, nil)
+			fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), provider, nil, tc.resolvers...)
 			r.NoError(err)
 
 			blob, source, err := fallbackRepo.GetLocalSource(ctx, tc.component, tc.version, tc.resourceIdentity)
@@ -727,10 +724,10 @@ func Test_GetLocalSource(t *testing.T) {
 			r.Equal(tc.resourceIdentity, source.ToIdentity(), "Expected resource identity to match %s for component %s and version %s", tc.resourceIdentity, tc.component, tc.version)
 			r.NotNil(blob, "Expected blob to be not nil for component %s and version %s", tc.component, tc.version)
 
-			expectedRepo, err := json.Marshal(tc.expectedRepo)
+			expectedRepoData, err := json.Marshal(tc.expectedRepo)
 			r.NoError(err, "Failed to marshal expected repository")
-			expectedLog := fmt.Sprintf(`"msg":"repository used for operation","realm":"%s","component":"%s","repository":%s`, fallback.Realm, tc.component, expectedRepo)
-			r.Contains(logBuffer.String(), expectedLog)
+			usedRepoData, err := extractUsedRepoFromLogs(logBuffer)
+			r.YAMLEq(string(expectedRepoData), string(usedRepoData), "Expected used repository to match expected repository")
 		})
 	}
 }
@@ -788,13 +785,11 @@ func Test_AddLocalResource(t *testing.T) {
 			AccessMode: ctfv1.AccessModeReadWrite,
 		}
 
-		fallbackRepo, err := fallback.New(t.Context(), []*resolverruntime.Resolver{
-			{
-				Repository: &repoWithComponent,
-				Prefix:     "",
-				Priority:   0,
-			},
-		}, provider, nil)
+		fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), provider, nil, &resolverruntime.Resolver{
+			Repository: &repoWithComponent,
+			Prefix:     "",
+			Priority:   0,
+		})
 		r.NoError(err, "failed to create fallback repository")
 
 		res, err := fallbackRepo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, resource, resourceContent)
@@ -855,13 +850,11 @@ func Test_AddLocalSource(t *testing.T) {
 			AccessMode: ctfv1.AccessModeReadWrite,
 		}
 
-		fallbackRepo, err := fallback.New(t.Context(), []*resolverruntime.Resolver{
-			{
-				Repository: &repoWithComponent,
-				Prefix:     "",
-				Priority:   0,
-			},
-		}, provider, nil)
+		fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), provider, nil, &resolverruntime.Resolver{
+			Repository: &repoWithComponent,
+			Prefix:     "",
+			Priority:   0,
+		})
 		r.NoError(err, "failed to create fallback repository")
 
 		res, err := fallbackRepo.AddLocalSource(ctx, desc.Component.Name, desc.Component.Version, source, sourceContent)

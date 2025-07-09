@@ -2,6 +2,7 @@ package fallback
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -11,7 +12,6 @@ import (
 	resolverruntime "ocm.software/open-component-model/bindings/go/componentversionrepository/resolver/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"oras.land/oras-go/v2/errdef"
 )
 
 func Test_AddRepositories(t *testing.T) {
@@ -171,7 +171,7 @@ func Test_ExecuteWithFallback(t *testing.T) {
 		if typ == "fallback1" {
 			return "success", nil
 		}
-		return "failure", errdef.ErrNotFound
+		return "failure", NewErrNotFound("not found", errors.New("not found"))
 	})
 	r.NoError(err, "operation with fallback should succeed")
 	r.Equal([]string{"fallback2", "fallback1"}, usedFallbacks, "used fallbacks do not match expected order")

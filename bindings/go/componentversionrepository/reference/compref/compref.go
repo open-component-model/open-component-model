@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode"
 
-	resolverv1 "ocm.software/open-component-model/bindings/go/component
+	resolverv1 "ocm.software/open-component-model/bindings/go/componentversionrepository/resolver/config/spec/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -468,7 +468,7 @@ func getFallbackRepositorySpecs(opts *ParseOptions, component string) ([]runtime
 	actual := slices.Clone(opts.FallbackResolvers)
 
 	slices.SortStableFunc(actual, func(a, b *resolverv1.Resolver) int {
-		return cmp.Compare(b.Priority, a.Priority)
+		return cmp.Compare(*b.Priority, *a.Priority)
 	})
 
 	// Create fallback repositories from resolvers
