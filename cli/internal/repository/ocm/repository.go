@@ -11,10 +11,10 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 
+	"ocm.software/open-component-model/bindings/go/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )

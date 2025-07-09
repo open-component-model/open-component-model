@@ -16,61 +16,96 @@ import (
 )
 
 func TestSingleLayerLocalBlobFromManifestByIdentity(t *testing.T) {
-	ctx := context.Background()
-	store := memory.New()
+	ctx := t.Context()
 
-	// Create a test manifest with a single layer
-	layerContent := []byte("test layer content")
-	layerDigest := digest.FromBytes(layerContent)
-	manifest := &ociImageSpecV1.Manifest{
-		Layers: []ociImageSpecV1.Descriptor{
-			{
-				MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
-				Digest:    layerDigest,
-				Size:      int64(len(layerContent)),
-				Annotations: map[string]string{
-					annotations.ArtifactAnnotationKey: `[{"kind": "resource", "identity": {"test": "value"}}]`,
-				},
+	cases := []struct {
+		name       string
+		annotation map[string]string
+		identity   map[string]string
+		err        assert.ErrorAssertionFunc
+	}{
+		{
+			name: "standard identity annotation",
+			annotation: map[string]string{
+				annotations.ArtifactAnnotationKey: `[{"kind": "resource", "identity": {"test": "value"}}]`,
 			},
+			identity: map[string]string{
+				"test": "value",
+			},
+			err: assert.NoError,
+		},
+		{
+			name: "non existing identity",
+			annotation: map[string]string{
+				annotations.ArtifactAnnotationKey: `[{"kind": "resource", "identity": {"test": "value"}}]`,
+			},
+			identity: map[string]string{
+				"nonexistent": "value",
+			},
+			err: assert.Error,
+		},
+		{
+			name: "legacy identity without version",
+			annotation: map[string]string{
+				annotations.ArtifactAnnotationKey: `[{"kind": "resource", "identity": {"name": "value"}}]`,
+			},
+			identity: map[string]string{
+				"name":    "value",
+				"version": "1.0.0", // expect to match even with version missing in annotation
+			},
+			err: assert.NoError,
 		},
 	}
 
-	// Store the layer content
-	err := store.Push(ctx, manifest.Layers[0], bytes.NewReader(layerContent))
-	require.NoError(t, err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := memory.New()
+			// Create a test manifest with a single layer
+			layerContent := []byte("test layer content %d")
+			layerDigest := digest.FromBytes(layerContent)
+			manifest := &ociImageSpecV1.Manifest{
+				Layers: []ociImageSpecV1.Descriptor{
+					{
+						MediaType:   "application/vnd.oci.image.layer.v1.tar+gzip",
+						Digest:      layerDigest,
+						Size:        int64(len(layerContent)),
+						Annotations: tc.annotation,
+					},
+				},
+			}
 
-	// Store the manifest
-	manifestBytes, err := json.Marshal(manifest)
-	require.NoError(t, err)
-	manifestDigest := digest.FromBytes(manifestBytes)
-	manifestDesc := ociImageSpecV1.Descriptor{
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-		Digest:    manifestDigest,
-		Size:      int64(len(manifestBytes)),
-	}
-	err = store.Push(ctx, manifestDesc, bytes.NewReader(manifestBytes))
-	require.NoError(t, err)
+			// Store the layer content
+			err := store.Push(ctx, manifest.Layers[0], bytes.NewReader(layerContent))
+			require.NoError(t, err)
 
-	// Test successful case
-	identity := map[string]string{
-		"test": "value",
-	}
-	blob, err := SingleLayerLocalBlobFromManifestByIdentity(ctx, store, manifest, identity, annotations.ArtifactKindResource)
-	require.NoError(t, err)
-	assert.NotNil(t, blob)
-	digest, _ := blob.Digest()
-	assert.Equal(t, layerDigest.String(), digest)
-	size := blob.Size()
-	assert.Equal(t, int64(len(layerContent)), size)
-	mediaType, _ := blob.MediaType()
-	assert.Equal(t, "application/vnd.oci.image.layer.v1.tar+gzip", mediaType)
+			// Store the manifest
+			manifestBytes, err := json.Marshal(manifest)
+			require.NoError(t, err)
+			manifestDigest := digest.FromBytes(manifestBytes)
+			manifestDesc := ociImageSpecV1.Descriptor{
+				MediaType: ociImageSpecV1.MediaTypeImageManifest,
+				Digest:    manifestDigest,
+				Size:      int64(len(manifestBytes)),
+			}
+			err = store.Push(ctx, manifestDesc, bytes.NewReader(manifestBytes))
+			require.NoError(t, err)
 
-	// Test case where no matching layer is found
-	identity = map[string]string{
-		"nonexistent": "value",
+			blob, err := SingleLayerLocalBlobFromManifestByIdentity(ctx, store, manifest, tc.identity, annotations.ArtifactKindResource)
+			if !tc.err(t, err, "SingleLayerLocalBlobFromManifestByIdentity() error should match expectation") {
+				return
+			}
+			if err != nil {
+				return
+			}
+			assert.NotNil(t, blob)
+			digest, _ := blob.Digest()
+			assert.Equal(t, layerDigest.String(), digest)
+			size := blob.Size()
+			assert.Equal(t, int64(len(layerContent)), size)
+			mediaType, _ := blob.MediaType()
+			assert.Equal(t, "application/vnd.oci.image.layer.v1.tar+gzip", mediaType)
+		})
 	}
-	_, err = SingleLayerLocalBlobFromManifestByIdentity(ctx, store, manifest, identity, annotations.ArtifactKindResource)
-	assert.Error(t, err)
 }
 
 func TestSingleLayerManifestBlobFromIndex(t *testing.T) {

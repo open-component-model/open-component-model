@@ -14,7 +14,9 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
+	"ocm.software/open-component-model/bindings/go/componentversionrepository/fallback"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -175,6 +177,9 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	}
 
 	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return desc, fallback.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
+	}
 	return desc, err
 }
 
@@ -333,7 +338,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 }
 
 // GetLocalResource retrieves a local resource from the repository.
-func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Resource, error) {
+func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
 	ctx = slogcontext.With(ctx, repo.logger)
 	var err error
 	done := log.Operation(ctx, "get local resource",
@@ -347,12 +352,15 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	var b LocalBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindResource); err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return nil, nil, fallback.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
+		}
 		return nil, nil, err
 	}
 	return b, artifact.(*descriptor.Resource), nil
 }
 
-func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Source, error) {
+func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	ctx = slogcontext.With(ctx, repo.logger)
 	var err error
 	done := log.Operation(ctx, "get local source",
@@ -366,6 +374,9 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 	var b LocalBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindSource); err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return nil, nil, fallback.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
+		}
 		return nil, nil, err
 	}
 	return b, artifact.(*descriptor.Source), nil

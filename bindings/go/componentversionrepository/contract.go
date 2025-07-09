@@ -8,6 +8,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+const (
+	Realm = "componentversionrepository/fallback"
+)
+
 // ComponentVersionRepositoryProvider defines the contract for providers that can retrieve
 // and manage component version repositories. It supports different types of repository
 // specifications.
@@ -78,9 +82,14 @@ type LocalSourceRepository interface {
 	// Sources for non-existent component versions may be stored but may be removed during garbage collection.
 	// The Source given is identified later on by its own Identity ([descriptor.Source.ToIdentity]) and a collection of a set of reserved identity values
 	// that can have a special meaning.
-	AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error)
+	AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error)
 
 	// GetLocalSource retrieves a local [descriptor.Source] from the repository.
 	// The [runtime.Identity] must match a source in the [descriptor.Descriptor].
 	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error)
+}
+
+type CredentialProvider interface {
+	// Resolve attempts to resolve credentials for the given identity.
+	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
 }

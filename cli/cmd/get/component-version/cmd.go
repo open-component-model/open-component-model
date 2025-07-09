@@ -11,7 +11,7 @@ import (
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
+	"ocm.software/open-component-model/cli/internal/reference/compr
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 

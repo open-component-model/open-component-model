@@ -299,6 +299,30 @@ func TestRepository_GetLocalResource(t *testing.T) {
 			},
 		},
 		{
+			name: "single layer legacy image manifest",
+			resource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name: "single-layer-manifest",
+					},
+				},
+				Type: "test-type",
+				Access: &v2.LocalBlob{
+					LocalReference: digest.FromString("single layer manifest content").String(),
+					MediaType:      ociImageSpecV1.MediaTypeImageManifest,
+				},
+			},
+			content: []byte("single layer manifest content"),
+			identity: map[string]string{
+				"name":    "single-layer-manifest",
+				"version": "1.0.0",
+			},
+			setupComponent: true,
+			checkContent: func(t *testing.T, original []byte, actual []byte) {
+				assert.Equal(t, string(original), string(actual))
+			},
+		},
+		{
 			name: "oci layout resource",
 			resource: &descriptor.Resource{
 				ElementMeta: descriptor.ElementMeta{
