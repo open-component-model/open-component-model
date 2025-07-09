@@ -2,7 +2,7 @@
 
 * **Status**: proposed  
 * **Deciders**: OCM Technical Steering Committee
-* **Date**: 2025.05.15  
+* **Date**: 2025.07.09  
 
 **Technical Story**:  
 Enable easy and simple interpretation of downloaded resources fetched from component versions based on a new set of specifications that integrates seamlessly with the new OCM Plugin System, while providing a newly architected foundation from the OCM v1 download handlers.
