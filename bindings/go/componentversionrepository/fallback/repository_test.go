@@ -2,309 +2,270 @@ package fallback
 
 import (
 	"context"
-	"errors"
-	"slices"
+	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/blob"
-	repository "ocm.software/open-component-model/bindings/go/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/componentversionrepository"
 	resolverruntime "ocm.software/open-component-model/bindings/go/componentversionrepository/resolver/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func Test_AddRepositories(t *testing.T) {
-	r := require.New(t)
+var (
+	FailType = runtime.NewUnversionedType("fail")
+	NilType  = runtime.NewUnversionedType("nil")
+)
+
+func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 	ctx := t.Context()
 
-	fallback, err := New(ctx, []*resolverruntime.Resolver{
+	cases := []struct {
+		name      string
+		component string
+		repos     []*resolverruntime.Resolver
+		expected  []runtime.Type
+		err       assert.ErrorAssertionFunc
+	}{
 		{
-			Repository: &runtime.Raw{
-				Type: runtime.NewUnversionedType("fallback1"),
-			},
-			Prefix:   "",
-			Priority: 1,
-		},
-		{
-			Repository: &runtime.Raw{
-				Type: runtime.NewUnversionedType("fallback3"),
-			},
-			Prefix:   "",
-			Priority: 3,
-		},
-		{
-			Repository: &runtime.Raw{
-				Type: runtime.NewUnversionedType("fallback0"),
-			},
-			Prefix:   "",
-			Priority: 0,
-		},
-	}, nil, nil)
-	r.NoError(err, "failed to create fallback repository when it should succeed")
-
-	actualRepos := fallback.fallbackRepositories
-	expectedRepos := []*repositoryWithResolverRules{
-		{
-			resolver: &resolverruntime.Resolver{
-				Repository: &runtime.Raw{
-					Type: runtime.NewUnversionedType("fallback3"),
-				},
-				Prefix:   "",
-				Priority: 3,
-			},
-			repository: nil,
-		},
-		{
-			resolver: &resolverruntime.Resolver{
-				Repository: &runtime.Raw{
-					Type: runtime.NewUnversionedType("fallback1"),
-				},
-				Prefix:   "",
-				Priority: 1,
-			},
-			repository: nil,
-		},
-		{
-			resolver: &resolverruntime.Resolver{
-				Repository: &runtime.Raw{
-					Type: runtime.NewUnversionedType("fallback0"),
-				},
-				Prefix:   "",
-				Priority: 0,
-			},
-			repository: nil,
-		},
-	}
-
-	r.Equal(expectedRepos, actualRepos, "repositories do not match expected repositories")
-
-	// Test adding a repository with a higher priority
-
-	err = fallback.AddRepositories(&resolverruntime.Resolver{
-		Repository: &runtime.Raw{
-			Type: runtime.NewUnversionedType("fallback5"),
-		},
-		Prefix:   "",
-		Priority: 5,
-	})
-	r.NoError(err, "failed to add repository when it should succeed")
-
-	actualRepos = fallback.fallbackRepositories
-	expectedRepos = slices.Insert(expectedRepos, 0, &repositoryWithResolverRules{
-		resolver: &resolverruntime.Resolver{
-			Repository: &runtime.Raw{
-				Type: runtime.NewUnversionedType("fallback5"),
-			},
-			Prefix:   "",
-			Priority: 5,
-		},
-		repository: nil,
-	})
-
-	r.Equal(expectedRepos, actualRepos, "repositories do not match expected repositories after adding a new one")
-
-	// Test adding a repository with equal priority
-	err = fallback.AddRepositories(&resolverruntime.Resolver{
-		Repository: &runtime.Raw{
-			Type: runtime.NewUnversionedType("fallback55"),
-		},
-		Prefix:   "",
-		Priority: 5,
-	})
-	r.NoError(err, "failed to add repository when it should succeed")
-
-	actualRepos = fallback.fallbackRepositories
-	expectedRepos = slices.Insert(expectedRepos, 1, &repositoryWithResolverRules{
-		resolver: &resolverruntime.Resolver{
-			Repository: &runtime.Raw{
-				Type: runtime.NewUnversionedType("fallback55"),
-			},
-			Prefix:   "",
-			Priority: 5,
-		},
-		repository: nil,
-	})
-
-	r.Equal(expectedRepos, actualRepos, "repositories do not match expected repositories after adding a new one")
-}
-
-func Test_ExecuteWithFallback(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	fallback := &ComponentVersionRepository{
-		provider:           nil,
-		credentialProvider: nil,
-		fallbackRepositories: []*repositoryWithResolverRules{
-			{
-				resolver: &resolverruntime.Resolver{
+			name:      "single repository",
+			component: "test-component",
+			repos: []*resolverruntime.Resolver{
+				{
 					Repository: &runtime.Raw{
-						Type: runtime.NewUnversionedType("fallback2"),
+						Type: runtime.NewUnversionedType("fallbackWithPriority0"),
 					},
 					Prefix:   "",
-					Priority: 2,
-				},
-				repository: &MockComponentVersionRepository{
-					typ: "fallback2",
+					Priority: 0,
 				},
 			},
-			{
-				resolver: &resolverruntime.Resolver{
+			expected: []runtime.Type{runtime.NewUnversionedType("fallbackWithPriority0")},
+			err:      assert.NoError,
+		},
+		{
+			name:      "multiple repositories with different priorities",
+			component: "test-component",
+			repos: []*resolverruntime.Resolver{
+				{
 					Repository: &runtime.Raw{
-						Type: runtime.NewUnversionedType("fallback1"),
+						Type: runtime.NewUnversionedType("fallbackWithPriority1"),
 					},
 					Prefix:   "",
 					Priority: 1,
 				},
-				repository: &MockComponentVersionRepository{
-					typ: "fallback1",
+				{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallbackWithPriority2"),
+					},
+					Prefix:   "",
+					Priority: 2,
+				},
+				{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallbackWithPriority3"),
+					},
+					Prefix:   "",
+					Priority: 3,
 				},
 			},
+			expected: []runtime.Type{
+				runtime.NewUnversionedType("fallbackWithPriority3"),
+				runtime.NewUnversionedType("fallbackWithPriority2"),
+				runtime.NewUnversionedType("fallbackWithPriority1"),
+			},
+			err: assert.NoError,
+		},
+		{
+			name:      "no repositories",
+			component: "test-component",
+			repos:     []*resolverruntime.Resolver{},
+			expected:  []runtime.Type{},
+			err:       assert.Error,
+		},
+		{
+			name:      "repository with prefixes",
+			component: "prefixB-test-component",
+			repos: []*resolverruntime.Resolver{
+				{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallbackWithPrefixA"),
+					},
+					Prefix:   "prefixA",
+					Priority: 0,
+				},
+				{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallbackWithPrefixB"),
+					},
+					Prefix:   "prefixB",
+					Priority: 0,
+				},
+			},
+			expected: []runtime.Type{
+				runtime.NewUnversionedType("fallbackWithPrefixB"),
+			},
+			err: assert.NoError,
+		},
+		{
+			name:      "repository with prefixes and priority",
+			component: "prefixB-test-component",
+			repos: []*resolverruntime.Resolver{
+				{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallbackWithPrefixA"),
+					},
+					Prefix:   "prefixA",
+					Priority: 0,
+				},
+				{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallbackWithPrefixB-Priority0"),
+					},
+					Prefix:   "prefixB",
+					Priority: 0,
+				},
+				{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallbackWithPrefixB-Priority1"),
+					},
+					Prefix:   "prefixB",
+					Priority: 1,
+				},
+			},
+			expected: []runtime.Type{
+				runtime.NewUnversionedType("fallbackWithPrefixB-Priority1"),
+				runtime.NewUnversionedType("fallbackWithPrefixB-Priority0"),
+			},
+			err: assert.NoError,
+		},
+		{
+			name:      "fail to resolve repository",
+			component: "test-component",
+			repos: []*resolverruntime.Resolver{
+				{
+					Repository: &runtime.Raw{
+						Type: FailType,
+					},
+					Prefix:   "",
+					Priority: 0,
+				},
+			},
+			expected: []runtime.Type{},
+			err:      assert.Error,
+		},
+		{
+			name:      "no resolvers with matching prefix",
+			component: "test-component",
+			repos: []*resolverruntime.Resolver{
+				{
+					Repository: &runtime.Raw{
+						Type: runtime.NewUnversionedType("fallbackWithPrefixA"),
+					},
+					Prefix:   "prefixA",
+					Priority: 0,
+				},
+			},
+			expected: []runtime.Type{},
+			err:      assert.Error,
+		},
+		{
+			name:      "nil repository",
+			component: "test-component",
+			repos: []*resolverruntime.Resolver{
+				{
+					Repository: &runtime.Raw{
+						Type: NilType,
+					},
+					Prefix:   "",
+					Priority: 0,
+				},
+			},
+			expected: []runtime.Type{},
+			err:      assert.Error,
 		},
 	}
 
-	usedFallbacks := make([]string, 0)
-	result, err := executeWithFallback[string](ctx, fallback, "test", func(ctx context.Context, repo repository.ComponentVersionRepository) (string, error) {
-		typ := repo.(*MockComponentVersionRepository).GetType()
-		usedFallbacks = append(usedFallbacks, typ)
-		if typ == "fallback1" {
-			return "success", nil
-		}
-		return "failure", NewErrNotFound("not found", errors.New("not found"))
-	})
-	r.NoError(err, "operation with fallback should succeed")
-	r.Equal([]string{"fallback2", "fallback1"}, usedFallbacks, "used fallbacks do not match expected order")
-	r.Equal("success", result, "result should be success from fallback1")
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
 
-func Test_ExecuteWithoutFallback(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
+			fallback, err := NewFallbackRepository(ctx, MockProvider{}, nil, tc.repos...)
+			r.NoError(err, "failed to create fallback repository when it should succeed")
 
-	t.Run("without fallback and no prefixes", func(t *testing.T) {
-		fallback := &ComponentVersionRepository{
-			provider:           nil,
-			credentialProvider: nil,
-			fallbackRepositories: []*repositoryWithResolverRules{
-				{
-					resolver: &resolverruntime.Resolver{
-						Repository: &runtime.Raw{
-							Type: runtime.NewUnversionedType("fallback2"),
-						},
-						Prefix:   "",
-						Priority: 2,
-					},
-					repository: &MockComponentVersionRepository{
-						typ: "fallback2",
-					},
-				},
-				{
-					resolver: &resolverruntime.Resolver{
-						Repository: &runtime.Raw{
-							Type: runtime.NewUnversionedType("fallback1"),
-						},
-						Prefix:   "",
-						Priority: 1,
-					},
-					repository: &MockComponentVersionRepository{
-						typ: "fallback1",
-					},
-				},
-			},
-		}
-		usedFallbacks := make([]string, 0)
-		result, err := executeWithoutFallback[string](ctx, fallback, "test", func(ctx context.Context, repo repository.ComponentVersionRepository) (string, error) {
-			typ := repo.(*MockComponentVersionRepository).GetType()
-			usedFallbacks = append(usedFallbacks, typ)
-			return "success", nil
+			actualRepos := fallback.RepositoriesForComponentIterator(ctx, "test-component")
+			expectedRepos := make([]runtime.Type, len(tc.expected))
+			index := 0
+			for repo, err := range actualRepos {
+				if !tc.err(t, err, "unexpected error for case %s", tc.name) {
+					return
+				}
+				if err != nil && repo == nil {
+					return
+				}
+				expectedRepos[index] = repo.(*MockRepository).Type()
+				index++
+			}
 		})
-		r.NoError(err, "operation without fallback should succeed")
-		r.Equal([]string{"fallback2"}, usedFallbacks, "used fallbacks do not match expected order")
-		r.Equal("success", result, "result should be success from fallback2")
-	})
-	t.Run("without fallback and with prefixes", func(t *testing.T) {
-		fallback := &ComponentVersionRepository{
-			provider:           nil,
-			credentialProvider: nil,
-			fallbackRepositories: []*repositoryWithResolverRules{
-				{
-					resolver: &resolverruntime.Resolver{
-						Repository: &runtime.Raw{
-							Type: runtime.NewUnversionedType("fallback2"),
-						},
-						Prefix:   "not-matching-prefix",
-						Priority: 2,
-					},
-					repository: &MockComponentVersionRepository{
-						typ: "fallback2",
-					},
-				},
-				{
-					resolver: &resolverruntime.Resolver{
-						Repository: &runtime.Raw{
-							Type: runtime.NewUnversionedType("fallback1"),
-						},
-						Prefix:   "tes",
-						Priority: 1,
-					},
-					repository: &MockComponentVersionRepository{
-						typ: "fallback1",
-					},
-				},
-			},
-		}
-		usedFallbacks := make([]string, 0)
-		result, err := executeWithoutFallback[string](ctx, fallback, "test", func(ctx context.Context, repo repository.ComponentVersionRepository) (string, error) {
-			typ := repo.(*MockComponentVersionRepository).GetType()
-			usedFallbacks = append(usedFallbacks, typ)
-			return "success", nil
-		})
-		r.NoError(err, "operation without fallback should succeed")
-		r.Equal([]string{"fallback1"}, usedFallbacks, "used fallbacks do not match expected order")
-		r.Equal("success", result, "result should be success from fallback1")
-	})
+	}
 }
 
-type MockComponentVersionRepository struct {
-	typ string
+type MockProvider struct{}
+
+func (m MockProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
+	return nil, nil
 }
 
-func (m *MockComponentVersionRepository) GetType() string {
+func (m MockProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentversionrepository.ComponentVersionRepository, error) {
+	if repositorySpecification.GetType() == FailType {
+		return nil, fmt.Errorf("mock error for testing")
+	}
+	if repositorySpecification.GetType() == NilType {
+		return nil, nil
+	}
+	return &MockRepository{}, nil
+}
+
+type MockRepository struct {
+	typ runtime.Type
+}
+
+func (m MockRepository) Type() runtime.Type {
 	return m.typ
 }
 
-func (m *MockComponentVersionRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
+func (m MockRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *MockComponentVersionRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+func (m MockRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *MockComponentVersionRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
+func (m MockRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *MockComponentVersionRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+func (m MockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *MockComponentVersionRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+func (m MockRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *MockComponentVersionRepository) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
+func (m MockRepository) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *MockComponentVersionRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
+func (m MockRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	//TODO implement me
 	panic("implement me")
 }

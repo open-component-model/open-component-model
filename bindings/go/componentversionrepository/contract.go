@@ -8,6 +8,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+const (
+	Realm = "componentversionrepository/fallback"
+)
+
 // ComponentVersionRepositoryProvider defines the contract for providers that can retrieve
 // and manage component version repositories. It supports different types of repository
 // specifications.
