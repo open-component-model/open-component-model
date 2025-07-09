@@ -242,7 +242,7 @@ func reproducibleTarHeader(fi fs.FileInfo, link string) (*tar.Header, error) {
 	h.ChangeTime = timestamp
 
 	// Clear system-specific fields
-	h.Xattrs = nil
+	h.Xattrs = nil //nolint:staticcheck // SA1019: tar.FileInfoHeader() still sets h.Xattrs, so it needs to be cleared here.
 	h.PAXRecords = nil
 	h.Devmajor = 0
 	h.Devminor = 0
