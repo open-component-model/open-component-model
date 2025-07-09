@@ -334,7 +334,7 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 	// best effort to resolve credentials for by value resource download.
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
-	if identity, err := repository.GetResourceCredentialConsumerIdentity(ctx, converted); err == nil {
+	if identity, err := repository.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.CredentialProvider, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
 		}
@@ -386,12 +386,11 @@ func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetR
 	if err != nil {
 		return nil, fmt.Errorf("no input method resolvable for input specification of type %q: %w", src.Input.GetType(), err)
 	}
-	converted := constructor.ConvertToDescriptorSource(src)
 
 	// best effort to resolve credentials for the input method.
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
-	if identity, err := method.GetSourceCredentialConsumerIdentity(ctx, converted); err == nil {
+	if identity, err := method.GetSourceCredentialConsumerIdentity(ctx, src); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.CredentialProvider, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for source input method: %w", err)
 		}
@@ -428,12 +427,11 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	if err != nil {
 		return nil, fmt.Errorf("no input method resolvable for input specification of type %q: %w", resource.Input.GetType(), err)
 	}
-	converted := constructor.ConvertToDescriptorResource(resource)
 
 	// best effort to resolve credentials for the input method.
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
-	if identity, err := method.GetResourceCredentialConsumerIdentity(ctx, converted); err == nil {
+	if identity, err := method.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.CredentialProvider, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource input method: %w", err)
 		}
