@@ -8,8 +8,8 @@
 /.github/CODEOWNERS     @open-component-model/admins
 
 # Owners for specific directories
-#/docs/  @<org>/<team>
-#/src/   @<org>/<team>
+/docs/steering  @open-component-model/tsc
+/docs/adr       @open-component-model/tsc
 
 # Owners for specific file types
 #*.md    @<org>/<team>
