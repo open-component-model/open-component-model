@@ -6,7 +6,6 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2/content"
 )
 
@@ -22,36 +21,37 @@ func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates 
 	}
 
 	// Build a set of all referenced digests
-	var lock sync.Mutex
+	var mu sync.Mutex
 	referenced := make(map[digest.Digest]struct{}, len(candidates))
 
-	eg, ctx := errgroup.WithContext(ctx)
-	// For each artifact in the index, find all the artifacts it references
-	for _, artifact := range candidates {
-		// Get the successors (referenced artifacts) for this artifact
-		eg.Go(func() error {
-			successors, err := content.Successors(ctx, fetcher, artifact)
-			if err != nil {
-				// If we can't get successors, skip this artifact
-				return nil
-			}
-
-			// Mark all successors as referenced
+	// resolveReferences is a function that finds all successors of an artifact
+	// and adds their digests to the reference cache.
+	resolveReferences := func(artifact ociImageSpecV1.Descriptor) {
+		if successors, err := content.Successors(ctx, fetcher, artifact); err == nil {
+			mu.Lock()
+			defer mu.Unlock()
 			for _, successor := range successors {
-				lock.Lock()
 				referenced[successor.Digest] = struct{}{}
-				lock.Unlock()
 			}
-			return nil
-		})
+		}
 	}
 
-	_ = eg.Wait() // Wait for all goroutines to finish
+	var wg sync.WaitGroup
+	wg.Add(len(candidates))
+	// For each artifact in the index, find all the artifacts it references
+	for i := range candidates {
+		go func() {
+			defer wg.Done()
+			resolveReferences(candidates[i])
+		}()
+	}
+	wg.Wait()
 
 	// Return artifacts that are not referenced by any other artifact
-	topLevel := make([]ociImageSpecV1.Descriptor, 0, len(referenced))
+	// Pre-allocate with worst-case capacity (all candidates could be top-level)
+	topLevel := make([]ociImageSpecV1.Descriptor, 0, len(candidates))
 	for _, artifact := range candidates {
-		if _, referenced := referenced[artifact.Digest]; !referenced {
+		if _, isReferenced := referenced[artifact.Digest]; !isReferenced {
 			topLevel = append(topLevel, artifact)
 		}
 	}
