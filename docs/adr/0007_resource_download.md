@@ -1,7 +1,7 @@
 # Next Generation Component Constructor Support
 
 * **Status**: proposed  
-* **Deciders**: Gergely Brautigam, Fabian Burth, Jakob Moeller  
+* **Deciders**: OCM Technical Steering Committee
 * **Date**: 2025.05.15  
 
 **Technical Story**:  
