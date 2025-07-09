@@ -8,19 +8,15 @@ import (
 	"time"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	slogcontext "github.com/veqryn/slog-context"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Base returns a base logger for OCI operations with a default RealmKey.
-func Base() *slog.Logger {
-	return slog.With(slog.String("realm", "oci"))
-}
-
 // Operation is a helper function to log operations with timing and error handling.
 func Operation(ctx context.Context, operation string, fields ...slog.Attr) func(error) {
 	start := time.Now()
-	logger := Base().With(slog.String("operation", operation))
+	logger := slogcontext.FromCtx(ctx).With(slog.String("realm", "oci"), slog.String("operation", operation))
 	logger.LogAttrs(ctx, slog.LevelDebug, "operation starting", fields...)
 
 	return func(err error) {

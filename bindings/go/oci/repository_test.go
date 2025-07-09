@@ -1018,7 +1018,7 @@ func TestRepository_ListComponentVersions(t *testing.T) {
 func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, resource *descriptor.Resource) {
 	r := require.New(t)
 	// Get a repository store for the component
-	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference("test-component", "1.0.0"))
+	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
 	r.NoError(err)
 
 	// Create a descriptor for the component version
@@ -1060,7 +1060,7 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 func setupLegacyComponentVersionWithSource(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, source *descriptor.Source) {
 	r := require.New(t)
 	// Get a repository store for the component
-	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference("test-component", "1.0.0"))
+	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
 	r.NoError(err)
 
 	// Create a descriptor for the component version

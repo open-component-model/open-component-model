@@ -144,7 +144,7 @@ type Resolver interface {
 	StoreForReference(ctx context.Context, reference string) (spec.Store, error)
 
 	// ComponentVersionReference returns a unique reference for a component version.
-	ComponentVersionReference(component, version string) string
+	ComponentVersionReference(ctx context.Context, component, version string) string
 
 	// Reference resolves a reference string to a fmt.Stringer whose "native"
 	// format represents a valid reference that can be used for a given store returned
