@@ -86,7 +86,7 @@ func packDirToTar(path string, opt *v1.Dir) (_ io.Reader, err error) {
 	return bytes.NewReader(buf.Bytes()), nil
 }
 
-// walkDirContents does recursive packaging of the directory contents.
+// walkDirContents does recursive packaging of the directory contents, while keeping the subfolder structure.
 // The function goes the directory contents file by file, checks if it should be included or excluded,
 // creates tar headers for each file and subfolder, and writes the file contents to the tar archive.
 // For subdirectories it calls itself recursively to process the subfolder contents.
