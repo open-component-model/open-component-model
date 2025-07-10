@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	configv1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -20,7 +22,7 @@ func createTestCommand() *cobra.Command {
 }
 
 func setFlag(cmd *cobra.Command, name, value string) {
-	cmd.Flags().Set(name, value)
+	_ = cmd.Flags().Set(name, value)
 	cmd.Flags().Lookup(name).Changed = true
 }
 
@@ -89,20 +91,12 @@ func TestGetBuiltinPluginConfig_ConfigFileOnly(t *testing.T) {
 			cmd := createTestCommand()
 			config := createTestConfig(tt.configLogLevel, tt.configLogFormat, tt.configTempFolder)
 
-			result, err := GetBuiltinPluginConfig(cmd, config)
-			if err != nil {
-				t.Fatalf("GetBuiltinPluginConfig() error = %v", err)
-			}
+			result, err := GetMergedBuiltinPluginConfig(cmd, config)
+			require.NoError(t, err)
 
-			if result.LogLevel != tt.expectedLogLevel {
-				t.Errorf("LogLevel = %v, want %v", result.LogLevel, tt.expectedLogLevel)
-			}
-			if result.LogFormat != tt.expectedLogFormat {
-				t.Errorf("LogFormat = %v, want %v", result.LogFormat, tt.expectedLogFormat)
-			}
-			if result.TempFolder != tt.expectedTempFolder {
-				t.Errorf("TempFolder = %v, want %v", result.TempFolder, tt.expectedTempFolder)
-			}
+			assert.Equal(t, tt.expectedLogLevel, result.LogLevel)
+			assert.Equal(t, tt.expectedLogFormat, result.LogFormat)
+			assert.Equal(t, tt.expectedTempFolder, result.TempFolder)
 		})
 	}
 }
@@ -153,20 +147,12 @@ func TestGetBuiltinPluginConfig_CLIFlagsOnly(t *testing.T) {
 			}
 
 			// No config file
-			result, err := GetBuiltinPluginConfig(cmd, nil)
-			if err != nil {
-				t.Fatalf("GetBuiltinPluginConfig() error = %v", err)
-			}
+			result, err := GetMergedBuiltinPluginConfig(cmd, nil)
+			require.NoError(t, err)
 
-			if result.LogLevel != tt.expectedLogLevel {
-				t.Errorf("LogLevel = %v, want %v", result.LogLevel, tt.expectedLogLevel)
-			}
-			if result.LogFormat != tt.expectedLogFormat {
-				t.Errorf("LogFormat = %v, want %v", result.LogFormat, tt.expectedLogFormat)
-			}
-			if result.TempFolder != tt.expectedTempFolder {
-				t.Errorf("TempFolder = %v, want %v", result.TempFolder, tt.expectedTempFolder)
-			}
+			assert.Equal(t, tt.expectedLogLevel, result.LogLevel)
+			assert.Equal(t, tt.expectedLogFormat, result.LogFormat)
+			assert.Equal(t, tt.expectedTempFolder, result.TempFolder)
 		})
 	}
 }
@@ -238,20 +224,12 @@ func TestGetBuiltinPluginConfig_Precedence(t *testing.T) {
 				setFlag(cmd, "temp-folder", tt.cliTempFolder)
 			}
 
-			result, err := GetBuiltinPluginConfig(cmd, config)
-			if err != nil {
-				t.Fatalf("GetBuiltinPluginConfig() error = %v", err)
-			}
+			result, err := GetMergedBuiltinPluginConfig(cmd, config)
+			require.NoError(t, err)
 
-			if result.LogLevel != tt.expectedLogLevel {
-				t.Errorf("LogLevel = %v, want %v", result.LogLevel, tt.expectedLogLevel)
-			}
-			if result.LogFormat != tt.expectedLogFormat {
-				t.Errorf("LogFormat = %v, want %v", result.LogFormat, tt.expectedLogFormat)
-			}
-			if result.TempFolder != tt.expectedTempFolder {
-				t.Errorf("TempFolder = %v, want %v", result.TempFolder, tt.expectedTempFolder)
-			}
+			assert.Equal(t, tt.expectedLogLevel, result.LogLevel)
+			assert.Equal(t, tt.expectedLogFormat, result.LogFormat)
+			assert.Equal(t, tt.expectedTempFolder, result.TempFolder)
 		})
 	}
 }
@@ -262,14 +240,10 @@ func TestGetMergedConfigWithCLIFlags_NoOverrides(t *testing.T) {
 
 	// No CLI flags set
 	result, err := GetMergedConfigWithCLIFlags(cmd, baseConfig)
-	if err != nil {
-		t.Fatalf("GetMergedConfigWithCLIFlags() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should return original config when no overrides
-	if result != baseConfig {
-		t.Errorf("Expected original config to be returned when no CLI overrides")
-	}
+	assert.Equal(t, baseConfig, result)
 }
 
 func TestGetMergedConfigWithCLIFlags_WithOverrides(t *testing.T) {
@@ -281,30 +255,17 @@ func TestGetMergedConfigWithCLIFlags_WithOverrides(t *testing.T) {
 	setFlag(cmd, log.FormatFlagName, "json")
 
 	result, err := GetMergedConfigWithCLIFlags(cmd, baseConfig)
-	if err != nil {
-		t.Fatalf("GetMergedConfigWithCLIFlags() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should return a different config with merged values
-	if result == baseConfig {
-		t.Errorf("Expected new merged config, got original config")
-	}
+	assert.NotEqual(t, baseConfig, result)
 
 	// Verify the merged config contains the CLI overrides
 	builtinConfig, err := builtinv1.LookupBuiltinPluginConfig(result)
-	if err != nil {
-		t.Fatalf("Failed to lookup builtin config from merged config: %v", err)
-	}
-
-	if builtinConfig.LogLevel != builtinv1.LogLevelDebug {
-		t.Errorf("Expected LogLevel to be debug, got %v", builtinConfig.LogLevel)
-	}
-	if builtinConfig.LogFormat != builtinv1.LogFormatJSON {
-		t.Errorf("Expected LogFormat to be json, got %v", builtinConfig.LogFormat)
-	}
-	if builtinConfig.TempFolder != "/tmp/base" {
-		t.Errorf("Expected TempFolder to remain /tmp/base, got %v", builtinConfig.TempFolder)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, builtinv1.LogLevelDebug, builtinConfig.LogLevel)
+	assert.Equal(t, builtinv1.LogFormatJSON, builtinConfig.LogFormat)
+	assert.Equal(t, "/tmp/base", builtinConfig.TempFolder)
 }
 
 func TestGetMergedConfigWithCLIFlags_NoBuiltinConfigInBase(t *testing.T) {
@@ -321,38 +282,23 @@ func TestGetMergedConfigWithCLIFlags_NoBuiltinConfigInBase(t *testing.T) {
 	setFlag(cmd, "temp-folder", "/tmp/new")
 
 	result, err := GetMergedConfigWithCLIFlags(cmd, baseConfig)
-	if err != nil {
-		t.Fatalf("GetMergedConfigWithCLIFlags() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	// Should add new builtin config to merged config
-	if len(result.Configurations) != 1 {
-		t.Errorf("Expected 1 configuration in merged config, got %d", len(result.Configurations))
-	}
+	assert.Len(t, result.Configurations, 1, "expected 1 configuration in merged config, got %d", len(result.Configurations))
 
 	// Verify the added config contains the CLI values
 	builtinConfig, err := builtinv1.LookupBuiltinPluginConfig(result)
-	if err != nil {
-		t.Fatalf("Failed to lookup builtin config from merged config: %v", err)
-	}
-
-	if builtinConfig.LogLevel != builtinv1.LogLevelError {
-		t.Errorf("Expected LogLevel to be error, got %v", builtinConfig.LogLevel)
-	}
-	if builtinConfig.TempFolder != "/tmp/new" {
-		t.Errorf("Expected TempFolder to be /tmp/new, got %v", builtinConfig.TempFolder)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, builtinv1.LogLevelError, builtinConfig.LogLevel)
+	assert.Equal(t, "/tmp/new", builtinConfig.TempFolder)
 }
 
 func TestGetMergedConfigWithCLIFlags_NilConfig(t *testing.T) {
 	cmd := createTestCommand()
 
 	result, err := GetMergedConfigWithCLIFlags(cmd, nil)
-	if err != nil {
-		t.Fatalf("GetMergedConfigWithCLIFlags() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if result != nil {
-		t.Errorf("Expected nil result for nil input config")
-	}
+	assert.Nil(t, result)
 }

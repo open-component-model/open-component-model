@@ -75,10 +75,6 @@ func (p *Plugin) Configure(config *builtinv1.BuiltinPluginConfig, logger *slog.L
 	p.config = config
 	p.logger = logger
 
-	p.logger.Info("CTF Plugin configured",
-		"tempFolder", config.GetTempFolder(),
-	)
-
 	return nil
 }
 

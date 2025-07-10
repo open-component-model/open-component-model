@@ -142,10 +142,6 @@ func (p *ResourceRepositoryPlugin) Configure(config *builtinv1.BuiltinPluginConf
 	p.config = config
 	p.logger = logger
 
-	p.logger.Info("OCI ResourceRepositoryPlugin configured",
-		"tempFolder", config.GetTempFolder(),
-	)
-
 	return nil
 }
 

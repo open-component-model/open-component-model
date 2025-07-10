@@ -63,7 +63,7 @@ func setupPluginManager(cmd *cobra.Command) error {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize plugin manager")
 	}
 
-	builtinPluginConfig, err := builtinConfig.GetBuiltinPluginConfig(cmd, baseCfg)
+	builtinPluginConfig, err := builtinConfig.GetMergedBuiltinPluginConfig(cmd, baseCfg)
 	if err != nil {
 		return fmt.Errorf("could not get built-in plugin configuration: %w", err)
 	}

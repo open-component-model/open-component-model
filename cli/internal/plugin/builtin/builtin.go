@@ -15,12 +15,10 @@ import (
 
 // Register registers built-in plugins with the plugin manager using the provided configuration.
 func Register(manager *manager.PluginManager, pluginConfig *builtinv1.BuiltinPluginConfig, logger *slog.Logger) error {
-	// Register OCI credential plugin
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
 
-	// Register OCI plugin with configuration
 	if err := ociplugin.Register(
 		manager.ComponentVersionRepositoryRegistry,
 		manager.ResourcePluginRegistry,
@@ -31,12 +29,9 @@ func Register(manager *manager.PluginManager, pluginConfig *builtinv1.BuiltinPlu
 		return fmt.Errorf("could not register OCI inbuilt plugin: %w", err)
 	}
 
-	// Register CTF plugin with configuration
 	if err := ctfplugin.Register(manager.ComponentVersionRepositoryRegistry, pluginConfig, logger); err != nil {
 		return fmt.Errorf("could not register CTF inbuilt plugin: %w", err)
 	}
-
-	// Register input plugins
 	if err := file.Register(manager.InputRegistry); err != nil {
 		return fmt.Errorf("could not register file input plugin: %w", err)
 	}
