@@ -1,1 +1,0 @@
-{"schemaVersion":1,"artifacts":[{"repository":"component-descriptors/github.com/acme.org/helloworld","tag":"2.0.0","digest":"sha256:5895ab5402f5d0dd459c466e29dac377f6739828ba6c216c464a9648f620147c"},{"repository":"component-descriptors/github.com/acme.org/not-helloworld","tag":"1.0.0","digest":"sha256:2c4d2101b55b2db705e2ed45a868eb54de8875cba80b7c756f6ab7db8d74dc58"}]}

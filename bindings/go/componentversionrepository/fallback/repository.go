@@ -88,7 +88,7 @@ func (f *FallbackRepository) GetComponentVersion(ctx context.Context, component,
 		}
 		desc, err := repo.GetComponentVersion(ctx, component, version)
 		if err != nil {
-			if errors.As(err, new(*ErrNotFound)) {
+			if errors.As(err, new(*repository.ErrNotFound)) {
 				slog.DebugContext(ctx, "component version not found in repository", "realm", repository.Realm, "repository", repo, "component", component, "version", version)
 				continue // try the next repository
 			}
@@ -175,7 +175,7 @@ func (f *FallbackRepository) GetLocalResource(ctx context.Context, component, ve
 		}
 		data, res, err := repo.GetLocalResource(ctx, component, version, identity)
 		if err != nil {
-			if errors.As(err, new(*ErrNotFound)) {
+			if errors.As(err, new(*repository.ErrNotFound)) {
 				slog.DebugContext(ctx, "local resource not found in repository", "realm", repository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
 				continue // try the next repository
 			}
@@ -210,7 +210,7 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 		}
 		data, source, err := repo.GetLocalSource(ctx, component, version, identity)
 		if err != nil {
-			if errors.As(err, new(*ErrNotFound)) {
+			if errors.As(err, new(*repository.ErrNotFound)) {
 				slog.DebugContext(ctx, "local source not found in repository", "realm", repository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
 				continue // try the next repository
 			}
@@ -307,24 +307,4 @@ func (f *FallbackRepository) GetResolvers() []*resolverruntime.Resolver {
 		resolversCopy[i] = resolver.DeepCopy()
 	}
 	return resolversCopy
-}
-
-type ErrNotFound struct {
-	msg string
-	err error
-}
-
-func (e *ErrNotFound) Error() string {
-	return e.msg
-}
-
-func (e *ErrNotFound) Unwrap() error {
-	return e.err
-}
-
-func NewErrNotFound(msg string, err error) *ErrNotFound {
-	return &ErrNotFound{
-		msg: msg,
-		err: err,
-	}
 }

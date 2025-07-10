@@ -9,8 +9,28 @@ import (
 )
 
 const (
-	Realm = "componentversionrepository/fallback"
+	Realm = "componentversionrepository"
 )
+
+type ErrNotFound struct {
+	msg string
+	err error
+}
+
+func (e *ErrNotFound) Error() string {
+	return e.msg
+}
+
+func (e *ErrNotFound) Unwrap() error {
+	return e.err
+}
+
+func NewErrNotFound(msg string, err error) *ErrNotFound {
+	return &ErrNotFound{
+		msg: msg,
+		err: err,
+	}
+}
 
 // ComponentVersionRepositoryProvider defines the contract for providers that can retrieve
 // and manage component version repositories. It supports different types of repository

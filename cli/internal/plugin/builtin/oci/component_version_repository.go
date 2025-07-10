@@ -8,14 +8,13 @@ import (
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	ocmrepository "ocm.software/open-component-model/bindings/go/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/componentversionrepository"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -56,8 +55,8 @@ func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx con
 }
 
 var (
-	_ ocmrepository.ComponentVersionRepositoryProvider = (*ComponentVersionRepositoryPlugin)(nil)
-	_ ocmrepository.ComponentVersionRepository         = (*wrapper)(nil)
+	_ componentversionrepository.ComponentVersionRepositoryProvider = (*ComponentVersionRepositoryPlugin)(nil)
+	_ componentversionrepository.ComponentVersionRepository         = (*wrapper)(nil)
 )
 
 // wrapper wraps a repo into returning the component version repository ComponentVersionRepositoryPlugin.
