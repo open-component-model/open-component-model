@@ -48,8 +48,8 @@ func (resolver *CachingResolver) BasePath() string {
 	return resolver.baseURL + "/" + path.DefaultComponentDescriptorPath
 }
 
-func (resolver *CachingResolver) ComponentVersionReference(component, version string) string {
-	tag := oci.LooseSemverToOCITag(version) // Remove prohibited characters.
+func (resolver *CachingResolver) ComponentVersionReference(ctx context.Context, component, version string) string {
+	tag := oci.LooseSemverToOCITag(ctx, version) // Remove prohibited characters.
 	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, tag)
 }
 

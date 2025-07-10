@@ -79,8 +79,8 @@ func (s *Store) Reference(reference string) (fmt.Stringer, error) {
 }
 
 // ComponentVersionReference creates a reference string for a component version in the format "component-descriptors/component:version".
-func (s *Store) ComponentVersionReference(component, version string) string {
-	tag := oci.LooseSemverToOCITag(version) // Remove prohibited characters.
+func (s *Store) ComponentVersionReference(ctx context.Context, component, version string) string {
+	tag := oci.LooseSemverToOCITag(ctx, version) // Remove prohibited characters.
 	return fmt.Sprintf("%s/component-descriptors/%s:%s", wellKnownRegistryCTF, component, tag)
 }
 

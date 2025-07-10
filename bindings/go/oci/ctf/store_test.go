@@ -48,7 +48,7 @@ func TestStoreForReference(t *testing.T) {
 func TestComponentVersionReference(t *testing.T) {
 	ctf := setupTestCTF(t)
 	store := NewFromCTF(ctf)
-	ref := store.ComponentVersionReference("test-component", "v1.0.0")
+	ref := store.ComponentVersionReference(t.Context(), "test-component", "v1.0.0")
 	assert.Equal(t, fmt.Sprintf("%s/%s/test-component:v1.0.0", wellKnownRegistryCTF, path.DefaultComponentDescriptorPath), ref)
 }
 
