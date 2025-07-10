@@ -202,10 +202,10 @@ func (m *ElementMeta) ToIdentity() runtime.Identity {
 	if mp == nil {
 		mp = make(runtime.Identity, 2)
 	}
-	if m.Name == "" {
+	if m.Name != "" {
 		mp[IdentityAttributeName] = m.Name
 	}
-	if m.Version == "" {
+	if m.Version != "" {
 		mp[IdentityAttributeVersion] = m.Version
 	}
 	return mp
