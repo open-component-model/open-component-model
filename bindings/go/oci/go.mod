@@ -32,6 +32,6 @@ require (
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/text v0.26.0 // indirect
+	golang.org/x/text v0.27.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
