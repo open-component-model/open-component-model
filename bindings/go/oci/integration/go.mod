@@ -72,6 +72,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
+	github.com/veqryn/slog-context v0.8.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
@@ -82,8 +83,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.7.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
+	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/grpc v1.73.0 // indirect

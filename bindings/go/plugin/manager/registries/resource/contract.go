@@ -11,7 +11,7 @@ import (
 // Repository defines the interface for storing and retrieving OCM resources
 // independently of component versions from a Store Implementation
 type Repository interface {
-	// GetResourceCredentialConsumerIdentity resolves the identity of the given [constructor.Resource] to use for credential resolution.
+	// GetResourceCredentialConsumerIdentity resolves the identity of the given [descriptor.Resource] to use for credential resolution.
 	GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error)
 	// DownloadResource downloads a [descriptor.Resource] from the repository.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
