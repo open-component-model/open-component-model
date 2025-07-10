@@ -32,7 +32,7 @@ This will allow us to define how the resource data should be transformed before 
 In the OCM CLI, users will be able to transform their downloaded resource by specifying a `BlobTransformer` on the command line:
 
 ```shell
-ocm download resources <component-reference> <resource-reference> --download-transformer extract-oci-artifact
+ocm download resources <component-reference> <resource-reference> --transform extract-oci-artifact
 ```
 
 This design continues the philosophy of:
@@ -129,7 +129,7 @@ This allows us to provide a unified interface for resource downloads while still
 
 The most common use case for interacting with OCI artifacts is to extract the contents of a specific OCI artifact downloaded into an OCI Layout presented as a tarball stream in the `blob.ReadOnlyBlob`.
 
-For extracting such a transformers, we will offer the default `extract.oci.artifact.ocm.software/v1alpha1` transformer, which will handle the extraction of OCI artifacts from a tarball stream.
+For extracting such artifacts, we will offer the default `extract.oci.artifact.ocm.software/v1alpha1` transformer, which will handle the extraction of OCI artifacts from a tarball stream.
 
 By default, this transformer will:
 
