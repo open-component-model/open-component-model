@@ -214,8 +214,12 @@ func (m *ElementMeta) ToIdentity() runtime.Identity {
 	if mp == nil {
 		mp = make(runtime.Identity, 2)
 	}
-	mp[IdentityAttributeName] = m.Name
-	mp[IdentityAttributeVersion] = m.Version
+	if m.Name != "" {
+		mp[IdentityAttributeName] = m.Name
+	}
+	if m.Version != "" {
+		mp[IdentityAttributeVersion] = m.Version
+	}
 	return mp
 }
 
