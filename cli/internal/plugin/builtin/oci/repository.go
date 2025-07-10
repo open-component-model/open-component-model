@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"fmt"
+	"log/slog"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
@@ -20,12 +21,7 @@ type Repository interface {
 	oci.ComponentVersionRepository
 }
 
-func createRepository(
-	spec *ociv1.Repository,
-	credentials map[string]string,
-	manifests cache.OCIDescriptorCache,
-	layers cache.OCIDescriptorCache,
-) (Repository, error) {
+func createRepository(spec *ociv1.Repository, credentials map[string]string, manifests cache.OCIDescriptorCache, layers cache.OCIDescriptorCache, logger *slog.Logger) (Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL %q: %w", spec.BaseUrl, err)
@@ -49,6 +45,7 @@ func createRepository(
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(manifests),
 		oci.WithLayerCache(layers),
+		oci.WithLogger(logger),
 	)
 	return repo, err
 }

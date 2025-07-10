@@ -63,10 +63,6 @@ func (p *ComponentVersionRepositoryPlugin) Configure(config *builtinv1.BuiltinPl
 	p.config = config
 	p.logger = logger
 
-	p.logger.Info("OCI ComponentVersionRepositoryPlugin configured",
-		"tempFolder", config.GetTempFolder(),
-	)
-
 	return nil
 }
 

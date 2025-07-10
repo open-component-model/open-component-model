@@ -142,15 +142,11 @@ func (p *ResourceRepositoryPlugin) Configure(config *builtinv1.BuiltinPluginConf
 	p.config = config
 	p.logger = logger
 
-	p.logger.Info("OCI ResourceRepositoryPlugin configured",
-		"tempFolder", config.GetTempFolder(),
-	)
-
 	return nil
 }
 
 func (p *ResourceRepositoryPlugin) getRepository(spec *ociv1.Repository, creds map[string]string) (Repository, error) {
-	repo, err := createRepository(spec, creds, p.manifests, p.layers)
+	repo, err := createRepository(spec, creds, p.manifests, p.layers, p.logger)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
