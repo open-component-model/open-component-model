@@ -1,0 +1,6 @@
+type: generic.config.ocm.software/v1
+configurations:
+  - type: builtin.plugin.config.ocm.software/v1
+    logLevel: debug
+    logFormat: json
+    tempFolder: /tmp/ocm-builtin-plugins

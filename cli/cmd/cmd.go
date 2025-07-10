@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/cli/cmd/version"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
+	builtinConfig "ocm.software/open-component-model/cli/internal/plugin/builtin/config"
 )
 
 // Execute adds all child commands to the Cmd command and sets flags appropriately.
@@ -42,6 +43,7 @@ func New() *cobra.Command {
 
 	configuration.RegisterConfigFlag(cmd)
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
+	builtinConfig.AddBuiltinPluginFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())
 	cmd.AddCommand(add.New())

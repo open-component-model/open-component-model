@@ -17,6 +17,7 @@ import (
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
+	builtinConfig "ocm.software/open-component-model/cli/internal/plugin/builtin/config"
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 )
 
@@ -32,16 +33,23 @@ func setupOCMConfig(cmd *cobra.Command) {
 func setupPluginManager(cmd *cobra.Command) error {
 	pluginManager := manager.NewPluginManager(cmd.Context())
 
-	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
-		slog.WarnContext(cmd.Context(), "could not get configuration to initialize plugin manager")
-	} else {
-		pluginCfg, err := v2alpha1.LookupConfig(cfg)
+	// Get base configuration and create merged config with CLI flag overrides
+	baseCfg := ocmctx.FromContext(cmd.Context()).Configuration()
+	mergedCfg, err := builtinConfig.GetMergedConfigWithCLIFlags(cmd, baseCfg)
+	if err != nil {
+		return fmt.Errorf("could not get merged configuration with CLI flags: %w", err)
+	}
+
+	// Use merged configuration for external plugins (if any exist)
+	if mergedCfg != nil {
+		pluginCfg, err := v2alpha1.LookupConfig(mergedCfg)
 		if err != nil {
 			return fmt.Errorf("could not get plugin configuration: %w", err)
 		}
 		for _, pluginLocation := range pluginCfg.Locations {
 			err := pluginManager.RegisterPlugins(cmd.Context(), pluginLocation,
 				manager.WithIdleTimeout(time.Duration(pluginCfg.IdleTimeout)),
+				manager.WithConfiguration(mergedCfg), // Use merged config
 			)
 			if errors.Is(err, manager.ErrNoPluginsFound) {
 				slog.DebugContext(cmd.Context(), "no plugins found at location", slog.String("location", pluginLocation))
@@ -51,9 +59,21 @@ func setupPluginManager(cmd *cobra.Command) error {
 				return err
 			}
 		}
+	} else {
+		slog.WarnContext(cmd.Context(), "could not get configuration to initialize plugin manager")
 	}
 
-	if err := builtin.Register(pluginManager); err != nil {
+	builtinPluginConfig, err := builtinConfig.GetBuiltinPluginConfig(cmd, baseCfg)
+	if err != nil {
+		return fmt.Errorf("could not get built-in plugin configuration: %w", err)
+	}
+
+	builtinLogger, err := builtinConfig.GetBuiltinPluginLogger(cmd)
+	if err != nil {
+		return fmt.Errorf("could not get built-in plugin logger: %w", err)
+	}
+
+	if err := builtin.Register(pluginManager, builtinPluginConfig, builtinLogger); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 

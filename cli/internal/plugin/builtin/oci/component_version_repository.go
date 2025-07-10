@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
@@ -16,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	builtinv1 "ocm.software/open-component-model/cli/internal/plugin/builtin/config/v1"
 )
 
 type ComponentVersionRepositoryPlugin struct {
@@ -23,6 +25,8 @@ type ComponentVersionRepositoryPlugin struct {
 	scheme    *runtime.Scheme
 	manifests cache.OCIDescriptorCache
 	layers    cache.OCIDescriptorCache
+	config    *builtinv1.BuiltinPluginConfig
+	logger    *slog.Logger
 }
 
 func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
@@ -52,6 +56,18 @@ func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx con
 	}
 
 	return &wrapper{repo: repo}, nil
+}
+
+// Configure configures the ComponentVersionRepositoryPlugin with built-in plugin configuration.
+func (p *ComponentVersionRepositoryPlugin) Configure(config *builtinv1.BuiltinPluginConfig, logger *slog.Logger) error {
+	p.config = config
+	p.logger = logger
+
+	p.logger.Info("OCI ComponentVersionRepositoryPlugin configured",
+		"tempFolder", config.GetTempFolder(),
+	)
+
+	return nil
 }
 
 var (

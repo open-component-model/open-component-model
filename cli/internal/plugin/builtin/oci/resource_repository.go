@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"oras.land/oras-go/v2/registry"
 
@@ -13,11 +14,14 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	builtinv1 "ocm.software/open-component-model/cli/internal/plugin/builtin/config/v1"
 )
 
 type ResourceRepositoryPlugin struct {
 	scheme            *runtime.Scheme
 	manifests, layers cache.OCIDescriptorCache
+	config            *builtinv1.BuiltinPluginConfig
+	logger            *slog.Logger
 }
 
 func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
@@ -131,6 +135,18 @@ func (p *ResourceRepositoryPlugin) DownloadResource(ctx context.Context, resourc
 	default:
 		return nil, fmt.Errorf("unsupported type %s for downloading the resource", t)
 	}
+}
+
+// Configure configures the ResourceRepositoryPlugin with built-in plugin configuration.
+func (p *ResourceRepositoryPlugin) Configure(config *builtinv1.BuiltinPluginConfig, logger *slog.Logger) error {
+	p.config = config
+	p.logger = logger
+
+	p.logger.Info("OCI ResourceRepositoryPlugin configured",
+		"tempFolder", config.GetTempFolder(),
+	)
+
+	return nil
 }
 
 func (p *ResourceRepositoryPlugin) getRepository(spec *ociv1.Repository, creds map[string]string) (Repository, error) {

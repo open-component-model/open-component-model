@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -16,17 +17,28 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	builtinv1 "ocm.software/open-component-model/cli/internal/plugin/builtin/config/v1"
 )
 
 const Creator = "CTF Repository"
 
-func Register(registry *componentversionrepository.RepositoryRegistry) error {
+func Register(registry *componentversionrepository.RepositoryRegistry, config *builtinv1.BuiltinPluginConfig, logger *slog.Logger) error {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
+
+	plugin := &Plugin{scheme: scheme, manifestCache: inmemory.New(), layerCache: inmemory.New()}
+
+	// Configure plugin if configuration is provided
+	if config != nil && logger != nil {
+		if err := plugin.Configure(config, logger); err != nil {
+			return fmt.Errorf("failed to configure CTF plugin: %w", err)
+		}
+	}
+
 	return componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		scheme,
 		registry,
-		&Plugin{scheme: scheme, manifestCache: inmemory.New(), layerCache: inmemory.New()},
+		plugin,
 		&ctfv1.Repository{},
 	)
 }
@@ -36,6 +48,8 @@ type Plugin struct {
 	scheme        *runtime.Scheme
 	manifestCache cache.OCIDescriptorCache
 	layerCache    cache.OCIDescriptorCache
+	config        *builtinv1.BuiltinPluginConfig
+	logger        *slog.Logger
 }
 
 func (p *Plugin) GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, _ runtime.Typed) (runtime.Identity, error) {
@@ -54,6 +68,18 @@ func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySp
 	}
 
 	return &wrapper{repo: repo}, nil
+}
+
+// Configure configures the CTF Plugin with built-in plugin configuration.
+func (p *Plugin) Configure(config *builtinv1.BuiltinPluginConfig, logger *slog.Logger) error {
+	p.config = config
+	p.logger = logger
+
+	p.logger.Info("CTF Plugin configured",
+		"tempFolder", config.GetTempFolder(),
+	)
+
+	return nil
 }
 
 var (
