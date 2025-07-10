@@ -31,7 +31,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverruntime.Resolver{
 				{
-					Repository: NewRepositorySpecWithComponents("single-repo", nil),
+					Repository: NewRepositorySpec("single-repo", nil),
 					Prefix:     "",
 					Priority:   0,
 				},
@@ -44,7 +44,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			component: "prefixA",
 			repos: []*resolverruntime.Resolver{
 				{
-					Repository: NewRepositorySpecWithComponents("single-repo-with-prefix", nil),
+					Repository: NewRepositorySpec("single-repo-with-prefix", nil),
 					Prefix:     "prefixA",
 					Priority:   0,
 				},
@@ -57,7 +57,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			component: "prefixA/component",
 			repos: []*resolverruntime.Resolver{
 				{
-					Repository: NewRepositorySpecWithComponents("single-repo-with-prefix", nil),
+					Repository: NewRepositorySpec("single-repo-with-prefix", nil),
 					Prefix:     "prefixA",
 					Priority:   0,
 				},
@@ -70,12 +70,12 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			component: "prefixB/component",
 			repos: []*resolverruntime.Resolver{
 				{
-					Repository: NewRepositorySpecWithComponents("repoWithPrefixA", nil),
+					Repository: NewRepositorySpec("repoWithPrefixA", nil),
 					Prefix:     "prefixA",
 					Priority:   0,
 				},
 				{
-					Repository: NewRepositorySpecWithComponents("repoWithPrefixB", nil),
+					Repository: NewRepositorySpec("repoWithPrefixB", nil),
 					Prefix:     "prefixB",
 					Priority:   0,
 				},
@@ -90,17 +90,17 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverruntime.Resolver{
 				{
-					Repository: NewRepositorySpecWithComponents("repoWithPriority1", nil),
+					Repository: NewRepositorySpec("repoWithPriority1", nil),
 					Prefix:     "",
 					Priority:   1,
 				},
 				{
-					Repository: NewRepositorySpecWithComponents("repoWithPriority2", nil),
+					Repository: NewRepositorySpec("repoWithPriority2", nil),
 					Prefix:     "",
 					Priority:   2,
 				},
 				{
-					Repository: NewRepositorySpecWithComponents("repoWithPriority3", nil),
+					Repository: NewRepositorySpec("repoWithPriority3", nil),
 					Prefix:     "",
 					Priority:   3,
 				},
@@ -117,17 +117,17 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			component: "prefixB/component",
 			repos: []*resolverruntime.Resolver{
 				{
-					Repository: NewRepositorySpecWithComponents("repoWithPrefixA-Priority0", nil),
+					Repository: NewRepositorySpec("repoWithPrefixA-Priority0", nil),
 					Prefix:     "prefixA",
 					Priority:   0,
 				},
 				{
-					Repository: NewRepositorySpecWithComponents("repoWithPrefixB-Priority0", nil),
+					Repository: NewRepositorySpec("repoWithPrefixB-Priority0", nil),
 					Prefix:     "prefixB",
 					Priority:   0,
 				},
 				{
-					Repository: NewRepositorySpecWithComponents("repoWithPrefixB-Priority1", nil),
+					Repository: NewRepositorySpec("repoWithPrefixB-Priority1", nil),
 					Prefix:     "prefixB",
 					Priority:   1,
 				},
@@ -143,7 +143,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			component: "prefixB/component",
 			repos: []*resolverruntime.Resolver{
 				{
-					Repository: NewRepositorySpecWithComponents("repoWithPrefixA", nil),
+					Repository: NewRepositorySpec("repoWithPrefixA", nil),
 					Prefix:     "prefixA",
 					Priority:   0,
 				},
@@ -156,7 +156,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverruntime.Resolver{
 				{
-					Repository: NewRepositorySpecWithComponents("nil-repo", nil, PolicyReturnNilOnGetRepositoryForSpec),
+					Repository: NewRepositorySpec("nil-repo", nil, PolicyReturnNilOnGetRepositoryForSpec),
 					Prefix:     "",
 					Priority:   0,
 				},
@@ -169,7 +169,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverruntime.Resolver{
 				{
-					Repository: NewRepositorySpecWithComponents("fail-repo", nil, PolicyErrorOnGetRepositoryForSpec),
+					Repository: NewRepositorySpec("fail-repo", nil, PolicyErrorOnGetRepositoryForSpec),
 					Prefix:     "",
 					Priority:   0,
 				},
@@ -211,371 +211,13 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 	}
 }
 
-func Test_GetComponentVersion(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	cases := []struct {
-		name      string
-		component string
-		version   string
-		resolvers []*resolverruntime.Resolver
-		err       assert.ErrorAssertionFunc
-	}{
-		{
-			name:      "found without fallback",
-			component: "test-component",
-			version:   "1.0.0",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("single-repository", map[string][]string{
-						"test-component": {"1.0.0"},
-					}),
-					Prefix:   "",
-					Priority: 0,
-				},
-			},
-			err: assert.NoError,
-		},
-		{
-			name:      "found with fallback",
-			component: "test-component",
-			version:   "1.0.0",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("repository-without-component", map[string][]string{}),
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: NewRepositorySpecWithComponents("repository-with-component", map[string][]string{
-						"test-component": {"1.0.0"},
-					}),
-					Prefix:   "",
-					Priority: 0,
-				},
-			},
-			err: assert.NoError,
-		},
-		{
-			name:      "not found",
-			component: "test-component",
-			version:   "1.0.0",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("repository-without-component", map[string][]string{}),
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: NewRepositorySpecWithComponents("repository-with-component", map[string][]string{}),
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			err: assert.Error,
-		},
-		{
-			name:      "fail on get repository",
-			component: "test-component",
-			version:   "1.0.0",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("fail-repository", nil, PolicyErrorOnGetRepositoryForSpec),
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			err: assert.Error,
-		},
-		{
-			name:      "fail on get component version",
-			component: "test-component",
-			version:   "1.0.0",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("fail-repository", nil, PolicyFailOnGetComponentVersion),
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			err: assert.Error,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), &MockProvider{}, nil, tc.resolvers...)
-			r.NoError(err)
-
-			desc, err := fallbackRepo.GetComponentVersion(ctx, tc.component, tc.version)
-			if !tc.err(t, err) {
-				return
-			}
-			if err != nil {
-				return
-			}
-			r.Equal(tc.component, desc.Component.Name)
-			r.Equal(tc.version, desc.Component.Version)
-		})
-	}
-}
-
-func Test_ListComponentVersion(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	cases := []struct {
-		name             string
-		component        string
-		resolvers        []*resolverruntime.Resolver
-		expectedVersions []string
-		err              assert.ErrorAssertionFunc
-	}{
-		{
-			name:      "list versions from single repository",
-			component: "test-component",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("single-repo", map[string][]string{
-						"test-component": {"1.0.0", "2.0.0"},
-					}),
-					Prefix:   "",
-					Priority: 0,
-				},
-			},
-			expectedVersions: []string{"1.0.0", "2.0.0"},
-			err:              assert.NoError,
-		},
-		{
-			name:      "list versions from multiple repositories",
-			component: "test-component",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("repo-1", map[string][]string{
-						"test-component": {"1.0.0"},
-					}),
-					Prefix:   "",
-					Priority: 0,
-				},
-				{
-					Repository: NewRepositorySpecWithComponents("repo-2", map[string][]string{
-						"test-component": {"2.0.0"},
-					}),
-					Prefix:   "",
-					Priority: 0,
-				},
-			},
-			expectedVersions: []string{"1.0.0", "2.0.0"},
-			err:              assert.NoError,
-		},
-		{
-			name:      "deduplicate versions found in multiple repositories",
-			component: "test-component",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("repo-1", map[string][]string{
-						"test-component": {"1.0.0", "2.0.0"},
-					}),
-					Prefix:   "",
-					Priority: 0,
-				},
-				{
-					Repository: NewRepositorySpecWithComponents("repo-2", map[string][]string{
-						"test-component": {"2.0.0", "3.0.0"},
-					}),
-					Prefix:   "",
-					Priority: 0,
-				},
-			},
-			expectedVersions: []string{"1.0.0", "2.0.0", "3.0.0"},
-			err:              assert.NoError,
-		},
-		{
-			name:      "no versions found in multiple repositories",
-			component: "test-component",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("repo-1", map[string][]string{}),
-					Prefix:     "",
-					Priority:   0,
-				},
-				{
-					Repository: NewRepositorySpecWithComponents("repo-2", map[string][]string{}),
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			expectedVersions: nil,
-			err:              assert.NoError,
-		},
-		{
-			name:      "fail on get repository",
-			component: "test-component",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("fail-repository", nil, PolicyErrorOnGetRepositoryForSpec),
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			err: assert.Error,
-		},
-		{
-			name:      "fail on get component version",
-			component: "test-component",
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("fail-repository", nil, PolicyFailOnGetComponentVersion),
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			err: assert.Error,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), &MockProvider{}, nil, tc.resolvers...)
-			r.NoError(err)
-
-			versions, err := fallbackRepo.ListComponentVersions(ctx, tc.component)
-			if !tc.err(t, err) {
-				return
-			}
-			r.Equal(tc.expectedVersions, versions, "Expected versions for component %s", tc.component)
-		})
-	}
-}
-
-func Test_AddComponentVersion(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	cases := []struct {
-		name         string
-		descriptor   *descriptor.Descriptor
-		resolvers    []*resolverruntime.Resolver
-		expectedRepo runtime.Typed
-		err          assert.ErrorAssertionFunc
-	}{
-		{
-			name:       "add component version without fallback",
-			descriptor: newComponentVersion("test-component", "1.0.0"),
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("single-repo", map[string][]string{}),
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			err: assert.NoError,
-		},
-		{
-			name:       "add component version without fallback",
-			descriptor: newComponentVersion("test-component", "1.0.0"),
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("single-repo", map[string][]string{}),
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			err: assert.NoError,
-		},
-		{
-			name:       "add component version without fallback",
-			descriptor: newComponentVersion("test-component", "1.0.0"),
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithComponents("single-repo", map[string][]string{}, PolicyErrorOnGetRepositoryForSpec),
-					Prefix:     "",
-					Priority:   0,
-				},
-			},
-			err: assert.Error,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), MockProvider{}, nil, tc.resolvers...)
-			r.NoError(err, "failed to create fallback repository")
-
-			err = fallbackRepo.AddComponentVersion(ctx, tc.descriptor)
-			if !tc.err(t, err, "failed adding component version when it should have succeeded") {
-				return
-			}
-		})
-	}
-}
-
-func Test_GetLocalResource(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-
-	cases := []struct {
-		name      string
-		component string
-		version   string
-		identity  map[string]string
-		resolvers []*resolverruntime.Resolver
-		err       assert.ErrorAssertionFunc
-	}{
-		{
-			name:      "found without fallback",
-			component: "test-component",
-			version:   "1.0.0",
-			identity: map[string]string{
-				"name":    "resource",
-				"version": "1.0.0",
-			},
-			resolvers: []*resolverruntime.Resolver{
-				{
-					Repository: NewRepositorySpecWithResources("single-repository", map[string]map[string]string{
-						"test-component:1.0.0": {
-							"name":    "resource",
-							"version": "1.0.0",
-						},
-					}),
-					Prefix:   "",
-					Priority: 0,
-				},
-			},
-			err: assert.NoError,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			fallbackRepo, err := fallback.NewFallbackRepository(t.Context(), &MockProvider{}, nil, tc.resolvers...)
-			r.NoError(err)
-
-			_, res, err := fallbackRepo.GetLocalResource(ctx, tc.component, tc.version, tc.identity)
-			if !tc.err(t, err) {
-				return
-			}
-			if err != nil {
-				return
-			}
-			r.EqualValues(tc.identity, res.ToIdentity())
-		})
-	}
-}
-
 var MockType = runtime.NewUnversionedType("mock-repository")
 
 const (
 	PolicyErrorOnGetRepositoryForSpec     = "fail-get-repository-for-spec"
 	PolicyReturnNilOnGetRepositoryForSpec = "nil-get-repository-for-spec"
-	PolicyFailOnGetComponentVersion       = "fail-get-component-version"
 )
 
-// LocalBlob describes the access for a local blob.
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
-// +k8s:deepcopy-gen=true
-// +ocm:typegen=true
 type RepositorySpec struct {
 	Type runtime.Type `json:"type"`
 
@@ -614,23 +256,11 @@ func (r *RepositorySpec) DeepCopyTyped() runtime.Typed {
 
 var _ runtime.Typed = (*RepositorySpec)(nil)
 
-func NewRepositorySpecWithComponents(name string, components map[string][]string, failPolicy ...string) *RepositorySpec {
+func NewRepositorySpec(name string, components map[string][]string, failPolicy ...string) *RepositorySpec {
 	spec := RepositorySpec{
 		Type:       MockType,
 		Name:       name,
 		Components: components,
-	}
-	if len(failPolicy) == 1 {
-		spec.Policy = failPolicy[0]
-	}
-	return &spec
-}
-
-func NewRepositorySpecWithResources(name string, resources map[string]map[string]string, failPolicy ...string) *RepositorySpec {
-	spec := RepositorySpec{
-		Type:      MockType,
-		Name:      name,
-		Resources: resources,
 	}
 	if len(failPolicy) == 1 {
 		spec.Policy = failPolicy[0]
@@ -667,34 +297,18 @@ type MockRepository struct {
 }
 
 func (m MockRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
-	m.Components[descriptor.Component.Name] = append(m.Components[descriptor.Component.Name], descriptor.Component.Version)
-	return nil
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m MockRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
-	if _, ok := m.Components[component]; !ok {
-		return nil, componentversionrepository.NewErrNotFound(fmt.Sprintf("component version %s/%s not found in repository", component, version), nil)
-	}
-	if m.Policy == PolicyFailOnGetComponentVersion {
-		return nil, fmt.Errorf("not a not found error")
-	}
-	return &descriptor.Descriptor{
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    component,
-					Version: version,
-				},
-			},
-		},
-	}, nil
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m MockRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
-	if m.Policy == PolicyFailOnGetComponentVersion {
-		return nil, fmt.Errorf("not a not found error")
-	}
-	return m.Components[component], nil
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m MockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
@@ -703,27 +317,8 @@ func (m MockRepository) AddLocalResource(ctx context.Context, component, version
 }
 
 func (m MockRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	if m.Resources[fmt.Sprintf("%s:%s", component, version)] == nil {
-		return nil, nil, componentversionrepository.NewErrNotFound(fmt.Sprintf("resource %s:%s not found in repository", component, version), nil)
-	}
-	resource := m.Resources[fmt.Sprintf("%s:%s", component, version)]
-	if !maps.Equal(resource, identity) {
-		return nil, nil, componentversionrepository.NewErrNotFound(fmt.Sprintf("resource %s:%s not found in repository", component, version), nil)
-	}
-	id := maps.Clone(identity)
-	name := id["name"]
-	vers := id["version"]
-	delete(id, "name")
-	delete(id, "version")
-	return nil, &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    name,
-				Version: vers,
-			},
-			ExtraIdentity: id,
-		},
-	}, nil
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m MockRepository) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
@@ -734,28 +329,4 @@ func (m MockRepository) AddLocalSource(ctx context.Context, component, version s
 func (m MockRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	//TODO implement me
 	panic("implement me")
-}
-
-func newResourceVersion(resource, version string) *descriptor.Resource {
-	return &descriptor.Resource{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    resource,
-				Version: version,
-			},
-		},
-	}
-}
-
-func newComponentVersion(component, version string) *descriptor.Descriptor {
-	return &descriptor.Descriptor{
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    component,
-					Version: version,
-				},
-			},
-		},
-	}
 }
