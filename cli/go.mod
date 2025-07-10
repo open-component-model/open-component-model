@@ -8,7 +8,7 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/sync v0.15.0
+	golang.org/x/sync v0.16.0
 	golang.org/x/sys v0.34.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
 	ocm.software/open-component-model/bindings/go/configuration v0.0.1
