@@ -10,6 +10,7 @@ import (
 
 	configv1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	builtinv1 "ocm.software/open-component-model/cli/internal/plugin/builtin/config/v1"
 )
@@ -32,13 +33,13 @@ func GetBuiltinPluginConfig(cmd *cobra.Command, config *configv1.Config) (*built
 
 	// Override log settings with CLI flags if they are set
 	if cmd.Flags().Changed(log.LevelFlagName) {
-		if level, err := cmd.Flags().GetString(log.LevelFlagName); err == nil {
+		if level, err := enum.Get(cmd.Flags(), log.LevelFlagName); err == nil {
 			builtinConfig.LogLevel = builtinv1.LogLevel(level)
 		}
 	}
 
 	if cmd.Flags().Changed(log.FormatFlagName) {
-		if format, err := cmd.Flags().GetString(log.FormatFlagName); err == nil {
+		if format, err := enum.Get(cmd.Flags(), log.FormatFlagName); err == nil {
 			builtinConfig.LogFormat = builtinv1.LogFormat(format)
 		}
 	}
