@@ -30,9 +30,9 @@ func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "resource",
 		Aliases: []string{"resources"},
-		Short:   fmt.Sprintf("Download resources described in a component version in an OCM Repository"),
+		Short:   "Download resources described in a component version in an OCM Repository",
 		Args:    cobra.MaximumNArgs(1),
-		Long: fmt.Sprintf(`Download a resource from a component version located in an Open Component Model (OCM) repository.
+		Long: `Download a resource from a component version located in an Open Component Model (OCM) repository.
 
 This command fetches a specific resource from the given OCM component version reference and stores it at the specified output location. 
 It supports optional transformation of the resource using a registered transformer plugin.
@@ -40,15 +40,15 @@ It supports optional transformation of the resource using a registered transform
 If no transformer is specified, the resource is written directly in its original format. If the media type is known,
 the appropriate file extension will be added to the output file name if no output location is given.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`),
-		Example: fmt.Sprintf(` # Download a resource with identity 'name=example' and write to default output
+Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
+		Example: ` # Download a resource with identity 'name=example' and write to default output
   ocm resource ghcr.io/org/component:v1 --identity name=example
 
   # Download a resource and specify an output file
   ocm resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`),
+  ocm resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
 		RunE:              DownloadResource,
 		DisableAutoGenTag: true,
 	}
