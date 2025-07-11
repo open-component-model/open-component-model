@@ -7,7 +7,6 @@ import (
 	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -32,7 +31,7 @@ func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerI
 	return p.getIdentity(obj)
 }
 
-func (p *ResourceRepositoryPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
+func (p *ResourceRepositoryPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	t := resource.Access.GetType()
 	obj, err := p.scheme.NewObject(t)
 	if err != nil {

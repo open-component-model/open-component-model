@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
@@ -20,6 +21,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -249,7 +251,23 @@ func (prov *constructorProvider) GetSourceInputMethod(ctx context.Context, src *
 }
 
 func (prov *constructorProvider) GetResourceRepository(ctx context.Context, resource *constructorruntime.Resource) (constructor.ResourceRepository, error) {
-	return prov.pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
+	plugin, err := prov.pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, resource.Access)
+	if err != nil {
+		return nil, fmt.Errorf("getting plugin for resource %q failed: %w", resource.Access, err)
+	}
+	return &constructorPlugin{plugin: plugin}, nil
+}
+
+type constructorPlugin struct {
+	plugin resource.Repository
+}
+
+func (c *constructorPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+	return c.plugin.GetResourceCredentialConsumerIdentity(ctx, constructorruntime.ConvertToDescriptorResource(resource))
+}
+
+func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (content blob.ReadOnlyBlob, err error) {
+	return c.plugin.DownloadResource(ctx, res, credentials)
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {

@@ -451,3 +451,53 @@ func Test_Version(t *testing.T) {
 	}
 	r.True(found, "expected to find gitVersion in log entries")
 }
+
+func Test_Download_Resource(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	// Create a test file to be added to the component version
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	r.NoError(os.WriteFile(testFilePath, []byte("foobar"), 0o600), "could not create test file")
+
+	constructorYAML := fmt.Sprintf(`
+name: ocm.software/examples-01
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+
+	r.NoError(err, "could not construct component version")
+
+	logs := test.NewJSONLogReader()
+
+	downloadTarget := filepath.Join(t.TempDir(), "downloaded-resource.txt")
+
+	_, err = test.OCM(t, test.WithArgs("download", "resource",
+		archiveFilePath+"//ocm.software/examples-01:1.0.0",
+		"--identity", "name=my-file,version=1.0.0",
+		"--output", downloadTarget),
+		test.WithOutput(logs),
+	)
+	r.NoError(err, "failed to run download resource command")
+
+	downloaded, err := os.ReadFile(downloadTarget)
+	r.NoError(err, "failed to read downloaded resource file")
+	r.Equal("foobar", string(downloaded), "expected downloaded resource content to match test file content")
+}
