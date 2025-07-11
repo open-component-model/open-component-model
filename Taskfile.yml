@@ -13,6 +13,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/constructor/Taskfile.yml
     dir: ./bindings/go/constructor
+  bindings/go/input/dir:
+    optional: true
+    taskfile: ./bindings/go/input/dir/Taskfile.yml
+    dir: ./bindings/go/input/dir
   bindings/go/input/file:
     optional: true
     taskfile: ./bindings/go/input/file/Taskfile.yml
