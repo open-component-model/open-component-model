@@ -157,8 +157,8 @@ func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Desc
 
 // Exists returns true if the described content Exists.
 func (s *OCILayoutWriter) Exists(_ context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
-	s.indexMu.RLock()
-	defer s.indexMu.RUnlock()
+	s.writerMu.Lock()
+	defer s.writerMu.Unlock()
 	for _, manifest := range s.written {
 		if content.Equal(manifest, target) {
 			return true, nil

@@ -53,7 +53,7 @@ func TestURLPathResolver_ComponentVersionReference(t *testing.T) {
 	component := "test-component"
 	version := "v1.0.0"
 	expected := "http://example.com/component-descriptors/test-component:v1.0.0"
-	result := resolver.ComponentVersionReference(component, version)
+	result := resolver.ComponentVersionReference(t.Context(), component, version)
 	assert.Equal(t, expected, result)
 }
 

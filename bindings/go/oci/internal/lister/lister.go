@@ -18,11 +18,11 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry"
 
-	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
 )
 
@@ -114,12 +114,12 @@ func (lister *Lister) List(ctx context.Context, opts Options) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	log.Base().Log(ctx, slog.LevelDebug, "listed version candidates", slog.Int("count", len(candidates)))
+	slogcontext.FromCtx(ctx).With(slog.String("realm", "oci")).Log(ctx, slog.LevelDebug, "listed version candidates", slog.Int("count", len(candidates)))
 	sorted, err := lister.sort(ctx, opts, candidates)
 	if err != nil {
 		return nil, err
 	}
-	log.Base().Log(ctx, slog.LevelDebug, "sorted version candidates")
+	slogcontext.FromCtx(ctx).With(slog.String("realm", "oci")).Log(ctx, slog.LevelDebug, "sorted version candidates")
 
 	return sorted, nil
 }
@@ -200,7 +200,7 @@ func listViaReferrrers(ctx context.Context, lister registry.ReferrerLister, opts
 	var mu sync.Mutex
 
 	list := func(referrers []ociImageSpecV1.Descriptor) error {
-		log.Base().Log(ctx, slog.LevelDebug, "listing referrers", slog.Int("count", len(referrers)))
+		slogcontext.FromCtx(ctx).With(slog.String("realm", "oci")).Log(ctx, slog.LevelDebug, "listing referrers", slog.Int("count", len(referrers)))
 		for _, referrer := range referrers {
 			wg.Go(func() error {
 				ver, err := opts.VersionResolver(ctx, referrer)
@@ -245,7 +245,7 @@ func listViaTags(ctx context.Context, lister registry.TagLister, opts TagListerO
 	// every time we get a callback for tags (i.e.g from a paginated list),
 	// we will spawn a goroutine for each tag to resolve it to a version
 	list := func(tags []string) error {
-		log.Base().Log(ctx, slog.LevelDebug, "listing tags", slog.Int("count", len(tags)), slog.String("tags", strings.Join(tags, ",")))
+		slogcontext.FromCtx(ctx).With(slog.String("realm", "oci")).Log(ctx, slog.LevelDebug, "listing tags", slog.Int("count", len(tags)), slog.String("tags", strings.Join(tags, ",")))
 		for _, tag := range tags {
 			wg.Go(func() error {
 				ver, err := opts.VersionResolver(ctx, tag)
