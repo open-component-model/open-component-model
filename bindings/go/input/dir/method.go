@@ -65,7 +65,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	dirBlob, err := GetV1DirBlob(dir)
+	dirBlob, err := GetV1DirBlob(ctx, dir)
 	if err != nil {
 		return nil, fmt.Errorf("error getting dir blob based on resource input specification: %w", err)
 	}
@@ -91,13 +91,13 @@ func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, sou
 //  1. Converts the source input to v1.Dir specification
 //  2. Calls GetV1DirBlob to read and process the directory
 //  3. Returns the processed blob data wrapped in a SourceInputMethodResult
-func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.Source, _ map[string]string) (result *constructor.SourceInputMethodResult, err error) {
+func (i *InputMethod) ProcessSource(ctx context.Context, src *constructorruntime.Source, _ map[string]string) (result *constructor.SourceInputMethodResult, err error) {
 	dir := v1.Dir{}
 	if err := Scheme.Convert(src.Input, &dir); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	fileBlob, err := GetV1DirBlob(dir)
+	fileBlob, err := GetV1DirBlob(ctx, dir)
 	if err != nil {
 		return nil, fmt.Errorf("error getting dir blob based on source input specification: %w", err)
 	}

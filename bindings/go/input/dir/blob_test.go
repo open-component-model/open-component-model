@@ -135,6 +135,7 @@ func TestGetV1DirBlob_Success(t *testing.T) {
 		},
 	}
 
+	ctx := t.Context()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create directory structure to test with.
@@ -161,7 +162,7 @@ func TestGetV1DirBlob_Success(t *testing.T) {
 			}
 
 			// Get blob.
-			b, err := dir.GetV1DirBlob(dirSpec)
+			b, err := dir.GetV1DirBlob(ctx, dirSpec)
 			require.NoError(t, err)
 			require.NotNil(t, b)
 
@@ -238,7 +239,8 @@ func TestGetV1DirBlob_EmptyPath(t *testing.T) {
 	}
 
 	// Get blob should fail.
-	dirBlob, err := dir.GetV1DirBlob(dirSpec)
+	ctx := t.Context()
+	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec)
 	assert.Error(t, err)
 	assert.Nil(t, dirBlob)
 }
@@ -252,7 +254,8 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 
 	// Get blob should fail. The error:
 	// "failed to create filesystem while trying to access <path>: path does not exist: <path>".
-	dirBlob, err := dir.GetV1DirBlob(dirSpec)
+	ctx := t.Context()
+	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec)
 	assert.Error(t, err)
 	assert.Nil(t, dirBlob)
 
@@ -267,7 +270,7 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 	}
 
 	// Create the blob.
-	dirBlob, err = dir.GetV1DirBlob(dirSpec)
+	dirBlob, err = dir.GetV1DirBlob(ctx, dirSpec)
 	// Expect no error here, because the pipe is not processed yet.
 	require.NoError(t, err)
 	require.NotNil(t, dirBlob)

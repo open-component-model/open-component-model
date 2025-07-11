@@ -2,9 +2,12 @@ package dir
 
 import (
 	"archive/tar"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/input/dir/log"
 	v1 "ocm.software/open-component-model/bindings/go/input/dir/spec/v1"
 )
 
@@ -26,12 +30,12 @@ import (
 //  2. Reads the directory contents using an instance of the virtual FileSystem
 //  3. Packs the directory contents into a tar archive
 //  4. Applies different configuration options of the v1.Dir specification
-func GetV1DirBlob(dir v1.Dir) (blob.ReadOnlyBlob, error) {
+func GetV1DirBlob(ctx context.Context, dir v1.Dir) (blob.ReadOnlyBlob, error) {
 	// TODO:
 	// - Handle FollowSymlinks option.
 
 	// Pack directory contents as a tar archive.
-	reader, err := packDirToTar(dir.Path, &dir)
+	reader, err := packDirToTar(ctx, dir.Path, &dir)
 	if err != nil {
 		return nil, fmt.Errorf("error producing blob for a dir input: %w", err)
 	}
@@ -50,7 +54,7 @@ func GetV1DirBlob(dir v1.Dir) (blob.ReadOnlyBlob, error) {
 // packDirToTar is the main function, which creates a tar archive from the contents of the specified directory.
 // It creates an instance of the virtual FileSystem based on the directory path, creates a tar writer and
 // triggers recursive packaging of the directory contents.
-func packDirToTar(path string, opt *v1.Dir) (_ io.Reader, err error) {
+func packDirToTar(ctx context.Context, path string, opt *v1.Dir) (_ io.Reader, err error) {
 	if path == "" {
 		return nil, fmt.Errorf("dir path must not be empty")
 	}
@@ -76,17 +80,23 @@ func packDirToTar(path string, opt *v1.Dir) (_ io.Reader, err error) {
 	// Start a goroutine to create the tar and write the data to the pipe.
 	go func() {
 		defer func() {
-			_ = pw.Close()
+			err = pw.Close()
+			if err != nil {
+				log.Base().Log(ctx, slog.LevelError, fmt.Sprintf("failed to close PipeWriter: %s", err.Error()))
+			}
 		}()
 
 		// Create tar writer
 		tw := tar.NewWriter(pw)
 		defer func() {
-			_ = tw.Close()
+			err = tw.Close()
+			if err != nil {
+				log.Base().Log(ctx, slog.LevelError, fmt.Sprintf("failed to close tar Writer: %s", err.Error()))
+			}
 		}()
 
 		// Walk recursively through directory contents and add it to the tar.
-		err = walkDirContents(subDir, baseDir, opt, fileSystem, tw)
+		err = walkDirContents(ctx, subDir, baseDir, opt, fileSystem, tw)
 		if err != nil {
 			_ = pw.CloseWithError(err) // CloseWithError() always returns nil.
 		}
@@ -103,9 +113,16 @@ func packDirToTar(path string, opt *v1.Dir) (_ io.Reader, err error) {
 // The function goes the directory contents file by file, checks if it should be included or excluded,
 // creates tar headers for each file and subfolder, and writes the file contents to the tar archive.
 // For subdirectories it calls itself recursively to process the subfolder contents.
-func walkDirContents(currentDir string, baseDir string,
+// TODO: limit recursion depth to avoid stack overflow.
+func walkDirContents(ctx context.Context, currentDir string, baseDir string,
 	opt *v1.Dir, fileSystem filesystem.FileSystem, tw *tar.Writer,
 ) (err error) {
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled while processing directory %q: %w", currentDir, ctx.Err())
+	default:
+	}
+
 	// Read directory contents.
 	dirEntries, err := fileSystem.ReadDir(currentDir)
 	if err != nil {
@@ -154,7 +171,7 @@ func walkDirContents(currentDir string, baseDir string,
 				return fmt.Errorf("failed to open file %q: %w", entryPath, err)
 			}
 			if _, err := io.Copy(tw, file); err != nil {
-				_ = file.Close()
+				err = errors.Join(err, file.Close())
 				return fmt.Errorf("failed to write file %q to tar archive: %w", entryPath, err)
 			}
 			if err := file.Close(); err != nil {
@@ -169,7 +186,7 @@ func walkDirContents(currentDir string, baseDir string,
 			}
 
 			// Process subdirectory contents.
-			if err := walkDirContents(entryPath, baseDir, opt, fileSystem, tw); err != nil {
+			if err := walkDirContents(ctx, entryPath, baseDir, opt, fileSystem, tw); err != nil {
 				return err
 			}
 

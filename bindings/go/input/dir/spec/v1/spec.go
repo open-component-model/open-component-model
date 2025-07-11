@@ -15,7 +15,7 @@ type Dir struct {
 	// Path is the path to the directory.
 	Path string `json:"path"`
 
-	// MediaType is the media type of the input (resulting blob).
+	// MediaType is the media type of the resulting blob.
 	MediaType string `json:"mediaType,omitempty"`
 
 	// Compress indicates whether the resulting blob should be compressed with gzip.
