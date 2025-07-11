@@ -133,6 +133,24 @@ func TestGetV1DirBlob_Success(t *testing.T) {
 				{relPath: "sub/yaml.yaml", content: "", expectedInTar: false}, // Excluded by "sub/*".
 			},
 		},
+		{
+			name:        "default media type", // mediaType field is not set in the spec.
+			compress:    false,
+			expectGzip:  false,
+			testDirBase: "input-dir",
+			testFiles: []TestFile{
+				{relPath: "file.txt", content: "content", expectedInTar: true},
+			},
+		},
+		{
+			name:        "default media type compressed", // mediaType field is not set in the spec.
+			compress:    true,
+			expectGzip:  true,
+			testDirBase: "input-dir",
+			testFiles: []TestFile{
+				{relPath: "file.txt", content: "content", expectedInTar: true},
+			},
+		},
 	}
 
 	ctx := t.Context()
@@ -197,16 +215,27 @@ func TestGetV1DirBlob_Success(t *testing.T) {
 
 				// Test media type for compressed blob.
 				if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
-					mediaType, known := mediaTypeAware.MediaType()
+					actualType, known := mediaTypeAware.MediaType()
+					expectedType := tt.mediaType
+					if expectedType == "" {
+						// If media type isn't set in the spec, expect the default.
+						expectedType = dir.DEFAULT_TAR_MIME_TYPE
+					}
+					expectedType += "+gzip"
 					assert.True(t, known)
-					assert.Equal(t, tt.mediaType+"+gzip", mediaType)
+					assert.Equal(t, expectedType, actualType)
 				}
 			} else {
 				// Test media type for uncompressed blob.
 				if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
-					mediaType, known := mediaTypeAware.MediaType()
+					actualType, known := mediaTypeAware.MediaType()
+					expectedType := tt.mediaType
+					if expectedType == "" {
+						// If media type isn't set in the spec, expect the default.
+						expectedType = dir.DEFAULT_TAR_MIME_TYPE
+					}
 					assert.True(t, known)
-					assert.Equal(t, tt.mediaType, mediaType)
+					assert.Equal(t, expectedType, actualType)
 				}
 			}
 

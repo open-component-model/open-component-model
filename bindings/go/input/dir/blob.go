@@ -20,6 +20,9 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/input/dir/spec/v1"
 )
 
+// DEFAULT_TAR_MIME_TYPE is used as blob media type, if the MediaType field is not set in the spec.
+const DEFAULT_TAR_MIME_TYPE = "application/x-tar"
+
 // GetV1DirBlob creates a ReadOnlyBlob from a v1.Dir specification.
 // It reads the directory from the filesystem and applies compression if requested.
 // The function returns an error if the file path is empty or if there are issues reading the directory
@@ -41,7 +44,11 @@ func GetV1DirBlob(ctx context.Context, dir v1.Dir) (blob.ReadOnlyBlob, error) {
 	}
 
 	// Wrap the tar archive in a ReadOnlyBlob.
-	var dirBlob blob.ReadOnlyBlob = inmemory.New(reader, inmemory.WithMediaType(dir.MediaType))
+	mediaType := dir.MediaType
+	if mediaType == "" {
+		mediaType = DEFAULT_TAR_MIME_TYPE
+	}
+	var dirBlob blob.ReadOnlyBlob = inmemory.New(reader, inmemory.WithMediaType(mediaType))
 
 	// gzip the blob, if requested in the spec.
 	if dir.Compress {
