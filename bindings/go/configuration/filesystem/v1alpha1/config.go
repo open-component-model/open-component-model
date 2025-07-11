@@ -29,6 +29,7 @@ func init() {
 type Config struct {
 	Type runtime.Type `json:"-"`
 	// TempFolder defines places where plugins and other functionalities can put ephemeral files under.
+	// If not defined, os.TempDir is used as a default.
 	TempFolder string `json:"tempFolder,omitempty"`
 }
 
@@ -73,14 +74,8 @@ func LookupConfig(cfg *v1.Config) (*Config, error) {
 		merged = new(Config)
 	}
 
-	// TODO: Question: Should we do this, or leave it empty signaling that the using code can create their own location?
 	if len(merged.TempFolder) == 0 {
-		tmp, err := os.CreateTemp("", "filesystem-temp-location")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create a temporary location: %w", err)
-		}
-
-		merged.TempFolder = tmp.Name()
+		merged.TempFolder = os.TempDir()
 	}
 
 	return merged, nil
