@@ -42,6 +42,7 @@ func New() *cobra.Command {
 
 	configuration.RegisterConfigFlag(cmd)
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
+	cmd.PersistentFlags().String("temp-dir", "", "Directory to use for temporary files and directories")
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())
 	cmd.AddCommand(add.New())
@@ -58,6 +59,10 @@ func preRunE(cmd *cobra.Command, _ []string) error {
 	slog.SetDefault(logger)
 
 	setupOCMConfig(cmd)
+
+	if err := setupTempDir(cmd); err != nil {
+		return fmt.Errorf("could not setup temp dir: %w", err)
+	}
 
 	if err := setupPluginManager(cmd); err != nil {
 		return fmt.Errorf("could not setup plugin manager: %w", err)
