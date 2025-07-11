@@ -283,6 +283,35 @@ func TestElementMeta_ToIdentity(t *testing.T) {
 			elemMeta: nil,
 			expected: nil,
 		},
+		{
+			name: "identity without version",
+			elemMeta: &v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Name: "test",
+				},
+			},
+			expected: runtime.Identity{
+				v1.IdentityAttributeName: "test",
+			},
+		},
+		{
+			name: "identity without name",
+			elemMeta: &v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Version: "test",
+				},
+			},
+			expected: runtime.Identity{
+				v1.IdentityAttributeVersion: "test",
+			},
+		},
+		{
+			name: "identity without anything",
+			elemMeta: &v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{},
+			},
+			expected: runtime.Identity{},
+		},
 	}
 
 	for _, tt := range tests {

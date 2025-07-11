@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 
 	descriptorRuntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -944,4 +945,73 @@ func TestLabels(t *testing.T) {
 			assert.Equal(t, "value2", val["key"])
 		})
 	})
+}
+
+func TestElementMeta_ToIdentity(t *testing.T) {
+	r := require.New(t)
+
+	tests := []struct {
+		name     string
+		elemMeta *descriptorRuntime.ElementMeta
+		expected runtime.Identity
+	}{
+		{
+			name: "with extra identity",
+			elemMeta: &descriptorRuntime.ElementMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Name:    "test-element",
+					Version: "2.0.0",
+				},
+				ExtraIdentity: runtime.Identity{
+					"namespace": "system",
+				},
+			},
+			expected: runtime.Identity{
+				"namespace": "system",
+				"name":      "test-element",
+				"version":   "2.0.0",
+			},
+		},
+		{
+			name:     "with nil identity",
+			elemMeta: nil,
+			expected: nil,
+		},
+		{
+			name: "identity without version",
+			elemMeta: &descriptorRuntime.ElementMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Name: "test",
+				},
+			},
+			expected: runtime.Identity{
+				v1.IdentityAttributeName: "test",
+			},
+		},
+		{
+			name: "identity without name",
+			elemMeta: &descriptorRuntime.ElementMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Version: "test",
+				},
+			},
+			expected: runtime.Identity{
+				v1.IdentityAttributeVersion: "test",
+			},
+		},
+		{
+			name: "identity without anything",
+			elemMeta: &descriptorRuntime.ElementMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{},
+			},
+			expected: runtime.Identity{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := tt.elemMeta.ToIdentity()
+			r.Equal(tt.expected, identity)
+		})
+	}
 }
