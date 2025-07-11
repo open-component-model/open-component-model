@@ -240,8 +240,12 @@ func (r *ComponentMeta) ToIdentity() runtime.Identity {
 		return nil
 	}
 	m := make(runtime.Identity, 2)
-	m[IdentityAttributeName] = r.Name
-	m[IdentityAttributeVersion] = r.Version
+	if r.Name != "" {
+		m[IdentityAttributeName] = r.Name
+	}
+	if r.Version != "" {
+		m[IdentityAttributeVersion] = r.Version
+	}
 	return m
 }
 

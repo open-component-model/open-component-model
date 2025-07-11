@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"sigs.k8s.io/yaml"
 
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -341,7 +340,7 @@ func TestElementMeta_ToIdentity(t *testing.T) {
 				},
 			},
 			expected: runtime.Identity{
-				v1.IdentityAttributeName: "test",
+				descriptorv2.IdentityAttributeName: "test",
 			},
 		},
 		{
@@ -352,7 +351,7 @@ func TestElementMeta_ToIdentity(t *testing.T) {
 				},
 			},
 			expected: runtime.Identity{
-				v1.IdentityAttributeVersion: "test",
+				descriptorv2.IdentityAttributeVersion: "test",
 			},
 		},
 		{
@@ -373,26 +372,66 @@ func TestElementMeta_ToIdentity(t *testing.T) {
 }
 
 func TestComponentMeta_ToIdentity(t *testing.T) {
-	// Setup
-	compMeta := descriptorv2.ComponentMeta{
-		ObjectMeta: descriptorv2.ObjectMeta{
-			Name:    "test-component",
-			Version: "3.0.0",
-			Labels: []descriptorv2.Label{
-				{Name: "stage", Value: descriptorv2.MustAsRawMessage("dev")},
+	tests := []struct {
+		name     string
+		compMeta *descriptorv2.ComponentMeta
+		expected runtime.Identity
+	}{
+		{
+			name: "WithNameAndVersion",
+			compMeta: &descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name:    "test-component",
+					Version: "3.0.0",
+				},
 			},
+			expected: runtime.Identity{
+				"name":    "test-component",
+				"version": "3.0.0",
+			},
+		},
+		{
+			name:     "NilComponentMeta",
+			compMeta: nil,
+			expected: nil,
+		},
+		{
+			name: "NameWithoutVersion",
+			compMeta: &descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Name: "test-component",
+				},
+			},
+			expected: runtime.Identity{
+				descriptorv2.IdentityAttributeName: "test-component",
+			},
+		},
+		{
+			name: "VersionWithoutName",
+			compMeta: &descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
+					Version: "1.0.0",
+				},
+			},
+			expected: runtime.Identity{
+				descriptorv2.IdentityAttributeVersion: "1.0.0",
+			},
+		},
+		{
+			name: "EmptyComponentMeta",
+			compMeta: &descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{},
+			},
+			expected: runtime.Identity{},
 		},
 	}
 
-	// Test
-	identity := compMeta.ToIdentity()
-
-	// Assert
-	expected := runtime.Identity{
-		"name":    "test-component",
-		"version": "3.0.0",
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := tt.compMeta.ToIdentity()
+			assert.Equal(t, tt.expected, identity)
+		})
 	}
-	assert.Equal(t, expected, identity)
 }
 
 func TestComponentMeta_ToIdentity_Nil(t *testing.T) {

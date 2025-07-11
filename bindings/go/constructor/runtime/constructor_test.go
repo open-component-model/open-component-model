@@ -159,6 +159,35 @@ func TestComponentMeta_ToIdentity(t *testing.T) {
 				IdentityAttributeVersion: "1.0.0",
 			},
 		},
+		{
+			name: "name without version",
+			meta: &ComponentMeta{
+				ObjectMeta: ObjectMeta{
+					Name: "test-component",
+				},
+			},
+			expected: runtime.Identity{
+				IdentityAttributeName: "test-component",
+			},
+		},
+		{
+			name: "version without name",
+			meta: &ComponentMeta{
+				ObjectMeta: ObjectMeta{
+					Version: "1.0.0",
+				},
+			},
+			expected: runtime.Identity{
+				IdentityAttributeVersion: "1.0.0",
+			},
+		},
+		{
+			name: "empty component meta",
+			meta: &ComponentMeta{
+				ObjectMeta: ObjectMeta{},
+			},
+			expected: runtime.Identity{},
+		},
 	}
 
 	for _, tt := range tests {
