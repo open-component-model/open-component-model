@@ -6,6 +6,9 @@
   prConcurrentLimit: 0,
   prHourlyLimit: 0,
   "platform": "github",
+  env: {
+    GOPROXY: "direct"
+  },
   "repositories": [
     "open-component-model/open-component-model",
   ],

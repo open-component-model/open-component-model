@@ -11,6 +11,9 @@
   'git-submodules': {
     enabled: true
   },
+  env: {
+    GOPROXY: "direct"
+  },
   packageRules: [
     {
       "matchCategories": [
