@@ -517,8 +517,9 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, 
 
 	targetAccess := resource.Access.DeepCopyTyped()
 	targetAccess.(*v1.OCIImage).ImageReference = to
+	resource.Access = targetAccess
 
-	newRes, err := repo.UploadResource(ctx, targetAccess, &resource, blob)
+	newRes, err := repo.UploadResource(ctx, &resource, blob)
 	r.NoError(err)
 	resource = *newRes
 
@@ -574,7 +575,7 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, from, to)
+	data, access := createSingleLayerOCIImage(t, originalData, from)
 
 	blob := inmemory.New(bytes.NewReader(data))
 
@@ -592,8 +593,9 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	targetAccess := resource.Access.DeepCopyTyped()
 	targetAccess.(*v1.OCIImage).ImageReference = to
+	resource.Access = targetAccess
 
-	newRes, err := repo.UploadResource(ctx, targetAccess, &resource, blob)
+	newRes, err := repo.UploadResource(ctx, &resource, blob)
 	r.NoError(err)
 	resource = *newRes
 
