@@ -157,30 +157,38 @@ func ConvertFromV2Resources(resources []v2.Resource) []Resource {
 	}
 	n := make([]Resource, len(resources))
 	for i := range resources {
-		n[i].Name = resources[i].Name
-		n[i].Version = resources[i].Version
-		n[i].Type = resources[i].Type
-		if resources[i].CreationTime != nil {
-			n[i].CreationTime = CreationTime(resources[i].CreationTime.Time.Time)
-		}
-		if resources[i].Labels != nil {
-			n[i].Labels = ConvertFromV2Labels(resources[i].Labels)
-		}
-		if resources[i].Digest != nil {
-			n[i].Digest = ConvertFromV2Digest(resources[i].Digest)
-		}
-		if resources[i].SourceRefs != nil {
-			n[i].SourceRefs = ConvertFromV2SourceRefs(resources[i].SourceRefs)
-		}
-		if resources[i].Access != nil {
-			n[i].Access = resources[i].Access.DeepCopy()
-		}
-		if resources[i].ExtraIdentity != nil {
-			n[i].ExtraIdentity = resources[i].ExtraIdentity.DeepCopy()
-		}
-		n[i].Relation = ResourceRelation(resources[i].Relation)
+		n[i] = *ConvertFromV2Resource(&resources[i])
 	}
 	return n
+}
+
+// ConvertFromV2Resource converts v2 resources to internal representation.
+func ConvertFromV2Resource(res *v2.Resource) *Resource {
+	var resource Resource
+	resource.Name = res.Name
+	resource.Version = res.Version
+	resource.Type = res.Type
+	if res.CreationTime != nil {
+		resource.CreationTime = CreationTime(res.CreationTime.Time.Time)
+	}
+	if res.Labels != nil {
+		resource.Labels = ConvertFromV2Labels(res.Labels)
+	}
+	if res.Digest != nil {
+		resource.Digest = ConvertFromV2Digest(res.Digest)
+	}
+	if res.SourceRefs != nil {
+		resource.SourceRefs = ConvertFromV2SourceRefs(res.SourceRefs)
+	}
+	if res.Access != nil {
+		resource.Access = res.Access.DeepCopy()
+	}
+	if res.ExtraIdentity != nil {
+		resource.ExtraIdentity = res.ExtraIdentity.DeepCopy()
+	}
+	resource.Relation = ResourceRelation(res.Relation)
+
+	return &resource
 }
 
 // ConvertFromV2SourceRefs converts v2 source references to internal format.
@@ -329,32 +337,44 @@ func ConvertToV2Resources(scheme *runtime.Scheme, resources []Resource) ([]v2.Re
 	}
 	n := make([]v2.Resource, len(resources))
 	for i := range resources {
-		n[i].Name = resources[i].Name
-		n[i].Version = resources[i].Version
-		n[i].Type = resources[i].Type
-		if time.Time(resources[i].CreationTime) != (time.Time{}) {
-			n[i].CreationTime = &v2.Timestamp{Time: v2.Time{Time: time.Time(resources[i].CreationTime)}}
-		}
-		l, err := ConvertToV2Labels(resources[i].Labels)
+		resource, err := ConvertToV2Resource(scheme, &resources[i])
 		if err != nil {
-			return nil, fmt.Errorf("could not convert labels for resource %q: %w", resources[i].Name, err)
+			return nil, fmt.Errorf("could not convert resource %q: %w", resources[i].Name, err)
 		}
-		n[i].Labels = l
-		n[i].Digest = ConvertToV2Digest(resources[i].Digest)
-		srcRefs, err := ConvertToV2SourceRefs(resources[i].SourceRefs)
-		if err != nil {
-			return nil, fmt.Errorf("could not convert source refs for resource %q: %w", resources[i].Name, err)
-		}
-		n[i].SourceRefs = srcRefs
-		n[i].Access = &runtime.Raw{}
-		// Use runtime.Scheme to convert custom access types.
-		if err := scheme.Convert(resources[i].Access, n[i].Access); err != nil {
-			return nil, fmt.Errorf("could not convert access %q: %w", resources[i].String(), err)
-		}
-		n[i].ExtraIdentity = resources[i].ExtraIdentity.DeepCopy()
-		n[i].Relation = v2.ResourceRelation(resources[i].Relation)
+		n[i] = *resource
 	}
 	return n, nil
+}
+
+// ConvertToV2Resource converts an internal resource to a v2 resource.
+func ConvertToV2Resource(scheme *runtime.Scheme, res *Resource) (*v2.Resource, error) {
+	var resource v2.Resource
+	resource.Name = res.Name
+	resource.Version = res.Version
+	resource.Type = res.Type
+	if time.Time(res.CreationTime) != (time.Time{}) {
+		resource.CreationTime = &v2.Timestamp{Time: v2.Time{Time: time.Time(res.CreationTime)}}
+	}
+	l, err := ConvertToV2Labels(res.Labels)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert labels for resource %q: %w", res.Name, err)
+	}
+	resource.Labels = l
+	resource.Digest = ConvertToV2Digest(res.Digest)
+	srcRefs, err := ConvertToV2SourceRefs(res.SourceRefs)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert source refs for resource %q: %w", res.Name, err)
+	}
+	resource.SourceRefs = srcRefs
+	resource.Access = &runtime.Raw{}
+	// Use runtime.Scheme to convert custom access types.
+	if err := scheme.Convert(res.Access, resource.Access); err != nil {
+		return nil, fmt.Errorf("could not convert access %q: %w", res.String(), err)
+	}
+	resource.ExtraIdentity = res.ExtraIdentity.DeepCopy()
+	resource.Relation = v2.ResourceRelation(res.Relation)
+
+	return &resource, nil
 }
 
 // ConvertToV2SourceRefs converts internal source references to v2 format.

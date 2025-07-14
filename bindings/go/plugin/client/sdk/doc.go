@@ -15,7 +15,7 @@
 //	repository.MustAddToScheme(scheme)
 //	capabilities := endpoints.NewEndpoints(scheme)
 //
-//	if err := componentversionrepository.RegisterComponentVersionRepository(&v1.OCIRepository{}, &OCIPlugin{}, capabilities); err != nil {
+//	if err := componentrepository.RegisterComponentVersionRepository(&v1.OCIRepository{}, &OCIPlugin{}, capabilities); err != nil {
 //		log.Fatal(err)
 //	}
 //

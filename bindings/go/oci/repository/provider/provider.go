@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	ocmrepository "ocm.software/open-component-model/bindings/go/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
@@ -18,7 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// CachingComponentVersionRepositoryProvider is a caching implementation of the ComponentVersionRepositoryProvider interface.
+// CachingComponentVersionRepositoryProvider is a caching implementation of the componentrepository.ComponentVersionRepositoryProvider interface.
 // It provides efficient caching mechanisms for repository operations by maintaining:
 // - A credential cache for authentication information
 // - An OCI cache for manifests and layers
@@ -32,9 +32,11 @@ type CachingComponentVersionRepositoryProvider struct {
 	httpClient         *http.Client
 }
 
+var _ componentrepository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
+
 // NewComponentVersionRepositoryProvider creates a new instance of CachingComponentVersionRepositoryProvider
 // with initialized caches and default HTTP client configuration.
-func NewComponentVersionRepositoryProvider() ocmrepository.ComponentVersionRepositoryProvider {
+func NewComponentVersionRepositoryProvider() *CachingComponentVersionRepositoryProvider {
 	return &CachingComponentVersionRepositoryProvider{
 		scheme:             repoSpec.Scheme,
 		credentialCache:    &credentialCache{},
@@ -44,7 +46,7 @@ func NewComponentVersionRepositoryProvider() ocmrepository.ComponentVersionRepos
 	}
 }
 
-// GetComponentVersionRepositoryCredentialConsumerIdentity implements the ComponentVersionRepositoryProvider interface.
+// GetComponentVersionRepositoryCredentialConsumerIdentity implements the componentversionrepository.ComponentVersionRepositoryProvider interface.
 // It retrieves the consumer identity for a given repository specification.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	return GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, b.scheme, repositorySpecification)
@@ -67,9 +69,9 @@ func GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, 
 	}
 }
 
-// GetComponentVersionRepository implements the ComponentVersionRepositoryProvider interface.
+// GetComponentVersionRepository implements the componentversionrepository.ComponentVersionRepositoryProvider interface.
 // It retrieves a component version repository with caching support for the given specification and credentials.
-func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ocmrepository.ComponentVersionRepository, error) {
+func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentrepository.ComponentVersionRepository, error) {
 	obj, err := getConvertedTypedSpec(b.scheme, repositorySpecification)
 	if err != nil {
 		return nil, err

@@ -13,7 +13,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/componentversionrepository/reference/compref"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -21,6 +20,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
 	"ocm.software/open-component-model/cli/cmd/internal/test"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 // setupTestRepositoryWithDescriptorLibrary creates a test repository with the given component versions

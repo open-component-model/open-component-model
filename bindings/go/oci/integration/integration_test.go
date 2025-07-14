@@ -345,10 +345,12 @@ func Test_Integration_OCIRepository(t *testing.T) {
 				"username": testUsername,
 				"password": password,
 			})
+			ocirepo, ok := repo.(oci.ComponentVersionRepository)
+			r.True(ok, "expected oci.ComponentVersionRepository, got %T", repo)
 			r.NoError(err)
 
 			t.Run("basic upload and download of a component version", func(t *testing.T) {
-				uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
+				uploadDownloadBarebonesComponentVersion(t, ocirepo, "test-component", "v1.0.0")
 			})
 		})
 	})
@@ -407,10 +409,12 @@ func Test_Integration_CTF(t *testing.T) {
 		r.Equal(id[ocmruntime.IdentityAttributePath], fs.String())
 
 		repo, err := repoProvider.GetComponentVersionRepository(t.Context(), repoSpec, nil)
+		ocirepo, ok := repo.(oci.ComponentVersionRepository)
+		r.True(ok, "expected oci.ComponentVersionRepository, got %T", repo)
 		r.NoError(err)
 
 		t.Run("basic upload and download of a component version", func(t *testing.T) {
-			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v5.0.0")
+			uploadDownloadBarebonesComponentVersion(t, ocirepo, "test-component", "v5.0.0")
 		})
 	})
 }

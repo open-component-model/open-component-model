@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -17,7 +18,6 @@ import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,7 +43,7 @@ func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, name, ve
 	if desc, exists := m.components[key]; exists {
 		return desc, nil
 	}
-	return nil, fmt.Errorf("component version %q not found: %w", name+":"+version, oci.ErrNotFound)
+	return nil, fmt.Errorf("component version %q not found: %w", name+":"+version, componentrepository.NewErrNotFound("component version not found", nil))
 }
 
 func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, component *constructorv1.Component) (TargetRepository, error) {

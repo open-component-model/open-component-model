@@ -15,9 +15,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"ocm.software/open-component-model/bindings/go/blob"
-	repository "ocm.software/open-component-model/bindings/go/componentversionrepository"
-	resolverruntime "ocm.software/open-component-model/bindings/go/componentversionrepository/resolver/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
+	resolverruntime "ocm.software/open-component-model/bindings/go/repositories/componentrepository/resolver/config/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -28,8 +28,8 @@ import (
 // leveraging the GetResolvers method in combination with the
 // resolverruntime.Merge function.
 type FallbackRepository struct {
-	repositoryProvider repository.ComponentVersionRepositoryProvider
-	credentialProvider repository.CredentialProvider
+	repositoryProvider componentrepository.ComponentVersionRepositoryProvider
+	credentialProvider componentrepository.CredentialProvider
 
 	// The resolvers slice is a list of resolvers sorted by priority (highest first).
 	// The order in this list determines the order in which repositories are
@@ -40,11 +40,11 @@ type FallbackRepository struct {
 	// This cache is based on index. So, the index of the resolver in the
 	// resolver slice corresponds to the index of the repository in this slice.
 	repositoriesForResolverCacheMu sync.Mutex
-	repositoriesForResolverCache   []repository.ComponentVersionRepository
+	repositoriesForResolverCache   []componentrepository.ComponentVersionRepository
 }
 
 // NewFallbackRepository creates a new FallbackRepository instance.
-func NewFallbackRepository(_ context.Context, repositoryProvider repository.ComponentVersionRepositoryProvider, credentialProvider repository.CredentialProvider, res ...*resolverruntime.Resolver) (*FallbackRepository, error) {
+func NewFallbackRepository(_ context.Context, repositoryProvider componentrepository.ComponentVersionRepositoryProvider, credentialProvider componentrepository.CredentialProvider, res ...*resolverruntime.Resolver) (*FallbackRepository, error) {
 	resolvers := make([]*resolverruntime.Resolver, len(res))
 
 	// copy the resolvers to ensure immutability
@@ -60,7 +60,7 @@ func NewFallbackRepository(_ context.Context, repositoryProvider repository.Comp
 		credentialProvider: credentialProvider,
 
 		resolvers:                    resolvers,
-		repositoriesForResolverCache: make([]repository.ComponentVersionRepository, len(resolvers)),
+		repositoriesForResolverCache: make([]componentrepository.ComponentVersionRepository, len(resolvers)),
 	}, nil
 }
 
@@ -88,8 +88,8 @@ func (f *FallbackRepository) GetComponentVersion(ctx context.Context, component,
 		}
 		desc, err := repo.GetComponentVersion(ctx, component, version)
 		if err != nil {
-			if errors.As(err, new(*repository.ErrNotFound)) {
-				slog.DebugContext(ctx, "component version not found in repository", "realm", repository.Realm, "repository", repo, "component", component, "version", version)
+			if errors.As(err, new(*componentrepository.ErrNotFound)) {
+				slog.DebugContext(ctx, "component version not found in repository", "realm", componentrepository.Realm, "repository", repo, "component", component, "version", version)
 				continue // try the next repository
 			}
 			return nil, fmt.Errorf("getting component version %s/%s from repository %v failed: %w", component, version, repo, err)
@@ -175,8 +175,8 @@ func (f *FallbackRepository) GetLocalResource(ctx context.Context, component, ve
 		}
 		data, res, err := repo.GetLocalResource(ctx, component, version, identity)
 		if err != nil {
-			if errors.As(err, new(*repository.ErrNotFound)) {
-				slog.DebugContext(ctx, "local resource not found in repository", "realm", repository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
+			if errors.As(err, new(*componentrepository.ErrNotFound)) {
+				slog.DebugContext(ctx, "local resource not found in repository", "realm", componentrepository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
 				continue // try the next repository
 			}
 			return nil, nil, fmt.Errorf("getting local resource with identity %v in component version %s/%s from repository %v failed: %w", identity, component, version, repo, err)
@@ -210,8 +210,8 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 		}
 		data, source, err := repo.GetLocalSource(ctx, component, version, identity)
 		if err != nil {
-			if errors.As(err, new(*repository.ErrNotFound)) {
-				slog.DebugContext(ctx, "local source not found in repository", "realm", repository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
+			if errors.As(err, new(*componentrepository.ErrNotFound)) {
+				slog.DebugContext(ctx, "local source not found in repository", "realm", componentrepository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
 				continue // try the next repository
 			}
 			return nil, nil, fmt.Errorf("getting local source with identity %v in component version %s/%s from repository %v failed: %w", identity, component, version, repo, err)
@@ -221,7 +221,7 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 	return nil, nil, fmt.Errorf("local source with identity %v in component version %s/%s not found in any repository", identity, component, version)
 }
 
-func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
+func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (componentrepository.ComponentVersionRepository, error) {
 	consumerIdentity, err := f.repositoryProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, specification)
 	if err != nil {
 		return nil, fmt.Errorf("getting consumer identity for repository %q failed: %w", specification, err)
@@ -239,12 +239,12 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	return repo, nil
 }
 
-func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index int, resolver *resolverruntime.Resolver) (repository.ComponentVersionRepository, error) {
+func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index int, resolver *resolverruntime.Resolver) (componentrepository.ComponentVersionRepository, error) {
 	f.repositoriesForResolverCacheMu.Lock()
 	defer f.repositoriesForResolverCacheMu.Unlock()
 
 	var err error
-	var repo repository.ComponentVersionRepository
+	var repo componentrepository.ComponentVersionRepository
 	if repo = f.repositoriesForResolverCache[index]; repo == nil {
 		repo, err = f.getRepositoryForSpecification(ctx, resolver.Repository)
 		if err != nil {
@@ -255,8 +255,8 @@ func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index i
 	return repo, nil
 }
 
-func (f *FallbackRepository) RepositoriesForComponent(ctx context.Context, component string) ([]repository.ComponentVersionRepository, error) {
-	repositories := make([]repository.ComponentVersionRepository, 0, len(f.resolvers))
+func (f *FallbackRepository) RepositoriesForComponent(ctx context.Context, component string) ([]componentrepository.ComponentVersionRepository, error) {
+	repositories := make([]componentrepository.ComponentVersionRepository, 0, len(f.resolvers))
 	for index, resolver := range f.resolvers {
 		if resolver.Prefix != "" && !strings.HasPrefix(resolver.Prefix, component) {
 			continue
@@ -277,8 +277,8 @@ func (f *FallbackRepository) RepositoriesForComponent(ctx context.Context, compo
 // Compared to RepositoriesForComponent, using the iterator allows for lazy
 // evaluation and can be more efficient when only a few repositories are
 // needed (e.g., when leveraged by the CLI code to do a simple GetComponentVersion).
-func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Context, component string) iter.Seq2[repository.ComponentVersionRepository, error] {
-	return func(yield func(repository.ComponentVersionRepository, error) bool) {
+func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Context, component string) iter.Seq2[componentrepository.ComponentVersionRepository, error] {
+	return func(yield func(componentrepository.ComponentVersionRepository, error) bool) {
 		for index, resolver := range f.resolvers {
 			if resolver.Prefix != "" && !strings.HasPrefix(component, resolver.Prefix) {
 				continue
@@ -292,7 +292,7 @@ func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Contex
 				yield(nil, fmt.Errorf("repository for resolver %v is nil", resolver))
 				return
 			}
-			slog.DebugContext(ctx, "yielding repository for component", "realm", repository.Realm, "component", component, "repository", resolver.Repository)
+			slog.DebugContext(ctx, "yielding repository for component", "realm", componentrepository.Realm, "component", component, "repository", resolver.Repository)
 			if !yield(repo, nil) {
 				return
 			}

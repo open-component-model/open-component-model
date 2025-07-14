@@ -43,14 +43,14 @@
 //
 // Core Interfaces:
 //
-//  1. ComponentVersionRepository:
+//  1. oci.ComponentVersionRepository:
 //     The main interface for managing component versions and their resources:
 //     - AddComponentVersion: Stores new component versions
 //     - GetComponentVersion: Retrieves existing component versions
 //     - AddLocalResource: Adds resources to components
 //     - GetLocalResource: Retrieves resources from components
 //
-//  2. ResourceRepository:
+//  2. oci.ResourceRepository:
 //     Handles resource operations independently of component versions:
 //     - UploadResource: Uploads resources to the repository
 //     - DownloadResource: Downloads resources from the repository

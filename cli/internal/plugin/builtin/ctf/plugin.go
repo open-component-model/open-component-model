@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	ocmrepository "ocm.software/open-component-model/bindings/go/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -16,6 +15,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,7 +43,7 @@ func (p *Plugin) GetComponentVersionRepositoryCredentialConsumerIdentity(_ conte
 	return nil, fmt.Errorf("not implemented because ctfs do not need consumer identity based credentials")
 }
 
-func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ocmrepository.ComponentVersionRepository, error) {
+func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentrepository.ComponentVersionRepository, error) {
 	ctfRepoSpec, ok := repositorySpecification.(*ctfv1.Repository)
 	if !ok {
 		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
@@ -58,8 +58,8 @@ func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySp
 }
 
 var (
-	_ ocmrepository.ComponentVersionRepositoryProvider = (*Plugin)(nil)
-	_ ocmrepository.ComponentVersionRepository         = (*wrapper)(nil)
+	_ componentrepository.ComponentVersionRepositoryProvider = (*Plugin)(nil)
+	_ componentrepository.ComponentVersionRepository         = (*wrapper)(nil)
 )
 
 // wrapper wraps a repo into returning the component version repository ComponentVersionRepository.

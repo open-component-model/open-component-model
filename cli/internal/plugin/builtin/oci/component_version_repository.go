@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/componentversionrepository"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
@@ -40,7 +40,7 @@ func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepositoryCredenti
 	return identity, nil
 }
 
-func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentversionrepository.ComponentVersionRepository, error) {
+func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentrepository.ComponentVersionRepository, error) {
 	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
 	if !ok {
 		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
@@ -55,15 +55,15 @@ func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx con
 }
 
 var (
-	_ componentversionrepository.ComponentVersionRepositoryProvider = (*ComponentVersionRepositoryPlugin)(nil)
-	_ componentversionrepository.ComponentVersionRepository         = (*wrapper)(nil)
+	_ componentrepository.ComponentVersionRepositoryProvider = (*ComponentVersionRepositoryPlugin)(nil)
+	_ componentrepository.ComponentVersionRepository         = (*wrapper)(nil)
 )
 
 // wrapper wraps a repo into returning the component version repository ComponentVersionRepositoryPlugin.
 // That's because the plugin interface uses ReadyOnlyBlob while the oci.ComponentVersionRepositoryPlugin uses LocalBlob
 // specific to OCI and CTF.
 type wrapper struct {
-	repo oci.ComponentVersionRepository
+	repo componentrepository.ComponentVersionRepository
 }
 
 func (w *wrapper) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
@@ -95,7 +95,7 @@ func (w *wrapper) GetLocalSource(ctx context.Context, component, version string,
 }
 
 // TODO(jakobmoellerdev): add identity mapping function from OCI package here as soon as we have the conversion function
-func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Repository, credentials map[string]string) (oci.ComponentVersionRepository, error) {
+func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Repository, credentials map[string]string) (componentrepository.ComponentVersionRepository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL %q: %w", spec.BaseUrl, err)

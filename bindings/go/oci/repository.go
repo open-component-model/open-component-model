@@ -14,7 +14,7 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
-	"ocm.software/open-component-model/bindings/go/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry"
@@ -178,7 +178,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 
 	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
 	if errors.Is(err, errdef.ErrNotFound) {
-		return desc, componentversionrepository.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
+		return desc, componentrepository.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
 	}
 	return desc, err
 }
@@ -349,11 +349,11 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		done(err)
 	}()
 
-	var b LocalBlob
+	var b fetch.LocalBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindResource); err != nil {
 		if errors.Is(err, errdef.ErrNotFound) {
-			return nil, nil, componentversionrepository.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
+			return nil, nil, componentrepository.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
 		}
 		return nil, nil, err
 	}
@@ -371,18 +371,18 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 		done(err)
 	}()
 
-	var b LocalBlob
+	var b fetch.LocalBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindSource); err != nil {
 		if errors.Is(err, errdef.ErrNotFound) {
-			return nil, nil, componentversionrepository.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
+			return nil, nil, componentrepository.NewErrNotFound(fmt.Sprintf("component version %q/%q not found", component, version), err)
 		}
 		return nil, nil, err
 	}
 	return b, artifact.(*descriptor.Source), nil
 }
 
-func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (LocalBlob, descriptor.Artifact, error) {
+func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (fetch.LocalBlob, descriptor.Artifact, error) {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
 		return nil, nil, err
@@ -433,7 +433,7 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	}
 }
 
-func (repo *Repository) getLocalBlob(ctx context.Context, store spec.Store, index *ociImageSpecV1.Index, manifest *ociImageSpecV1.Manifest, access runtime.Typed, identity runtime.Identity, kind annotations.ArtifactKind) (LocalBlob, error) {
+func (repo *Repository) getLocalBlob(ctx context.Context, store spec.Store, index *ociImageSpecV1.Index, manifest *ociImageSpecV1.Manifest, access runtime.Typed, identity runtime.Identity, kind annotations.ArtifactKind) (fetch.LocalBlob, error) {
 	// if the index does not exist, we can only use the manifest
 	// and thus local blobs can only be available as image layers
 	if index == nil {
