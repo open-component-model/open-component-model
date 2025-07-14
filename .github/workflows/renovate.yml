@@ -14,6 +14,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run forced Go Module Proxy Update
+        run: task tools:force-go-proxy-mod-update
+
       - name: Generate token
         id: generate_token
         uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
@@ -24,7 +32,6 @@ jobs:
         uses: renovatebot/github-action@13da59cf7cfbd3bfea72ce26752ed22edf747ce9 # v43.0.2
         env:
           RENOVATE_PLATFORM_COMMIT: 'true'
-          GONOPROXY: ocm.software/open-component-model
         with:
           configurationFile: .github/config/renovate.json5
           token: ${{ steps.generate_token.outputs.token }}
