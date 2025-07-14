@@ -13,6 +13,9 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -29,8 +32,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
 )
 
 var testScheme = runtime.NewScheme()
@@ -562,7 +563,7 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 
 				// Upload the resource with the store content
 				b := inmemory.New(buf)
-				newRes, err := repo.UploadResource(ctx, tc.resource.Access, tc.resource, b)
+				newRes, err := repo.UploadResource(ctx, tc.resource, b)
 				r.NoError(err, "Failed to upload test resource")
 				r.NotNil(newRes, "Resource should not be nil after uploading")
 
@@ -744,7 +745,7 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 
 				// Upload the source with the store content
 				b := inmemory.New(buf)
-				newSrc, err := repo.UploadSource(ctx, tc.source.Access, tc.source, b)
+				newSrc, err := repo.UploadSource(ctx, tc.source, b)
 				r.NoError(err, "Failed to upload test source")
 				r.NotNil(newSrc, "Source should not be nil after uploading")
 

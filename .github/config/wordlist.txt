@@ -409,3 +409,5 @@ yitsushi
 yml
 yyyy
 zsh
+blobtransformer
+architected
