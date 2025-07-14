@@ -73,13 +73,19 @@ tasks:
       - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/refs/tags/v{{ .GOLANGCI_LINT_TARGET_VERSION }}/install.sh | sh -s -- -b {{ .ROOT_DIR }}/tmp/bin v{{ .GOLANGCI_LINT_TARGET_VERSION }}
 
 
-  force-go-proxy-mod-update:
+  force-update-go-proxy:
     desc: "Forces a cache update of the go.mod files in all Go Modules in the go module proxy"
     vars:
-      PROXY: https://proxy.golang.org
-      VERSION:
-        sh: "git rev-parse HEAD"
-    cmds:
+      COMMIT: '$(git rev-parse HEAD)'
+    deps:
       - for: { var: GO_MODULES }
-        ignore_error: true
-        cmd: 'curl -s -X GET {{ .PROXY }}/ocm.software/open-component-model/{{ .ITEM }}/@latest'
+        task: 'force-update-go-proxy/module'
+        vars:
+          ITEM: '{{ .ITEM }}'
+          COMMIT: '{{ .COMMIT }}'
+  force-update-go-proxy/module:
+    internal: true
+    ignore_error: true
+    desc: "Forces a cache update of the go.mod file in the specified Go Module in the go module proxy"
+    cmds:
+      - cd {{ .ITEM }} && go list -m $(go list -m)@{{ .COMMIT }}
