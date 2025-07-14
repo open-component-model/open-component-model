@@ -7,10 +7,10 @@
   prHourlyLimit: 0,
   "platform": "github",
   allowedEnv: [
-    "GOPROXY"
+    "GONOPROXY"
   ],
   env: {
-    GOPROXY: "direct"
+    GONOPROXY: "ocm.software/open-component-model"
   },
   "repositories": [
     "open-component-model/open-component-model",

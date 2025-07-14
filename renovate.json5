@@ -12,7 +12,7 @@
     enabled: true
   },
   env: {
-    GOPROXY: "direct"
+    GONOPROXY: "ocm.software/open-component-model"
   },
   packageRules: [
     {
