@@ -17,7 +17,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/errdef"
-	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
