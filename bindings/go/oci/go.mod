@@ -12,7 +12,7 @@ require (
 	golang.org/x/sync v0.16.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
 	ocm.software/open-component-model/bindings/go/ctf v0.0.3
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250703134543-ad7810c4adcc
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250714112051-875069c6398e
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha2
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0

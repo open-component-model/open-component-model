@@ -12,15 +12,15 @@ require (
 	golang.org/x/sys v0.34.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
 	ocm.software/open-component-model/bindings/go/configuration v0.0.1
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250703134543-ad7810c4adcc
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250714112051-875069c6398e
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/ctf v0.0.3
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250703134543-ad7810c4adcc
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250714112051-875069c6398e
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha2
-	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250703134543-ad7810c4adcc
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250703134543-ad7810c4adcc
-	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250703134543-ad7810c4adcc
-	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250703134543-ad7810c4adcc
+	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250714112051-875069c6398e
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250714112051-875069c6398e
+	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250714112051-875069c6398e
+	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250714124148-c5479b3cc6b0
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.5.0
@@ -33,6 +33,7 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
@@ -44,6 +45,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/veqryn/slog-context v0.8.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/net v0.42.0 // indirect
