@@ -8,6 +8,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
@@ -20,8 +21,9 @@ import (
 
 type ComponentVersionRepositoryPlugin struct {
 	contracts.EmptyBasePlugin
-	manifests cache.OCIDescriptorCache
-	layers    cache.OCIDescriptorCache
+	manifests        cache.OCIDescriptorCache
+	layers           cache.OCIDescriptorCache
+	filesystemConfig *v1alpha1.Config
 }
 
 func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
@@ -113,11 +115,17 @@ func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Reposito
 		},
 		Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
 	})
-	repo, err := oci.NewRepository(
+	options := []oci.RepositoryOption{
 		oci.WithResolver(urlResolver),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifests),
 		oci.WithLayerCache(p.layers),
-	)
+	}
+
+	if p.filesystemConfig != nil {
+		options = append(options, oci.WithFilesystemConfig(p.filesystemConfig))
+	}
+
+	repo, err := oci.NewRepository(options...)
 	return repo, err
 }

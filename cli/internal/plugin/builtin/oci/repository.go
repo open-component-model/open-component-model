@@ -6,6 +6,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
+	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -25,6 +26,7 @@ func createRepository(
 	credentials map[string]string,
 	manifests cache.OCIDescriptorCache,
 	layers cache.OCIDescriptorCache,
+	filesystemConfig *v1alpha1.Config,
 ) (Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
@@ -44,12 +46,15 @@ func createRepository(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
 	}
-	repo, err := oci.NewRepository(
+	options := []oci.RepositoryOption{
 		oci.WithResolver(urlResolver),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(manifests),
 		oci.WithLayerCache(layers),
-	)
+		oci.WithFilesystemConfig(filesystemConfig),
+	}
+
+	repo, err := oci.NewRepository(options...)
 	return repo, err
 }
 
