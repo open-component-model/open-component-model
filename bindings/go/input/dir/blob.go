@@ -139,7 +139,7 @@ func walkDirContents(ctx context.Context, currentDir string, baseDir string,
 	// Iterate over directory entries.
 	for _, entry := range dirEntries {
 		// Get FileInfo for the entry.
-		info, err := entry.Info()
+		fi, err := entry.Info()
 		if err != nil {
 			return fmt.Errorf("failed to get information for file %q: %w", entry.Name(), err)
 		}
@@ -156,9 +156,9 @@ func walkDirContents(ctx context.Context, currentDir string, baseDir string,
 		}
 
 		// Create tar header.
-		header, err := reproducibleTarHeader(info, "")
+		header, err := reproducibleTarHeader(fi, "")
 		if err != nil {
-			return fmt.Errorf("failed to create tar header for file %q: %w", info.Name(), err)
+			return fmt.Errorf("failed to create tar header for file %q: %w", fi.Name(), err)
 		}
 		// Set header name to the relative path of the entry with respect to the base directory,
 		// to preserve the subfolder structure in the tar archive.
@@ -177,7 +177,12 @@ func walkDirContents(ctx context.Context, currentDir string, baseDir string,
 			if err != nil {
 				return fmt.Errorf("failed to open file %q: %w", entryPath, err)
 			}
-			if _, err := io.Copy(tw, file); err != nil {
+			if size := fi.Size(); size > blob.SizeUnknown {
+				_, err = io.CopyN(tw, file, size)
+			} else {
+				return fmt.Errorf("size of file %q unknown", entryPath)
+			}
+			if err != nil {
 				err = errors.Join(err, file.Close())
 				return fmt.Errorf("failed to write file %q to tar archive: %w", entryPath, err)
 			}
@@ -215,7 +220,7 @@ func walkDirContents(ctx context.Context, currentDir string, baseDir string,
 			return fmt.Errorf("symlinks not supported yet")
 
 		default:
-			return fmt.Errorf("unsupported file type %q of file %q", info.Mode().String(), entryPath)
+			return fmt.Errorf("unsupported file type %q of file %q", fi.Mode().String(), entryPath)
 		}
 	}
 
