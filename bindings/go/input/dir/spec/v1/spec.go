@@ -33,6 +33,13 @@ type Dir struct {
 
 	// IncludeFiles is a list of file name patterns to exclusively add to the resulting blob.
 	IncludeFiles []string `json:"includeFiles,omitempty"`
+
+	// Reproducible defines that the attributes of the included files have to be normalized.
+	// This is important if reproducible generation of blobs is required. In this case the blobs
+	// need to be comparable on byte level (e.g. for hashing). So, if Reproducible is set to true,
+	// to get fully byte-equivalent blobs despite different file modification time, permission bits, etc.,
+	// these attributes will be set to fixed values while creating the blob.
+	Reproducible bool `json:"reproducible,omitempty"`
 }
 
 func (t *Dir) String() string {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,90 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/input/dir/spec/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+func TestGetV1DirBlob_Reproducibility(t *testing.T) {
+	ctx := t.Context()
+
+	tests := []struct {
+		name         string
+		baseDir      string
+		fileName     string
+		fileContents string
+		reproducible bool
+	}{
+		{
+			name:         "reproducibility set to false",
+			baseDir:      "input-dir",
+			fileName:     "text.txt",
+			fileContents: "text contents",
+			reproducible: false,
+		},
+		{
+			name:         "reproducibility set to true",
+			baseDir:      "input-dir",
+			fileName:     "text.txt",
+			fileContents: "text contents",
+			reproducible: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Prepare a file system folder.
+			tempDir := t.TempDir()
+			dirAbs := filepath.Join(tempDir, tt.baseDir)
+			filePath := filepath.Join(dirAbs, tt.fileName)
+			err := os.MkdirAll(filepath.Dir(filePath), 0o755)
+			require.NoError(t, err)
+			err = os.WriteFile(filePath, []byte(tt.fileContents), 0o644)
+			require.NoError(t, err)
+
+			// Create v1.Dir spec.
+			dirSpec := v1.Dir{
+				Type:         runtime.NewUnversionedType(v1.Type),
+				Path:         dirAbs,
+				Reproducible: tt.reproducible,
+			}
+
+			// Create blob.
+			b, err := dir.GetV1DirBlob(ctx, dirSpec)
+			require.NoError(t, err)
+			require.NotNil(t, b)
+
+			// Read the tar data.
+			readerBefore, err := b.ReadCloser()
+			require.NoError(t, err)
+			defer readerBefore.Close()
+			require.NoError(t, err)
+			tarBefore, err := io.ReadAll(readerBefore)
+
+			// Change file access and modification times.
+			fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
+			err = os.Chtimes(filePath, fiveMinutesAgo, fiveMinutesAgo)
+			require.NoError(t, err)
+
+			// Create new blob.
+			b, err = dir.GetV1DirBlob(ctx, dirSpec)
+			require.NoError(t, err)
+			require.NotNil(t, b)
+
+			// Read the tar data after modification.
+			readerAfter, err := b.ReadCloser()
+			require.NoError(t, err)
+			defer readerAfter.Close()
+			require.NoError(t, err)
+			tarAfter, err := io.ReadAll(readerAfter)
+
+			// Compare the two tar data blobs.
+			equal := bytes.Equal(tarBefore, tarAfter)
+			if tt.reproducible {
+				require.True(t, equal, "tar data expected to be byte-equivalent")
+			} else {
+				require.False(t, equal, "tar data is expected to be not byte-equivalent")
+			}
+		})
+	}
+}
 
 func TestGetV1DirBlob_Success(t *testing.T) {
 	type TestFile struct {
@@ -167,9 +252,9 @@ func TestGetV1DirBlob_Success(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			// Create v1.File spec.
+			// Create v1.Dir spec.
 			dirSpec := v1.Dir{
-				Type:           runtime.NewUnversionedType("dir"),
+				Type:           runtime.NewUnversionedType(v1.Type),
 				Path:           dirAbs,
 				MediaType:      tt.mediaType,
 				Compress:       tt.compress,
@@ -263,7 +348,7 @@ func TestGetV1DirBlob_Success(t *testing.T) {
 func TestGetV1DirBlob_EmptyPath(t *testing.T) {
 	// Create v1.Dir spec with empty path.
 	dirSpec := v1.Dir{
-		Type: runtime.NewUnversionedType("dir"),
+		Type: runtime.NewUnversionedType(v1.Type),
 		Path: "",
 	}
 
@@ -277,7 +362,7 @@ func TestGetV1DirBlob_EmptyPath(t *testing.T) {
 func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 	// Create v1.Dir spec with non-existing path.
 	dirSpec := v1.Dir{
-		Type: runtime.NewUnversionedType("dir"),
+		Type: runtime.NewUnversionedType(v1.Type),
 		Path: "/non/existent/path",
 	}
 
@@ -293,7 +378,7 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 	// Still, as there is nothing to tar, we expect an error.
 	tempDir := t.TempDir()
 	dirSpec = v1.Dir{
-		Type:        runtime.NewUnversionedType("dir"),
+		Type:        runtime.NewUnversionedType(v1.Type),
 		Path:        filepath.Join(tempDir, "non-existent-path"),
 		PreserveDir: true,
 	}
