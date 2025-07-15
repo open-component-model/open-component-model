@@ -1,4 +1,4 @@
-package fallback
+package v1
 
 import (
 	"cmp"
@@ -22,17 +22,17 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Deprecated: FallbackRepository is an implementation for the deprecated config
-// type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
-// and only added for backwards compatibility.
-// New concepts will likely be introduced in the future (contributions welcome!).
-//
 // FallbackRepository implements a fallback mechanism for component version repositories.
 // The configuration is static, meaning that the resolvers are provided at creation time and cannot be changed later.
 // This allows for easier locking and caching of repositories.
 // If a different configuration is needed, a new instance can be created
 // leveraging the GetResolvers method in combination with the
 // resolverruntime.Merge function.
+//
+// Deprecated: FallbackRepository is an implementation for the deprecated config
+// type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
+// and only added for backwards compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 type FallbackRepository struct {
 	repositoryProvider componentrepository.ComponentVersionRepositoryProvider
 	credentialProvider componentrepository.CredentialProvider
@@ -49,12 +49,12 @@ type FallbackRepository struct {
 	repositoriesForResolverCache   []componentrepository.ComponentVersionRepository
 }
 
+// NewFallbackRepository creates a new FallbackRepository instance.
+//
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-// NewFallbackRepository creates a new FallbackRepository instance.
 func NewFallbackRepository(_ context.Context, repositoryProvider componentrepository.ComponentVersionRepositoryProvider, credentialProvider componentrepository.CredentialProvider, res ...*resolverruntime.Resolver) (*FallbackRepository, error) {
 	resolvers := make([]*resolverruntime.Resolver, len(res))
 
@@ -75,13 +75,13 @@ func NewFallbackRepository(_ context.Context, repositoryProvider componentreposi
 	}, nil
 }
 
+// AddComponentVersion adds a new component version to the repository specified
+// by the resolver with the highest priority and matching component prefix.
+//
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-// AddComponentVersion adds a new component version to the repository specified
-// by the resolver with the highest priority and matching component prefix.
 func (f *FallbackRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
 	repos := f.RepositoriesForComponentIterator(ctx, descriptor.Component.Name)
 	for repo, err := range repos {
@@ -93,14 +93,14 @@ func (f *FallbackRepository) AddComponentVersion(ctx context.Context, descriptor
 	return fmt.Errorf("no repository found for component %s to add version", descriptor.Component.Name)
 }
 
+// GetComponentVersion iterates through all resolvers with matching component prefix in
+// the order of their priority (higher priorities first) and attempts to
+// retrieve the component version from each repository.
+//
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-// GetComponentVersion iterates through all resolvers with matching component prefix in
-// the order of their priority (higher priorities first) and attempts to
-// retrieve the component version from each repository.
 func (f *FallbackRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -120,14 +120,14 @@ func (f *FallbackRepository) GetComponentVersion(ctx context.Context, component,
 	return nil, fmt.Errorf("component version %s/%s not found in any repository", component, version)
 }
 
+// ListComponentVersions accumulates a deduplicated list of the versions of the
+// given component from all repositories specified by resolvers with a matching
+// component prefix in the order of their priority (higher priorities first).
+//
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-// ListComponentVersions accumulates a deduplicated list of the versions of the
-// given component from all repositories specified by resolvers with a matching
-// component prefix in the order of their priority (higher priorities first).
 func (f *FallbackRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 
@@ -177,13 +177,13 @@ func (f *FallbackRepository) ListComponentVersions(ctx context.Context, componen
 	return versionList, nil
 }
 
+// AddLocalResource adds a local resource to the repository specified
+// by the resolver with the highest priority and matching component prefix.
+//
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-// AddLocalResource adds a local resource to the repository specified
-// by the resolver with the highest priority and matching component prefix.
 func (f *FallbackRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -198,6 +198,11 @@ func (f *FallbackRepository) AddLocalResource(ctx context.Context, component, ve
 // GetLocalResource iterates through all resolvers with matching component prefix in
 // the order of their priority (higher priorities first) and attempts to
 // retrieve the local resource from each repository.
+//
+// Deprecated: FallbackRepository is an implementation for the deprecated config
+// type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
+// and only added for backwards compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 func (f *FallbackRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -217,13 +222,13 @@ func (f *FallbackRepository) GetLocalResource(ctx context.Context, component, ve
 	return nil, nil, fmt.Errorf("local resource with identity %v in component version %s/%s not found in any repository", identity, component, version)
 }
 
+// AddLocalSource adds a local source to the repository specified
+// by the resolver with the highest priority and matching component prefix.
+//
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-// AddLocalSource adds a local source to the repository specified
-// by the resolver with the highest priority and matching component prefix.
 func (f *FallbackRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -235,14 +240,14 @@ func (f *FallbackRepository) AddLocalSource(ctx context.Context, component, vers
 	return nil, fmt.Errorf("no repository found for component %s to add local resource", component)
 }
 
+// GetLocalSource iterates through all resolvers with matching component prefix in
+// the order of their priority (higher priorities first) and attempts to
+// retrieve the local source from each repository.
+//
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-// GetLocalSource iterates through all resolvers with matching component prefix in
-// the order of their priority (higher priorities first) and attempts to
-// retrieve the local source from each repository.
 func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -262,15 +267,15 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 	return nil, nil, fmt.Errorf("local source with identity %v in component version %s/%s not found in any repository", identity, component, version)
 }
 
-// Deprecated: FallbackRepository is an implementation for the deprecated config
-// type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
-// and only added for backwards compatibility.
-// New concepts will likely be introduced in the future (contributions welcome!).
-//
 // RepositoriesForComponentIterator returns an iterator that yields repositories for the given component.
 // Compared to RepositoriesForComponent, using the iterator allows for lazy
 // evaluation and can be more efficient when only a few repositories are
 // needed (e.g., when leveraged by the CLI code to do a simple GetComponentVersion).
+//
+// Deprecated: FallbackRepository is an implementation for the deprecated config
+// type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
+// and only added for backwards compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Context, component string) iter.Seq2[componentrepository.ComponentVersionRepository, error] {
 	return func(yield func(componentrepository.ComponentVersionRepository, error) bool) {
 		for index, resolver := range f.resolvers {
@@ -294,12 +299,12 @@ func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Contex
 	}
 }
 
+// GetResolvers returns a copy of the resolvers used by this repository.
+//
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-// GetResolvers returns a copy of the resolvers used by this repository.
 func (f *FallbackRepository) GetResolvers() []*resolverruntime.Resolver {
 	// Return a copy of the resolvers to ensure immutability
 	resolversCopy := make([]*resolverruntime.Resolver, len(f.resolvers))

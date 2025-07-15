@@ -1,4 +1,4 @@
-package fallback_test
+package v1_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
-	"ocm.software/open-component-model/bindings/go/repositories/componentrepository/fallback"
+	fallback "ocm.software/open-component-model/bindings/go/repositories/componentrepository/fallback/v1"
 	resolverruntime "ocm.software/open-component-model/bindings/go/repositories/componentrepository/resolver/config/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
