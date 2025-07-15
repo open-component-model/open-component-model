@@ -84,7 +84,7 @@ func TestPluginFlow(t *testing.T) {
 	transformedBlob, err := retrievedPlugin.TransformBlob(ctx, inmemory.New(strings.NewReader("foobar")), &dummyv1.Repository{
 		Type:    typ,
 		BaseUrl: "test-base-url",
-	})
+	}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, transformedBlob)
 }
@@ -135,7 +135,7 @@ func TestInternalPluginRegistry(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, mockPlugin, retrievedPlugin)
 
-	transformedBlob, err := retrievedPlugin.TransformBlob(ctx, inmemory.New(strings.NewReader("foobar")), proto)
+	transformedBlob, err := retrievedPlugin.TransformBlob(ctx, inmemory.New(strings.NewReader("foobar")), proto, nil)
 	require.NoError(t, err)
 	require.True(t, mockPlugin.called)
 	require.NotNil(t, transformedBlob)
@@ -197,7 +197,7 @@ type mockBlobTransformerPlugin struct {
 	called bool
 }
 
-func (m *mockBlobTransformerPlugin) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, spec runtime.Typed) (blob.ReadOnlyBlob, error) {
+func (m *mockBlobTransformerPlugin) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, spec runtime.Typed, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	m.called = true
 	return blob, nil
 }
