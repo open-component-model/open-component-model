@@ -125,10 +125,7 @@ func Merge(configs ...*Config) *Config {
 			merged.Aliases[alias] = raw
 		}
 
-		// Merge resolvers
-		for _, resolver := range cfg.Resolvers {
-			merged.Resolvers = append(merged.Resolvers, resolver)
-		}
+		merged.Resolvers = append(merged.Resolvers, cfg.Resolvers...)
 	}
 
 	return merged

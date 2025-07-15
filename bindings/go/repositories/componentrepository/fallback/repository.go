@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"golang.org/x/sync/errgroup"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
@@ -108,7 +109,7 @@ func (f *FallbackRepository) GetComponentVersion(ctx context.Context, component,
 		}
 		desc, err := repo.GetComponentVersion(ctx, component, version)
 		if err != nil {
-			if errors.As(err, new(*componentrepository.ErrNotFound)) {
+			if errors.As(err, new(*componentrepository.NotFoundError)) {
 				slog.DebugContext(ctx, "component version not found in repository", "realm", componentrepository.Realm, "repository", repo, "component", component, "version", version)
 				continue // try the next repository
 			}
@@ -205,7 +206,7 @@ func (f *FallbackRepository) GetLocalResource(ctx context.Context, component, ve
 		}
 		data, res, err := repo.GetLocalResource(ctx, component, version, identity)
 		if err != nil {
-			if errors.As(err, new(*componentrepository.ErrNotFound)) {
+			if errors.As(err, new(*componentrepository.NotFoundError)) {
 				slog.DebugContext(ctx, "local resource not found in repository", "realm", componentrepository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
 				continue // try the next repository
 			}
@@ -250,7 +251,7 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 		}
 		data, source, err := repo.GetLocalSource(ctx, component, version, identity)
 		if err != nil {
-			if errors.As(err, new(*componentrepository.ErrNotFound)) {
+			if errors.As(err, new(*componentrepository.NotFoundError)) {
 				slog.DebugContext(ctx, "local source not found in repository", "realm", componentrepository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
 				continue // try the next repository
 			}

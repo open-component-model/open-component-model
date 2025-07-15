@@ -45,7 +45,7 @@ type ComponentVersionRepository interface {
 
 	// GetComponentVersion retrieves a component version from the repository.
 	// Returns the descriptor for the given component name and version.
-	// If the component version does not exist, it returns ErrNotFound.
+	// If the component version does not exist, it returns NotFoundError.
 	GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error)
 
 	// ListComponentVersions lists all versions for a given component.
@@ -94,25 +94,25 @@ type CredentialProvider interface {
 	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
 }
 
-// ErrNotFound is an error type that indicates a requested component version
-// was not found. ErrNotFound is independent of the underlying repository implementation.
+// NotFoundError is an error type that indicates a requested component version
+// was not found. NotFoundError is independent of the underlying repository implementation.
 // It is supposed to wrap the original technology-specific error and to provide a
 // technology-agnostic API to check for not found errors.
-type ErrNotFound struct {
+type NotFoundError struct {
 	msg string
 	err error
 }
 
-func (e *ErrNotFound) Error() string {
+func (e *NotFoundError) Error() string {
 	return e.msg
 }
 
-func (e *ErrNotFound) Unwrap() error {
+func (e *NotFoundError) Unwrap() error {
 	return e.err
 }
 
-func NewErrNotFound(msg string, err error) *ErrNotFound {
-	return &ErrNotFound{
+func NewNotFoundError(msg string, err error) *NotFoundError {
+	return &NotFoundError{
 		msg: msg,
 		err: err,
 	}
