@@ -14,7 +14,6 @@ import (
 // compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
 //
-//nolint:staticcheck // SA1019: using deprecated type within deprecated c
 //nolint:staticcheck // SA1019: using deprecated type within deprecated code
 func ConvertFromV1(repositoryScheme *runtime.Scheme, config *resolverv1.Config) (*Config, error) {
 	if config == nil {
@@ -36,7 +35,6 @@ func ConvertFromV1(repositoryScheme *runtime.Scheme, config *resolverv1.Config) 
 
 // Deprecated
 //
-//nolint:staticcheck // SA1019: using deprecated type within deprecated c
 //nolint:staticcheck // SA1019: using deprecated type within deprecated code
 func convertResolvers(repositoryScheme *runtime.Scheme, resolvers []*resolverv1.Resolver) ([]Resolver, error) {
 	if len(resolvers) == 0 {
