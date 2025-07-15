@@ -11,6 +11,10 @@
   'git-submodules': {
     enabled: true
   },
+  env: {
+    GONOPROXY: "ocm.software/open-component-model",
+    GOPRIVATE: "ocm.software/open-component-model"
+  },
   packageRules: [
     {
       "matchCategories": [

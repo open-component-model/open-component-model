@@ -29,7 +29,7 @@ require (
 	golang.org/x/text v0.27.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250703134543-ad7810c4adcc // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.0-alpha2 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250703134543-ad7810c4adcc // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 )

@@ -6,6 +6,10 @@
   prConcurrentLimit: 0,
   prHourlyLimit: 0,
   "platform": "github",
+  allowedEnv: [
+    "GONOPROXY",
+    "GOPRIVATE"
+  ],
   "repositories": [
     "open-component-model/open-component-model",
   ],
