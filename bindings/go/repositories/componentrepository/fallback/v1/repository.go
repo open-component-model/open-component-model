@@ -18,7 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
-	resolverruntime "ocm.software/open-component-model/bindings/go/repositories/componentrepository/resolver/config/runtime"
+	resolverruntime "ocm.software/open-component-model/bindings/go/repositories/componentrepository/resolver/config/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
