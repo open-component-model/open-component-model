@@ -43,6 +43,7 @@ type FallbackRepository struct {
 	// This list is immutable after creation.
 	//
 	// Deprecated
+	// nolint:staticcheck // SA1019: using deprecated type within deprecated code
 	resolvers []*resolverruntime.Resolver
 
 	// This cache is based on index. So, the index of the resolver in the
@@ -319,6 +320,7 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 }
 
 // Deprecated
+// nolint:staticcheck // SA1019: using deprecated type within deprecated code
 func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index int, resolver *resolverruntime.Resolver) (componentrepository.ComponentVersionRepository, error) {
 	var err error
 
@@ -338,10 +340,13 @@ func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index i
 	return repo, nil
 }
 
+// Deprecated
+// nolint:staticcheck // SA1019: using deprecated type within deprecated code
 func deepCopyResolvers(resolvers []*resolverruntime.Resolver) []*resolverruntime.Resolver {
 	if resolvers == nil {
 		return nil
 	}
+	// nolint:staticcheck // SA1019: using deprecated type within deprecated code
 	copied := make([]*resolverruntime.Resolver, len(resolvers))
 	for i, resolver := range resolvers {
 		copied[i] = resolver.DeepCopy()
