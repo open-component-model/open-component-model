@@ -334,7 +334,7 @@ func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index i
 
 	f.repositoriesForResolverCacheMu.RLock()
 	repo := f.repositoriesForResolverCache[index]
-	defer f.repositoriesForResolverCacheMu.RUnlock()
+	f.repositoriesForResolverCacheMu.RUnlock()
 
 	if repo == nil {
 		repo, err = f.getRepositoryForSpecification(ctx, resolver.Repository)
