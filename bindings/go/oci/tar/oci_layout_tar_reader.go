@@ -109,3 +109,15 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 		Index:         idx,
 	}, nil
 }
+
+// MainArtifacts returns the main artifacts from the OCI layout.
+// It uses the Index from the CloseableReadOnlyStore to get the main artifacts.
+// If the reference name is not set or cannot be assumed,
+// this is an easy way to retrieve top level artifacts for reading in case the original reference is not known.
+//
+// For example, if an OCI Layout was downloaded from "ghcr.io/open-component-model/ocm-layout:v1.0.0",
+// and the index contains multiple manifests, this function will return a single top-level artifact
+// referencing the main index behind the given reference.
+func (s *CloseableReadOnlyStore) MainArtifacts(ctx context.Context) []ociImageSpecV1.Descriptor {
+	return TopLevelArtifacts(ctx, s.ReadOnlyStore, s.Index.Manifests)
+}
