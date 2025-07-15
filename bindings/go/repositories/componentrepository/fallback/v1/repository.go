@@ -281,10 +281,6 @@ func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Contex
 				yield(nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err))
 				return
 			}
-			if repo == nil {
-				yield(nil, fmt.Errorf("repository for resolver %v is nil", resolver))
-				return
-			}
 			slog.DebugContext(ctx, "yielding repository for component", "realm", componentrepository.Realm, "component", component, "repository", resolver.Repository)
 			if !yield(repo, nil) {
 				return
@@ -322,6 +318,9 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	repo, err := f.repositoryProvider.GetComponentVersionRepository(ctx, specification, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", specification, err)
+	}
+	if repo == nil {
+		return nil, fmt.Errorf("repository for specification %q is nil", specification)
 	}
 	return repo, nil
 }
