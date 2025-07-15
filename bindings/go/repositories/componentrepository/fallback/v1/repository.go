@@ -41,6 +41,8 @@ type FallbackRepository struct {
 	// The order in this list determines the order in which repositories are
 	// tried during lookup operations.
 	// This list is immutable after creation.
+	//
+	// Deprecated
 	resolvers []*resolverruntime.Resolver
 
 	// This cache is based on index. So, the index of the resolver in the
@@ -304,6 +306,7 @@ func (f *FallbackRepository) GetResolvers() []*resolverruntime.Resolver {
 	return resolversCopy
 }
 
+// Deprecated
 func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, specification runtime.Typed) (componentrepository.ComponentVersionRepository, error) {
 	consumerIdentity, err := f.repositoryProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, specification)
 	if err != nil {
@@ -325,6 +328,7 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	return repo, nil
 }
 
+// Deprecated
 func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index int, resolver *resolverruntime.Resolver) (componentrepository.ComponentVersionRepository, error) {
 	var err error
 
