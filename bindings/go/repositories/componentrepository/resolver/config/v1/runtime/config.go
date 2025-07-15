@@ -11,6 +11,21 @@ import (
 // Config is the OCM configuration type for configuring legacy fallback
 // resolvers.
 //
+//   - type: ocm.config.ocm.software
+//     resolvers:
+//   - repository:
+//     type: CommonTransportFormat/v1
+//     filePath: ./ocm/primary-transport-archive
+//     priority: 100
+//   - repository:
+//     type: CommonTransportFormat/v1
+//     filePath: ./ocm/primary-transport-archive
+//     priority: 10
+//
+// Deprecated: Resolvers are deprecated and are only added for backwards
+// compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
+//
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
