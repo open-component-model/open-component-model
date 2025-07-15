@@ -7,8 +7,8 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.10.0
-	github.com/testcontainers/testcontainers-go v0.37.0
-	github.com/testcontainers/testcontainers-go/modules/registry v0.37.0
+	github.com/testcontainers/testcontainers-go v0.38.0
+	github.com/testcontainers/testcontainers-go/modules/registry v0.38.0
 	golang.org/x/crypto v0.40.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
 	ocm.software/open-component-model/bindings/go/ctf v0.0.3
@@ -58,7 +58,6 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.1.0 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
-	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
