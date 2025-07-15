@@ -36,7 +36,10 @@ func Test_CTF_ReadWrite(t *testing.T) {
 			testBlob := inmemory.New(bytes.NewReader([]byte("test")))
 			digest, _ := testBlob.Digest()
 
-			err := ctf.WorkWithinCTF(ctx, path, ctf.O_CREATE|ctf.O_RDWR, nil, func(ctx context.Context, ctf ctf.CTF) error {
+			err := ctf.WorkWithinCTF(ctx, ctf.OpenCTFOptions{
+				Path: path,
+				Flag: ctf.O_CREATE | ctf.O_RDWR,
+			}, func(ctx context.Context, ctf ctf.CTF) error {
 				if err := ctf.SaveBlob(ctx, testBlob); err != nil {
 					return err
 				}
@@ -57,7 +60,10 @@ func Test_CTF_ReadWrite(t *testing.T) {
 			})
 			r.NoError(err)
 
-			archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, path, ctf.O_RDONLY, nil)
+			archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, ctf.OpenCTFOptions{
+				Path: path,
+				Flag: ctf.O_RDONLY,
+			})
 			r.NoError(err)
 			r.Equal(format, discovered)
 			blobs, err := archive.ListBlobs(ctx)
@@ -101,7 +107,11 @@ func Test_CTF_CustomTempFolder_TAR(t *testing.T) {
 	digest, _ := testBlob.Digest()
 
 	// Test that CTF operations use the custom temp folder
-	err = ctf.WorkWithinCTF(ctx, tarPath, ctf.O_CREATE|ctf.O_RDWR, fsConfig, func(ctx context.Context, ctf ctf.CTF) error {
+	err = ctf.WorkWithinCTF(ctx, ctf.OpenCTFOptions{
+		Path:             tarPath,
+		Flag:             ctf.O_CREATE | ctf.O_RDWR,
+		FileSystemConfig: fsConfig,
+	}, func(ctx context.Context, ctf ctf.CTF) error {
 		if err := ctf.SaveBlob(ctx, testBlob); err != nil {
 			return err
 		}
@@ -140,7 +150,11 @@ func Test_CTF_CustomTempFolder_TAR(t *testing.T) {
 	r.NoError(err)
 
 	// Verify we can read the CTF back
-	archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, tarPath, ctf.O_RDONLY, fsConfig)
+	archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, ctf.OpenCTFOptions{
+		Path:             tarPath,
+		Flag:             ctf.O_RDONLY,
+		FileSystemConfig: fsConfig,
+	})
 	r.NoError(err)
 	r.Equal(ctf.FormatTAR, discovered)
 
@@ -171,7 +185,11 @@ func Test_CTF_CustomTempFolder_TGZ(t *testing.T) {
 	digest, _ := testBlob.Digest()
 
 	// Test that CTF operations use the custom temp folder
-	err = ctf.WorkWithinCTF(ctx, tgzPath, ctf.O_CREATE|ctf.O_RDWR, fsConfig, func(ctx context.Context, ctf ctf.CTF) error {
+	err = ctf.WorkWithinCTF(ctx, ctf.OpenCTFOptions{
+		Path:             tgzPath,
+		Flag:             ctf.O_CREATE | ctf.O_RDWR,
+		FileSystemConfig: fsConfig,
+	}, func(ctx context.Context, ctf ctf.CTF) error {
 		if err := ctf.SaveBlob(ctx, testBlob); err != nil {
 			return err
 		}
@@ -209,7 +227,11 @@ func Test_CTF_CustomTempFolder_TGZ(t *testing.T) {
 	r.NoError(err)
 
 	// Verify we can read the CTF back
-	archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, tgzPath, ctf.O_RDONLY, fsConfig)
+	archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, ctf.OpenCTFOptions{
+		Path:             tgzPath,
+		Flag:             ctf.O_RDONLY,
+		FileSystemConfig: fsConfig,
+	})
 	r.NoError(err)
 	r.Equal(ctf.FormatTGZ, discovered)
 
