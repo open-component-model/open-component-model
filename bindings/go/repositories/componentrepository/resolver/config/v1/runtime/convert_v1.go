@@ -34,8 +34,9 @@ func ConvertFromV1(repositoryScheme *runtime.Scheme, config *resolverv1.Config) 
 	}, nil
 }
 
-hin deprecate
 // Deprecated
+//
+//nolint:staticcheck // SA1019: using deprecated type within deprecated c
 //nolint:staticcheck // SA1019: using deprecated type within deprecated code
 func convertResolvers(repositoryScheme *runtime.Scheme, resolvers []*resolverv1.Resolver) ([]Resolver, error) {
 	if len(resolvers) == 0 {
