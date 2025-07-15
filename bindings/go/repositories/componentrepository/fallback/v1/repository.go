@@ -58,13 +58,7 @@ type FallbackRepository struct {
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
 func NewFallbackRepository(_ context.Context, repositoryProvider componentrepository.ComponentVersionRepositoryProvider, credentialProvider componentrepository.CredentialProvider, res ...*resolverruntime.Resolver) (*FallbackRepository, error) {
-	resolvers := make([]*resolverruntime.Resolver, len(res))
-
-	// copy the resolvers to ensure immutability
-	for index, resolver := range res {
-		r := resolver.DeepCopy()
-		resolvers[index] = r
-	}
+	resolvers := deepCopyResolvers(res)
 	slices.SortStableFunc(resolvers, func(a, b *resolverruntime.Resolver) int {
 		return cmp.Compare(b.Priority, a.Priority)
 	})
@@ -299,11 +293,7 @@ func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Contex
 // New concepts will likely be introduced in the future (contributions welcome!).
 func (f *FallbackRepository) GetResolvers() []*resolverruntime.Resolver {
 	// Return a copy of the resolvers to ensure immutability
-	resolversCopy := make([]*resolverruntime.Resolver, len(f.resolvers))
-	for i, resolver := range f.resolvers {
-		resolversCopy[i] = resolver.DeepCopy()
-	}
-	return resolversCopy
+	return deepCopyResolvers(f.resolvers)
 }
 
 // Deprecated
@@ -346,4 +336,15 @@ func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index i
 		f.repositoriesForResolverCacheMu.Unlock()
 	}
 	return repo, nil
+}
+
+func deepCopyResolvers(resolvers []*resolverruntime.Resolver) []*resolverruntime.Resolver {
+	if resolvers == nil {
+		return nil
+	}
+	copied := make([]*resolverruntime.Resolver, len(resolvers))
+	for i, resolver := range resolvers {
+		copied[i] = resolver.DeepCopy()
+	}
+	return copied
 }
