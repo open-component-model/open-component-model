@@ -53,7 +53,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			err:      assert.NoError,
 		},
 		{
-			name:      "single repository with prefix",
+			name:      "single repository with prefix matching path segment",
 			component: "prefixA/component",
 			repos: []*resolverruntime.Resolver{
 				{
@@ -64,6 +64,32 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			},
 			expected: []string{"single-repo-with-prefix"},
 			err:      assert.NoError,
+		},
+		{
+			name:      "single repository with prefix matching path segment and trailing slash",
+			component: "prefixA/component",
+			repos: []*resolverruntime.Resolver{
+				{
+					Repository: NewRepositorySpec("single-repo-with-prefix", nil),
+					Prefix:     "prefixA/",
+					Priority:   0,
+				},
+			},
+			expected: []string{"single-repo-with-prefix"},
+			err:      assert.NoError,
+		},
+		{
+			name:      "single repository with prefix matching partial path segment",
+			component: "prefixA/component",
+			repos: []*resolverruntime.Resolver{
+				{
+					Repository: NewRepositorySpec("single-repo-with-prefix", nil),
+					Prefix:     "prefix",
+					Priority:   0,
+				},
+			},
+			expected: []string{},
+			err:      assert.Error,
 		},
 		{
 			name:      "multiple repositories with prefixes",

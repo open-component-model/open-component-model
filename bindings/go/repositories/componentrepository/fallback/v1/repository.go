@@ -273,7 +273,7 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Context, component string) iter.Seq2[componentrepository.ComponentVersionRepository, error] {
 	return func(yield func(componentrepository.ComponentVersionRepository, error) bool) {
 		for index, resolver := range f.resolvers {
-			if resolver.Prefix != "" && !strings.HasPrefix(component, resolver.Prefix) {
+			if resolver.Prefix != "" && resolver.Prefix != component && !strings.HasPrefix(component, strings.TrimSuffix(resolver.Prefix, "/")+"/") {
 				continue
 			}
 			repo, err := f.getRepositoryFromCache(ctx, index, resolver)
