@@ -45,7 +45,7 @@ type FallbackRepository struct {
 
 	// This cache is based on index. So, the index of the resolver in the
 	// resolver slice corresponds to the index of the repository in this slice.
-	repositoriesForResolverCacheMu sync.Mutex
+	repositoriesForResolverCacheMu sync.RWMutex
 	repositoriesForResolverCache   []componentrepository.ComponentVersionRepository
 }
 
@@ -326,17 +326,20 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 }
 
 func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, index int, resolver *resolverruntime.Resolver) (componentrepository.ComponentVersionRepository, error) {
-	f.repositoriesForResolverCacheMu.Lock()
-	defer f.repositoriesForResolverCacheMu.Unlock()
-
 	var err error
-	var repo componentrepository.ComponentVersionRepository
-	if repo = f.repositoriesForResolverCache[index]; repo == nil {
+
+	f.repositoriesForResolverCacheMu.RLock()
+	repo := f.repositoriesForResolverCache[index]
+	defer f.repositoriesForResolverCacheMu.RUnlock()
+
+	if repo == nil {
 		repo, err = f.getRepositoryForSpecification(ctx, resolver.Repository)
 		if err != nil {
 			return nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err)
 		}
+		f.repositoriesForResolverCacheMu.Lock()
 		f.repositoriesForResolverCache[index] = repo
+		f.repositoriesForResolverCacheMu.Unlock()
 	}
 	return repo, nil
 }
