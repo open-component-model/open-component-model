@@ -36,6 +36,12 @@ type Config struct {
 	// All matching entries are tried to lookup a component version in the following
 	//    order:
 	//    - highest priority first
+	//
+	// The default priority is spec.DefaultLookupPriority (10).
+	//
+	// Repositories with a specified prefix are only even tried if the prefix
+	// matches the component name.
+	//
 	// If resolvers are defined, it is possible to use component version names on the
 	// command line without a repository. The names are resolved with the specified
 	// resolution rule.
