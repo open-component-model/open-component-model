@@ -13,7 +13,7 @@ import (
 func CreateBlobData(location types.Location) (blob.Blob, error) {
 	switch location.LocationType {
 	case types.LocationTypeLocalFile:
-		file, err := os.Open(location.Value)
+		file, err := os.Stat(location.Value)
 		if err != nil {
 			return nil, err
 		}

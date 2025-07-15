@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -84,7 +85,7 @@ func getPluginLocation(ctx context.Context, plugin *types.Plugin) (string, error
 	defer cancel()
 
 	// Create a scanner to read output line by line
-	scanner := bufio.NewScanner(plugin.Stdout)
+	scanner := bufio.NewScanner(io.MultiReader(plugin.Stdout, plugin.Stderr))
 
 	go func() {
 		for scanner.Scan() {
