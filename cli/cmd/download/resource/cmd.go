@@ -182,13 +182,9 @@ func isLocal(access runtime.Typed) bool {
 	if access == nil {
 		return false
 	}
-	switch access.(type) {
-	case *v2.LocalBlob:
-		return true
-	case *runtime.Raw:
-		return access.GetType() == runtime.NewUnversionedType(v2.LocalBlobAccessType) ||
-			access.GetType() == runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion)
-	default:
+	var local v2.LocalBlob
+	if err := v2.Scheme.Convert(access, &local); err != nil {
 		return false
 	}
+	return true
 }
