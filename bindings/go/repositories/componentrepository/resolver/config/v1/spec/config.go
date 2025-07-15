@@ -25,10 +25,6 @@ func init() {
 	)
 }
 
-// Deprecated: Resolvers are deprecated and are only added for backwards
-// compatibility.
-// New concepts will likely be introduced in the future (contributions welcome!).
-//
 // Config is the OCM configuration type for configuring legacy fallback
 // resolvers.
 //
@@ -42,6 +38,10 @@ func init() {
 //     type: CommonTransportFormat/v1
 //     filePath: ./ocm/primary-transport-archive
 //     priority: 10
+//
+// Deprecated: Resolvers are deprecated and are only added for backwards
+// compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -77,6 +77,10 @@ type Config struct {
 // Resolver assigns a priority and a prefix to a single OCM repository specification
 // to allow defining a lookup order for component versions.
 //
+// Deprecated: Resolvers are deprecated and are only added for backwards
+// compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
+//
 // +k8s:deepcopy-gen=true
 type Resolver struct {
 	// Repository is the OCM repository specification to be used for resolving
@@ -96,6 +100,10 @@ type Resolver struct {
 }
 
 // Lookup creates a new Config from a central V1 config.
+//
+// Deprecated: Resolvers are deprecated and are only added for backwards
+// compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 func Lookup(cfg *v1.Config) (*Config, error) {
 	if cfg == nil {
 		return nil, nil
@@ -121,6 +129,10 @@ func Lookup(cfg *v1.Config) (*Config, error) {
 }
 
 // Merge merges the provided configs into a single config.
+//
+// Deprecated: Resolvers are deprecated and are only added for backwards
+// compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
 		return nil

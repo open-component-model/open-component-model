@@ -8,11 +8,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// ConvertFromV1 converts a resolver configuration from the v1 version to the runtime.Config type.
+//
 // Deprecated: Resolvers are deprecated and are only added for backwards
 // compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-// ConvertFromV1 converts a resolver configuration from the v1 version to the runtime.Config type.
 func ConvertFromV1(repositoryScheme *runtime.Scheme, config *resolverv1.Config) (*Config, error) {
 	if config == nil {
 		return nil, nil

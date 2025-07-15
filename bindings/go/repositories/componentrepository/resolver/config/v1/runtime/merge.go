@@ -3,6 +3,10 @@ package runtime
 // Merge merges the provided configs into a single config.
 // If the configs have multiple repositories with the same priority, the order
 // of configs is relevant (first will be preferred).
+//
+// Deprecated: Resolvers are deprecated and are only added for backwards
+// compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
 		return nil

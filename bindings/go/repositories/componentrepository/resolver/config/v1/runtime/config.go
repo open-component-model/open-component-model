@@ -4,10 +4,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Deprecated: Resolvers are deprecated and are only added for backwards
-// compatibility.
-// New concepts will likely be introduced in the future (contributions welcome!).
-//
 // Config is the OCM configuration type for configuring legacy fallback
 // resolvers.
 //
@@ -53,6 +49,10 @@ type Config struct {
 
 // Resolver assigns a priority and a prefix to a single OCM repository specification
 // to allow defining a lookup order for component versions.
+//
+// Deprecated: Resolvers are deprecated and are only added for backwards
+// compatibility.
+// New concepts will likely be introduced in the future (contributions welcome!).
 //
 // +k8s:deepcopy-gen=true
 type Resolver struct {
