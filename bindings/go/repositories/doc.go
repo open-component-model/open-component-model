@@ -1,11 +1,8 @@
 // Package repositories provides an abstraction layer for working
 // with different OCM (Open Component Model) repository technologies.
-// It defines a set of interfaces and types that allow developers to interact
-// with component version repositories in a technology-agnostic way.
 //
-// This module enables technology-specific repository implementations (such as
-// OCI, CTF) to conform to a common set of interfaces. By programming against
-// these interfaces, consumers of the module can seamlessly switch between
+// By programming against these technology-agnostic repository interfaces,
+// consumers of the module can seamlessly switch between
 // repository backends without changing their application logic.
 //
 // Key features:
