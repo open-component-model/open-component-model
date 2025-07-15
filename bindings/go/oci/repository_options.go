@@ -8,6 +8,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 
+	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
@@ -51,6 +52,10 @@ type RepositoryOptions struct {
 	// Logger is the logger to use for OCI operations.
 	// If not provided, slog.Default() will be used.
 	Logger *slog.Logger
+
+	// FilesystemConfig is the configuration for filesystem operations.
+	// If not provided, default filesystem configuration will be used.
+	FilesystemConfig *v1alpha1.Config
 }
 
 // ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
@@ -127,6 +132,13 @@ func WithLogger(logger *slog.Logger) RepositoryOption {
 	}
 }
 
+// WithFilesystemConfig sets the filesystem configuration for the repository.
+func WithFilesystemConfig(config *v1alpha1.Config) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.FilesystemConfig = config
+	}
+}
+
 // NewRepository creates a new Repository instance with the given options.
 func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	options := &RepositoryOptions{}
@@ -186,5 +198,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		resourceCopyOptions:        *options.ResourceCopyOptions,
 		referrerTrackingPolicy:     options.ReferrerTrackingPolicy,
 		logger:                     options.Logger,
+		filesystemConfig:           options.FilesystemConfig,
 	}, nil
 }

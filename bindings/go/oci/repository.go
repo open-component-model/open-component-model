@@ -17,6 +17,7 @@ import (
 	"oras.land/oras-go/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
@@ -76,6 +77,9 @@ type Repository struct {
 
 	// logger is the logger used for OCI operations.
 	logger *slog.Logger
+
+	// filesystemConfig is the configuration for filesystem operations.
+	filesystemConfig *v1alpha1.Config
 }
 
 // AddComponentVersion adds a new component version to the repository.
