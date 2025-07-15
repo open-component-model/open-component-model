@@ -188,7 +188,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 				},
 			},
 			expected: []string{},
-			err:      assert.Error,
+			err:      assert.NoError,
 		},
 		{
 			name:      "fail to resolve repository",
@@ -226,7 +226,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 				if !tc.err(t, err, "unexpected error for case %s", tc.name) {
 					return
 				}
-				if err != nil && repo == nil {
+				if err != nil || repo == nil {
 					return
 				}
 				expectedRepos[index] = repo.(*MockRepository).Name

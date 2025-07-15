@@ -313,9 +313,6 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", specification, err)
 	}
-	if repo == nil {
-		return nil, fmt.Errorf("repository for specification %q is nil", specification)
-	}
 	return repo, nil
 }
 
