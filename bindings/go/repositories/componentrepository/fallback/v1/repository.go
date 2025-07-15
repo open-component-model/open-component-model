@@ -131,22 +131,16 @@ func (f *FallbackRepository) GetComponentVersion(ctx context.Context, component,
 func (f *FallbackRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
 	repos := f.RepositoriesForComponentIterator(ctx, component)
 
-	var errGroup errgroup.Group
 	var versionsMu sync.Mutex
 	accumulatedVersions := make(map[string]struct{})
 
+	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.SetLimit(goruntime.NumCPU())
 
 	for repo, err := range repos {
 		errGroup.Go(func() error {
 			if err != nil {
 				return fmt.Errorf("getting repository for component %s failed: %w", component, err)
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				// continue
 			}
 			var versions []string
 			versions, err = repo.ListComponentVersions(ctx, component)
