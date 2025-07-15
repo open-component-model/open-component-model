@@ -12,15 +12,15 @@ require (
 	golang.org/x/sys v0.34.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
 	ocm.software/open-component-model/bindings/go/configuration v0.0.1
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250710100917-f52829c20f75
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250714155011-0962c439cc10
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/ctf v0.0.3
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250710100917-f52829c20f75
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250714155011-0962c439cc10
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250710100917-f52829c20f75
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250710100917-f52829c20f75
-	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250710100917-f52829c20f75
-	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250710100917-f52829c20f75
+	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250714155011-0962c439cc10
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250714155011-0962c439cc10
+	ocm.software/open-component-model/bindings/go/oci v0.0.0-20250714155011-0962c439cc10
+	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250714155011-0962c439cc10
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.5.0
