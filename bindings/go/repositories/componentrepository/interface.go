@@ -1,4 +1,4 @@
-package componentversionrepository
+package componentrepository
 
 import (
 	"context"
@@ -6,6 +6,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+const (
+	Realm = "componentrepository"
 )
 
 // ComponentVersionRepositoryProvider defines the contract for providers that can retrieve
@@ -78,9 +82,38 @@ type LocalSourceRepository interface {
 	// Sources for non-existent component versions may be stored but may be removed during garbage collection.
 	// The Source given is identified later on by its own Identity ([descriptor.Source.ToIdentity]) and a collection of a set of reserved identity values
 	// that can have a special meaning.
-	AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error)
+	AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error)
 
 	// GetLocalSource retrieves a local [descriptor.Source] from the repository.
 	// The [runtime.Identity] must match a source in the [descriptor.Descriptor].
 	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error)
+}
+
+type CredentialProvider interface {
+	// Resolve attempts to resolve credentials for the given identity.
+	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
+}
+
+// ErrNotFound is an error type that indicates a requested component version
+// was not found. ErrNotFound is independent of the underlying repository implementation.
+// It is supposed to wrap the original technology-specific error and to provide a
+// technology-agnostic API to check for not found errors.
+type ErrNotFound struct {
+	msg string
+	err error
+}
+
+func (e *ErrNotFound) Error() string {
+	return e.msg
+}
+
+func (e *ErrNotFound) Unwrap() error {
+	return e.err
+}
+
+func NewErrNotFound(msg string, err error) *ErrNotFound {
+	return &ErrNotFound{
+		msg: msg,
+		err: err,
+	}
 }
