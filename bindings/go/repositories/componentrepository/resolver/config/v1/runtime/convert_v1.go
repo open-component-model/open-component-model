@@ -13,8 +13,6 @@ import (
 // Deprecated: Resolvers are deprecated and are only added for backwards
 // compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-//
-//nolint:staticcheck // SA1019: using deprecated type within deprecated code
 func ConvertFromV1(repositoryScheme *runtime.Scheme, config *resolverv1.Config) (*Config, error) {
 	if config == nil {
 		return nil, nil
