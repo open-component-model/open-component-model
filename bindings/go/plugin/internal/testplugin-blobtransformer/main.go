@@ -21,11 +21,11 @@ import (
 type TestPlugin struct{}
 
 func (m *TestPlugin) TransformBlob(ctx context.Context, request *v1.TransformBlobRequest[*dummyv1.Repository], credentials map[string]string) (*v1.TransformBlobResponse, error) {
-	file, err := os.CreateTemp("", "test-resource-file")
+	file, err := os.CreateTemp("", "test-blob-file")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temp file: %w", err)
 	}
-	_, _ = file.Write([]byte("test-resource"))
+	_, _ = file.Write([]byte("transformed-blob"))
 	_ = file.Close()
 	logger.Debug("TransformResource", "location", file.Name())
 	return &v1.TransformBlobResponse{

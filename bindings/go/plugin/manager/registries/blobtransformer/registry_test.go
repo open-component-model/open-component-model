@@ -27,7 +27,7 @@ import (
 func TestPluginFlow(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-blobtransformer")
 	_, err := os.Stat(path)
-	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-resource first")
+	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-blobtransformer first")
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	ctx := t.Context()
