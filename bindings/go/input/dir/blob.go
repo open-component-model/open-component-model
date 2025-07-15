@@ -174,11 +174,7 @@ func walkDirContents(ctx context.Context, currentDir string, baseDir string,
 			if err != nil {
 				return fmt.Errorf("failed to open file %q: %w", entryPath, err)
 			}
-			if size := header.Size; size > blob.SizeUnknown {
-				_, err = io.CopyN(tw, file, size)
-			} else {
-				return fmt.Errorf("size of file %q unknown", entryPath)
-			}
+			_, err = io.CopyN(tw, file, header.Size)
 			if err != nil {
 				err = errors.Join(err, file.Close())
 				return fmt.Errorf("failed to write file %q to tar archive: %w", entryPath, err)
