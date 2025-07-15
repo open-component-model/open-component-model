@@ -84,8 +84,18 @@ func getPluginLocation(ctx context.Context, plugin *types.Plugin) (string, error
 	timeoutCtx, cancel := context.WithTimeout(ctx, connectionTimeout)
 	defer cancel()
 
+	var reader io.Reader
+	switch {
+	case plugin.Stdout != nil && plugin.Stderr != nil:
+		reader = io.MultiReader(plugin.Stdout, plugin.Stderr)
+	case plugin.Stdout != nil:
+		reader = plugin.Stdout
+	case plugin.Stderr != nil:
+		reader = plugin.Stderr
+	}
+
 	// Create a scanner to read output line by line
-	scanner := bufio.NewScanner(io.MultiReader(plugin.Stdout, plugin.Stderr))
+	scanner := bufio.NewScanner(reader)
 
 	go func() {
 		for scanner.Scan() {
