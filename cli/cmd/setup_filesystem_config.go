@@ -16,10 +16,7 @@ import (
 func setupFilesystemConfig(cmd *cobra.Command) {
 	value, err := cmd.PersistentFlags().GetString(tempFolderFlag)
 	if err != nil {
-		slog.ErrorContext(cmd.Context(), "could not read temp folder flag value", slog.String("error", err.Error()))
-
-		// no point to continue if we don't have a value
-		return
+		slog.WarnContext(cmd.Context(), "could not read temp folder flag value", slog.String("error", err.Error()))
 	}
 
 	ocmCtx := ocmctx.FromContext(cmd.Context())
