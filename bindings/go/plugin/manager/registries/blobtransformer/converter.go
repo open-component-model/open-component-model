@@ -49,6 +49,19 @@ func (c *converter) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, s
 	return blobs.CreateBlobData(response.Location)
 }
 
+func (c *converter) GetBlobTransformerCredentialConsumerIdentity(ctx context.Context, spec runtime.Typed) (runtime.Identity, error) {
+	request := &blobtransformerv1.GetIdentityRequest[runtime.Typed]{
+		Typ: spec,
+	}
+
+	result, err := c.externalPlugin.GetIdentity(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get identity: %w", err)
+	}
+
+	return result.Identity, nil
+}
+
 var _ BlobTransformer = (*converter)(nil)
 
 func (r *Registry) externalToBlobTransformerConverter(plugin blobtransformerv1.BlobTransformerPluginContract[runtime.Typed], scheme *runtime.Scheme) BlobTransformer {

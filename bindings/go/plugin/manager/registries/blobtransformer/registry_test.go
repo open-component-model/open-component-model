@@ -197,6 +197,12 @@ type mockBlobTransformerPlugin struct {
 	called bool
 }
 
+func (m *mockBlobTransformerPlugin) GetBlobTransformerCredentialConsumerIdentity(ctx context.Context, spec runtime.Typed) (runtime.Identity, error) {
+	m.called = true
+	// Return a mock identity for testing purposes
+	return runtime.Identity{}, nil
+}
+
 func (m *mockBlobTransformerPlugin) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, spec runtime.Typed, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	m.called = true
 	return blob, nil
