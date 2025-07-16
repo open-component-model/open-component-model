@@ -34,6 +34,10 @@ import (
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
 type FallbackRepository struct {
+	// GoRoutineLimit limits the number of active goroutines for concurrent
+	// operations.
+	goRoutineLimit int
+
 	repositoryProvider componentrepository.ComponentVersionRepositoryProvider
 	credentialProvider componentrepository.CredentialProvider
 
@@ -52,18 +56,41 @@ type FallbackRepository struct {
 	repositoriesForResolverCache   []componentrepository.ComponentVersionRepository
 }
 
+type FallbackRepositoryOption func(*FallbackRepositoryOptions)
+
+func WithGoRoutineLimit(numGoRoutines int) FallbackRepositoryOption {
+	return func(options *FallbackRepositoryOptions) {
+		options.GoRoutineLimit = numGoRoutines
+	}
+}
+
+type FallbackRepositoryOptions struct {
+	GoRoutineLimit int
+}
+
 // NewFallbackRepository creates a new FallbackRepository instance.
 //
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-func NewFallbackRepository(_ context.Context, repositoryProvider componentrepository.ComponentVersionRepositoryProvider, credentialProvider componentrepository.CredentialProvider, res ...*resolverruntime.Resolver) (*FallbackRepository, error) {
+func NewFallbackRepository(_ context.Context, repositoryProvider componentrepository.ComponentVersionRepositoryProvider, credentialProvider componentrepository.CredentialProvider, res []*resolverruntime.Resolver, opts ...FallbackRepositoryOption) (*FallbackRepository, error) {
+	options := &FallbackRepositoryOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if options.GoRoutineLimit <= 0 {
+		options.GoRoutineLimit = goruntime.NumCPU()
+	}
+
 	resolvers := deepCopyResolvers(res)
 	slices.SortStableFunc(resolvers, func(a, b *resolverruntime.Resolver) int {
 		return cmp.Compare(b.Priority, a.Priority)
 	})
 	return &FallbackRepository{
+		goRoutineLimit: options.GoRoutineLimit,
+
 		repositoryProvider: repositoryProvider,
 		credentialProvider: credentialProvider,
 
@@ -132,7 +159,7 @@ func (f *FallbackRepository) ListComponentVersions(ctx context.Context, componen
 	accumulatedVersions := make(map[string]struct{})
 
 	errGroup, ctx := errgroup.WithContext(ctx)
-	errGroup.SetLimit(goruntime.NumCPU())
+	errGroup.SetLimit(f.goRoutineLimit)
 
 	for repo, err := range repos {
 		errGroup.Go(func() error {

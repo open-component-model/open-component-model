@@ -216,7 +216,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 
-			fallback, err := fallback.NewFallbackRepository(ctx, MockProvider{}, nil, tc.repos...)
+			fallback, err := fallback.NewFallbackRepository(ctx, MockProvider{}, nil, tc.repos)
 			r.NoError(err, "failed to create fallback repository when it should succeed")
 
 			actualRepos := fallback.RepositoriesForComponentIterator(ctx, tc.component)
