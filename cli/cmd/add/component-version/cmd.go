@@ -221,6 +221,7 @@ func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentC
 	if err != nil {
 		return nil, fmt.Errorf("reading component constructor %q failed: %w", constructorFlag.String(), err)
 	}
+
 	data := constructorv1.ComponentConstructor{}
 	if err := yaml.Unmarshal(constructorData, &data); err != nil {
 		return nil, fmt.Errorf("unmarshalling component constructor %q failed: %w", constructorFlag.String(), err)
