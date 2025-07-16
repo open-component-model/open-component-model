@@ -14,7 +14,6 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
-	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/errdef"
 
@@ -38,6 +37,7 @@ import (
 	descriptor2 "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
