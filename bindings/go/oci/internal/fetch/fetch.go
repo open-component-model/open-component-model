@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"oras.land/oras-go/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -37,7 +38,11 @@ type LocalBlob interface {
 //   - A LocalBlob representing the matching layer
 //   - An error if the layer cannot be found or fetched
 func SingleLayerLocalBlobFromManifestByIdentity(ctx context.Context, store oras.ReadOnlyTarget, manifest *ociImageSpecV1.Manifest, identity map[string]string, artifactKind annotations.ArtifactKind) (LocalBlob, error) {
-	layer, err := annotations.FilterFirstMatchingArtifact(manifest.Layers, identity, artifactKind)
+	// The runtime.IdentitySubset matcher is required to match with annotations
+	// created by the old ocm cli where the version was only included in the
+	// identity if the identity was not unique without the version.
+	identityMatcher := runtime.IdentityMatchingChainFn(runtime.IdentitySubset)
+	layer, err := annotations.FilterFirstMatchingArtifact(manifest.Layers, identity, artifactKind, identityMatcher)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find matching layer: %w", err)
 	}

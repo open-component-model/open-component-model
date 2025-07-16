@@ -1043,7 +1043,9 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 		Digest:    digest.FromBytes(content),
 		Size:      int64(len(content)),
 	}
-	r.NoError(identity.Adopt(&layerDesc, resource))
+	res := resource.DeepCopy()
+	res.Version = ""
+	r.NoError(identity.Adopt(&layerDesc, res))
 
 	// Push the component version as a layer
 	r.NoError(repoStore.Push(ctx, layerDesc, bytes.NewReader(content)))
