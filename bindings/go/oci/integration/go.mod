@@ -90,5 +90,6 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.2 // indirect
+	ocm.software/open-component-model/bindings/go/repositories v0.0.0-20250716091102-f6aa481fbaee // indirect
 	sigs.k8s.io/yaml v1.5.0 // indirect
 )
