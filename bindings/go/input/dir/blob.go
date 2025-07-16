@@ -22,10 +22,14 @@ import (
 // DEFAULT_TAR_MIME_TYPE is used as blob media type, if the MediaType field is not set in the spec.
 const DEFAULT_TAR_MIME_TYPE = "application/x-tar"
 
+var ErrEmptyPath = errors.New("dir path must not be empty")
+
 // GetV1DirBlob creates a ReadOnlyBlob from a v1.Dir specification.
 // It reads the directory from the filesystem and applies compression if requested.
 // The function returns an error if the file path is empty or if there are issues reading the directory
 // contents from the filesystem.
+//
+// The function is not able to handle symbolic links yet.
 //
 // The function performs the following steps:
 //  1. Validates that the directory path is not empty
@@ -33,9 +37,6 @@ const DEFAULT_TAR_MIME_TYPE = "application/x-tar"
 //  3. Packs the directory contents into a tar archive
 //  4. Applies different configuration options of the v1.Dir specification
 func GetV1DirBlob(ctx context.Context, dir v1.Dir) (blob.ReadOnlyBlob, error) {
-	// TODO:
-	// - Handle FollowSymlinks option.
-
 	// Pack directory contents as a tar archive.
 	reader, err := packDirToTar(ctx, dir.Path, &dir)
 	if err != nil {
@@ -62,7 +63,7 @@ func GetV1DirBlob(ctx context.Context, dir v1.Dir) (blob.ReadOnlyBlob, error) {
 // triggers recursive packaging of the directory contents.
 func packDirToTar(ctx context.Context, path string, opt *v1.Dir) (io.Reader, error) {
 	if path == "" {
-		return nil, fmt.Errorf("dir path must not be empty")
+		return nil, ErrEmptyPath
 	}
 
 	// Determine the base directory for relative paths in the tar archive.
@@ -196,21 +197,8 @@ func walkDirContents(ctx context.Context, currentDir string, baseDir string,
 			}
 
 		case header.Typeflag == tar.TypeSymlink:
-			/*// The entry is a symlink.
-			if !opt.FollowSymlinks {
-				absPath := filepath.Join(baseDir, entryPath)
-				link, err := fileSystem.Readlink(absPath)
-				if err != nil {
-					return fmt.Errorf("cannot read symlink %q: %w", absPath, err)
-				}
-				header.Linkname = link
-				// Write the header to the tar archive.
-				if err := tw.WriteHeader(header); err != nil {
-					return fmt.Errorf("failed to write tar header to tar archive: %w", err)
-				}
-			} else {
-			}*/
-			return fmt.Errorf("symlinks not supported yet")
+			// TODO: add support for symlinks, if there is stakeholder demand
+			return fmt.Errorf("symbolic link %q encountered, symlinks not supported yet", entryPath)
 
 		default:
 			return fmt.Errorf("unsupported file type %q of file %q", fi.Mode().String(), entryPath)

@@ -25,6 +25,7 @@ type Dir struct {
 	PreserveDir bool `json:"preserveDir,omitempty"`
 
 	// FollowSymlinks will include the content of the encountered symbolic links to the resulting blob.
+	// Support for this option is not implemented yet. The field is included for compatibility with previous OCM version.
 	FollowSymlinks bool `json:"followSymlinks,omitempty"`
 
 	// ExcludeFiles is a list of file name patterns to exclude from addition to the resulting blob.

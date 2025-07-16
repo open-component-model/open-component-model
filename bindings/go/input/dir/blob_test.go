@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +20,47 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/input/dir/spec/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+func TestGetV1DirBlob_Symlinks(t *testing.T) {
+	ctx := t.Context()
+
+	// Create a folder with a file.
+	tempDir := t.TempDir()
+	dirAbs := filepath.Join(tempDir, "dir-input")
+	filePath := filepath.Join(dirAbs, "hello.txt")
+	err := os.MkdirAll(filepath.Dir(filePath), 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filePath, []byte("This file is a symlink target"), 0o644)
+	require.NoError(t, err)
+
+	// Create a symlink to the file in the same folder.
+	linkPath := filepath.Join(dirAbs, "hello.link")
+	err = os.Symlink("hello.txt", linkPath)
+	require.NoError(t, err)
+
+	// Read the link.
+	dst, err := os.Readlink(linkPath)
+	require.NoError(t, err)
+	require.Equal(t, "hello.txt", dst)
+
+	// Create v1.Dir spec.
+	dirSpec := v1.Dir{
+		Type: runtime.NewUnversionedType(v1.Type),
+		Path: dirAbs,
+	}
+
+	// Create blob.
+	b, err := dir.GetV1DirBlob(ctx, dirSpec)
+	require.NoError(t, err)
+	require.NotNil(t, b)
+
+	// Read the tar data.
+	reader, err := b.ReadCloser()
+	assert.Nil(t, reader)
+	// Expect an error, as symlinks are not supported yet.
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "symlinks not supported")
+}
 
 func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 	ctx := t.Context()
@@ -73,8 +115,8 @@ func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 			readerBefore, err := b.ReadCloser()
 			require.NoError(t, err)
 			defer readerBefore.Close()
-			require.NoError(t, err)
 			tarBefore, err := io.ReadAll(readerBefore)
+			require.NoError(t, err)
 
 			// Change file access and modification times.
 			fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
@@ -90,8 +132,8 @@ func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 			readerAfter, err := b.ReadCloser()
 			require.NoError(t, err)
 			defer readerAfter.Close()
-			require.NoError(t, err)
 			tarAfter, err := io.ReadAll(readerAfter)
+			require.NoError(t, err)
 
 			// Compare the two tar data blobs.
 			equal := bytes.Equal(tarBefore, tarAfter)
@@ -104,7 +146,7 @@ func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 	}
 }
 
-func TestGetV1DirBlob_Success(t *testing.T) {
+func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 	type TestFile struct {
 		relPath       string
 		content       string
@@ -355,8 +397,9 @@ func TestGetV1DirBlob_EmptyPath(t *testing.T) {
 	// Get blob should fail.
 	ctx := t.Context()
 	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec)
-	assert.Error(t, err)
 	assert.Nil(t, dirBlob)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, dir.ErrEmptyPath), "expected ErrEmptyPath to be returned, got: %v", err)
 }
 
 func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
@@ -370,8 +413,9 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 	// "failed to create filesystem while trying to access <path>: path does not exist: <path>".
 	ctx := t.Context()
 	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec)
-	assert.Error(t, err)
 	assert.Nil(t, dirBlob)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "path does not exist")
 
 	// Another case: the input directory does not exist, but its parent folder does.
 	// In this case, and if PreserveDir is true, the FileSystem instance is created for the existing parent folder.
@@ -386,14 +430,15 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 	// Create the blob.
 	dirBlob, err = dir.GetV1DirBlob(ctx, dirSpec)
 	// Expect no error here, because the pipe is not processed yet.
-	require.NoError(t, err)
 	require.NotNil(t, dirBlob)
+	require.NoError(t, err)
 
 	// Try to read the data. Expect error propagation from the pipe packaging the tar.
 	// Getting the reader should fail. The error: "... non-existent-path: no such file or directory".
 	reader, err := dirBlob.ReadCloser()
-	assert.Error(t, err)
 	assert.Nil(t, reader)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no such file or directory")
 }
 
 // extractFileFromTar extracts a specific file from a tar archive and returns its content
