@@ -120,10 +120,7 @@ func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Reposito
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifests),
 		oci.WithLayerCache(p.layers),
-	}
-
-	if p.filesystemConfig != nil {
-		options = append(options, oci.WithFilesystemConfig(p.filesystemConfig))
+		oci.WithFilesystemConfig(p.filesystemConfig), // the filesystem config being empty is a valid config
 	}
 
 	repo, err := oci.NewRepository(options...)

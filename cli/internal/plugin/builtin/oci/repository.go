@@ -51,7 +51,7 @@ func createRepository(
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(manifests),
 		oci.WithLayerCache(layers),
-		oci.WithFilesystemConfig(filesystemConfig),
+		oci.WithFilesystemConfig(filesystemConfig), // the filesystem config being empty is a valid config
 	}
 
 	repo, err := oci.NewRepository(options...)

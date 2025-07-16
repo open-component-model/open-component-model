@@ -20,23 +20,22 @@ func init() {
 	v1.Scheme.MustRegisterWithAlias(&v1alpha1.Config{}, runtime.NewVersionedType(v1alpha1.ConfigType, v1alpha1.Version))
 }
 
-// createFilesystemConfigRaw creates a properly serialized runtime.Raw for filesystem config
-func createFilesystemConfigRaw(tempFolder string) *runtime.Raw {
-	cfg := &v1alpha1.Config{
-		Type:       runtime.NewVersionedType(v1alpha1.ConfigType, v1alpha1.Version),
-		TempFolder: tempFolder,
-	}
-
-	// Serialize the config to JSON
-	data, err := json.Marshal(cfg)
-	if err != nil {
+// createConfigWithFilesystemConfig creates a v1.Config with filesystem configuration from JSON
+func createConfigWithFilesystemConfig(tempFolder string) *v1.Config {
+	configJSON := `{
+		"configurations": [
+			{
+				"type": "filesystem.config.ocm.software/v1alpha1",
+				"tempFolder": "` + tempFolder + `"
+			}
+		]
+	}`
+	
+	config := &v1.Config{}
+	if err := json.Unmarshal([]byte(configJSON), config); err != nil {
 		panic(err)
 	}
-
-	return &runtime.Raw{
-		Type: cfg.Type,
-		Data: data,
-	}
+	return config
 }
 
 func TestSetupFilesystemConfig(t *testing.T) {
@@ -62,24 +61,16 @@ func TestSetupFilesystemConfig(t *testing.T) {
 			expectedConfigMerge: false, // Config merge fails due to scheme registration issue
 		},
 		{
-			name:    "CLI flag overrides existing filesystem config",
-			cliFlag: "/tmp/override",
-			existingConfig: &v1.Config{
-				Configurations: []*runtime.Raw{
-					createFilesystemConfigRaw("/tmp/original"),
-				},
-			},
+			name:                "CLI flag overrides existing filesystem config",
+			cliFlag:             "/tmp/override",
+			existingConfig:      createConfigWithFilesystemConfig("/tmp/original"),
 			expectedTempFolder:  "/tmp/override",
 			expectedConfigMerge: false,
 		},
 		{
-			name:    "No CLI flag uses existing config",
-			cliFlag: "",
-			existingConfig: &v1.Config{
-				Configurations: []*runtime.Raw{
-					createFilesystemConfigRaw("/tmp/fromconfig"),
-				},
-			},
+			name:                "No CLI flag uses existing config",
+			cliFlag:             "",
+			existingConfig:      createConfigWithFilesystemConfig("/tmp/fromconfig"),
 			expectedTempFolder:  "/tmp/fromconfig",
 			expectedConfigMerge: false,
 		},
@@ -171,37 +162,48 @@ func TestHasFilesystemConfig(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "config with filesystem config",
-			config: &v1.Config{
-				Configurations: []*runtime.Raw{
-					createFilesystemConfigRaw("/tmp/test"),
-				},
-			},
+			name:     "config with filesystem config",
+			config:   createConfigWithFilesystemConfig("/tmp/test"),
 			expected: true,
 		},
 		{
 			name: "config with other types",
-			config: &v1.Config{
-				Configurations: []*runtime.Raw{
-					{
-						Type: runtime.NewVersionedType("other.type", "v1"),
-						Data: []byte(`{"type":{"name":"other.type","version":"v1"}}`),
-					},
-				},
-			},
+			config: func() *v1.Config {
+				configJSON := `{
+					"configurations": [
+						{
+							"type": "other.type/v1"
+						}
+					]
+				}`
+				config := &v1.Config{}
+				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
+					panic(err)
+				}
+				return config
+			}(),
 			expected: false,
 		},
 		{
 			name: "config with mixed types including filesystem",
-			config: &v1.Config{
-				Configurations: []*runtime.Raw{
-					{
-						Type: runtime.NewVersionedType("other.type", "v1"),
-						Data: []byte(`{"type":{"name":"other.type","version":"v1"}}`),
-					},
-					createFilesystemConfigRaw("/tmp/test"),
-				},
-			},
+			config: func() *v1.Config {
+				configJSON := `{
+					"configurations": [
+						{
+							"type": "other.type/v1"
+						},
+						{
+							"type": "filesystem.config.ocm.software/v1alpha1",
+							"tempFolder": "/tmp/test"
+						}
+					]
+				}`
+				config := &v1.Config{}
+				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
+					panic(err)
+				}
+				return config
+			}(),
 			expected: true,
 		},
 	}
@@ -233,14 +235,20 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 		},
 		{
 			name: "add to existing config",
-			initialConfig: &v1.Config{
-				Configurations: []*runtime.Raw{
-					{
-						Type: runtime.NewVersionedType("other.type", "v1"),
-						Data: []byte(`{"type":{"name":"other.type","version":"v1"}}`),
-					},
-				},
-			},
+			initialConfig: func() *v1.Config {
+				configJSON := `{
+					"configurations": [
+						{
+							"type": "other.type/v1"
+						}
+					]
+				}`
+				config := &v1.Config{}
+				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
+					panic(err)
+				}
+				return config
+			}(),
 			fsCfg: &v1alpha1.Config{
 				TempFolder: "/tmp/test",
 			},
