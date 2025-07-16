@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"mime"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -128,12 +129,12 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	if len(toDownload) != 1 {
 		return fmt.Errorf("expected exactly one res candidate to download, got %d", len(toDownload))
 	}
-	res := toDownload[0]
+	res := &toDownload[0]
 
 	access := res.GetAccess()
 	var data blob.ReadOnlyBlob
 	if isLocal(access) {
-		data, _, err = repo.GetLocalResource(cmd.Context(), requestedIdentity)
+		data, res, err = repo.GetLocalResource(cmd.Context(), requestedIdentity)
 	} else {
 		var plugin resource.Repository
 		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(cmd.Context(), access)
@@ -141,15 +142,28 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("getting res plugin for access %q failed: %w", access.GetType(), err)
 		}
 		var creds map[string]string
-		if identity, err := plugin.GetResourceCredentialConsumerIdentity(cmd.Context(), &res); err == nil {
+		if identity, err := plugin.GetResourceCredentialConsumerIdentity(cmd.Context(), res); err == nil {
 			if creds, err = credentialGraph.Resolve(cmd.Context(), identity); err != nil {
 				return fmt.Errorf("getting credentials for res %q failed: %w", res.Name, err)
 			}
 		}
-		data, err = plugin.DownloadResource(cmd.Context(), &res, creds)
+		data, err = plugin.DownloadResource(cmd.Context(), res, creds)
 	}
 	if err != nil {
-		return fmt.Errorf("downloading res %q failed: %w", res.Name, err)
+		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
+	}
+
+	for _, label := range res.Labels {
+		if label.Name == "downloadName" {
+			if err := label.GetValue(&output); err != nil {
+				return fmt.Errorf("interpreting downloadName label value failed: %w", err)
+			}
+			if output = filepath.Clean(output); filepath.IsAbs(output) {
+				return fmt.Errorf("downloadName label value %q must not be an absolute path for security reasons", output)
+			}
+			logger.Info("using downloadName label for file download location", slog.String("output", output))
+			break
+		}
 	}
 
 	if output == "" {

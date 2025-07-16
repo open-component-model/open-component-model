@@ -11,6 +11,12 @@ vars:
   VERSION: '{{ .VERSION | default .DEFAULT_VERSION }}'
   COMPONENT_CONSTRUCTOR_FILE: "{{ .TASKFILE_DIR }}/tmp/component-constructor.yaml"
   CTF_LOCATION: '{{ .TASKFILE_DIR }}/tmp/transport-archive'
+  GOOS:
+    sh: |
+      go env GOOS
+  GOARCH:
+    sh: |
+      go env GOARCH
 tasks:
   tmp:
     cmds:
@@ -40,13 +46,6 @@ tasks:
 
   build:
     desc: "Build the CLI in the Host Architecture"
-    vars:
-      GOOS:
-        sh: |
-          go env GOOS
-      GOARCH:
-        sh: |
-          go env GOARCH
     deps:
       - task: build:target
         vars:
@@ -70,15 +69,15 @@ tasks:
   build:target:
     desc: "Build CLI for a specific GOOS/GOARCH target"
     internal: true
-    silent: true
+    silent: false
     generates:
       - tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml
     cmds:
-      - |
-        go build \
-          -ldflags "-X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" \
-          -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
+      - cmd: |
+          GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
+            -ldflags "-X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" \
+            -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/resources
         cat > {{ .TASKFILE_DIR }}/tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml <<EOF
@@ -109,11 +108,25 @@ tasks:
         --repository {{ .CTF_LOCATION }}
 
   verify/ctf:
-    desc: "Verify the CTF by checking the component version and being able to fetch the CLI for the Host Architecture"
+    desc: "Verify the CTF by checking the component version and being able to fetch and run the CLI for the Host Architecture"
+    silent: true
     vars:
       REFERENCE: '{{ .CTF_LOCATION }}//{{ .PROVIDER }}/{{ .NAME }}'
+    dir: '{{ .TASKFILE_DIR }}/tmp/verify-ctf'
     cmd: |
-      {{ .TASKFILE_DIR }}/tmp/bin/ocm get component-version {{ .REFERENCE }} -oyaml --loglevel=error
+      VERSION=$({{ .TASKFILE_DIR }}/tmp/bin/ocm get component-version {{ .REFERENCE }} -oyaml --loglevel=error | yq .component.version)
+      if [ -z "$VERSION" ]; then
+        echo "Component version not found in CTF at {{ .REFERENCE }}"
+        exit 1
+      fi
+      echo "Component version found: $VERSION"
+      
+      {{ .TASKFILE_DIR }}/tmp/bin/ocm download resource {{ .REFERENCE }}:$VERSION \
+        --identity name=ocmcli,os={{ .GOOS }},architecture={{ .GOARCH }}
+      
+      chmod +x ./ocm
+      ./ocm version
+      
       
 
   generate/component-constructor:
