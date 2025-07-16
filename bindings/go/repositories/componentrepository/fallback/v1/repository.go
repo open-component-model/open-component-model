@@ -186,7 +186,7 @@ func (f *FallbackRepository) ListComponentVersions(ctx context.Context, componen
 	}
 
 	if err := errGroup.Wait(); err != nil {
-		return nil, fmt.Errorf("listing component versions for %q failed: %w", component, err)
+		return nil, fmt.Errorf("listing component versions for %s failed: %w", component, err)
 	}
 
 	versionList := slices.Collect(maps.Keys(accumulatedVersions))
@@ -255,7 +255,7 @@ func (f *FallbackRepository) AddLocalSource(ctx context.Context, component, vers
 		}
 		return repo.AddLocalSource(ctx, component, version, source, content)
 	}
-	return nil, fmt.Errorf("no repository found for component %s to add local resource", component)
+	return nil, fmt.Errorf("no repository found for component %s to add local source", component)
 }
 
 // GetLocalSource iterates through all resolvers with matching component prefix in
