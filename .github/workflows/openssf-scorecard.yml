@@ -1,9 +1,6 @@
 # see https://github.com/ossf/scorecard
 name: OpenSSF Scorecard Supply-Chain Security
 on:
-  # For Branch-Protection check. Only the default branch is supported. See
-  # https://github.com/ossf/scorecard/blob/main/docs/checks.md#branch-protection
-  branch_protection_rule:
   # To guarantee Maintained check is occasionally updated. See
   # https://github.com/ossf/scorecard/blob/main/docs/checks.md#maintained
   schedule:
@@ -32,13 +29,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Generate token
-        id: generate_token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
-        with:
-          app_id: ${{ secrets.OCMBOT_APP_ID }}
-          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
-
       - name: "Run analysis"
         uses: ossf/scorecard-action@f49aabe0b5af0936a0987cfb85d86b75731b0186 # v2.4.1
         with:
@@ -48,7 +38,7 @@ jobs:
           # - you want to enable the Branch-Protection check on a *public* repository, or
           # - you are installing Scorecard on a *private* repository
           # To create the PAT, follow the steps in https://github.com/ossf/scorecard-action?tab=readme-ov-file#authentication-with-fine-grained-pat-optional.
-          repo_token: ${{ steps.generate_token.outputs.token }}
+          # repo_token: ${{ steps.generate_token.outputs.token }}
 
           # Public repositories:
           #   - Publish results to OpenSSF REST API for easy access by consumers
