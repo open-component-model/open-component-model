@@ -26,7 +26,6 @@ type FileSystem interface {
 	RemoveFS
 	RemoveAllFS
 	ReadOnlyFS
-	ReadlinkFS
 }
 
 // OpenFileFS is a filesystem that supports opening files with a specific flag and permission bitmask
@@ -67,12 +66,6 @@ type ReadOnlyFS interface {
 	ReadOnly() bool
 	// ForceReadOnly sets the filesystem to read only mode, restricting all future operations.
 	ForceReadOnly()
-}
-
-type ReadlinkFS interface {
-	// Readlink returns the destination of the named symbolic link. If there is an error, it will be of type *PathError.
-	// If the link destination is relative, Readlink returns the relative path without resolving it to an absolute one.
-	Readlink(name string) (string, error)
 }
 
 // File is an interface that needs to be fulfilled by any file implementation
@@ -171,10 +164,6 @@ func (s *osFileSystem) ForceReadOnly() {
 	s.flagMu.Lock()
 	defer s.flagMu.Unlock()
 	s.flag &= os.O_RDONLY
-}
-
-func (s *osFileSystem) Readlink(name string) (string, error) {
-	return os.Readlink(filepath.Join(s.base, name))
 }
 
 // isFlagReadOnly checks if the flag is read only.
