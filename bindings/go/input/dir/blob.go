@@ -118,7 +118,7 @@ func packDirToTar(ctx context.Context, path string, opt *v1.Dir) (io.Reader, err
 // The function goes the directory contents file by file, checks if it should be included or excluded,
 // creates tar headers for each file and subfolder, and writes the file contents to the tar archive.
 // For subdirectories it calls itself recursively to process the subfolder contents.
-// TODO: limit recursion depth to avoid stack overflow.
+// TODO(ikhandamirov): limit recursion depth to avoid stack overflow.
 func walkDirContents(ctx context.Context, currentDir string, baseDir string,
 	opt *v1.Dir, fileSystem filesystem.FileSystem, tw *tar.Writer,
 ) error {
@@ -197,7 +197,8 @@ func walkDirContents(ctx context.Context, currentDir string, baseDir string,
 			}
 
 		case header.Typeflag == tar.TypeSymlink:
-			// TODO: add support for symlinks, if there is stakeholder demand
+			// TODO(ikhandamirov): add support for symlinks, if there is stakeholder demand.
+			// Until then it won't be possible to package directories containing symlinks.
 			return fmt.Errorf("symbolic link %q encountered, symlinks not supported yet", entryPath)
 
 		default:
