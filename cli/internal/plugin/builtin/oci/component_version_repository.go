@@ -20,7 +20,6 @@ import (
 
 type ComponentVersionRepositoryPlugin struct {
 	contracts.EmptyBasePlugin
-	scheme    *runtime.Scheme
 	manifests cache.OCIDescriptorCache
 	layers    cache.OCIDescriptorCache
 }
@@ -116,7 +115,6 @@ func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Reposito
 	})
 	repo, err := oci.NewRepository(
 		oci.WithResolver(urlResolver),
-		oci.WithScheme(p.scheme),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifests),
 		oci.WithLayerCache(p.layers),

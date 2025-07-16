@@ -292,14 +292,9 @@ func ConvertToRuntimeComponent(component *v1.Component) Component {
 // for use in a ComponentConstructor.
 func ConvertToRuntimeConstructorResource(resource v1.Resource) Resource {
 	target := Resource{
-		ElementMeta: ElementMeta{
-			ObjectMeta: ObjectMeta{
-				Name:    resource.Name,
-				Version: resource.Version,
-			},
-		},
-		Type:     resource.Type,
-		Relation: ResourceRelation(resource.Relation),
+		ElementMeta: ConvertFromV1ElementMeta(resource.ElementMeta),
+		Type:        resource.Type,
+		Relation:    ResourceRelation(resource.Relation),
 		ConstructorAttributes: ConstructorAttributes{
 			CopyPolicy: CopyPolicy(resource.CopyPolicy),
 		},
@@ -318,13 +313,8 @@ func ConvertToRuntimeConstructorResource(resource v1.Resource) Resource {
 // for use in a ComponentConstructor.
 func ConvertToRuntimeConstructorSource(source v1.Source) Source {
 	target := Source{
-		ElementMeta: ElementMeta{
-			ObjectMeta: ObjectMeta{
-				Name:    source.Name,
-				Version: source.Version,
-			},
-		},
-		Type: source.Type,
+		ElementMeta: ConvertFromV1ElementMeta(source.ElementMeta),
+		Type:        source.Type,
 		ConstructorAttributes: ConstructorAttributes{
 			CopyPolicy: CopyPolicy(source.CopyPolicy),
 		},
@@ -343,13 +333,8 @@ func ConvertToRuntimeConstructorSource(source v1.Source) Source {
 // for use in a ComponentConstructor.
 func ConvertToRuntimeConstructorReference(reference v1.Reference) Reference {
 	return Reference{
-		ElementMeta: ElementMeta{
-			ObjectMeta: ObjectMeta{
-				Name:    reference.Name,
-				Version: reference.Version,
-			},
-		},
-		Component: reference.Component,
+		ElementMeta: ConvertFromV1ElementMeta(reference.ElementMeta),
+		Component:   reference.Component,
 	}
 }
 

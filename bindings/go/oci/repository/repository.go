@@ -31,7 +31,19 @@ func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository,
 
 	path = filepath.Clean(path)
 	mask := repository.AccessMode.ToAccessBitmask()
-	archive, _, err := ctf.OpenCTFByFileExtension(ctx, path, mask)
+
+	repoOpts := &oci.RepositoryOptions{}
+	for _, opt := range options {
+		opt(repoOpts)
+	}
+
+	ctfOpts := ctf.OpenCTFOptions{
+		Path:             path,
+		Flag:             mask,
+		FileSystemConfig: repoOpts.FilesystemConfig,
+	}
+
+	archive, _, err := ctf.OpenCTFByFileExtension(ctx, ctfOpts)
 	if err != nil {
 		return nil, fmt.Errorf("unable to open ctf archive %q: %w", path, err)
 	}

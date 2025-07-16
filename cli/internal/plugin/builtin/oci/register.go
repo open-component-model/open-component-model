@@ -26,7 +26,7 @@ func Register(
 	manifests := inmemory.New()
 	layers := inmemory.New()
 
-	cvRepoPlugin := ComponentVersionRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers}
+	cvRepoPlugin := ComponentVersionRepositoryPlugin{manifests: manifests, layers: layers}
 	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers}
 
 	return errors.Join(
