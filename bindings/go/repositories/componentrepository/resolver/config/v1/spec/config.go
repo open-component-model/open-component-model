@@ -2,6 +2,8 @@ package spec
 
 import (
 	"fmt"
+	"log/slog"
+	"reflect"
 
 	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -148,6 +150,10 @@ func Merge(configs ...*Config) *Config {
 		for alias, raw := range cfg.Aliases {
 			if existing, exists := merged.Aliases[alias]; exists {
 				if existing != nil && raw != nil {
+					if !reflect.DeepEqual(existing, raw) {
+						slog.Info("Two aliases with the same name but different repository specifications."+
+							"The new alias will be ignored.", "alias", alias, "existing", existing, "new", raw)
+					}
 					continue // Skip if the alias is already present with the same value
 				}
 			}
