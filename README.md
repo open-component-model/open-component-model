@@ -3,7 +3,9 @@
 > Looking for the original OCM project before our start with the next Generation of OCM? Check out the [previous repository](https://github.com/open-component-model/ocm)
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10065/badge)](https://www.bestpractices.dev/projects/10065)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/open-component-model/open-component-model/badge)](https://scorecard.dev/viewer/?uri=github.com/open-component-model/open-component-model)
 [![REUSE status](https://api.reuse.software/badge/github.com/open-component-model/open-component-model)](https://api.reuse.software/info/github.com/open-component-model/open-component-model)
+[![CI](https://github.com/open-component-model/open-component-model/actions/workflows/ci.yml/badge.svg)](https://github.com/open-component-model/open-component-model/actions/workflows/ci.yml)
 
 The Open Component Model (OCM) is an open standard to describe software bills of delivery (SBOD). OCM is a technology-agnostic and machine-readable format focused on the software artifacts that must be delivered for software products.
 
