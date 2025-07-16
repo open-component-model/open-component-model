@@ -132,7 +132,7 @@ func (f *FallbackRepository) GetComponentVersion(ctx context.Context, component,
 			return nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
 		}
 		desc, err := repo.GetComponentVersion(ctx, component, version)
-		if errors.As(err, new(*componentrepository.NotFoundError)) {
+		if errors.Is(err, componentrepository.ErrNotFound) {
 			slog.DebugContext(ctx, "component version not found in repository", "realm", componentrepository.Realm, "repository", repo, "component", component, "version", version)
 			continue // try the next repository
 		}
@@ -228,7 +228,7 @@ func (f *FallbackRepository) GetLocalResource(ctx context.Context, component, ve
 			return nil, nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
 		}
 		data, res, err := repo.GetLocalResource(ctx, component, version, identity)
-		if errors.As(err, new(*componentrepository.NotFoundError)) {
+		if errors.Is(err, componentrepository.ErrNotFound) {
 			slog.DebugContext(ctx, "local resource not found in repository", "realm", componentrepository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
 			continue // try the next repository
 		}
@@ -273,7 +273,7 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 			return nil, nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
 		}
 		data, source, err := repo.GetLocalSource(ctx, component, version, identity)
-		if errors.As(err, new(*componentrepository.NotFoundError)) {
+		if errors.Is(err, componentrepository.ErrNotFound) {
 			slog.DebugContext(ctx, "local source not found in repository", "realm", componentrepository.Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
 			continue // try the next repository
 		}
