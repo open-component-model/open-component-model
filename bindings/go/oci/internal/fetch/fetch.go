@@ -8,12 +8,12 @@ import (
 	"fmt"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"oras.land/oras-go/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // LocalBlob represents a content-addressable piece of data stored in an OCI repository.
