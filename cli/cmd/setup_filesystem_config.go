@@ -14,13 +14,17 @@ import (
 
 // setupFilesystemConfig sets up file system configuration entity.
 func setupFilesystemConfig(cmd *cobra.Command) {
-	value, _ := cmd.PersistentFlags().GetString(tempFolderFlag)
+	value, err := cmd.PersistentFlags().GetString(tempFolderFlag)
+	if err != nil {
+		slog.ErrorContext(cmd.Context(), "could not read temp folder flag value", slog.String("error", err.Error()))
+
+		// no point to continue if we don't have a value
+		return
+	}
+
 	ocmCtx := ocmctx.FromContext(cmd.Context())
 	cfg := ocmCtx.Configuration()
-
 	var fsCfg *v1alpha1.Config
-	var err error
-
 	if cfg == nil {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize filesystem config")
 		fsCfg = &v1alpha1.Config{}
@@ -54,17 +58,25 @@ func setupFilesystemConfig(cmd *cobra.Command) {
 }
 
 // hasFilesystemConfig checks if the central configuration already contains filesystem configuration
+// It uses the Config Filter function to handle versioned configurations properly
 func hasFilesystemConfig(cfg *v1.Config) bool {
 	if cfg == nil {
 		return false
 	}
-	for _, configEntry := range cfg.Configurations {
-		if configEntry.Name == v1alpha1.ConfigType {
-			return true
-		}
+
+	// Use the Config Filter function to find filesystem configurations
+	// This handles both versioned and unversioned configurations
+	filtered, err := v1.Filter(cfg, &v1.FilterOptions{
+		ConfigTypes: []runtime.Type{
+			runtime.NewVersionedType(v1alpha1.ConfigType, v1alpha1.Version),
+			runtime.NewUnversionedType(v1alpha1.ConfigType),
+		},
+	})
+	if err != nil {
+		return false
 	}
 
-	return false
+	return len(filtered.Configurations) > 0
 }
 
 // addFilesystemConfigToCentralConfig adds the filesystem configuration to the central configuration

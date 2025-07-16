@@ -206,6 +206,25 @@ func TestHasFilesystemConfig(t *testing.T) {
 			}(),
 			expected: true,
 		},
+		{
+			name: "config with unversioned filesystem config",
+			config: func() *v1.Config {
+				configJSON := `{
+					"configurations": [
+						{
+							"type": "filesystem.config.ocm.software",
+							"tempFolder": "/tmp/unversioned"
+						}
+					]
+				}`
+				config := &v1.Config{}
+				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
+					panic(err)
+				}
+				return config
+			}(),
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
