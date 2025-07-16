@@ -5,7 +5,7 @@ go 1.24.1
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/stretchr/testify v1.10.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250715131558-8c6d380c4b25
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250716071236-95556f175d34
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	sigs.k8s.io/yaml v1.5.0
