@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -127,14 +128,14 @@ func TestSchemeDoesNotExist(t *testing.T) {
 
 type mockPluginProvider struct {
 	// TODO: fill this.
-	mockPlugin ComponentVersionRepository
+	mockPlugin componentrepository.ComponentVersionRepository
 }
 
 func (m *mockPluginProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	return nil, nil
 }
 
-func (m *mockPluginProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ComponentVersionRepository, error) {
+func (m *mockPluginProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentrepository.ComponentVersionRepository, error) {
 	return m.mockPlugin, nil
 }
 

@@ -22,6 +22,8 @@ import (
 
 type TestPlugin struct{}
 
+var _ repov1.ReadWriteOCMRepositoryPluginContract[*dummyv1.Repository] = (*TestPlugin)(nil)
+
 func (m *TestPlugin) Ping(_ context.Context) error {
 	return nil
 }

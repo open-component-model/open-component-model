@@ -13,6 +13,7 @@ import (
 	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -21,7 +22,7 @@ type componentVersionRepositoryProviderConverter struct {
 	scheme         *runtime.Scheme
 }
 
-var _ ComponentVersionRepositoryProvider = (*componentVersionRepositoryProviderConverter)(nil)
+var _ componentrepository.ComponentVersionRepositoryProvider = (*componentVersionRepositoryProviderConverter)(nil)
 
 func (c *componentVersionRepositoryProviderConverter) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	request := &ocmrepositoryv1.GetIdentityRequest[runtime.Typed]{
@@ -36,7 +37,7 @@ func (c *componentVersionRepositoryProviderConverter) GetComponentVersionReposit
 	return result.Identity, nil
 }
 
-func (c *componentVersionRepositoryProviderConverter) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ComponentVersionRepository, error) {
+func (c *componentVersionRepositoryProviderConverter) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentrepository.ComponentVersionRepository, error) {
 	return &componentVersionRepositoryWrapper{
 		externalPlugin:          c.externalPlugin,
 		repositorySpecification: repositorySpecification,
@@ -52,7 +53,7 @@ type componentVersionRepositoryWrapper struct {
 	scheme                  *runtime.Scheme
 }
 
-var _ ComponentVersionRepository = (*componentVersionRepositoryWrapper)(nil)
+var _ componentrepository.ComponentVersionRepository = (*componentVersionRepositoryWrapper)(nil)
 
 func (c *componentVersionRepositoryWrapper) AddComponentVersion(ctx context.Context, desc *descriptor.Descriptor) error {
 	convertedDesc, err := descriptor.ConvertToV2(c.scheme, desc)
