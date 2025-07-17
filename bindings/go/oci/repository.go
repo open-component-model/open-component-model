@@ -181,7 +181,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 
 	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
 	if errors.Is(err, errdef.ErrNotFound) {
-		return desc, componentrepository.NewNotFoundError(fmt.Sprintf("component version %q/%q not found", component, version), err)
+		return desc, errors.Join(fmt.Errorf("component version %s/%s not found: %w", component, version, componentrepository.ErrNotFound), err)
 	}
 	return desc, err
 }
@@ -356,7 +356,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindResource); err != nil {
 		if errors.Is(err, errdef.ErrNotFound) {
-			return nil, nil, componentrepository.NewNotFoundError(fmt.Sprintf("component version %q/%q not found", component, version), err)
+			return nil, nil, errors.Join(fmt.Errorf("component version %s/%s not found: %w", component, version, componentrepository.ErrNotFound), err)
 		}
 		return nil, nil, err
 	}
@@ -378,7 +378,7 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindSource); err != nil {
 		if errors.Is(err, errdef.ErrNotFound) {
-			return nil, nil, componentrepository.NewNotFoundError(fmt.Sprintf("component version %q/%q not found", component, version), err)
+			return nil, nil, errors.Join(fmt.Errorf("component version %s/%s not found: %w", component, version, componentrepository.ErrNotFound), err)
 		}
 		return nil, nil, err
 	}

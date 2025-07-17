@@ -73,7 +73,7 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 	}
 	_, err = repo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
 	r.Error(err)
-	r.ErrorAs(err, new(*componentrepository.NotFoundError))
+	r.ErrorIs(err, componentrepository.ErrNotFound)
 
 	// Test adding component version
 	err = repo.AddComponentVersion(ctx, desc)
