@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -15,7 +14,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
-	"ocm.software/open-component-model/bindings/go/input/dir/log"
 	v1 "ocm.software/open-component-model/bindings/go/input/dir/spec/v1"
 )
 
@@ -86,25 +84,19 @@ func packDirToTar(ctx context.Context, path string, opt *v1.Dir) (io.Reader, err
 
 	// Start a goroutine to create the tar and write the data to the pipe.
 	go func() {
-		defer func() {
-			if err := pw.Close(); err != nil {
-				log.Base().Log(ctx, slog.LevelError, fmt.Sprintf("failed to close PipeWriter: %s", err.Error()))
-			}
-		}()
-
 		// Create tar writer
 		tw := tar.NewWriter(pw)
-		defer func() {
-			if err := tw.Close(); err != nil {
-				log.Base().Log(ctx, slog.LevelError, fmt.Sprintf("failed to close tar Writer: %s", err.Error()))
-			}
-		}()
 
 		// Walk recursively through directory contents and add it to the tar.
 		err = walkDirContents(ctx, subDir, baseDir, opt, fileSystem, tw)
-		if err != nil {
-			_ = pw.CloseWithError(err) // CloseWithError() always returns nil.
-		}
+
+		// Close tar writer.
+		err = errors.Join(err, tw.Close())
+
+		// Close PipeWriter with CloseWithError():
+		// - If the input parameter is nil, the pipe is just normally closed without an error.
+		// - The return value is always nil, i.e. can be ignored.
+		_ = pw.CloseWithError(err)
 	}()
 
 	if err != nil {

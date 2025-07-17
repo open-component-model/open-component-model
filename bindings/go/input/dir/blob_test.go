@@ -399,7 +399,7 @@ func TestGetV1DirBlob_EmptyPath(t *testing.T) {
 	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec)
 	assert.Nil(t, dirBlob)
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, dir.ErrEmptyPath), "expected ErrEmptyPath to be returned, got: %v", err)
+	assert.Truef(t, errors.Is(err, dir.ErrEmptyPath), "expected %q to be returned, got: %q", dir.ErrEmptyPath, err)
 }
 
 func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
