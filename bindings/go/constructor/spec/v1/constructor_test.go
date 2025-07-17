@@ -283,6 +283,35 @@ func TestElementMeta_ToIdentity(t *testing.T) {
 			elemMeta: nil,
 			expected: nil,
 		},
+		{
+			name: "WithoutVersion",
+			elemMeta: &v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Name: "test",
+				},
+			},
+			expected: runtime.Identity{
+				v1.IdentityAttributeName: "test",
+			},
+		},
+		{
+			name: "WithoutName",
+			elemMeta: &v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Version: "test",
+				},
+			},
+			expected: runtime.Identity{
+				v1.IdentityAttributeVersion: "test",
+			},
+		},
+		{
+			name: "WithoutAnything",
+			elemMeta: &v1.ElementMeta{
+				ObjectMeta: v1.ObjectMeta{},
+			},
+			expected: runtime.Identity{},
+		},
 	}
 
 	for _, tt := range tests {
@@ -316,6 +345,35 @@ func TestComponentMeta_ToIdentity(t *testing.T) {
 			name:     "NilComponentMeta",
 			compMeta: nil,
 			expected: nil,
+		},
+		{
+			name: "NameWithoutVersion",
+			compMeta: &v1.ComponentMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Name: "test-component",
+				},
+			},
+			expected: runtime.Identity{
+				v1.IdentityAttributeName: "test-component",
+			},
+		},
+		{
+			name: "VersionWithoutName",
+			compMeta: &v1.ComponentMeta{
+				ObjectMeta: v1.ObjectMeta{
+					Version: "1.0.0",
+				},
+			},
+			expected: runtime.Identity{
+				v1.IdentityAttributeVersion: "1.0.0",
+			},
+		},
+		{
+			name: "EmptyComponentMeta",
+			compMeta: &v1.ComponentMeta{
+				ObjectMeta: v1.ObjectMeta{},
+			},
+			expected: runtime.Identity{},
 		},
 	}
 
