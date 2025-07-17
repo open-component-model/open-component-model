@@ -14,7 +14,7 @@ import (
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -149,7 +149,7 @@ func ProcessConflictStrategy(ctx context.Context, repo TargetRepository, compone
 			}
 			logger.WarnContext(ctx, "component version already exists in target repository, skipping construction", "component", component.Name, "version", component.Version)
 			return desc, ErrShouldSkipConstruction
-		case !errors.Is(err, oci.ErrNotFound):
+		case !errors.Is(err, componentrepository.ErrNotFound):
 			return nil, fmt.Errorf("error checking for existing component version in target repository: %w", err)
 		default:
 			logger.DebugContext(ctx, "no existing component version found in target repository, continuing with construction", "component", component.Name, "version", component.Version)

@@ -17,7 +17,7 @@ import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,7 +43,7 @@ func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, name, ve
 	if desc, exists := m.components[key]; exists {
 		return desc, nil
 	}
-	return nil, fmt.Errorf("component version %q not found: %w", name+":"+version, oci.ErrNotFound)
+	return nil, fmt.Errorf("component version %q not found: %w", name+":"+version, componentrepository.ErrNotFound)
 }
 
 func (m *mockTargetRepository) GetTargetRepository(ctx context.Context, component *constructorv1.Component) (TargetRepository, error) {
