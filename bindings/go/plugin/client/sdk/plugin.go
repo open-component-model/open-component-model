@@ -307,36 +307,43 @@ func (p *Plugin) Shutdown(w http.ResponseWriter, _ *http.Request) {
 // if the process is not found, we remove the socket file AND the lock file.
 func (p *Plugin) performCleanUp(loc string) error {
 	lockFile := loc + ".lock"
-	file, err := os.Stat(lockFile)
-	if err != nil {
+	if _, err := os.Stat(lockFile); err != nil {
 		return fmt.Errorf("lock file does not exists unable to determine using process: %w", err)
 	}
 
-	content, err := os.ReadFile(file.Name())
+	content, err := os.ReadFile(lockFile)
 	if err != nil {
 		return fmt.Errorf("could not read lock file: %w", err)
 	}
-
-	slog.DebugContext(p.baseCtx, "cleaning up plugin with PID", "id", p.Config.ID, "pid", string(content))
 
 	pid, err := strconv.Atoi(string(content))
 	if err != nil {
 		return fmt.Errorf("could not parse PID: %w", err)
 	}
+
 	process, err := os.FindProcess(pid)
 	if err != nil {
-		if err := os.Remove(lockFile); err != nil {
-			return fmt.Errorf("could not remove lock file: %w", err)
-		}
-		if err := os.Remove(loc); err != nil {
-			return fmt.Errorf("could not remove socket file: %w", err)
-		}
+		return p.removeFiles(loc, lockFile)
+	}
 
-		// the process isn't running anymore, it's safe to delete the lock file.
-		return nil
+	// Check if the process is actually running by sending signal 0
+	if err := process.Signal(syscall.Signal(0)); err != nil {
+		// error means the process is gone; it's safe to remove the files.
+		return p.removeFiles(loc, lockFile)
 	}
 
 	return fmt.Errorf("process using socket file is still alive under pid %d", process.Pid)
+}
+
+func (p *Plugin) removeFiles(loc string, lockFile string) error {
+	// The Process doesn't exist, safe to clean up
+	if err := os.Remove(lockFile); err != nil {
+		return fmt.Errorf("could not remove lock file: %w", err)
+	}
+	if err := os.Remove(loc); err != nil {
+		return fmt.Errorf("could not remove socket file: %w", err)
+	}
+	return nil
 }
 
 // createLockFile creates a lock file and puts the current process PID into the file.

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -254,6 +255,51 @@ func waitForPlugin(r *require.Assertions, httpClient *http.Client) {
 
 		return true
 	}, 5*time.Second, 20*time.Millisecond)
+}
+
+func TestLockFileCreationAndCleanup(t *testing.T) {
+	r := require.New(t)
+	location := "/tmp/test-plugin-lock-plugin.socket"
+	lockFile := location + ".lock"
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(location)
+		_ = os.RemoveAll(lockFile)
+	})
+
+	// Test lock file creation and PID verification
+	ctx := context.Background()
+	p := NewPlugin(ctx, slog.Default(), types.Config{
+		ID:         "test-plugin-lock",
+		Type:       types.Socket,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+	}, os.Stdout)
+
+	// Start the plugin in a goroutine
+	go func() {
+		_ = p.Start(ctx)
+	}()
+
+	// Wait for the plugin to start and create the lock file
+	r.Eventually(func() bool {
+		_, err := os.Stat(lockFile)
+		return err == nil
+	}, 5*time.Second, 100*time.Millisecond)
+
+	lockContent, err := os.ReadFile(lockFile)
+	r.NoError(err)
+
+	expectedPID := strconv.Itoa(os.Getpid())
+	r.Equal(expectedPID, string(lockContent))
+
+	err = p.GracefulShutdown(ctx)
+	r.NoError(err)
+
+	_, err = os.Stat(lockFile)
+	r.True(os.IsNotExist(err))
+
+	_, err = os.Stat(location)
+	r.True(os.IsNotExist(err))
 }
 
 func createHttpClient(location string) *http.Client {
