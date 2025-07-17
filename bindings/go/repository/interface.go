@@ -1,4 +1,4 @@
-package componentrepository
+package repository
 
 import (
 	"context"
@@ -7,10 +7,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
-)
-
-const (
-	Realm = "componentrepository"
 )
 
 // ErrNotFound is an error type that indicates a requested component version
@@ -96,7 +92,38 @@ type LocalSourceRepository interface {
 	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error)
 }
 
+// ResourceRepository defines the interface for storing and retrieving OCM resources
+// independently of component versions from a store implementation
+type ResourceRepository interface {
+	// UploadResource uploads a [descriptor.Resource] to the repository.
+	// Returns the updated resource with repository-specific information.
+	// The resource must be referenced in the component descriptor.
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (resourceAfterUpload *descriptor.Resource, err error)
+
+	// DownloadResource downloads a [descriptor.Resource] from the repository.
+	DownloadResource(ctx context.Context, res *descriptor.Resource) (content blob.ReadOnlyBlob, err error)
+}
+
+type SourceRepository interface {
+	// UploadSource uploads a [descriptor.Source] to the repository.
+	// Returns the updated source with repository-specific information.
+	// The source must be referenced in the component descriptor.
+	UploadSource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Source, content blob.ReadOnlyBlob) (sourceAfterUpload *descriptor.Source, err error)
+
+	// DownloadSource downloads a [descriptor.Source] from the repository.
+	DownloadSource(ctx context.Context, res *descriptor.Source) (content blob.ReadOnlyBlob, err error)
+}
+
 type CredentialProvider interface {
 	// Resolve attempts to resolve credentials for the given identity.
 	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
+}
+
+// HealthCheckable defines the interface for checking the health of a component
+// version repository.
+type HealthCheckable interface {
+	// CheckHealth checks if the repository is accessible and properly configured.
+	// This method verifies that the underlying OCI registry is reachable and that authentication
+	// is properly configured. It performs a lightweight check without modifying the repository.
+	CheckHealth(ctx context.Context) error
 }
