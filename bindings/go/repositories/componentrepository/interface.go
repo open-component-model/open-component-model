@@ -2,6 +2,7 @@ package componentrepository
 
 import (
 	"context"
+	"errors"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -11,6 +12,12 @@ import (
 const (
 	Realm = "componentrepository"
 )
+
+// ErrNotFound is an error type that indicates a requested component version
+// was not found. NotFoundError is independent of the underlying repository implementation.
+// It is supposed to be joined with the original technology-specific error to provide a
+// technology-agnostic API to check for not found errors.
+var ErrNotFound = errors.New("component version not found")
 
 // ComponentVersionRepositoryProvider defines the contract for providers that can retrieve
 // and manage component version repositories. It supports different types of repository
@@ -92,28 +99,4 @@ type LocalSourceRepository interface {
 type CredentialProvider interface {
 	// Resolve attempts to resolve credentials for the given identity.
 	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
-}
-
-// NotFoundError is an error type that indicates a requested component version
-// was not found. NotFoundError is independent of the underlying repository implementation.
-// It is supposed to wrap the original technology-specific error and to provide a
-// technology-agnostic API to check for not found errors.
-type NotFoundError struct {
-	msg string
-	err error
-}
-
-func (e *NotFoundError) Error() string {
-	return e.msg
-}
-
-func (e *NotFoundError) Unwrap() error {
-	return e.err
-}
-
-func NewNotFoundError(msg string, err error) *NotFoundError {
-	return &NotFoundError{
-		msg: msg,
-		err: err,
-	}
 }
