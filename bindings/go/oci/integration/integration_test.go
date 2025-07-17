@@ -80,7 +80,6 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 	scheme := ocmruntime.NewScheme()
 	ocmoci.MustAddToScheme(scheme)
 	v2.MustAddToScheme(scheme)
-	scheme.MustRegisterWithAlias(&v2.LocalBlob{}, ocmruntime.NewUnversionedType(v2.LocalBlobAccessType))
 
 	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithScheme(scheme))
 	r.NoError(err)
