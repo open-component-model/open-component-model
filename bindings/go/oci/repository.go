@@ -404,7 +404,12 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	}
 	artifact := candidates[0]
 	meta := artifact.GetElementMeta()
-	slogcontext.Info(ctx, "found artifact in descriptor", "artifact", meta.ToIdentity())
+
+	// now that we have a unique candidate, we should use its identity instead of the one requested, as
+	// the requested identity might not be fully qualified.
+	// For example, it is valid to ask for "name=abc", but receive an artifact with "name=abc,version=1.0.0".
+	identity = meta.ToIdentity()
+	slogcontext.Info(ctx, "found artifact in descriptor", "artifact", identity)
 
 	access := artifact.GetAccess()
 
@@ -418,14 +423,21 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		b, err := repo.getLocalBlob(ctx, store, index, manifest, access, identity, kind)
+		b, err := repo.getLocalBlobFromIndexOrManifest(ctx, store, index, manifest, identity, kind)
 		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
 }
 
-func (repo *Repository) getLocalBlob(ctx context.Context, store spec.Store, index *ociImageSpecV1.Index, manifest *ociImageSpecV1.Manifest, access runtime.Typed, identity runtime.Identity, kind annotations.ArtifactKind) (LocalBlob, error) {
+func (repo *Repository) getLocalBlobFromIndexOrManifest(
+	ctx context.Context,
+	store spec.Store, // store to fetch the local blob from
+	index *ociImageSpecV1.Index, // may be nil for legacy manifests
+	manifest *ociImageSpecV1.Manifest, // always present, even if index is nil
+	identity runtime.Identity, // identity of the artifact to fetch
+	kind annotations.ArtifactKind, // kind of the artifact to fetch (e.g., Resource or Source)
+) (LocalBlob, error) {
 	// if the index does not exist, we can only use the manifest
 	// and thus local blobs can only be available as image layers
 	if index == nil {
