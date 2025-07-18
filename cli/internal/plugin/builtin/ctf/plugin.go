@@ -11,10 +11,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -22,7 +23,7 @@ const Creator = "CTF Repository"
 
 func Register(registry *componentversionrepository.RepositoryRegistry) error {
 	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
+	ocirepository.MustAddToScheme(scheme)
 	return componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		scheme,
 		registry,
@@ -42,7 +43,7 @@ func (p *Plugin) GetComponentVersionRepositoryCredentialConsumerIdentity(_ conte
 	return nil, fmt.Errorf("not implemented because ctfs do not need consumer identity based credentials")
 }
 
-func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentversionrepository.ComponentVersionRepository, error) {
+func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
 	ctfRepoSpec, ok := repositorySpecification.(*ctfv1.Repository)
 	if !ok {
 		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
@@ -57,8 +58,8 @@ func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySp
 }
 
 var (
-	_ componentversionrepository.ComponentVersionRepositoryProvider = (*Plugin)(nil)
-	_ componentversionrepository.ComponentVersionRepository         = (*wrapper)(nil)
+	_ repository.ComponentVersionRepositoryProvider = (*Plugin)(nil)
+	_ repository.ComponentVersionRepository         = (*wrapper)(nil)
 )
 
 // wrapper wraps a repo into returning the component version repository ComponentVersionRepository.

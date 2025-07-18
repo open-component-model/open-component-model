@@ -15,7 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
@@ -24,9 +24,9 @@ import (
 // useful CLI relevant helper functions that make high level operations easier.
 // It manages component references, repository specifications, and credentials for OCM operations.
 type ComponentRepository struct {
-	ref  *compref.Ref                                          // Component reference containing repository and component information
-	spec runtime.Typed                                         // Repository specification
-	base componentversionrepository.ComponentVersionRepository // base repository plugin contract
+	ref  *compref.Ref                          // Component reference containing repository and component information
+	spec runtime.Typed                         // Repository specification
+	base repository.ComponentVersionRepository // Base repository plugin contract
 
 	credentials map[string]string // Credentials for repository access
 }

@@ -63,6 +63,7 @@ func init() {
 // For valid components, see ComponentRegex.
 // For valid versions, see VersionRegex.
 // For valid digests, see DigestRegex.
+// +k8s:deepcopy-gen=true
 type Ref struct {
 	// Type represents the repository type (e.g., "oci", "ctf")
 	Type string
@@ -116,7 +117,6 @@ func (ref *Ref) String() string {
 // Not accepted cases that were valid in old OCM:
 //
 //   - [type::][<repositorySpecJSON>/[<DefaultPrefix>]/<component id>[:<version>] - arbitrary repository definitions
-//   - <repositoryAlias>//[<DefaultPrefix>]/<component id>[:<version>] - repository aliases for the ocm configuration
 //
 // All non-supported special cases are currently under review of being accepted forms.
 //
