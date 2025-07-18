@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
-	fallback "ocm.software/open-component-model/bindings/go/repositories/componentrepository/fallback/v1"
-	resolverruntime "ocm.software/open-component-model/bindings/go/repositories/componentrepository/resolver/config/v1/runtime"
+	"ocm.software/open-component-model/bindings/go/repository"
+	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
+	resolverruntime "ocm.software/open-component-model/bindings/go/repository/component/resolver/config/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -300,7 +300,7 @@ func (m MockProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ct
 	return nil, nil
 }
 
-func (m MockProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentrepository.ComponentVersionRepository, error) {
+func (m MockProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
 	switch spec := repositorySpecification.(type) {
 	case *RepositorySpec:
 		switch spec.Policy {
