@@ -142,9 +142,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 	defer r.mu.Unlock()
 
 	// look for an internal implementation that actually implements the interface
-	if _, err := r.scheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
-	}
+	_, _ = r.scheme.DefaultType(spec)
 	typ := spec.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
 	if ok := r.scheme.IsRegistered(typ); ok {
