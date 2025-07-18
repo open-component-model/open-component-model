@@ -31,6 +31,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -72,7 +73,7 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 	}
 	_, err = repo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
 	r.Error(err)
-	r.ErrorIs(err, oci.ErrNotFound)
+	r.ErrorIs(err, repository.ErrNotFound)
 
 	// Test adding component version
 	err = repo.AddComponentVersion(ctx, desc)

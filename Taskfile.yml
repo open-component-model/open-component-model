@@ -73,10 +73,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/configuration/Taskfile.yml
     dir: ./bindings/go/configuration
-  bindings/go/repositories:
+  bindings/go/repository:
     optional: true
-    taskfile: ./bindings/go/repositories/Taskfile.yml
-    dir: ./bindings/go/repositories
+    taskfile: ./bindings/go/repository/Taskfile.yml
+    dir: ./bindings/go/repository
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml

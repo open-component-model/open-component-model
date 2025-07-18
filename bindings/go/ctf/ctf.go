@@ -11,7 +11,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
@@ -58,8 +57,9 @@ type OpenCTFOptions struct {
 	Format FileFormat
 	// Flag specifies the open flags (O_RDONLY, O_RDWR, O_CREATE)
 	Flag int
-	// FileSystemConfig allows customization of filesystem behavior, such as temporary directory location
-	FileSystemConfig *v1alpha1.Config
+	// Temporary directory to use for extracting the CTF if it is in a compressed format.
+	// If not set, the default from os.TempDir is used.
+	TempDir string
 }
 
 // CTF represents the CommonTransportFormat. It is an interface that provides access to an index and blobs through
@@ -125,8 +125,8 @@ func OpenCTF(ctx context.Context, opts OpenCTFOptions) (CTF, error) {
 
 		// Use filesystem configuration for temporary directory
 		var tempDir string
-		if opts.FileSystemConfig != nil && opts.FileSystemConfig.TempFolder != "" {
-			tempDir = opts.FileSystemConfig.TempFolder
+		if opts.TempDir != "" {
+			tempDir = opts.TempDir
 		}
 		if tempDir == "" {
 			tempDir = os.TempDir()
