@@ -13,6 +13,7 @@ var (
 	InputPluginType                      PluginType = "inputRepository"
 	DigestProcessorPluginType            PluginType = "digestProcessorRepository"
 	ResourceRepositoryPluginType         PluginType = "resourceRepository"
+	BlobTransformerPluginType            PluginType = "blobTransformer"
 )
 
 type Location struct {

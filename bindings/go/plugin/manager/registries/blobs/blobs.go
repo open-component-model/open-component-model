@@ -2,7 +2,6 @@ package blobs
 
 import (
 	"fmt"
-	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -13,17 +12,7 @@ import (
 func CreateBlobData(location types.Location) (blob.Blob, error) {
 	switch location.LocationType {
 	case types.LocationTypeLocalFile:
-		file, err := os.Open(location.Value)
-		if err != nil {
-			return nil, err
-		}
-
-		fileBlob, err := filesystem.GetBlobFromOSPath(file.Name())
-		if err != nil {
-			return nil, err
-		}
-
-		return fileBlob, nil
+		return filesystem.GetBlobFromOSPath(location.Value)
 	default:
 		return nil, fmt.Errorf("unsupported location type: %s", location.LocationType)
 	}

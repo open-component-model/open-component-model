@@ -51,7 +51,7 @@ func TestCreateBlobDataLocalFileFileNotFound(t *testing.T) {
 	blob, err := CreateBlobData(location)
 	r.Error(err)
 	r.Nil(blob)
-	r.Contains(err.Error(), "no such file or directory")
+	r.Contains(err.Error(), "path does not exist")
 }
 
 func TestCreateBlobDataUnsupportedLocationType(t *testing.T) {

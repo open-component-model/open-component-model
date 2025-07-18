@@ -12,6 +12,7 @@ tasks:
       - go build -o tmp/testdata/test-plugin-resource internal/testplugin-resource/main.go
       - go build -o tmp/testdata/test-plugin-input internal/testplugin-input/main.go
       - go build -o tmp/testdata/test-plugin-digester internal/testplugin-digester/main.go
+      - go build -o tmp/testdata/test-plugin-blobtransformer internal/testplugin-blobtransformer/main.go
   test:
     cmds:
       - go test -v -coverprofile=tmp/coverage.out ./...
