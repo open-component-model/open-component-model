@@ -7,6 +7,7 @@ import (
 	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -17,6 +18,7 @@ import (
 type ResourceRepositoryPlugin struct {
 	scheme            *runtime.Scheme
 	manifests, layers cache.OCIDescriptorCache
+	filesystemConfig  *v1alpha1.Config
 }
 
 func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
@@ -133,7 +135,7 @@ func (p *ResourceRepositoryPlugin) DownloadResource(ctx context.Context, resourc
 }
 
 func (p *ResourceRepositoryPlugin) getRepository(spec *ociv1.Repository, creds map[string]string) (Repository, error) {
-	repo, err := createRepository(spec, creds, p.manifests, p.layers)
+	repo, err := createRepository(spec, creds, p.manifests, p.layers, p.filesystemConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}

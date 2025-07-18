@@ -53,7 +53,9 @@ func setupPluginManager(cmd *cobra.Command) error {
 		}
 	}
 
-	if err := builtin.Register(pluginManager); err != nil {
+	ocmContext := ocmctx.FromContext(cmd.Context())
+	filesystemConfig := ocmContext.FilesystemConfig()
+	if err := builtin.Register(pluginManager, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 

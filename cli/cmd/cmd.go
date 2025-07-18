@@ -17,6 +17,10 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )
 
+const (
+	tempFolderFlag = "temp-folder"
+)
+
 // Execute adds all child commands to the Cmd command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the Cmd.
 func Execute() {
@@ -42,6 +46,7 @@ func New() *cobra.Command {
 	}
 
 	configuration.RegisterConfigFlag(cmd)
+	cmd.PersistentFlags().String(tempFolderFlag, "", `Specify a custom temporary folder path for filesystem operations.`)
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())
@@ -60,6 +65,7 @@ func preRunE(cmd *cobra.Command, _ []string) error {
 	slog.SetDefault(logger)
 
 	setupOCMConfig(cmd)
+	setupFilesystemConfig(cmd)
 
 	if err := setupPluginManager(cmd); err != nil {
 		return fmt.Errorf("could not setup plugin manager: %w", err)
