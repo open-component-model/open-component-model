@@ -326,8 +326,14 @@ func (p *Plugin) performCleanUp(loc string) error {
 		return p.removeFiles(loc, lockFile)
 	}
 
-	// Check if the process is actually running by sending syscall.SIGCONT signal to it.
-	if err := process.Signal(syscall.SIGCONT); err != nil {
+	// Check if the process is actually running by sending signal 0.
+	// For more information see https://man7.org/linux/man-pages/man2/kill.2.html#description
+	// Section:
+	// If sig is 0, then no signal is sent, but existence and permission
+	// checks are still performed; this can be used to check for the
+	// existence of a process ID or process group ID that the caller is
+	// permitted to signal.
+	if err := process.Signal(syscall.Signal(0)); err != nil {
 		// error means the process is gone; it's safe to remove the files.
 		return p.removeFiles(loc, lockFile)
 	}
