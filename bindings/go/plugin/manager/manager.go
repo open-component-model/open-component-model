@@ -16,6 +16,7 @@ import (
 	"time"
 
 	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -36,6 +37,7 @@ type PluginManager struct {
 	InputRegistry                      *input.RepositoryRegistry
 	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
 	ResourcePluginRegistry             *resource.ResourceRegistry
+	BlobTransformerRegistry            *blobtransformer.Registry
 
 	mu sync.Mutex
 
@@ -55,6 +57,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		InputRegistry:                      input.NewInputRepositoryRegistry(ctx),
 		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
 		ResourcePluginRegistry:             resource.NewResourceRegistry(ctx),
+		BlobTransformerRegistry:            blobtransformer.NewBlobTransformerRegistry(ctx),
 		baseCtx:                            ctx,
 	}
 }
@@ -261,6 +264,11 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, pl
 		case mtypes.ResourceRepositoryPluginType:
 			slog.DebugContext(ctx, "adding resource repository plugin", "id", plugin.ID)
 			if err := pm.ResourcePluginRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case mtypes.BlobTransformerPluginType:
+			slog.DebugContext(ctx, "adding blob transformer plugin", "id", plugin.ID)
+			if err := pm.BlobTransformerRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		}

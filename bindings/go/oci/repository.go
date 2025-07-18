@@ -86,7 +86,7 @@ type Repository struct {
 
 // AddComponentVersion adds a new component version to the repository.
 func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) (err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	component, version := descriptor.Component.Name, descriptor.Component.Version
 	done := log.Operation(ctx, "add component version", slog.String("component", component), slog.String("version", version))
 	defer func() {
@@ -120,7 +120,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 }
 
 func (repo *Repository) ListComponentVersions(ctx context.Context, component string) (_ []string, err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "list component versions",
 		slog.String("component", component))
 	defer func() {
@@ -161,12 +161,12 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 
 // CheckHealth checks if the repository is accessible and properly configured.
 func (repo *Repository) CheckHealth(ctx context.Context) (err error) {
-	return repo.resolver.Ping(slogcontext.With(ctx, repo.logger))
+	return repo.resolver.Ping(slogcontext.NewCtx(ctx, repo.logger))
 }
 
 // GetComponentVersion retrieves a component version from the repository.
 func (repo *Repository) GetComponentVersion(ctx context.Context, component, version string) (desc *descriptor.Descriptor, err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "get component version",
 		slog.String("component", component),
 		slog.String("version", version))
@@ -193,7 +193,7 @@ func (repo *Repository) AddLocalResource(
 	resource *descriptor.Resource,
 	b blob.ReadOnlyBlob,
 ) (_ *descriptor.Resource, err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "add local resource",
 		slog.String("component", component),
 		slog.String("version", version),
@@ -212,7 +212,7 @@ func (repo *Repository) AddLocalResource(
 }
 
 func (repo *Repository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, content blob.ReadOnlyBlob) (newRes *descriptor.Source, err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "add local source",
 		slog.String("component", component),
 		slog.String("version", version),
@@ -231,7 +231,7 @@ func (repo *Repository) AddLocalSource(ctx context.Context, component, version s
 }
 
 func (repo *Repository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource) (_ *descriptor.Resource, err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "process resource digest",
 		log.IdentityLogAttr("resource", res.ToIdentity()))
 	defer func() {
@@ -342,7 +342,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 
 // GetLocalResource retrieves a local resource from the repository.
 func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	var err error
 	done := log.Operation(ctx, "get local resource",
 		slog.String("component", component),
@@ -364,7 +364,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 }
 
 func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	var err error
 	done := log.Operation(ctx, "get local source",
 		slog.String("component", component),
@@ -489,7 +489,7 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 
 // UploadResource uploads a [*descriptor.Resource] to the repository.
 func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Resource, b blob.ReadOnlyBlob) (newRes *descriptor.Resource, err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "upload resource", log.IdentityLogAttr("resource", res.ToIdentity()))
 	defer func() {
 		done(err)
@@ -515,7 +515,7 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 
 // UploadSource uploads a [*descriptor.Source] to the repository.
 func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source, b blob.ReadOnlyBlob) (newSrc *descriptor.Source, err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "upload source", log.IdentityLogAttr("source", src.ToIdentity()))
 	defer func() {
 		done(err)
@@ -578,7 +578,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 
 // DownloadResource downloads a [*descriptor.Resource] from the repository.
 func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Resource) (data blob.ReadOnlyBlob, err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "download resource", log.IdentityLogAttr("resource", res.ToIdentity()))
 	defer func() {
 		done(err)
@@ -592,7 +592,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 
 // DownloadSource downloads a [*descriptor.Source] from the repository.
 func (repo *Repository) DownloadSource(ctx context.Context, src *descriptor.Source) (data blob.ReadOnlyBlob, err error) {
-	ctx = slogcontext.With(ctx, repo.logger)
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "download source", log.IdentityLogAttr("resource", src.ToIdentity()))
 	defer func() {
 		done(err)
