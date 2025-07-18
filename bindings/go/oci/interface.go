@@ -18,6 +18,7 @@ type LocalBlob fetch.LocalBlob
 // and their associated resources in a Store.
 type ComponentVersionRepository interface {
 	repository.ComponentVersionRepository
+	repository.HealthCheckable
 	ResourceDigestProcessor
 }
 
