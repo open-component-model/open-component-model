@@ -121,7 +121,7 @@ func (f *FallbackRepository) AddComponentVersion(ctx context.Context, descriptor
 
 // GetComponentVersion iterates through all resolvers with matching component prefix in
 // the order of their priority (higher priorities first) and attempts to
-// retrieve the component version from each repositories.
+// retrieve the component version from each repository.
 //
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
@@ -217,7 +217,7 @@ func (f *FallbackRepository) AddLocalResource(ctx context.Context, component, ve
 
 // GetLocalResource iterates through all resolvers with matching component prefix in
 // the order of their priority (higher priorities first) and attempts to
-// retrieve the local resource from each repositories.
+// retrieve the local resource from each repository.
 //
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
@@ -262,7 +262,7 @@ func (f *FallbackRepository) AddLocalSource(ctx context.Context, component, vers
 
 // GetLocalSource iterates through all resolvers with matching component prefix in
 // the order of their priority (higher priorities first) and attempts to
-// retrieve the local source from each repositories.
+// retrieve the local source from each repository.
 //
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
@@ -315,7 +315,7 @@ func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Contex
 	}
 }
 
-// GetResolvers returns a copy of the resolvers used by this repositories.
+// GetResolvers returns a copy of the resolvers used by this repository.
 //
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
