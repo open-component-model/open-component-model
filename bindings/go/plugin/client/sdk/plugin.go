@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -207,7 +208,13 @@ func (p *Plugin) determineLocation() (_ string, err error) {
 	case types.Socket:
 		loc := "/tmp/" + p.Config.ID + "-plugin.socket"
 		if _, err := os.Stat(loc); err == nil {
-			return "", fmt.Errorf("plugin location already exists: %s", loc)
+			if cleanupErr := p.performCleanUp(loc); cleanupErr != nil {
+				return "", fmt.Errorf("could not cleanup socket: %w", cleanupErr)
+			}
+		}
+
+		if err := p.createLockFile(loc); err != nil {
+			return "", fmt.Errorf("could not create lock file: %w", err)
 		}
 
 		return loc, nil
@@ -232,7 +239,7 @@ func (p *Plugin) determineLocation() (_ string, err error) {
 }
 
 // GracefulShutdown will stop the server and do cleanup if necessary.
-// In case of sockets it will remove the created socket.
+// In the case of sockets, it will remove the created socket.
 func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 	p.logger.InfoContext(ctx, "Gracefully shutting down plugin", "id", p.Config.ID)
 	// We ignore server closed errors because server closing might race with the listener.
@@ -244,6 +251,10 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 	case types.Socket:
 		p.logger.InfoContext(ctx, "removing socket", "location", p.location)
 		if err := os.Remove(p.location); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		// also remove the lock file
+		if err := os.Remove(p.location + ".lock"); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	case types.TCP:
@@ -290,4 +301,73 @@ func (p *Plugin) Shutdown(w http.ResponseWriter, _ *http.Request) {
 	if err := p.GracefulShutdown(p.baseCtx); err != nil {
 		p.logger.ErrorContext(p.baseCtx, "Error shutting down plugin", "error", err)
 	}
+}
+
+// performCleanUp looks for a lock file that contains the pid of the process using the corresponding socket file.
+// if the process is not found, we remove the socket file AND the lock file.
+func (p *Plugin) performCleanUp(loc string) error {
+	lockFile := loc + ".lock"
+	if _, err := os.Stat(lockFile); err != nil {
+		return fmt.Errorf("lock file does not exists unable to determine using process: %w", err)
+	}
+
+	content, err := os.ReadFile(lockFile)
+	if err != nil {
+		return fmt.Errorf("could not read lock file: %w", err)
+	}
+
+	pid, err := strconv.Atoi(string(content))
+	if err != nil {
+		return fmt.Errorf("could not parse PID: %w", err)
+	}
+
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return p.removeFiles(loc, lockFile)
+	}
+
+	// Check if the process is actually running by sending signal 0.
+	// For more information see https://man7.org/linux/man-pages/man2/kill.2.html#description
+	// Section:
+	// If sig is 0, then no signal is sent, but existence and permission
+	// checks are still performed; this can be used to check for the
+	// existence of a process ID or process group ID that the caller is
+	// permitted to signal.
+	if err := process.Signal(syscall.Signal(0)); err != nil {
+		// error means the process is gone; it's safe to remove the files.
+		return p.removeFiles(loc, lockFile)
+	}
+
+	return fmt.Errorf("process using socket file is still alive under pid %d", process.Pid)
+}
+
+func (p *Plugin) removeFiles(loc string, lockFile string) error {
+	// The Process doesn't exist, safe to clean up
+	if err := os.Remove(lockFile); err != nil {
+		return fmt.Errorf("could not remove lock file: %w", err)
+	}
+	if err := os.Remove(loc); err != nil {
+		return fmt.Errorf("could not remove socket file: %w", err)
+	}
+	return nil
+}
+
+// createLockFile creates a lock file and puts the current process PID into the file.
+func (p *Plugin) createLockFile(loc string) (err error) {
+	lockFile := loc + ".lock"
+	file, err := os.Create(lockFile)
+	if err != nil {
+		return fmt.Errorf("could not create lock file: %w", err)
+	}
+
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
+
+	pid := strconv.Itoa(os.Getpid())
+	if _, err = file.Write([]byte(pid)); err != nil {
+		return fmt.Errorf("could not write lock file: %w", err)
+	}
+
+	return nil
 }
