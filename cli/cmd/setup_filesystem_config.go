@@ -14,9 +14,15 @@ import (
 
 // setupFilesystemConfig sets up file system configuration entity.
 func setupFilesystemConfig(cmd *cobra.Command) {
-	value, err := cmd.PersistentFlags().GetString(tempFolderFlag)
-	if err != nil {
-		slog.DebugContext(cmd.Context(), "could not read temp folder flag value", slog.String("error", err.Error()))
+	var (
+		value string
+		err   error
+	)
+	if flag := cmd.Flags().Lookup(tempFolderFlag); flag != nil && flag.Changed {
+		value, err = cmd.Flags().GetString(tempFolderFlag)
+		if err != nil {
+			slog.DebugContext(cmd.Context(), "could not read temp folder flag value", slog.String("error", err.Error()))
+		}
 	}
 
 	ocmCtx := ocmctx.FromContext(cmd.Context())
