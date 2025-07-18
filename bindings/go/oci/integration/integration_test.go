@@ -82,7 +82,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 	v2.MustAddToScheme(scheme)
 	scheme.MustRegisterWithAlias(&v2.LocalBlob{}, ocmruntime.NewUnversionedType(v2.LocalBlobAccessType))
 
-	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithScheme(scheme))
+	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithScheme(scheme), oci.WithTempFolder(t.TempDir()))
 	r.NoError(err)
 
 	t.Run("basic download of a component version", func(t *testing.T) {
@@ -150,7 +150,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 		r.NoError(err)
 		resolver.SetClient(createAuthClient(reg, user, password))
 
-		repo, err := oci.NewRepository(oci.WithResolver(resolver))
+		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempFolder(t.TempDir()))
 		r.NoError(err)
 
 		// Health check should succeed with valid credentials
@@ -165,7 +165,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 		r.NoError(err)
 		resolver.SetClient(createAuthClient(reg, "invalid-user", "invalid-password"))
 
-		repo, err := oci.NewRepository(oci.WithResolver(resolver))
+		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempFolder(t.TempDir()))
 		r.NoError(err)
 
 		// Health check should fail for ghcr.io with invalid credentials
@@ -184,7 +184,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 		// explicitly set default client to avoid token fetch round
 		resolver.SetClient(http.DefaultClient)
 
-		repo, err := oci.NewRepository(oci.WithResolver(resolver))
+		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempFolder(t.TempDir()))
 		r.NoError(err)
 
 		// Health check should fail without credentials for ghcr.io
@@ -277,7 +277,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		)
 		r.NoError(err)
 
-		repo, err := oci.NewRepository(oci.WithResolver(resolver))
+		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempFolder(t.TempDir()))
 		r.NoError(err)
 
 		t.Run("basic connectivity and resolution failure", func(t *testing.T) {
@@ -297,7 +297,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		})
 
 		t.Run("basic upload and download of a component version (with index based referrer tracking)", func(t *testing.T) {
-			repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(oci.ReferrerTrackingPolicyByIndexAndSubject))
+			repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(oci.ReferrerTrackingPolicyByIndexAndSubject), oci.WithTempFolder(t.TempDir()))
 			r.NoError(err)
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
 		})
@@ -362,7 +362,7 @@ func Test_Integration_CTF(t *testing.T) {
 	t.Run("direct", func(t *testing.T) {
 		archive := ctf.NewFileSystemCTF(fs)
 		store := ocictf.NewFromCTF(archive)
-		repo, err := oci.NewRepository(oci.WithResolver(store))
+		repo, err := oci.NewRepository(oci.WithResolver(store), oci.WithTempFolder(t.TempDir()))
 		require.NoError(t, err)
 		t.Run("basic upload and download of a component version", func(t *testing.T) {
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
