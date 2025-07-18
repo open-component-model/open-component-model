@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"ocm.software/open-component-model/bindings/go/repository"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
@@ -15,6 +14,7 @@ import (
 	repoSpec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
