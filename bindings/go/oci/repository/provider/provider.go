@@ -19,7 +19,7 @@ import (
 )
 
 // CachingComponentVersionRepositoryProvider is a caching implementation of the repository.ComponentVersionRepositoryProvider interface.
-// It provides efficient caching mechanisms for ocirepository operations by maintaining:
+// It provides efficient caching mechanisms for repository operations by maintaining:
 // - A credential cache for authentication information
 // - An OCI cache for manifests and layers
 // - An authorization cache for auth tokens
@@ -47,13 +47,13 @@ func NewComponentVersionRepositoryProvider() *CachingComponentVersionRepositoryP
 }
 
 // GetComponentVersionRepositoryCredentialConsumerIdentity implements the componentversionrepository.ComponentVersionRepositoryProvider interface.
-// It retrieves the consumer identity for a given ocirepository specification.
+// It retrieves the consumer identity for a given repository specification.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	return GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, b.scheme, repositorySpecification)
 }
 
 // GetComponentVersionRepositoryCredentialConsumerIdentity is a helper function that extracts the consumer identity
-// from a ocirepository specification. It supports both OCI and CTF ocirepository types.
+// from a repository specification. It supports both OCI and CTF repository types.
 func GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, scheme *runtime.Scheme, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	obj, err := getConvertedTypedSpec(scheme, repositorySpecification)
 	if err != nil {
@@ -65,12 +65,12 @@ func GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, 
 	case *ctfrepospecv1.Repository:
 		return v1.IdentityFromCTFRepository(obj)
 	default:
-		return nil, fmt.Errorf("unsupported ocirepository specification type for identity generation %T", obj)
+		return nil, fmt.Errorf("unsupported repository specification type for identity generation %T", obj)
 	}
 }
 
 // GetComponentVersionRepository implements the componentversionrepository.ComponentVersionRepositoryProvider interface.
-// It retrieves a component version ocirepository with caching support for the given specification and credentials.
+// It retrieves a component version repository with caching support for the given specification and credentials.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
 	obj, err := getConvertedTypedSpec(b.scheme, repositorySpecification)
 	if err != nil {
@@ -79,7 +79,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 
 	manifests, layers, err := b.ociCache.get(ctx, obj)
 	if err != nil {
-		return nil, fmt.Errorf("failed to getOCIDescriptors from ocirepository cache: %w", err)
+		return nil, fmt.Errorf("failed to getOCIDescriptors from repository cache: %w", err)
 	}
 
 	opts := []oci.RepositoryOption{
@@ -90,7 +90,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	switch obj := obj.(type) {
 	case *ocirepospecv1.Repository:
 		if err := b.credentialCache.add(obj, credentials); err != nil {
-			return nil, fmt.Errorf("failed to add ocirepository get to credentials: %w", err)
+			return nil, fmt.Errorf("failed to add repository get to credentials: %w", err)
 		}
 		return ocirepository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
 			Client:     b.httpClient,
@@ -100,7 +100,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	case *ctfrepospecv1.Repository:
 		return ocirepository.NewFromCTFRepoV1(ctx, obj, opts...)
 	default:
-		return nil, fmt.Errorf("unsupported ocirepository specification type %T", obj)
+		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
 	}
 }
 
@@ -109,7 +109,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 func getConvertedTypedSpec(scheme *runtime.Scheme, repositorySpecification runtime.Typed) (runtime.Typed, error) {
 	repositorySpecification = repositorySpecification.DeepCopyTyped()
 	if _, err := scheme.DefaultType(repositorySpecification); err != nil {
-		return nil, fmt.Errorf("failed to ensure type for ocirepository specification: %w", err)
+		return nil, fmt.Errorf("failed to ensure type for repository specification: %w", err)
 	}
 	obj, err := scheme.NewObject(repositorySpecification.GetType())
 	if err != nil {
