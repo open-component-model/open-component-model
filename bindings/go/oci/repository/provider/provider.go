@@ -46,7 +46,7 @@ func NewComponentVersionRepositoryProvider() *CachingComponentVersionRepositoryP
 	}
 }
 
-// GetComponentVersionRepositoryCredentialConsumerIdentity implements the componentversionrepository.ComponentVersionRepositoryProvider interface.
+// GetComponentVersionRepositoryCredentialConsumerIdentity implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves the consumer identity for a given repository specification.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	return GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, b.scheme, repositorySpecification)
@@ -69,7 +69,7 @@ func GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, 
 	}
 }
 
-// GetComponentVersionRepository implements the componentversionrepository.ComponentVersionRepositoryProvider interface.
+// GetComponentVersionRepository implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves a component version repository with caching support for the given specification and credentials.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
 	obj, err := getConvertedTypedSpec(b.scheme, repositorySpecification)
