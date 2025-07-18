@@ -40,7 +40,7 @@ func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository,
 	ctfOpts := ctf.OpenCTFOptions{
 		Path:    path,
 		Flag:    mask,
-		TempDir: repoOpts.TempFolder,
+		TempDir: repoOpts.TempDir,
 	}
 
 	archive, _, err := ctf.OpenCTFByFileExtension(ctx, ctfOpts)

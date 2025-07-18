@@ -43,7 +43,7 @@ func init() {
 }
 
 func Repository(t *testing.T, options ...oci.RepositoryOption) *oci.Repository {
-	opts := append([]oci.RepositoryOption{oci.WithTempFolder(t.TempDir())}, options...)
+	opts := append([]oci.RepositoryOption{oci.WithTempDir(t.TempDir())}, options...)
 	repo, err := oci.NewRepository(opts...)
 	require.NoError(t, err, "Failed to create repository")
 	return repo

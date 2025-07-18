@@ -52,8 +52,8 @@ type RepositoryOptions struct {
 	// If not provided, slog.Default() will be used.
 	Logger *slog.Logger
 
-	// TempFolder is the default temporary filesystem folder for any temporary cached data
-	TempFolder string
+	// TempDir is the default temporary filesystem folder for any temporary cached data
+	TempDir string
 }
 
 // ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
@@ -130,10 +130,10 @@ func WithLogger(logger *slog.Logger) RepositoryOption {
 	}
 }
 
-// WithTempFolder sets the resource copy options for the repository.
-func WithTempFolder(tempFolder string) RepositoryOption {
+// WithTempDir sets the temporary directory for the repository to use for caching data.
+func WithTempDir(tempDir string) RepositoryOption {
 	return func(o *RepositoryOptions) {
-		o.TempFolder = tempFolder
+		o.TempDir = tempDir
 	}
 }
 
