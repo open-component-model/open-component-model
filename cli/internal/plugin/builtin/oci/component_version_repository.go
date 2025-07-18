@@ -15,7 +15,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -41,7 +41,7 @@ func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepositoryCredenti
 	return identity, nil
 }
 
-func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (componentversionrepository.ComponentVersionRepository, error) {
+func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
 	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
 	if !ok {
 		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
@@ -56,15 +56,15 @@ func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepository(ctx con
 }
 
 var (
-	_ componentversionrepository.ComponentVersionRepositoryProvider = (*ComponentVersionRepositoryPlugin)(nil)
-	_ componentversionrepository.ComponentVersionRepository         = (*wrapper)(nil)
+	_ repository.ComponentVersionRepositoryProvider = (*ComponentVersionRepositoryPlugin)(nil)
+	_ repository.ComponentVersionRepository         = (*wrapper)(nil)
 )
 
 // wrapper wraps a repo into returning the component version repository ComponentVersionRepositoryPlugin.
 // That's because the plugin interface uses ReadyOnlyBlob while the oci.ComponentVersionRepositoryPlugin uses LocalBlob
 // specific to OCI and CTF.
 type wrapper struct {
-	repo oci.ComponentVersionRepository
+	repo repository.ComponentVersionRepository
 }
 
 func (w *wrapper) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
@@ -96,7 +96,7 @@ func (w *wrapper) GetLocalSource(ctx context.Context, component, version string,
 }
 
 // TODO(jakobmoellerdev): add identity mapping function from OCI package here as soon as we have the conversion function
-func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Repository, credentials map[string]string) (oci.ComponentVersionRepository, error) {
+func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Repository, credentials map[string]string) (repository.ComponentVersionRepository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL %q: %w", spec.BaseUrl, err)
@@ -115,12 +115,16 @@ func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Reposito
 		},
 		Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
 	})
+	tempDir := ""
+	if p.filesystemConfig != nil {
+		tempDir = p.filesystemConfig.TempFolder
+	}
 	options := []oci.RepositoryOption{
 		oci.WithResolver(urlResolver),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(p.manifests),
 		oci.WithLayerCache(p.layers),
-		oci.WithFilesystemConfig(p.filesystemConfig), // the filesystem config being empty is a valid config
+		oci.WithTempDir(tempDir),
 	}
 
 	repo, err := oci.NewRepository(options...)

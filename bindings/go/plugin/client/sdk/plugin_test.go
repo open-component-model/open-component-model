@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -254,6 +255,139 @@ func waitForPlugin(r *require.Assertions, httpClient *http.Client) {
 
 		return true
 	}, 5*time.Second, 20*time.Millisecond)
+}
+
+func TestLockFileCreationAndCleanup(t *testing.T) {
+	r := require.New(t)
+	location := "/tmp/test-plugin-lock-plugin.socket"
+	lockFile := location + ".lock"
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(location)
+		_ = os.RemoveAll(lockFile)
+	})
+
+	// Test lock file creation and PID verification
+	ctx := context.Background()
+	p := NewPlugin(ctx, slog.Default(), types.Config{
+		ID:         "test-plugin-lock",
+		Type:       types.Socket,
+		PluginType: types.ComponentVersionRepositoryPluginType,
+	}, os.Stdout)
+
+	// Start the plugin in a goroutine
+	go func() {
+		_ = p.Start(ctx)
+	}()
+
+	// Wait for the plugin to start and create the lock file
+	r.Eventually(func() bool {
+		_, err := os.Stat(lockFile)
+		return err == nil
+	}, 5*time.Second, 100*time.Millisecond)
+
+	lockContent, err := os.ReadFile(lockFile)
+	r.NoError(err)
+
+	expectedPID := strconv.Itoa(os.Getpid())
+	r.Equal(expectedPID, string(lockContent))
+
+	err = p.GracefulShutdown(ctx)
+	r.NoError(err)
+
+	_, err = os.Stat(lockFile)
+	r.True(os.IsNotExist(err))
+
+	_, err = os.Stat(location)
+	r.True(os.IsNotExist(err))
+}
+
+func TestLockFileProcessValidation(t *testing.T) {
+	location := "/tmp/test-plugin-process-validation-plugin.socket"
+	lockFile := location + ".lock"
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(location)
+		_ = os.RemoveAll(lockFile)
+	})
+
+	ctx := context.Background()
+
+	// Test 1: Create a lock file with current PID, verify cleanup is blocked
+	t.Run("cannot cleanup when process is alive", func(t *testing.T) {
+		r := require.New(t)
+
+		p1 := NewPlugin(ctx, slog.Default(), types.Config{
+			ID:         "test-plugin-process-validation",
+			Type:       types.Socket,
+			PluginType: types.ComponentVersionRepositoryPluginType,
+		}, os.Stdout)
+
+		go func() {
+			_ = p1.Start(ctx)
+		}()
+
+		r.Eventually(func() bool {
+			_, err := os.Stat(lockFile)
+			return err == nil
+		}, 5*time.Second, 100*time.Millisecond)
+
+		lockContent, err := os.ReadFile(lockFile)
+		r.NoError(err)
+		expectedPID := strconv.Itoa(os.Getpid())
+		r.Equal(expectedPID, string(lockContent))
+
+		p2 := NewPlugin(ctx, slog.Default(), types.Config{
+			ID:         "test-plugin-process-validation",
+			Type:       types.Socket,
+			PluginType: types.ComponentVersionRepositoryPluginType,
+		}, os.Stdout)
+
+		_, err = p2.determineLocation()
+		r.Error(err)
+		r.Contains(err.Error(), "process using socket file is still alive")
+
+		r.NoError(p1.GracefulShutdown(ctx))
+	})
+
+	// Test 2: Create a lock file with fake PID, verify cleanup works
+	t.Run("can cleanup when process is dead", func(t *testing.T) {
+		r := require.New(t)
+
+		fakePID := "999999"
+
+		socketFile, err := os.Create(location)
+		r.NoError(err)
+		socketFile.Close()
+
+		err = os.WriteFile(lockFile, []byte(fakePID), 0644)
+		r.NoError(err)
+
+		_, err = os.Stat(location)
+		r.NoError(err)
+		_, err = os.Stat(lockFile)
+		r.NoError(err)
+
+		p := NewPlugin(ctx, slog.Default(), types.Config{
+			ID:         "test-plugin-process-validation",
+			Type:       types.Socket,
+			PluginType: types.ComponentVersionRepositoryPluginType,
+		}, os.Stdout)
+
+		loc, err := p.determineLocation()
+		r.NoError(err)
+		r.Equal(location, loc)
+
+		_, err = os.Stat(lockFile)
+		r.NoError(err) // Lock file should exist with new PID
+
+		lockContent, err := os.ReadFile(lockFile)
+		r.NoError(err)
+		expectedPID := strconv.Itoa(os.Getpid())
+		r.Equal(expectedPID, string(lockContent))
+
+		r.NoError(os.Remove(lockFile))
+	})
 }
 
 func createHttpClient(location string) *http.Client {

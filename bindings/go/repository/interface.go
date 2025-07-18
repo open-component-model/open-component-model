@@ -1,12 +1,19 @@
-package componentversionrepository
+package repository
 
 import (
 	"context"
+	"errors"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// ErrNotFound is an error type that indicates a requested component version
+// was not found. NotFoundError is independent of the underlying repository implementation.
+// It is supposed to be joined with the original technology-specific error to provide a
+// technology-agnostic API to check for not found errors.
+var ErrNotFound = errors.New("component version not found")
 
 // ComponentVersionRepositoryProvider defines the contract for providers that can retrieve
 // and manage component version repositories. It supports different types of repository
@@ -41,7 +48,7 @@ type ComponentVersionRepository interface {
 
 	// GetComponentVersion retrieves a component version from the repository.
 	// Returns the descriptor for the given component name and version.
-	// If the component version does not exist, it returns ErrNotFound.
+	// If the component version does not exist, it returns NotFoundError.
 	GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error)
 
 	// ListComponentVersions lists all versions for a given component.
@@ -78,9 +85,59 @@ type LocalSourceRepository interface {
 	// Sources for non-existent component versions may be stored but may be removed during garbage collection.
 	// The Source given is identified later on by its own Identity ([descriptor.Source.ToIdentity]) and a collection of a set of reserved identity values
 	// that can have a special meaning.
-	AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error)
+	AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error)
 
 	// GetLocalSource retrieves a local [descriptor.Source] from the repository.
 	// The [runtime.Identity] must match a source in the [descriptor.Descriptor].
 	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error)
+}
+
+// ResourceRepository defines the interface for storing and retrieving OCM resources
+// independently of component versions from a store implementation.
+type ResourceRepository interface {
+	// UploadResource uploads a [descriptor.Resource] to the repository.
+	// Returns the updated resource with repository-specific information.
+	// The resource must be referenced in the component descriptor.
+	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob) (resourceAfterUpload *descriptor.Resource, err error)
+
+	// DownloadResource downloads a [descriptor.Resource] from the repository.
+	DownloadResource(ctx context.Context, res *descriptor.Resource) (content blob.ReadOnlyBlob, err error)
+}
+
+// SourceRepository defines the interface for storing and retrieving OCM sources
+// independently of component versions from a store implementation.
+type SourceRepository interface {
+	// UploadSource uploads a [descriptor.Source] to the repository.
+	// Returns the updated source with repository-specific information.
+	// The source must be referenced in the component descriptor.
+	UploadSource(ctx context.Context, targetAccess runtime.Typed, source *descriptor.Source, content blob.ReadOnlyBlob) (sourceAfterUpload *descriptor.Source, err error)
+
+	// DownloadSource downloads a [descriptor.Source] from the repository.
+	DownloadSource(ctx context.Context, res *descriptor.Source) (content blob.ReadOnlyBlob, err error)
+}
+
+// CredentialProvider defines the interface for resolving credentials based on
+// a given identity.
+type CredentialProvider interface {
+	// Resolve attempts to resolve credentials for the given identity.
+	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
+}
+
+// ResourceDigestProcessor defines the interface for processing resource digests.
+type ResourceDigestProcessor interface {
+	// ProcessResourceDigest processes, verifies and appends the [*descriptor.Resource.Digest] with information fetched
+	// from the repository.
+	// Under certain circumstances, it can also process the [*descriptor.Resource.Access] of the resource,
+	// e.g. to ensure that the digest is pinned after digest information was appended.
+	// As a result, after processing, the access MUST always reference the content described by the digest and cannot be mutated.
+	ProcessResourceDigest(ctx context.Context, res *descriptor.Resource) (*descriptor.Resource, error)
+}
+
+// HealthCheckable is an optional interface that can be implemented by a
+// component version repository.
+type HealthCheckable interface {
+	// CheckHealth checks if the repository is accessible and properly configured.
+	// This method verifies that the underlying OCI registry is reachable and that authentication
+	// is properly configured. It performs a lightweight check without modifying the repository.
+	CheckHealth(ctx context.Context) error
 }

@@ -15,9 +15,9 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
@@ -36,6 +36,7 @@ import (
 	descriptor2 "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -77,9 +78,6 @@ type Repository struct {
 
 	// logger is the logger used for OCI operations.
 	logger *slog.Logger
-
-	// filesystemConfig is the configuration for filesystem operations.
-	filesystemConfig *v1alpha1.Config
 }
 
 // AddComponentVersion adds a new component version to the repository.
@@ -178,6 +176,9 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 	}
 
 	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
+	if errors.Is(err, errdef.ErrNotFound) {
+		return desc, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+	}
 	return desc, err
 }
 
@@ -336,7 +337,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(ctx context.Context, compon
 }
 
 // GetLocalResource retrieves a local resource from the repository.
-func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Resource, error) {
+func (repo *Repository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	var err error
 	done := log.Operation(ctx, "get local resource",
@@ -347,15 +348,18 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		done(err)
 	}()
 
-	var b LocalBlob
+	var b fetch.LocalBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindResource); err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return nil, nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+		}
 		return nil, nil, err
 	}
 	return b, artifact.(*descriptor.Resource), nil
 }
 
-func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (LocalBlob, *descriptor.Source, error) {
+func (repo *Repository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	var err error
 	done := log.Operation(ctx, "get local source",
@@ -366,15 +370,18 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 		done(err)
 	}()
 
-	var b LocalBlob
+	var b fetch.LocalBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindSource); err != nil {
+		if errors.Is(err, errdef.ErrNotFound) {
+			return nil, nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+		}
 		return nil, nil, err
 	}
 	return b, artifact.(*descriptor.Source), nil
 }
 
-func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (LocalBlob, descriptor.Artifact, error) {
+func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (fetch.LocalBlob, descriptor.Artifact, error) {
 	reference, store, err := repo.getStore(ctx, component, version)
 	if err != nil {
 		return nil, nil, err
@@ -404,7 +411,12 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	}
 	artifact := candidates[0]
 	meta := artifact.GetElementMeta()
-	slogcontext.Info(ctx, "found artifact in descriptor", "artifact", meta.ToIdentity())
+
+	// now that we have a unique candidate, we should use its identity instead of the one requested, as
+	// the requested identity might not be fully qualified.
+	// For example, it is valid to ask for "name=abc", but receive an artifact with "name=abc,version=1.0.0".
+	identity = meta.ToIdentity()
+	slogcontext.Info(ctx, "found artifact in descriptor", "artifact", identity)
 
 	access := artifact.GetAccess()
 
@@ -418,14 +430,21 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		b, err := repo.getLocalBlob(ctx, store, index, manifest, access, identity, kind)
+		b, err := repo.getLocalBlobFromIndexOrManifest(ctx, store, index, manifest, identity, kind)
 		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
 	}
 }
 
-func (repo *Repository) getLocalBlob(ctx context.Context, store spec.Store, index *ociImageSpecV1.Index, manifest *ociImageSpecV1.Manifest, access runtime.Typed, identity runtime.Identity, kind annotations.ArtifactKind) (LocalBlob, error) {
+func (repo *Repository) getLocalBlobFromIndexOrManifest(
+	ctx context.Context,
+	store spec.Store, // store to fetch the local blob from
+	index *ociImageSpecV1.Index, // may be nil for legacy manifests
+	manifest *ociImageSpecV1.Manifest, // always present, even if index is nil
+	identity runtime.Identity, // identity of the artifact to fetch
+	kind annotations.ArtifactKind, // kind of the artifact to fetch (e.g., Resource or Source)
+) (LocalBlob, error) {
 	// if the index does not exist, we can only use the manifest
 	// and thus local blobs can only be available as image layers
 	if index == nil {

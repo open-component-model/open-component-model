@@ -46,12 +46,16 @@ func createRepository(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
 	}
+	tempDir := ""
+	if filesystemConfig != nil {
+		tempDir = filesystemConfig.TempFolder
+	}
 	options := []oci.RepositoryOption{
 		oci.WithResolver(urlResolver),
 		oci.WithCreator(Creator),
 		oci.WithManifestCache(manifests),
 		oci.WithLayerCache(layers),
-		oci.WithFilesystemConfig(filesystemConfig), // the filesystem config being empty is a valid config
+		oci.WithTempDir(tempDir), // the filesystem config being empty is a valid config
 	}
 
 	repo, err := oci.NewRepository(options...)

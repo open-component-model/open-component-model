@@ -46,9 +46,9 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 			ctx := t.Context()
 			r := require.New(t)
 			archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, ctf.OpenCTFOptions{
-				Path:             tc.path,
-				Flag:             ctf.O_RDONLY,
-				FileSystemConfig: nil,
+				Path:    tc.path,
+				Flag:    ctf.O_RDONLY,
+				TempDir: t.TempDir(),
 			})
 			r.Equal(tc.format, discovered, "discovered format should be the same as the one used to open")
 			r.NoError(err)
@@ -90,9 +90,9 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 			ctx := t.Context()
 			r := require.New(t)
 			err := ctf.WorkWithinCTF(ctx, ctf.OpenCTFOptions{
-				Path:             tc.path,
-				Flag:             ctf.O_RDONLY,
-				FileSystemConfig: nil,
+				Path:    tc.path,
+				Flag:    ctf.O_RDONLY,
+				TempDir: t.TempDir(),
 			}, func(ctx context.Context, ctf ctf.CTF) error {
 				blobs, err := ctf.ListBlobs(ctx)
 				if err != nil {

@@ -116,7 +116,6 @@ func (ref *Ref) String() string {
 // Not accepted cases that were valid in old OCM:
 //
 //   - [type::][<repositorySpecJSON>/[<DefaultPrefix>]/<component id>[:<version>] - arbitrary repository definitions
-//   - <repositoryAlias>//[<DefaultPrefix>]/<component id>[:<version>] - repository aliases for the ocm configuration
 //
 // All non-supported special cases are currently under review of being accepted forms.
 //
