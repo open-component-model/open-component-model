@@ -326,8 +326,8 @@ func (p *Plugin) performCleanUp(loc string) error {
 		return p.removeFiles(loc, lockFile)
 	}
 
-	// Check if the process is actually running by sending signal 0
-	if err := process.Signal(syscall.Signal(0)); err != nil {
+	// Check if the process is actually running by sending syscall.SIGCONT signal to it.
+	if err := process.Signal(syscall.SIGCONT); err != nil {
 		// error means the process is gone; it's safe to remove the files.
 		return p.removeFiles(loc, lockFile)
 	}
