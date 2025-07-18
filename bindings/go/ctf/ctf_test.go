@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
@@ -91,14 +90,7 @@ func Test_CTF_CustomTempFolder_TAR(t *testing.T) {
 	r := require.New(t)
 
 	// Create a custom temp directory
-	customTempDir := filepath.Join(t.TempDir(), "custom-temp")
-	err := os.MkdirAll(customTempDir, 0755)
-	r.NoError(err)
-
-	// Create filesystem config with custom temp folder
-	fsConfig := &v1alpha1.Config{
-		TempFolder: customTempDir,
-	}
+	customTempDir := t.TempDir()
 
 	// Create a TAR file path
 	tarPath := filepath.Join(t.TempDir(), "test.tar")
@@ -107,10 +99,10 @@ func Test_CTF_CustomTempFolder_TAR(t *testing.T) {
 	digest, _ := testBlob.Digest()
 
 	// Test that CTF operations use the custom temp folder
-	err = ctf.WorkWithinCTF(ctx, ctf.OpenCTFOptions{
-		Path:             tarPath,
-		Flag:             ctf.O_CREATE | ctf.O_RDWR,
-		FileSystemConfig: fsConfig,
+	err := ctf.WorkWithinCTF(ctx, ctf.OpenCTFOptions{
+		Path:    tarPath,
+		Flag:    ctf.O_CREATE | ctf.O_RDWR,
+		TempDir: customTempDir,
 	}, func(ctx context.Context, ctf ctf.CTF) error {
 		if err := ctf.SaveBlob(ctx, testBlob); err != nil {
 			return err
@@ -151,9 +143,9 @@ func Test_CTF_CustomTempFolder_TAR(t *testing.T) {
 
 	// Verify we can read the CTF back
 	archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, ctf.OpenCTFOptions{
-		Path:             tarPath,
-		Flag:             ctf.O_RDONLY,
-		FileSystemConfig: fsConfig,
+		Path:    tarPath,
+		Flag:    ctf.O_RDONLY,
+		TempDir: customTempDir,
 	})
 	r.NoError(err)
 	r.Equal(ctf.FormatTAR, discovered)
@@ -169,14 +161,7 @@ func Test_CTF_CustomTempFolder_TGZ(t *testing.T) {
 	r := require.New(t)
 
 	// Create a custom temp directory
-	customTempDir := filepath.Join(t.TempDir(), "custom-temp-tgz")
-	err := os.MkdirAll(customTempDir, 0755)
-	r.NoError(err)
-
-	// Create filesystem config with custom temp folder
-	fsConfig := &v1alpha1.Config{
-		TempFolder: customTempDir,
-	}
+	customTempDir := t.TempDir()
 
 	// Create a TGZ file path
 	tgzPath := filepath.Join(t.TempDir(), "test.tar.gz")
@@ -185,10 +170,10 @@ func Test_CTF_CustomTempFolder_TGZ(t *testing.T) {
 	digest, _ := testBlob.Digest()
 
 	// Test that CTF operations use the custom temp folder
-	err = ctf.WorkWithinCTF(ctx, ctf.OpenCTFOptions{
-		Path:             tgzPath,
-		Flag:             ctf.O_CREATE | ctf.O_RDWR,
-		FileSystemConfig: fsConfig,
+	err := ctf.WorkWithinCTF(ctx, ctf.OpenCTFOptions{
+		Path:    tgzPath,
+		Flag:    ctf.O_CREATE | ctf.O_RDWR,
+		TempDir: customTempDir,
 	}, func(ctx context.Context, ctf ctf.CTF) error {
 		if err := ctf.SaveBlob(ctx, testBlob); err != nil {
 			return err
@@ -228,9 +213,9 @@ func Test_CTF_CustomTempFolder_TGZ(t *testing.T) {
 
 	// Verify we can read the CTF back
 	archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, ctf.OpenCTFOptions{
-		Path:             tgzPath,
-		Flag:             ctf.O_RDONLY,
-		FileSystemConfig: fsConfig,
+		Path:    tgzPath,
+		Flag:    ctf.O_RDONLY,
+		TempDir: customTempDir,
 	})
 	r.NoError(err)
 	r.Equal(ctf.FormatTGZ, discovered)
