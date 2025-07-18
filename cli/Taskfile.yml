@@ -110,6 +110,8 @@ tasks:
   verify/ctf:
     desc: "Verify the CTF by checking the component version and being able to fetch and run the CLI for the Host Architecture"
     silent: true
+    deps:
+      - generate/ctf
     vars:
       REFERENCE: '{{ .CTF_LOCATION }}//{{ .PROVIDER }}/{{ .NAME }}'
     dir: '{{ .TASKFILE_DIR }}/tmp/verify-ctf'
@@ -122,7 +124,7 @@ tasks:
       echo "Component version found: $VERSION"
       
       {{ .TASKFILE_DIR }}/tmp/bin/ocm download resource {{ .REFERENCE }}:$VERSION \
-        --identity name=ocmcli,os={{ .GOOS }},architecture={{ .GOARCH }},version=$VERSION
+        --identity name=ocmcli,os={{ .GOOS }},architecture={{ .GOARCH }}
       
       chmod +x ./ocm
       ./ocm version
