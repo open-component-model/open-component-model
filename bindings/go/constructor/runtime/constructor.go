@@ -197,8 +197,12 @@ func (m *ElementMeta) ToIdentity() runtime.Identity {
 	if mp == nil {
 		mp = make(runtime.Identity, 2)
 	}
-	mp[IdentityAttributeName] = m.Name
-	mp[IdentityAttributeVersion] = m.Version
+	if m.Name != "" {
+		mp[IdentityAttributeName] = m.Name
+	}
+	if m.Version != "" {
+		mp[IdentityAttributeVersion] = m.Version
+	}
 	return mp
 }
 
@@ -215,8 +219,12 @@ func (r *ComponentMeta) ToIdentity() runtime.Identity {
 		return nil
 	}
 	m := make(runtime.Identity, 2)
-	m[IdentityAttributeName] = r.Name
-	m[IdentityAttributeVersion] = r.Version
+	if r.Name != "" {
+		m[IdentityAttributeName] = r.Name
+	}
+	if r.Version != "" {
+		m[IdentityAttributeVersion] = r.Version
+	}
 	return m
 }
 
