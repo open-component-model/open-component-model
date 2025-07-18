@@ -1,6 +1,11 @@
 package blob
 
-import "io"
+import (
+	"context"
+	"io"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
 
 // Blob is an interface that represents a Binary Large Object.
 // It's main purpose is to provide an abstraction over purpose to be able to only
@@ -101,4 +106,16 @@ type MediaTypeOverrideable interface {
 	// It MUST be safe for concurrent use, serializing as necessary.
 	// It MUST be safe to call multiple times, overwriting the mediaType every time.
 	SetMediaType(mediaType string)
+}
+
+// BlobTransformer transforms blob data according to specified configuration.
+// It provides a flexible interface for transforming blob content while maintaining
+// compatibility with the existing blob.ReadOnlyBlob interface.
+//
+// Different implementations can be chosen based on the media type of the input blob
+// to provide specialized transformation logic for specific content types.
+type BlobTransformer interface {
+	// TransformBlob transforms the given blob data according to the specified configuration.
+	// It returns the transformed data as a ReadOnlyBlob or an error if the transformation fails.
+	TransformBlob(ctx context.Context, input ReadOnlyBlob, config runtime.Typed) (ReadOnlyBlob, error)
 }
