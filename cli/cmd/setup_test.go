@@ -30,7 +30,7 @@ func createConfigWithFilesystemConfig(tempFolder string) *v1.Config {
 			}
 		]
 	}`
-	
+
 	config := &v1.Config{}
 	if err := json.Unmarshal([]byte(configJSON), config); err != nil {
 		panic(err)
@@ -91,9 +91,9 @@ func TestSetupFilesystemConfig(t *testing.T) {
 			cmd := &cobra.Command{
 				Use: "test",
 			}
-			cmd.PersistentFlags().String(tempFolderFlag, "", "test flag")
+			cmd.Flags().String(tempFolderFlag, "", "test flag")
 			if tt.cliFlag != "" {
-				err := cmd.PersistentFlags().Set(tempFolderFlag, tt.cliFlag)
+				err := cmd.Flags().Set(tempFolderFlag, tt.cliFlag)
 				r.NoError(err, "failed to set CLI flag")
 			}
 
