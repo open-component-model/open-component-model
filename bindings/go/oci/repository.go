@@ -37,7 +37,7 @@ import (
 	descriptor2 "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
-	"ocm.software/open-component-model/bindings/go/repositories/componentrepository"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -181,7 +181,7 @@ func (repo *Repository) GetComponentVersion(ctx context.Context, component, vers
 
 	desc, _, _, err = getDescriptorFromStore(ctx, store, reference)
 	if errors.Is(err, errdef.ErrNotFound) {
-		return desc, errors.Join(componentrepository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+		return desc, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
 	}
 	return desc, err
 }
@@ -356,7 +356,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindResource); err != nil {
 		if errors.Is(err, errdef.ErrNotFound) {
-			return nil, nil, errors.Join(componentrepository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+			return nil, nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
 		}
 		return nil, nil, err
 	}
@@ -378,7 +378,7 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindSource); err != nil {
 		if errors.Is(err, errdef.ErrNotFound) {
-			return nil, nil, errors.Join(componentrepository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+			return nil, nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
 		}
 		return nil, nil, err
 	}

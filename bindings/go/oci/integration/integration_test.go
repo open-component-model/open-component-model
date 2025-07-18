@@ -48,6 +48,7 @@ import (
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -344,12 +345,10 @@ func Test_Integration_OCIRepository(t *testing.T) {
 				"username": testUsername,
 				"password": password,
 			})
-			ocirepo, ok := repo.(oci.ComponentVersionRepository)
-			r.True(ok, "expected oci.ComponentVersionRepository, got %T", repo)
 			r.NoError(err)
 
 			t.Run("basic upload and download of a component version", func(t *testing.T) {
-				uploadDownloadBarebonesComponentVersion(t, ocirepo, "test-component", "v1.0.0")
+				uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
 			})
 		})
 	})
@@ -408,12 +407,10 @@ func Test_Integration_CTF(t *testing.T) {
 		r.Equal(id[ocmruntime.IdentityAttributePath], fs.String())
 
 		repo, err := repoProvider.GetComponentVersionRepository(t.Context(), repoSpec, nil)
-		ocirepo, ok := repo.(oci.ComponentVersionRepository)
-		r.True(ok, "expected oci.ComponentVersionRepository, got %T", repo)
 		r.NoError(err)
 
 		t.Run("basic upload and download of a component version", func(t *testing.T) {
-			uploadDownloadBarebonesComponentVersion(t, ocirepo, "test-component", "v5.0.0")
+			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v5.0.0")
 		})
 	})
 }
@@ -492,7 +489,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 	r.Len(store.Index.Manifests, 1)
 }
 
-func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, from, to string) {
+func uploadDownloadBarebonesOCIImage(t *testing.T, repo repository.ResourceRepository, from, to string) {
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -615,7 +612,7 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 	r.NotNil(resource.Digest)
 }
 
-func uploadDownloadBarebonesComponentVersion(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {
+func uploadDownloadBarebonesComponentVersion(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -750,7 +747,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 	return buf.Bytes(), access
 }
 
-func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {
+func uploadDownloadLocalResource(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -826,7 +823,7 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 	r.Equal(testData, data.Bytes())
 }
 
-func uploadDownloadLocalSource(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {
+func uploadDownloadLocalSource(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
 	ctx := t.Context()
 	r := require.New(t)
 
