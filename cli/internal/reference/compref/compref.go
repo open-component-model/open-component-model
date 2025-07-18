@@ -63,7 +63,6 @@ func init() {
 // For valid components, see ComponentRegex.
 // For valid versions, see VersionRegex.
 // For valid digests, see DigestRegex.
-// +k8s:deepcopy-gen=true
 type Ref struct {
 	// Type represents the repository type (e.g., "oci", "ctf")
 	Type string
