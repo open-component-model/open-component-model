@@ -2,9 +2,8 @@ package transformer
 
 import (
 	"archive/tar"
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -40,60 +38,23 @@ func (t *HelmTransformer) TransformBlob(ctx context.Context, input blob.ReadOnly
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OCI layout: %w", err)
 	}
-	defer store.Close()
+	defer func() {
+		err = errors.Join(err, store.Close())
+	}()
 
 	mainArtifacts := store.MainArtifacts(ctx)
-	if len(mainArtifacts) == 0 {
-		return nil, fmt.Errorf("no main artifacts found in OCI layout")
+	if len(mainArtifacts) != 1 {
+		return nil, fmt.Errorf("should have exactly one main artifact but was %d", len(mainArtifacts))
 	}
 
-	// TODO: This will be configurable.
 	artifact := mainArtifacts[0]
 
-	extractedBlob, err := t.extractHelmChart(ctx, store, artifact)
+	extractedBlob, err := extractOCIArtifact(ctx, store, artifact, t.processHelmLayer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract Helm chart: %w", err)
 	}
 
 	return extractedBlob, nil
-}
-
-// extractHelmChart extracts Helm chart layers from an OCI artifact.
-func (t *HelmTransformer) extractHelmChart(ctx context.Context, store content.Fetcher, artifact ociImageSpecV1.Descriptor) (blob.ReadOnlyBlob, error) {
-	manifestReader, err := store.Fetch(ctx, artifact)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch artifact manifest: %w", err)
-	}
-	defer manifestReader.Close()
-
-	manifestData, err := io.ReadAll(manifestReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest data: %w", err)
-	}
-
-	var manifest ociImageSpecV1.Manifest
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
-	}
-
-	var tarBuffer bytes.Buffer
-	tarWriter := tar.NewWriter(&tarBuffer)
-
-	for _, layer := range manifest.Layers {
-		if err := t.processHelmLayer(ctx, store, layer, tarWriter); err != nil {
-			tarWriter.Close()
-			return nil, fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
-		}
-	}
-
-	if err := tarWriter.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close TAR writer: %w", err)
-	}
-
-	resultBlob := inmemory.New(bytes.NewReader(tarBuffer.Bytes()))
-	resultBlob.SetMediaType("application/tar")
-
-	return resultBlob, nil
 }
 
 // processHelmLayer processes a single layer from the Helm OCI manifest.
@@ -102,7 +63,9 @@ func (t *HelmTransformer) processHelmLayer(ctx context.Context, store content.Fe
 	if err != nil {
 		return fmt.Errorf("failed to fetch layer: %w", err)
 	}
-	defer layerReader.Close()
+	defer func() {
+		err = errors.Join(err, layerReader.Close())
+	}()
 
 	filename := t.getHelmFilename(layer.MediaType)
 

@@ -2,9 +2,7 @@ package transformer
 
 import (
 	"archive/tar"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +12,6 @@ import (
 	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -30,22 +27,23 @@ func NewOCIArtifactTransformer() *OCIArtifactTransformer {
 
 // TransformBlob transforms an OCI Layout blob by extracting its main artifacts.
 // This provides generic OCI artifact extraction for any media type.
-func (t *OCIArtifactTransformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, _ runtime.Typed) (blob.ReadOnlyBlob, error) {
+func (t *OCIArtifactTransformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, _ runtime.Typed) (_ blob.ReadOnlyBlob, err error) {
 	store, err := ocitar.ReadOCILayout(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OCI layout: %w", err)
 	}
-	defer store.Close()
+	defer func() {
+		err = errors.Join(err, store.Close())
+	}()
 
 	mainArtifacts := store.MainArtifacts(ctx)
-	if len(mainArtifacts) == 0 {
-		return nil, errors.New("no main artifacts found in OCI layout")
+	if len(mainArtifacts) != 1 {
+		return nil, fmt.Errorf("should have exactly one main artifact but was %d", len(mainArtifacts))
 	}
 
-	// TODO: This would be selected through the config?
 	artifact := mainArtifacts[0]
 
-	extractedBlob, err := t.extractArtifactLayers(ctx, store, artifact)
+	extractedBlob, err := extractOCIArtifact(ctx, store, artifact, t.processLayer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract artifact layers: %w", err)
 	}
@@ -53,52 +51,15 @@ func (t *OCIArtifactTransformer) TransformBlob(ctx context.Context, input blob.R
 	return extractedBlob, nil
 }
 
-// extractArtifactLayers extracts layers from an OCI artifact and returns them as a TAR blob.
-func (t *OCIArtifactTransformer) extractArtifactLayers(ctx context.Context, store content.Fetcher, artifact ociImageSpecV1.Descriptor) (blob.ReadOnlyBlob, error) {
-	manifestReader, err := store.Fetch(ctx, artifact)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch artifact manifest: %w", err)
-	}
-	defer manifestReader.Close()
-
-	manifestData, err := io.ReadAll(manifestReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest data: %w", err)
-	}
-
-	var manifest ociImageSpecV1.Manifest
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
-	}
-
-	var tarBuffer bytes.Buffer
-	tarWriter := tar.NewWriter(&tarBuffer)
-
-	for _, layer := range manifest.Layers {
-		if err := t.processLayer(ctx, store, layer, tarWriter); err != nil {
-			tarWriter.Close()
-			return nil, fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
-		}
-	}
-
-	if err := tarWriter.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close TAR writer: %w", err)
-	}
-
-	// create the right tar and the MediaType
-	resultBlob := inmemory.New(bytes.NewReader(tarBuffer.Bytes()))
-	resultBlob.SetMediaType("application/tar")
-
-	return resultBlob, nil
-}
-
 // processLayer processes a single layer from the OCI manifest.
-func (t *OCIArtifactTransformer) processLayer(ctx context.Context, store content.Fetcher, layer ociImageSpecV1.Descriptor, tarWriter *tar.Writer) error {
+func (t *OCIArtifactTransformer) processLayer(ctx context.Context, store content.Fetcher, layer ociImageSpecV1.Descriptor, tarWriter *tar.Writer) (err error) {
 	layerReader, err := store.Fetch(ctx, layer)
 	if err != nil {
 		return fmt.Errorf("failed to fetch layer: %w", err)
 	}
-	defer layerReader.Close()
+	defer func() {
+		err = errors.Join(err, layerReader.Close())
+	}()
 
 	filename := t.getFilenameForMediaType(layer.MediaType)
 	header := &tar.Header{
