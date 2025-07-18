@@ -1,4 +1,4 @@
-module ocm.software/open-component-model/bindings/go/repositories
+module ocm.software/open-component-model/bindings/go/repository
 
 go 1.24.2
 

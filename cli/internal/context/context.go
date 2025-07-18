@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/configuration/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -46,6 +47,11 @@ type Context struct {
 	// Once resolved they are passed to the corresponding plugin call.
 	// Usually plugins can return correct consumer identities based on respective endpoints.
 	credentialGraph *credentials.Graph
+
+	// filesystemConfig is the central filesystem configuration for OCM.
+	// It defines filesystem-related settings like temporary folder locations
+	// that can be used by plugins and other components.
+	filesystemConfig *v1alpha1.Config
 }
 
 // WithCredentialGraph creates a new context with the given credential graph.
@@ -56,6 +62,17 @@ func WithCredentialGraph(ctx context.Context, graph *credentials.Graph) context.
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
 	ocmctx.credentialGraph = graph
+	return ctx
+}
+
+// WithFilesystemConfig creates a new context with the given filesystem configuration.
+// After this function is called, the filesystem configuration can be retrieved from the context
+// using [FromContext] and [Context.FilesystemConfig].
+func WithFilesystemConfig(ctx context.Context, cfg *v1alpha1.Config) context.Context {
+	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
+	ocmctx.mu.Lock()
+	defer ocmctx.mu.Unlock()
+	ocmctx.filesystemConfig = cfg
 	return ctx
 }
 
@@ -117,6 +134,15 @@ func (ctx *Context) Configuration() *v1.Config {
 	ctx.mu.RLock()
 	defer ctx.mu.RUnlock()
 	return ctx.configuration
+}
+
+func (ctx *Context) FilesystemConfig() *v1alpha1.Config {
+	if ctx == nil {
+		return nil
+	}
+	ctx.mu.RLock()
+	defer ctx.mu.RUnlock()
+	return ctx.filesystemConfig
 }
 
 // FromContext retrieves the OCM context from the given context.

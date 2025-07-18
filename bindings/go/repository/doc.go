@@ -1,4 +1,4 @@
-// Package repositories provides an abstraction layer for working
+// Package repository provides an abstraction layer for working
 // with different OCM (Open Component Model) repository technologies.
 //
 // By programming against these technology-agnostic repository interfaces,
@@ -19,4 +19,4 @@
 // Use this module when you need to work with OCM repositories in a generic way,
 // or when building new repository backends that should be compatible with the
 // OCM tooling and workflows.
-package repositories
+package repository
