@@ -1,11 +1,13 @@
 package transformer
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -33,17 +35,13 @@ func TestIntegrationHelmChartTransformer(t *testing.T) {
 		r.Equal("application/tar", mediaType, "Result should be tar format")
 	}
 
-	// Verify we can read the result
 	reader, err := result.ReadCloser()
 	r.NoError(err, "Should be able to read result")
-	defer reader.Close()
 
-	buffer := make([]byte, 1024)
-	n, err := reader.Read(buffer)
-	r.NoError(err, "Should be able to read data from result")
-	r.Greater(n, 0, "Should read some data")
+	expectedFiles := []string{"chart.prov", "chart.tar.gz"}
+	validateTarContents(t, reader, expectedFiles)
 
-	t.Logf("Successfully transformed Helm chart from local OCI layout, read %d bytes", n)
+	t.Logf("Successfully transformed and validated Helm chart from local OCI layout")
 }
 
 func TestIntegrationOCIArtifactTransformer(t *testing.T) {
@@ -68,18 +66,14 @@ func TestIntegrationOCIArtifactTransformer(t *testing.T) {
 
 	reader, err := result.ReadCloser()
 	r.NoError(err, "Should be able to read result")
-	defer reader.Close()
 
-	// we'll validate here that there is no provenance data and it's a different layout.
-	buffer := make([]byte, 1024)
-	n, err := reader.Read(buffer)
-	r.NoError(err, "Should be able to read data from result")
-	r.Greater(n, 0, "Should read some data")
+	expectedFiles := []string{"layer.tar.gz", "layer.bin"}
+	validateTarContents(t, reader, expectedFiles)
 
-	t.Logf("Successfully transformed OCI artifact from local OCI layout using generic transformer, read %d bytes", n)
+	t.Logf("Successfully transformed and validated OCI artifact from local OCI layout using generic transformer")
 }
 
-// loadOCILayoutBlob loads an OCI layout tar file as a blob
+// loadOCILayoutBlob loads an OCI layout tar file as a blob.
 func loadOCILayoutBlob(ctx context.Context, layoutPath string) (blob.ReadOnlyBlob, error) {
 	layoutData, err := os.ReadFile(layoutPath)
 	if err != nil {
@@ -89,7 +83,7 @@ func loadOCILayoutBlob(ctx context.Context, layoutPath string) (blob.ReadOnlyBlo
 	return &testBlob{data: layoutData}, nil
 }
 
-// testBlob is a simple implementation of blob.ReadOnlyBlob for testing
+// testBlob is a simple implementation of blob.ReadOnlyBlob for testing.
 type testBlob struct {
 	data []byte
 }
@@ -100,4 +94,39 @@ func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
 
 func (b *testBlob) Size() int64 {
 	return int64(len(b.data))
+}
+
+// validateTarContents untars the downloaded oci artifact and verifies that certain files are present at given locations.
+func validateTarContents(t *testing.T, reader io.ReadCloser, expectedFiles []string) {
+	defer reader.Close()
+
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err, "Should be able to read all data from tar")
+
+	tarReader := tar.NewReader(bytes.NewReader(data))
+	foundFiles := make(map[string]bool)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err, "Should be able to read tar header")
+
+		filename := header.Name
+		if strings.Contains(filename, "/") {
+			parts := strings.Split(filename, "/")
+			filename = parts[len(parts)-1]
+		}
+
+		if filename != "" {
+			foundFiles[filename] = true
+			t.Logf("Found file in tar: %s (original path: %s)", filename, header.Name)
+		}
+	}
+
+	for _, expectedFile := range expectedFiles {
+		require.True(t, foundFiles[expectedFile], "Expected file %s should be present in tar", expectedFile)
+	}
+
+	t.Logf("Successfully validated tar contains all expected files: %v", expectedFiles)
 }
