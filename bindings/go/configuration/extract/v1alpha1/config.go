@@ -3,7 +3,6 @@ package v1alpha1
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
@@ -11,8 +10,8 @@ import (
 )
 
 const (
-	// ConfigType defines the type identifier for filesystem configurations
-	ConfigType = "filesystem.config.ocm.software"
+	// ConfigType defines the type identifier for transformation configurations
+	ConfigType = "extract.oci.artifact.ocm.software"
 )
 
 var scheme = runtime.NewScheme()
@@ -21,7 +20,7 @@ func init() {
 	scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, Version))
 }
 
-// Config represents the top-level configuration for the filesystem.
+// Config represents the top-level configuration for the transformation.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -45,7 +44,7 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	return json.Unmarshal(b, &v)
 }
 
-// LookupConfig creates a new filesystem configuration from a central config.
+// LookupConfig creates a new extract configuration from a central V1 config.
 func LookupConfig(cfg *v1.Config) (*Config, error) {
 	var merged *Config
 	if cfg != nil {
@@ -74,9 +73,7 @@ func LookupConfig(cfg *v1.Config) (*Config, error) {
 		merged = new(Config)
 	}
 
-	if len(merged.TempFolder) == 0 {
-		merged.TempFolder = os.TempDir()
-	}
+	// Update later with values to configure.
 
 	return merged, nil
 }
@@ -89,12 +86,6 @@ func Merge(configs ...*Config) *Config {
 
 	merged := new(Config)
 	_, _ = scheme.DefaultType(merged)
-
-	for _, config := range configs {
-		if config.TempFolder != merged.TempFolder {
-			merged.TempFolder = config.TempFolder
-		}
-	}
 
 	return merged
 }
