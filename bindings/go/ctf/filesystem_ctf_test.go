@@ -232,6 +232,31 @@ func Test_FileSystemCTF_IndexOperations(t *testing.T) {
 	r.Equal("test-repo", artifact.Repository)
 	r.Equal("latest", artifact.Tag)
 	r.Equal(digest, artifact.Digest)
+
+	idx.AddArtifact(v1.ArtifactMetadata{
+		Repository: "test-repo2",
+		Tag:        "latest",
+		Digest:     digest,
+		MediaType:  "application/json",
+	})
+	err = fs.SetIndex(ctx, idx)
+	r.NoError(err)
+
+	// Verify index was saved correctly
+	savedIdx, err = fs.GetIndex(ctx)
+	r.NoError(err)
+	r.Len(savedIdx.GetArtifacts(), 2)
+	artifact = savedIdx.GetArtifacts()[1]
+	r.Equal("test-repo2", artifact.Repository)
+	r.Equal("latest", artifact.Tag)
+	r.Equal(digest, artifact.Digest)
+
+	// make sure smaller index is saved correctly
+	r.NoError(fs.SetIndex(ctx, v1.NewIndex()))
+	// Verify index was saved correctly
+	savedIdx, err = fs.GetIndex(ctx)
+	r.NoError(err)
+	r.Len(savedIdx.GetArtifacts(), 0)
 }
 
 func Test_FileSystemCTF_FileSystemOperations(t *testing.T) {
