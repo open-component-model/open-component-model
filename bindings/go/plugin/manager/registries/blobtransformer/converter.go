@@ -19,7 +19,7 @@ type converter struct {
 	scheme         *runtime.Scheme
 }
 
-func (c *converter) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, spec runtime.Typed, credentials map[string]string) (blob.ReadOnlyBlob, error) {
+func (c *converter) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, spec runtime.Typed, credentials map[string]string) (_ blob.ReadOnlyBlob, err error) {
 	tmp, err := os.CreateTemp("", "blob")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
