@@ -97,7 +97,7 @@ func GetOCMConfig(additional ...string) (*v1.Config, error) {
 // Returns:
 //   - *v1.Config: The decoded configuration struct.
 //   - error: An error if the file cannot be opened or decoded.
-func GetConfigFromPath(path string) (*v1.Config, error) {
+func GetConfigFromPath(path string) (_ *v1.Config, err error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err

@@ -540,7 +540,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 	return src, nil
 }
 
-func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob) (ociImageSpecV1.Descriptor, *accessv1.OCIImage, error) {
+func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
 	var access accessv1.OCIImage
 	if err := repo.scheme.Convert(newAccess, &access); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("error converting resource target to OCI image: %w", err)
