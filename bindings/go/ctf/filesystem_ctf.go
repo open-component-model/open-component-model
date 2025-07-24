@@ -147,7 +147,10 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err e
 	}
 
 	var file fs.File
-	if file, err = c.ofFS.OpenFile(name, os.O_CREATE|os.O_WRONLY, 0o644); err != nil {
+	// If the file does not exist, we create it.
+	// If it exists, we truncate it to make sure that size is correct
+	// and we can write the new data to it.
+	if file, err = c.ofFS.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644); err != nil {
 		return fmt.Errorf("unable to open artifact index: %w", err)
 	}
 	defer func() {
