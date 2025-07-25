@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
@@ -27,15 +27,15 @@ func setupFilesystemConfig(cmd *cobra.Command) {
 
 	ocmCtx := ocmctx.FromContext(cmd.Context())
 	cfg := ocmCtx.Configuration()
-	var fsCfg *v1alpha1.Config
+	var fsCfg *filesystemv1alpha1.Config
 	if cfg == nil {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize filesystem config")
-		fsCfg = &v1alpha1.Config{}
+		fsCfg = &filesystemv1alpha1.Config{}
 	} else {
-		fsCfg, err = v1alpha1.LookupConfig(cfg)
+		fsCfg, err = filesystemv1alpha1.LookupConfig(cfg)
 		if err != nil {
 			slog.DebugContext(cmd.Context(), "could not get filesystem configuration", slog.String("error", err.Error()))
-			fsCfg = &v1alpha1.Config{}
+			fsCfg = &filesystemv1alpha1.Config{}
 		}
 	}
 
@@ -62,17 +62,17 @@ func setupFilesystemConfig(cmd *cobra.Command) {
 
 // hasFilesystemConfig checks if the central configuration already contains filesystem configuration
 // It uses the Config Filter function to handle versioned configurations properly
-func hasFilesystemConfig(cfg *v1.Config) bool {
+func hasFilesystemConfig(cfg *genericv1.Config) bool {
 	if cfg == nil {
 		return false
 	}
 
 	// Use the Config Filter function to find filesystem configurations
 	// This handles both versioned and unversioned configurations
-	filtered, err := v1.Filter(cfg, &v1.FilterOptions{
+	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
 		ConfigTypes: []runtime.Type{
-			runtime.NewVersionedType(v1alpha1.ConfigType, v1alpha1.Version),
-			runtime.NewUnversionedType(v1alpha1.ConfigType),
+			runtime.NewVersionedType(filesystemv1alpha1.ConfigType, filesystemv1alpha1.Version),
+			runtime.NewUnversionedType(filesystemv1alpha1.ConfigType),
 		},
 	})
 	if err != nil {
@@ -83,7 +83,7 @@ func hasFilesystemConfig(cfg *v1.Config) bool {
 }
 
 // addFilesystemConfigToCentralConfig adds the filesystem configuration to the central configuration
-func addFilesystemConfigToCentralConfig(cmd *cobra.Command, fsCfg *v1alpha1.Config) error {
+func addFilesystemConfigToCentralConfig(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config) error {
 	ocmCtx := ocmctx.FromContext(cmd.Context())
 	cfg := ocmCtx.Configuration()
 	if cfg == nil {
@@ -91,7 +91,7 @@ func addFilesystemConfigToCentralConfig(cmd *cobra.Command, fsCfg *v1alpha1.Conf
 	}
 
 	raw := &runtime.Raw{}
-	if err := v1.Scheme.Convert(fsCfg, raw); err != nil {
+	if err := genericv1.Scheme.Convert(fsCfg, raw); err != nil {
 		return fmt.Errorf("failed to convert filesystem config to raw: %w", err)
 	}
 	cfg.Configurations = append(cfg.Configurations, raw)

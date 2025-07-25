@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 )
 
 // OCM Configuration file and directory constants
@@ -41,15 +41,15 @@ By default (without specifying custom locations with this flag), the file will b
 Using the option, this configuration file be used instead of the lookup above.`)
 }
 
-func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*v1.Config, error) {
+func GetFlattenedOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 	cfg, err := GetOCMConfigForCommand(cmd)
 	if err != nil {
 		return nil, err
 	}
-	return v1.FlatMap(cfg), nil
+	return genericv1.FlatMap(cfg), nil
 }
 
-func GetOCMConfigForCommand(cmd *cobra.Command) (*v1.Config, error) {
+func GetOCMConfigForCommand(cmd *cobra.Command) (*genericv1.Config, error) {
 	path, _ := cmd.Flags().GetString(OCMConfigCommandArgument)
 	if path != "" {
 		return GetConfigFromPath(path)
@@ -67,13 +67,13 @@ func GetOCMConfigForCommand(cmd *cobra.Command) (*v1.Config, error) {
 // Returns:
 //   - *v1.Config: The parsed configuration file.
 //   - error: An error if no valid configuration file is found or if decoding fails.
-func GetOCMConfig(additional ...string) (*v1.Config, error) {
+func GetOCMConfig(additional ...string) (*genericv1.Config, error) {
 	paths, err := GetOCMConfigPaths()
 	paths = append(paths, additional...)
 	if err != nil && len(additional) == 0 {
 		return nil, err
 	}
-	cfgs := make([]*v1.Config, 0, len(paths))
+	cfgs := make([]*genericv1.Config, 0, len(paths))
 	for _, path := range paths {
 		cfg, err := GetConfigFromPath(path)
 		if err != nil {
@@ -86,7 +86,7 @@ func GetOCMConfig(additional ...string) (*v1.Config, error) {
 		slog.Debug("ocm config was loaded successfully", slog.String("path", path))
 		cfgs = append(cfgs, cfg)
 	}
-	return v1.FlatMap(cfgs...), nil
+	return genericv1.FlatMap(cfgs...), nil
 }
 
 // GetConfigFromPath reads and decodes the YAML configuration file from the specified path.
@@ -97,7 +97,7 @@ func GetOCMConfig(additional ...string) (*v1.Config, error) {
 // Returns:
 //   - *v1.Config: The decoded configuration struct.
 //   - error: An error if the file cannot be opened or decoded.
-func GetConfigFromPath(path string) (_ *v1.Config, err error) {
+func GetConfigFromPath(path string) (_ *genericv1.Config, err error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -106,8 +106,8 @@ func GetConfigFromPath(path string) (_ *v1.Config, err error) {
 		err = errors.Join(err, file.Close())
 	}()
 
-	var instance v1.Config
-	if err := v1.Scheme.Decode(file, &instance); err != nil {
+	var instance genericv1.Config
+	if err := genericv1.Scheme.Decode(file, &instance); err != nil {
 		return nil, err
 	}
 	return &instance, nil

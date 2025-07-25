@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/configuration/v1"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
@@ -30,7 +30,7 @@ type Context struct {
 	// It can be used to initialize other components and is always guaranteed to be
 	// available first.
 	// In case the config is not set, default values should be used.
-	configuration *v1.Config
+	configuration *genericv1.Config
 
 	// pluginManager is the central integration point into the OCM plugin system.
 	// Any command that should be extendable by typed plugins should interact
@@ -51,7 +51,7 @@ type Context struct {
 	// filesystemConfig is the central filesystem configuration for OCM.
 	// It defines filesystem-related settings like temporary folder locations
 	// that can be used by plugins and other components.
-	filesystemConfig *v1alpha1.Config
+	filesystemConfig *filesystemv1alpha1.Config
 }
 
 // WithCredentialGraph creates a new context with the given credential graph.
@@ -68,7 +68,7 @@ func WithCredentialGraph(ctx context.Context, graph *credentials.Graph) context.
 // WithFilesystemConfig creates a new context with the given filesystem configuration.
 // After this function is called, the filesystem configuration can be retrieved from the context
 // using [FromContext] and [Context.FilesystemConfig].
-func WithFilesystemConfig(ctx context.Context, cfg *v1alpha1.Config) context.Context {
+func WithFilesystemConfig(ctx context.Context, cfg *filesystemv1alpha1.Config) context.Context {
 	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
@@ -90,7 +90,7 @@ func WithPluginManager(ctx context.Context, pm *manager.PluginManager) context.C
 // WithConfiguration creates a new context with the given configuration.
 // After this function is called, the configuration can be retrieved from the context
 // using [FromContext] and [Context.Configuration].
-func WithConfiguration(ctx context.Context, cfg *v1.Config) context.Context {
+func WithConfiguration(ctx context.Context, cfg *genericv1.Config) context.Context {
 	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
@@ -127,7 +127,7 @@ func (ctx *Context) CredentialGraph() *credentials.Graph {
 	return ctx.credentialGraph
 }
 
-func (ctx *Context) Configuration() *v1.Config {
+func (ctx *Context) Configuration() *genericv1.Config {
 	if ctx == nil {
 		return nil
 	}
@@ -136,7 +136,7 @@ func (ctx *Context) Configuration() *v1.Config {
 	return ctx.configuration
 }
 
-func (ctx *Context) FilesystemConfig() *v1alpha1.Config {
+func (ctx *Context) FilesystemConfig() *filesystemv1alpha1.Config {
 	if ctx == nil {
 		return nil
 	}

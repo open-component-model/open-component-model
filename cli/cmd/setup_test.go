@@ -10,18 +10,18 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/configuration/v1"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
 func init() {
-	v1.Scheme.MustRegisterWithAlias(&v1alpha1.Config{}, runtime.NewVersionedType(v1alpha1.ConfigType, v1alpha1.Version))
+	genericv1.Scheme.MustRegisterWithAlias(&filesystemv1alpha1.Config{}, runtime.NewVersionedType(filesystemv1alpha1.ConfigType, filesystemv1alpha1.Version))
 }
 
 // createConfigWithFilesystemConfig creates a v1.Config with filesystem configuration from JSON
-func createConfigWithFilesystemConfig(tempFolder string) *v1.Config {
+func createConfigWithFilesystemConfig(tempFolder string) *genericv1.Config {
 	configJSON := `{
 		"configurations": [
 			{
@@ -31,7 +31,7 @@ func createConfigWithFilesystemConfig(tempFolder string) *v1.Config {
 		]
 	}`
 
-	config := &v1.Config{}
+	config := &genericv1.Config{}
 	if err := json.Unmarshal([]byte(configJSON), config); err != nil {
 		panic(err)
 	}
@@ -42,7 +42,7 @@ func TestSetupFilesystemConfig(t *testing.T) {
 	tests := []struct {
 		name                string
 		cliFlag             string
-		existingConfig      *v1.Config
+		existingConfig      *genericv1.Config
 		expectedTempFolder  string
 		expectedConfigMerge bool
 	}{
@@ -56,7 +56,7 @@ func TestSetupFilesystemConfig(t *testing.T) {
 		{
 			name:                "CLI flag with empty central config",
 			cliFlag:             "/tmp/custom",
-			existingConfig:      &v1.Config{},
+			existingConfig:      &genericv1.Config{},
 			expectedTempFolder:  "/tmp/custom",
 			expectedConfigMerge: false, // Config merge fails due to scheme registration issue
 		},
@@ -77,7 +77,7 @@ func TestSetupFilesystemConfig(t *testing.T) {
 		{
 			name:                "No CLI flag and no existing config",
 			cliFlag:             "",
-			existingConfig:      &v1.Config{},
+			existingConfig:      &genericv1.Config{},
 			expectedTempFolder:  os.TempDir(), // filesystem config defaults to os.TempDir()
 			expectedConfigMerge: false,
 		},
@@ -130,10 +130,10 @@ func TestSetupFilesystemConfig(t *testing.T) {
 				// Verify the filesystem config was added correctly
 				found := false
 				for _, cfg := range centralCfg.Configurations {
-					if cfg.Type.Name == v1alpha1.ConfigType {
+					if cfg.Type.Name == filesystemv1alpha1.ConfigType {
 						found = true
-						fsConfig := &v1alpha1.Config{}
-						err := v1.Scheme.Convert(cfg, fsConfig)
+						fsConfig := &filesystemv1alpha1.Config{}
+						err := genericv1.Scheme.Convert(cfg, fsConfig)
 						r.NoError(err, "should convert to filesystem config")
 						r.Equal(tt.expectedTempFolder, fsConfig.TempFolder, "merged config should have correct temp folder")
 						break
@@ -148,7 +148,7 @@ func TestSetupFilesystemConfig(t *testing.T) {
 func TestHasFilesystemConfig(t *testing.T) {
 	tests := []struct {
 		name     string
-		config   *v1.Config
+		config   *genericv1.Config
 		expected bool
 	}{
 		{
@@ -158,7 +158,7 @@ func TestHasFilesystemConfig(t *testing.T) {
 		},
 		{
 			name:     "empty config",
-			config:   &v1.Config{},
+			config:   &genericv1.Config{},
 			expected: false,
 		},
 		{
@@ -168,7 +168,7 @@ func TestHasFilesystemConfig(t *testing.T) {
 		},
 		{
 			name: "config with other types",
-			config: func() *v1.Config {
+			config: func() *genericv1.Config {
 				configJSON := `{
 					"configurations": [
 						{
@@ -176,7 +176,7 @@ func TestHasFilesystemConfig(t *testing.T) {
 						}
 					]
 				}`
-				config := &v1.Config{}
+				config := &genericv1.Config{}
 				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
 					panic(err)
 				}
@@ -186,7 +186,7 @@ func TestHasFilesystemConfig(t *testing.T) {
 		},
 		{
 			name: "config with mixed types including filesystem",
-			config: func() *v1.Config {
+			config: func() *genericv1.Config {
 				configJSON := `{
 					"configurations": [
 						{
@@ -198,7 +198,7 @@ func TestHasFilesystemConfig(t *testing.T) {
 						}
 					]
 				}`
-				config := &v1.Config{}
+				config := &genericv1.Config{}
 				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
 					panic(err)
 				}
@@ -208,7 +208,7 @@ func TestHasFilesystemConfig(t *testing.T) {
 		},
 		{
 			name: "config with unversioned filesystem config",
-			config: func() *v1.Config {
+			config: func() *genericv1.Config {
 				configJSON := `{
 					"configurations": [
 						{
@@ -217,7 +217,7 @@ func TestHasFilesystemConfig(t *testing.T) {
 						}
 					]
 				}`
-				config := &v1.Config{}
+				config := &genericv1.Config{}
 				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
 					panic(err)
 				}
@@ -238,15 +238,15 @@ func TestHasFilesystemConfig(t *testing.T) {
 func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 	tests := []struct {
 		name          string
-		initialConfig *v1.Config
-		fsCfg         *v1alpha1.Config
+		initialConfig *genericv1.Config
+		fsCfg         *filesystemv1alpha1.Config
 		expectedError bool
 		expectedCount int
 	}{
 		{
 			name:          "add to empty config",
-			initialConfig: &v1.Config{},
-			fsCfg: &v1alpha1.Config{
+			initialConfig: &genericv1.Config{},
+			fsCfg: &filesystemv1alpha1.Config{
 				TempFolder: "/tmp/test",
 			},
 			expectedError: false,
@@ -254,7 +254,7 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 		},
 		{
 			name: "add to existing config",
-			initialConfig: func() *v1.Config {
+			initialConfig: func() *genericv1.Config {
 				configJSON := `{
 					"configurations": [
 						{
@@ -262,13 +262,13 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 						}
 					]
 				}`
-				config := &v1.Config{}
+				config := &genericv1.Config{}
 				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
 					panic(err)
 				}
 				return config
 			}(),
-			fsCfg: &v1alpha1.Config{
+			fsCfg: &filesystemv1alpha1.Config{
 				TempFolder: "/tmp/test",
 			},
 			expectedError: false,
@@ -277,7 +277,7 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 		{
 			name:          "nil central config",
 			initialConfig: nil,
-			fsCfg: &v1alpha1.Config{
+			fsCfg: &filesystemv1alpha1.Config{
 				TempFolder: "/tmp/test",
 			},
 			expectedError: true,
@@ -319,10 +319,10 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 			// Verify the filesystem config was added correctly
 			found := false
 			for _, cfg := range centralCfg.Configurations {
-				if cfg.Type.Name == v1alpha1.ConfigType {
+				if cfg.Type.Name == filesystemv1alpha1.ConfigType {
 					found = true
-					fsConfig := &v1alpha1.Config{}
-					err := v1.Scheme.Convert(cfg, fsConfig)
+					fsConfig := &filesystemv1alpha1.Config{}
+					err := genericv1.Scheme.Convert(cfg, fsConfig)
 					r.NoError(err, "should convert to filesystem config")
 					r.Equal(tt.fsCfg.TempFolder, fsConfig.TempFolder, "should have correct temp folder")
 					break

@@ -3,7 +3,7 @@ package plugin
 import (
 	"errors"
 
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -19,7 +19,7 @@ func Register(
 	compverRegistry *componentversionrepository.RepositoryRegistry,
 	resRegistry *resource.ResourceRegistry,
 	digRegistry *digestprocessor.RepositoryRegistry,
-	filesystemConfig *v1alpha1.Config,
+	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
