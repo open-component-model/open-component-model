@@ -24,6 +24,14 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm) (blob.ReadOnlyBlob, er
 		return nil, fmt.Errorf("invalid helm input spec: %w", err)
 	}
 
+	// TODO:
+	// - Walk the dir
+	// - Check if the content is really a helm chart?
+	// - Tar the contents
+	// - Create a provenance file
+	// - Pack the tar and the .prov file in an OCI layout as per https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
+	// - Return the result as a ReadOnlyBlob
+
 	return nil, nil
 }
 
