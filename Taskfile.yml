@@ -21,6 +21,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/input/file/Taskfile.yml
     dir: ./bindings/go/input/file
+  bindings/go/input/helm:
+    optional: true
+    taskfile: ./bindings/go/input/helm/Taskfile.yml
+    dir: ./bindings/go/input/helm
   bindings/go/input/utf8:
     optional: true
     taskfile: ./bindings/go/input/utf8/Taskfile.yml
