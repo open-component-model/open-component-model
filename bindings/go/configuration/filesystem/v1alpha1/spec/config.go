@@ -1,4 +1,4 @@
-package v1alpha1
+package spec
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -27,7 +27,7 @@ func init() {
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 type Config struct {
-	Type runtime.Type `json:"-"`
+	Type runtime.Type `json:"type"`
 	// TempFolder defines places where plugins and other functionalities can put ephemeral files under.
 	// If not defined, os.TempDir is used as a default.
 	TempFolder string `json:"tempFolder,omitempty"`
@@ -46,10 +46,10 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 // LookupConfig creates a new filesystem configuration from a central V1 config.
-func LookupConfig(cfg *v1.Config) (*Config, error) {
+func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 	var merged *Config
 	if cfg != nil {
-		cfg, err := v1.Filter(cfg, &v1.FilterOptions{
+		cfg, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
 			ConfigTypes: []runtime.Type{
 				runtime.NewVersionedType(ConfigType, Version),
 				runtime.NewUnversionedType(ConfigType),

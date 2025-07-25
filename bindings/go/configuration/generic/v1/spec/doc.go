@@ -1,4 +1,4 @@
-// Package v1 supports finding, loading and parsing OCM configuration files.
+// Package spec supports finding, loading and parsing OCM configuration files.
 //
 // The file format is YAML and follows the same type mechanism used for all
 // typed specifications in the OCM ecosystem. The file must have the type of
@@ -25,4 +25,4 @@
 //				 type: DockerConfig/v1
 //				 dockerConfigFile: "~/.docker/config.json"
 //				 propagateConsumerIdentity: true
-package v1
+package spec
