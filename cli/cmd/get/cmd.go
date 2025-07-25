@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	componentversion "ocm.software/open-component-model/cli/cmd/get/component-version"
+	"ocm.software/open-component-model/cli/cmd/get/resources"
 )
 
 // New represents any command that is related to retrieving ( "get"ting ) objects
@@ -15,6 +16,9 @@ func New() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(componentversion.New())
+	cmd.AddCommand(
+		componentversion.New(),
+		resources.New(),
+	)
 	return cmd
 }

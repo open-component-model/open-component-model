@@ -1,24 +1,38 @@
 ---
-title: ocm get
-description: Get anything from OCM.
+title: ocm get resources
+description: Get resource description(s) from an OCM component version.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm get
+## ocm get resources
 
-Get anything from OCM
+Get resource description(s) from an OCM component version
+
+### Synopsis
+
+Get resource description(s) from an OCM component version.
 
 ```
-ocm get {component-version|component-versions|cv|cvs} [flags]
+ocm get resources {reference} [flags]
+```
+
+### Examples
+
+```
+Getting a single component version:
+
+get resources ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 ```
 
 ### Options
 
 ```
-  -h, --help   help for get
+  -h, --help          help for resources
+  -o, --output enum   output format of the resource descriptions
+                      (must be one of [tree treewide]) (default tree)
 ```
 
 ### Options inherited from parent commands
@@ -60,7 +74,5 @@ ocm get {component-version|component-versions|cv|cvs} [flags]
 
 ### SEE ALSO
 
-* [ocm](ocm.md)	 - The official Open Component Model (OCM) CLI
-* [ocm get component-version](ocm_get_component-version.md)	 - Get component version(s) from an OCM repository
-* [ocm get resources](ocm_get_resources.md)	 - Get resource description(s) from an OCM component version
+* [ocm get](ocm_get.md)	 - Get anything from OCM
 
