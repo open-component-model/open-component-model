@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/configuration/v1"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
@@ -15,22 +15,22 @@ import (
 func TestWithFilesystemConfig(t *testing.T) {
 	tests := []struct {
 		name     string
-		config   *v1alpha1.Config
-		expected *v1alpha1.Config
+		config   *filesystemv1alpha1.Config
+		expected *filesystemv1alpha1.Config
 	}{
 		{
 			name: "basic filesystem config",
-			config: &v1alpha1.Config{
+			config: &filesystemv1alpha1.Config{
 				TempFolder: "/tmp/test",
 			},
-			expected: &v1alpha1.Config{
+			expected: &filesystemv1alpha1.Config{
 				TempFolder: "/tmp/test",
 			},
 		},
 		{
 			name:     "empty filesystem config",
-			config:   &v1alpha1.Config{},
-			expected: &v1alpha1.Config{},
+			config:   &filesystemv1alpha1.Config{},
+			expected: &filesystemv1alpha1.Config{},
 		},
 		{
 			name:     "nil filesystem config",
@@ -74,7 +74,7 @@ func TestFilesystemConfigConcurrentAccess(t *testing.T) {
 	r := require.New(t)
 
 	// Create context with filesystem config
-	initialConfig := &v1alpha1.Config{
+	initialConfig := &filesystemv1alpha1.Config{
 		TempFolder: "/tmp/initial",
 	}
 	ctx := WithFilesystemConfig(context.Background(), initialConfig)
@@ -104,7 +104,7 @@ func TestContextWithMultipleConfigurations(t *testing.T) {
 	ctx := context.Background()
 
 	// Add central configuration
-	centralConfig := &v1.Config{}
+	centralConfig := &genericv1.Config{}
 	ctx = WithConfiguration(ctx, centralConfig)
 
 	// Add credential graph
@@ -116,7 +116,7 @@ func TestContextWithMultipleConfigurations(t *testing.T) {
 	ctx = WithPluginManager(ctx, pluginMgr)
 
 	// Add filesystem config
-	fsConfig := &v1alpha1.Config{
+	fsConfig := &filesystemv1alpha1.Config{
 		TempFolder: "/tmp/multi",
 	}
 	ctx = WithFilesystemConfig(ctx, fsConfig)
@@ -138,7 +138,7 @@ func TestContextOverwriteFilesystemConfig(t *testing.T) {
 	r := require.New(t)
 
 	// Create initial context with filesystem config
-	initialConfig := &v1alpha1.Config{
+	initialConfig := &filesystemv1alpha1.Config{
 		TempFolder: "/tmp/initial",
 	}
 	ctx := WithFilesystemConfig(context.Background(), initialConfig)
@@ -149,7 +149,7 @@ func TestContextOverwriteFilesystemConfig(t *testing.T) {
 	r.Equal("/tmp/initial", fsCfg.TempFolder, "initial config should be set")
 
 	// Overwrite with new config
-	newConfig := &v1alpha1.Config{
+	newConfig := &filesystemv1alpha1.Config{
 		TempFolder: "/tmp/overwrite",
 	}
 	ctx = WithFilesystemConfig(ctx, newConfig)
@@ -188,8 +188,8 @@ func TestFilesystemConfigIsolation(t *testing.T) {
 	r := require.New(t)
 
 	// Create two separate contexts with different filesystem configs
-	config1 := &v1alpha1.Config{TempFolder: "/tmp/ctx1"}
-	config2 := &v1alpha1.Config{TempFolder: "/tmp/ctx2"}
+	config1 := &filesystemv1alpha1.Config{TempFolder: "/tmp/ctx1"}
+	config2 := &filesystemv1alpha1.Config{TempFolder: "/tmp/ctx2"}
 
 	ctx1 := WithFilesystemConfig(context.Background(), config1)
 	ctx2 := WithFilesystemConfig(context.Background(), config2)

@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -21,7 +21,7 @@ import (
 )
 
 func TestPluginManager(t *testing.T) {
-	config := &v1.Config{
+	config := &genericv1.Config{
 		Type: runtime.Type{
 			Name:    "custom.config",
 			Version: "v1",
@@ -84,7 +84,7 @@ func TestPluginManager(t *testing.T) {
 }
 
 func TestConfigurationPassedToPlugin(t *testing.T) {
-	config := &v1.Config{
+	config := &genericv1.Config{
 		Type: runtime.Type{
 			Version: "v1",
 			Name:    "generic.config.ocm.software",
@@ -132,7 +132,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 }
 
 func TestConfigurationPassedToPluginNotFound(t *testing.T) {
-	config := &v1.Config{
+	config := &genericv1.Config{
 		Type: runtime.Type{
 			Version: "v1",
 			Name:    "generic.config.ocm.software",
@@ -148,7 +148,7 @@ func TestConfigurationPassedToPluginNotFound(t *testing.T) {
 }
 
 func TestPluginManagerCancelContext(t *testing.T) {
-	config := &v1.Config{
+	config := &genericv1.Config{
 		Type: runtime.Type{
 			Name:    "custom.config",
 			Version: "v1",
@@ -200,7 +200,7 @@ func TestPluginManagerCancelContext(t *testing.T) {
 }
 
 func TestPluginManagerShutdownPlugin(t *testing.T) {
-	config := &v1.Config{
+	config := &genericv1.Config{
 		Type: runtime.Type{
 			Name:    "custom.config",
 			Version: "v1",
@@ -248,7 +248,7 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 }
 
 func TestPluginManagerShutdownWithoutWait(t *testing.T) {
-	config := &v1.Config{
+	config := &genericv1.Config{
 		Type: runtime.Type{
 			Name:    "custom.config",
 			Version: "v1",
@@ -333,7 +333,7 @@ func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
 	}
 	serialized, err := json.Marshal(pluginTypes)
 	require.NoError(t, err)
-	config := &v1.Config{
+	config := &genericv1.Config{
 		Type: runtime.Type{
 			Name:    "custom.config",
 			Version: "v1",

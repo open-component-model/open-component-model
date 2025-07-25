@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 )
@@ -15,12 +15,12 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		filesystemConfig *v1alpha1.Config
+		filesystemConfig *filesystemv1alpha1.Config
 		expectError      bool
 	}{
 		{
 			name: "with filesystem config",
-			filesystemConfig: &v1alpha1.Config{
+			filesystemConfig: &filesystemv1alpha1.Config{
 				TempFolder: "/tmp/test",
 			},
 			expectError: false,

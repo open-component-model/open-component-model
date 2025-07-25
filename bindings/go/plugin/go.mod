@@ -7,12 +7,12 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
-	ocm.software/open-component-model/bindings/go/configuration v0.0.2
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250718123610-c4fc9b2af637
+	ocm.software/open-component-model/bindings/go/configuration v0.0.3
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250725141641-3a57106c5eff
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250718123610-c4fc9b2af637
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250725141641-3a57106c5eff
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250718123610-c4fc9b2af637
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250725141641-3a57106c5eff
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 

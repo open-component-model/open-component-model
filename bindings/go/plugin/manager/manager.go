@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
@@ -64,7 +64,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 
 type RegistrationOptions struct {
 	IdleTimeout time.Duration
-	Config      *v1.Config
+	Config      *genericv1.Config
 }
 
 type RegistrationOptionFn func(*RegistrationOptions)
@@ -77,7 +77,7 @@ func WithIdleTimeout(d time.Duration) RegistrationOptionFn {
 }
 
 // WithConfiguration adds a configuration to the plugin.
-func WithConfiguration(c *v1.Config) RegistrationOptionFn {
+func WithConfiguration(c *genericv1.Config) RegistrationOptionFn {
 	return func(o *RegistrationOptions) {
 		o.Config = c
 	}
@@ -195,7 +195,7 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 	return plugins, nil
 }
 
-func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
+func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
 	// Determine Configuration requirements.
 	types := &mtypes.Types{}
 	if err := json.Unmarshal(capabilitiesCommandOutput.Bytes(), types); err != nil {
@@ -203,7 +203,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *v1.Config, pl
 	}
 
 	if ocmConfig != nil {
-		filtered, _ := v1.Filter(ocmConfig, &v1.FilterOptions{ConfigTypes: types.ConfigTypes})
+		filtered, _ := genericv1.Filter(ocmConfig, &genericv1.FilterOptions{ConfigTypes: types.ConfigTypes})
 		if len(types.ConfigTypes) > 0 && len(filtered.Configurations) == 0 {
 			return fmt.Errorf("no configuration found for plugin %s; requested configuration types: %s", plugin.ID, types.ConfigTypes)
 		}

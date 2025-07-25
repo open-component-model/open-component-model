@@ -3,7 +3,7 @@ package credentials
 import (
 	"fmt"
 
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -16,11 +16,11 @@ func init() {
 }
 
 // LookupCredentialConfiguration creates a new ConfigCredentialProvider from a central V1 config.
-func LookupCredentialConfiguration(cfg *v1.Config) (*credentialsRuntime.Config, error) {
+func LookupCredentialConfiguration(cfg *genericv1.Config) (*credentialsRuntime.Config, error) {
 	if cfg == nil {
 		return &credentialsRuntime.Config{}, nil
 	}
-	cfg, err := v1.Filter(cfg, &v1.FilterOptions{
+	cfg, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
 		ConfigTypes: []runtime.Type{
 			runtime.NewVersionedType(credentialsv1.ConfigType, credentialsv1.Version),
 			runtime.NewUnversionedType(credentialsv1.ConfigType),
