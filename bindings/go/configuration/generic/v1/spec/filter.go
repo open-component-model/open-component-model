@@ -36,7 +36,7 @@ func FilterForType[T runtime.Typed](scheme *runtime.Scheme, config *Config) ([]T
 		return nil, fmt.Errorf("failed to create get type for prototype of type %T: %w", typ, err)
 	}
 
-	types := append(scheme.GetTypes()[typ], typ)
+	types := append(scheme.GetTypes()[typ], typ) //nolint:gocritic // appendAssign to new variable should be safe here
 
 	filtered, err := Filter(config, &FilterOptions{
 		ConfigTypes: types,
