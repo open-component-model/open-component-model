@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/resolver/v1/spec"
+	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
