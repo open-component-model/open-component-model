@@ -63,6 +63,8 @@ ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 h1:daG
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3/go.mod h1:nnLzPfpD2zy9YUgIuQxA3vCmUUKFQqSCl6jFAQXVE8M=
 ocm.software/open-component-model/bindings/go/repository v0.0.0-20250718123610-c4fc9b2af637 h1:gZ3s44quW8U9MfmqMoGhjdXcMTUbR20/5jWSaO3jEh8=
 ocm.software/open-component-model/bindings/go/repository v0.0.0-20250718123610-c4fc9b2af637/go.mod h1:Bk8H6r4pAc/yfz2c0VRpInRGyUWhtwRaJlELyrS4Gz4=
+ocm.software/open-component-model/bindings/go/repository v0.0.0-20250725130018-7a70534411d4 h1:1gsk5gFnqLcASfC42+tK6YnogKk8hUWdo1jbtLZLZSo=
+ocm.software/open-component-model/bindings/go/repository v0.0.0-20250725130018-7a70534411d4/go.mod h1:835i2aJt8JXORJgMoTiWIY+kzHBEMcg2hVSQKVHHGAU=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2 h1:YA20enOxMsk4gDWF+Anltwkc616dXebfgPz/0Bl0EKE=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 sigs.k8s.io/yaml v1.6.0 h1:G8fkbMSAFqgEFgh4b1wmtzDnioxFCUgTZhlbj5P9QYs=
