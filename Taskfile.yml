@@ -131,4 +131,4 @@ tasks:
       - task: 'cli:generate/docs'
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"
-          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/docs/reference/cli'
+          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/cli/docs/reference'
