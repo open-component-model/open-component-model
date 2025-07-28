@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/blob"
+	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
-	resolverruntime "ocm.software/open-component-model/bindings/go/repository/component/resolver/config/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 

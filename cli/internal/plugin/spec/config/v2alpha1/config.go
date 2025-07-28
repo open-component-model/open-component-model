@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	generic "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -66,10 +66,10 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 // LookupConfig creates a new plugin configuration from a central V1 config.
-func LookupConfig(cfg *v1.Config) (*Config, error) {
+func LookupConfig(cfg *generic.Config) (*Config, error) {
 	var merged *Config
 	if cfg != nil {
-		cfg, err := v1.Filter(cfg, &v1.FilterOptions{
+		cfg, err := generic.Filter(cfg, &generic.FilterOptions{
 			ConfigTypes: []runtime.Type{
 				runtime.NewVersionedType(ConfigType, Version),
 				runtime.NewUnversionedType(ConfigType),

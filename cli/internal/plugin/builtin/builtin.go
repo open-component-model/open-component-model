@@ -3,7 +3,7 @@ package builtin
 import (
 	"fmt"
 
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocicredentialplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/credentials/oci"
 	ctfplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/ctf"
@@ -13,7 +13,7 @@ import (
 	ociplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/oci"
 )
 
-func Register(manager *manager.PluginManager, filesystemConfig *v1alpha1.Config) error {
+func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config) error {
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}

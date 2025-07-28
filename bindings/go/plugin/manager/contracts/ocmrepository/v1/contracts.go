@@ -20,6 +20,7 @@ type IdentityProvider[T runtime.Typed] interface {
 type ReadOCMRepositoryPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	IdentityProvider[T]
+	HealthCheckable[T]
 	GetComponentVersion(ctx context.Context, request GetComponentVersionRequest[T], credentials map[string]string) (*descriptor.Descriptor, error)
 	ListComponentVersions(ctx context.Context, request ListComponentVersionsRequest[T], credentials map[string]string) ([]string, error)
 	GetLocalResource(ctx context.Context, request GetLocalResourceRequest[T], credentials map[string]string) (GetLocalResourceResponse, error)
@@ -39,4 +40,10 @@ type WriteOCMRepositoryPluginContract[T runtime.Typed] interface {
 type ReadWriteOCMRepositoryPluginContract[T runtime.Typed] interface {
 	ReadOCMRepositoryPluginContract[T]
 	WriteOCMRepositoryPluginContract[T]
+}
+
+// HealthCheckable is an optional interface that can be implemented by a
+// component version repository.
+type HealthCheckable[T runtime.Typed] interface {
+	CheckHealth(ctx context.Context, request PostCheckHealthRequest[T], credentials map[string]string) error
 }

@@ -28,6 +28,11 @@ func (m *TestPlugin) Ping(_ context.Context) error {
 	return nil
 }
 
+func (m *TestPlugin) CheckHealth(ctx context.Context, request repov1.PostCheckHealthRequest[*dummyv1.Repository], credentials map[string]string) error {
+	// Would construct request.BaseURL and try to ping the repository here.
+	return nil
+}
+
 func (m *TestPlugin) GetComponentVersion(ctx context.Context, request repov1.GetComponentVersionRequest[*dummyv1.Repository], credentials map[string]string) (*descriptor.Descriptor, error) {
 	return &descriptor.Descriptor{
 		Component: descriptor.Component{

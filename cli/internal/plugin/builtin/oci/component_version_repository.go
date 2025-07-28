@@ -8,7 +8,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
@@ -23,7 +23,7 @@ type ComponentVersionRepositoryPlugin struct {
 	contracts.EmptyBasePlugin
 	manifests        cache.OCIDescriptorCache
 	layers           cache.OCIDescriptorCache
-	filesystemConfig *v1alpha1.Config
+	filesystemConfig *filesystemv1alpha1.Config
 }
 
 func (p *ComponentVersionRepositoryPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {

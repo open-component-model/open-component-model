@@ -6,7 +6,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
-	"ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -26,7 +26,7 @@ func createRepository(
 	credentials map[string]string,
 	manifests cache.OCIDescriptorCache,
 	layers cache.OCIDescriptorCache,
-	filesystemConfig *v1alpha1.Config,
+	filesystemConfig *filesystemv1alpha1.Config,
 ) (Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
