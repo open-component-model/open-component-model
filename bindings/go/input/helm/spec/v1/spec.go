@@ -13,7 +13,7 @@ import (
 type Helm struct {
 	Type runtime.Type `json:"type"`
 
-	// Path is the path to the directory.
+	// Path is the path to the directory or tgz file containing the chart.
 	Path string `json:"path"`
 
 	// Repository field property can be used to specify the repository hint for the generated local artifact access.

@@ -28,9 +28,13 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm) (blob.ReadOnlyBlob, er
 	// - Walk the dir
 	// - Check if the content is really a helm chart?
 	// - Tar the contents
-	// - Create a provenance file
+	// - Respect the provenance file sitting next to the chart, if exists
 	// - Pack the tar and the .prov file in an OCI layout as per https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
-	// - Return the result as a ReadOnlyBlob
+	//   - Config layer, chart layer, optionally provenance layer, tagged with helm chart version
+	// - Return the result as a ReadOnlyBlob OR ReadOnlyBlob and an Access (if Repository field is set) --> the latter in a separate PR
+	// - External plug-in (CLI) is a separate PR, helm version should be the suffix of the plug-in version
+
+	// Helm SDK can be used, e.g. for chart validation
 
 	return nil, nil
 }
