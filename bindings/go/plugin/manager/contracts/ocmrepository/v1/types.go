@@ -89,6 +89,11 @@ type PostLocalSourceRequest[T runtime.Typed] struct {
 	Source         *v2.Source     `json:"source"`
 }
 
+type PostCheckHealthRequest[T runtime.Typed] struct {
+	// The Repository Specification where the Component Version should be stored
+	Repository T `json:"repository"`
+}
+
 type GetIdentityRequest[T runtime.Typed] struct {
 	Typ T `json:"type"`
 }

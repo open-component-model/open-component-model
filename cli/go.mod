@@ -4,7 +4,7 @@ go 1.24.3
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/jedib0t/go-pretty/v6 v6.6.7
+	github.com/jedib0t/go-pretty/v6 v6.6.8
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7
 	github.com/stretchr/testify v1.10.0
@@ -12,17 +12,17 @@ require (
 	golang.org/x/sys v0.34.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
 	ocm.software/open-component-model/bindings/go/configuration v0.0.3
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250725141641-3a57106c5eff
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250728075338-376c827fb15f
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250725141641-3a57106c5eff
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250728075338-376c827fb15f
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/input/dir v0.0.0-20250725141641-3a57106c5eff
-	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250725141641-3a57106c5eff
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250725141641-3a57106c5eff
+	ocm.software/open-component-model/bindings/go/input/dir v0.0.0-20250728075338-376c827fb15f
+	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250728075338-376c827fb15f
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250728075338-376c827fb15f
 	ocm.software/open-component-model/bindings/go/oci v0.0.4
-	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250725141641-3a57106c5eff
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250725141641-3a57106c5eff
+	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250728075338-376c827fb15f
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250728075338-376c827fb15f
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
