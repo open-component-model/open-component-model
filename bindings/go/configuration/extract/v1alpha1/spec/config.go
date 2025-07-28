@@ -1,11 +1,9 @@
-package v1alpha1
+package spec
 
 import (
-	"encoding/json"
 	"fmt"
-	"time"
 
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	v1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -20,28 +18,21 @@ func init() {
 	scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, Version))
 }
 
+// Layer has configuration information for layers to process.
+type Layer struct {
+	Index     string `json:"index,omitempty"`
+	MediaType string `json:"mediaType,omitempty"`
+}
+
 // Config represents the top-level configuration for the transformation.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 type Config struct {
-	Type runtime.Type `json:"-"`
-	// TempFolder defines places where plugins and other functionalities can put ephemeral files under.
-	// If not defined, os.TempDir is used as a default.
-	TempFolder string `json:"tempFolder,omitempty"`
-}
-
-type Duration time.Duration
-
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
-}
-
-func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v interface{}
-
-	return json.Unmarshal(b, &v)
+	Type runtime.Type `json:"type"`
+	// Layer defines configuration options on selecting the right Layer.
+	Layer Layer `json:"layer,omitempty"`
 }
 
 // LookupConfig creates a new extract configuration from a central V1 config.
