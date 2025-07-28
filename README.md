@@ -36,11 +36,11 @@ Additionally, OCM provides a generic solution for how to:
 - Transport component versions, per reference or as values to any of the
   repository implementations.
 
-## [OCM CLI](docs/reference/cli/ocm.md)
+## [OCM CLI](cli/docs/reference/ocm.md)
 
 > **Work In Progress**: This OCM CLI is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Commands available. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and [reference the previous implementation here](https://github.com/open-component-model/ocm)
 
-The [`ocm` CLI](docs/reference/cli/ocm.md) may also be used to interact with OCM mechanisms. It makes it easy to create component versions and embed them in build processes.
+The [`ocm` CLI](cli/docs/reference/ocm.md) may also be used to interact with OCM mechanisms. It makes it easy to create component versions and embed them in build processes.
 
 The code for the CLI can be found in [`cli`](cli).
 
