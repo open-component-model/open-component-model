@@ -21,6 +21,10 @@ func (r *TypeToUntypedPlugin[T]) Ping(ctx context.Context) error {
 	return r.base.Ping(ctx)
 }
 
+func (r *TypeToUntypedPlugin[T]) CheckHealth(ctx context.Context, request v1.PostCheckHealthRequest[T], credentials map[string]string) error {
+	return r.base.CheckHealth(ctx, request, credentials)
+}
+
 func (r *TypeToUntypedPlugin[T]) GetLocalResource(ctx context.Context, request v1.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalResourceResponse, error) {
 	return r.base.GetLocalResource(ctx, v1.GetLocalResourceRequest[T]{
 		Repository: request.Repository.(T),

@@ -115,6 +115,10 @@ func (m *mockPlugin) GetIdentity(ctx context.Context, typ *repov1.GetIdentityReq
 	return nil, nil
 }
 
+func (m *mockPlugin) CheckHealth(ctx context.Context, typ repov1.PostCheckHealthRequest[*dummyv1.Repository], credentials map[string]string) error {
+	return nil
+}
+
 var _ repov1.ReadWriteOCMRepositoryPluginContract[*dummyv1.Repository] = &mockPlugin{}
 
 func TestRegisterComponentVersionRepository(t *testing.T) {

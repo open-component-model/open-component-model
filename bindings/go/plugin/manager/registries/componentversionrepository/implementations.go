@@ -35,6 +35,8 @@ const (
 	ListComponentVersions = "/component-versions"
 	// Identity defines the endpoint to retrieve credential consumer identity.
 	Identity = "/identity"
+	// CheckHealth defines the endpoint to check the health of a component version repository.
+	CheckHealth = "/component-version/check-health"
 )
 
 // RepositoryPlugin implements the ReadWriteOCMRepositoryPluginContract for external plugin communication.
@@ -279,6 +281,24 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 	}
 
 	return &identity, nil
+}
+
+func (r *RepositoryPlugin) CheckHealth(ctx context.Context, request v1.PostCheckHealthRequest[runtime.Typed], credentials map[string]string) error {
+	credHeader, err := toCredentials(credentials)
+	if err != nil {
+		return err
+	}
+
+	// We know we only have this single schema for all endpoints which require validation.
+	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+		return err
+	}
+
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, CheckHealth, http.MethodPost, plugins.WithPayload(request), plugins.WithHeader(credHeader)); err != nil {
+		return fmt.Errorf("failed to add component version with plugin %q: %w", r.ID, err)
+	}
+
+	return nil
 }
 
 // validateEndpoint uses the provided JSON schema and the runtime.Typed and, using the JSON schema, validates that the
