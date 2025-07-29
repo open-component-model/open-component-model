@@ -21,7 +21,7 @@ type HelmInputPlugin struct{}
 
 var logger *slog.Logger
 
-func (h *HelmInputPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
+func (h *HelmInputPlugin) GetIdentity(_ context.Context, typ *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
 	logger.Info("GetIdentity called for Helm input", "type", typ.Typ)
 	return nil, nil
 }
@@ -54,7 +54,7 @@ func main() {
 		runtime.NewVersionedType(helmv1.Type, helmv1.Version),
 		runtime.NewUnversionedType(helmv1.Type),
 	)
-	
+
 	capabilities := endpoints.NewEndpoints(scheme)
 
 	if err := input.RegisterInputProcessor(&helmv1.Helm{}, &HelmInputPlugin{}, capabilities); err != nil {
