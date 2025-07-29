@@ -20,7 +20,7 @@ func init() {
 
 // Layer has configuration information for layers to process.
 type Layer struct {
-	Index     string `json:"index,omitempty"`
+	Index     int    `json:"index,omitempty"`
 	MediaType string `json:"mediaType,omitempty"`
 }
 
