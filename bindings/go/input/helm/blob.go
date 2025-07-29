@@ -1,19 +1,43 @@
 package helm
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v3/pkg/registry"
+	"oras.land/oras-go/v2"
+
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	v1 "ocm.software/open-component-model/bindings/go/input/helm/spec/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
 var (
 	ErrEmptyPath        = errors.New("helm input path must not be empty")
 	ErrUnsupportedField = errors.New("unsupported input field must not be used")
 )
+
+// ReadOnlyChart contains Helm chart contents as tgz archive and some metadata, required for packaging into OCI Layout.
+type ReadOnlyChart struct {
+	Name    string
+	Version string
+	Size    int64
+	Digest  digest.Digest
+	Content io.ReadCloser
+}
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
 // It reads the directory from the filesystem and packages it as an OCI artifact.
@@ -24,19 +48,19 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm) (blob.ReadOnlyBlob, er
 		return nil, fmt.Errorf("invalid helm input spec: %w", err)
 	}
 
-	// TODO:
-	// - Walk the dir
-	// - Check if the content is really a helm chart?
-	// - Tar the contents
-	// - Respect the provenance file sitting next to the chart, if exists
-	// - Pack the tar and the .prov file in an OCI layout as per https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
-	//   - Config layer, chart layer, optionally provenance layer, tagged with helm chart version
-	// - Return the result as a ReadOnlyBlob OR ReadOnlyBlob and an Access (if Repository field is set) --> the latter in a separate PR
-	// - External plug-in (CLI) is a separate PR, helm version should be the suffix of the plug-in version
+	chart, err := newReadOnlyChart(helmSpec.Path)
+	if err != nil {
+		return nil, fmt.Errorf("error loading input helm chart %q: %w", helmSpec.Path, err)
+	}
 
-	// Helm SDK can be used, e.g. for chart validation
+	// TODO: check for provenance file, take it along if exists
 
-	return nil, nil
+	b, err := copyChartToOCILayout(ctx, chart)
+	if err != nil {
+		return nil, fmt.Errorf("error copying helm chart to OCI layout: %w", err)
+	}
+
+	return b, nil
 }
 
 func validateInputSpec(helmSpec v1.Helm) error {
@@ -67,4 +91,145 @@ func validateInputSpec(helmSpec v1.Helm) error {
 	}
 
 	return err
+}
+
+func newReadOnlyChart(path string) (result *ReadOnlyChart, err error) {
+	// Load the chart from filesystem, the path can be either a helm chart directory or a tgz file.
+	// While loading the chart is also validated.
+	chart, err := loader.Load(path)
+	if err != nil {
+		return nil, fmt.Errorf("error loading helm chart from path %q: %w", path, err)
+	}
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving file information for %q: %w", path, err)
+	}
+
+	result = &ReadOnlyChart{
+		Name:    chart.Name(),
+		Version: chart.Metadata.Version,
+	}
+
+	// If path is a file, directly return it.
+	if !fi.IsDir() {
+		if file, err := os.Open(path); err == nil {
+			result.Digest, err = digest.FromReader(file)
+			if err != nil {
+				return nil, fmt.Errorf("error calculating digest for file %q: %w", path, err)
+			}
+			result.Size = fi.Size()
+			result.Content = file
+			return result, nil
+		} else {
+			return nil, fmt.Errorf("error opening file %q: %w", path, err)
+		}
+	}
+
+	// If path is a directory, we need to create a tgz archive in a temporary folder.
+	tmpDir, err := os.MkdirTemp("", "chartDirToTgz")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temporary directory")
+	}
+	defer func() {
+		err = os.RemoveAll(tmpDir)
+	}()
+
+	// Save the chart as a tgz archive. If the directory is /foo, and the chart is named bar, with version 1.0.0,
+	// this will generate /foo/bar-1.0.0.tgz
+	tgzFile, err := chartutil.Save(chart, tmpDir)
+	if err != nil {
+		return nil, fmt.Errorf("error saving archived chart to directory %q: %w", tmpDir, err)
+	}
+
+	// Read the entire archive and return the result.
+	data, err := os.ReadFile(tgzFile)
+	if err != nil {
+		return nil, fmt.Errorf("error reading file %q: %w", tgzFile, err)
+	}
+	result.Size = int64(len(data))
+	result.Digest = digest.FromBytes(data)
+	result.Content = io.NopCloser(bytes.NewReader(data))
+
+	return result, nil
+}
+
+// copyChartToOCILayout takes a ReadOnlyChart helper object and creates an OCI layout from it.
+// Three OCI layers are expected: config, tgz contents and optionally a provenance file.
+// The result is tagged with the helm chart version.
+// See also: https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
+func copyChartToOCILayout(ctx context.Context, chart *ReadOnlyChart) (b *inmemory.Blob, err error) {
+	var buf bytes.Buffer
+
+	h := sha256.New()
+	writer := io.MultiWriter(&buf, h)
+
+	zippedBuf := gzip.NewWriter(writer)
+	defer func() {
+		if err != nil {
+			// Clean up resources if there was an error
+			zippedBuf.Close()
+			buf.Reset()
+		}
+	}()
+
+	target := tar.NewOCILayoutWriter(zippedBuf)
+	defer func() {
+		if terr := target.Close(); terr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to close tar writer: %w", terr))
+			return
+		}
+		if zerr := zippedBuf.Close(); zerr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to close gzip writer: %w", zerr))
+			return
+		}
+	}()
+
+	// Create config OCI layer.
+	configContent := fmt.Sprintf(`{"name": "%s", "version": "%s"}`, chart.Name, chart.Version)
+	configDigest := digest.FromString(configContent)
+	configLayer := ociImageSpecV1.Descriptor{
+		MediaType: registry.ConfigMediaType,
+		Digest:    configDigest,
+		Size:      int64(len(configContent)),
+	}
+	if err := target.Push(ctx, configLayer, strings.NewReader(configContent)); err != nil {
+		return nil, fmt.Errorf("failed to push helm chart config layer: %w", err)
+	}
+
+	// Create content OCI layer.
+	chartLayer := ociImageSpecV1.Descriptor{
+		MediaType: registry.ChartLayerMediaType,
+		Digest:    chart.Digest,
+		Size:      chart.Size,
+	}
+	if err = target.Push(ctx, chartLayer, chart.Content); err != nil {
+		return nil, fmt.Errorf("failed to push helm chart content layer: %w", err)
+	}
+
+	// TODO: Create provenance OCI layer.
+	// target.Push(ctx, provenanceLayer, dataFromProvenance)
+
+	// Create OCI image manifest.
+	imgDesc, err := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
+		ConfigDescriptor: &configLayer,
+		Layers:           []ociImageSpecV1.Descriptor{chartLayer}, // TODO: add provenanceLayer.
+	})
+
+	if err := target.Tag(ctx, imgDesc, chart.Version); err != nil {
+		return nil, fmt.Errorf("failed to tag base: %w", err)
+	}
+
+	// Now close prematurely so that the buf is fully filled before we set things like size and digest.
+	if err := errors.Join(target.Close(), zippedBuf.Close(), chart.Content.Close()); err != nil {
+		return nil, fmt.Errorf("failed to close writers: %w", err)
+	}
+
+	b = inmemory.New(&buf,
+		inmemory.WithSize(int64(buf.Len())),
+		inmemory.WithDigest(digest.NewDigest(digest.SHA256, h).String()),
+		inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1),
+	)
+
+	return b, nil
 }
