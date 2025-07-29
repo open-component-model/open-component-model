@@ -49,8 +49,8 @@ ocm.software/open-component-model/bindings/go/blob v0.0.3 h1:gd33Yt3ZuVgP/ysp7Dq
 ocm.software/open-component-model/bindings/go/blob v0.0.3/go.mod h1:XHcaZ3WihLLswm+dNDs7QrAHu4M0zaNTy2nErUkZNLU=
 ocm.software/open-component-model/bindings/go/configuration v0.0.3 h1:nYqhJ0asF4HOTL3RoWUJshyP3devR0QTpiy9AgB0hgk=
 ocm.software/open-component-model/bindings/go/configuration v0.0.3/go.mod h1:U3YTVWceJbfoaJy92TSbOOGO4T23JIJ32U2UqQgc9JU=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250728075338-376c827fb15f h1:0zCMGSnpt5tKIWQte+wrf7oZKzjE0Utzck/J9iWN2iU=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250728075338-376c827fb15f/go.mod h1:QK95GAldTX7R4oh/bfGmeYoTVdrAMBIgJvquQELawb4=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250729203313-2064e6f8e710 h1:1ataXUjraKWZ2X5Zj0awxbfypMJB5qV4JVE+tORwjzs=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250729203313-2064e6f8e710/go.mod h1:QK95GAldTX7R4oh/bfGmeYoTVdrAMBIgJvquQELawb4=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 h1:daGC2XnJEJkukGdhvKxobUH+vF5TKYPlVQ6nl5ASdFM=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3/go.mod h1:nnLzPfpD2zy9YUgIuQxA3vCmUUKFQqSCl6jFAQXVE8M=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2 h1:YA20enOxMsk4gDWF+Anltwkc616dXebfgPz/0Bl0EKE=

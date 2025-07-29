@@ -8,11 +8,11 @@ require (
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.3
 	ocm.software/open-component-model/bindings/go/configuration v0.0.3
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250728075338-376c827fb15f
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250729203313-2064e6f8e710
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250728075338-376c827fb15f
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250729203313-2064e6f8e710
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250728075338-376c827fb15f
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250729203313-2064e6f8e710
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
