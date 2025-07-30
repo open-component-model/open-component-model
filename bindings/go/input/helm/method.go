@@ -33,7 +33,9 @@ func init() {
 //
 // Since directories are accessed directly from the local filesystem, no credentials
 // are required for any operations.
-type InputMethod struct{}
+type InputMethod struct {
+	TempDir string
+}
 
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrHelmInputDoesNotRequireCredentials
 // since helm inputs do not require any credentials for access. The data is read directly
@@ -51,7 +53,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	helmBlob, err := GetV1HelmBlob(ctx, helm)
+	helmBlob, err := GetV1HelmBlob(ctx, helm, i.TempDir)
 	if err != nil {
 		return nil, fmt.Errorf("error getting helm blob based on resource input specification: %w", err)
 	}
