@@ -43,12 +43,12 @@ type ReadOnlyChart struct {
 // It reads the directory from the filesystem and packages it as an OCI artifact.
 // The function returns an error if the file path is empty or if there are issues reading the directory
 // contents from the filesystem.
-func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm) (blob.ReadOnlyBlob, error) {
+func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string) (blob.ReadOnlyBlob, error) {
 	if err := validateInputSpec(helmSpec); err != nil {
 		return nil, fmt.Errorf("invalid helm input spec: %w", err)
 	}
 
-	chart, err := newReadOnlyChart(helmSpec.Path)
+	chart, err := newReadOnlyChart(helmSpec.Path, tmpDir)
 	if err != nil {
 		return nil, fmt.Errorf("error loading input helm chart %q: %w", helmSpec.Path, err)
 	}
@@ -93,7 +93,7 @@ func validateInputSpec(helmSpec v1.Helm) error {
 	return err
 }
 
-func newReadOnlyChart(path string) (result *ReadOnlyChart, err error) {
+func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error) {
 	// Load the chart from filesystem, the path can be either a helm chart directory or a tgz file.
 	// While loading the chart is also validated.
 	chart, err := loader.Load(path)
@@ -127,7 +127,7 @@ func newReadOnlyChart(path string) (result *ReadOnlyChart, err error) {
 	}
 
 	// If path is a directory, we need to create a tgz archive in a temporary folder.
-	tmpDir, err := os.MkdirTemp("", "chartDirToTgz")
+	tmpDir, err := os.MkdirTemp(tmpDirBase, "chartDirToTgz*")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory")
 	}
