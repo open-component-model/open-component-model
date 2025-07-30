@@ -42,7 +42,8 @@ type ReadOnlyChart struct {
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
 // It reads the directory from the filesystem and packages it as an OCI artifact.
 // The function returns an error if the file path is empty or if there are issues reading the directory
-// contents from the filesystem.
+// contents from the filesystem. If provided tmpDir is empty, the temporary directory will be created
+// in the system's default temp directory.
 func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string) (blob.ReadOnlyBlob, error) {
 	if err := validateInputSpec(helmSpec); err != nil {
 		return nil, fmt.Errorf("invalid helm input spec: %w", err)
@@ -118,6 +119,11 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 			if err != nil {
 				return nil, fmt.Errorf("error calculating digest for file %q: %w", path, err)
 			}
+			// Get back to the start of the reader after digest calculation, so the file can be read again.
+			_, err = file.Seek(0, io.SeekStart)
+			if err != nil {
+				return nil, fmt.Errorf("error seeking to start of file %q: %w", path, err)
+			}
 			result.Size = fi.Size()
 			result.Content = file
 			return result, nil
@@ -176,7 +182,7 @@ func copyChartToOCILayout(ctx context.Context, chart *ReadOnlyChart) (b *inmemor
 	target := tar.NewOCILayoutWriter(zippedBuf)
 	defer func() {
 		if terr := target.Close(); terr != nil {
-			err = errors.Join(err, fmt.Errorf("failed to close tar writer: %w", terr))
+			err = errors.Join(err, fmt.Errorf("failed to close OCI layout writer: %w", terr))
 			return
 		}
 		if zerr := zippedBuf.Close(); zerr != nil {
