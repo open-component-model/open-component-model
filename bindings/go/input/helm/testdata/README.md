@@ -1,8 +1,8 @@
 # Readme
 
-The Helm chart that is used for testing is copied from [helm chart museum repository](https://github.com/helm/chartmuseum/tree/main/testdata/charts/mychart)
+The Helm chart that is used for testing is copied from [Helm chart museum repository](https://github.com/helm/chartmuseum/tree/main/testdata/charts/mychart)
 
-The same chart is stored in three formats in the respective folders:
+Three chart formats are supported:
 
 * Non-packaged (directory)
 * Unsigned packaged chart (tgz)

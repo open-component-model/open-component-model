@@ -79,11 +79,11 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 	}{
 		{
 			name: "non-packaged helm chart",
-			path: filepath.Join(testDataDir, "dir", "mychart"),
+			path: filepath.Join(testDataDir, "mychart"),
 		},
 		{
 			name: "packaged helm chart",
-			path: filepath.Join(testDataDir, "tgz", "mychart-0.1.0.tgz"),
+			path: filepath.Join(testDataDir, "mychart-0.1.0.tgz"),
 		},
 	}
 
@@ -95,6 +95,37 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 			b, err := helm.GetV1HelmBlob(ctx, spec, "")
 			require.NoError(t, err)
 			require.NotNil(t, b)
+		})
+	}
+}
+
+func TestGetV1HelmBlob_BadCharts(t *testing.T) {
+	ctx := t.Context()
+	workDir, err := os.Getwd()
+	require.NoError(t, err, "failed to get current working directory")
+	testDataDir := filepath.Join(workDir, "testdata")
+
+	tests := []struct {
+		name       string
+		path       string
+		wantErrMgs string
+	}{
+		{
+			name:       "bad chart",
+			path:       filepath.Join(testDataDir, "badchart"),
+			wantErrMgs: "chart.metadata.version is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := v1.Helm{
+				Path: tt.path,
+			}
+			b, err := helm.GetV1HelmBlob(ctx, spec, "")
+			require.Error(t, err)
+			require.Nil(t, b)
+			assert.Contains(t, err.Error(), tt.wantErrMgs)
 		})
 	}
 }
