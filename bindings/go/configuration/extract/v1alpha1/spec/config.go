@@ -57,12 +57,10 @@ type LayerSelectorRequirement struct {
 // LayerSelector allows selecting layers based on index, mediatype, and annotations.
 // +k8s:deepcopy-gen=true
 type LayerSelector struct {
-	// MatchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+	// MatchProperties is a map of {key,value} pairs. A single {key,value} in the matchLabels
 	// map is equivalent to an element of matchExpressions, whose key field is "key", the
-	// operator is "In", and the value array contains only "value". *Note* this is called
-	// match_Labels_ to be in-line with other, more common, matching selector operations.
-	// Though technically, no labels are matched.
-	MatchLabels map[string]string `json:"matchLabels,omitempty"`
+	// operator is "In", and the value array contains only "value".
+	MatchProperties map[string]string `json:"matchProperties,omitempty"`
 	// MatchExpressions is a list of selectors. The selectors are ANDed together.
 	// Use predefined keys like 'layer.index' and 'layer.mediaType' for built-in properties.
 	MatchExpressions []LayerSelectorRequirement `json:"matchExpressions,omitempty"`

@@ -2,15 +2,16 @@ package spec
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 )
 
 // LayerInfo represents information about a layer for matching purposes.
 // The user populates this layer info to call Matches on the selectors.
 type LayerInfo struct {
-	Index     int
-	MediaType string
-	// Potentially add annotations to these properties.
+	Index       int
+	MediaType   string
+	Annotations map[string]string
 }
 
 // GetProperties returns a combined map of all layer properties for matching.
@@ -21,8 +22,7 @@ func (l LayerInfo) GetProperties() map[string]string {
 	// Add predefined properties
 	props[LayerIndexKey] = fmt.Sprintf("%d", l.Index)
 	props[LayerMediaTypeKey] = l.MediaType
-
-	// TODO: Merge annotations
+	maps.Copy(props, l.Annotations)
 
 	return props
 }
@@ -35,8 +35,8 @@ func (l *LayerSelector) Matches(layer LayerInfo) bool {
 
 	props := layer.GetProperties()
 
-	// Check match labels
-	if !l.matchesLabels(props) {
+	// Check match properties
+	if !l.matchesProperties(props) {
 		return false
 	}
 
@@ -44,13 +44,13 @@ func (l *LayerSelector) Matches(layer LayerInfo) bool {
 	return l.matchesExpressions(props)
 }
 
-// matchesLabels checks if all match labels are satisfied.
-func (l *LayerSelector) matchesLabels(properties map[string]string) bool {
-	if len(l.MatchLabels) == 0 {
+// matchesProperties checks if all match Properties are satisfied.
+func (l *LayerSelector) matchesProperties(properties map[string]string) bool {
+	if len(l.MatchProperties) == 0 {
 		return true
 	}
 
-	for key, expectedValue := range l.MatchLabels {
+	for key, expectedValue := range l.MatchProperties {
 		actualValue, exists := properties[key]
 		if !exists || actualValue != expectedValue {
 			return false
