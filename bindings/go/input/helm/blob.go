@@ -228,7 +228,7 @@ func copyChartToOCILayout(ctx context.Context, chart *ReadOnlyChart) (b *inmemor
 
 	// Now close prematurely so that the buf is fully filled before we set things like size and digest.
 	if err := errors.Join(target.Close(), zippedBuf.Close(), chart.Content.Close()); err != nil {
-		return nil, fmt.Errorf("failed to close writers: %w", err)
+		return nil, fmt.Errorf("failed to close writers/readers: %w", err)
 	}
 
 	b = inmemory.New(&buf,

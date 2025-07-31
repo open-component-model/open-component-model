@@ -1,4 +1,4 @@
 name: badchart
 version:
 
-# version is missing --> chart is not valid
+# version is missing --> chart is not valid --> should be detected in test

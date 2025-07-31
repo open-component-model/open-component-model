@@ -11,6 +11,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/input/helm"
 	v1 "ocm.software/open-component-model/bindings/go/input/helm/spec/v1"
+	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
 func TestGetV1HelmBlob_ValidateFields(t *testing.T) {
@@ -85,6 +86,7 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 			name: "packaged helm chart",
 			path: filepath.Join(testDataDir, "mychart-0.1.0.tgz"),
 		},
+		// TODO: packaged with provenance file
 	}
 
 	for _, tt := range tests {
@@ -95,6 +97,14 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 			b, err := helm.GetV1HelmBlob(ctx, spec, "")
 			require.NoError(t, err)
 			require.NotNil(t, b)
+
+			store, err := tar.ReadOCILayout(ctx, b)
+			require.NoError(t, err)
+			require.NotNil(t, store)
+			t.Cleanup(func() {
+				require.NoError(t, store.Close())
+			})
+			require.Len(t, store.Index.Manifests, 1)
 		})
 	}
 }
@@ -111,7 +121,7 @@ func TestGetV1HelmBlob_BadCharts(t *testing.T) {
 		wantErrMgs string
 	}{
 		{
-			name:       "bad chart",
+			name:       "bad chart version missing",
 			path:       filepath.Join(testDataDir, "badchart"),
 			wantErrMgs: "chart.metadata.version is required",
 		},
