@@ -7,28 +7,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// TransformBlob transforms a blob by selecting the appropriate transformer
-// based on the blob's media type using a simple switch statement.
-func TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, config runtime.Typed) (blob.ReadOnlyBlob, error) {
-	mediaType := getMediaType(input)
-
-	var transformer blob.BlobTransformer
-	switch mediaType {
-	case MediaTypeHelmChart, MediaTypeHelmProvenance, MediaTypeHelmConfig:
-		transformer = NewHelmTransformer()
-	default:
-		transformer = NewOCIArtifactTransformer()
-	}
-
-	return transformer.TransformBlob(ctx, input, config)
-}
-
-// getMediaType extracts the media type from a blob
-func getMediaType(input blob.ReadOnlyBlob) string {
-	if mediaTypeAware, ok := input.(blob.MediaTypeAware); ok {
-		if mediaType, known := mediaTypeAware.MediaType(); known {
-			return mediaType
-		}
-	}
-	return "application/octet-stream" // default fallback
+// Transformer transforms blob data according to specified configuration.
+// It provides a flexible interface for transforming blob content while maintaining
+// compatibility with the existing blob.ReadOnlyBlob interface.
+//
+// Different implementations can be chosen based on the media type of the input blob
+// to provide specialized transformation logic for specific content types.
+type Transformer interface {
+	// TransformBlob transforms the given blob data according to the specified configuration.
+	// It returns the transformed data as a blob.ReadOnlyBlob or an error if the transformation fails.
+	TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, config runtime.Typed, credentials map[string]string) (blob.ReadOnlyBlob, error)
 }
