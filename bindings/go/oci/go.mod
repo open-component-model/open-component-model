@@ -10,7 +10,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/veqryn/slog-context v0.8.0
 	golang.org/x/sync v0.16.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.3
+	ocm.software/open-component-model/bindings/go/blob v0.0.4-0.20250801133341-719ab8088fe9
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250729203313-2064e6f8e710
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
