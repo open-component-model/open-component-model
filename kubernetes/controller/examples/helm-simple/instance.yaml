@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmSimple
+metadata:
+  name: helm-simple
+spec:
+  prefix: helm-simple

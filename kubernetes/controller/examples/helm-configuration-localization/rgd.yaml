@@ -1,0 +1,79 @@
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: helm-configuration-localization
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: HelmConfigurationLocalization
+    spec:
+      prefix: string | default="helm-configuration-localization"
+      podinfo:
+        message: string | default="hello world"
+        releaseName: string | default="podinfo"
+  resources:
+    - id: resourceChart
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-chart-name"
+        spec:
+          componentRef:
+            name: helm-configuration-localization-component
+          resource:
+            byReference:
+              resource:
+                name: helm-resource
+          interval: 10m
+    - id: resourceImage
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-image-name"
+        spec:
+          componentRef:
+            name: helm-configuration-localization-component
+          resource:
+            byReference:
+              resource:
+                name: image-resource
+          interval: 10m
+    - id: ocirepository
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        kind: OCIRepository
+        metadata:
+          name: "${schema.spec.prefix}-oci-repository-name"
+        spec:
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: oci://${resourceChart.status.reference.registry}/${resourceChart.status.reference.repository}
+          ref:
+            digest: ${resourceChart.status.reference.digest}
+    - id: helmrelease
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: "${schema.spec.podinfo.releaseName}"
+        spec:
+          releaseName: "${schema.spec.podinfo.releaseName}"
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${ocirepository.metadata.name}
+            namespace: default
+          values:
+            # Localization
+            image:
+              repository: ${resourceImage.status.reference.registry}/${resourceImage.status.reference.repository}
+              tag: ${resourceImage.status.reference.tag} # Using the tag for e2e-tests but the reference can be used as well
+            # Configuration
+            ui:
+              message: ${schema.spec.podinfo.message}

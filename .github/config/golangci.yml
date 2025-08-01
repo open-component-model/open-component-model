@@ -82,6 +82,10 @@ linters:
         - err
         - wg
         - id
+    staticcheck:
+      dot-import-whitelist:
+        - "github.com/onsi/ginkgo/v2"
+        - "github.com/onsi/gomega"
   exclusions:
     generated: lax
     presets:

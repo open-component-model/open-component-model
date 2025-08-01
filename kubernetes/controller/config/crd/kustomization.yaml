@@ -1,0 +1,30 @@
+# This kustomization.yaml is not intended to be run by itself,
+# since it depends on service name and namespace that are out of this kustomize package.
+# It should be run by config/default
+resources:
+- bases/delivery.ocm.software_repositories.yaml
+- bases/delivery.ocm.software_components.yaml
+- bases/delivery.ocm.software_resources.yaml
+- bases/delivery.ocm.software_replications.yaml
+- bases/delivery.ocm.software_deployers.yaml
+# +kubebuilder:scaffold:crdkustomizeresource
+
+# patches:
+# [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
+# patches here are for enabling the conversion webhook for each CRD
+# +kubebuilder:scaffold:crdkustomizewebhookpatch
+
+# [CERTMANAGER] To enable cert-manager, uncomment all the sections with [CERTMANAGER] prefix.
+# patches here are for enabling the CA injection for each CRD
+#- path: patches/cainjection_in_repositories.yaml
+#- path: patches/cainjection_in_components.yaml
+#- path: patches/cainjection_in_resources.yaml
+#- path: patches/cainjection_in_replications.yaml
+#- path: patches/cainjection_in_configuredresources.yaml
+# +kubebuilder:scaffold:crdkustomizecainjectionpatch
+
+# [WEBHOOK] To enable webhook, uncomment the following section
+# the following config is for teaching kustomize how to do kustomization for CRDs.
+
+#configurations:
+#- kustomizeconfig.yaml
