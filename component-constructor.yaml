@@ -1,0 +1,12 @@
+name: ocm.software/cli
+version: 0.0.1
+provider:
+  name: ocm.software
+resources:
+  - name: helmchart
+    type: executable
+    version: 0.0.1
+    relation: local
+    input:
+      type: helm/v1
+      path: /Users/D067928/SAPDevelop/open-component-model/bindings/go/helm/input/testdata/provenance/mychart-0.1.0.tgz

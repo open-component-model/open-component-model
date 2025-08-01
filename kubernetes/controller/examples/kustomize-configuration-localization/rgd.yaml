@@ -1,0 +1,111 @@
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: kustomize-configuration-localization
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: KustomizeConfigurationLocalization
+    spec:
+      prefix: string | default="kustomize-configuration-localization"
+      podinfo:
+        message: string | default="hello world"
+  resources:
+    - id: resourceKustomization
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-name"
+        spec:
+          componentRef:
+            name: kustomize-configuration-localization-component
+          resource:
+            byReference:
+              resource:
+                name: kustomize-resource
+          interval: 10m
+    - id: resourceImage
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-image-name"
+        spec:
+          componentRef:
+            name: kustomize-configuration-localization-component
+          resource:
+            byReference:
+              resource:
+                name: image-resource
+          additionalStatusFields:
+            registry: resource.access.imageReference.toOCI().registry
+            repository: resource.access.imageReference.toOCI().repository
+            tag: resource.access.imageReference.toOCI().tag
+          interval: 10m
+    - id: gitrepository
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1
+        kind: GitRepository
+        metadata:
+          name: podinfo
+          namespace: default
+        spec:
+          interval: 5m
+          url: ${resourceKustomization.status.resource.access.?repoUrl}
+          ref:
+            commit: ${resourceKustomization.status.resource.access.?commit}
+    - id: kustomization
+      template:
+        apiVersion: kustomize.toolkit.fluxcd.io/v1
+        kind: Kustomization
+        metadata:
+          name: "${schema.spec.prefix}-kustomization-name"
+        spec:
+          targetNamespace: default
+          interval: 1m
+          prune: true
+          sourceRef:
+            kind: GitRepository
+            name: ${gitrepository.metadata.name}
+          path: "kustomize"
+          patches:
+            # Localization
+            - patch: |
+                - op: replace
+                  path: /spec/template/spec/containers/0/image
+                  value: ${resourceImage.status.additional.?registry}/${resourceImage.status.additional.?repository}:${resourceImage.status.additional.?tag}
+              target:
+                kind: Deployment
+                name: .*
+            # Configuration
+            - patch: |
+                - op: add
+                  path: /spec/template/spec/containers/0/env/-
+                  value:
+                    name: PODINFO_UI_MESSAGE
+                    value: ${schema.spec.podinfo.message}
+              target:
+                kind: Deployment
+                name: .*
+            # e2e-test related patch to validate deployment
+            - patch: |
+                - op: replace
+                  path: /metadata/name
+                  value: kustomize-configuration-localization-podinfo
+                - op: add
+                  path: /spec/template/metadata/labels/app.kubernetes.io~1name
+                  value: kustomize-configuration-localization-podinfo
+              target:
+                kind: Deployment
+                name: .*
+            - patch: |
+                - op: replace
+                  path: /spec/minReplicas
+                  value: 1
+                - op: replace
+                  path: /spec/maxReplicas
+                  value: 1
+              target:
+                kind: HorizontalPodAutoscaler
+                name: .*

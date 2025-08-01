@@ -1,0 +1,8 @@
+## Append samples of your project ##
+resources:
+- delivery_v1alpha1_repository.yaml
+- delivery_v1alpha1_component.yaml
+- delivery_v1alpha1_resource.yaml
+- delivery_v1alpha1_replication.yaml
+- delivery_v1alpha1_deployer.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmSigning
+metadata:
+  name: helm-signing
+spec:
+  prefix: "helm-signing"
