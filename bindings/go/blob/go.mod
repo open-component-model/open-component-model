@@ -1,11 +1,10 @@
 module ocm.software/open-component-model/bindings/go/blob
 
-go 1.24.2
+go 1.24.1
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/sys v0.34.0
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
@@ -28,8 +27,12 @@ require (
 =======
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
+<<<<<<< HEAD
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 >>>>>>> 0d088e6 (trying to keep the implementation to a minimum)
+=======
+	golang.org/x/sys v0.34.0
+>>>>>>> 1f287eb (removed my changes)
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
