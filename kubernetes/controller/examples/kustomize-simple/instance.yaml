@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: KustomizeSimple
+metadata:
+  name: kustomize-simple
+spec:
+  prefix: kustomize-simple

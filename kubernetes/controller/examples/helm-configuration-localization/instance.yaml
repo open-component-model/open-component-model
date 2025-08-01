@@ -1,0 +1,8 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmConfigurationLocalization
+metadata:
+  name: helm-configuration-localization
+spec:
+  podinfo:
+    message: "helm-configuration-localization"
+    releaseName: "helm-configuration-localization"
