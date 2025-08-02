@@ -8,6 +8,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/transformer"
 	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -62,9 +63,9 @@ func (c *converter) GetBlobTransformerCredentialConsumerIdentity(ctx context.Con
 	return result.Identity, nil
 }
 
-var _ BlobTransformer = (*converter)(nil)
+var _ transformer.Transformer = (*converter)(nil)
 
-func (r *Registry) externalToBlobTransformerConverter(plugin blobtransformerv1.BlobTransformerPluginContract[runtime.Typed], scheme *runtime.Scheme) BlobTransformer {
+func (r *Registry) externalToBlobTransformerConverter(plugin blobtransformerv1.BlobTransformerPluginContract[runtime.Typed], scheme *runtime.Scheme) *converter {
 	return &converter{
 		externalPlugin: plugin,
 		scheme:         scheme,

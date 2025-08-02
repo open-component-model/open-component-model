@@ -6,7 +6,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.10.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.3
+	ocm.software/open-component-model/bindings/go/blob v0.0.4
 	ocm.software/open-component-model/bindings/go/configuration v0.0.3
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250729203313-2064e6f8e710
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
