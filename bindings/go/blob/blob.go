@@ -1,6 +1,8 @@
 package blob
 
-import "io"
+import (
+	"io"
+)
 
 // Blob is an interface that represents a Binary Large Object.
 // It's main purpose is to provide an abstraction over purpose to be able to only
