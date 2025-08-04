@@ -112,50 +112,44 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 		Version: chart.Metadata.Version,
 	}
 
-	// If path is a file, directly return it.
-	if !fi.IsDir() {
-		if file, err := os.Open(path); err == nil {
-			result.Digest, err = digest.FromReader(file)
-			if err != nil {
-				return nil, fmt.Errorf("error calculating digest for file %q: %w", path, err)
-			}
-			// Get back to the start of the reader after digest calculation, so the file can be read again.
-			_, err = file.Seek(0, io.SeekStart)
-			if err != nil {
-				return nil, fmt.Errorf("error seeking to start of file %q: %w", path, err)
-			}
-			result.Size = fi.Size()
-			result.Content = file
-			return result, nil
-		} else {
-			return nil, fmt.Errorf("error opening file %q: %w", path, err)
+	if fi.IsDir() {
+		// If path is a directory, we need to create a tgz archive in a temporary folder.
+		tmpDir, err := os.MkdirTemp(tmpDirBase, "chartDirToTgz*")
+		if err != nil {
+			return nil, fmt.Errorf("error creating temporary directory")
+		}
+
+		// Save the chart as a tgz archive. If the directory is /foo, and the chart is named bar, with version 1.0.0,
+		// this will generate /foo/bar-1.0.0.tgz
+		// TODO: contribution to Helm to allow to write to tar in memory instead of a file.
+		path, err = chartutil.Save(chart, tmpDir)
+		if err != nil {
+			return nil, fmt.Errorf("error saving archived chart to directory %q: %w", tmpDir, err)
+		}
+
+		// After saving the chart, we need to retrieve the file information again, to know the file size.
+		fi, err = os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("error retrieving file information for %q: %w", path, err)
 		}
 	}
 
-	// If path is a directory, we need to create a tgz archive in a temporary folder.
-	tmpDir, err := os.MkdirTemp(tmpDirBase, "chartDirToTgz*")
-	if err != nil {
-		return nil, fmt.Errorf("error creating temporary directory")
+	if file, err := os.Open(path); err == nil {
+		// Now we know that path refers to a valid Helm chart packaged as a tgz file. Thus returning its contents.
+		result.Digest, err = digest.FromReader(file)
+		if err != nil {
+			return nil, fmt.Errorf("error calculating digest for file %q: %w", path, err)
+		}
+		// Get back to the start of the reader after digest calculation, so the file can be read again.
+		_, err = file.Seek(0, io.SeekStart)
+		if err != nil {
+			return nil, fmt.Errorf("error seeking to start of file %q: %w", path, err)
+		}
+		result.Size = fi.Size()
+		result.Content = file
+	} else {
+		return nil, fmt.Errorf("error opening file %q: %w", path, err)
 	}
-	defer func() {
-		err = os.RemoveAll(tmpDir)
-	}()
-
-	// Save the chart as a tgz archive. If the directory is /foo, and the chart is named bar, with version 1.0.0,
-	// this will generate /foo/bar-1.0.0.tgz
-	tgzFile, err := chartutil.Save(chart, tmpDir)
-	if err != nil {
-		return nil, fmt.Errorf("error saving archived chart to directory %q: %w", tmpDir, err)
-	}
-
-	// Read the entire archive and return the result.
-	data, err := os.ReadFile(tgzFile)
-	if err != nil {
-		return nil, fmt.Errorf("error reading file %q: %w", tgzFile, err)
-	}
-	result.Size = int64(len(data))
-	result.Digest = digest.FromBytes(data)
-	result.Content = io.NopCloser(bytes.NewReader(data))
 
 	return result, nil
 }
@@ -231,6 +225,7 @@ func copyChartToOCILayout(ctx context.Context, chart *ReadOnlyChart) (b *inmemor
 		return nil, fmt.Errorf("failed to close writers/readers: %w", err)
 	}
 
+	// TODO(ikhandamirov): replace this with a direct/unbuffered blob.
 	b = inmemory.New(&buf,
 		inmemory.WithSize(int64(buf.Len())),
 		inmemory.WithDigest(digest.NewDigest(digest.SHA256, h).String()),
