@@ -19,6 +19,7 @@ import (
 	"oras.land/oras-go/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	v1 "ocm.software/open-component-model/bindings/go/input/helm/spec/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -30,13 +31,12 @@ var (
 	ErrUnsupportedField = errors.New("unsupported input field must not be used")
 )
 
-// ReadOnlyChart contains Helm chart contents as tgz archive and some metadata, required for packaging into OCI Layout.
+// ReadOnlyChart contains Helm chart contents as tgz archive, some metadata and optionally a provenance file.
 type ReadOnlyChart struct {
-	Name    string
-	Version string
-	Size    int64
-	Digest  digest.Digest
-	Content io.ReadCloser
+	Name      string
+	Version   string
+	ChartBlob *filesystem.Blob
+	ProvBlob  *filesystem.Blob
 }
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
@@ -53,8 +53,6 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string) (blob.R
 	if err != nil {
 		return nil, fmt.Errorf("error loading input helm chart %q: %w", helmSpec.Path, err)
 	}
-
-	// TODO: check for provenance file, take it along if exists
 
 	b, err := copyChartToOCILayout(ctx, chart)
 	if err != nil {
@@ -126,30 +124,15 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 		if err != nil {
 			return nil, fmt.Errorf("error saving archived chart to directory %q: %w", tmpDir, err)
 		}
-
-		// After saving the chart, we need to retrieve the file information again, to know the file size.
-		fi, err = os.Stat(path)
-		if err != nil {
-			return nil, fmt.Errorf("error retrieving file information for %q: %w", path, err)
-		}
 	}
 
-	if file, err := os.Open(path); err == nil {
-		// Now we know that path refers to a valid Helm chart packaged as a tgz file. Thus returning its contents.
-		result.Digest, err = digest.FromReader(file)
-		if err != nil {
-			return nil, fmt.Errorf("error calculating digest for file %q: %w", path, err)
-		}
-		// Get back to the start of the reader after digest calculation, so the file can be read again.
-		_, err = file.Seek(0, io.SeekStart)
-		if err != nil {
-			return nil, fmt.Errorf("error seeking to start of file %q: %w", path, err)
-		}
-		result.Size = fi.Size()
-		result.Content = file
-	} else {
-		return nil, fmt.Errorf("error opening file %q: %w", path, err)
+	// Now we know that the path refers to a valid Helm chart packaged as a tgz file. Thus returning its contents.
+	result.ChartBlob, err = filesystem.GetBlobFromOSPath(path)
+	if err != nil {
+		return nil, fmt.Errorf("error creating blob from file %q: %w", path, err)
 	}
+
+	// TODO: check for provenance file, take it along if exists.
 
 	return result, nil
 }
@@ -198,22 +181,29 @@ func copyChartToOCILayout(ctx context.Context, chart *ReadOnlyChart) (b *inmemor
 	}
 
 	// Create content OCI layer.
+	chartDigStr, known := chart.ChartBlob.Digest()
+	if !known {
+		return nil, fmt.Errorf("unknown digest for helm chart %q:%q", chart.Name, chart.Version)
+	}
 	chartLayer := ociImageSpecV1.Descriptor{
 		MediaType: registry.ChartLayerMediaType,
-		Digest:    chart.Digest,
-		Size:      chart.Size,
+		Digest:    digest.Digest(chartDigStr),
+		Size:      chart.ChartBlob.Size(),
 	}
-	if err = target.Push(ctx, chartLayer, chart.Content); err != nil {
+	chartReader, err := chart.ChartBlob.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get a reader for helm chart blob %q:%q: %w", chart.Name, chart.Version, err)
+	}
+	if err = target.Push(ctx, chartLayer, chartReader); err != nil {
 		return nil, fmt.Errorf("failed to push helm chart content layer: %w", err)
 	}
 
-	// TODO: Create provenance OCI layer.
-	// target.Push(ctx, provenanceLayer, dataFromProvenance)
+	// TODO: create and push provenance OCI layer.
 
 	// Create OCI image manifest.
 	imgDesc, err := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
 		ConfigDescriptor: &configLayer,
-		Layers:           []ociImageSpecV1.Descriptor{chartLayer}, // TODO: add provenanceLayer.
+		Layers:           []ociImageSpecV1.Descriptor{chartLayer}, // TODO: add provenance layer.
 	})
 
 	if err := target.Tag(ctx, imgDesc, chart.Version); err != nil {
@@ -221,8 +211,13 @@ func copyChartToOCILayout(ctx context.Context, chart *ReadOnlyChart) (b *inmemor
 	}
 
 	// Now close prematurely so that the buf is fully filled before we set things like size and digest.
-	if err := errors.Join(target.Close(), zippedBuf.Close(), chart.Content.Close()); err != nil {
-		return nil, fmt.Errorf("failed to close writers/readers: %w", err)
+	if err := errors.Join(target.Close(), zippedBuf.Close()); err != nil {
+		return nil, fmt.Errorf("failed to close writers: %w", err)
+	}
+
+	// Explicitly close the readers.
+	if err := chartReader.Close(); err != nil { // TODO: close provenance reader.
+		return nil, fmt.Errorf("failed to close readers: %w", err)
 	}
 
 	// TODO(ikhandamirov): replace this with a direct/unbuffered blob.
