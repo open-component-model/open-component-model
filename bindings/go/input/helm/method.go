@@ -33,6 +33,10 @@ func init() {
 //
 // Since directories are accessed directly from the local filesystem, no credentials
 // are required for any operations.
+//
+// The TempFolder field is used to specify a base temporary folder for processing helm charts.
+// It is set by the user when creating an instance of InputMethod. If the field is empty,
+// the system's default temporary directory will be used.
 type InputMethod struct {
 	TempFolder string
 }

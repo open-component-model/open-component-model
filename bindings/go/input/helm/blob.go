@@ -40,9 +40,9 @@ type ReadOnlyChart struct {
 }
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
-// It reads the directory from the filesystem and packages it as an OCI artifact.
-// The function returns an error if the file path is empty or if there are issues reading the directory
-// contents from the filesystem. If provided tmpDir is empty, the temporary directory will be created
+// It reads the contents from the filesystem and packages it as an OCI artifact.
+// The function returns an error if the path is empty or if there are issues reading the contents
+// from the filesystem. If provided tmpDir is empty, the temporary directory will be created.
 // in the system's default temp directory.
 func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string) (blob.ReadOnlyBlob, error) {
 	if err := validateInputSpec(helmSpec); err != nil {
