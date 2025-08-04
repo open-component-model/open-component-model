@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/blob/transformer"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -208,4 +209,4 @@ func (m *mockBlobTransformerPlugin) TransformBlob(ctx context.Context, blob blob
 	return blob, nil
 }
 
-var _ BlobTransformer = (*mockBlobTransformerPlugin)(nil)
+var _ transformer.Transformer = (*mockBlobTransformerPlugin)(nil)
