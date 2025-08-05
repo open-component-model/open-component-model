@@ -152,6 +152,15 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.
 		_ = w.CloseWithError(err) // Always returns nil.
 	}()
 
+	chartReader, rerr := chart.ChartBlob.ReadCloser()
+	if rerr != nil {
+		err = fmt.Errorf("failed to get a reader for helm chart blob %q:%q: %w", chart.Name, chart.Version, rerr)
+		return
+	}
+	defer func() {
+		err = errors.Join(err, chartReader.Close()) // TODO: close provenance reader.
+	}()
+
 	zippedBuf := gzip.NewWriter(w)
 	defer func() {
 		err = errors.Join(err, zippedBuf.Close())
@@ -187,11 +196,6 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.
 		Digest:    digest.Digest(chartDigStr),
 		Size:      chart.ChartBlob.Size(),
 	}
-	chartReader, rerr := chart.ChartBlob.ReadCloser()
-	if rerr != nil {
-		err = fmt.Errorf("failed to get a reader for helm chart blob %q:%q: %w", chart.Name, chart.Version, rerr)
-		return
-	}
 	if perr := target.Push(ctx, chartLayer, chartReader); perr != nil {
 		err = fmt.Errorf("failed to push helm chart content layer: %w", perr)
 		return
@@ -211,12 +215,6 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.
 
 	if terr := target.Tag(ctx, imgDesc, chart.Version); terr != nil {
 		err = fmt.Errorf("failed to tag OCI image: %w", terr)
-		return
-	}
-
-	// Explicitly close the readers.
-	if rerr := chartReader.Close(); rerr != nil { // TODO: close provenance reader.
-		err = fmt.Errorf("failed to close readers: %w", rerr)
 		return
 	}
 }
