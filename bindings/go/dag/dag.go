@@ -21,16 +21,11 @@ package dag
 
 import (
 	"cmp"
-	"context"
-	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
-
-	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -38,46 +33,11 @@ var (
 	ErrAlreadyExists = fmt.Errorf("vertex already exists in the graph")
 )
 
-// Vertex represents a node/vertex in a directed acyclic graph.
-type Vertex[T cmp.Ordered] struct {
-	// ID is a unique identifier for the node
-	ID T
-	// Attributes stores the attributes of the node, such as the component
-	// descriptor.
-	Attributes *sync.Map // map[string]any (attributes)
-	// Edges stores the IDs of the nodes that this node has an outgoing edge to,
-	// as well as any attributes associated with that edge.
-	Edges *sync.Map // map[T]*sync.Map with map[string]any (attributes)
-}
-
-func (v *Vertex[T]) Clone() *Vertex[T] {
-	cloned := &Vertex[T]{
-		ID:         v.ID,
-		Attributes: &sync.Map{},
-		Edges:      &sync.Map{},
-	}
-	v.Attributes.Range(func(key, value any) bool {
-		k := key.(string)
-		cloned.Attributes.Store(k, value)
-		return true
-	})
-	v.Edges.Range(func(key, value any) bool {
-		k := key.(T)
-		if attrMap, ok := value.(*sync.Map); ok {
-			newMap := &sync.Map{}
-			attrMap.Range(func(kk, vv any) bool {
-				newMap.Store(kk, vv)
-				return true
-			})
-			cloned.Edges.Store(k, newMap)
-		}
-		return true
-	})
-	return cloned
-}
-
 // DirectedAcyclicGraph represents a directed acyclic graph.
+// It uses a sync.Map for concurrent access. Still, it generally CANNOT be
+// assumed to be thread-safe for operations that modify the graph structure.
 type DirectedAcyclicGraph[T cmp.Ordered] struct {
+	mu sync.RWMutex // Mutex to protect concurrent access to the graph
 	// Vertices stores the nodes in the graph
 	Vertices *sync.Map // map[T]*Vertex[T]
 	// OutDegree of each vertex (number of outgoing edges)
@@ -102,6 +62,14 @@ func (d *DirectedAcyclicGraph[T]) GetOutDegree(id T) (int, bool) {
 	return 0, false
 }
 
+func (d *DirectedAcyclicGraph[T]) MustGetOutDegree(id T) int {
+	inDegree, ok := d.GetOutDegree(id)
+	if !ok {
+		panic(fmt.Sprintf("out-degree for vertex %v not found in the graph", id))
+	}
+	return inDegree
+}
+
 func (d *DirectedAcyclicGraph[T]) GetInDegree(id T) (int, bool) {
 	if inDegree, ok := d.InDegree.Load(id); ok {
 		return inDegree.(int), true
@@ -109,8 +77,26 @@ func (d *DirectedAcyclicGraph[T]) GetInDegree(id T) (int, bool) {
 	return 0, false
 }
 
+func (d *DirectedAcyclicGraph[T]) MustGetInDegree(id T) int {
+	inDegree, ok := d.GetInDegree(id)
+	if !ok {
+		panic(fmt.Sprintf("in-degree for vertex %v not found in the graph", id))
+	}
+	return inDegree
+}
+
+func (d *DirectedAcyclicGraph[T]) LengthVertices() int {
+	count := 0
+	d.Vertices.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	return count
+}
+
 func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
 	cloned := NewDirectedAcyclicGraph[T]()
+
 	d.Vertices.Range(func(key, value any) bool {
 		cloned.Vertices.Store(key, value.(*Vertex[T]).Clone())
 		return true
@@ -126,8 +112,8 @@ func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
 	return cloned
 }
 
-// AddVertex adds a new node to the graph.
-func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) error {
+// CreateAndAddVertex adds a new node to the graph.
+func (d *DirectedAcyclicGraph[T]) CreateAndAddVertex(id T, attributes ...map[string]any) error {
 	if _, exists := d.Vertices.Load(id); exists {
 		return fmt.Errorf("node %v already exists: %w", id, ErrAlreadyExists)
 	}
@@ -146,6 +132,22 @@ func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) 
 
 	d.OutDegree.Store(id, 0)
 	d.InDegree.Store(id, 0)
+	return nil
+}
+
+func (d *DirectedAcyclicGraph[T]) AddVertex(vertex *Vertex[T], attributes ...map[string]any) error {
+	if _, exists := d.Vertices.Load(vertex.ID); exists {
+		return fmt.Errorf("node %v already exists: %w", vertex.ID, ErrAlreadyExists)
+	}
+	for _, attrs := range attributes {
+		for k, v := range attrs {
+			vertex.Attributes.Store(k, v)
+		}
+	}
+	d.Vertices.Store(vertex.ID, vertex)
+
+	d.OutDegree.Store(vertex.ID, 0)
+	d.InDegree.Store(vertex.ID, 0)
 	return nil
 }
 
@@ -208,8 +210,7 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 
 	if !exists {
 		// Only initialize the map if the edge was added
-		attrMap := &sync.Map{}
-		fromNode.Edges.Store(to, attrMap)
+		fromNode.Edges.Store(to, &sync.Map{})
 		// Only increment the out-degree and in-degree if the edge was added
 		outDegree, _ := d.OutDegree.Load(from)
 		d.OutDegree.Store(from, outDegree.(int)+1)
@@ -307,6 +308,14 @@ func (d *DirectedAcyclicGraph[T]) GetVertex(id T) (*Vertex[T], bool) {
 	return vertex, ok
 }
 
+func (d *DirectedAcyclicGraph[T]) MustGetVertex(id T) *Vertex[T] {
+	vertex, ok := d.GetVertex(id)
+	if !ok {
+		panic(fmt.Sprintf("vertex %v not found in the graph", id))
+	}
+	return vertex
+}
+
 // GetVertices returns the nodes in the graph in sorted alphabetical order.
 func (d *DirectedAcyclicGraph[T]) GetVertices() []T {
 	nodes := make([]T, 0)
@@ -353,20 +362,24 @@ func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 		recStack[node] = true
 		cyclePath = append(cyclePath, fmt.Sprintf("%v", node))
 
-		vertex, ok := d.GetVertex(node)
-		if ok {
-			vertex.Edges.Range(func(neighbor any, _ any) bool {
-				if !visited[neighbor.(T)] {
-					if dfs(neighbor.(T)) {
-						return true
-					}
-				} else if recStack[neighbor.(T)] {
-					// Found a cycle, add the closing node to complete the cycle
-					cyclePath = append(cyclePath, fmt.Sprintf("%v", neighbor))
-					return true
+		vertex := d.MustGetVertex(node)
+		foundCycle := false
+		vertex.Edges.Range(func(neighbor any, _ any) bool {
+			if !visited[neighbor.(T)] {
+				if dfs(neighbor.(T)) {
+					foundCycle = true
+					return false // Stop further iteration
 				}
-				return true
-			})
+			} else if recStack[neighbor.(T)] {
+				// Found a cycle, add the closing node to complete the cycle
+				cyclePath = append(cyclePath, fmt.Sprintf("%v", neighbor))
+				foundCycle = true
+				return false // Stop further iteration
+			}
+			return true
+		})
+		if foundCycle {
+			return true
 		}
 
 		recStack[node] = false
@@ -412,7 +425,7 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 
 	// Ensure all vertices exist in the new graph
 	d.Vertices.Range(func(key, value any) bool {
-		if err := reverse.AddVertex(key.(T)); err != nil {
+		if err := reverse.CreateAndAddVertex(key.(T)); err != nil {
 			return false
 		}
 		return true
@@ -433,175 +446,113 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 	return reverse, nil
 }
 
-type DiscoveryState int
-
-const (
-	AttributeDiscoveryState = "dag/discovery-state"
-	AttributeOrderIndex     = "dag/order-index"
-
-	StateDiscovering DiscoveryState = iota
-	StateDiscovered
-	StateCompleted
-	StateError
-)
-
-// Discover recursively discovers the graph from the rootID vertex using the provided process function.
-func (d *DirectedAcyclicGraph[T]) Discover(ctx context.Context, root *Vertex[T], process func(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error)) error {
-	if err := d.AddVertex(root.ID, root.AttributesToMap(), map[string]any{
-		AttributeDiscoveryState: StateDiscovering,
-	}); err != nil && !errors.Is(err, ErrAlreadyExists) {
-		return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
-	}
-	return d.discover(ctx, root.ID, process, &sync.Map{})
+// Vertex represents a node/vertex in a directed acyclic graph.
+type Vertex[T cmp.Ordered] struct {
+	// ID is a unique identifier for the node
+	ID T
+	// Attributes stores the attributes of the node, such as the component
+	// descriptor.
+	Attributes *sync.Map // map[string]any (attributes)
+	// Edges stores the IDs of the nodes that this node has an outgoing edge to,
+	// as well as any attributes associated with that edge.
+	Edges *sync.Map // map[T]*sync.Map with map[string]any (attributes)
 }
 
-func (d *DirectedAcyclicGraph[T]) discover(ctx context.Context, id T, process func(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error), doneMap *sync.Map) error {
-	doneCh, loaded := doneMap.LoadOrStore(id, make(chan struct{}))
-	done := doneCh.(chan struct{})
-	if loaded {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-done:
+// NewVertex creates a new vertex with the given ID and optional attributes.
+func NewVertex[T cmp.Ordered](id T, attributes ...map[string]any) *Vertex[T] {
+	v := &Vertex[T]{
+		ID:         id,
+		Attributes: &sync.Map{},
+		Edges:      &sync.Map{},
+	}
+	for _, attrs := range attributes {
+		for key, value := range attrs {
+			v.Attributes.Store(key, value)
 		}
-		return nil
 	}
-	defer close(done)
-
-	vertex, ok := d.GetVertex(id)
-	if !ok {
-		return fmt.Errorf("vertex %v not found in the graph", id)
-	}
-
-	neighbors, err := process(ctx, vertex)
-	if err != nil {
-		vertex.Attributes.Store(AttributeDiscoveryState, StateError)
-		return fmt.Errorf("failed to process id %v: %w", id, err)
-	}
-	vertex.Attributes.Store(AttributeDiscoveryState, StateDiscovered)
-
-	wg, ctx := errgroup.WithContext(ctx)
-	for index, ref := range neighbors {
-		if err := d.AddVertex(ref.ID, ref.AttributesToMap(), map[string]any{
-			AttributeDiscoveryState: StateDiscovering},
-		); err != nil && !errors.Is(err, ErrAlreadyExists) {
-			return fmt.Errorf("failed to add vertex for reference %v: %w", ref, err)
-		}
-		if err := d.AddEdge(id, ref.ID, map[string]any{AttributeOrderIndex: index}); err != nil {
-			return fmt.Errorf("failed to add edge %v: %w", id, err)
-		}
-		refID := ref.ID
-		wg.Go(func() error {
-			if err := d.discover(ctx, refID, process, doneMap); err != nil {
-				return fmt.Errorf("failed to discover reference %v: %w", id, err)
-			}
-			return nil
-		})
-	}
-	if err = wg.Wait(); err != nil {
-		vertex.Attributes.Store(AttributeDiscoveryState, StateError)
-		return err
-	}
-	vertex.Attributes.Store(AttributeDiscoveryState, StateCompleted)
-	return nil
+	return v
 }
 
-// VertexMapRepresentation is a map-based representation of a vertex for easier testing and inspection.
-type VertexMapRepresentation[T cmp.Ordered] struct {
-	ID         T
-	Attributes map[string]any
-	Edges      map[T]map[string]any
-}
-
-// GraphMapRepresentation is a map-based representation of the entire graph, including degree maps.
-type GraphMapRepresentation[T cmp.Ordered] struct {
-	Vertices  map[T]*VertexMapRepresentation[T]
-	OutDegree map[T]int
-	InDegree  map[T]int
-}
-
-// ToMap converts the concurrent graph structure into a regular map-based
-// structure for testing and non-concurrent evaluation.
-func (d *DirectedAcyclicGraph[T]) ToMap() *GraphMapRepresentation[T] {
-	vertices := make(map[T]*VertexMapRepresentation[T])
-	d.Vertices.Range(func(key, value any) bool {
-		id, ok := key.(T)
-		if !ok {
-			return true
-		}
-		v, ok := value.(*Vertex[T])
-		if !ok {
-			return true
-		}
-		vertices[id] = &VertexMapRepresentation[T]{
-			ID:         v.ID,
-			Attributes: v.AttributesToMap(),
-			Edges:      v.EdgesToMap(),
+func (v *Vertex[T]) Clone() *Vertex[T] {
+	cloned := &Vertex[T]{
+		ID:         v.ID,
+		Attributes: &sync.Map{},
+		Edges:      &sync.Map{},
+	}
+	v.Attributes.Range(func(key, value any) bool {
+		k := key.(string)
+		cloned.Attributes.Store(k, value)
+		return true
+	})
+	v.Edges.Range(func(key, value any) bool {
+		k := key.(T)
+		if attrMap, ok := value.(*sync.Map); ok {
+			newMap := &sync.Map{}
+			attrMap.Range(func(kk, vv any) bool {
+				newMap.Store(kk, vv)
+				return true
+			})
+			cloned.Edges.Store(k, newMap)
 		}
 		return true
 	})
-	return &GraphMapRepresentation[T]{
-		Vertices:  vertices,
-		OutDegree: d.OutDegreeToMap(),
-		InDegree:  d.InDegreeToMap(),
-	}
+	return cloned
 }
 
-// AttributesToMap converts the vertex sync.Map attributes to a regular map for
-// easier testing and non-concurrent evaluation.
-func (v *Vertex[T]) AttributesToMap() map[string]any {
-	return SyncMapToMap[string, any](v.Attributes)
+func (v *Vertex[T]) LengthEdges() int {
+	count := 0
+	v.Edges.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	return count
 }
 
-// EdgesToMap converts the vertex sync.Map edges and their attributes to
-// regular maps for easier testing and evaluation.
-func (v *Vertex[T]) EdgesToMap() map[T]map[string]any {
-	edges := make(map[T]map[string]any)
-	v.Edges.Range(func(key, value any) bool {
-		if edgeID, ok := key.(T); ok {
-			if attrMap, ok := value.(*sync.Map); ok {
-				edges[edgeID] = SyncMapToMap[string, any](attrMap)
-			}
-		}
+func (v *Vertex[T]) EdgeKeys() []T {
+	edges := make([]T, 0)
+	v.Edges.Range(func(key, _ any) bool {
+		edges = append(edges, key.(T))
 		return true
 	})
 	return edges
 }
 
-// VerticesToMap converts the graph's vertices sync.Map to a regular map for
-// easier testing and non-concurrent evaluation.
-func (d *DirectedAcyclicGraph[T]) VerticesToMap() map[T]*Vertex[T] {
-	return SyncMapToMap[T, *Vertex[T]](d.Vertices)
+func (v *Vertex[T]) GetAttribute(key string) (any, bool) {
+	value, ok := v.Attributes.Load(key)
+	if !ok {
+		return nil, false
+	}
+	return value, true
 }
 
-// OutDegreeToMap converts the graph's out-degree sync.Map to a regular map for
-// easier testing and non-concurrent evaluation.
-func (d *DirectedAcyclicGraph[T]) OutDegreeToMap() map[T]int {
-	return SyncMapToMap[T, int](d.OutDegree)
+func (v *Vertex[T]) MustGetAttribute(key string) any {
+	value, ok := v.GetAttribute(key)
+	if !ok {
+		panic(fmt.Sprintf("attribute %s not found in vertex %v", key, v.ID))
+	}
+	return value
 }
 
-// InDegreeToMap converts the graph's in-degree sync.Map to a regular map for
-// easier testing and non-concurrent evaluation.
-func (d *DirectedAcyclicGraph[T]) InDegreeToMap() map[T]int {
-	return SyncMapToMap[T, int](d.InDegree)
+func (v *Vertex[T]) GetEdgeAttribute(to T, key string) (any, bool) {
+	edge, ok := v.Edges.Load(to)
+	if !ok {
+		return nil, false
+	}
+	attrMap, ok := edge.(*sync.Map)
+	if !ok {
+		return nil, false
+	}
+	value, ok := attrMap.Load(key)
+	if !ok {
+		return nil, false
+	}
+	return value, true
 }
 
-// SyncMapToMap converts a sync.Map to a regular map with type assertions.
-// This is an auxiliary function to facilitate conversion of sync.Map in the
-// graph structure to a regular map for easier testing and non-concurrent
-// evaluation.
-func SyncMapToMap[K comparable, V any](m *sync.Map) map[K]V {
-	result := make(map[K]V)
-	m.Range(func(key, value any) bool {
-		if k, ok := key.(K); ok {
-			if v, ok := value.(V); ok {
-				result[k] = v
-			} else {
-				var zeroValue V
-				slog.Error("Value type mismatch in sync.Map", "expected", fmt.Sprintf("%T", zeroValue), "got", fmt.Sprintf("%T", value))
-			}
-		}
-		return true
-	})
-	return result
+func (v *Vertex[T]) MustGetEdgeAttribute(to T, key string) any {
+	value, ok := v.GetEdgeAttribute(to, key)
+	if !ok {
+		panic(fmt.Sprintf("edge attribute %s not found for edge %v -> %v", key, v.ID, to))
+	}
+	return value
 }
