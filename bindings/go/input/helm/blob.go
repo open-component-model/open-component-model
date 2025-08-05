@@ -171,8 +171,8 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.
 		Digest:    configDigest,
 		Size:      int64(len(configContent)),
 	}
-	if err := target.Push(ctx, configLayer, strings.NewReader(configContent)); err != nil {
-		err = fmt.Errorf("failed to push helm chart config layer: %w", err)
+	if perr := target.Push(ctx, configLayer, strings.NewReader(configContent)); perr != nil {
+		err = fmt.Errorf("failed to push helm chart config layer: %w", perr)
 		return
 	}
 
@@ -187,32 +187,36 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.
 		Digest:    digest.Digest(chartDigStr),
 		Size:      chart.ChartBlob.Size(),
 	}
-	chartReader, err := chart.ChartBlob.ReadCloser()
-	if err != nil {
-		err = fmt.Errorf("failed to get a reader for helm chart blob %q:%q: %w", chart.Name, chart.Version, err)
+	chartReader, rerr := chart.ChartBlob.ReadCloser()
+	if rerr != nil {
+		err = fmt.Errorf("failed to get a reader for helm chart blob %q:%q: %w", chart.Name, chart.Version, rerr)
 		return
 	}
-	if err = target.Push(ctx, chartLayer, chartReader); err != nil {
-		err = fmt.Errorf("failed to push helm chart content layer: %w", err)
+	if perr := target.Push(ctx, chartLayer, chartReader); perr != nil {
+		err = fmt.Errorf("failed to push helm chart content layer: %w", perr)
 		return
 	}
 
 	// TODO: create and push provenance OCI layer.
 
 	// Create OCI image manifest.
-	imgDesc, err := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
+	imgDesc, perr := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
 		ConfigDescriptor: &configLayer,
 		Layers:           []ociImageSpecV1.Descriptor{chartLayer}, // TODO: add provenance layer.
 	})
+	if perr != nil {
+		err = fmt.Errorf("failed to create OCI image manifest: %w", perr)
+		return
+	}
 
-	if err := target.Tag(ctx, imgDesc, chart.Version); err != nil {
-		err = fmt.Errorf("failed to tag base: %w", err)
+	if terr := target.Tag(ctx, imgDesc, chart.Version); terr != nil {
+		err = fmt.Errorf("failed to tag OCI image: %w", terr)
 		return
 	}
 
 	// Explicitly close the readers.
-	if err := chartReader.Close(); err != nil { // TODO: close provenance reader.
-		err = fmt.Errorf("failed to close readers: %w", err)
+	if rerr := chartReader.Close(); rerr != nil { // TODO: close provenance reader.
+		err = fmt.Errorf("failed to close readers: %w", rerr)
 		return
 	}
 }
