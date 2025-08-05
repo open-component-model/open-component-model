@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 
-	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
@@ -25,53 +23,56 @@ type CopyToOCILayoutOptions struct {
 	Tags []string
 }
 
-func CopyToOCILayoutInMemory(ctx context.Context, src content.ReadOnlyStorage, base ociImageSpecV1.Descriptor, opts CopyToOCILayoutOptions) (b *inmemory.Blob, err error) {
-	var buf bytes.Buffer
+// CopyToOCILayoutInMemory streams the contents of an OCI graph from the given
+// ReadOnlyStorage into an in-memory OCI layout archive (gzipped tar), returning
+// a Blob that can be read by consumers. The actual copy happens asynchronously
+// in a goroutine; if the caller never reads from the returned Blob, the copy
+// will block.
+//
+// Returns an inmemory.Blob wrapping the read side of a pipe, with media type
+// [layout.MediaTypeOCIImageLayoutTarGzipV1].
+func CopyToOCILayoutInMemory(ctx context.Context, src content.ReadOnlyStorage, base ociImageSpecV1.Descriptor, opts CopyToOCILayoutOptions) (*inmemory.Blob, error) {
+	r, w := io.Pipe()
 
-	h := sha256.New()
-	writer := io.MultiWriter(&buf, h)
+	go copyToOCILayoutInMemoryAsync(ctx, src, base, opts, w)
 
-	zippedBuf := gzip.NewWriter(writer)
+	downloaded := inmemory.New(r, inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1))
+	return downloaded, nil
+}
+
+// copyToOCILayoutInMemoryAsync performs the actual OCI‐layout archive creation
+// and writes it into the provided PipeWriter. Any error (from CopyGraph,
+// gzip, or OCILayoutWriter) is joined and propagated via the pipe's [io.PipeWriter.CloseWithError],
+// causing any reader to receive an error when reading from the pipe.
+func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyStorage, base ociImageSpecV1.Descriptor, opts CopyToOCILayoutOptions, w *io.PipeWriter) {
+	// err accumulates any error from copy, gzip, or layout writing.
+	var err error
 	defer func() {
-		if err != nil {
-			// Clean up resources if there was an error
-			zippedBuf.Close()
-			buf.Reset()
-		}
+		w.CloseWithError(err)
 	}()
 
+	zippedBuf := gzip.NewWriter(w)
+	defer func() {
+		err = errors.Join(err, zippedBuf.Close())
+	}()
+
+	// Create an OCI layout writer over the gzip stream.
 	target := NewOCILayoutWriter(zippedBuf)
 	defer func() {
-		if terr := target.Close(); terr != nil {
-			err = errors.Join(err, fmt.Errorf("failed to close tar writer: %w", terr))
-			return
-		}
-		if zerr := zippedBuf.Close(); zerr != nil {
-			err = errors.Join(err, fmt.Errorf("failed to close gzip writer: %w", zerr))
-			return
-		}
+		err = errors.Join(err, target.Close())
 	}()
 
-	if err := oras.CopyGraph(ctx, src, target, base, opts.CopyGraphOptions); err != nil {
-		return nil, fmt.Errorf("failed to copy graph starting from descriptor %v: %w", base, err)
+	// Copy the image graph into the layout.
+	if err = errors.Join(err, oras.CopyGraph(ctx, src, target, base, opts.CopyGraphOptions)); err != nil {
+		return
 	}
 
+	// Apply any additional tags.
 	for _, tag := range opts.Tags {
-		if err := target.Tag(ctx, base, tag); err != nil {
-			return nil, fmt.Errorf("failed to tag base: %w", err)
+		if err = errors.Join(err, target.Tag(ctx, base, tag)); err != nil {
+			return
 		}
 	}
-
-	// now close prematurely so that the buf is fully filled before we set things like size and digest.
-	if err := errors.Join(target.Close(), zippedBuf.Close()); err != nil {
-		return nil, fmt.Errorf("failed to close writers: %w", err)
-	}
-	downloaded := inmemory.New(&buf,
-		inmemory.WithSize(int64(buf.Len())),
-		inmemory.WithDigest(digest.NewDigest(digest.SHA256, h).String()),
-		inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1),
-	)
-	return downloaded, nil
 }
 
 type CopyOCILayoutWithIndexOptions struct {
