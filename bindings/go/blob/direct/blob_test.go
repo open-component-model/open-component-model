@@ -127,13 +127,24 @@ func TestCompatibility(t *testing.T) {
 	})
 
 	t.Run("bytes", func(t *testing.T) {
-		b := NewFromBytes([]byte(data))
-		br, err := b.ReadCloser()
-		assert.NoError(t, err)
-		result, err := io.ReadAll(br)
-		assert.NoError(t, err)
-		assert.Equal(t, data, string(result))
-		assert.Equal(t, int64(len(data)), b.Size())
+		t.Run("direct", func(t *testing.T) {
+			b := NewFromBytes([]byte(data))
+			br, err := b.ReadCloser()
+			assert.NoError(t, err)
+			result, err := io.ReadAll(br)
+			assert.NoError(t, err)
+			assert.Equal(t, data, string(result))
+			assert.Equal(t, int64(len(data)), b.Size())
+		})
+		t.Run("reader", func(t *testing.T) {
+			b := New(bytes.NewReader([]byte(data)))
+			br, err := b.ReadCloser()
+			assert.NoError(t, err)
+			result, err := io.ReadAll(br)
+			assert.NoError(t, err)
+			assert.Equal(t, data, string(result))
+			assert.Equal(t, int64(len(data)), b.Size())
+		})
 	})
 
 	t.Run("buffer", func(t *testing.T) {

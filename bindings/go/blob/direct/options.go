@@ -9,7 +9,9 @@ type DirectBlobOption interface {
 type WithMediaType string
 
 func (w WithMediaType) ApplyToDirectBlob(b *Blob) {
-	b.SetMediaType(string(w))
+	if w != "" {
+		b.SetMediaType(string(w))
+	}
 }
 
 // WithSize is a DirectBlobOption that sets the size of the Blob.
@@ -17,7 +19,9 @@ func (w WithMediaType) ApplyToDirectBlob(b *Blob) {
 type WithSize int64
 
 func (w WithSize) ApplyToDirectBlob(b *Blob) {
-	b.size = func() (int64, error) {
-		return int64(w), nil
+	if w >= 0 {
+		b.size = func() (int64, error) {
+			return int64(w), nil
+		}
 	}
 }

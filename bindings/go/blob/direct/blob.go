@@ -33,7 +33,7 @@ func NewFromBytes(data []byte, opts ...DirectBlobOption) *Blob {
 		append([]DirectBlobOption{WithSize(int64(len(data)))}, opts...)...)
 }
 
-// New constructs a Blob from a io.ReaderAt source, applying any DirectBlobOption values.
+// New constructs a Blob from a [io.Reader] source, applying any DirectBlobOption values.
 // By default, the media type is set to "application/octet-stream" if not overwritten by
 // WithMediaType.
 //
@@ -44,15 +44,16 @@ func NewFromBytes(data []byte, opts ...DirectBlobOption) *Blob {
 //   - If it cannot seek, size defaults to -1 (SizeUnknown).
 //
 // Note that if you do not have the ability to open readers on demand on the source,
-// you can use a memory buffered blob instead (see package inmemory for that) to avoid the need for seeking.
+// you can use a memory buffered blob instead (see package inmemory for that) to avoid the need for seeking or
+// to allow repetitive reads.
 //
 // If possible, you should also use native implementations that access the underlying data structures directly.
 // For example, for filesystem blobs, use the filesystem package which directly works with stat calls.
 //
 // See Blob for more details on how the underlying implementation behaves.
-func New(src io.ReaderAt, opts ...DirectBlobOption) *Blob {
+func New(src io.Reader, opts ...DirectBlobOption) *Blob {
 	b := &Blob{
-		readerAt:  src,
+		reader:    src,
 		mediaType: atomic.Pointer[string]{},
 	}
 
@@ -73,13 +74,13 @@ func New(src io.ReaderAt, opts ...DirectBlobOption) *Blob {
 // Blob represents immutable binary data that can be read independently with each call to ReadCloser.
 // It is designed to be thread-safe and allows concurrent access to its methods.
 // Thus it can be considered a "direct" blob implementation that does not rely on in-memory buffering,
-// but rather on the underlying io.ReaderAt source for reading data.
+// but rather on the underlying [io.Reader] source for reading data.
 //
 // It supports lazy evaluation of size. When constructed via
 // New, by default size does not use up buffer space, but can still be determined when the reader supports io.Seeker.
 type Blob struct {
 	// base for creating io.SectionReader instances
-	readerAt io.ReaderAt
+	reader io.Reader
 	// MIME type of the data
 	mediaType atomic.Pointer[string]
 	// size is a lazily-evaluated function returning the size of the underlying returned readers.
@@ -97,14 +98,21 @@ func (b *Blob) Size() int64 {
 
 // ReadCloser returns a new io.ReadCloser that streams from the start
 // of the blob to its size. Closing it does not close the underlying source.
+// Note that if the source is not an io.ReaderAt, it will return a direct reader
+// which can cause repeated calls to ReadCloser to return the same reader.
 func (b *Blob) ReadCloser() (io.ReadCloser, error) {
-	size, err := b.size()
-	if err != nil {
-		return nil, err
+	if readerAt, ok := b.reader.(io.ReaderAt); ok {
+		size, err := b.size()
+		if err != nil {
+			return nil, err
+		}
+		// NewSectionReader reads from offset 0 up to the blob size
+		reader := io.NewSectionReader(readerAt, 0, size)
+		return io.NopCloser(reader), nil
 	}
-	// NewSectionReader reads from offset 0 up to the blob size
-	reader := io.NewSectionReader(b.readerAt, 0, size)
-	return io.NopCloser(reader), nil
+
+	// If the source is not a ReaderAt, we return a direct reader
+	return io.NopCloser(b.reader), nil
 }
 
 // SetMediaType updates the MIME type of the blob.
