@@ -40,14 +40,14 @@ func TestDAGAddNode(t *testing.T) {
 	r.True(d.Contains("A"))
 	r.False(d.Contains("B"))
 
-	r.Lenf(d.Vertices, 1, "expected 1 node after rejection of the second, but got %d", len(d.Vertices))
-	r.Equal("A", d.Vertices["A"].ID, "expected node ID to be 'A', but got %s", d.Vertices["A"].ID)
-	r.Equal("1", d.Vertices["A"].Attributes["key"], "expected node attribute to be '1', but got %s", d.Vertices["A"].Attributes["key"])
+	r.Lenf(d.VerticesToMap(), 1, "expected 1 node after rejection of the second, but got %d", len(d.VerticesToMap()))
+	r.Equal("A", d.VerticesToMap()["A"].ID, "expected node ID to be 'A', but got %s", d.VerticesToMap()["A"].ID)
+	r.Equal("1", d.VerticesToMap()["A"].AttributesToMap()["key"], "expected node attribute to be '1', but got %s", d.VerticesToMap()["A"].AttributesToMap()["key"])
 
 	r.NoError(d.AddVertex("B", map[string]any{"key": "2"}))
-	r.Lenf(d.Vertices, 2, "expected 2 nodes after adding 'B', but got %d", len(d.Vertices))
-	r.Equal("B", d.Vertices["B"].ID, "expected node ID to be 'B', but got %s", d.Vertices["B"].ID)
-	r.Equal("2", d.Vertices["B"].Attributes["key"], "expected node attribute to be '2', but got %s", d.Vertices["B"].Attributes["key"])
+	r.Lenf(d.VerticesToMap(), 2, "expected 2 nodes after adding 'B', but got %d", len(d.VerticesToMap()))
+	r.Equal("B", d.VerticesToMap()["B"].ID, "expected node ID to be 'B', but got %s", d.VerticesToMap()["B"].ID)
+	r.Equal("2", d.VerticesToMap()["B"].AttributesToMap()["key"], "expected node attribute to be '2', but got %s", d.VerticesToMap()["B"].AttributesToMap()["key"])
 
 	t.Run("roots", func(t *testing.T) {
 		r := require.New(t)
@@ -58,21 +58,21 @@ func TestDAGAddNode(t *testing.T) {
 
 	t.Run("degrees", func(t *testing.T) {
 		r := require.New(t)
-		r.Equal(d.OutDegree["A"], 0, "expected out-degree of A to be 0, but got %d", d.OutDegree["A"])
-		r.Equal(d.InDegree["A"], 0, "expected in-degree of A to be 0, but got %d", d.InDegree["A"])
-		r.Equal(d.OutDegree["B"], 0, "expected out-degree of B to be 0, but got %d", d.OutDegree["B"])
-		r.Equal(d.InDegree["B"], 0, "expected in-degree of B to be 0, but got %d", d.InDegree["B"])
+		r.Equal(d.OutDegreeToMap()["A"], 0, "expected out-degree of A to be 0, but got %d", d.OutDegreeToMap()["A"])
+		r.Equal(d.InDegreeToMap()["A"], 0, "expected in-degree of A to be 0, but got %d", d.InDegreeToMap()["A"])
+		r.Equal(d.OutDegreeToMap()["B"], 0, "expected out-degree of B to be 0, but got %d", d.OutDegreeToMap()["B"])
+		r.Equal(d.InDegreeToMap()["B"], 0, "expected in-degree of B to be 0, but got %d", d.InDegreeToMap()["B"])
 	})
 
 	t.Run("delete", func(t *testing.T) {
 		r := require.New(t)
 		r.NoError(d.DeleteVertex("A"))
-		r.Lenf(d.Vertices, 1, "expected 1 node after deleting 'A', but got %d", len(d.Vertices))
-		r.Equal("B", d.Vertices["B"].ID, "expected node ID to be 'B', but got %s", d.Vertices["B"].ID)
+		r.Lenf(d.VerticesToMap(), 1, "expected 1 node after deleting 'A', but got %d", len(d.VerticesToMap()))
+		r.Equal("B", d.VerticesToMap()["B"].ID, "expected node ID to be 'B', but got %s", d.VerticesToMap()["B"].ID)
 		r.Error(d.DeleteVertex("A"), "expected error when deleting non-existent node 'A', but got nil")
-		_, outExists := d.OutDegree["A"]
+		_, outExists := d.OutDegreeToMap()["A"]
 		r.False(outExists)
-		_, inExists := d.InDegree["A"]
+		_, inExists := d.InDegreeToMap()["A"]
 		r.False(inExists)
 	})
 }
@@ -91,36 +91,36 @@ func TestDAGAddEdge(t *testing.T) {
 		r.EqualValues([]string{"A"}, d.Roots(), "expected roots to be [A], but got %v", d.Roots())
 	})
 
-	r.Len(d.Vertices["A"].Edges, 1, "expected 1 edge from A to B, but got %d", len(d.Vertices["A"].Edges))
-	r.EqualValues([]string{"B"}, slices.Collect(maps.Keys(d.Vertices["A"].Edges)), "expected edge ID to be 'B', but got %s", d.Vertices["A"].Edges)
-	r.Len(d.Vertices["B"].Edges, 0, "expected 0 edges from B to A, but got %d", len(d.Vertices["B"].Edges))
+	r.Len(d.VerticesToMap()["A"].EdgesToMap(), 1, "expected 1 edge from A to B, but got %d", len(d.VerticesToMap()["A"].EdgesToMap()))
+	r.EqualValues([]string{"B"}, slices.Collect(maps.Keys(d.VerticesToMap()["A"].EdgesToMap())), "expected edge ID to be 'B', but got %s", d.VerticesToMap()["A"].EdgesToMap())
+	r.Len(d.VerticesToMap()["B"].EdgesToMap(), 0, "expected 0 edges from B to A, but got %d", len(d.VerticesToMap()["B"].EdgesToMap()))
 
 	t.Run("degrees", func(t *testing.T) {
-		r.Equal(d.OutDegree["A"], 1, "expected out-degree of A to be 1, but got %d", d.OutDegree["A"])
-		r.Equal(d.InDegree["A"], 0, "expected in-degree of A to be 0, but got %d", d.InDegree["A"])
+		r.Equal(d.OutDegreeToMap()["A"], 1, "expected out-degree of A to be 1, but got %d", d.OutDegreeToMap()["A"])
+		r.Equal(d.InDegreeToMap()["A"], 0, "expected in-degree of A to be 0, but got %d", d.InDegreeToMap()["A"])
 
-		r.Equal(d.OutDegree["B"], 0, "expected out-degree of B to be 0, but got %d", d.OutDegree["B"])
-		r.Equal(d.InDegree["B"], 1, "expected in-degree of B to be 1, but got %d", d.InDegree["B"])
+		r.Equal(d.OutDegreeToMap()["B"], 0, "expected out-degree of B to be 0, but got %d", d.OutDegreeToMap()["B"])
+		r.Equal(d.InDegreeToMap()["B"], 1, "expected in-degree of B to be 1, but got %d", d.InDegreeToMap()["B"])
 	})
 
 	t.Run("reverse", func(t *testing.T) {
 		r := require.New(t)
 		d, err := d.Reverse()
 		r.NoError(err, "error reversing the graph")
-		r.Len(d.Vertices["A"].Edges, 0, "expected 0 edges from A to B, but got %d", len(d.Vertices["A"].Edges))
-		r.Len(d.Vertices["B"].Edges, 1, "expected 1 edge from B to A, but got %d", len(d.Vertices["B"].Edges))
-		r.EqualValues([]string{"A"}, slices.Collect(maps.Keys(d.Vertices["B"].Edges)), "expected edge ID to be 'A', but got %s", d.Vertices["B"].Edges)
+		r.Len(d.VerticesToMap()["A"].EdgesToMap(), 0, "expected 0 edges from A to B, but got %d", len(d.VerticesToMap()["A"].EdgesToMap()))
+		r.Len(d.VerticesToMap()["B"].EdgesToMap(), 1, "expected 1 edge from B to A, but got %d", len(d.VerticesToMap()["B"].EdgesToMap()))
+		r.EqualValues([]string{"A"}, slices.Collect(maps.Keys(d.VerticesToMap()["B"].EdgesToMap())), "expected edge ID to be 'A', but got %s", d.VerticesToMap()["B"].EdgesToMap())
 	})
 
 	t.Run("delete", func(t *testing.T) {
 		r := require.New(t)
 		r.NoError(d.DeleteVertex("A"))
-		r.Lenf(d.Vertices, 1, "expected 1 node after deleting 'A', but got %d", len(d.Vertices))
-		r.Equal("B", d.Vertices["B"].ID, "expected node ID to be 'B', but got %s", d.Vertices["B"].ID)
+		r.Lenf(d.VerticesToMap(), 1, "expected 1 node after deleting 'A', but got %d", len(d.VerticesToMap()))
+		r.Equal("B", d.VerticesToMap()["B"].ID, "expected node ID to be 'B', but got %s", d.VerticesToMap()["B"].ID)
 		r.Error(d.DeleteVertex("A"), "expected error when deleting non-existent node 'A', but got nil")
-		_, outExists := d.OutDegree["A"]
+		_, outExists := d.OutDegreeToMap()["A"]
 		r.False(outExists)
-		_, inExists := d.InDegree["A"]
+		_, inExists := d.InDegreeToMap()["A"]
 		r.False(inExists)
 	})
 }
@@ -142,7 +142,7 @@ func TestDAGHasCycle(t *testing.T) {
 
 	// pointless to test for the cycle here, so we need to emulate one
 	// by artificially adding a cycle.
-	d.Vertices["C"].Edges["A"] = map[string]any{}
+	d.VerticesToMap()["C"].EdgesToMap()["A"] = map[string]any{}
 	cyclic, _ = d.HasCycle()
 	r.Truef(cyclic, "DAG incorrectly reported no cycle")
 
