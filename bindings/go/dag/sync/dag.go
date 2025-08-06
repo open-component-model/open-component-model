@@ -55,6 +55,8 @@ func NewDirectedAcyclicGraph[T cmp.Ordered]() *DirectedAcyclicGraph[T] {
 	}
 }
 
+// GetOutDegree returns the out-degree (number of outgoing edges) of the given
+// vertex and a boolean indicating if the vertex exists in the graph.
 func (d *DirectedAcyclicGraph[T]) GetOutDegree(id T) (int, bool) {
 	if outDegree, ok := d.OutDegree.Load(id); ok {
 		return outDegree.(int), true
@@ -62,6 +64,8 @@ func (d *DirectedAcyclicGraph[T]) GetOutDegree(id T) (int, bool) {
 	return 0, false
 }
 
+// MustGetOutDegree returns the out-degree of the given vertex, panicking if
+// the vertex does not exist in the graph.
 func (d *DirectedAcyclicGraph[T]) MustGetOutDegree(id T) int {
 	inDegree, ok := d.GetOutDegree(id)
 	if !ok {
@@ -70,6 +74,8 @@ func (d *DirectedAcyclicGraph[T]) MustGetOutDegree(id T) int {
 	return inDegree
 }
 
+// GetInDegree returns the in-degree (number of incoming edges) of the given
+// vertex and a boolean indicating if the vertex exists in the graph.
 func (d *DirectedAcyclicGraph[T]) GetInDegree(id T) (int, bool) {
 	if inDegree, ok := d.InDegree.Load(id); ok {
 		return inDegree.(int), true
@@ -77,6 +83,8 @@ func (d *DirectedAcyclicGraph[T]) GetInDegree(id T) (int, bool) {
 	return 0, false
 }
 
+// MustGetInDegree returns the in-degree of the given vertex, panicking if
+// the vertex does not exist in the graph.
 func (d *DirectedAcyclicGraph[T]) MustGetInDegree(id T) int {
 	inDegree, ok := d.GetInDegree(id)
 	if !ok {
@@ -85,6 +93,7 @@ func (d *DirectedAcyclicGraph[T]) MustGetInDegree(id T) int {
 	return inDegree
 }
 
+// LengthVertices returns the number of vertices in the graph.
 func (d *DirectedAcyclicGraph[T]) LengthVertices() int {
 	count := 0
 	d.Vertices.Range(func(_, _ any) bool {
@@ -94,6 +103,9 @@ func (d *DirectedAcyclicGraph[T]) LengthVertices() int {
 	return count
 }
 
+// Clone creates a copy of the graph and returns it.
+// The copy IS NOT a complete deep copy, as it only clones the vertices and their
+// and their edges. The attribute values are not cloned.
 func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
 	cloned := NewDirectedAcyclicGraph[T]()
 
@@ -229,6 +241,7 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 	return nil
 }
 
+// Roots returns the root nodes of the graph, which are nodes with no incoming edges.
 func (d *DirectedAcyclicGraph[T]) Roots() []T {
 	var roots []T
 	d.InDegree.Range(func(key, value any) bool {
@@ -240,6 +253,7 @@ func (d *DirectedAcyclicGraph[T]) Roots() []T {
 	return roots
 }
 
+// TopologicalSort performs a topological sort on the graph.
 func (d *DirectedAcyclicGraph[T]) TopologicalSort() ([]T, error) {
 	if cyclic, nodes := d.HasCycle(); cyclic {
 		return nil, &CycleError{
@@ -286,6 +300,8 @@ func (d *DirectedAcyclicGraph[T]) TopologicalSort() ([]T, error) {
 	return order, nil
 }
 
+// GetVertex returns the vertex with the given ID and a boolean indicating if
+// it exists in the graph.
 func (d *DirectedAcyclicGraph[T]) GetVertex(id T) (*Vertex[T], bool) {
 	v, ok := d.Vertices.Load(id)
 	if !ok {
@@ -295,6 +311,8 @@ func (d *DirectedAcyclicGraph[T]) GetVertex(id T) (*Vertex[T], bool) {
 	return vertex, ok
 }
 
+// MustGetVertex returns the vertex with the given ID, panicking if the vertex
+// does not exist in the graph.
 func (d *DirectedAcyclicGraph[T]) MustGetVertex(id T) *Vertex[T] {
 	vertex, ok := d.GetVertex(id)
 	if !ok {
@@ -317,7 +335,7 @@ func (d *DirectedAcyclicGraph[T]) GetVertices() []T {
 	return nodes
 }
 
-// GetEdges returns the edges in the graph in sorted order...
+// GetEdges returns the edges in the graph in sorted order.
 func (d *DirectedAcyclicGraph[T]) GetEdges() [][2]T {
 	var edges [][2]T
 	d.Vertices.Range(func(from, value any) bool {
@@ -338,6 +356,8 @@ func (d *DirectedAcyclicGraph[T]) GetEdges() [][2]T {
 	return edges
 }
 
+// HasCycle checks if the graph has a cycle. In other words, it checks whether
+// the graph is still a directed ACYCLIC graph (DAG).
 func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 	visited := make(map[T]bool)
 	recStack := make(map[T]bool)
@@ -400,6 +420,7 @@ func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 	return false, nil
 }
 
+// Contains checks if the graph contains a vertex with the given ID.
 func (d *DirectedAcyclicGraph[T]) Contains(v T) (ok bool) {
 	_, ok = d.Vertices.Load(v)
 	return
@@ -486,6 +507,7 @@ func (v *Vertex[T]) Clone() *Vertex[T] {
 	return cloned
 }
 
+// LengthEdges returns the number of edges (outgoing connections) from this vertex.
 func (v *Vertex[T]) LengthEdges() int {
 	count := 0
 	v.Edges.Range(func(_, _ any) bool {
@@ -495,6 +517,8 @@ func (v *Vertex[T]) LengthEdges() int {
 	return count
 }
 
+// EdgeKeys returns the keys of the edges of this vertex. In other words, the
+// IDs of the child nodes of this vertex.
 func (v *Vertex[T]) EdgeKeys() []T {
 	edges := make([]T, 0)
 	v.Edges.Range(func(key, _ any) bool {
@@ -504,6 +528,8 @@ func (v *Vertex[T]) EdgeKeys() []T {
 	return edges
 }
 
+// GetAttribute retrieves an attribute from the vertex by its key and a boolean
+// indicating if the attribute exists.
 func (v *Vertex[T]) GetAttribute(key string) (any, bool) {
 	value, ok := v.Attributes.Load(key)
 	if !ok {
@@ -512,6 +538,8 @@ func (v *Vertex[T]) GetAttribute(key string) (any, bool) {
 	return value, true
 }
 
+// MustGetAttribute retrieves an attribute from the vertex by its key, panicking
+// if the attribute does not exist.
 func (v *Vertex[T]) MustGetAttribute(key string) any {
 	value, ok := v.GetAttribute(key)
 	if !ok {
@@ -520,6 +548,9 @@ func (v *Vertex[T]) MustGetAttribute(key string) any {
 	return value
 }
 
+// GetEdgeAttribute returns an attribute from the edge with ID to, and the
+// specified attribute key. It also returns a boolean indicating if the
+// attribute exists.
 func (v *Vertex[T]) GetEdgeAttribute(to T, key string) (any, bool) {
 	edge, ok := v.Edges.Load(to)
 	if !ok {
@@ -536,6 +567,8 @@ func (v *Vertex[T]) GetEdgeAttribute(to T, key string) (any, bool) {
 	return value, true
 }
 
+// MustGetEdgeAttribute retrieves an attribute from the edge with ID to, and the
+// specified attribute key, panicking if the attribute does not exist.
 func (v *Vertex[T]) MustGetEdgeAttribute(to T, key string) any {
 	value, ok := v.GetEdgeAttribute(to, key)
 	if !ok {
