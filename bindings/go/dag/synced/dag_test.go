@@ -17,7 +17,7 @@
 //
 // We would like to thank the authors of kro for their outstanding work on this code.
 
-package dag
+package synced
 
 import (
 	"errors"
