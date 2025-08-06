@@ -1,11 +1,15 @@
 package plugin
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -14,6 +18,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
@@ -25,17 +30,18 @@ const (
 	FlagResourceVersion = "resource-version"
 	FlagOutput          = "output"
 	FlagExtraIdentity   = "extra-identity"
+	timeout             = 30 * time.Second
 )
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "plugin",
 		Aliases: []string{"plugins"},
-		Short:   "Download plugin binaries from a component version in an OCM Repository",
+		Short:   "Download plugin binaries from a component version.",
 		Args:    cobra.ExactArgs(1),
-		Long: `Download a plugin binary from a component version located in an Open Component Model (OCM) repository.
+		Long: `Download a plugin binary from a component version located in a component version.
 
-This command fetches a specific plugin resource from the given OCM component version reference and stores it at the specified output location.
+This command fetches a specific plugin resource from the given OCM component version and stores it at the specified output location.
 The plugin binary can be identified by resource name and version, with optional extra identity parameters for platform-specific binaries.
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
@@ -137,7 +143,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		resourceIdentity[key] = value
 	}
 
-	// Find matching resource
+	// Find a matching resource
 	var toDownload []descriptor.Resource
 	for _, resource := range desc.Component.Resources {
 		resourceIdent := resource.ToIdentity()
@@ -191,7 +197,6 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Write plugin binary to output location
 	if err := filesystem.CopyBlobToOSPath(data, output); err != nil {
 		return fmt.Errorf("writing plugin binary to %q failed: %w", output, err)
 	}
@@ -205,7 +210,14 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	logger.Info("plugin binary downloaded successfully", slog.String("output", output))
+	if err := validatePlugin(output, logger); err != nil {
+		if removeErr := os.Remove(output); removeErr != nil {
+			logger.Warn("failed to remove invalid plugin binary", slog.String("path", output), slog.String("error", removeErr.Error()))
+		}
+		return fmt.Errorf("downloaded binary is not a valid plugin: %w", err)
+	}
+
+	logger.Info("plugin binary downloaded and validated successfully", slog.String("output", output))
 	return nil
 }
 
@@ -218,4 +230,32 @@ func isLocal(access runtime.Typed) bool {
 		return false
 	}
 	return true
+}
+
+func validatePlugin(pluginPath string, logger *slog.Logger) error {
+	logger.Info("validating plugin binary", slog.String("path", pluginPath))
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, pluginPath, "capabilities")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("plugin capabilities command failed: %w", err)
+	}
+
+	var capabilities types.Types
+	if err := json.Unmarshal(output, &capabilities); err != nil {
+		return fmt.Errorf("plugin capabilities returned invalid JSON: %w", err)
+	}
+
+	if capabilities.Types == nil || len(capabilities.Types) == 0 {
+		return fmt.Errorf("plugin capabilities missing required 'types' field or is empty")
+	}
+
+	logger.Info("plugin validation successful",
+		slog.Int("plugin_types", len(capabilities.Types)),
+		slog.Int("config_types", len(capabilities.ConfigTypes)))
+
+	return nil
 }
