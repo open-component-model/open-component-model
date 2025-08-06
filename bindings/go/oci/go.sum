@@ -61,12 +61,12 @@ ocm.software/open-component-model/bindings/go/blob v0.0.4 h1:H+okhOgcoIRiJtHRP4v
 ocm.software/open-component-model/bindings/go/blob v0.0.4/go.mod h1:16FGcnFi6cVJsuUZ56R9H2n+TETUij+G2gYtwWS6l3Q=
 ocm.software/open-component-model/bindings/go/ctf v0.2.0 h1:BGZ+irknUVjZkOjL5j5bK5shmGWbOjpszfuETkPndVw=
 ocm.software/open-component-model/bindings/go/ctf v0.2.0/go.mod h1:L9JjTdoWDybr2YY9zXCsCAtNLracxW3aMK2f2TrqYZo=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250801133341-719ab8088fe9 h1:q4hTeYO8kLr0kAnSCKtpe+xs5pcy0foXAHRzaCIsP1s=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250801133341-719ab8088fe9/go.mod h1:QK95GAldTX7R4oh/bfGmeYoTVdrAMBIgJvquQELawb4=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250806065657-b7f82dbae95c h1:80dfJ9sMUk+Kgktsmqcgfxrd4Bfb0fKIonhy0NnZqiw=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250806065657-b7f82dbae95c/go.mod h1:QK95GAldTX7R4oh/bfGmeYoTVdrAMBIgJvquQELawb4=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 h1:daGC2XnJEJkukGdhvKxobUH+vF5TKYPlVQ6nl5ASdFM=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3/go.mod h1:nnLzPfpD2zy9YUgIuQxA3vCmUUKFQqSCl6jFAQXVE8M=
-ocm.software/open-component-model/bindings/go/repository v0.0.0-20250801133341-719ab8088fe9 h1:3j0DTa7DXMlbaM0pQHT7JdxTyh6yCtG429/C9yA/jKk=
-ocm.software/open-component-model/bindings/go/repository v0.0.0-20250801133341-719ab8088fe9/go.mod h1:Y+svPgrj+oL41Y5BV9usvbqtIoHVSQLqio31WTN8msw=
+ocm.software/open-component-model/bindings/go/repository v0.0.0-20250806065657-b7f82dbae95c h1:3Fm6oPtDily08S42G37UffNlQpvM69KlrO+8GWi2r4E=
+ocm.software/open-component-model/bindings/go/repository v0.0.0-20250806065657-b7f82dbae95c/go.mod h1:+/lv+I7EJc5oUbM576lS8fVh2jQcV+vygdT5qjNaP40=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2 h1:YA20enOxMsk4gDWF+Anltwkc616dXebfgPz/0Bl0EKE=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
