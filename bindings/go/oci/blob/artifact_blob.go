@@ -202,7 +202,7 @@ func (r *ArtifactBlob) HasSizeAndDigest() bool {
 
 func (r *ArtifactBlob) NewArtifactWithBufferedBlob() (result *ArtifactBlob, err error) {
 	// Get current reader.
-	reader, err := r.ReadOnlyBlob.ReadCloser()
+	reader, err := r.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get blob reader: %w", err)
 	}
@@ -222,13 +222,11 @@ func (r *ArtifactBlob) NewArtifactWithBufferedBlob() (result *ArtifactBlob, err 
 
 	// Create a new instance of the descriptor.
 	var newArtifact descriptor.Artifact
-	switch r.Artifact.(type) {
+	switch a := r.Artifact.(type) {
 	case *descriptor.Resource:
-		resource, _ := r.Artifact.(*descriptor.Resource)
-		newArtifact = resource.DeepCopy()
+		newArtifact = a.DeepCopy()
 	case *descriptor.Source:
-		source, _ := r.Artifact.(*descriptor.Source)
-		newArtifact = source.DeepCopy()
+		newArtifact = a.DeepCopy()
 	default:
 		return nil, fmt.Errorf("artifact is neither *descriptor.Resource not *descriptor.Source: %T", r.Artifact)
 	}
