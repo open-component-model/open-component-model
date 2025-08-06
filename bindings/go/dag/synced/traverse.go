@@ -141,8 +141,8 @@ func (d *DirectedAcyclicGraph[T]) traverse(
 
 	for index, ref := range neighbors {
 		if err := d.addRawVertex(ref, map[string]any{
-			AttributeTraversalState: StateDiscovering},
-		); err != nil && !errors.Is(err, ErrAlreadyExists) {
+			AttributeTraversalState: StateDiscovering,
+		}); err != nil && !errors.Is(err, ErrAlreadyExists) {
 			vertex.Attributes.Store(AttributeTraversalState, StateError)
 			return fmt.Errorf("failed to add vertex for reference %v: %w", ref, err)
 		}
