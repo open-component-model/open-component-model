@@ -1,47 +1,33 @@
-package introspection
+package synced
 
 import (
 	"cmp"
 	"fmt"
 	"sync"
 
-	dag "ocm.software/open-component-model/bindings/go/dag/synced"
+	"ocm.software/open-component-model/bindings/go/dag"
 )
 
-// VertexMapSnapshot is a map-based representation.
-type VertexMapSnapshot[T cmp.Ordered] struct {
-	ID         T
-	Attributes map[string]any
-	Edges      map[T]map[string]any
-}
-
-// GraphMapSnapshot is a map-based representation of the entire graph.
-type GraphMapSnapshot[T cmp.Ordered] struct {
-	Vertices  map[T]*VertexMapSnapshot[T]
-	OutDegree map[T]int
-	InDegree  map[T]int
-}
-
-// ToMap converts the concurrent graph structure into a regular map-based.
-func ToMap[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) *GraphMapSnapshot[T] {
-	vertices := make(map[T]*VertexMapSnapshot[T])
+// ToMapBasedDAG converts the concurrent graph structure into a regular map-based.
+func ToMapBasedDAG[T cmp.Ordered](d *DirectedAcyclicGraph[T]) *dag.DirectedAcyclicGraph[T] {
+	vertices := make(map[T]*dag.Vertex[T])
 	d.Vertices.Range(func(key, value any) bool {
 		id, ok := key.(T)
 		if !ok {
 			return true
 		}
-		v, ok := value.(*dag.Vertex[T])
+		v, ok := value.(*Vertex[T])
 		if !ok {
 			return true
 		}
-		vertices[id] = &VertexMapSnapshot[T]{
+		vertices[id] = &dag.Vertex[T]{
 			ID:         v.ID,
 			Attributes: VertexAttributesToMap(v),
 			Edges:      VertexEdgesToMap(v),
 		}
 		return true
 	})
-	return &GraphMapSnapshot[T]{
+	return &dag.DirectedAcyclicGraph[T]{
 		Vertices:  vertices,
 		OutDegree: OutDegreeToMap(d),
 		InDegree:  InDegreeToMap(d),
@@ -50,13 +36,13 @@ func ToMap[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) *GraphMapSnapshot[T] {
 
 // VertexAttributesToMap converts the vertex sync.Map attributes to a regular
 // map.
-func VertexAttributesToMap[T cmp.Ordered](v *dag.Vertex[T]) map[string]any {
+func VertexAttributesToMap[T cmp.Ordered](v *Vertex[T]) map[string]any {
 	return MustSyncMapToMap[string, any](v.Attributes)
 }
 
 // VertexEdgesToMap converts the vertex sync.Map edges and their attributes to
 // regular maps.
-func VertexEdgesToMap[T cmp.Ordered](v *dag.Vertex[T]) map[T]map[string]any {
+func VertexEdgesToMap[T cmp.Ordered](v *Vertex[T]) map[T]map[string]any {
 	edges := make(map[T]map[string]any)
 	v.Edges.Range(func(key, value any) bool {
 		if edgeID, ok := key.(T); ok {
@@ -70,17 +56,17 @@ func VertexEdgesToMap[T cmp.Ordered](v *dag.Vertex[T]) map[T]map[string]any {
 }
 
 // VerticesToMap converts the graph's vertices sync.Map to a regular map.
-func VerticesToMap[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) map[T]*dag.Vertex[T] {
-	return MustSyncMapToMap[T, *dag.Vertex[T]](d.Vertices)
+func VerticesToMap[T cmp.Ordered](d *DirectedAcyclicGraph[T]) map[T]*Vertex[T] {
+	return MustSyncMapToMap[T, *Vertex[T]](d.Vertices)
 }
 
 // OutDegreeToMap converts the graph's out-degree sync.Map to a regular.
-func OutDegreeToMap[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) map[T]int {
+func OutDegreeToMap[T cmp.Ordered](d *DirectedAcyclicGraph[T]) map[T]int {
 	return MustSyncMapToMap[T, int](d.OutDegree)
 }
 
 // InDegreeToMap converts the graph's in-degree sync.Map to a regular map.
-func InDegreeToMap[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) map[T]int {
+func InDegreeToMap[T cmp.Ordered](d *DirectedAcyclicGraph[T]) map[T]int {
 	return MustSyncMapToMap[T, int](d.InDegree)
 }
 

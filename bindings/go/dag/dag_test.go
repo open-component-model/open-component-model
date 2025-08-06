@@ -17,14 +17,14 @@
 //
 // We would like to thank the authors of kro for their outstanding work on this code.
 
-package synced
+package dag
 
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,20 +34,20 @@ func TestDAGAddNode(t *testing.T) {
 	r := require.New(t)
 	d := NewDirectedAcyclicGraph[string]()
 
-	r.NoError(d.CreateAndAddVertex("A", map[string]any{"key": "1"}))
-	r.Error(d.CreateAndAddVertex("A", map[string]any{"key": "2"}), "duplicate node ids are forbidden")
+	r.NoError(d.AddVertex("A", map[string]any{"key": "1"}))
+	r.Error(d.AddVertex("A", map[string]any{"key": "2"}), "duplicate node ids are forbidden")
 
 	r.True(d.Contains("A"))
 	r.False(d.Contains("B"))
 
-	r.Equalf(d.LengthVertices(), 1, "expected 1 node after rejection of the second, but got %d", d.LengthVertices())
-	r.Equal("A", d.MustGetVertex("A").ID, "expected node ID to be 'A', but got %s", d.MustGetVertex("A").ID)
-	r.Equal("1", d.MustGetVertex("A").MustGetAttribute("key"), "expected node attribute to be '1', but got %s", d.MustGetVertex("A").MustGetAttribute("key"))
+	r.Lenf(d.Vertices, 1, "expected 1 node after rejection of the second, but got %d", len(d.Vertices))
+	r.Equal("A", d.Vertices["A"].ID, "expected node ID to be 'A', but got %s", d.Vertices["A"].ID)
+	r.Equal("1", d.Vertices["A"].Attributes["key"], "expected node attribute to be '1', but got %s", d.Vertices["A"].Attributes["key"])
 
-	r.NoError(d.CreateAndAddVertex("B", map[string]any{"key": "2"}))
-	r.Equalf(d.LengthVertices(), 2, "expected 2 nodes after adding 'B', but got %d", d.LengthVertices())
-	r.Equal("B", d.MustGetVertex("B").ID, "expected node ID to be 'B', but got %s", d.MustGetVertex("B").ID)
-	r.Equal("2", d.MustGetVertex("B").MustGetAttribute("key"), "expected node attribute to be '2', but got %s", d.MustGetVertex("B").MustGetAttribute("key"))
+	r.NoError(d.AddVertex("B", map[string]any{"key": "2"}))
+	r.Lenf(d.Vertices, 2, "expected 2 nodes after adding 'B', but got %d", len(d.Vertices))
+	r.Equal("B", d.Vertices["B"].ID, "expected node ID to be 'B', but got %s", d.Vertices["B"].ID)
+	r.Equal("2", d.Vertices["B"].Attributes["key"], "expected node attribute to be '2', but got %s", d.Vertices["B"].Attributes["key"])
 
 	t.Run("roots", func(t *testing.T) {
 		r := require.New(t)
@@ -58,21 +58,21 @@ func TestDAGAddNode(t *testing.T) {
 
 	t.Run("degrees", func(t *testing.T) {
 		r := require.New(t)
-		r.Equal(d.MustGetOutDegree("A"), 0, "expected out-degree of A to be 0, but got %d", d.MustGetOutDegree("A"))
-		r.Equal(d.MustGetInDegree("A"), 0, "expected in-degree of A to be 0, but got %d", d.MustGetInDegree("A"))
-		r.Equal(d.MustGetOutDegree("B"), 0, "expected out-degree of B to be 0, but got %d", d.MustGetOutDegree("B"))
-		r.Equal(d.MustGetInDegree("B"), 0, "expected in-degree of B to be 0, but got %d", d.MustGetInDegree("B"))
+		r.Equal(d.OutDegree["A"], 0, "expected out-degree of A to be 0, but got %d", d.OutDegree["A"])
+		r.Equal(d.InDegree["A"], 0, "expected in-degree of A to be 0, but got %d", d.InDegree["A"])
+		r.Equal(d.OutDegree["B"], 0, "expected out-degree of B to be 0, but got %d", d.OutDegree["B"])
+		r.Equal(d.InDegree["B"], 0, "expected in-degree of B to be 0, but got %d", d.InDegree["B"])
 	})
 
 	t.Run("delete", func(t *testing.T) {
 		r := require.New(t)
 		r.NoError(d.DeleteVertex("A"))
-		r.Equalf(d.LengthVertices(), 1, "expected 1 node after deleting 'A', but got %d", d.LengthVertices())
-		r.Equal("B", d.MustGetVertex("B").ID, "expected node ID to be 'B', but got %s", d.MustGetVertex("B").ID)
+		r.Lenf(d.Vertices, 1, "expected 1 node after deleting 'A', but got %d", len(d.Vertices))
+		r.Equal("B", d.Vertices["B"].ID, "expected node ID to be 'B', but got %s", d.Vertices["B"].ID)
 		r.Error(d.DeleteVertex("A"), "expected error when deleting non-existent node 'A', but got nil")
-		_, outExists := d.GetOutDegree("A")
+		_, outExists := d.OutDegree["A"]
 		r.False(outExists)
-		_, inExists := d.GetInDegree("A")
+		_, inExists := d.InDegree["A"]
 		r.False(inExists)
 	})
 }
@@ -80,8 +80,8 @@ func TestDAGAddNode(t *testing.T) {
 func TestDAGAddEdge(t *testing.T) {
 	r := require.New(t)
 	d := NewDirectedAcyclicGraph[string]()
-	r.NoError(d.CreateAndAddVertex("A"))
-	r.NoError(d.CreateAndAddVertex("B"))
+	r.NoError(d.AddVertex("A"))
+	r.NoError(d.AddVertex("B"))
 	r.NoError(d.AddEdge("A", "B", map[string]any{"key": "1"}))
 
 	t.Run("roots", func(t *testing.T) {
@@ -91,36 +91,36 @@ func TestDAGAddEdge(t *testing.T) {
 		r.EqualValues([]string{"A"}, d.Roots(), "expected roots to be [A], but got %v", d.Roots())
 	})
 
-	r.Equalf(d.MustGetVertex("A").LengthEdges(), 1, "expected 1 edge from A to B, but got %d", d.MustGetVertex("A").LengthEdges())
-	r.EqualValues([]string{"B"}, d.MustGetVertex("A").EdgeKeys(), "expected edge ID to be 'B', but got %s", d.MustGetVertex("A").EdgeKeys())
-	r.Equalf(d.MustGetVertex("B").LengthEdges(), 0, "expected 0 edges from B to A, but got %d", d.MustGetVertex("B").LengthEdges())
+	r.Len(d.Vertices["A"].Edges, 1, "expected 1 edge from A to B, but got %d", len(d.Vertices["A"].Edges))
+	r.EqualValues([]string{"B"}, slices.Collect(maps.Keys(d.Vertices["A"].Edges)), "expected edge ID to be 'B', but got %s", d.Vertices["A"].Edges)
+	r.Len(d.Vertices["B"].Edges, 0, "expected 0 edges from B to A, but got %d", len(d.Vertices["B"].Edges))
 
 	t.Run("degrees", func(t *testing.T) {
-		r.Equal(d.MustGetOutDegree("A"), 1, "expected out-degree of A to be 1, but got %d", d.MustGetOutDegree("A"))
-		r.Equal(d.MustGetInDegree("A"), 0, "expected in-degree of A to be 0, but got %d", d.MustGetInDegree("A"))
+		r.Equal(d.OutDegree["A"], 1, "expected out-degree of A to be 1, but got %d", d.OutDegree["A"])
+		r.Equal(d.InDegree["A"], 0, "expected in-degree of A to be 0, but got %d", d.InDegree["A"])
 
-		r.Equal(d.MustGetOutDegree("B"), 0, "expected out-degree of B to be 0, but got %d", d.MustGetOutDegree("B"))
-		r.Equal(d.MustGetInDegree("B"), 1, "expected in-degree of B to be 1, but got %d", d.MustGetInDegree("B"))
+		r.Equal(d.OutDegree["B"], 0, "expected out-degree of B to be 0, but got %d", d.OutDegree["B"])
+		r.Equal(d.InDegree["B"], 1, "expected in-degree of B to be 1, but got %d", d.InDegree["B"])
 	})
 
 	t.Run("reverse", func(t *testing.T) {
 		r := require.New(t)
 		d, err := d.Reverse()
 		r.NoError(err, "error reversing the graph")
-		r.Equalf(d.MustGetVertex("A").LengthEdges(), 0, "expected 0 edges from A to B, but got %d", d.MustGetVertex("A").LengthEdges())
-		r.Equalf(d.MustGetVertex("B").LengthEdges(), 1, "expected 1 edge from B to A, but got %d", d.MustGetVertex("B").LengthEdges())
-		r.EqualValues([]string{"A"}, d.MustGetVertex("B").EdgeKeys(), "expected edge ID to be 'A', but got %s", d.MustGetVertex("B").EdgeKeys())
+		r.Len(d.Vertices["A"].Edges, 0, "expected 0 edges from A to B, but got %d", len(d.Vertices["A"].Edges))
+		r.Len(d.Vertices["B"].Edges, 1, "expected 1 edge from B to A, but got %d", len(d.Vertices["B"].Edges))
+		r.EqualValues([]string{"A"}, slices.Collect(maps.Keys(d.Vertices["B"].Edges)), "expected edge ID to be 'A', but got %s", d.Vertices["B"].Edges)
 	})
 
 	t.Run("delete", func(t *testing.T) {
 		r := require.New(t)
 		r.NoError(d.DeleteVertex("A"))
-		r.Equalf(d.LengthVertices(), 1, "expected 1 node after deleting 'A', but got %d", d.LengthVertices())
-		r.Equal("B", d.MustGetVertex("B").ID, "expected node ID to be 'B', but got %s", d.MustGetVertex("B").ID)
+		r.Lenf(d.Vertices, 1, "expected 1 node after deleting 'A', but got %d", len(d.Vertices))
+		r.Equal("B", d.Vertices["B"].ID, "expected node ID to be 'B', but got %s", d.Vertices["B"].ID)
 		r.Error(d.DeleteVertex("A"), "expected error when deleting non-existent node 'A', but got nil")
-		_, outExists := d.GetOutDegree("A")
+		_, outExists := d.OutDegree["A"]
 		r.False(outExists)
-		_, inExists := d.GetInDegree("A")
+		_, inExists := d.InDegree["A"]
 		r.False(inExists)
 	})
 }
@@ -128,9 +128,9 @@ func TestDAGAddEdge(t *testing.T) {
 func TestDAGHasCycle(t *testing.T) {
 	r := require.New(t)
 	d := NewDirectedAcyclicGraph[string]()
-	r.NoError(d.CreateAndAddVertex("A"))
-	r.NoError(d.CreateAndAddVertex("B"))
-	r.NoError(d.CreateAndAddVertex("C"))
+	r.NoError(d.AddVertex("A"))
+	r.NoError(d.AddVertex("B"))
+	r.NoError(d.AddVertex("C"))
 
 	r.NoError(d.AddEdge("A", "B"))
 	r.NoError(d.AddEdge("B", "C"))
@@ -142,7 +142,7 @@ func TestDAGHasCycle(t *testing.T) {
 
 	// pointless to test for the cycle here, so we need to emulate one
 	// by artificially adding a cycle.
-	d.MustGetVertex("C").Edges.Store("A", &sync.Map{})
+	d.Vertices["C"].Edges["A"] = map[string]any{}
 	cyclic, _ = d.HasCycle()
 	r.Truef(cyclic, "DAG incorrectly reported no cycle")
 
@@ -193,7 +193,7 @@ func TestDAGTopologicalSort(t *testing.T) {
 			r := require.New(t)
 			d := NewDirectedAcyclicGraph[string]()
 			for _, node := range strings.Split(g.Nodes, ",") {
-				r.NoError(d.CreateAndAddVertex(node))
+				r.NoError(d.AddVertex(node))
 			}
 
 			if g.Edges != "" {
