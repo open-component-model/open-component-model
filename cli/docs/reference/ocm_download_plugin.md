@@ -1,6 +1,6 @@
 ---
 title: ocm download plugin
-description: Download plugin binaries from a component version in an OCM Repository.
+description: Download plugin binaries from a component version.
 suppressTitle: true
 toc: true
 sidebar:
@@ -9,13 +9,13 @@ sidebar:
 
 ## ocm download plugin
 
-Download plugin binaries from a component version in an OCM Repository
+Download plugin binaries from a component version.
 
 ### Synopsis
 
-Download a plugin binary from a component version located in an Open Component Model (OCM) repository.
+Download a plugin binary from a component version located in a component version.
 
-This command fetches a specific plugin resource from the given OCM component version reference and stores it at the specified output location.
+This command fetches a specific plugin resource from the given OCM component version and stores it at the specified output location.
 The plugin binary can be identified by resource name and version, with optional extra identity parameters for platform-specific binaries.
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
@@ -45,6 +45,7 @@ ocm download plugin [flags]
       --output string             output location to download the plugin binary to (required) (default ".")
       --resource-name string      name of the plugin resource to download (required)
       --resource-version string   version of the plugin resource to download (optional, defaults to component version)
+      --skip-validation           skip validation of the downloaded plugin binary
 ```
 
 ### Options inherited from parent commands

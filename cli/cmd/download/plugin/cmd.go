@@ -30,6 +30,7 @@ const (
 	FlagResourceVersion = "resource-version"
 	FlagOutput          = "output"
 	FlagExtraIdentity   = "extra-identity"
+	SkipValidation      = "skip-validation"
 	timeout             = 30 * time.Second
 )
 
@@ -61,6 +62,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 	cmd.Flags().String(FlagResourceVersion, "", "version of the plugin resource to download (optional, defaults to component version)")
 	cmd.Flags().String(FlagOutput, ".", "output location to download the plugin binary to (required)")
 	cmd.Flags().StringSlice(FlagExtraIdentity, []string{}, "extra identity parameters for resource matching (e.g., os=linux,arch=amd64)")
+	cmd.Flags().Bool(SkipValidation, false, "skip validation of the downloaded plugin binary")
 
 	_ = cmd.MarkFlagRequired(FlagResourceName)
 	_ = cmd.MarkFlagRequired(FlagOutput)
@@ -104,6 +106,11 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting extra-identity flag failed: %w", err)
 	}
 
+	skipValidation, err := cmd.Flags().GetBool(SkipValidation)
+	if err != nil {
+		return fmt.Errorf("getting skip-validation flag failed: %w", err)
+	}
+
 	// Parse extra identity parameters
 	extraIdentity := make(map[string]string)
 	for _, param := range extraIdentitySlice {
@@ -130,7 +137,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		"name": resourceName,
 	}
 
-	// Add resource version if specified, otherwise use component version
+	// Add a resource version if specified, otherwise use component version
 	if resourceVersion != "" {
 		resourceIdentity["version"] = resourceVersion
 	} else {
@@ -191,7 +198,6 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	// Ensure output directory exists
 	outputDir := filepath.Dir(output)
 	if outputDir != "." && outputDir != "" {
-		// TODO: Use filesystem config.
 		if err := os.MkdirAll(outputDir, 0o755); err != nil {
 			return fmt.Errorf("creating output directory %q failed: %w", outputDir, err)
 		}
@@ -210,14 +216,16 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := validatePlugin(output, logger); err != nil {
-		if removeErr := os.Remove(output); removeErr != nil {
-			logger.Warn("failed to remove invalid plugin binary", slog.String("path", output), slog.String("error", removeErr.Error()))
+	if !skipValidation {
+		if err := validatePlugin(output, logger); err != nil {
+			if removeErr := os.Remove(output); removeErr != nil {
+				logger.Warn("failed to remove invalid plugin binary", slog.String("path", output), slog.String("error", removeErr.Error()))
+			}
+			return fmt.Errorf("downloaded binary is not a valid plugin: %w", err)
 		}
-		return fmt.Errorf("downloaded binary is not a valid plugin: %w", err)
 	}
 
-	logger.Info("plugin binary downloaded and validated successfully", slog.String("output", output))
+	logger.Info("plugin binary downloaded successfully", slog.String("output", output))
 	return nil
 }
 
@@ -249,7 +257,7 @@ func validatePlugin(pluginPath string, logger *slog.Logger) error {
 		return fmt.Errorf("plugin capabilities returned invalid JSON: %w", err)
 	}
 
-	if capabilities.Types == nil || len(capabilities.Types) == 0 {
+	if len(capabilities.Types) == 0 {
 		return fmt.Errorf("plugin capabilities missing required 'types' field or is empty")
 	}
 
