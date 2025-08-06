@@ -1,12 +1,14 @@
 package blob
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 )
@@ -191,6 +193,60 @@ func (r *ArtifactBlob) OCIDescriptor() ociImageSpecV1.Descriptor {
 		Digest:    digest.Digest(dig),
 		Size:      r.Size(),
 	}
+}
+
+// HasSizeAndDigest checks if the blob has both a pre-calculated size and a pre-calculated  digest.
+func (r *ArtifactBlob) HasSizeAndDigest() bool {
+	return r.HasPrecalculatedSize() && r.HasPrecalculatedDigest()
+}
+
+func (r *ArtifactBlob) NewArtifactWithBufferedBlob() (result *ArtifactBlob, err error) {
+	// Get current reader.
+	reader, err := r.ReadOnlyBlob.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get blob reader: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, reader.Close())
+	}()
+
+	// Get current media type, even if it is empty.
+	mediaType, _ := r.MediaType()
+
+	// Create buffered in-memory blob and load it.
+	inMemoryBlob := inmemory.New(reader, inmemory.WithMediaType(mediaType))
+	err = inMemoryBlob.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load in-memory blob: %w", err)
+	}
+
+	// Create a new instance of the descriptor.
+	var newArtifact descriptor.Artifact
+	switch r.Artifact.(type) {
+	case *descriptor.Resource:
+		resource, _ := r.Artifact.(*descriptor.Resource)
+		newArtifact = resource.DeepCopy()
+	case *descriptor.Source:
+		source, _ := r.Artifact.(*descriptor.Source)
+		newArtifact = source.DeepCopy()
+	default:
+		return nil, fmt.Errorf("artifact is neither *descriptor.Resource not *descriptor.Source: %T", r.Artifact)
+	}
+
+	// Create new ArtifactBlob.
+	result, err = NewArtifactBlobWithMediaType(newArtifact, inMemoryBlob, mediaType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new ArtifactBlob: %w", err)
+	}
+
+	// Set the digest.
+	dig, ok := inMemoryBlob.Digest()
+	if !ok {
+		return nil, fmt.Errorf("in-memory blob does not have a digest")
+	}
+	result.SetPrecalculatedDigest(dig)
+
+	return result, nil
 }
 
 // Interface implementations
