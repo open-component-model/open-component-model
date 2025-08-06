@@ -288,8 +288,8 @@ k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 h1:hwvWFiBzdWw1FhfY1FooPn3kzWuJ8
 k8s.io/utils v0.0.0-20250604170112-4c0f3b243397/go.mod h1:OLgZIPagt7ERELqWJFomSt595RzquPNLL48iOWgYOg0=
 ocm.software/open-component-model/bindings/go/blob v0.0.4 h1:H+okhOgcoIRiJtHRP4vTvgS7Rt1nx7XIA2hUBu1iL3U=
 ocm.software/open-component-model/bindings/go/blob v0.0.4/go.mod h1:16FGcnFi6cVJsuUZ56R9H2n+TETUij+G2gYtwWS6l3Q=
-ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250806070856-b98cfb41436e h1:ZDfWT0LmYoBXaRu54Gz5GcJkhNypgCT6D9Dl6KXJ7DU=
-ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250806070856-b98cfb41436e/go.mod h1:e5hbe5WM/YQiS07o2AygB1HYGbRGr0ELyq5gVvHGh+c=
+ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250806121746-4654a622c0f4 h1:5XTK9bP9b4hqQX5Chztf8WABGgZUidHnnRL7jyxRBWQ=
+ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250806121746-4654a622c0f4/go.mod h1:e5hbe5WM/YQiS07o2AygB1HYGbRGr0ELyq5gVvHGh+c=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250806065657-b7f82dbae95c h1:80dfJ9sMUk+Kgktsmqcgfxrd4Bfb0fKIonhy0NnZqiw=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250806065657-b7f82dbae95c/go.mod h1:QK95GAldTX7R4oh/bfGmeYoTVdrAMBIgJvquQELawb4=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 h1:daGC2XnJEJkukGdhvKxobUH+vF5TKYPlVQ6nl5ASdFM=
