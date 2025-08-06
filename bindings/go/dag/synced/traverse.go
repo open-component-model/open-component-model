@@ -10,13 +10,24 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type DiscoveryState int
+// The TraversalState is an attribute set during Traverse()
+// on each vertex to indicate its discovery state:
+// - StateDiscovering: The vertex has been added to the graph, but it has not yet
+// been processed by the traversalFunc (direct neighbors are not known yet).
+// - StateDiscovered: The vertex has been processed by the traversalFunc, but
+// its neighbors or transitive neighbors have not all been processed by the
+// traversalFunc yet.
+// - StateCompleted: The vertex and all its neighbors have been processed by the
+// traversalFunc (sub-graph up to this vertex is fully completed).
+// - StateError: The traversalFunc returned an error for this vertex (or a neighbor),
+// indicating that the traversal could not be completed for this vertex.
+type TraversalState int
 
 const (
-	AttributeDiscoveryState = "dag/discovery-state"
+	AttributeTraversalState = "dag/traversal-state"
 	AttributeOrderIndex     = "dag/order-index"
 
-	StateDiscovering DiscoveryState = iota
+	StateDiscovering TraversalState = iota
 	StateDiscovered
 	StateCompleted
 	StateError
@@ -35,35 +46,18 @@ func WithGoRoutineLimit(numGoRoutines int) TraverseOption {
 	}
 }
 
-// Traverse performs a concurrent depth-first search (dfs). Therefore, it
-// recursively discovers the graph from the root vertex using the
-// provided traversalFunc function.
+// Traverse performs a concurrent depth-first traversal from the given root vertex.
+// For each vertex v, it calls traversalFunc(v), which MUST treat v as read-only
+// and return its neighbors (created via NewVertex) or an error. The new vertices
+// returned MUST not contain any edges, as traversalFunc will be called for them
+// individually.
 //
-// Thereby, it sets a DiscoveryState attribute
-// on each vertex to indicate its discovery state:
-// - StateDiscovering: The vertex has been added to the graph, but it has not yet
-// been processed by the traversalFunc (direct neighbors are not known yet).
-// - StateDiscovered: The vertex has been processed by the traversalFunc, but
-// its neighbors or transitive neighbors have not all been processed by the
-// traversalFunc yet.
-// - StateCompleted: The vertex and all its neighbors have been processed by the
-// traversalFunc (sub-graph up to this vertex is fully completed).
-// - StateError: The traversalFunc returned an error for this vertex, indicating
-// that the traversal could not be completed for this vertex.
+// Returned neighbors need no pre-set edges but may include an
+// AttributeOrderIndex and other business logic related attributes which can be
+// interpreted by other tools.
 //
-// The traversalFunc is called for each vertex - starting with the root vertex.
-// It has access to the vertex and all its attributes. The traversalFunc SHOULD
-// treat the vertex v as READ-ONLY and SHOULD NOT modify the edges of vertex v,
-// as this may lead to undefined behavior.
-// The traversalFunc returns a slice of neighbor vertices. The Traverse
-// logic takes care of adding these neighbors to the graph and traversing them
-// recursively (so, the edges on those vertices SHOULD NOT be set). Ideally, it
-// uses NewVertex to create the neighbors.
-// The traversalFunc can return an error, which will stop the traversal and set
-// the discovery state of the vertex to StateError.
-// The traversalFunc may set the AttributeOrderIndex attribute on the returned
-// neighbors to indicate an order between the neighbors. This information is
-// irrelevant for the traversal but may be interpreted by other tools.
+// Traverse tracks each vertex’s TraversalState attribute and halts on error.
+// See TraversalState for more details.
 func (d *DirectedAcyclicGraph[T]) Traverse(
 	ctx context.Context,
 	root *Vertex[T],
@@ -84,8 +78,8 @@ func (d *DirectedAcyclicGraph[T]) Traverse(
 	if opts.GoRoutineLimit <= 0 {
 		opts.GoRoutineLimit = runtime.NumCPU()
 	}
-	if err := d.AddVertex(root, map[string]any{
-		AttributeDiscoveryState: StateDiscovering,
+	if err := d.addRawVertex(root, map[string]any{
+		AttributeTraversalState: StateDiscovering,
 	}); err != nil && !errors.Is(err, ErrAlreadyExists) {
 		return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
 	}
@@ -95,7 +89,7 @@ func (d *DirectedAcyclicGraph[T]) Traverse(
 func (d *DirectedAcyclicGraph[T]) traverse(
 	ctx context.Context,
 	id T,
-	process func(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error),
+	traversalFunc func(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error),
 	doneMap *sync.Map,
 	opts *TraverseOptions,
 ) error {
@@ -131,12 +125,12 @@ func (d *DirectedAcyclicGraph[T]) traverse(
 		return fmt.Errorf("vertex %v not found in the graph", id)
 	}
 
-	neighbors, err := process(ctx, vertex)
+	neighbors, err := traversalFunc(ctx, vertex)
 	if err != nil {
-		vertex.Attributes.Store(AttributeDiscoveryState, StateError)
-		return fmt.Errorf("failed to process id %v: %w", id, err)
+		vertex.Attributes.Store(AttributeTraversalState, StateError)
+		return fmt.Errorf("failed to traversalFunc id %v: %w", id, err)
 	}
-	vertex.Attributes.Store(AttributeDiscoveryState, StateDiscovered)
+	vertex.Attributes.Store(AttributeTraversalState, StateDiscovered)
 
 	errGroup, ctx := errgroup.WithContext(ctx)
 	// TODO(fabianburth): Implement a worker pool approach.
@@ -146,28 +140,28 @@ func (d *DirectedAcyclicGraph[T]) traverse(
 	errGroup.SetLimit(opts.GoRoutineLimit)
 
 	for index, ref := range neighbors {
-		if err := d.AddVertex(ref, map[string]any{
-			AttributeDiscoveryState: StateDiscovering},
+		if err := d.addRawVertex(ref, map[string]any{
+			AttributeTraversalState: StateDiscovering},
 		); err != nil && !errors.Is(err, ErrAlreadyExists) {
-			vertex.Attributes.Store(AttributeDiscoveryState, StateError)
+			vertex.Attributes.Store(AttributeTraversalState, StateError)
 			return fmt.Errorf("failed to add vertex for reference %v: %w", ref, err)
 		}
 		if err := d.AddEdge(id, ref.ID, map[string]any{AttributeOrderIndex: index}); err != nil {
-			vertex.Attributes.Store(AttributeDiscoveryState, StateError)
+			vertex.Attributes.Store(AttributeTraversalState, StateError)
 			return fmt.Errorf("failed to add edge %v: %w", id, err)
 		}
 		refID := ref.ID
 		errGroup.Go(func() error {
-			if err := d.traverse(ctx, refID, process, doneMap, opts); err != nil {
+			if err := d.traverse(ctx, refID, traversalFunc, doneMap, opts); err != nil {
 				return fmt.Errorf("failed to traverse reference %v: %w", id, err)
 			}
 			return nil
 		})
 	}
 	if err = errGroup.Wait(); err != nil {
-		vertex.Attributes.Store(AttributeDiscoveryState, StateError)
+		vertex.Attributes.Store(AttributeTraversalState, StateError)
 		return err
 	}
-	vertex.Attributes.Store(AttributeDiscoveryState, StateCompleted)
+	vertex.Attributes.Store(AttributeTraversalState, StateCompleted)
 	return nil
 }

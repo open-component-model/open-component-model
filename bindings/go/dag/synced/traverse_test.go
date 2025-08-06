@@ -46,7 +46,7 @@ func TestDAGTraverse(t *testing.T) {
 		r.ElementsMatchf(dag.MustGetVertex("C").EdgeKeys(), []string{"D"}, "expected edge from C to D, but got %v", dag.MustGetVertex("C").EdgeKeys())
 		r.ElementsMatchf(dag.MustGetVertex("D").EdgeKeys(), []string{}, "expected no edges from D, but got %v", dag.MustGetVertex("D").EdgeKeys())
 
-		// As Traverse uses AddVertex and AddEdge internally, which are unit tested
+		// As Traverse uses addRawVertex and AddEdge internally, which are unit tested
 		// separately, we can assume out degree and in degree are correct if the
 		// graph structure is correct.
 	})
@@ -92,8 +92,8 @@ func TestDAGTraverse(t *testing.T) {
 		err := dag.Traverse(ctx, NewVertex("A"), traverseFunc, WithGoRoutineLimit(1))
 		r.Error(err, "expected error due to missing node in the external graph, but got nil")
 
-		r.Equal(dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState), StateError, "expected vertex A to be in error state, but got %s", dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState))
-		r.Equal(dag.MustGetVertex("B").MustGetAttribute(AttributeDiscoveryState), StateCompleted, "expected vertex B to be in completed state, but got %s", dag.MustGetVertex("B").MustGetAttribute(AttributeDiscoveryState))
-		r.Equal(dag.MustGetVertex("C").MustGetAttribute(AttributeDiscoveryState), StateError, "expected vertex C to be in error state, but got %s", dag.MustGetVertex("C").MustGetAttribute(AttributeDiscoveryState))
+		r.Equal(dag.MustGetVertex("A").MustGetAttribute(AttributeTraversalState), StateError, "expected vertex A to be in error state, but got %s", dag.MustGetVertex("A").MustGetAttribute(AttributeTraversalState))
+		r.Equal(dag.MustGetVertex("B").MustGetAttribute(AttributeTraversalState), StateCompleted, "expected vertex B to be in completed state, but got %s", dag.MustGetVertex("B").MustGetAttribute(AttributeTraversalState))
+		r.Equal(dag.MustGetVertex("C").MustGetAttribute(AttributeTraversalState), StateError, "expected vertex C to be in error state, but got %s", dag.MustGetVertex("C").MustGetAttribute(AttributeTraversalState))
 	})
 }

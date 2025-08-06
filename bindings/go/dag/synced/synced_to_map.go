@@ -55,11 +55,6 @@ func VertexEdgesToMap[T cmp.Ordered](v *Vertex[T]) map[T]map[string]any {
 	return edges
 }
 
-// VerticesToMap converts the graph's vertices sync.Map to a regular map.
-func VerticesToMap[T cmp.Ordered](d *DirectedAcyclicGraph[T]) map[T]*Vertex[T] {
-	return MustSyncMapToMap[T, *Vertex[T]](d.Vertices)
-}
-
 // OutDegreeToMap converts the graph's out-degree sync.Map to a regular.
 func OutDegreeToMap[T cmp.Ordered](d *DirectedAcyclicGraph[T]) map[T]int {
 	return MustSyncMapToMap[T, int](d.OutDegree)

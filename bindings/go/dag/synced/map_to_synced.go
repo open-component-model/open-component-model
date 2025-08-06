@@ -36,10 +36,6 @@ func VertexEdgesToSyncMap[T cmp.Ordered](v *dag.Vertex[T]) *sync.Map {
 	return edges
 }
 
-func VerticesToSyncMap[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) *sync.Map {
-	return MapToSyncMap[T, *dag.Vertex[T]](d.Vertices)
-}
-
 func OutDegreeToSyncMap[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) *sync.Map {
 	return MapToSyncMap[T, int](d.OutDegree)
 }

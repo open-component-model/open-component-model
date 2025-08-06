@@ -21,9 +21,9 @@ func TestMapToSynced(t *testing.T) {
 	r.NoError(mapBasedDAG.AddEdge("B", "C", map[string]any{"key": "2"}))
 
 	syncMapBasedDAG := NewDirectedAcyclicGraph[string]()
-	r.NoError(syncMapBasedDAG.AddVertex(NewVertex("A", map[string]any{"key": "1"})))
-	r.NoError(syncMapBasedDAG.AddVertex(NewVertex("B", map[string]any{"key": "2"})))
-	r.NoError(syncMapBasedDAG.AddVertex(NewVertex("C", map[string]any{"key": "3"})))
+	r.NoError(syncMapBasedDAG.addRawVertex(NewVertex("A", map[string]any{"key": "1"})))
+	r.NoError(syncMapBasedDAG.addRawVertex(NewVertex("B", map[string]any{"key": "2"})))
+	r.NoError(syncMapBasedDAG.addRawVertex(NewVertex("C", map[string]any{"key": "3"})))
 
 	r.NoError(syncMapBasedDAG.AddEdge("A", "B", map[string]any{"key": "1"}))
 	r.NoError(syncMapBasedDAG.AddEdge("B", "C", map[string]any{"key": "2"}))

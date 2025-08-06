@@ -112,30 +112,17 @@ func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
 	return cloned
 }
 
-// CreateAndAddVertex adds a new node to the graph.
-func (d *DirectedAcyclicGraph[T]) CreateAndAddVertex(id T, attributes ...map[string]any) error {
-	if _, exists := d.Vertices.Load(id); exists {
-		return fmt.Errorf("node %v already exists: %w", id, ErrAlreadyExists)
-	}
+// AddVertex adds a new node to the graph.
+func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) error {
 	vertex := &Vertex[T]{
 		ID:         id,
 		Attributes: &sync.Map{},
 		Edges:      &sync.Map{},
 	}
-	d.Vertices.Store(id, vertex)
-
-	for _, attrs := range attributes {
-		for k, v := range attrs {
-			vertex.Attributes.Store(k, v)
-		}
-	}
-
-	d.OutDegree.Store(id, 0)
-	d.InDegree.Store(id, 0)
-	return nil
+	return d.addRawVertex(vertex, attributes...)
 }
 
-func (d *DirectedAcyclicGraph[T]) AddVertex(vertex *Vertex[T], attributes ...map[string]any) error {
+func (d *DirectedAcyclicGraph[T]) addRawVertex(vertex *Vertex[T], attributes ...map[string]any) error {
 	if _, exists := d.Vertices.Load(vertex.ID); exists {
 		return fmt.Errorf("node %v already exists: %w", vertex.ID, ErrAlreadyExists)
 	}
@@ -425,7 +412,7 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 
 	// Ensure all vertices exist in the new graph
 	d.Vertices.Range(func(key, value any) bool {
-		if err := reverse.CreateAndAddVertex(key.(T)); err != nil {
+		if err := reverse.AddVertex(key.(T)); err != nil {
 			return false
 		}
 		return true
