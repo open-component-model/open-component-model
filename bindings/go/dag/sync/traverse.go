@@ -10,26 +10,26 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// The TraversalState is an attribute set during Traverse()
-// on each vertex to indicate its discovery state:
-// - StateDiscovering: The vertex has been added to the graph, but it has not yet
-// been processed by the traversalFunc (direct neighbors are not known yet).
-// - StateDiscovered: The vertex has been processed by the traversalFunc, but
-// its neighbors or transitive neighbors have not all been processed by the
-// traversalFunc yet.
-// - StateCompleted: The vertex and all its neighbors have been processed by the
-// traversalFunc (sub-graph up to this vertex is fully completed).
-// - StateError: The traversalFunc returned an error for this vertex (or a neighbor),
-// indicating that the traversal could not be completed for this vertex.
+// TraversalState is an attribute set during Traverse()
+// on each vertex to indicate its traversal state:
 type TraversalState int
 
 const (
 	AttributeTraversalState = "dag/traversal-state"
 	AttributeOrderIndex     = "dag/order-index"
 
+	// StateDiscovering indicates the vertex has been added to the graph, but it
+	// has not yet been processed by the traversalFunc (direct neighbors are not known yet).
 	StateDiscovering TraversalState = iota
+	// StateDiscovered indicates the vertex has been processed by the traversalFunc,
+	// but its neighbors or transitive neighbors have not all been processed by the
+	// traversalFunc yet.
 	StateDiscovered
+	// StateCompleted indicates the vertex and all its neighbors have been
+	// processed by the traversalFunc (sub-graph up to this vertex is fully completed).
 	StateCompleted
+	// StateError indicates the traversalFunc returned an error for this vertex
+	// or a neighbor.
 	StateError
 )
 
