@@ -25,8 +25,20 @@ func init() {
 // +ocm:typegen=true
 type Config struct {
 	Type runtime.Type `json:"type"`
-	// LayerSelector defines a selection criteria for layers.
-	LayerSelector *LayerSelector `json:"layerSelector,omitempty"`
+	// Rules defines rules for extracting layers to specific files.
+	Rules []Rule `json:"rules,omitempty"`
+}
+
+// Rule represents a rule for extracting selected layers to a target file.
+// Multiple layer selectors can be specified to select different layers that should
+// be merged into the same output file. For now, the first matching selector is used.
+// +k8s:deepcopy-gen=true
+type Rule struct {
+	// Filename is the target filename for the extracted layers.
+	Filename string `json:"filename,omitempty"`
+	// LayerSelectors defines multiple selection criteria for layers to include in this file.
+	// Layers matching any of these selectors will be included.
+	LayerSelectors []*LayerSelector `json:"layerSelectors,omitempty"`
 }
 
 // LookupConfig creates a new extract configuration from a central V1 config.
