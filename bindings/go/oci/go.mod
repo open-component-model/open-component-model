@@ -12,9 +12,9 @@ require (
 	golang.org/x/sync v0.16.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.4
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250806065657-b7f82dbae95c
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250806121746-4654a622c0f4
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250806065657-b7f82dbae95c
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250806121746-4654a622c0f4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0

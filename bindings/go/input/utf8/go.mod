@@ -6,7 +6,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.4
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250806065657-b7f82dbae95c
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250806121746-4654a622c0f4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -25,7 +25,7 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250806065657-b7f82dbae95c // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250806121746-4654a622c0f4 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250806065657-b7f82dbae95c // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250806121746-4654a622c0f4 // indirect
 )
