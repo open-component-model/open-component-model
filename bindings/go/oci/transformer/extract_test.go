@@ -16,6 +16,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestTransformer_TransformBlob(t *testing.T) {
@@ -27,7 +29,9 @@ func TestTransformer_TransformBlob(t *testing.T) {
 		{
 			name: "valid OCI artifact",
 			setupBlob: func(t *testing.T) blob.ReadOnlyBlob {
-				return createOCILayoutBlob(t)
+				b, err := loadOCILayoutBlob("oci-layout.tar.gz")
+				require.NoError(t, err)
+				return b
 			},
 			expectError: false,
 		},
@@ -113,11 +117,12 @@ func TestTransformerIntegration(t *testing.T) {
 	ctx := context.Background()
 	r := require.New(t)
 
-	ociLayoutBlob, err := loadOCILayoutBlob(ctx, "oci-layout.tar.gz")
+	ociLayoutBlob, err := loadOCILayoutBlob("oci-layout.tar.gz")
 	r.NoError(err)
 	r.NotNil(ociLayoutBlob, "OCI layout blob should not be nil")
 
 	transformer := New()
+	// no config should default to all layers
 	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, nil)
 
 	r.NoError(err, "Transformation should succeed")
@@ -138,15 +143,8 @@ func TestTransformerIntegration(t *testing.T) {
 	t.Logf("Successfully transformed and validated OCI artifact")
 }
 
-// createOCILayoutBlob creates a test blob with OCI layout data
-func createOCILayoutBlob(t *testing.T) blob.ReadOnlyBlob {
-	data, err := os.ReadFile(filepath.Join("testdata", "oci-layout.tar.gz"))
-	require.NoError(t, err, "Failed to read test data")
-	return &testBlob{data: data}
-}
-
 // loadOCILayoutBlob loads an OCI layout tar file as a blob.
-func loadOCILayoutBlob(ctx context.Context, layoutPath string) (blob.ReadOnlyBlob, error) {
+func loadOCILayoutBlob(layoutPath string) (blob.ReadOnlyBlob, error) {
 	layoutData, err := os.ReadFile(filepath.Join("testdata", layoutPath))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OCI layout file: %w", err)
@@ -201,4 +199,119 @@ func validateTarContents(t *testing.T, reader io.ReadCloser, expectedFiles []str
 	}
 
 	t.Logf("Successfully validated tar contains all expected files: %v", expectedFiles)
+}
+
+func TestTransformerWithLayerSelector(t *testing.T) {
+	ctx := context.Background()
+	r := require.New(t)
+
+	// select only Helm chart layers
+	config := &spec.Config{
+		Type: runtime.NewVersionedType(spec.ConfigType, spec.Version),
+		LayerSelector: &spec.LayerSelector{
+			MatchProperties: map[string]string{
+				spec.LayerMediaTypeKey: MediaTypeHelmChart,
+			},
+		},
+	}
+
+	ociLayoutBlob, err := loadOCILayoutBlob("oci-layout.tar.gz")
+	r.NoError(err)
+	r.NotNil(ociLayoutBlob)
+
+	transformer := New()
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+
+	r.NoError(err)
+	r.NotNil(result)
+
+	reader, err := result.ReadCloser()
+	r.NoError(err)
+
+	expectedFiles := []string{"chart.tar.gz"}
+	validateTarContents(t, reader, expectedFiles)
+
+	t.Logf("Successfully filtered layers using LayerSelector")
+}
+
+func TestTransformerWithIndexSelector(t *testing.T) {
+	ctx := context.Background()
+	r := require.New(t)
+
+	// select only the first layer (index 0)
+	config := &spec.Config{
+		Type: runtime.NewVersionedType(spec.ConfigType, spec.Version),
+		LayerSelector: &spec.LayerSelector{
+			MatchProperties: map[string]string{
+				spec.LayerIndexKey: "0",
+			},
+		},
+	}
+
+	ociLayoutBlob, err := loadOCILayoutBlob("oci-layout.tar.gz")
+	r.NoError(err)
+	r.NotNil(ociLayoutBlob)
+
+	transformer := New()
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+
+	r.NoError(err)
+	r.NotNil(result)
+
+	reader, err := result.ReadCloser()
+	r.NoError(err)
+
+	data, err := io.ReadAll(reader)
+	r.NoError(err)
+
+	tarReader := tar.NewReader(bytes.NewReader(data))
+	headerCount := 0
+	for {
+		_, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		headerCount++
+	}
+
+	r.Equal(1, headerCount, "should have exactly one layer when selecting index 0")
+	t.Logf("Successfully selected layer by index")
+}
+
+func TestTransformerWithMatchExpressions(t *testing.T) {
+	ctx := context.Background()
+	r := require.New(t)
+
+	// test match expressions
+	config := &spec.Config{
+		Type: runtime.NewVersionedType(spec.ConfigType, spec.Version),
+		LayerSelector: &spec.LayerSelector{
+			MatchExpressions: []spec.LayerSelectorRequirement{
+				{
+					Key:      spec.LayerMediaTypeKey,
+					Operator: spec.LayerSelectorOpIn,
+					Values:   []string{MediaTypeHelmChart, MediaTypeHelmProvenance},
+				},
+			},
+		},
+	}
+
+	ociLayoutBlob, err := loadOCILayoutBlob("oci-layout.tar.gz")
+	r.NoError(err)
+	r.NotNil(ociLayoutBlob)
+
+	transformer := New()
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+
+	r.NoError(err)
+	r.NotNil(result)
+
+	reader, err := result.ReadCloser()
+	r.NoError(err)
+
+	expectedFiles := []string{"chart.tar.gz", "chart.prov"}
+	validateTarContents(t, reader, expectedFiles)
+
+	t.Logf("Successfully filtered layers using match expressions")
 }

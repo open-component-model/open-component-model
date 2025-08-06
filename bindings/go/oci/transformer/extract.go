@@ -15,6 +15,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -35,7 +36,7 @@ func New() *Transformer {
 }
 
 // TransformBlob transforms an OCI Layout blob by extracting its main artifacts.
-func (t *Transformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, _ runtime.Typed) (_ blob.ReadOnlyBlob, err error) {
+func (t *Transformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, config runtime.Typed) (_ blob.ReadOnlyBlob, err error) {
 	store, err := ocitar.ReadOCILayout(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OCI layout: %w", err)
@@ -49,12 +50,20 @@ func (t *Transformer) TransformBlob(ctx context.Context, input blob.ReadOnlyBlob
 		return nil, fmt.Errorf("should have exactly one main artifact but was %d", len(mainArtifacts))
 	}
 
+	// Parse configuration
+	var extractConfig *spec.Config
+	if config != nil {
+		if cfg, ok := config.(*spec.Config); ok {
+			extractConfig = cfg
+		}
+	}
+
 	artifact := mainArtifacts[0]
-	return t.extractOCIArtifact(ctx, store, artifact)
+	return t.extractOCIArtifact(ctx, store, artifact, extractConfig)
 }
 
-// extractOCIArtifact extracts all layers from an OCI artifact into a tar archive.
-func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetcher, artifact ociImageSpecV1.Descriptor) (_ blob.ReadOnlyBlob, err error) {
+// extractOCIArtifact extracts selected layers from an OCI artifact into a tar archive.
+func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetcher, artifact ociImageSpecV1.Descriptor, config *spec.Config) (_ blob.ReadOnlyBlob, err error) {
 	manifestReader, err := store.Fetch(ctx, artifact)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch artifact manifest: %w", err)
@@ -79,7 +88,17 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 		err = errors.Join(err, tarWriter.Close())
 	}()
 
-	for _, layer := range manifest.Layers {
+	for i, layer := range manifest.Layers {
+		layerInfo := spec.LayerInfo{
+			Index:       i,
+			MediaType:   layer.MediaType,
+			Annotations: layer.Annotations,
+		}
+
+		if config != nil && config.LayerSelector != nil && !config.LayerSelector.Matches(layerInfo) {
+			continue // Skip this layer
+		}
+
 		if err := t.processLayer(ctx, store, layer, tarWriter); err != nil {
 			return nil, fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
 		}
