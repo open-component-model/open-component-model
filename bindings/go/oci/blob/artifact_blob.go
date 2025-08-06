@@ -200,6 +200,8 @@ func (r *ArtifactBlob) HasSizeAndDigest() bool {
 	return r.HasPrecalculatedSize() && r.HasPrecalculatedDigest()
 }
 
+// NewArtifactWithBufferedBlob creates a new ArtifactBlob with an in-memory buffered blob.
+// It can be used to covert ArtifactBlob with unknown size or digest to a new instance where those fields a set.
 func (r *ArtifactBlob) NewArtifactWithBufferedBlob() (result *ArtifactBlob, err error) {
 	// Get current reader.
 	reader, err := r.ReadCloser()
