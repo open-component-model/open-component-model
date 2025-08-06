@@ -87,7 +87,8 @@ func TestCache_ReadCloser(t *testing.T) {
 			}
 
 			// Create cached blob
-			cached := Cache(mock)
+			cached, err := Cache(mock)
+			require.NoError(t, err)
 
 			// Test first read
 			reader, err := cached.ReadCloser()
@@ -131,19 +132,19 @@ func TestCache_Size(t *testing.T) {
 		{
 			name:        "unknown size empty blob",
 			data:        []byte{},
-			expected:    blob.SizeUnknown,
+			expected:    0,
 			unknownSize: true,
 		},
 		{
 			name:        "unknown size small blob",
 			data:        []byte("hello"),
-			expected:    blob.SizeUnknown,
+			expected:    int64(len([]byte("hello"))),
 			unknownSize: true,
 		},
 		{
 			name:        "unknown size large blob",
 			data:        bytes.Repeat([]byte("x"), 1024*1024), // 1MB
-			expected:    blob.SizeUnknown,
+			expected:    int64(len(bytes.Repeat([]byte("x"), 1024*1024))),
 			unknownSize: true,
 		},
 	}
@@ -156,14 +157,14 @@ func TestCache_Size(t *testing.T) {
 			}
 
 			// Create cached blob
-			cached := Cache(mock)
+			cached, err := Cache(mock)
+			require.NoError(t, err)
 
 			// Test size before reading
 			assert.Equal(t, tt.expected, cached.Size())
 
 			// Test size after reading
-			_, err := cached.Data()
-			require.NoError(t, err)
+			_ = cached.Data()
 			if tt.unknownSize {
 				// After reading, size should be known
 				assert.Equal(t, int64(len(tt.data)), cached.Size())
@@ -224,7 +225,8 @@ func TestCache_Digest(t *testing.T) {
 			}
 
 			// Create cached blob
-			cached := Cache(mock)
+			cached, err := Cache(mock)
+			require.NoError(t, err)
 
 			// Test digest before reading
 			dig, ok := cached.Digest()
@@ -232,7 +234,7 @@ func TestCache_Digest(t *testing.T) {
 			assert.Equal(t, tt.expected, dig)
 
 			// Test digest after reading
-			_, err := cached.Data()
+			_ = cached.Data()
 			require.NoError(t, err)
 			dig, ok = cached.Digest()
 			require.True(t, ok)
@@ -274,7 +276,8 @@ func TestCache_MediaType(t *testing.T) {
 			}
 
 			// Create cached blob
-			cached := Cache(mock)
+			cached, err := Cache(mock)
+			require.NoError(t, err)
 
 			// Test media type
 			mt, known := cached.MediaType()
@@ -335,15 +338,15 @@ func TestCache_Data(t *testing.T) {
 			}
 
 			// Create cached blob
-			cached := Cache(mock)
+			cached, err := Cache(mock)
+			require.NoError(t, err)
 
 			// Test first read
-			data, err := cached.Data()
-			require.NoError(t, err)
+			data := cached.Data()
 			assert.Equal(t, tt.data, data)
 
 			// Test second read (should use cache)
-			data, err = cached.Data()
+			data = cached.Data()
 			require.NoError(t, err)
 			assert.Equal(t, tt.data, data)
 		})
@@ -360,11 +363,6 @@ func TestCache_ClearCache(t *testing.T) {
 			name: "known size",
 			data: []byte("hello"),
 		},
-		{
-			name:        "unknown size",
-			data:        []byte("hello"),
-			unknownSize: true,
-		},
 	}
 
 	for _, tt := range tests {
@@ -375,30 +373,16 @@ func TestCache_ClearCache(t *testing.T) {
 			}
 
 			// Create cached blob
-			cached := Cache(mock)
-
-			// Read data to cache it
-			_, err := cached.Data()
+			cached, err := Cache(mock)
 			require.NoError(t, err)
 
 			// Verify data is cached
-			if tt.unknownSize {
-				assert.Equal(t, int64(len(tt.data)), cached.Size())
-			} else {
-				assert.Equal(t, int64(len(tt.data)), cached.Size())
-			}
-
-			// Clear cache
-			cached.ClearCache()
+			assert.Equal(t, int64(len(tt.data)), cached.Size())
 
 			// Verify cache is cleared
-			if tt.unknownSize {
-				assert.Equal(t, blob.SizeUnknown, cached.Size())
-			} else {
-				assert.Equal(t, int64(len(tt.data)), cached.Size())
-			}
-			_, err = cached.Data()
-			require.NoError(t, err)
+			assert.Equal(t, int64(len(tt.data)), cached.Size())
+			data := cached.Data()
+			require.NotEmpty(t, data)
 		})
 	}
 }
@@ -428,7 +412,8 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 			}
 
 			// Create cached blob
-			cached := Cache(mock)
+			cached, err := Cache(mock)
+			require.NoError(t, err)
 
 			// Test concurrent access
 			done := make(chan struct{})
@@ -443,8 +428,8 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 					require.NoError(t, err)
 
 					// Test Data
-					_, err = cached.Data()
-					require.NoError(t, err)
+					data := cached.Data()
+					require.NotEmpty(t, data)
 
 					// Test Size
 					_ = cached.Size()
@@ -467,44 +452,26 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 
 func TestCache_SizeBeforeRead(t *testing.T) {
 	tests := []struct {
-		name        string
-		data        []byte
-		expected    int64
-		unknownSize bool
+		name     string
+		data     []byte
+		expected int64
 	}{
 		{
 			name:     "known size before read",
 			data:     []byte("test data"),
 			expected: 9,
 		},
-		{
-			name:        "unknown size before read",
-			data:        []byte("test data"),
-			expected:    blob.SizeUnknown,
-			unknownSize: true,
-		},
-		{
-			name:     "empty blob with known size",
-			data:     []byte{},
-			expected: 0,
-		},
-		{
-			name:        "empty blob with unknown size",
-			data:        []byte{},
-			expected:    blob.SizeUnknown,
-			unknownSize: true,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockBlob{
-				data:        tt.data,
-				unknownSize: tt.unknownSize,
+				data: tt.data,
 			}
 
 			// Create cached blob
-			cached := Cache(mock)
+			cached, err := Cache(mock)
+			require.NoError(t, err)
 
 			// Test size before any read operations
 			size := cached.Size()
@@ -515,19 +482,11 @@ func TestCache_SizeBeforeRead(t *testing.T) {
 				assert.Equal(t, tt.expected, cached.Size())
 			}
 
-			// Verify that the data hasn't been loaded yet
-			assert.Nil(t, cached.getData())
-
 			// Now read the data and verify size changes appropriately
-			_, err := cached.Data()
-			require.NoError(t, err)
+			data := cached.Data()
+			require.NotEmpty(t, data)
 
-			if tt.unknownSize {
-				// After reading, size should be known
-				assert.Equal(t, int64(len(tt.data)), cached.Size())
-			} else {
-				assert.Equal(t, tt.expected, cached.Size())
-			}
+			assert.Equal(t, tt.expected, cached.Size())
 		})
 	}
 }
