@@ -30,7 +30,7 @@ var ioBufPool = sync.Pool{
 // If the file does not exist, it will be created (os.O_CREATE).
 // The function also handles named pipes by setting the appropriate file mode (os.ModeNamedPipe).
 // It uses a buffered I/O operation to improve performance, leveraing the internal ioBufPool.
-func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) error {
+func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) (err error) {
 	data, err := blob.ReadCloser()
 	if err != nil {
 		return fmt.Errorf("failed to get resource data: %w", err)

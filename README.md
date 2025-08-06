@@ -3,7 +3,9 @@
 > Looking for the original OCM project before our start with the next Generation of OCM? Check out the [previous repository](https://github.com/open-component-model/ocm)
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10065/badge)](https://www.bestpractices.dev/projects/10065)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/open-component-model/open-component-model/badge)](https://scorecard.dev/viewer/?uri=github.com/open-component-model/open-component-model)
 [![REUSE status](https://api.reuse.software/badge/github.com/open-component-model/open-component-model)](https://api.reuse.software/info/github.com/open-component-model/open-component-model)
+[![CI](https://github.com/open-component-model/open-component-model/actions/workflows/ci.yml/badge.svg)](https://github.com/open-component-model/open-component-model/actions/workflows/ci.yml)
 
 The Open Component Model (OCM) is an open standard to describe software bills of delivery (SBOD). OCM is a technology-agnostic and machine-readable format focused on the software artifacts that must be delivered for software products.
 
@@ -34,11 +36,11 @@ Additionally, OCM provides a generic solution for how to:
 - Transport component versions, per reference or as values to any of the
   repository implementations.
 
-## [OCM CLI](docs/reference/cli/ocm.md)
+## [OCM CLI](cli/docs/reference/ocm.md)
 
 > **Work In Progress**: This OCM CLI is a completely new take on interacting and working with OCM. As such, expect heavy changes, especially in the Commands available. We are working on a stable API and will release it as soon as possible. Until then, please use the library at your own risk and [reference the previous implementation here](https://github.com/open-component-model/ocm)
 
-The [`ocm` CLI](docs/reference/cli/ocm.md) may also be used to interact with OCM mechanisms. It makes it easy to create component versions and embed them in build processes.
+The [`ocm` CLI](cli/docs/reference/ocm.md) may also be used to interact with OCM mechanisms. It makes it easy to create component versions and embed them in build processes.
 
 The code for the CLI can be found in [`cli`](cli).
 

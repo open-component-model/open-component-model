@@ -172,7 +172,7 @@ func NewBlobOCILayer(b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) 
 // Blob handles the actual transfer of blob data to the OCI storage.
 // It reads the blob content and pushes it to the storage using the provided descriptor.
 // The function ensures proper cleanup of resources by closing the blob reader after the transfer.
-func Blob(ctx context.Context, storage content.Pusher, b blob.ReadOnlyBlob, desc ociImageSpecV1.Descriptor) error {
+func Blob(ctx context.Context, storage content.Pusher, b blob.ReadOnlyBlob, desc ociImageSpecV1.Descriptor) (err error) {
 	layerData, err := b.ReadCloser()
 	if err != nil {
 		return fmt.Errorf("failed to get blob reader: %w", err)

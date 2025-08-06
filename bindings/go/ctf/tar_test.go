@@ -14,9 +14,13 @@ import (
 func Test_Archive(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
-	path := t.TempDir()
 
-	archive, err := ctf.OpenCTF(ctx, path, ctf.FormatDirectory, ctf.O_RDWR)
+	archive, err := ctf.OpenCTF(ctx, ctf.OpenCTFOptions{
+		Path:    t.TempDir(),
+		Format:  ctf.FormatDirectory,
+		Flag:    ctf.O_RDWR,
+		TempDir: t.TempDir(),
+	})
 	r.NoError(err)
 
 	testBlob := inmemory.New(bytes.NewReader([]byte("test")))

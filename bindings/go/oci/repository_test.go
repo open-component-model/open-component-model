@@ -25,11 +25,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
+	"ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -41,7 +43,8 @@ func init() {
 }
 
 func Repository(t *testing.T, options ...oci.RepositoryOption) *oci.Repository {
-	repo, err := oci.NewRepository(options...)
+	opts := append([]oci.RepositoryOption{oci.WithTempDir(t.TempDir())}, options...)
+	repo, err := oci.NewRepository(opts...)
 	require.NoError(t, err, "Failed to create repository")
 	return repo
 }
@@ -71,7 +74,7 @@ func TestRepository_AddComponentVersion(t *testing.T) {
 	}
 	_, err = repo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
 	r.Error(err)
-	r.ErrorIs(err, oci.ErrNotFound)
+	r.ErrorIs(err, repository.ErrNotFound)
 
 	// Test adding component version
 	err = repo.AddComponentVersion(ctx, desc)
@@ -562,7 +565,7 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 
 				// Upload the resource with the store content
 				b := inmemory.New(buf)
-				newRes, err := repo.UploadResource(ctx, tc.resource.Access, tc.resource, b)
+				newRes, err := repo.UploadResource(ctx, tc.resource, b)
 				r.NoError(err, "Failed to upload test resource")
 				r.NotNil(newRes, "Resource should not be nil after uploading")
 
@@ -744,7 +747,7 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 
 				// Upload the source with the store content
 				b := inmemory.New(buf)
-				newSrc, err := repo.UploadSource(ctx, tc.source.Access, tc.source, b)
+				newSrc, err := repo.UploadSource(ctx, tc.source, b)
 				r.NoError(err, "Failed to upload test source")
 				r.NotNil(newSrc, "Source should not be nil after uploading")
 
@@ -1017,7 +1020,7 @@ func TestRepository_ListComponentVersions(t *testing.T) {
 func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, resource *descriptor.Resource) {
 	r := require.New(t)
 	// Get a repository store for the component
-	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference("test-component", "1.0.0"))
+	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
 	r.NoError(err)
 
 	// Create a descriptor for the component version
@@ -1042,7 +1045,9 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 		Digest:    digest.FromBytes(content),
 		Size:      int64(len(content)),
 	}
-	r.NoError(identity.Adopt(&layerDesc, resource))
+	res := resource.DeepCopy()
+	res.Version = ""
+	r.NoError(identity.Adopt(&layerDesc, res))
 
 	// Push the component version as a layer
 	r.NoError(repoStore.Push(ctx, layerDesc, bytes.NewReader(content)))
@@ -1059,7 +1064,7 @@ func setupLegacyComponentVersion(t *testing.T, store *ocictf.Store, ctx context.
 func setupLegacyComponentVersionWithSource(t *testing.T, store *ocictf.Store, ctx context.Context, content []byte, source *descriptor.Source) {
 	r := require.New(t)
 	// Get a repository store for the component
-	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference("test-component", "1.0.0"))
+	repoStore, err := store.StoreForReference(t.Context(), store.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
 	r.NoError(err)
 
 	// Create a descriptor for the component version
@@ -1514,4 +1519,57 @@ func TestRepository_ProcessResourceDigest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRepositoryHealthCheck(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("CTF health check succeeds", func(t *testing.T) {
+		// Create a temporary CTF repository
+		tmpdir := t.TempDir()
+		fs, err := filesystem.NewFS(tmpdir, os.O_RDWR)
+		require.NoError(t, err, "Failed to create filesystem")
+		archive := ctf.NewFileSystemCTF(fs)
+
+		// Create a repository with CTF
+		repo := Repository(t,
+			ocictf.WithCTF(ocictf.NewFromCTF(archive)),
+			oci.WithScheme(testScheme),
+		)
+
+		// Test health check - should always succeed for CTF
+		err = repo.CheckHealth(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("URL resolver health check with invalid URL fails", func(t *testing.T) {
+		// Create a repository with URL resolver pointing to invalid URL
+		resolver, err := url.New(url.WithBaseURL("http://invalid.nonexistent.domain"))
+		require.NoError(t, err)
+
+		repo := Repository(t,
+			oci.WithResolver(resolver),
+			oci.WithScheme(testScheme),
+		)
+
+		// Test health check - should fail for unreachable URL
+		err = repo.CheckHealth(ctx)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create registry client")
+	})
+
+	t.Run("URL resolver health check with malformed URL fails", func(t *testing.T) {
+		// Create a repository with URL resolver pointing to malformed URL
+		resolver, err := url.New(url.WithBaseURL("not-a-valid-url"))
+		require.NoError(t, err)
+
+		repo := Repository(t,
+			oci.WithResolver(resolver),
+			oci.WithScheme(testScheme),
+		)
+
+		// Test health check - should fail for malformed URL
+		err = repo.CheckHealth(ctx)
+		require.Error(t, err)
+	})
 }

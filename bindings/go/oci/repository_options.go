@@ -47,6 +47,13 @@ type RepositoryOptions struct {
 
 	// ReferrerTrackingPolicy defines how OCI referrers are used to track component versions.
 	ReferrerTrackingPolicy ReferrerTrackingPolicy
+
+	// Logger is the logger to use for OCI operations.
+	// If not provided, slog.Default() will be used.
+	Logger *slog.Logger
+
+	// TempDir is the default temporary filesystem folder for any temporary cached data
+	TempDir string
 }
 
 // ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
@@ -116,6 +123,20 @@ func WithReferrerTrackingPolicy(policy ReferrerTrackingPolicy) RepositoryOption 
 	}
 }
 
+// WithLogger sets the logger for the repository.
+func WithLogger(logger *slog.Logger) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.Logger = logger
+	}
+}
+
+// WithTempDir sets the temporary directory for the repository to use for caching data.
+func WithTempDir(tempDir string) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.TempDir = tempDir
+	}
+}
+
 // NewRepository creates a new Repository instance with the given options.
 func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	options := &RepositoryOptions{}
@@ -140,6 +161,10 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 
 	if options.Creator == "" {
 		options.Creator = "Open Component Model Go Reference Library"
+	}
+
+	if options.Logger == nil {
+		options.Logger = slog.Default()
 	}
 
 	if options.ResourceCopyOptions == nil {
@@ -170,5 +195,6 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		creatorAnnotation:          options.Creator,
 		resourceCopyOptions:        *options.ResourceCopyOptions,
 		referrerTrackingPolicy:     options.ReferrerTrackingPolicy,
+		logger:                     options.Logger,
 	}, nil
 }

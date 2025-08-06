@@ -7,11 +7,18 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/cli/cmd/add"
 	"ocm.software/open-component-model/cli/cmd/configuration"
+	"ocm.software/open-component-model/cli/cmd/download"
 	"ocm.software/open-component-model/cli/cmd/generate"
 	"ocm.software/open-component-model/cli/cmd/get"
+	"ocm.software/open-component-model/cli/cmd/version"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
+)
+
+const (
+	tempFolderFlag = "temp-folder"
 )
 
 // Execute adds all child commands to the Cmd command and sets flags appropriately.
@@ -39,9 +46,13 @@ func New() *cobra.Command {
 	}
 
 	configuration.RegisterConfigFlag(cmd)
+	cmd.PersistentFlags().String(tempFolderFlag, "", `Specify a custom temporary folder path for filesystem operations.`)
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())
+	cmd.AddCommand(add.New())
+	cmd.AddCommand(version.New())
+	cmd.AddCommand(download.New())
 	return cmd
 }
 
@@ -54,6 +65,7 @@ func preRunE(cmd *cobra.Command, _ []string) error {
 	slog.SetDefault(logger)
 
 	setupOCMConfig(cmd)
+	setupFilesystemConfig(cmd)
 
 	if err := setupPluginManager(cmd); err != nil {
 		return fmt.Errorf("could not setup plugin manager: %w", err)

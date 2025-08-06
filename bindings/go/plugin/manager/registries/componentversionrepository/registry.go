@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -25,7 +26,7 @@ type constructedPlugin struct {
 func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](
 	scheme *runtime.Scheme,
 	r *RepositoryRegistry,
-	p ComponentVersionRepositoryProvider,
+	p repository.ComponentVersionRepositoryProvider,
 	prototype T,
 ) error {
 	r.mu.Lock()
@@ -56,7 +57,7 @@ type RepositoryRegistry struct {
 	constructedPlugins map[string]*constructedPlugin  // running plugins
 
 	// internalComponentVersionRepositoryPlugins contains all plugins that have been registered using internally import statement.
-	internalComponentVersionRepositoryPlugins map[runtime.Type]ComponentVersionRepositoryProvider
+	internalComponentVersionRepositoryPlugins map[runtime.Type]repository.ComponentVersionRepositoryProvider
 	// scheme is the holder of schemes. This hold will contain the scheme required to
 	// construct and understand the passed in types and what / how they need to look like. The passed in scheme during
 	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
@@ -136,27 +137,21 @@ loop:
 // GetPlugin retrieves a plugin for the given specification type.
 // It first checks for internal plugins registered via RegisterInternalComponentVersionRepositoryPlugin,
 // then falls back to external plugins if no internal plugin is found.
-func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (ComponentVersionRepositoryProvider, error) {
+func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (repository.ComponentVersionRepositoryProvider, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.scheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
-	}
+	// look for an internal implementation that actually implements the interface
+	_, _ = r.scheme.DefaultType(spec)
+	typ := spec.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.scheme.TypeForPrototype(spec); err == nil {
+	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalComponentVersionRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
 		}
-		return p, nil
-	}
 
-	// if we don't find the type registered internally, we look for external plugins by using the type
-	// from the specification.
-	typ := spec.GetType()
-	if typ.IsEmpty() {
-		return nil, fmt.Errorf("external plugins can not be fetched without a type %T", spec)
+		return p, nil
 	}
 
 	plugin, err := r.getPlugin(ctx, typ)
@@ -187,6 +182,6 @@ func NewComponentVersionRepositoryRegistry(ctx context.Context) *RepositoryRegis
 		registry:           make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins: make(map[string]*constructedPlugin),
 		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),
-		internalComponentVersionRepositoryPlugins: make(map[runtime.Type]ComponentVersionRepositoryProvider),
+		internalComponentVersionRepositoryPlugins: make(map[runtime.Type]repository.ComponentVersionRepositoryProvider),
 	}
 }

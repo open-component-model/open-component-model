@@ -13,10 +13,22 @@ includes:
     optional: true
     taskfile: ./bindings/go/constructor/Taskfile.yml
     dir: ./bindings/go/constructor
+  bindings/go/input/dir:
+    optional: true
+    taskfile: ./bindings/go/input/dir/Taskfile.yml
+    dir: ./bindings/go/input/dir
   bindings/go/input/file:
     optional: true
     taskfile: ./bindings/go/input/file/Taskfile.yml
     dir: ./bindings/go/input/file
+  bindings/go/input/helm:
+    optional: true
+    taskfile: ./bindings/go/input/helm/Taskfile.yml
+    dir: ./bindings/go/input/helm
+  bindings/go/input/utf8:
+    optional: true
+    taskfile: ./bindings/go/input/utf8/Taskfile.yml
+    dir: ./bindings/go/input/utf8
   bindings/go/descriptor/v2:
     optional: true
     taskfile: ./bindings/go/descriptor/v2/Taskfile.yml
@@ -65,6 +77,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/configuration/Taskfile.yml
     dir: ./bindings/go/configuration
+  bindings/go/repository:
+    optional: true
+    taskfile: ./bindings/go/repository/Taskfile.yml
+    dir: ./bindings/go/repository
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
@@ -119,4 +135,4 @@ tasks:
       - task: 'cli:generate/docs'
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"
-          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/docs/reference/cli'
+          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/cli/docs/reference'

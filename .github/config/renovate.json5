@@ -6,6 +6,10 @@
   prConcurrentLimit: 0,
   prHourlyLimit: 0,
   "platform": "github",
+  allowedEnv: [
+    "GONOPROXY",
+    "GOPRIVATE"
+  ],
   "repositories": [
     "open-component-model/open-component-model",
   ],
@@ -41,6 +45,6 @@
     },
   ],
   "allowedCommands": [
-    "^find\\s\\.\\s-name.+go\\.mod.+-path.+integration.+go\\smod\\stidy"
+    "^(command -v go >/dev/null 2>&1 \\|\\| exit 0;\\s*)?find\\s+\\.\\s+-name\\s+\\\"go\\.mod\\\".*-path\\s+'\\*/integration/\\*'.*go\\s+mod\\s+tidy"
   ]
 }

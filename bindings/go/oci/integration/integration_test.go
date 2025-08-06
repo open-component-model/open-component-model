@@ -48,6 +48,7 @@ import (
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -80,9 +81,8 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 	scheme := ocmruntime.NewScheme()
 	ocmoci.MustAddToScheme(scheme)
 	v2.MustAddToScheme(scheme)
-	scheme.MustRegisterWithAlias(&v2.LocalBlob{}, ocmruntime.NewUnversionedType(v2.LocalBlobAccessType))
 
-	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithScheme(scheme))
+	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithScheme(scheme), oci.WithTempDir(t.TempDir()))
 	r.NoError(err)
 
 	t.Run("basic download of a component version", func(t *testing.T) {
@@ -126,6 +126,109 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 		out, err := exec.CommandContext(t.Context(), cliPath, "version").CombinedOutput()
 		r.NoError(err)
 		r.Contains(string(out), version)
+	})
+}
+
+func Test_Integration_HealthCheck_Authentication(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("skipping integration test as reaching ghcr.io is taking too long!")
+	}
+
+	t.Parallel()
+	user, password := getUserAndPasswordWithGitHubCLIAndJQ(t)
+
+	r := require.New(t)
+	r.NotEmpty(user)
+	r.NotEmpty(password)
+
+	reg := "ghcr.io"
+
+	t.Run("health check with valid authentication succeeds", func(t *testing.T) {
+		r := require.New(t)
+
+		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
+		r.NoError(err)
+		resolver.SetClient(createAuthClient(reg, user, password))
+
+		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+		r.NoError(err)
+
+		// Health check should succeed with valid credentials
+		err = repo.CheckHealth(t.Context())
+		r.NoError(err)
+	})
+
+	t.Run("health check with invalid authentication fails", func(t *testing.T) {
+		r := require.New(t)
+
+		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
+		r.NoError(err)
+		resolver.SetClient(createAuthClient(reg, "invalid-user", "invalid-password"))
+
+		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+		r.NoError(err)
+
+		// Health check should fail for ghcr.io with invalid credentials
+		// GHCR returns 403 during token exchange when credentials are invalid
+		err = repo.CheckHealth(t.Context())
+		r.Error(err)
+		r.True(strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "denied"),
+			"Expected 403 or denied error, got: %v", err)
+	})
+
+	t.Run("health check without authentication fails for ghcr.io", func(t *testing.T) {
+		r := require.New(t)
+
+		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
+		r.NoError(err)
+		// explicitly set default client to avoid token fetch round
+		resolver.SetClient(http.DefaultClient)
+
+		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
+		r.NoError(err)
+
+		// Health check should fail without credentials for ghcr.io
+		// GHCR returns 403 during token exchange when no credentials provided
+		err = repo.CheckHealth(t.Context())
+		r.ErrorContains(err, "401")
+	})
+
+	t.Run("resolver ping with valid authentication succeeds", func(t *testing.T) {
+		r := require.New(t)
+
+		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
+		r.NoError(err)
+		resolver.SetClient(createAuthClient(reg, user, password))
+
+		// Direct resolver ping should succeed with valid credentials
+		err = resolver.Ping(t.Context())
+		r.NoError(err)
+	})
+
+	t.Run("resolver ping with invalid authentication fails", func(t *testing.T) {
+		r := require.New(t)
+
+		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
+		r.NoError(err)
+		resolver.SetClient(createAuthClient(reg, "invalid-user", "invalid-password"))
+
+		// Direct resolver ping should fail for ghcr.io with invalid credentials
+		// GHCR returns 403 during token exchange when credentials are invalid
+		err = resolver.Ping(t.Context())
+		r.ErrorContains(err, "403")
+	})
+
+	t.Run("resolver ping without authentication fails", func(t *testing.T) {
+		r := require.New(t)
+
+		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
+		r.NoError(err)
+		resolver.SetClient(http.DefaultClient)
+
+		// Direct resolver ping should fail for ghcr.io without credentials
+		// GHCR returns 403 during token exchange when no credentials provided
+		err = resolver.Ping(t.Context())
+		r.ErrorContains(err, "401")
 	})
 }
 
@@ -174,7 +277,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		)
 		r.NoError(err)
 
-		repo, err := oci.NewRepository(oci.WithResolver(resolver))
+		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
 		r.NoError(err)
 
 		t.Run("basic connectivity and resolution failure", func(t *testing.T) {
@@ -194,7 +297,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		})
 
 		t.Run("basic upload and download of a component version (with index based referrer tracking)", func(t *testing.T) {
-			repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(oci.ReferrerTrackingPolicyByIndexAndSubject))
+			repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(oci.ReferrerTrackingPolicyByIndexAndSubject), oci.WithTempDir(t.TempDir()))
 			r.NoError(err)
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
 		})
@@ -259,7 +362,7 @@ func Test_Integration_CTF(t *testing.T) {
 	t.Run("direct", func(t *testing.T) {
 		archive := ctf.NewFileSystemCTF(fs)
 		store := ocictf.NewFromCTF(archive)
-		repo, err := oci.NewRepository(oci.WithResolver(store))
+		repo, err := oci.NewRepository(oci.WithResolver(store), oci.WithTempDir(t.TempDir()))
 		require.NoError(t, err)
 		t.Run("basic upload and download of a component version", func(t *testing.T) {
 			uploadDownloadBarebonesComponentVersion(t, repo, "test-component", "v1.0.0")
@@ -386,7 +489,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 	r.Len(store.Index.Manifests, 1)
 }
 
-func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, from, to string) {
+func uploadDownloadBarebonesOCIImage(t *testing.T, repo repository.ResourceRepository, from, to string) {
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -410,8 +513,9 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo oci.ResourceRepository, 
 
 	targetAccess := resource.Access.DeepCopyTyped()
 	targetAccess.(*v1.OCIImage).ImageReference = to
+	resource.Access = targetAccess
 
-	newRes, err := repo.UploadResource(ctx, targetAccess, &resource, blob)
+	newRes, err := repo.UploadResource(ctx, &resource, blob)
 	r.NoError(err)
 	resource = *newRes
 
@@ -467,7 +571,7 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, from, to)
+	data, access := createSingleLayerOCIImage(t, originalData, from)
 
 	blob := inmemory.New(bytes.NewReader(data))
 
@@ -485,8 +589,9 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	targetAccess := resource.Access.DeepCopyTyped()
 	targetAccess.(*v1.OCIImage).ImageReference = to
+	resource.Access = targetAccess
 
-	newRes, err := repo.UploadResource(ctx, targetAccess, &resource, blob)
+	newRes, err := repo.UploadResource(ctx, &resource, blob)
 	r.NoError(err)
 	resource = *newRes
 
@@ -507,7 +612,7 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 	r.NotNil(resource.Digest)
 }
 
-func uploadDownloadBarebonesComponentVersion(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {
+func uploadDownloadBarebonesComponentVersion(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -642,7 +747,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 	return buf.Bytes(), access
 }
 
-func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {
+func uploadDownloadLocalResource(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
 	ctx := t.Context()
 	r := require.New(t)
 
@@ -718,7 +823,7 @@ func uploadDownloadLocalResource(t *testing.T, repo oci.ComponentVersionReposito
 	r.Equal(testData, data.Bytes())
 }
 
-func uploadDownloadLocalSource(t *testing.T, repo oci.ComponentVersionRepository, name, version string) {
+func uploadDownloadLocalSource(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
 	ctx := t.Context()
 	r := require.New(t)
 

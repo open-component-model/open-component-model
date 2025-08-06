@@ -48,13 +48,27 @@ func (resolver *CachingResolver) BasePath() string {
 	return resolver.baseURL + "/" + path.DefaultComponentDescriptorPath
 }
 
-func (resolver *CachingResolver) ComponentVersionReference(component, version string) string {
-	tag := oci.LooseSemverToOCITag(version) // Remove prohibited characters.
+func (resolver *CachingResolver) ComponentVersionReference(ctx context.Context, component, version string) string {
+	tag := oci.LooseSemverToOCITag(ctx, version) // Remove prohibited characters.
 	return fmt.Sprintf("%s/%s:%s", resolver.BasePath(), component, tag)
 }
 
 func (resolver *CachingResolver) Reference(reference string) (fmt.Stringer, error) {
 	return registry.ParseReference(reference)
+}
+
+// Ping does a resolver.Ping that uses OCI specific technology, in our case it's Oras. Oras' Ping
+// does make sure that authentication is working and that the registry is available.
+func (resolver *CachingResolver) Ping(ctx context.Context) error {
+	r, err := remote.NewRegistry(resolver.baseURL)
+	if err != nil {
+		return fmt.Errorf("failed to create registry client: %w", err)
+	}
+	r.PlainHTTP = resolver.plainHTTP
+	if resolver.baseClient != nil {
+		r.Client = resolver.baseClient
+	}
+	return r.Ping(ctx)
 }
 
 func (resolver *CachingResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {

@@ -3,7 +3,20 @@ version: '3'
 vars:
   CLI_DOCUMENTATION_MODE: "markdown"
   CLI_DOCUMENTATION_DIRECTORY: tmp/docs
-
+  PROVIDER: ocm.software
+  NAME: cli
+  DEFAULT_VERSION:
+    sh: |
+      echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)$(git diff --quiet || echo '+dirty')"
+  VERSION: '{{ .VERSION | default .DEFAULT_VERSION }}'
+  COMPONENT_CONSTRUCTOR_FILE: "{{ .TASKFILE_DIR }}/tmp/component-constructor.yaml"
+  CTF_LOCATION: '{{ .TASKFILE_DIR }}/tmp/transport-archive'
+  GOOS:
+    sh: |
+      go env GOOS
+  GOARCH:
+    sh: |
+      go env GOARCH
 tasks:
   tmp:
     cmds:
@@ -19,10 +32,128 @@ tasks:
       - go test -v -coverprofile=tmp/coverage.out ./...
     deps:
       - tmp
-  build:
-    desc: "Build the CLI"
+
+  install:
+    desc: "Install the CLI"
+    prompt: "This will install the CLI to {{ .TARGET }}, do you want to continue?"
+    interactive: true
+    vars:
+      TARGET: /usr/local/bin
+    deps:
+      - task: build
     cmds:
-      - go build -o {{ .ROOT_DIR }}/tmp/bin/ocm
+      - cmd: sudo install -m 755 {{ .TASKFILE_DIR }}/tmp/bin/ocm {{ .TARGET }}
+
+  build:
+    desc: "Build the CLI in the Host Architecture"
+    deps:
+      - task: build:target
+        vars:
+          GOOS: '{{ .GOOS }}'
+          GOARCH: '{{ .GOARCH }}'
+    cmds:
+      - cmd: ln -sf {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }} {{ .TASKFILE_DIR }}/tmp/bin/ocm
+
+  build/multiarch:
+    desc: "Build CLI for all supported targets"
+    deps:
+      - for:
+          matrix:
+            GOOS: [ "windows", "linux", "darwin" ]
+            GOARCH: [ "amd64", "arm64" ]
+        task: build:target
+        vars:
+          GOOS: '{{.ITEM.GOOS }}'
+          GOARCH: '{{.ITEM.GOARCH }}'
+
+  build:target:
+    desc: "Build CLI for a specific GOOS/GOARCH target"
+    internal: true
+    silent: false
+    generates:
+      - tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
+      - tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml
+    cmds:
+      - cmd: |
+          GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
+            -ldflags "-X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" \
+            -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
+      - |
+        mkdir -p {{ .TASKFILE_DIR }}/tmp/resources
+        cat > {{ .TASKFILE_DIR }}/tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml <<EOF
+        - name: ocmcli
+          type: executable
+          version: {{ .VERSION }}
+          labels:
+            - name: downloadName
+              value: ocm
+          extraIdentity:
+            os: {{ .GOOS }}
+            architecture: {{ .GOARCH }}
+          relation: local
+          input:
+            type: file
+            path: {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
+        EOF
+
+  generate/ctf:
+    deps:
+      - task: generate/component-constructor
+      - task: build
+    desc: "Generate the component-constructor.yaml and build the CLI for all targets, then generate the CTF containing the Component Version"
+    cmd: |
+      rm -rf {{ .CTF_LOCATION }}
+      {{ .TASKFILE_DIR }}/tmp/bin/ocm add component-versions \
+        --constructor {{ .COMPONENT_CONSTRUCTOR_FILE }} \
+        --repository {{ .CTF_LOCATION }}
+
+  verify/ctf:
+    desc: "Verify the CTF by checking the component version and being able to fetch and run the CLI for the Host Architecture"
+    silent: true
+    deps:
+      - generate/ctf
+    vars:
+      REFERENCE: '{{ .CTF_LOCATION }}//{{ .PROVIDER }}/{{ .NAME }}'
+    dir: '{{ .TASKFILE_DIR }}/tmp/verify-ctf'
+    cmd: |
+      VERSION=$({{ .TASKFILE_DIR }}/tmp/bin/ocm get component-version {{ .REFERENCE }} -oyaml --loglevel=error | yq .component.version)
+      if [ -z "$VERSION" ]; then
+        echo "Component version not found in CTF at {{ .REFERENCE }}"
+        exit 1
+      fi
+      echo "Component version found: $VERSION"
+      
+      {{ .TASKFILE_DIR }}/tmp/bin/ocm download resource {{ .REFERENCE }}:$VERSION \
+        --identity name=ocmcli,os={{ .GOOS }},architecture={{ .GOARCH }}
+      
+      chmod +x ./ocm
+      ./ocm version
+      
+      
+
+  generate/component-constructor:
+    desc: "Generate the component-constructor.yaml by building the CLI for all targets"
+    generates:
+      - '{{ .COMPONENT_CONSTRUCTOR_FILE }}'
+    silent: true
+    deps:
+      - task: build/multiarch
+        silent: true
+    cmds:
+      - |
+        cat <<EOF > {{ .COMPONENT_CONSTRUCTOR_FILE }}
+        name: {{ .PROVIDER }}/{{ .NAME }}
+        version: {{ .VERSION }}
+        provider:
+          name: {{ .PROVIDER }}
+        resources:
+        EOF
+      - |
+        for file in {{ .TASKFILE_DIR }}/tmp/resources/*.yaml; do
+          # Indent each line by 2 spaces and append
+          cat "$file" >> {{ .COMPONENT_CONSTRUCTOR_FILE }}
+        done
+      - cat "{{ .COMPONENT_CONSTRUCTOR_FILE }}"
 
   generate/docs:
     desc: "Generate CLI Markdown documentation"

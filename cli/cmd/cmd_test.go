@@ -1,24 +1,30 @@
 package cmd_test
 
 import (
+	"bytes"
+	"fmt"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
 	"ocm.software/open-component-model/cli/cmd/internal/test"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-// setupTestRepository creates a test repository with the given component versions
-func setupTestRepository(t *testing.T, versions ...*descriptor.Descriptor) (string, error) {
+// setupTestRepositoryWithDescriptorLibrary creates a test repository with the given component versions
+func setupTestRepositoryWithDescriptorLibrary(t *testing.T, versions ...*descriptor.Descriptor) (string, error) {
 	r := require.New(t)
 	archivePath := t.TempDir()
 	fs, err := filesystem.NewFS(archivePath, os.O_RDWR)
@@ -59,7 +65,7 @@ func createTestDescriptor(name, version string) *descriptor.Descriptor {
 func Test_Get_Component_Version_Formats(t *testing.T) {
 	// Setup test repository with a single component version
 	desc := createTestDescriptor("ocm.software/test-component", "0.0.1")
-	archivePath, err := setupTestRepository(t, desc)
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, desc)
 	require.NoError(t, err)
 
 	ref := compref.Ref{
@@ -169,7 +175,7 @@ func Test_List_Component_Version_Variations(t *testing.T) {
 	// Setup test repository with multiple component versions
 	desc1 := createTestDescriptor("ocm.software/test-component", "0.0.1")
 	desc2 := createTestDescriptor("ocm.software/test-component", "0.0.2")
-	archivePath, err := setupTestRepository(t, desc1, desc2)
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, desc1, desc2)
 	require.NoError(t, err)
 
 	ref := compref.Ref{
@@ -252,4 +258,246 @@ COMPONENT                   │ VERSION │ PROVIDER
 			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(discarded), "expected table output")
 		})
 	}
+}
+
+func Test_Add_Component_Version(t *testing.T) {
+	r := require.New(t)
+	logs := test.NewJSONLogReader()
+	tmp := t.TempDir()
+
+	// Create a test file to be added to the component version
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	r.NoError(os.WriteFile(testFilePath, []byte("foobar"), 0o600), "could not create test file")
+
+	constructorYAML := fmt.Sprintf(`
+name: ocm.software/examples-01
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+
+	t.Run("base construction", func(t *testing.T) {
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorYAMLFilePath,
+			"--repository", archiveFilePath,
+		), test.WithOutput(logs))
+
+		r.NoError(err, "could not construct component version")
+
+		entries, err := logs.List()
+		r.NoError(err, "failed to list log entries")
+		r.NotEmpty(entries, "expected log entries to be present")
+
+		expected := []string{
+			"starting component construction",
+			"component construction completed",
+		}
+		for _, entry := range entries {
+			if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
+				require.Contains(t, expected, entry.Msg)
+				expected = slices.DeleteFunc(expected, func(s string) bool {
+					return s == entry.Msg
+				})
+			}
+		}
+		r.Empty(expected, "expected logs should all have been matched matched within the CLI realm")
+
+		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+		r.NoError(err, "could not create test filesystem")
+		archive := ctf.NewFileSystemCTF(fs)
+		helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+		r.NoError(err, "could not create helper test repository")
+
+		desc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/examples-01", "1.0.0")
+		r.NoError(err, "could not retrieve component version from test repository")
+
+		r.Equal("ocm.software/examples-01", desc.Component.Name, "expected component name to match")
+		r.Equal("1.0.0", desc.Component.Version, "expected component version to match")
+		r.Len(desc.Component.Resources, 1, "expected one resource in component version")
+		r.Equal("my-file", desc.Component.Resources[0].Name, "expected resource name to match")
+		r.Equal("blob", desc.Component.Resources[0].Type, "expected resource type to match")
+		r.NotNil(desc.Component.Resources[0].Access, "expected resource access to be set")
+		r.Equal("localBlob/v1", desc.Component.Resources[0].Access.GetType().String(), "expected resource access type to match")
+
+		blb, _, err := helperRepo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, desc.Component.Resources[0].ToIdentity())
+		r.NoError(err, "could not retrieve local resource from test repository")
+		var buf bytes.Buffer
+		r.NoError(blob.Copy(&buf, blb))
+		r.Equal("foobar", buf.String(), "expected resource content to match test file content")
+
+		t.Run("expect failure on existing component version", func(t *testing.T) {
+			_, err := test.OCM(t, test.WithArgs("add", "cv",
+				"--constructor", constructorYAMLFilePath,
+				"--repository", archiveFilePath,
+			), test.WithOutput(logs))
+
+			r.Error(err, "expected error on adding existing component version")
+			r.Contains(err.Error(), "already exists in target repository", "expected error message about existing component version")
+
+			entries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(entries, "expected log entries to be present")
+
+			expected := []string{
+				"starting component construction",
+				"component construction failed",
+			}
+			for _, entry := range entries {
+				if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
+					require.Contains(t, expected, entry.Msg)
+					expected = slices.DeleteFunc(expected, func(s string) bool {
+						return s == entry.Msg
+					})
+				}
+			}
+			r.Empty(expected, "expected logs should all have been matched matched within the CLI realm")
+		})
+
+		t.Run("expect success on replace strategy", func(t *testing.T) {
+			constructorYAML = fmt.Sprintf(`
+name: ocm.software/examples-01
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file-replaced
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+			// Create a replacement test file to be added to the component version
+			testFilePath := filepath.Join(tmp, "test-file.txt")
+			r.NoError(os.WriteFile(testFilePath, []byte("replaced"), 0o600), "could not create test file")
+
+			constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-replace.yaml")
+			r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+			_, err := test.OCM(t, test.WithArgs("add", "cv",
+				"--constructor", constructorYAMLFilePath,
+				"--repository", archiveFilePath,
+				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
+			), test.WithOutput(logs))
+
+			r.NoError(err, "could not construct component version", "replace strategy should allow an existing component version to be replaced")
+
+			entries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(entries, "expected log entries to be present")
+
+			expected := []string{
+				"starting component construction",
+				"component construction completed",
+			}
+			for _, entry := range entries {
+				if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
+					require.Contains(t, expected, entry.Msg)
+					expected = slices.DeleteFunc(expected, func(s string) bool {
+						return s == entry.Msg
+					})
+				}
+			}
+			r.Empty(expected, "expected logs should all have been matched matched within the CLI realm")
+
+			desc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/examples-01", "1.0.0")
+			r.NoError(err, "could not retrieve component version from test repository")
+
+			r.Equal("ocm.software/examples-01", desc.Component.Name, "expected component name to match")
+			r.Equal("1.0.0", desc.Component.Version, "expected component version to match")
+			r.Len(desc.Component.Resources, 1, "expected one resource in component version")
+			r.Equal("my-file-replaced", desc.Component.Resources[0].Name, "expected resource name to match")
+
+			blb, _, err := helperRepo.GetLocalResource(t.Context(), desc.Component.Name, desc.Component.Version, desc.Component.Resources[0].ToIdentity())
+			r.NoError(err, "could not retrieve local resource from test repository")
+			var buf bytes.Buffer
+			r.NoError(blob.Copy(&buf, blb))
+			r.Equal("replaced", buf.String(), "expected resource content to match test file content")
+
+		})
+	})
+}
+
+func Test_Version(t *testing.T) {
+	r := require.New(t)
+	logs := test.NewJSONLogReader()
+	_, err := test.OCM(t, test.WithArgs("version"), test.WithOutput(logs))
+	r.NoError(err, "failed to run version command")
+
+	entries, err := logs.List()
+	r.NoError(err, "failed to list log entries")
+
+	r.NotEmpty(entries, "expected log entries for version command")
+
+	found := false
+	for _, entry := range entries {
+		ver, ok := entry.Extras["gitVersion"]
+		if ok {
+			found = true
+			r.Equal(ver, "(devel)")
+			break
+		}
+	}
+	r.True(found, "expected to find gitVersion in log entries")
+}
+
+func Test_Download_Resource(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	// Create a test file to be added to the component version
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	r.NoError(os.WriteFile(testFilePath, []byte("foobar"), 0o600), "could not create test file")
+
+	constructorYAML := fmt.Sprintf(`
+name: ocm.software/examples-01
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+
+	r.NoError(err, "could not construct component version")
+
+	logs := test.NewJSONLogReader()
+
+	downloadTarget := filepath.Join(t.TempDir(), "downloaded-resource.txt")
+
+	_, err = test.OCM(t, test.WithArgs("download", "resource",
+		archiveFilePath+"//ocm.software/examples-01:1.0.0",
+		"--identity", "name=my-file,version=1.0.0",
+		"--output", downloadTarget),
+		test.WithOutput(logs),
+	)
+	r.NoError(err, "failed to run download resource command")
+
+	downloaded, err := os.ReadFile(downloadTarget)
+	r.NoError(err, "failed to read downloaded resource file")
+	r.Equal("foobar", string(downloaded), "expected downloaded resource content to match test file content")
 }

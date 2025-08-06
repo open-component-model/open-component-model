@@ -88,22 +88,21 @@ type hugoGenerator struct {
 
 // generateHugoMarkdownTree generates markdown documentation for a command and all its children
 func generateHugoMarkdownTree(cmd *cobra.Command, generator *hugoGenerator) error {
+	// Generate markdown for each command
+	if err := generateHugoMarkdownForCommand(cmd, generator); err != nil {
+		return err
+	}
+
 	for _, c := range cmd.Commands() {
 		// Skip hidden commands
 		if !c.IsAvailableCommand() || c.IsAdditionalHelpTopicCommand() {
 			continue
 		}
-
-		// Generate markdown for each command
-		if err := generateHugoMarkdownForCommand(c, generator); err != nil {
-			return err
-		}
-
-		// Recursively process children commands
 		if err := generateHugoMarkdownTree(c, generator); err != nil {
-			return err
+			return fmt.Errorf("failed to generate markdown for command %s: %w", c.CommandPath(), err)
 		}
 	}
+
 	return nil
 }
 

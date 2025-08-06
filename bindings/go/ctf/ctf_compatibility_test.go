@@ -45,7 +45,11 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			r := require.New(t)
-			archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, tc.path, ctf.O_RDONLY)
+			archive, discovered, err := ctf.OpenCTFByFileExtension(ctx, ctf.OpenCTFOptions{
+				Path:    tc.path,
+				Flag:    ctf.O_RDONLY,
+				TempDir: t.TempDir(),
+			})
 			r.Equal(tc.format, discovered, "discovered format should be the same as the one used to open")
 			r.NoError(err)
 			blobs, err := archive.ListBlobs(ctx)
@@ -85,7 +89,11 @@ func Test_CTF_Basic_ReadOnly_Compatibility(t *testing.T) {
 		t.Run("work within "+tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			r := require.New(t)
-			err := ctf.WorkWithinCTF(ctx, tc.path, ctf.O_RDONLY, func(ctx context.Context, ctf ctf.CTF) error {
+			err := ctf.WorkWithinCTF(ctx, ctf.OpenCTFOptions{
+				Path:    tc.path,
+				Flag:    ctf.O_RDONLY,
+				TempDir: t.TempDir(),
+			}, func(ctx context.Context, ctf ctf.CTF) error {
 				blobs, err := ctf.ListBlobs(ctx)
 				if err != nil {
 					return err
@@ -104,7 +112,11 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 	t.Run("remote resource", func(t *testing.T) {
 		ctx := t.Context()
 		r := require.New(t)
-		archive, err := ctf.OpenCTF(ctx, "testdata/compatibility/02/without-resource", ctf.FormatDirectory, ctf.O_RDONLY)
+		archive, err := ctf.OpenCTF(ctx, ctf.OpenCTFOptions{
+			Path:   "testdata/compatibility/02/without-resource",
+			Format: ctf.FormatDirectory,
+			Flag:   ctf.O_RDONLY,
+		})
 		r.NoError(err)
 		blobs, err := archive.ListBlobs(ctx)
 		r.NoError(err)
@@ -123,7 +135,11 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 	t.Run("local (embedded) resource", func(t *testing.T) {
 		ctx := t.Context()
 		r := require.New(t)
-		archive, err := ctf.OpenCTF(ctx, "testdata/compatibility/02/with-resource", ctf.FormatDirectory, ctf.O_RDONLY)
+		archive, err := ctf.OpenCTF(ctx, ctf.OpenCTFOptions{
+			Path:   "testdata/compatibility/02/with-resource",
+			Format: ctf.FormatDirectory,
+			Flag:   ctf.O_RDONLY,
+		})
 		r.NoError(err)
 		blobs, err := archive.ListBlobs(ctx)
 		r.NoError(err)

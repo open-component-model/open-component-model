@@ -55,14 +55,13 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 			credentials, _ = g.resolveFromGraph(ctx, identity)
 		}
 		slog.InfoContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
-		credentials, err = plugin.Resolve(ctx, cfg, identity, credentials)
+		credentials, err := plugin.Resolve(ctx, cfg, identity, credentials)
 
 		mu.Lock()
 		defer mu.Unlock()
 
 		switch {
 		case err != nil:
-			slog.ErrorContext(ctx, "Failed to resolve credentials", "identity", identity, "config", cfg, "error", err)
 			errs = append(errs, err)
 		case resolved == nil:
 			resolved = credentials

@@ -63,7 +63,6 @@ Specifying types and schemes:
 get cv ctf::github.com/locally-checked-out-repo//ocm.software/ocmcli:0.23.0
 get cvs oci::http://localhost:8080//ocm.software/ocmcli
 `),
-		Version:           "v1alpha1",
 		RunE:              GetComponentVersion,
 		DisableAutoGenTag: true,
 	}
@@ -115,7 +114,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	repo, err := ocm.New(cmd.Context(), pluginManager, credentialGraph, reference)
+	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}

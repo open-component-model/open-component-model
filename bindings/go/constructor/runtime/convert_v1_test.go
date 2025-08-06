@@ -406,6 +406,9 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 										Name:    "test-resource",
 										Version: "1.0.0",
 									},
+									ExtraIdentity: rt.Identity{
+										"namespace": "test-namespace",
+									},
 								},
 								Type:     "blob",
 								Relation: v1.LocalRelation,
@@ -417,6 +420,9 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 									ObjectMeta: v1.ObjectMeta{
 										Name:    "test-source",
 										Version: "1.0.0",
+									},
+									ExtraIdentity: rt.Identity{
+										"namespace": "test-namespace",
 									},
 								},
 								Type: "git",
@@ -444,6 +450,9 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 										Name:    "test-resource",
 										Version: "1.0.0",
 									},
+									ExtraIdentity: rt.Identity{
+										"namespace": "test-namespace",
+									},
 								},
 								Type:     "blob",
 								Relation: LocalRelation,
@@ -455,6 +464,9 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 									ObjectMeta: ObjectMeta{
 										Name:    "test-source",
 										Version: "1.0.0",
+									},
+									ExtraIdentity: rt.Identity{
+										"namespace": "test-namespace",
 									},
 								},
 								Type: "git",

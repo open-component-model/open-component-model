@@ -9,15 +9,16 @@ import (
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/oci"
-	"ocm.software/open-component-model/bindings/go/oci/repository"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/identity/v1"
 	repoSpec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// CachingComponentVersionRepositoryProvider is a caching implementation of the ComponentVersionRepositoryProvider interface.
+// CachingComponentVersionRepositoryProvider is a caching implementation of the repository.ComponentVersionRepositoryProvider interface.
 // It provides efficient caching mechanisms for repository operations by maintaining:
 // - A credential cache for authentication information
 // - An OCI cache for manifests and layers
@@ -31,9 +32,11 @@ type CachingComponentVersionRepositoryProvider struct {
 	httpClient         *http.Client
 }
 
+var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
+
 // NewComponentVersionRepositoryProvider creates a new instance of CachingComponentVersionRepositoryProvider
 // with initialized caches and default HTTP client configuration.
-func NewComponentVersionRepositoryProvider() ComponentVersionRepositoryProvider {
+func NewComponentVersionRepositoryProvider() *CachingComponentVersionRepositoryProvider {
 	return &CachingComponentVersionRepositoryProvider{
 		scheme:             repoSpec.Scheme,
 		credentialCache:    &credentialCache{},
@@ -43,7 +46,7 @@ func NewComponentVersionRepositoryProvider() ComponentVersionRepositoryProvider 
 	}
 }
 
-// GetComponentVersionRepositoryCredentialConsumerIdentity implements the ComponentVersionRepositoryProvider interface.
+// GetComponentVersionRepositoryCredentialConsumerIdentity implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves the consumer identity for a given repository specification.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	return GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, b.scheme, repositorySpecification)
@@ -66,9 +69,9 @@ func GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, 
 	}
 }
 
-// GetComponentVersionRepository implements the ComponentVersionRepositoryProvider interface.
+// GetComponentVersionRepository implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves a component version repository with caching support for the given specification and credentials.
-func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (oci.ComponentVersionRepository, error) {
+func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
 	obj, err := getConvertedTypedSpec(b.scheme, repositorySpecification)
 	if err != nil {
 		return nil, err
@@ -89,13 +92,13 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		if err := b.credentialCache.add(obj, credentials); err != nil {
 			return nil, fmt.Errorf("failed to add repository get to credentials: %w", err)
 		}
-		return repository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
+		return ocirepository.NewFromOCIRepoV1(ctx, obj, &auth.Client{
 			Client:     b.httpClient,
 			Cache:      b.authorizationCache,
 			Credential: b.credentialCache.get,
 		}, opts...)
 	case *ctfrepospecv1.Repository:
-		return repository.NewFromCTFRepoV1(ctx, obj, opts...)
+		return ocirepository.NewFromCTFRepoV1(ctx, obj, opts...)
 	default:
 		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
 	}

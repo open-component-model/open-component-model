@@ -945,3 +945,135 @@ func TestLabels(t *testing.T) {
 		})
 	})
 }
+
+func TestElementMeta_ToIdentity(t *testing.T) {
+	r := require.New(t)
+
+	tests := []struct {
+		name     string
+		elemMeta *descriptorRuntime.ElementMeta
+		expected runtime.Identity
+	}{
+		{
+			name: "with extra identity",
+			elemMeta: &descriptorRuntime.ElementMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Name:    "test-element",
+					Version: "2.0.0",
+				},
+				ExtraIdentity: runtime.Identity{
+					"namespace": "system",
+				},
+			},
+			expected: runtime.Identity{
+				"namespace": "system",
+				"name":      "test-element",
+				"version":   "2.0.0",
+			},
+		},
+		{
+			name:     "with nil identity",
+			elemMeta: nil,
+			expected: nil,
+		},
+		{
+			name: "identity without version",
+			elemMeta: &descriptorRuntime.ElementMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Name: "test",
+				},
+			},
+			expected: runtime.Identity{
+				v2.IdentityAttributeName: "test",
+			},
+		},
+		{
+			name: "identity without name",
+			elemMeta: &descriptorRuntime.ElementMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Version: "test",
+				},
+			},
+			expected: runtime.Identity{
+				v2.IdentityAttributeVersion: "test",
+			},
+		},
+		{
+			name: "identity without anything",
+			elemMeta: &descriptorRuntime.ElementMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{},
+			},
+			expected: runtime.Identity{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := tt.elemMeta.ToIdentity()
+			r.Equal(tt.expected, identity)
+		})
+	}
+}
+
+func TestComponentMeta_ToIdentity(t *testing.T) {
+	tests := []struct {
+		name     string
+		compMeta *descriptorRuntime.ComponentMeta
+		expected runtime.Identity
+	}{
+		{
+			name: "WithNameAndVersion",
+			compMeta: &descriptorRuntime.ComponentMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Name:    "test-component",
+					Version: "3.0.0",
+				},
+			},
+			expected: runtime.Identity{
+				"name":    "test-component",
+				"version": "3.0.0",
+			},
+		},
+		{
+			name:     "NilComponentMeta",
+			compMeta: nil,
+			expected: nil,
+		},
+		{
+			name: "NameWithoutVersion",
+			compMeta: &descriptorRuntime.ComponentMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Name: "test-component",
+				},
+			},
+			expected: runtime.Identity{
+				descriptorRuntime.IdentityAttributeName: "test-component",
+			},
+		},
+		{
+			name: "VersionWithoutName",
+			compMeta: &descriptorRuntime.ComponentMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{
+					Version: "1.0.0",
+				},
+			},
+			expected: runtime.Identity{
+				descriptorRuntime.IdentityAttributeVersion: "1.0.0",
+			},
+		},
+		{
+			name: "EmptyComponentMeta",
+			compMeta: &descriptorRuntime.ComponentMeta{
+				ObjectMeta: descriptorRuntime.ObjectMeta{},
+			},
+			expected: runtime.Identity{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := tt.compMeta.ToIdentity()
+			assert.Equal(t, tt.expected, identity)
+		})
+	}
+}

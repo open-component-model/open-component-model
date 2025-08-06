@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	v1 "ocm.software/open-component-model/bindings/go/configuration/v1"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -16,7 +16,7 @@ func TestGetFlattenedGetConfigFromPath(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    *v1.Config
+		want    *genericv1.Config
 		wantErr bool
 	}{
 		{
@@ -24,7 +24,7 @@ func TestGetFlattenedGetConfigFromPath(t *testing.T) {
 			args: args{
 				path: "testdata/.ocmconfig-1",
 			},
-			want: &v1.Config{
+			want: &genericv1.Config{
 				Type: runtime.Type{
 					Version: "v1",
 					Name:    "generic.config.ocm.software",

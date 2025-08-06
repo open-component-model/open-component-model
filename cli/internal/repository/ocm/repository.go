@@ -11,10 +11,11 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
@@ -23,16 +24,16 @@ import (
 // useful CLI relevant helper functions that make high level operations easier.
 // It manages component references, repository specifications, and credentials for OCM operations.
 type ComponentRepository struct {
-	ref  *compref.Ref                                          // Component reference containing repository and component information
-	spec runtime.Typed                                         // Repository specification
-	base componentversionrepository.ComponentVersionRepository // Base repository plugin contract
+	ref  *compref.Ref                          // Component reference containing repository and component information
+	spec runtime.Typed                         // Repository specification
+	base repository.ComponentVersionRepository // Base repository plugin contract
 
 	credentials map[string]string // Credentials for repository access
 }
 
-// New creates a new ComponentRepository instance for the given component reference.
+// NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func New(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
+func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
@@ -63,6 +64,47 @@ func New(ctx context.Context, manager *manager.PluginManager, graph *credentials
 		base:        provider,
 		credentials: creds,
 	}, nil
+}
+
+func (repo *ComponentRepository) Version(ctx context.Context) (string, error) {
+	version := repo.ref.Version
+	if version == "" {
+		versions, err := repo.Versions(ctx, VersionOptions{LatestOnly: true})
+		if err != nil {
+			return "", fmt.Errorf("getting component versions failed: %w", err)
+		}
+		if len(versions) == 0 {
+			return "", fmt.Errorf("no versions found for component %q", repo.ref.Component)
+		}
+		if len(versions) > 1 {
+			return "", fmt.Errorf("multiple versions found for component %q, expected only one: %v", repo.ref.Component, versions)
+		}
+		version = versions[0]
+	}
+	return version, nil
+}
+
+func (repo *ComponentRepository) GetComponentVersion(ctx context.Context) (*descriptor.Descriptor, error) {
+	version, err := repo.Version(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("getting component version failed: %w", err)
+	}
+
+	desc, err := repo.base.GetComponentVersion(ctx, repo.ref.Component, version)
+	if err != nil {
+		return nil, fmt.Errorf("getting component descriptor for %q failed: %w", repo.ref.Component, err)
+	}
+
+	return desc, nil
+}
+
+func (repo *ComponentRepository) GetLocalResource(ctx context.Context, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+	version, err := repo.Version(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting component version failed: %w", err)
+	}
+
+	return repo.base.GetLocalResource(ctx, repo.ref.Component, version, identity)
 }
 
 // ComponentReference returns the component reference associated with this repository.
