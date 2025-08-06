@@ -1,4 +1,4 @@
-package synced
+package sync
 
 import (
 	"cmp"
