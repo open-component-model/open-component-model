@@ -83,8 +83,8 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 
 	// If no config provided, extract all layers with default naming
 	if config == nil || len(config.Rules) == 0 {
-		for i, layer := range manifest.Layers {
-			filename := t.getDefaultFilename(layer.MediaType, i)
+		for _, layer := range manifest.Layers {
+			filename := t.getDefaultFilename(layer.Digest.String())
 			if err := t.processLayer(ctx, store, layer, tarWriter, filename); err != nil {
 				return nil, fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
 			}
@@ -123,10 +123,10 @@ func (t *Transformer) processRule(ctx context.Context, store content.Fetcher, la
 		}
 
 		if matched {
-			// if we have a filename, use it, otherwise use default based on media type
+			// if we have a filename, use it, otherwise use default based on digest
 			filename := rule.Filename
 			if filename == "" {
-				filename = t.getDefaultFilename(layer.MediaType, i)
+				filename = t.getDefaultFilename(layer.Digest.String())
 			}
 
 			if err := t.processLayer(ctx, store, layer, tarWriter, filename); err != nil {
@@ -166,16 +166,18 @@ func (t *Transformer) processLayer(ctx context.Context, store content.Fetcher, l
 }
 
 // getDefaultFilename provides fallback filename generation when no config is provided.
-func (t *Transformer) getDefaultFilename(mediaType string, index int) string {
-	if strings.Contains(mediaType, "tar") {
-		if strings.Contains(mediaType, "gzip") {
-			return fmt.Sprintf("layer-%d.tar.gz", index)
-		}
-		return fmt.Sprintf("layer-%d.tar", index)
+// Uses the layer's digest similar to how ORAS handles unnamed layers.
+func (t *Transformer) getDefaultFilename(digest string) string {
+	if strings.HasPrefix(digest, "sha256:") {
+		return strings.TrimPrefix(digest, "sha256:")
 	}
-	if strings.Contains(mediaType, "json") {
-		return fmt.Sprintf("layer-%d.json", index)
+	switch {
+	case strings.HasPrefix(digest, "sha512:"):
+		return strings.TrimPrefix(digest, "sha512:")
+	case strings.HasPrefix(digest, "sha256:"):
+		return strings.TrimPrefix(digest, "sha256:")
 	}
 
-	return fmt.Sprintf("layer-%d.bin", index)
+	// Fallback if digest's format is unexpected
+	return digest
 }

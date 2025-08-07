@@ -72,19 +72,18 @@ func TestTransformer_getDefaultFilename(t *testing.T) {
 	transformer := New()
 
 	tests := []struct {
-		mediaType string
-		index     int
-		expected  string
+		name     string
+		digest   string
+		expected string
 	}{
-		{"application/tar", 0, "layer-0.tar"},
-		{"application/tar+gzip", 1, "layer-1.tar.gz"},
-		{"application/json", 2, "layer-2.json"},
-		{"application/octet-stream", 3, "layer-3.bin"},
+		{"sha256 digest", "sha256:abc123def456", "abc123def456"},
+		{"sha512 digest", "sha512:xyz789", "xyz789"},
+		{"malformed digest", "invaliddigest", "invaliddigest"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.mediaType, func(t *testing.T) {
-			result := transformer.getDefaultFilename(tt.mediaType, tt.index)
+		t.Run(tt.name, func(t *testing.T) {
+			result := transformer.getDefaultFilename(tt.digest)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -115,7 +114,7 @@ func TestTransformerIntegration(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err, "Should be able to read result")
 
-	expectedFiles := []string{"layer-0.tar.gz", "layer-1.bin"}
+	expectedFiles := []string{"b4d308c16f0492bff4efa51ac9aab718bc819413008aec39007ef4abc309504a", "c25ba77a4c310dc0a36a4e587a216db0001488353a262b9147662ca6c2d25c69"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully transformed and validated OCI artifact")
@@ -359,8 +358,8 @@ func TestTransformerWithRuleWithoutFilename(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	// Should use default filename based on media type and index
-	expectedFiles := []string{"layer-0.tar.gz"}
+	// Should use default filename based on digest
+	expectedFiles := []string{"b4d308c16f0492bff4efa51ac9aab718bc819413008aec39007ef4abc309504a"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully used default filename when rule doesn't specify one")
@@ -410,8 +409,8 @@ func TestTransformerWithHelmRulesWithoutFilenames(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	// Should use default filenames based on media type and index
-	expectedFiles := []string{"layer-0.tar.gz", "layer-1.bin"}
+	// Should use default filenames based on digest
+	expectedFiles := []string{"b4d308c16f0492bff4efa51ac9aab718bc819413008aec39007ef4abc309504a", "c25ba77a4c310dc0a36a4e587a216db0001488353a262b9147662ca6c2d25c69"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully used default filenames for Helm artifacts when rules don't specify them")

@@ -18,21 +18,9 @@ require (
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-<<<<<<< HEAD
-<<<<<<< HEAD
-	golang.org/x/sys v0.35.0
-=======
-	golang.org/x/sys v0.34.0
->>>>>>> 6aefcfb (adding an integration test)
-=======
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-<<<<<<< HEAD
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
->>>>>>> 0d088e6 (trying to keep the implementation to a minimum)
-=======
-	golang.org/x/sys v0.34.0
->>>>>>> 1f287eb (removed my changes)
+	golang.org/x/sys v0.35.0
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
