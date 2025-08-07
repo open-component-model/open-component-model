@@ -10,15 +10,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	ocmctx "ocm.software/open-component-model/cli/internal/context"
-	"ocm.software/open-component-model/cli/internal/flags/log"
-	"ocm.software/open-component-model/cli/internal/repository/ocm"
+	"ocm.software/open-component-model/cli/cmd/download/shared"
 )
 
 const (
@@ -72,24 +67,14 @@ func init() {
 }
 
 func DownloadResource(cmd *cobra.Command, args []string) error {
-	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
-	if pluginManager == nil {
-		return fmt.Errorf("could not retrieve plugin manager from context")
-	}
-
-	credentialGraph := ocmctx.FromContext(cmd.Context()).CredentialGraph()
-	if credentialGraph == nil {
-		return fmt.Errorf("could not retrieve credential graph from context")
-	}
-
-	logger, err := log.GetBaseLogger(cmd)
+	pluginManager, credentialGraph, logger, err := shared.GetContextItems(cmd)
 	if err != nil {
-		return fmt.Errorf("could not retrieve logger: %w", err)
+		return err
 	}
 
-	identity, err := cmd.Flags().GetString(FlagResourceIdentity)
+	identityStr, err := cmd.Flags().GetString(FlagResourceIdentity)
 	if err != nil {
-		return fmt.Errorf("getting res identities flag failed: %w", err)
+		return fmt.Errorf("getting resource identities flag failed: %w", err)
 	}
 
 	output, err := cmd.Flags().GetString(FlagOutput)
@@ -102,10 +87,15 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting transformer flag failed: %w", err)
 	}
 
-	reference := args[0]
-	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
+	requestedIdentity, err := runtime.ParseIdentity(identityStr)
 	if err != nil {
-		return fmt.Errorf("could not initialize ocm repository: %w", err)
+		return fmt.Errorf("parsing resource identity %q failed: %w", identityStr, err)
+	}
+
+	reference := args[0]
+	repo, err := shared.SetupRepository(cmd.Context(), pluginManager, credentialGraph, reference)
+	if err != nil {
+		return err
 	}
 
 	desc, err := repo.GetComponentVersion(cmd.Context())
@@ -113,10 +103,6 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
 
-	requestedIdentity, err := runtime.ParseIdentity(identity)
-	if err != nil {
-		return fmt.Errorf("parsing res identity %q failed: %w", identity, err)
-	}
 	var toDownload []descriptor.Resource
 	for _, resource := range desc.Component.Resources {
 		resourceIdentity := resource.ToIdentity()
@@ -127,47 +113,53 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(toDownload) != 1 {
-		return fmt.Errorf("expected exactly one res candidate to download, got %d", len(toDownload))
+		return fmt.Errorf("expected exactly one resource candidate to download, got %d", len(toDownload))
 	}
 	res := &toDownload[0]
 
-	access := res.GetAccess()
-	var data blob.ReadOnlyBlob
-	if isLocal(access) {
-		data, res, err = repo.GetLocalResource(cmd.Context(), requestedIdentity)
-	} else {
-		var plugin resource.Repository
-		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(cmd.Context(), access)
-		if err != nil {
-			return fmt.Errorf("getting res plugin for access %q failed: %w", access.GetType(), err)
-		}
-		var creds map[string]string
-		if identity, err := plugin.GetResourceCredentialConsumerIdentity(cmd.Context(), res); err == nil {
-			if creds, err = credentialGraph.Resolve(cmd.Context(), identity); err != nil {
-				return fmt.Errorf("getting credentials for res %q failed: %w", res.Name, err)
-			}
-		}
-		data, err = plugin.DownloadResource(cmd.Context(), res, creds)
-	}
+	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, repo, res, requestedIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}
 
-	for _, label := range res.Labels {
+	finalOutput, err := processResourceOutput(output, res, data, requestedIdentity.String(), logger)
+	if err != nil {
+		return err
+	}
+
+	if transformer == "" {
+		if err := shared.SaveBlobToFile(data, finalOutput); err != nil {
+			return err
+		}
+		logger.Info("resource downloaded successfully", slog.String("output", finalOutput))
+		return nil
+	}
+
+	// TODO(jakobmoellerdev): now lookup a transformer based on the transformer config
+	//  then use the transformer config to look for a transformer plugin
+	//  then call the transformer plugin to transform the res
+	//  write the transformed res to the output location
+	return fmt.Errorf("download based on transformer %q is not implemented", transformer)
+}
+
+func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {
+	// Check for downloadName label
+	for _, label := range resource.Labels {
 		if label.Name == "downloadName" {
-			if err := label.GetValue(&output); err != nil {
-				return fmt.Errorf("interpreting downloadName label value failed: %w", err)
+			var downloadName string
+			if err := label.GetValue(&downloadName); err != nil {
+				return "", fmt.Errorf("interpreting downloadName label value failed: %w", err)
 			}
-			if output = filepath.Clean(output); filepath.IsAbs(output) {
-				return fmt.Errorf("downloadName label value %q must not be an absolute path for security reasons", output)
+			if downloadName = filepath.Clean(downloadName); filepath.IsAbs(downloadName) {
+				return "", fmt.Errorf("downloadName label value %q must not be an absolute path for security reasons", downloadName)
 			}
-			logger.Info("using downloadName label for file download location", slog.String("output", output))
-			break
+			logger.Info("using downloadName label for file download location", slog.String("output", downloadName))
+			return downloadName, nil
 		}
 	}
 
 	if output == "" {
-		output = requestedIdentity.String()
+		output = identity
 		// if we have media type aware data, we try to append the file extension based on the media type
 		if mediaTypeAware, ok := data.(blob.MediaTypeAware); ok {
 			if mediaType, known := mediaTypeAware.MediaType(); known {
@@ -176,29 +168,8 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 				}
 			}
 		}
-		logger.Warn("no output location specified, using res identity as output file name", slog.String("output", output))
+		logger.Warn("no output location specified, using resource identity as output file name", slog.String("output", output))
 	}
 
-	if transformer == "" {
-		// If no transformer is specified, we try to write the res as is.
-		return filesystem.CopyBlobToOSPath(data, output)
-	}
-
-	// TODO(jakobmoellerdev): now lookup a transformer based on the transformer config
-	//  then use the transformer config to look for a transformer plugin
-	//  then call the transformer plugin to transform the res
-	//  write the transformed res to the output location
-
-	return fmt.Errorf("download based on transformer %q is not implemented", transformer)
-}
-
-func isLocal(access runtime.Typed) bool {
-	if access == nil {
-		return false
-	}
-	var local v2.LocalBlob
-	if err := v2.Scheme.Convert(access, &local); err != nil {
-		return false
-	}
-	return true
+	return output, nil
 }

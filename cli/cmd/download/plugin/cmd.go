@@ -7,31 +7,24 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	ocmctx "ocm.software/open-component-model/cli/internal/context"
-	"ocm.software/open-component-model/cli/internal/flags/log"
-	"ocm.software/open-component-model/cli/internal/repository/ocm"
+	"ocm.software/open-component-model/cli/cmd/download/shared"
 )
 
 const (
-	FlagResourceName    = "resource-name"
-	FlagResourceVersion = "resource-version"
-	FlagOutput          = "output"
-	FlagExtraIdentity   = "extra-identity"
-	SkipValidation      = "skip-validation"
-	timeout             = 30 * time.Second
+	FlagResourceName        = "resource-name"
+	FlagResourceVersion     = "resource-version"
+	FlagOutput              = "output"
+	FlagExtraIdentity       = "extra-identity"
+	SkipValidation          = "skip-validation"
+	pluginValidationTimeout = 30 * time.Second
 )
 
 func New() *cobra.Command {
@@ -71,19 +64,9 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 }
 
 func DownloadPlugin(cmd *cobra.Command, args []string) error {
-	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
-	if pluginManager == nil {
-		return fmt.Errorf("could not retrieve plugin manager from context")
-	}
-
-	credentialGraph := ocmctx.FromContext(cmd.Context()).CredentialGraph()
-	if credentialGraph == nil {
-		return fmt.Errorf("could not retrieve credential graph from context")
-	}
-
-	logger, err := log.GetBaseLogger(cmd)
+	pluginManager, credentialGraph, logger, err := shared.GetContextItems(cmd)
 	if err != nil {
-		return fmt.Errorf("could not retrieve logger: %w", err)
+		return err
 	}
 
 	resourceName, err := cmd.Flags().GetString(FlagResourceName)
@@ -111,20 +94,15 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting skip-validation flag failed: %w", err)
 	}
 
-	// Parse extra identity parameters
-	extraIdentity := make(map[string]string)
-	for _, param := range extraIdentitySlice {
-		parts := strings.SplitN(param, "=", 2)
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid extra-identity parameter format %q, expected key=value", param)
-		}
-		extraIdentity[parts[0]] = parts[1]
+	extraIdentity, err := parseExtraIdentity(extraIdentitySlice)
+	if err != nil {
+		return err
 	}
 
 	reference := args[0]
-	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
+	repo, err := shared.SetupRepository(cmd.Context(), pluginManager, credentialGraph, reference)
 	if err != nil {
-		return fmt.Errorf("could not initialize ocm repository: %w", err)
+		return err
 	}
 
 	desc, err := repo.GetComponentVersion(cmd.Context())
@@ -150,7 +128,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		resourceIdentity[key] = value
 	}
 
-	// Find a matching resource
+	// Find matching resources
 	var toDownload []descriptor.Resource
 	for _, resource := range desc.Component.Resources {
 		resourceIdent := resource.ToIdentity()
@@ -160,7 +138,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(toDownload) == 0 {
-		return fmt.Errorf("no plugin resource found matching identity %v", resourceIdentity)
+		return fmt.Errorf("no resource found matching identity %v", resourceIdentity)
 	}
 	if len(toDownload) > 1 {
 		logger.Warn("multiple resources match identity, using first match", slog.Int("count", len(toDownload)))
@@ -173,48 +151,16 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		slog.String("type", res.Type),
 		slog.Any("identity", res.ToIdentity()))
 
-	access := res.GetAccess()
-	var data blob.ReadOnlyBlob
-	if isLocal(access) {
-		data, _, err = repo.GetLocalResource(cmd.Context(), resourceIdentity)
-	} else {
-		var plugin resource.Repository
-		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(cmd.Context(), access)
-		if err != nil {
-			return fmt.Errorf("getting resource plugin for access %q failed: %w", access.GetType(), err)
-		}
-		var creds map[string]string
-		if identity, err := plugin.GetResourceCredentialConsumerIdentity(cmd.Context(), res); err == nil {
-			if creds, err = credentialGraph.Resolve(cmd.Context(), identity); err != nil {
-				return fmt.Errorf("getting credentials for resource %q failed: %w", res.Name, err)
-			}
-		}
-		data, err = plugin.DownloadResource(cmd.Context(), res, creds)
-	}
+	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, repo, res, resourceIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading plugin resource for identity %q failed: %w", resourceIdentity, err)
 	}
 
-	// Ensure output directory exists
-	outputDir := filepath.Dir(output)
-	if outputDir != "." && outputDir != "" {
-		if err := os.MkdirAll(outputDir, 0o755); err != nil {
-			return fmt.Errorf("creating output directory %q failed: %w", outputDir, err)
-		}
+	if err := shared.SaveBlobToFile(data, output); err != nil {
+		return err
 	}
 
-	if err := filesystem.CopyBlobToOSPath(data, output); err != nil {
-		return fmt.Errorf("writing plugin binary to %q failed: %w", output, err)
-	}
-
-	// Make the binary executable if it's a regular file
-	if info, err := os.Stat(output); err == nil && info.Mode().IsRegular() {
-		if err := os.Chmod(output, 0o755); err != nil {
-			logger.Warn("failed to make plugin binary executable", slog.String("path", output), slog.String("error", err.Error()))
-		} else {
-			logger.Info("made plugin binary executable", slog.String("path", output))
-		}
-	}
+	makePluginExecutable(output, logger)
 
 	if !skipValidation {
 		if err := validatePlugin(output, logger); err != nil {
@@ -229,21 +175,32 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func isLocal(access runtime.Typed) bool {
-	if access == nil {
-		return false
+func parseExtraIdentity(extraIdentitySlice []string) (map[string]string, error) {
+	extraIdentity := make(map[string]string)
+	for _, param := range extraIdentitySlice {
+		parts := strings.SplitN(param, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid extra-identity parameter format %q, expected key=value", param)
+		}
+		extraIdentity[parts[0]] = parts[1]
 	}
-	var local v2.LocalBlob
-	if err := v2.Scheme.Convert(access, &local); err != nil {
-		return false
+	return extraIdentity, nil
+}
+
+func makePluginExecutable(outputPath string, logger *slog.Logger) {
+	if info, err := os.Stat(outputPath); err == nil && info.Mode().IsRegular() {
+		if err := os.Chmod(outputPath, 0o755); err != nil {
+			logger.Warn("failed to make plugin binary executable", slog.String("path", outputPath), slog.String("error", err.Error()))
+		} else {
+			logger.Info("made plugin binary executable", slog.String("path", outputPath))
+		}
 	}
-	return true
 }
 
 func validatePlugin(pluginPath string, logger *slog.Logger) error {
 	logger.Info("validating plugin binary", slog.String("path", pluginPath))
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), pluginValidationTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, pluginPath, "capabilities")

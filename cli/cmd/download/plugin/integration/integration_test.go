@@ -140,7 +140,7 @@ func TestDownloadPluginMissingResource(t *testing.T) {
 	args := []string{"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0"}
 	err := plugincmd.DownloadPlugin(cmd, args)
 	require.Error(t, err, "DownloadPlugin should fail for non-existent resource")
-	assert.Contains(t, err.Error(), "no plugin resource found matching identity", "error should mention missing resource")
+	assert.Contains(t, err.Error(), "no resource found matching identity", "error should mention missing resource")
 	assert.NoFileExists(t, outputPath, "plugin binary should not be downloaded for non-existent resource")
 }
 
