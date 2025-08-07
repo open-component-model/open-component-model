@@ -81,7 +81,7 @@ tasks:
     env:
       GOBIN: '{{ .ROOT_DIR }}/tmp/bin'
     cmds:
-      - go install github.com/jakobmoellerdev/deferrlint@v0.0.0-20250723114254-0e4b18bb60fe
+      - go install github.com/jakobmoellerdev/deferrlint@v0.0.0-20250805180713-1b707831da54
 
   golangci-lint/install:
     desc: "Install golangci-lint at {{ .GOLANGCI_LINT_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"

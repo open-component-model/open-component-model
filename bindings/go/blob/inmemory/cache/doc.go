@@ -1,4 +1,4 @@
-// Package inmemory provides an in-memory caching implementation for blob storage.
+// Package cache provides an in-memory caching implementation for blob storage.
 //
 // The package implements a caching layer for ReadOnlyBlob that stores blob data in memory
 // after the first read, enabling efficient repeated access to the same data. This is
@@ -17,4 +17,4 @@
 //	blob, err := inmemory.Cache(sourceBlob) // if the loading into the cache fails, an error is returned
 //	data := blob.Data()  // The data can be directly accessed after caching.
 //	data, _ := blob.ReadCloser() // or accessed via ReadCloser for incremental reading
-package inmemory
+package cache

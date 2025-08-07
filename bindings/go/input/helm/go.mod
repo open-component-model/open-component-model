@@ -6,9 +6,10 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.10.0
+	golang.org/x/sync v0.16.0
 	helm.sh/helm/v3 v3.18.4
-	ocm.software/open-component-model/bindings/go/blob v0.0.4
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250806121746-4654a622c0f4
+	ocm.software/open-component-model/bindings/go/blob v0.0.6
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250807092808-c85e55d93cab
 	ocm.software/open-component-model/bindings/go/oci v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
@@ -47,8 +48,8 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
@@ -62,9 +63,9 @@ require (
 	k8s.io/client-go v0.33.3 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250806121746-4654a622c0f4 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250807092808-c85e55d93cab // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250806121746-4654a622c0f4 // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250807092808-c85e55d93cab // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect

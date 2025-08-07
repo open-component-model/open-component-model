@@ -122,12 +122,16 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 	}
 
 	// Now we know that the path refers to a valid Helm chart packaged as a tgz file. Thus returning its contents.
-	result.ChartBlob, err = filesystem.GetBlobFromOSPath(path)
-	if err != nil {
+	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(path); err != nil {
 		return nil, fmt.Errorf("error creating blob from file %q: %w", path, err)
 	}
 
-	// TODO: check for provenance file, take it along if exists.
+	provName := path + ".prov" // foo.prov
+	if _, err := os.Stat(provName); err == nil {
+		if result.ProvBlob, err = filesystem.GetBlobFromOSPath(provName); err != nil {
+			return nil, fmt.Errorf("error creating blob from file %q: %w", path, err)
+		}
+	}
 
 	return result, nil
 }
@@ -152,61 +156,34 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.
 		_ = w.CloseWithError(err) // Always returns nil.
 	}()
 
-	chartReader, rerr := chart.ChartBlob.ReadCloser()
-	if rerr != nil {
-		err = fmt.Errorf("failed to get a reader for helm chart blob %q:%q: %w", chart.Name, chart.Version, rerr)
-		return
-	}
-	defer func() {
-		err = errors.Join(err, chartReader.Close()) // TODO: close provenance reader.
-	}()
-
 	zippedBuf := gzip.NewWriter(w)
 	defer func() {
-		err = errors.Join(err, zippedBuf.Close())
+		err = errors.Join(err, zippedBuf.Close()) //nolint:deferrlint // err is used within pipe closure
 	}()
 
 	// Create an OCI layout writer over the gzip stream.
 	target := tar.NewOCILayoutWriter(zippedBuf)
 	defer func() {
-		err = errors.Join(err, target.Close())
+		err = errors.Join(err, target.Close()) //nolint:deferrlint // err is used within pipe closure
 	}()
 
-	// Create config OCI layer.
-	configContent := fmt.Sprintf(`{"name": "%s", "version": "%s"}`, chart.Name, chart.Version)
-	configDigest := digest.FromString(configContent)
-	configLayer := ociImageSpecV1.Descriptor{
-		MediaType: registry.ConfigMediaType,
-		Digest:    configDigest,
-		Size:      int64(len(configContent)),
-	}
-	if perr := target.Push(ctx, configLayer, strings.NewReader(configContent)); perr != nil {
-		err = fmt.Errorf("failed to push helm chart config layer: %w", perr)
+	// Generate and Push layers based on the chart to the OCI layout.
+	configLayer, chartLayer, provLayer, err := pushChartAndGenerateLayers(ctx, chart, target)
+	if err != nil {
+		err = fmt.Errorf("failed to push chart layers: %w", err)
 		return
 	}
 
-	// Create content OCI layer.
-	chartDigStr, known := chart.ChartBlob.Digest()
-	if !known {
-		err = fmt.Errorf("unknown digest for helm chart %q:%q", chart.Name, chart.Version)
-		return
+	layers := []ociImageSpecV1.Descriptor{*chartLayer}
+	if provLayer != nil {
+		// If a provenance file was provided, add it to the layers.
+		layers = append(layers, *provLayer)
 	}
-	chartLayer := ociImageSpecV1.Descriptor{
-		MediaType: registry.ChartLayerMediaType,
-		Digest:    digest.Digest(chartDigStr),
-		Size:      chart.ChartBlob.Size(),
-	}
-	if perr := target.Push(ctx, chartLayer, chartReader); perr != nil {
-		err = fmt.Errorf("failed to push helm chart content layer: %w", perr)
-		return
-	}
-
-	// TODO: create and push provenance OCI layer.
 
 	// Create OCI image manifest.
 	imgDesc, perr := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
-		ConfigDescriptor: &configLayer,
-		Layers:           []ociImageSpecV1.Descriptor{chartLayer}, // TODO: add provenance layer.
+		ConfigDescriptor: configLayer,
+		Layers:           layers,
 	})
 	if perr != nil {
 		err = fmt.Errorf("failed to create OCI image manifest: %w", perr)
@@ -217,4 +194,90 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.
 		err = fmt.Errorf("failed to tag OCI image: %w", terr)
 		return
 	}
+}
+
+func pushChartAndGenerateLayers(ctx context.Context, chart *ReadOnlyChart, target oras.Target) (
+	configLayer *ociImageSpecV1.Descriptor,
+	chartLayer *ociImageSpecV1.Descriptor,
+	provLayer *ociImageSpecV1.Descriptor,
+	err error,
+) {
+	// Create config OCI layer.
+	if configLayer, err = pushConfigLayer(ctx, chart.Name, chart.Version, target); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create and push helm chart config layer: %w", err)
+	}
+
+	// Create Helm Chart OCI layer.
+	if chartLayer, err = pushChartLayer(ctx, chart.ChartBlob, target); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create and push helm chart content layer: %w", err)
+	}
+
+	// Create Provenance OCI layer (optional).
+	if chart.ProvBlob != nil {
+		if provLayer, err = pushProvenanceLayer(ctx, chart.ProvBlob, target); err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to create and push helm chart provenance: %w", err)
+		}
+	}
+	return
+}
+
+func pushConfigLayer(ctx context.Context, name, version string, target oras.Target) (_ *ociImageSpecV1.Descriptor, err error) {
+	configContent := fmt.Sprintf(`{"name": "%s", "version": "%s"}`, name, version)
+	configLayer := &ociImageSpecV1.Descriptor{
+		MediaType: registry.ConfigMediaType,
+		Digest:    digest.FromString(configContent),
+		Size:      int64(len(configContent)),
+	}
+	if err = target.Push(ctx, *configLayer, strings.NewReader(configContent)); err != nil {
+		return nil, fmt.Errorf("failed to push helm chart config layer: %w", err)
+	}
+	return configLayer, nil
+}
+
+func pushProvenanceLayer(ctx context.Context, provenance *filesystem.Blob, target oras.Target) (_ *ociImageSpecV1.Descriptor, err error) {
+	provDigStr, known := provenance.Digest()
+	if !known {
+		return nil, fmt.Errorf("unknown digest for helm provenance")
+	}
+	provenanceReader, err := provenance.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get a reader for helm chart provenance: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, provenanceReader.Close())
+	}()
+	provenanceLayer := ociImageSpecV1.Descriptor{
+		MediaType: registry.ProvLayerMediaType,
+		Digest:    digest.Digest(provDigStr),
+		Size:      provenance.Size(),
+	}
+	if err = target.Push(ctx, provenanceLayer, provenanceReader); err != nil {
+		return nil, fmt.Errorf("failed to push helm chart content layer: %w", err)
+	}
+
+	return &provenanceLayer, nil
+}
+
+func pushChartLayer(ctx context.Context, chart *filesystem.Blob, target oras.Target) (_ *ociImageSpecV1.Descriptor, err error) {
+	chartDigStr, known := chart.Digest()
+	if !known {
+		return nil, fmt.Errorf("unknown digest for helm chart")
+	}
+	chartLayer := ociImageSpecV1.Descriptor{
+		MediaType: registry.ChartLayerMediaType,
+		Digest:    digest.Digest(chartDigStr),
+		Size:      chart.Size(),
+	}
+	chartReader, err := chart.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get a reader for helm chart blob: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, chartReader.Close())
+	}()
+	if err = target.Push(ctx, chartLayer, chartReader); err != nil {
+		return nil, fmt.Errorf("failed to push helm chart content layer: %w", err)
+	}
+
+	return &chartLayer, nil
 }
