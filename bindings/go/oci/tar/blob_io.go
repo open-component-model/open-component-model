@@ -53,13 +53,13 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyStora
 
 	zippedBuf := gzip.NewWriter(w)
 	defer func() {
-		err = errors.Join(err, zippedBuf.Close())
+		err = errors.Join(err, zippedBuf.Close()) //nolint:deferrlint // we use err in CloseWithError
 	}()
 
 	// Create an OCI layout writer over the gzip stream.
 	target := NewOCILayoutWriter(zippedBuf)
 	defer func() {
-		err = errors.Join(err, target.Close())
+		err = errors.Join(err, target.Close()) //nolint:deferrlint // we use err in CloseWithError
 	}()
 
 	// Copy the image graph into the layout.

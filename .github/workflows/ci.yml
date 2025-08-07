@@ -188,6 +188,40 @@ jobs:
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
           args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml
 
+  deferrlint:
+    name: "deferrlint"
+    needs: discover_modules
+    runs-on: ubuntu-latest
+    permissions:
+      # Required: allow read access to the content for analysis.
+      contents: read
+      # Optional: allow write access to checks to allow the action to annotate code in the PR.
+      checks: write
+    if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
+    strategy:
+      matrix:
+        module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          sparse-checkout: |
+            ${{ matrix.module }}
+            Taskfile.yml
+            tools.Taskfile.yml
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
+      - name: Run deferrlint
+        run: task tools:deferrlint/run
+
+
   run_integration_tests:
     name: "Integration Tests"
     needs: discover_modules
@@ -317,6 +351,7 @@ jobs:
       - run_unit_tests
       - run_integration_tests
       - golangci_lint
+      - deferrlint
     if: failure()
     steps:
       - name: Some CI step failed or was cancelled!

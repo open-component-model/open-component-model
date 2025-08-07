@@ -28,14 +28,15 @@ tasks:
       - go install {{ .PKG }}@{{ .DEEPCOPY_GEN_TARGET_VERSION }}
       - mv {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }}
 
+  lint:
+    desc: "Run Linters through project"
+    deps: [golangci-lint/run, deferrlint/run]
 
   golangci-lint/run:
     desc: "Run golangci-lint on all go modules"
-    deps: [golangci-lint/install, deferrlint/install]
+    deps: [golangci-lint/install]
     cmds:
       - task: golangci-lint/run-concurrent
-    aliases:
-      - "lint"
 
   golangci-lint/run-concurrent:
     desc: "Run golangci-lint on all modules concurrently after install"
@@ -46,13 +47,6 @@ tasks:
         vars:
           ITEM: '{{ .ITEM }}'
       - task: 'golangci-lint/module'
-        vars:
-          ITEM: 'cli'
-      - for: { var: GO_MODULES }
-        task: 'deferrlint/module'
-        vars:
-          ITEM: '{{ .ITEM }}'
-      - task: 'deferrlint/module'
         vars:
           ITEM: 'cli'
 
@@ -67,6 +61,24 @@ tasks:
           --config={{ .ROOT_DIR }}/.github/config/golangci.yml \
           --path-prefix {{.ITEM}} \
           {{ .CLI_ARGS }} ./...   
+
+  deferrlint/run:
+    desc: "Run golangci-lint on all go modules"
+    deps: [deferrlint/install]
+    cmds:
+      - task: deferrlint/run-concurrent
+
+  deferrlint/run-concurrent:
+    desc: "Run golangci-lint on all modules concurrently after install"
+    internal: true
+    deps:
+      - for: { var: GO_MODULES }
+        task: 'deferrlint/module'
+        vars:
+          ITEM: '{{ .ITEM }}'
+      - task: 'deferrlint/module'
+        vars:
+          ITEM: 'cli'
 
   deferrlint/module:
     desc: "Run deferrlint on a single go module specified by ITEM"
