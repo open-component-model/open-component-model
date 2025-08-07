@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -181,7 +182,32 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	logger.Info("plugin binary downloaded successfully", slog.String("output", output))
+
+	// Display table with plugin information
+	printPluginTable(res, desc.Component.String(), output)
+
 	return nil
+}
+
+func printPluginTable(res *descriptor.Resource, source, outputPath string) {
+	t := table.NewWriter()
+	t.SetStyle(table.StyleLight)
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"PLUGIN", "VERSION", "SOURCE", "TYPE", "IDENTITY", "LOCATION"})
+
+	identity := res.ToIdentity()
+	identityStr := identity.String()
+
+	t.AppendRow(table.Row{
+		res.Name,
+		res.Version,
+		source,
+		res.Type,
+		identityStr,
+		outputPath,
+	})
+
+	t.Render()
 }
 
 func parseExtraIdentity(extraIdentitySlice []string) (map[string]string, error) {
