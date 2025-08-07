@@ -42,15 +42,6 @@ func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, *credentials.G
 	return pluginManager, credentialGraph, logger, nil
 }
 
-// SetupRepository creates OCM repository from reference
-func SetupRepository(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph *credentials.Graph, reference string) (*ocm.ComponentRepository, error) {
-	repo, err := ocm.NewFromRef(ctx, pluginManager, credentialGraph, reference)
-	if err != nil {
-		return nil, fmt.Errorf("could not initialize ocm repository: %w", err)
-	}
-	return repo, nil
-}
-
 // DownloadResourceData handles the actual data download from repository
 func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph *credentials.Graph, repo *ocm.ComponentRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
 	access := res.GetAccess()

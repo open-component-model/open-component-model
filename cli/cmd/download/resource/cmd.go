@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
+	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
 const (
@@ -93,9 +94,9 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	repo, err := shared.SetupRepository(cmd.Context(), pluginManager, credentialGraph, reference)
+	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
 	desc, err := repo.GetComponentVersion(cmd.Context())
