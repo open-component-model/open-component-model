@@ -1,14 +1,13 @@
 package blob
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
 )
@@ -22,19 +21,11 @@ type ArtifactBlob struct {
 	blob.ReadOnlyBlob
 	descriptor.Artifact
 	mediaType string
-	size      int64
 }
 
 // NewArtifactBlobWithMediaType creates a new ArtifactBlob instance with the given artifact,
 // blob data, and media type.
 func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyBlob, mediaType string) (*ArtifactBlob, error) {
-	size := blob.SizeUnknown
-	if sizeAware, ok := b.(blob.SizeAware); ok {
-		if blobSize := sizeAware.Size(); blobSize != size {
-			size = blobSize
-		}
-	}
-
 	if mediaType == "" {
 		if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
 			mediaType, _ = mediaTypeAware.MediaType()
@@ -56,6 +47,8 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 					if dig != digest.Digest(blobDig) {
 						return nil, fmt.Errorf("resource blob digest mismatch: resource %s vs blob %s", resource.Digest.Value, blobDig)
 					}
+				} else {
+					resource.Digest = digestSpecFromDigest(digest.Digest(blobDig))
 				}
 			}
 		}
@@ -65,7 +58,6 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 		ReadOnlyBlob: b,
 		Artifact:     artifact,
 		mediaType:    mediaType,
-		size:         size,
 	}, nil
 }
 
@@ -167,19 +159,14 @@ func digestSpecToDigest(dig *descriptor.Digest) (digest.Digest, error) {
 // Size returns the size of the blob in bytes. This is obtained directly from
 // the associated resource's size field.
 func (r *ArtifactBlob) Size() int64 {
-	return r.size
-}
+	size := blob.SizeUnknown
+	if sizeAware, ok := r.ReadOnlyBlob.(blob.SizeAware); ok {
+		if blobSize := sizeAware.Size(); blobSize != size {
+			size = blobSize
+		}
+	}
 
-// HasPrecalculatedSize indicates whether the blob has a pre-calculated size.
-// This is always true for ArtifactBlob as it uses the size from the associated resource.
-func (r *ArtifactBlob) HasPrecalculatedSize() bool {
-	return r.size != blob.SizeUnknown
-}
-
-// SetPrecalculatedSize sets the pre-calculated size value for the resource.
-// This method allows updating the size value when it's known beforehand.
-func (r *ArtifactBlob) SetPrecalculatedSize(size int64) {
-	r.size = size
+	return size
 }
 
 // OCIDescriptor returns an OCI descriptor for the blob. This is particularly
@@ -195,58 +182,16 @@ func (r *ArtifactBlob) OCIDescriptor() ociImageSpecV1.Descriptor {
 	}
 }
 
-// HasSizeAndDigest checks if the blob has both a pre-calculated size and a pre-calculated  digest.
-func (r *ArtifactBlob) HasSizeAndDigest() bool {
-	return r.HasPrecalculatedSize() && r.HasPrecalculatedDigest()
-}
-
-// NewArtifactWithBufferedBlob creates a new ArtifactBlob with an in-memory buffered blob.
+// Buffer creates a new ArtifactBlob with an in-memory buffered blob.
 // It can be used to covert ArtifactBlob with unknown size or digest to a new instance where those fields a set.
-func (r *ArtifactBlob) NewArtifactWithBufferedBlob() (result *ArtifactBlob, err error) {
-	// Get current reader.
-	reader, err := r.ReadCloser()
+func (r *ArtifactBlob) Buffer() (result *ArtifactBlob, err error) {
+	inMemoryBlob, err := cache.Cache(r)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get blob reader: %w", err)
-	}
-	defer func() {
-		err = errors.Join(err, reader.Close())
-	}()
-
-	// Get current media type, even if it is empty.
-	mediaType, _ := r.MediaType()
-
-	// Create buffered in-memory blob and load it.
-	inMemoryBlob := inmemory.New(reader, inmemory.WithMediaType(mediaType))
-	err = inMemoryBlob.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load in-memory blob: %w", err)
+		return nil, fmt.Errorf("failed to create in-memory eagerly cached blob from ReadOnlyBlob: %w", err)
 	}
 
-	// Create a new instance of the descriptor.
-	var newArtifact descriptor.Artifact
-	switch a := r.Artifact.(type) {
-	case *descriptor.Resource:
-		newArtifact = a.DeepCopy()
-	case *descriptor.Source:
-		newArtifact = a.DeepCopy()
-	default:
-		return nil, fmt.Errorf("artifact is neither *descriptor.Resource not *descriptor.Source: %T", r.Artifact)
-	}
-
-	// Create new ArtifactBlob.
-	result, err = NewArtifactBlobWithMediaType(newArtifact, inMemoryBlob, mediaType)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new ArtifactBlob: %w", err)
-	}
-
-	// Set the digest.
-	dig, ok := inMemoryBlob.Digest()
-	if !ok {
-		return nil, fmt.Errorf("in-memory blob does not have a digest")
-	}
-	result.SetPrecalculatedDigest(dig)
-
-	return result, nil
+	// Reuse existing Artifact, but replace the ReadOnlyBlob with the in-memory buffered one.
+	return NewArtifactBlob(r.Artifact, inMemoryBlob)
 }
 
 // Interface implementations
