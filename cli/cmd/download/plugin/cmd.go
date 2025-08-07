@@ -1,9 +1,11 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -101,7 +103,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting skip-validation flag failed: %w", err)
 	}
 
-	outputFormat, err := cmd.Flags().GetString(FlagOutputFormat)
+	outputFormat, err := enum.Get(cmd.Flags(), FlagOutputFormat)
 	if err != nil {
 		return fmt.Errorf("getting output-format flag failed: %w", err)
 	}
@@ -193,23 +195,28 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	logger.Info("plugin binary downloaded successfully", slog.String("output", output))
 
 	// Display plugin information in requested format
-	if err := printPluginInfo(res, reference, output, outputFormat); err != nil {
-		return fmt.Errorf("displaying plugin information failed: %w", err)
+	reader, size, err := encodePluginInfo(res, desc.Component.String(), output, outputFormat)
+	if err != nil {
+		return fmt.Errorf("generating plugin information output failed: %w", err)
+	}
+
+	if _, err := io.CopyN(cmd.OutOrStdout(), reader, size); err != nil {
+		return fmt.Errorf("writing plugin information failed: %w", err)
 	}
 
 	return nil
 }
 
 type Info struct {
-	Plugin   string `json:"plugin" yaml:"plugin"`
-	Version  string `json:"version" yaml:"version"`
-	Source   string `json:"source" yaml:"source"`
-	Type     string `json:"type" yaml:"type"`
-	Identity string `json:"identity" yaml:"identity"`
-	Location string `json:"location" yaml:"location"`
+	Plugin   string `json:"plugin"`
+	Version  string `json:"version"`
+	Source   string `json:"source"`
+	Type     string `json:"type"`
+	Identity string `json:"identity"`
+	Location string `json:"location"`
 }
 
-func printPluginInfo(res *descriptor.Resource, source, outputPath, format string) error {
+func encodePluginInfo(res *descriptor.Resource, source, outputPath, format string) (io.Reader, int64, error) {
 	identity := res.ToIdentity()
 	info := Info{
 		Plugin:   res.Name,
@@ -220,25 +227,28 @@ func printPluginInfo(res *descriptor.Resource, source, outputPath, format string
 		Location: outputPath,
 	}
 
+	var data []byte
+	var err error
+
 	switch format {
 	case "json":
-		data, err := json.MarshalIndent(info, "", "  ")
+		data, err = json.MarshalIndent(info, "", "  ")
 		if err != nil {
-			return fmt.Errorf("marshaling plugin info as JSON failed: %w", err)
+			return nil, 0, fmt.Errorf("marshaling plugin info as JSON failed: %w", err)
 		}
-		fmt.Println(string(data))
+		data = append(data, '\n') // Add newline for consistency
 	case "yaml":
-		data, err := yaml.Marshal(info)
+		data, err = yaml.Marshal(info)
 		if err != nil {
-			return fmt.Errorf("marshaling plugin info as YAML failed: %w", err)
+			return nil, 0, fmt.Errorf("marshaling plugin info as YAML failed: %w", err)
 		}
-		fmt.Print(string(data))
 	case "table":
 		fallthrough
 	default:
+		var buf bytes.Buffer
 		t := table.NewWriter()
 		t.SetStyle(table.StyleLight)
-		t.SetOutputMirror(os.Stdout)
+		t.SetOutputMirror(&buf)
 		t.AppendHeader(table.Row{"PLUGIN", "VERSION", "SOURCE", "TYPE", "IDENTITY", "LOCATION"})
 		t.AppendRow(table.Row{
 			info.Plugin,
@@ -249,9 +259,10 @@ func printPluginInfo(res *descriptor.Resource, source, outputPath, format string
 			info.Location,
 		})
 		t.Render()
+		data = buf.Bytes()
 	}
 
-	return nil
+	return bytes.NewReader(data), int64(len(data)), nil
 }
 
 func parseExtraIdentity(extraIdentitySlice []string) (map[string]string, error) {
