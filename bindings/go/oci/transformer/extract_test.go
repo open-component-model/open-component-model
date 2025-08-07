@@ -324,3 +324,95 @@ func TestTransformerWithMatchExpressions(t *testing.T) {
 
 	t.Logf("Successfully filtered layers using match expressions")
 }
+
+func TestTransformerWithRuleWithoutFilename(t *testing.T) {
+	ctx := context.Background()
+	r := require.New(t)
+
+	// Configure rule without filename - should fall back to default naming
+	config := &spec.Config{
+		Type: runtime.NewVersionedType(spec.ConfigType, spec.Version),
+		Rules: []spec.Rule{
+			{
+				// Filename is empty - should use default naming
+				LayerSelectors: []*spec.LayerSelector{
+					{
+						MatchProperties: map[string]string{
+							spec.LayerIndexKey: "0",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ociLayoutBlob, err := loadOCILayoutBlob("oci-layout.tar.gz")
+	r.NoError(err)
+	r.NotNil(ociLayoutBlob)
+
+	transformer := New()
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+
+	r.NoError(err)
+	r.NotNil(result)
+
+	reader, err := result.ReadCloser()
+	r.NoError(err)
+
+	// Should use default filename based on media type and index
+	expectedFiles := []string{"layer-0.tar.gz"}
+	validateTarContents(t, reader, expectedFiles)
+
+	t.Logf("Successfully used default filename when rule doesn't specify one")
+}
+
+func TestTransformerWithHelmRulesWithoutFilenames(t *testing.T) {
+	ctx := context.Background()
+	r := require.New(t)
+
+	// Configure rules for Helm artifacts without filenames - should fall back to default naming
+	config := &spec.Config{
+		Type: runtime.NewVersionedType(spec.ConfigType, spec.Version),
+		Rules: []spec.Rule{
+			{
+				// No filename specified for Helm chart
+				LayerSelectors: []*spec.LayerSelector{
+					{
+						MatchProperties: map[string]string{
+							spec.LayerMediaTypeKey: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+						},
+					},
+				},
+			},
+			{
+				// No filename specified for Helm provenance
+				LayerSelectors: []*spec.LayerSelector{
+					{
+						MatchProperties: map[string]string{
+							spec.LayerMediaTypeKey: "application/vnd.cncf.helm.chart.provenance.v1.prov",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ociLayoutBlob, err := loadOCILayoutBlob("oci-layout.tar.gz")
+	r.NoError(err)
+	r.NotNil(ociLayoutBlob)
+
+	transformer := New()
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+
+	r.NoError(err)
+	r.NotNil(result)
+
+	reader, err := result.ReadCloser()
+	r.NoError(err)
+
+	// Should use default filenames based on media type and index
+	expectedFiles := []string{"layer-0.tar.gz", "layer-1.bin"}
+	validateTarContents(t, reader, expectedFiles)
+
+	t.Logf("Successfully used default filenames for Helm artifacts when rules don't specify them")
+}
