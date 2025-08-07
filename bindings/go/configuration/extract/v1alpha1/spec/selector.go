@@ -6,11 +6,11 @@ import (
 	"slices"
 )
 
-// Predefined selector keys for layer properties
+// Predefined selector keys for layer properties.
 const (
-	// LayerIndexKey is the key used to select layers by index
+	// LayerIndexKey is the key used to select layers by index.
 	LayerIndexKey = "layer.index"
-	// LayerMediaTypeKey is the key used to select layers by media type
+	// LayerMediaTypeKey is the key used to select layers by media type.
 	LayerMediaTypeKey = "layer.mediaType"
 )
 
