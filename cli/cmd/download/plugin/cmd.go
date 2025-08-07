@@ -13,11 +13,13 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
@@ -25,6 +27,7 @@ const (
 	FlagResourceName        = "resource-name"
 	FlagResourceVersion     = "resource-version"
 	FlagOutput              = "output"
+	FlagOutputFormat        = "output-format"
 	FlagExtraIdentity       = "extra-identity"
 	SkipValidation          = "skip-validation"
 	pluginValidationTimeout = 30 * time.Second
@@ -57,6 +60,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 	cmd.Flags().String(FlagResourceName, "", "name of the plugin resource to download (required)")
 	cmd.Flags().String(FlagResourceVersion, "", "version of the plugin resource to download (optional, defaults to component version)")
 	cmd.Flags().String(FlagOutput, ".", "output location to download the plugin binary to (required)")
+	enum.VarP(cmd.Flags(), FlagOutputFormat, "f", []string{"table", "yaml", "json"}, "output format of the plugin information")
 	cmd.Flags().StringSlice(FlagExtraIdentity, []string{}, "extra identity parameters for resource matching (e.g., os=linux,arch=amd64)")
 	cmd.Flags().Bool(SkipValidation, false, "skip validation of the downloaded plugin binary")
 
@@ -95,6 +99,11 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	skipValidation, err := cmd.Flags().GetBool(SkipValidation)
 	if err != nil {
 		return fmt.Errorf("getting skip-validation flag failed: %w", err)
+	}
+
+	outputFormat, err := cmd.Flags().GetString(FlagOutputFormat)
+	if err != nil {
+		return fmt.Errorf("getting output-format flag failed: %w", err)
 	}
 
 	extraIdentity, err := parseExtraIdentity(extraIdentitySlice)
@@ -183,31 +192,66 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 
 	logger.Info("plugin binary downloaded successfully", slog.String("output", output))
 
-	// Display table with plugin information
-	printPluginTable(res, desc.Component.String(), output)
+	// Display plugin information in requested format
+	if err := printPluginInfo(res, reference, output, outputFormat); err != nil {
+		return fmt.Errorf("displaying plugin information failed: %w", err)
+	}
 
 	return nil
 }
 
-func printPluginTable(res *descriptor.Resource, source, outputPath string) {
-	t := table.NewWriter()
-	t.SetStyle(table.StyleLight)
-	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"PLUGIN", "VERSION", "SOURCE", "TYPE", "IDENTITY", "LOCATION"})
+type Info struct {
+	Plugin   string `json:"plugin" yaml:"plugin"`
+	Version  string `json:"version" yaml:"version"`
+	Source   string `json:"source" yaml:"source"`
+	Type     string `json:"type" yaml:"type"`
+	Identity string `json:"identity" yaml:"identity"`
+	Location string `json:"location" yaml:"location"`
+}
 
+func printPluginInfo(res *descriptor.Resource, source, outputPath, format string) error {
 	identity := res.ToIdentity()
-	identityStr := identity.String()
+	info := Info{
+		Plugin:   res.Name,
+		Version:  res.Version,
+		Source:   source,
+		Type:     res.Type,
+		Identity: identity.String(),
+		Location: outputPath,
+	}
 
-	t.AppendRow(table.Row{
-		res.Name,
-		res.Version,
-		source,
-		res.Type,
-		identityStr,
-		outputPath,
-	})
+	switch format {
+	case "json":
+		data, err := json.MarshalIndent(info, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshaling plugin info as JSON failed: %w", err)
+		}
+		fmt.Println(string(data))
+	case "yaml":
+		data, err := yaml.Marshal(info)
+		if err != nil {
+			return fmt.Errorf("marshaling plugin info as YAML failed: %w", err)
+		}
+		fmt.Print(string(data))
+	case "table":
+		fallthrough
+	default:
+		t := table.NewWriter()
+		t.SetStyle(table.StyleLight)
+		t.SetOutputMirror(os.Stdout)
+		t.AppendHeader(table.Row{"PLUGIN", "VERSION", "SOURCE", "TYPE", "IDENTITY", "LOCATION"})
+		t.AppendRow(table.Row{
+			info.Plugin,
+			info.Version,
+			info.Source,
+			info.Type,
+			info.Identity,
+			info.Location,
+		})
+		t.Render()
+	}
 
-	t.Render()
+	return nil
 }
 
 func parseExtraIdentity(extraIdentitySlice []string) (map[string]string, error) {
