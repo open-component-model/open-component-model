@@ -20,13 +20,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Helm OCI artifact media types as defined in HIP-0006
-const (
-	MediaTypeHelmChart      = "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
-	MediaTypeHelmProvenance = "application/vnd.cncf.helm.chart.provenance.v1.prov"
-	MediaTypeHelmConfig     = "application/vnd.cncf.helm.config.v1+json"
-)
-
 // Transformer extracts OCI artifacts with media-type specific handling.
 type Transformer struct{}
 
@@ -88,19 +81,20 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 		err = errors.Join(err, tarWriter.Close())
 	}()
 
-	for i, layer := range manifest.Layers {
-		layerInfo := spec.LayerInfo{
-			Index:       i,
-			MediaType:   layer.MediaType,
-			Annotations: layer.Annotations,
+	// If no config provided, extract all layers with default naming
+	if config == nil || len(config.Rules) == 0 {
+		for i, layer := range manifest.Layers {
+			filename := t.getDefaultFilename(layer.MediaType, i)
+			if err := t.processLayer(ctx, store, layer, tarWriter, filename); err != nil {
+				return nil, fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
+			}
 		}
-
-		if config != nil && config.LayerSelector != nil && !config.LayerSelector.Matches(layerInfo) {
-			continue // Skip this layer
-		}
-
-		if err := t.processLayer(ctx, store, layer, tarWriter); err != nil {
-			return nil, fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
+	} else {
+		// Process layers according to configured rules
+		for _, rule := range config.Rules {
+			if err := t.processRule(ctx, store, manifest.Layers, rule, tarWriter); err != nil {
+				return nil, fmt.Errorf("failed to process rule for file %s: %w", rule.Filename, err)
+			}
 		}
 	}
 
@@ -110,8 +104,42 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 	return resultBlob, nil
 }
 
-// processLayer processes a single layer from the OCI manifest with media-type specific filename handling.
-func (t *Transformer) processLayer(ctx context.Context, store content.Fetcher, layer ociImageSpecV1.Descriptor, tarWriter *tar.Writer) (err error) {
+// processRule processes layers that match the rule's selectors into a single tar file.
+func (t *Transformer) processRule(ctx context.Context, store content.Fetcher, layers []ociImageSpecV1.Descriptor, rule spec.Rule, tarWriter *tar.Writer) error {
+	for i, layer := range layers {
+		layerInfo := spec.LayerInfo{
+			Index:       i,
+			MediaType:   layer.MediaType,
+			Annotations: layer.Annotations,
+		}
+
+		// Check if this layer matches any of the rule's selectors
+		matched := false
+		for _, selector := range rule.LayerSelectors {
+			if selector.Matches(layerInfo) {
+				matched = true
+				break
+			}
+		}
+
+		if matched {
+			// if we have a filename, use it, otherwise use default based on media type
+			filename := rule.Filename
+			if filename == "" {
+				filename = t.getDefaultFilename(layer.MediaType, i)
+			}
+
+			if err := t.processLayer(ctx, store, layer, tarWriter, filename); err != nil {
+				return fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// processLayer processes a single layer from the OCI manifest.
+func (t *Transformer) processLayer(ctx context.Context, store content.Fetcher, layer ociImageSpecV1.Descriptor, tarWriter *tar.Writer, filename string) (err error) {
 	layerReader, err := store.Fetch(ctx, layer)
 	if err != nil {
 		return fmt.Errorf("failed to fetch layer: %w", err)
@@ -119,8 +147,6 @@ func (t *Transformer) processLayer(ctx context.Context, store content.Fetcher, l
 	defer func() {
 		err = errors.Join(err, layerReader.Close())
 	}()
-
-	filename := t.GetFilename(layer.MediaType)
 
 	header := &tar.Header{
 		Name: filename,
@@ -139,38 +165,17 @@ func (t *Transformer) processLayer(ctx context.Context, store content.Fetcher, l
 	return nil
 }
 
-// GetFilename determines the appropriate filename based on media type.
-func (t *Transformer) GetFilename(mediaType string) string {
-	// Handle Helm-specific media types
-	switch mediaType {
-	case MediaTypeHelmChart:
-		return "chart.tar.gz"
-	case MediaTypeHelmProvenance:
-		return "chart.prov"
-	case MediaTypeHelmConfig:
-		return "config.json"
-	}
-
-	// Generic OCI layer handling
+// getDefaultFilename provides fallback filename generation when no config is provided.
+func (t *Transformer) getDefaultFilename(mediaType string, index int) string {
 	if strings.Contains(mediaType, "tar") {
 		if strings.Contains(mediaType, "gzip") {
-			return "layer.tar.gz"
+			return fmt.Sprintf("layer-%d.tar.gz", index)
 		}
-		return "layer.tar"
+		return fmt.Sprintf("layer-%d.tar", index)
 	}
 	if strings.Contains(mediaType, "json") {
-		return "layer.json"
+		return fmt.Sprintf("layer-%d.json", index)
 	}
 
-	return "layer.bin"
-}
-
-// IsHelmMediaType checks if a media type is Helm-specific.
-func IsHelmMediaType(mediaType string) bool {
-	switch mediaType {
-	case MediaTypeHelmChart, MediaTypeHelmProvenance, MediaTypeHelmConfig:
-		return true
-	default:
-		return false
-	}
+	return fmt.Sprintf("layer-%d.bin", index)
 }

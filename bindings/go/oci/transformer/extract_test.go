@@ -68,50 +68,28 @@ func TestTransformer_TransformBlob(t *testing.T) {
 	}
 }
 
-func TestTransformer_getFilename(t *testing.T) {
+func TestTransformer_getDefaultFilename(t *testing.T) {
 	transformer := New()
 
 	tests := []struct {
 		mediaType string
+		index     int
 		expected  string
 	}{
-		{MediaTypeHelmChart, "chart.tar.gz"},
-		{MediaTypeHelmProvenance, "chart.prov"},
-		{MediaTypeHelmConfig, "config.json"},
-		{"application/tar", "layer.tar"},
-		{"application/tar+gzip", "layer.tar.gz"},
-		{"application/json", "layer.json"},
-		{"application/octet-stream", "layer.bin"},
+		{"application/tar", 0, "layer-0.tar"},
+		{"application/tar+gzip", 1, "layer-1.tar.gz"},
+		{"application/json", 2, "layer-2.json"},
+		{"application/octet-stream", 3, "layer-3.bin"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.mediaType, func(t *testing.T) {
-			result := transformer.GetFilename(tt.mediaType)
+			result := transformer.getDefaultFilename(tt.mediaType, tt.index)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestIsHelmMediaType(t *testing.T) {
-	tests := []struct {
-		mediaType string
-		expected  bool
-	}{
-		{MediaTypeHelmChart, true},
-		{MediaTypeHelmProvenance, true},
-		{MediaTypeHelmConfig, true},
-		{"application/tar", false},
-		{"application/json", false},
-		{"application/octet-stream", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.mediaType, func(t *testing.T) {
-			result := IsHelmMediaType(tt.mediaType)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
 
 func TestTransformerIntegration(t *testing.T) {
 	ctx := context.Background()
@@ -137,7 +115,7 @@ func TestTransformerIntegration(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err, "Should be able to read result")
 
-	expectedFiles := []string{"chart.prov", "chart.tar.gz"}
+	expectedFiles := []string{"layer-0.tar.gz", "layer-1.bin"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully transformed and validated OCI artifact")
@@ -201,16 +179,33 @@ func validateTarContents(t *testing.T, reader io.ReadCloser, expectedFiles []str
 	t.Logf("Successfully validated tar contains all expected files: %v", expectedFiles)
 }
 
-func TestTransformerWithLayerSelector(t *testing.T) {
+func TestTransformerWithRules(t *testing.T) {
 	ctx := context.Background()
 	r := require.New(t)
 
-	// select only Helm chart layers
+	// Configure rules to extract specific layers with custom filenames
 	config := &spec.Config{
 		Type: runtime.NewVersionedType(spec.ConfigType, spec.Version),
-		LayerSelector: &spec.LayerSelector{
-			MatchProperties: map[string]string{
-				spec.LayerMediaTypeKey: MediaTypeHelmChart,
+		Rules: []spec.Rule{
+			{
+				Filename: "chart.tar.gz",
+				LayerSelectors: []*spec.LayerSelector{
+					{
+						MatchProperties: map[string]string{
+							spec.LayerMediaTypeKey: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+						},
+					},
+				},
+			},
+			{
+				Filename: "chart.prov",
+				LayerSelectors: []*spec.LayerSelector{
+					{
+						MatchProperties: map[string]string{
+							spec.LayerMediaTypeKey: "application/vnd.cncf.helm.chart.provenance.v1.prov",
+						},
+					},
+				},
 			},
 		},
 	}
@@ -228,10 +223,10 @@ func TestTransformerWithLayerSelector(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	expectedFiles := []string{"chart.tar.gz"}
+	expectedFiles := []string{"chart.tar.gz", "chart.prov"}
 	validateTarContents(t, reader, expectedFiles)
 
-	t.Logf("Successfully filtered layers using LayerSelector")
+	t.Logf("Successfully filtered layers using Rules")
 }
 
 func TestTransformerWithIndexSelector(t *testing.T) {
@@ -241,9 +236,16 @@ func TestTransformerWithIndexSelector(t *testing.T) {
 	// select only the first layer (index 0)
 	config := &spec.Config{
 		Type: runtime.NewVersionedType(spec.ConfigType, spec.Version),
-		LayerSelector: &spec.LayerSelector{
-			MatchProperties: map[string]string{
-				spec.LayerIndexKey: "0",
+		Rules: []spec.Rule{
+			{
+				Filename: "first-layer.bin",
+				LayerSelectors: []*spec.LayerSelector{
+					{
+						MatchProperties: map[string]string{
+							spec.LayerIndexKey: "0",
+						},
+					},
+				},
 			},
 		},
 	}
@@ -286,12 +288,19 @@ func TestTransformerWithMatchExpressions(t *testing.T) {
 	// test match expressions
 	config := &spec.Config{
 		Type: runtime.NewVersionedType(spec.ConfigType, spec.Version),
-		LayerSelector: &spec.LayerSelector{
-			MatchExpressions: []spec.LayerSelectorRequirement{
-				{
-					Key:      spec.LayerMediaTypeKey,
-					Operator: spec.LayerSelectorOpIn,
-					Values:   []string{MediaTypeHelmChart, MediaTypeHelmProvenance},
+		Rules: []spec.Rule{
+			{
+				Filename: "helm-artifacts.tar",
+				LayerSelectors: []*spec.LayerSelector{
+					{
+						MatchExpressions: []spec.LayerSelectorRequirement{
+							{
+								Key:      spec.LayerMediaTypeKey,
+								Operator: spec.LayerSelectorOpIn,
+								Values:   []string{"application/vnd.cncf.helm.chart.content.v1.tar+gzip", "application/vnd.cncf.helm.chart.provenance.v1.prov"},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -310,7 +319,7 @@ func TestTransformerWithMatchExpressions(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	expectedFiles := []string{"chart.tar.gz", "chart.prov"}
+	expectedFiles := []string{"helm-artifacts.tar"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully filtered layers using match expressions")
