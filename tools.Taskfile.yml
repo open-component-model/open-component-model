@@ -48,13 +48,6 @@ tasks:
       - task: 'golangci-lint/module'
         vars:
           ITEM: 'cli'
-      - for: { var: GO_MODULES }
-        task: 'deferrlint/module'
-        vars:
-          ITEM: '{{ .ITEM }}'
-      - task: 'deferrlint/module'
-        vars:
-          ITEM: 'cli'
 
 
   golangci-lint/module:
@@ -66,22 +59,7 @@ tasks:
           --timeout 10m \
           --config={{ .ROOT_DIR }}/.github/config/golangci.yml \
           --path-prefix {{.ITEM}} \
-          {{ .CLI_ARGS }} ./...   
-
-  deferrlint/module:
-    desc: "Run deferrlint on a single go module specified by ITEM"
-    internal: true
-    cmd: |
-      cd {{.ITEM}} && {{ .ROOT_DIR }}/tmp/bin/deferrlint ./...
-
-  deferrlint/install:
-    desc: "Install deferrlint at latest into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
-    status:
-      - '{{ .ROOT_DIR }}/tmp/bin/deferrlint'
-    env:
-      GOBIN: '{{ .ROOT_DIR }}/tmp/bin'
-    cmds:
-      - go install github.com/jakobmoellerdev/deferrlint@v0.0.0-20250805180713-1b707831da54
+          {{ .CLI_ARGS }} ./...
 
   golangci-lint/install:
     desc: "Install golangci-lint at {{ .GOLANGCI_LINT_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
