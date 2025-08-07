@@ -181,7 +181,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	makePluginExecutable(output, logger)
+	tryToMakePluginExecutableOrWarn(output, logger)
 
 	if !skipValidation {
 		if err := validatePlugin(output, logger); err != nil {
@@ -277,7 +277,7 @@ func parseExtraIdentity(extraIdentitySlice []string) (map[string]string, error) 
 	return extraIdentity, nil
 }
 
-func makePluginExecutable(outputPath string, logger *slog.Logger) {
+func tryToMakePluginExecutableOrWarn(outputPath string, logger *slog.Logger) {
 	if info, err := os.Stat(outputPath); err == nil && info.Mode().IsRegular() {
 		if err := os.Chmod(outputPath, 0o755); err != nil {
 			logger.Warn("failed to make plugin binary executable", slog.String("path", outputPath), slog.String("error", err.Error()))
