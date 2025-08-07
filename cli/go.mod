@@ -54,5 +54,5 @@ require (
 	golang.org/x/term v0.33.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/dag v0.0.1 // indirect
+	ocm.software/open-component-model/bindings/go/dag v0.0.2-0.20250806131018-61873fa78651 // indirect
 )
