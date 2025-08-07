@@ -11,7 +11,6 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"golang.org/x/sync/errgroup"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/registry"
@@ -203,39 +202,22 @@ func pushChartAndGenerateLayers(ctx context.Context, chart *ReadOnlyChart, targe
 	provLayer *ociImageSpecV1.Descriptor,
 	err error,
 ) {
-	eg, egctx := errgroup.WithContext(ctx)
 	// Create config OCI layer.
-	eg.Go(func() (err error) {
-		if configLayer, err = pushConfigLayer(egctx, chart.Name, chart.Version, target); err != nil {
-			return fmt.Errorf("failed to create and push helm chart content layer: %w", err)
-		}
+	if configLayer, err = pushConfigLayer(ctx, chart.Name, chart.Version, target); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create and push helm chart config layer: %w", err)
+	}
 
-		return nil
-	})
 	// Create Helm Chart OCI layer.
-	eg.Go(func() (err error) {
-		if chartLayer, err = pushChartLayer(egctx, chart.ChartBlob, target); err != nil {
-			return fmt.Errorf("failed to create and push helm chart content layer: %w", err)
-		}
-
-		return nil
-	})
+	if chartLayer, err = pushChartLayer(ctx, chart.ChartBlob, target); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create and push helm chart content layer: %w", err)
+	}
 
 	// Create Provenance OCI layer (optional).
 	if chart.ProvBlob != nil {
-		eg.Go(func() (err error) {
-			if provLayer, err = pushProvenanceLayer(egctx, chart.ProvBlob, target); err != nil {
-				return fmt.Errorf("failed to create and push helm chart provenance: %w", err)
-			}
-
-			return nil
-		})
+		if provLayer, err = pushProvenanceLayer(ctx, chart.ProvBlob, target); err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to create and push helm chart provenance: %w", err)
+		}
 	}
-
-	if err = eg.Wait(); err != nil {
-		return nil, nil, nil, err
-	}
-
 	return
 }
 
