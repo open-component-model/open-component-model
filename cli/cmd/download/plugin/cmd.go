@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
-	"ocm.software/open-component-model/bindings/go/runtime"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
@@ -112,11 +113,10 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build resource identity for matching
-	resourceIdentity := runtime.Identity{
+	resourceIdentity := ocmruntime.Identity{
 		"name": resourceName,
 	}
 
-	// Add a resource version if specified, otherwise use component version
 	if resourceVersion != "" {
 		resourceIdentity["version"] = resourceVersion
 	} else {
@@ -124,16 +124,24 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		logger.Info("using component version for resource version", slog.String("version", desc.Component.Version))
 	}
 
-	// Add extra identity parameters
 	for key, value := range extraIdentity {
 		resourceIdentity[key] = value
 	}
 
-	// Find matching resources
+	// Default OS and ARCH if not provided via --extra-identity
+	if _, hasOS := extraIdentity["os"]; !hasOS {
+		resourceIdentity["os"] = runtime.GOOS
+		logger.Debug("defaulting os to runtime OS", slog.String("os", runtime.GOOS))
+	}
+	if _, hasArch := extraIdentity["architecture"]; !hasArch {
+		resourceIdentity["architecture"] = runtime.GOARCH
+		logger.Debug("defaulting arch to runtime ARCH", slog.String("architecture", runtime.GOARCH))
+	}
+
 	var toDownload []descriptor.Resource
 	for _, resource := range desc.Component.Resources {
 		resourceIdent := resource.ToIdentity()
-		if resourceIdentity.Match(resourceIdent, runtime.IdentityMatchingChainFn(runtime.IdentitySubset)) {
+		if resourceIdentity.Match(resourceIdent, ocmruntime.IdentityMatchingChainFn(ocmruntime.IdentitySubset)) {
 			toDownload = append(toDownload, resource)
 		}
 	}
