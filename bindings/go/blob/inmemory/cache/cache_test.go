@@ -1,15 +1,18 @@
-package inmemory
+package cache_test
 
 import (
 	"bytes"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	. "ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
 )
 
 type mockBlob struct {
@@ -255,8 +258,8 @@ func TestCache_MediaType(t *testing.T) {
 			name:       "no media type",
 			data:       []byte("hello"),
 			mediaType:  "",
-			expected:   "",
-			shouldKnow: false,
+			expected:   "application/octet-stream",
+			shouldKnow: true,
 		},
 		{
 			name:       "with media type",
@@ -489,4 +492,22 @@ func TestCache_SizeBeforeRead(t *testing.T) {
 			assert.Equal(t, tt.expected, cached.Size())
 		})
 	}
+}
+
+func TestCache_Cacheception(t *testing.T) {
+	original := inmemory.New(strings.NewReader("test"),
+		inmemory.WithMediaType("text/plain"),
+		inmemory.WithDigest(digest.SHA512.FromString("test")),
+	)
+	cache, err := Cache(original)
+	require.NoError(t, err)
+	assert.NotNil(t, cache)
+	assert.Equal(t, "test", string(cache.Data()))
+	assert.Equal(t, int64(4), cache.Size())
+	dig, ok := cache.Digest()
+	require.True(t, ok)
+	assert.Equal(t, digest.SHA512.FromString("test").String(), dig)
+	mt, ok := cache.MediaType()
+	require.True(t, ok)
+	assert.Equal(t, "text/plain", mt)
 }
