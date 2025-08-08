@@ -7,7 +7,7 @@ require (
 	golang.org/x/sync v0.16.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.6
 	ocm.software/open-component-model/bindings/go/configuration v0.0.5
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250807092808-c85e55d93cab
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250808101103-d1c8c3df9fea
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
