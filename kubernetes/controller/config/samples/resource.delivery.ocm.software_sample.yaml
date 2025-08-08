@@ -1,0 +1,20 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  namespace: default
+  name: ocm-resource
+spec:
+  componentRef:
+    name: ocm-comp
+  resource:
+    byReference:
+      resource:
+        name: oci
+      referencePath:
+        - name: ocm-comp-ref
+  ocmConfig:
+    - apiVersion: delivery.ocm.software/v1alpha1
+      kind: Component
+      name: ocm-comp
+  interval: 10min
+  suspend: false

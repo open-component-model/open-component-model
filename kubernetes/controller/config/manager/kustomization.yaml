@@ -1,0 +1,8 @@
+resources:
+- manager.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: ghcr.io/open-component-model/ocm-k8s-toolkit
+  newName: image-registry:5000/ocm.software/ocm-controller
+  newTag: v0.0.1
