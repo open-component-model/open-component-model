@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -113,25 +114,20 @@ func (t *Transformer) processRule(ctx context.Context, store content.Fetcher, la
 			Annotations: layer.Annotations,
 		}
 
-		// Check if this layer matches any of the rule's selectors
-		matched := false
-		for _, selector := range rule.LayerSelectors {
-			if selector.Matches(layerInfo) {
-				matched = true
-				break
-			}
+		if !slices.ContainsFunc(rule.LayerSelectors, func(selector *spec.LayerSelector) bool {
+			return selector.Matches(layerInfo)
+		}) {
+			continue
 		}
 
-		if matched {
-			// if we have a filename, use it, otherwise use default based on digest
-			filename := rule.Filename
-			if filename == "" {
-				filename = t.getDefaultFilename(layer.Digest.String())
-			}
+		// if we have a filename, use it, otherwise use default based on digest
+		filename := rule.Filename
+		if filename == "" {
+			filename = t.getDefaultFilename(layer.Digest.String())
+		}
 
-			if err := t.processLayer(ctx, store, layer, tarWriter, filename); err != nil {
-				return fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
-			}
+		if err := t.processLayer(ctx, store, layer, tarWriter, filename); err != nil {
+			return fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
 		}
 	}
 

@@ -3,7 +3,6 @@ package transformer
 import (
 	"archive/tar"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -49,8 +48,7 @@ func TestTransformer_TransformBlob(t *testing.T) {
 			transformer := New()
 			inputBlob := tt.setupBlob(t)
 
-			result, err := transformer.TransformBlob(context.Background(), inputBlob, nil)
-
+			result, err := transformer.TransformBlob(t.Context(), inputBlob, nil)
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, result)
@@ -89,9 +87,8 @@ func TestTransformer_getDefaultFilename(t *testing.T) {
 	}
 }
 
-
 func TestTransformerIntegration(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := require.New(t)
 
 	ociLayoutBlob, err := loadOCILayoutBlob("oci-layout.tar.gz")
@@ -179,7 +176,7 @@ func validateTarContents(t *testing.T, reader io.ReadCloser, expectedFiles []str
 }
 
 func TestTransformerWithRules(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := require.New(t)
 
 	// Configure rules to extract specific layers with custom filenames
@@ -229,7 +226,7 @@ func TestTransformerWithRules(t *testing.T) {
 }
 
 func TestTransformerWithIndexSelector(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := require.New(t)
 
 	// select only the first layer (index 0)
@@ -281,7 +278,7 @@ func TestTransformerWithIndexSelector(t *testing.T) {
 }
 
 func TestTransformerWithMatchExpressions(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := require.New(t)
 
 	// test match expressions
@@ -325,7 +322,7 @@ func TestTransformerWithMatchExpressions(t *testing.T) {
 }
 
 func TestTransformerWithRuleWithoutFilename(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := require.New(t)
 
 	// Configure rule without filename - should fall back to default naming
@@ -366,7 +363,7 @@ func TestTransformerWithRuleWithoutFilename(t *testing.T) {
 }
 
 func TestTransformerWithHelmRulesWithoutFilenames(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	r := require.New(t)
 
 	// Configure rules for Helm artifacts without filenames - should fall back to default naming
