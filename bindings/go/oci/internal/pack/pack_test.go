@@ -126,7 +126,7 @@ func TestBufferArtifactBlob(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resourceBlob)
 
-	// Compressed blobs neither have a size nor a digest.‚
+	// Compressed blobs neither have a size nor a digest.
 	assert.Equal(t, blob.SizeUnknown, resourceBlob.Size())
 	dig, ok := resourceBlob.Digest()
 	assert.Equal(t, "", dig)
