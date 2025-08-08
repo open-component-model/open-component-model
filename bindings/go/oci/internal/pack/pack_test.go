@@ -76,7 +76,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 			},
 		},
 		{
-			name: "error on unknown size",
+			name: "error on missing content",
 			blob: &testBlob{
 				mediaType: "application/vnd.test",
 				digest:    digest.FromBytes([]byte("test content")),
@@ -86,7 +86,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 				BlobMediaType: "application/vnd.test",
 				BlobDigest:    digest.FromBytes([]byte("test content")),
 			},
-			expectedError: "blob size is unknown",
+			expectedError: "blob not found",
 		},
 	}
 
@@ -96,7 +96,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.res, tt.blob)
 			require.NoError(t, err)
 
-			desc, err := NewBlobOCILayer(resourceBlob, tt.opts)
+			resourceBlob, desc, err := PrepareArtifactBlobForOCI(resourceBlob, tt.opts)
 
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError)

@@ -102,13 +102,19 @@ func TestCopyToOCILayoutInMemory_ErrorCases(t *testing.T) {
 	// Test with invalid source store
 	invalidStore := &invalidStore{}
 	opts := CopyToOCILayoutOptions{}
-	_, err := CopyToOCILayoutInMemory(t.Context(), invalidStore, ociImageSpecV1.Descriptor{}, opts)
+	b, err := CopyToOCILayoutInMemory(t.Context(), invalidStore, ociImageSpecV1.Descriptor{}, opts)
+	assert.NoError(t, err)
+	rc, err := b.ReadCloser()
 	assert.Error(t, err)
+	assert.Nil(t, rc)
 
 	// Test with invalid descriptor
 	src := memory.New()
-	_, err = CopyToOCILayoutInMemory(t.Context(), src, ociImageSpecV1.Descriptor{}, opts)
+	b, err = CopyToOCILayoutInMemory(t.Context(), src, ociImageSpecV1.Descriptor{}, opts)
+	assert.NoError(t, err)
+	rc, err = b.ReadCloser()
 	assert.Error(t, err)
+	assert.Nil(t, rc)
 }
 
 func TestCopyOCILayoutWithIndex_ErrorCases(t *testing.T) {

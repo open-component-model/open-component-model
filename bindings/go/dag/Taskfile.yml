@@ -13,6 +13,6 @@ tasks:
       - ./go.mod
       - ./go.sum
     cmds:
-      - go test -v -coverprofile=tmp/coverage.out ./...
+      - go test -v -race -coverprofile=tmp/coverage.out ./...
     deps:
       - tmp

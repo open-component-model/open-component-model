@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/opencontainers/go-digest"
 )
@@ -15,25 +16,27 @@ import (
 // Note that this should only be used without MemoryBlobOption if no sizing and digest information is present.
 // Otherwise, use WithSize, WithDigest, or WithMediaType to set the size, digest, and media type of the blob in advance.
 func New(r io.Reader, opts ...MemoryBlobOption) *Blob {
-	b := newMemoryBlobFromUnknownSource(r)
+	b := newMemoryBlobFromUnknownSource()
 	for _, opt := range opts {
 		opt.ApplyToMemoryBlob(b)
 	}
+
+	b.load = sync.OnceValue(func() error {
+		return storeSourceInBlob(b, r)
+	})
+
 	return b
 }
 
 // Blob is a read-only blob that reads from an [io.Reader] once via Load and stores the data in memory.
 type Blob struct {
-	mu   sync.RWMutex
 	data []byte // the data read from source during Blob.Load
 
-	size      int64         // size of the blob, if loaded or set in advance
-	digest    digest.Digest // digest of the blob, if loaded or set in advance
-	mediaType string        // media type of the blob, if set in advance
+	size      atomic.Int64                  // size of the blob, if loaded or set in advance
+	digest    atomic.Pointer[digest.Digest] // digest of the blob, if loaded or set in advance
+	mediaType atomic.Pointer[string]        // media type of the blob, if set in advance
 
-	source io.Reader // source is loaded via Blob.Load on the first ReadCloser call.
-	loaded bool      // indicates if the data has been loaded from source.
-	err    error     // error encountered during Blob.Load, if any
+	load func() error
 }
 
 // ReadCloser returns a reader to incrementally access byte stream content
@@ -49,56 +52,22 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
 	return io.NopCloser(bytes.NewReader(b.data)), nil
 }
 
-// Load reads the data from the source [io.Reader] and stores it in memory.
+// Load reads the data from the source [io.Reader] and stores it in memory (at most once).
 // It also calculates the digest and size of the blob.
-// If the data is already loaded, it returns nil without reloading, as a reload is not necessary.
+// If the data is already loaded, it will return the result of the last load.
 func (b *Blob) Load() (err error) {
-	b.mu.RLock()
-	if b.loaded {
-		b.mu.RUnlock()
-		return b.err // already loaded
-	}
-	b.mu.RUnlock()
+	return b.load()
+}
 
-	b.mu.Lock()
-	defer func() {
-		b.loaded = true
-		b.err = err // store the error if any occurred because Load should not be called again
-		b.mu.Unlock()
-	}()
-
-	var data bytes.Buffer
-
-	digester := digest.Canonical.Digester()
-	sourceWithDigest := io.TeeReader(b.source, digester.Hash())
-
-	if b.size > 0 {
-		// if we have a pre-set size, we can use io.CopyN to limit the read.
-		_, err = io.CopyN(&data, sourceWithDigest, b.size)
-	} else {
-		_, err = io.Copy(&data, sourceWithDigest)
-		b.size = int64(data.Len())
-	}
-	if err != nil {
-		return err
+func (b *Blob) Data() []byte {
+	if err := b.Load(); err != nil {
+		return nil
 	}
 
-	// if we have a pre-set digest, we can use it to verify the loaded data.
-	if loaded := digester.Digest(); b.digest == "" {
-		b.digest = loaded
-	} else if b.digest != loaded {
-		return fmt.Errorf("data from pre-set digest %q differed from loaded digest %q", b.digest, loaded)
-	}
-
-	b.data = data.Bytes()
-
-	return nil
+	return b.data
 }
 
 func (b *Blob) Size() int64 {
@@ -106,22 +75,16 @@ func (b *Blob) Size() int64 {
 		return -1
 	}
 
-	b.mu.RLock()
-	defer b.mu.RUnlock()
 	// the size is always known based on its buffer
-	return b.size
+	return b.size.Load()
 }
 
 func (b *Blob) HasPrecalculatedSize() bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.size > -1
+	return b.size.Load() > -1
 }
 
 func (b *Blob) SetPrecalculatedSize(size int64) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.size = size
+	b.size.Store(size)
 }
 
 func (b *Blob) Digest() (string, bool) {
@@ -129,39 +92,79 @@ func (b *Blob) Digest() (string, bool) {
 		return "", false
 	}
 
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.digest.String(), true
+	return b.digest.Load().String(), true
 }
 
 func (b *Blob) HasPrecalculatedDigest() bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.digest != ""
+	return b.digest.Load().String() != ""
 }
 
 func (b *Blob) SetPrecalculatedDigest(dig string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.digest = digest.Digest(dig)
+	d := digest.Digest(dig)
+	b.digest.Store(&d)
 }
 
 func (b *Blob) MediaType() (string, bool) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.mediaType, true
+	return *b.mediaType.Load(), true
 }
 
 func (b *Blob) SetMediaType(mediaType string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.mediaType = mediaType
+	b.mediaType.Store(&mediaType)
 }
 
-func newMemoryBlobFromUnknownSource(source io.Reader) *Blob {
-	return &Blob{
-		source:    source,
-		mediaType: "application/octet-stream",
-		size:      -1,
+func newMemoryBlobFromUnknownSource() *Blob {
+	b := &Blob{}
+	mt := "application/octet-stream"
+	b.mediaType.Store(&mt)
+	b.size.Store(-1)
+	d := digest.Digest("")
+	b.digest.Store(&d)
+	return b
+}
+
+func storeSourceInBlob(b *Blob, source io.Reader) error {
+	// Either compute a new digest or verify against an existing one.
+	var reader io.Reader
+	var digester digest.Digester
+	var verifier digest.Verifier
+	if loadedDigest := b.digest.Load(); loadedDigest.String() == "" {
+		digester = digest.Canonical.Digester()
+		reader = io.TeeReader(source, digester.Hash())
+	} else {
+		if err := loadedDigest.Validate(); err != nil {
+			return fmt.Errorf("invalid digest %q: %w", loadedDigest, err)
+		}
+		verifier = loadedDigest.Verifier()
+		reader = io.TeeReader(source, verifier)
 	}
+
+	// either read the data into a pre-set size or read all data
+	// if the size is set, we can use io.ReadFull to limit the read.
+	// if the size is not set, we can use io.ReadAll to read all data with buffering
+	var err error
+	if size := b.size.Load(); size > 0 {
+		b.data = make([]byte, size)
+		// if we have a pre-set size, we can use io.CopyN to limit the read.
+		_, err = io.ReadFull(reader, b.data)
+	} else {
+		b.data, err = io.ReadAll(reader)
+		b.size.Store(int64(len(b.data)))
+	}
+	if err != nil {
+		return err
+	}
+
+	// if we have a digest we just computed, store it
+	// if we have a verifier, we need to check if the data matches the loaded digest
+	switch {
+	case digester != nil:
+		newDigest := digester.Digest()
+		b.digest.Store(&newDigest)
+	case verifier != nil:
+		if !verifier.Verified() {
+			return fmt.Errorf("differed from loaded digest")
+		}
+	}
+
+	return nil
 }
