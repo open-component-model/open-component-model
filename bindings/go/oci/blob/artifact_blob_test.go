@@ -199,17 +199,6 @@ func TestResourceBlob_SetPrecalculatedDigest(t *testing.T) {
 	}
 }
 
-func TestResourceBlob_SetPrecalculatedSize(t *testing.T) {
-	resource := &descriptor.Resource{}
-	mock := &mockBlob{}
-
-	rb, err := ociblob.NewArtifactBlobWithMediaType(resource, mock, "application/octet-stream")
-	require.NoError(t, err)
-	newSize := int64(200)
-	rb.SetPrecalculatedSize(newSize)
-	assert.Equal(t, newSize, int64(200))
-}
-
 func TestResourceBlob_OCIDescriptor(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -279,25 +268,22 @@ func TestResourceBlob_CompleteWorkflow(t *testing.T) {
 	assert.Equal(t, "sha256:1234567890abcdef", dig)
 
 	assert.True(t, rb.HasPrecalculatedDigest())
-	assert.False(t, rb.HasPrecalculatedSize())
 
 	// Update values
 	newDigest := digest.FromString("test")
-	newSize := int64(200)
 	rb.SetPrecalculatedDigest(newDigest.String())
-	rb.SetPrecalculatedSize(newSize)
 
 	// Verify updates
 	dig, ok = rb.Digest()
 	require.True(t, ok)
 	assert.Equal(t, newDigest.String(), dig)
-	assert.Equal(t, newSize, rb.Size())
+	assert.Equal(t, blob.SizeUnknown, rb.Size())
 
 	// Test OCI descriptor
 	desc := rb.OCIDescriptor()
 	assert.Equal(t, mediaType, desc.MediaType)
 	assert.Equal(t, digest.Digest(newDigest), desc.Digest)
-	assert.Equal(t, newSize, desc.Size)
+	assert.Equal(t, blob.SizeUnknown, desc.Size)
 }
 
 func TestNewResourceBlobWithMediaType_SizeValidation(t *testing.T) {
