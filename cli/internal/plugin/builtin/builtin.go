@@ -9,6 +9,7 @@ import (
 	ctfplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/ctf"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/dir"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/file"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/helm"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin/input/utf8"
 	ociplugin "ocm.software/open-component-model/cli/internal/plugin/builtin/oci"
 )
@@ -22,6 +23,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.ComponentVersionRepositoryRegistry,
 		manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
+		manager.BlobTransformerRegistry,
 		filesystemConfig,
 	); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt plugin: %w", err)

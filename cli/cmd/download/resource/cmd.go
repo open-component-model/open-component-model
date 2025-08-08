@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"mime"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/internal/transformers"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -136,11 +139,28 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// TODO(jakobmoellerdev): now lookup a transformer based on the transformer config
-	//  then use the transformer config to look for a transformer plugin
-	//  then call the transformer plugin to transform the res
-	//  write the transformed res to the output location
-	return fmt.Errorf("download based on transformer %q is not implemented", transformer)
+	availableTransformers := transformers.Transformers()
+
+	transformerConfig, ok := transformers.Transformers()[transformer]
+	if !ok {
+		return fmt.Errorf("transformer %q not found, available transformers: %v", transformer, slices.Collect(maps.Keys(availableTransformers)))
+	}
+
+	plugin, err := pluginManager.BlobTransformerRegistry.GetPlugin(cmd.Context(), transformerConfig)
+	if err != nil {
+		return fmt.Errorf("getting transformer plugin registered with config under %q failed: %w", transformer, err)
+	}
+
+	transformed, err := plugin.TransformBlob(cmd.Context(), data, transformerConfig, nil)
+	if err != nil {
+		return fmt.Errorf("transforming resource failed: %w", err)
+	}
+
+	if err := shared.SaveBlobToFile(transformed, finalOutput); err != nil {
+		return err
+	}
+	logger.Info("resource transformed and downloaded successfully", slog.String("output", finalOutput))
+	return nil
 }
 
 func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {
