@@ -90,5 +90,5 @@ add component-version  --repository ./path/to/transport-archive --constructor ./
 
 ### SEE ALSO
 
-* [ocm add](ocm_add.md)	 - Add anything to OCM
+* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
 

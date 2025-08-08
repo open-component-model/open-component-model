@@ -60,6 +60,6 @@ ocm add {component-version|component-versions|cv|cvs} [flags]
 
 ### SEE ALSO
 
-* [ocm](ocm.md)	 - The official Open Component Model (OCM) CLI
-* [ocm add component-version](ocm_add_component-version.md)	 - Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a "component-constructor" file
+* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
+* [ocm add component-version]({{< relref "ocm_add_component-version.md" >}})	 - Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a "component-constructor" file
 

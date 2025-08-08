@@ -101,5 +101,5 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 
 ### SEE ALSO
 
-* [ocm get](ocm_get.md)	 - Get anything from OCM
+* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 

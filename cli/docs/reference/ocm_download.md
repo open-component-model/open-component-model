@@ -60,7 +60,6 @@ ocm download {resource|resources|plugin|plugins} [flags]
 
 ### SEE ALSO
 
-* [ocm](ocm.md)	 - The official Open Component Model (OCM) CLI
-* [ocm download plugin](ocm_download_plugin.md)	 - Download plugin binaries from a component version.
-* [ocm download resource](ocm_download_resource.md)	 - Download resources described in a component version in an OCM Repository
-
+* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
+* [ocm download plugin]({{< relref "ocm_download_plugin.md" >}}).  - Download plugin binaries from a component version.
+* [ocm download resource]({{< relref "ocm_download_resource.md" >}})	 - Download resources described in a component version in an OCM Repository

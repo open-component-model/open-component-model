@@ -62,9 +62,9 @@ See each sub-command's help for details on how to use the generated script.
 
 ### SEE ALSO
 
-* [ocm](ocm.md)	 - The official Open Component Model (OCM) CLI
-* [ocm completion bash](ocm_completion_bash.md)	 - Generate the autocompletion script for bash
-* [ocm completion fish](ocm_completion_fish.md)	 - Generate the autocompletion script for fish
-* [ocm completion powershell](ocm_completion_powershell.md)	 - Generate the autocompletion script for powershell
-* [ocm completion zsh](ocm_completion_zsh.md)	 - Generate the autocompletion script for zsh
+* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
+* [ocm completion bash]({{< relref "ocm_completion_bash.md" >}})	 - Generate the autocompletion script for bash
+* [ocm completion fish]({{< relref "ocm_completion_fish.md" >}})	 - Generate the autocompletion script for fish
+* [ocm completion powershell]({{< relref "ocm_completion_powershell.md" >}})	 - Generate the autocompletion script for powershell
+* [ocm completion zsh]({{< relref "ocm_completion_zsh.md" >}})	 - Generate the autocompletion script for zsh
 
