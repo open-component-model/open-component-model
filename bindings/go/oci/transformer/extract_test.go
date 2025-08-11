@@ -111,7 +111,8 @@ func TestTransformerIntegration(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err, "Should be able to read result")
 
-	expectedFiles := []string{"b4d308c16f0492bff4efa51ac9aab718bc819413008aec39007ef4abc309504a", "c25ba77a4c310dc0a36a4e587a216db0001488353a262b9147662ca6c2d25c69"}
+	// With Helm support, both chart and provenance layers should be named according to Helm conventions
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz", "test-helm-chart-0.1.0.tgz.prov"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully transformed and validated OCI artifact")
@@ -219,7 +220,8 @@ func TestTransformerWithRules(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	expectedFiles := []string{"chart.tar.gz", "chart.prov"}
+	// For Helm layers, the filename config is ignored and Helm naming convention is used
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz", "test-helm-chart-0.1.0.tgz.prov"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully filtered layers using Rules")
@@ -315,7 +317,8 @@ func TestTransformerWithMatchExpressions(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	expectedFiles := []string{"helm-artifacts.tar"}
+	// For Helm layers, the configured filename is ignored and Helm naming conventions are used
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz", "test-helm-chart-0.1.0.tgz.prov"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully filtered layers using match expressions")
@@ -355,8 +358,8 @@ func TestTransformerWithRuleWithoutFilename(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	// Should use default filename based on digest
-	expectedFiles := []string{"b4d308c16f0492bff4efa51ac9aab718bc819413008aec39007ef4abc309504a"}
+	// Should use Helm naming convention for Helm chart content layer
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully used default filename when rule doesn't specify one")
@@ -406,8 +409,8 @@ func TestTransformerWithHelmRulesWithoutFilenames(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	// Should use default filenames based on digest
-	expectedFiles := []string{"b4d308c16f0492bff4efa51ac9aab718bc819413008aec39007ef4abc309504a", "c25ba77a4c310dc0a36a4e587a216db0001488353a262b9147662ca6c2d25c69"}
+	// Both Helm chart content and provenance should use Helm naming conventions
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz", "test-helm-chart-0.1.0.tgz.prov"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully used default filenames for Helm artifacts when rules don't specify them")
