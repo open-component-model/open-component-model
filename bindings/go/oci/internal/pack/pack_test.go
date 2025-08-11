@@ -2,6 +2,7 @@ package pack_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"oras.land/oras-go/v2/content/file"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	resourceblob "ocm.software/open-component-model/bindings/go/oci/blob"
@@ -76,7 +78,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 			},
 		},
 		{
-			name: "error on unknown size",
+			name: "error on missing content",
 			blob: &testBlob{
 				mediaType: "application/vnd.test",
 				digest:    digest.FromBytes([]byte("test content")),
@@ -86,7 +88,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 				BlobMediaType: "application/vnd.test",
 				BlobDigest:    digest.FromBytes([]byte("test content")),
 			},
-			expectedError: "blob size is unknown",
+			expectedError: "blob not found",
 		},
 	}
 
@@ -96,7 +98,7 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.res, tt.blob)
 			require.NoError(t, err)
 
-			desc, err := NewBlobOCILayer(resourceBlob, tt.opts)
+			resourceBlob, desc, err := PrepareArtifactBlobForOCI(resourceBlob, tt.opts)
 
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError)
@@ -109,6 +111,58 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 			assert.Equal(t, int64(len(tt.blob.content)), desc.Size)
 		})
 	}
+}
+
+func TestBufferArtifactBlob(t *testing.T) {
+	text := "test content"
+	var b blob.ReadOnlyBlob
+	b = &testBlob{
+		content:   []byte(text),
+		mediaType: "text/plain",
+	}
+	b = compression.Compress(b)
+
+	resourceBlob, err := resourceblob.NewArtifactBlob(&descriptor.Resource{}, b)
+	require.NoError(t, err)
+	require.NotNil(t, resourceBlob)
+
+	// Compressed blobs neither have a size nor a digest.
+	assert.Equal(t, blob.SizeUnknown, resourceBlob.Size())
+	dig, ok := resourceBlob.Digest()
+	assert.Equal(t, "", dig)
+	assert.False(t, ok)
+
+	// wantData contains the expected compressed data to be compared with later in the test.
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
+	_, err = io.Copy(writer, bytes.NewReader([]byte(text)))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	wantData := buf.Bytes()
+	wantDig := digest.FromBytes(wantData).String()
+
+	// Switch to buffered blob.
+	resourceBlob, desc, err := PrepareArtifactBlobForOCI(resourceBlob, ResourceBlobOCILayerOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, resourceBlob)
+
+	// The new blob has to have the properties set.
+	assert.Equal(t, int64(len(wantData)), resourceBlob.Size())
+	dig, ok = resourceBlob.Digest()
+	assert.True(t, ok)
+	assert.Equal(t, wantDig, dig)
+
+	// Check that the blob also has the right data.
+	reader, err := resourceBlob.ReadCloser()
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, string(wantData), string(data))
+
+	// Check the descriptor.
+	assert.Equal(t, "text/plain+gzip", desc.MediaType)
+	assert.Equal(t, int64(len(wantData)), desc.Size)
+	assert.Equal(t, wantDig, desc.Digest.String())
 }
 
 func TestBlob(t *testing.T) {

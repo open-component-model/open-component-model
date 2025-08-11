@@ -300,7 +300,7 @@ func TestMemoryBlobOptions(t *testing.T) {
 			// Loading should fail because the actual data size doesn't match the provided size
 			err := blob.Load()
 			r.Error(err)
-			r.ErrorIs(err, io.EOF)
+			r.ErrorIs(err, io.ErrUnexpectedEOF)
 		})
 	})
 

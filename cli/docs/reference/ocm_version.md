@@ -87,5 +87,5 @@ ocm version --format legacyjson
 
 ### SEE ALSO
 
-* [ocm](ocm.md)	 - The official Open Component Model (OCM) CLI
+* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
 

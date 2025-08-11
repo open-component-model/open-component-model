@@ -88,5 +88,5 @@ ocm download resource [flags]
 
 ### SEE ALSO
 
-* [ocm download](ocm_download.md)	 - Download anything from OCM
+* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
 

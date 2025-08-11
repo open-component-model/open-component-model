@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -86,6 +87,38 @@ type hugoGenerator struct {
 	dir string
 }
 
+// convert standard markdown links to Hugo relref shortcodes
+// (https://gohugo.io/methods/page/relref/)
+func convertMarkdownLinksToRelref(content string) string {
+	// match [text](filename.md) or [text](path/filename.md)
+	linkRegex := regexp.MustCompile(`\[([^\]]+)\]\(([^)]+\.md)\)`)
+
+	// Replace with Hugo relref shortcode
+	result := linkRegex.ReplaceAllStringFunc(content, func(match string) string {
+		// Extract text and filename from match
+		parts := linkRegex.FindStringSubmatch(match)
+		if parts == nil || len(parts) != 3 {
+			return match // Return original if something went wrong
+		}
+
+		linkText := parts[1]
+		filename := parts[2]
+
+		// Skip external URLs (http:// or https://)
+		if strings.HasPrefix(filename, "http://") || strings.HasPrefix(filename, "https://") {
+			return match // Return original for external URLs
+		}
+
+		// Extract just the filename from any path (e.g., "path/file.md" -> "file.md")
+		filename = filepath.Base(filename)
+
+		// Return Hugo relref shortcode
+		return fmt.Sprintf(`[%s]({{< relref "%s" >}})`, linkText, filename)
+	})
+
+	return result
+}
+
 // generateHugoMarkdownTree generates markdown documentation for a command and all its children
 func generateHugoMarkdownTree(cmd *cobra.Command, generator *hugoGenerator) error {
 	// Generate markdown for each command
@@ -119,6 +152,9 @@ func generateHugoMarkdownForCommand(cmd *cobra.Command, generator *hugoGenerator
 	}
 
 	markdownContent := markdownBuffer.String()
+
+	// Convert relative markdown links to Hugo relref shortcodes
+	markdownContent = convertMarkdownLinksToRelref(markdownContent)
 
 	// Use cmd.Short for the description
 	description := cmd.Short

@@ -67,5 +67,5 @@ ocm generate docs [-d <directory>] [--mode <format>] [flags]
 
 ### SEE ALSO
 
-* [ocm generate](ocm_generate.md)	 - Generate documentation for the OCM CLI
+* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
 

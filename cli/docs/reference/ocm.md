@@ -61,10 +61,10 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add](ocm_add.md)	 - Add anything to OCM
-* [ocm completion](ocm_completion.md)	 - Generate the autocompletion script for the specified shell
-* [ocm download](ocm_download.md)	 - Download anything from OCM
-* [ocm generate](ocm_generate.md)	 - Generate documentation for the OCM CLI
-* [ocm get](ocm_get.md)	 - Get anything from OCM
-* [ocm version](ocm_version.md)	 - Retrieve the build version of the OCM CLI
+* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
+* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
+* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
+* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
+* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
+* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
 

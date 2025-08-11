@@ -66,7 +66,7 @@ func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.
 }
 
 func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
-	layer, err := NewBlobOCILayer(b, ResourceBlobOCILayerOptions{
+	b, layer, err := PrepareArtifactBlobForOCI(b, ResourceBlobOCILayerOptions{
 		BlobMediaType: access.MediaType,
 		BlobDigest:    digest.Digest(access.LocalReference),
 	})
@@ -123,12 +123,12 @@ type OCILayerConvertableBlob interface {
 	blob.DigestAware
 }
 
-// NewBlobOCILayer creates a new OCI layer descriptor for a OCILayerConvertableBlob.
-func NewBlobOCILayer(b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) (ociImageSpecV1.Descriptor, error) {
+// PrepareArtifactBlobForOCI creates a new OCI layer descriptor for a OCILayerConvertableBlob.
+// It ensures that the involved ArtifactBlob has the size and the digest set, so it can be uploaded to OCI registries,
+// which need these fields for API interactions. If the incoming ArtifactBlob does not have a size or a digest,
+// a new instance of ArtifactBlob having both fields set is created and returned. Otherwise, the initial ArtifactBlob is returned.
+func PrepareArtifactBlobForOCI(b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) (*ociblob.ArtifactBlob, ociImageSpecV1.Descriptor, error) {
 	size := b.Size()
-	if size == blob.SizeUnknown {
-		return ociImageSpecV1.Descriptor{}, errors.New("blob size is unknown and cannot be packed into a single layer artifact")
-	}
 
 	var mediaType string
 	if mediaTypeFromBlob, ok := b.MediaType(); ok {
@@ -138,21 +138,31 @@ func NewBlobOCILayer(b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) 
 		mediaType = opts.BlobMediaType
 	}
 	if mediaType == "" {
-		return ociImageSpecV1.Descriptor{}, errors.New("blob media type is unknown and cannot be packed into an oci blob")
+		return nil, ociImageSpecV1.Descriptor{}, errors.New("blob media type is unknown and cannot be packed into an oci blob")
 	}
 
 	var dig digest.Digest
 	if blobDigest, ok := b.Digest(); ok {
 		dig = digest.Digest(blobDigest)
 		if err := dig.Validate(); err != nil {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to validate blob digest: %w", err)
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to validate blob digest: %w", err)
 		}
-	}
-	if len(dig) == 0 {
+	} else if len(opts.BlobDigest) > 0 {
 		dig = opts.BlobDigest
 		if err := dig.Validate(); err != nil {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to validate blob digest: %w", err)
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to validate blob digest: %w", err)
 		}
+	}
+
+	var err error
+	if size == blob.SizeUnknown || len(dig) == 0 {
+		b, err = b.Buffer()
+		if err != nil {
+			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("could not convert artifact blob from unbuffered to buffered: %w", err)
+		}
+		size = b.Size()
+		digStr, _ := b.Digest()
+		dig = digest.Digest(digStr)
 	}
 
 	layer := ociImageSpecV1.Descriptor{
@@ -163,10 +173,10 @@ func NewBlobOCILayer(b *ociblob.ArtifactBlob, opts ResourceBlobOCILayerOptions) 
 	}
 
 	if err := identity.Adopt(&layer, b.Artifact); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
+		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to adopt descriptor based on resource: %w", err)
 	}
 
-	return layer, nil
+	return b, layer, nil
 }
 
 // Blob handles the actual transfer of blob data to the OCI storage.

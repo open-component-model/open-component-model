@@ -76,5 +76,5 @@ ocm completion fish [flags]
 
 ### SEE ALSO
 
-* [ocm completion](ocm_completion.md)	 - Generate the autocompletion script for the specified shell
+* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
 
