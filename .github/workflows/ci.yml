@@ -31,7 +31,7 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
       - name: Discover Go Modules
         id: discover
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
@@ -165,7 +165,7 @@ jobs:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           sparse-checkout: |
             ${{ matrix.module }}
@@ -205,7 +205,7 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
         with:
@@ -230,7 +230,7 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           sparse-checkout: |
             ${{ matrix.module }}
@@ -258,7 +258,7 @@ jobs:
         project: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           # we have a self reference here because CodeQL does introspection on the step
           sparse-checkout: |
@@ -281,7 +281,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "Code Generation"
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
