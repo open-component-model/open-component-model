@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -182,6 +183,49 @@ func TestCompatibility(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, data, string(result))
 		assert.Equal(t, int64(len(data)), b.Size())
+	})
+
+	t.Run("pipe", func(t *testing.T) {
+		r, w := io.Pipe()
+		go func() {
+			_, err := w.Write([]byte(data))
+			assert.NoError(t, w.CloseWithError(err))
+		}()
+
+		b := New(r)
+		br, err := b.ReadCloser()
+
+		assert.NoError(t, err)
+		result, err := io.ReadAll(br)
+		assert.NoError(t, err)
+		assert.Equal(t, data, string(result))
+		assert.Equal(t, int64(-1), b.Size())
+		mtString, ok := b.MediaType()
+		assert.True(t, ok)
+		assert.Equal(t, "application/octet-stream", mtString)
+
+		t.Run("serialized access to pipe", func(t *testing.T) {
+			parallel := atomic.Bool{}
+			waitForParallel := make(chan struct{}, 1)
+			go func() {
+				defer func() {
+					waitForParallel <- struct{}{}
+				}()
+				// Wait for the reader to be created
+				rc, err := b.ReadCloser()
+				require.NoError(t, err)
+				require.NotNil(t, rc)
+				result, err := io.ReadAll(br)
+				assert.NoError(t, err)
+				assert.Empty(t, result, "because the original read closer should have read all data, the next result should be empty")
+				parallel.Store(true)
+			}()
+
+			assert.False(t, parallel.Load(), "because the original reader should not be closed yet, we should not be able to create a parallel ReadCloser")
+			assert.NoError(t, br.Close())
+			<-waitForParallel
+			assert.True(t, parallel.Load(), "because the original reader should have been closed, we should be able to create a parallel ReadCloser")
+		})
 	})
 }
 
