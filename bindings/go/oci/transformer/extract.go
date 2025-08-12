@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -28,18 +29,22 @@ const (
 	helmProvenanceMediaType   = "application/vnd.cncf.helm.chart.provenance.v1.prov"
 )
 
-// HelmChartMetadata represents chart metadata from Helm config.
-type HelmChartMetadata struct {
+// helmChartMetadata represents chart metadata from Helm config.
+type helmChartMetadata struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 }
 
 // Transformer extracts OCI artifacts with media-type specific handling.
-type Transformer struct{}
+type Transformer struct {
+	logger *slog.Logger
+}
 
 // New creates a new OCI artifact transformer.
-func New() *Transformer {
-	return &Transformer{}
+func New(logger *slog.Logger) *Transformer {
+	return &Transformer{
+		logger: logger,
+	}
 }
 
 // TransformBlob transforms an OCI Layout blob by extracting its main artifacts.
@@ -95,7 +100,8 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 		err = errors.Join(err, tarWriter.Close())
 	}()
 
-	// Extract Helm metadata if this is a Helm chart
+	// Helm is a special snowflake. The filename for the generated output needs to follow a specific naming convention.
+	// The filename needs to be chartname-version.tgz for charts and chartname-version.tgz.prov for provenance.
 	helmMetadata, err := t.extractHelmMetadata(ctx, store, manifest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract Helm metadata: %w", err)
@@ -125,7 +131,7 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 }
 
 // processRuleWithHelm processes layers that match the rule's selectors into a single tar file, with Helm-aware filename handling.
-func (t *Transformer) processRuleWithHelm(ctx context.Context, store content.Fetcher, layers []ociImageSpecV1.Descriptor, rule spec.Rule, tarWriter *tar.Writer, helmMetadata *HelmChartMetadata) error {
+func (t *Transformer) processRuleWithHelm(ctx context.Context, store content.Fetcher, layers []ociImageSpecV1.Descriptor, rule spec.Rule, tarWriter *tar.Writer, helmMetadata *helmChartMetadata) error {
 	for i, layer := range layers {
 		layerInfo := spec.LayerInfo{
 			Index:       i,
@@ -143,6 +149,9 @@ func (t *Transformer) processRuleWithHelm(ctx context.Context, store content.Fet
 		// For non-Helm layers, use the configured filename or default
 		var filename string
 		if t.isHelmLayer(layer) && helmMetadata != nil {
+			if rule.Filename != "" {
+				t.logger.WarnContext(ctx, "filename for helm is generated based on config data, settings a filename will be ignored", "filename", rule.Filename)
+			}
 			filename = t.getFilenameForLayer(layer, helmMetadata)
 		} else {
 			filename = rule.Filename
@@ -204,7 +213,7 @@ func (t *Transformer) getDefaultFilename(digest string) string {
 }
 
 // extractHelmMetadata extracts chart metadata from the OCI config if this is a Helm chart.
-func (t *Transformer) extractHelmMetadata(ctx context.Context, store content.Fetcher, manifest ociImageSpecV1.Manifest) (*HelmChartMetadata, error) {
+func (t *Transformer) extractHelmMetadata(ctx context.Context, store content.Fetcher, manifest ociImageSpecV1.Manifest) (*helmChartMetadata, error) {
 	if manifest.Config.MediaType != helmConfigMediaType {
 		return nil, nil // Not a Helm chart
 	}
@@ -220,7 +229,7 @@ func (t *Transformer) extractHelmMetadata(ctx context.Context, store content.Fet
 		return nil, fmt.Errorf("failed to read Helm config data: %w", err)
 	}
 
-	var metadata HelmChartMetadata
+	var metadata helmChartMetadata
 	if err := json.Unmarshal(configData, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal Helm config: %w", err)
 	}
@@ -234,7 +243,8 @@ func (t *Transformer) isHelmLayer(layer ociImageSpecV1.Descriptor) bool {
 }
 
 // getFilenameForLayer determines the appropriate filename for a layer, considering Helm naming conventions.
-func (t *Transformer) getFilenameForLayer(layer ociImageSpecV1.Descriptor, helmMetadata *HelmChartMetadata) string {
+// https://helm.sh/docs/topics/charts/#charts-and-versioning details this requirement.
+func (t *Transformer) getFilenameForLayer(layer ociImageSpecV1.Descriptor, helmMetadata *helmChartMetadata) string {
 	if helmMetadata != nil {
 		switch layer.MediaType {
 		case helmChartContentMediaType:
