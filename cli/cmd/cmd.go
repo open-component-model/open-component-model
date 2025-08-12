@@ -47,7 +47,10 @@ func New() *cobra.Command {
 	}
 
 	configuration.RegisterConfigFlag(cmd)
+	
 	cmd.PersistentFlags().String(tempFolderFlag, "", `Specify a custom temporary folder path for filesystem operations.`)
+	cmd.PersistentFlags().String(workingDirectoryFlag, "", `Specify a custom working directory path for filesystem operations.`)
+
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())

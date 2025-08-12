@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -68,6 +69,16 @@ func setupFilesystemConfig(cmd *cobra.Command) {
 			fsCfg = &filesystemv1alpha1.Config{}
 		} else {
 			fsCfg = _fsCfg
+		}
+	}
+
+	if fsCfg.WorkingDirectory == "" {
+		// If no working directory is set, we use the current working directory
+		if wd, err := os.Getwd(); err != nil {
+			slog.WarnContext(cmd.Context(), "could not get current working directory, using default", slog.String("error", err.Error()))
+			fsCfg.WorkingDirectory = "."
+		} else {
+			fsCfg.WorkingDirectory = wd
 		}
 	}
 

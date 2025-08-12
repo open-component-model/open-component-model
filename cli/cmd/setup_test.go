@@ -38,7 +38,7 @@ func createConfigWithFilesystemConfig(tempFolder string) *genericv1.Config {
 	return config
 }
 
-func TestSetupFilesystemConfig(t *testing.T) {
+func TestSetupTempFolderFilesystemConfig(t *testing.T) {
 	tests := []struct {
 		name                string
 		cliFlag             string
@@ -145,6 +145,131 @@ func TestSetupFilesystemConfig(t *testing.T) {
 	}
 }
 
+func createWorkingDirConfigWithFilesystemConfig(workingDir string) *genericv1.Config {
+	configJSON := `{
+		"configurations": [
+			{
+				"type": "filesystem.config.ocm.software/v1alpha1",
+				"workingDirectory": "` + workingDir + `"
+			}
+		]
+	}`
+
+	config := &genericv1.Config{}
+	if err := json.Unmarshal([]byte(configJSON), config); err != nil {
+		panic(err)
+	}
+	return config
+}
+
+func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
+	wd, _ := os.Getwd()
+	tests := []struct {
+		name                string
+		cliFlag             string
+		existingConfig      *genericv1.Config
+		expectedWorkingDir  string
+		expectedConfigMerge bool
+	}{
+		{
+			name:                "CLI flag without existing config",
+			cliFlag:             "/wd/custom",
+			existingConfig:      nil,
+			expectedWorkingDir:  "/wd/custom",
+			expectedConfigMerge: false,
+		},
+		{
+			name:                "CLI flag with empty central config",
+			cliFlag:             "/wd/custom",
+			existingConfig:      &genericv1.Config{},
+			expectedWorkingDir:  "/wd/custom",
+			expectedConfigMerge: false, // Config merge fails due to scheme registration issue
+		},
+		{
+			name:                "CLI flag overrides existing filesystem config",
+			cliFlag:             "/wd/override",
+			existingConfig:      createWorkingDirConfigWithFilesystemConfig("/wd/original"),
+			expectedWorkingDir:  "/wd/override",
+			expectedConfigMerge: false,
+		},
+		{
+			name:                "No CLI flag uses existing config",
+			cliFlag:             "",
+			existingConfig:      createWorkingDirConfigWithFilesystemConfig("/wd/fromconfig"),
+			expectedWorkingDir:  "/wd/fromconfig",
+			expectedConfigMerge: false,
+		},
+		{
+			name:                "No CLI flag and no existing config",
+			cliFlag:             "",
+			existingConfig:      &genericv1.Config{},
+			expectedWorkingDir:  wd,
+			expectedConfigMerge: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			// Create a test command with the working-directory flag
+			cmd := &cobra.Command{
+				Use: "test",
+			}
+			cmd.Flags().String(workingDirectoryFlag, "", "test flag")
+			if tt.cliFlag != "" {
+				err := cmd.Flags().Set(workingDirectoryFlag, tt.cliFlag)
+				r.NoError(err, "failed to set CLI flag")
+			}
+
+			// Set up context with existing config if provided
+			ctx := context.Background()
+			if tt.existingConfig != nil {
+				ctx = ocmctx.WithConfiguration(ctx, tt.existingConfig)
+			}
+			cmd.SetContext(ctx)
+
+			// Count configurations before setup
+			var configsBefore int
+			if tt.existingConfig != nil {
+				configsBefore = len(tt.existingConfig.Configurations)
+			}
+
+			// Call setupFilesystemConfig
+			setupFilesystemConfig(cmd)
+
+			// Verify the filesystem config in context
+			ocmContext := ocmctx.FromContext(cmd.Context())
+			r.NotNil(ocmContext, "OCM context should be available")
+
+			fsCfg := ocmContext.FilesystemConfig()
+			r.NotNil(fsCfg, "filesystem config should be available")
+			r.Equal(tt.expectedWorkingDir, fsCfg.WorkingDirectory, "working-directory should match expected")
+
+			// Verify config merging behavior
+			if tt.expectedConfigMerge {
+				centralCfg := ocmContext.Configuration()
+				r.NotNil(centralCfg, "central config should be available")
+				r.Greater(len(centralCfg.Configurations), configsBefore, "filesystem config should be added to central config")
+
+				// Verify the filesystem config was added correctly
+				found := false
+				for _, cfg := range centralCfg.Configurations {
+					if cfg.Type.Name == filesystemv1alpha1.ConfigType {
+						found = true
+						fsConfig := &filesystemv1alpha1.Config{}
+						err := genericv1.Scheme.Convert(cfg, fsConfig)
+						r.NoError(err, "should convert to filesystem config")
+						r.Equal(tt.expectedWorkingDir, fsConfig.WorkingDirectory, "merged config should have correct working directory")
+						break
+					}
+				}
+				r.True(found, "filesystem config should be found in central config")
+			}
+		})
+	}
+}
+
 func TestHasFilesystemConfig(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -214,6 +339,45 @@ func TestHasFilesystemConfig(t *testing.T) {
 						{
 							"type": "filesystem.config.ocm.software",
 							"tempFolder": "/tmp/unversioned"
+						}
+					]
+				}`
+				config := &genericv1.Config{}
+				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
+					panic(err)
+				}
+				return config
+			}(),
+			expected: true,
+		},
+		{
+			name: "config with filesystem config and working directory",
+			config: func() *genericv1.Config {
+				configJSON := `{
+					"configurations": [
+						{
+							"type": "filesystem.config.ocm.software/v1alpha1",
+							"workingDirectory": "/wd/test"
+						}
+					]
+				}`
+				config := &genericv1.Config{}
+				if err := json.Unmarshal([]byte(configJSON), config); err != nil {
+					panic(err)
+				}
+				return config
+			}(),
+			expected: true,
+		},
+		{
+			name: "config with filesystem config and tempt and working directory",
+			config: func() *genericv1.Config {
+				configJSON := `{
+					"configurations": [
+						{
+							"type": "filesystem.config.ocm.software/v1alpha1",
+							"tempFolder": "/tmp/test",
+							"workingDirectory": "/wd/test"
 						}
 					]
 				}`
@@ -338,6 +502,7 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
+	workingDir := filepath.Join(tempDir, "working")
 	customTempDir := filepath.Join(tempDir, "custom")
 	err := os.MkdirAll(customTempDir, 0755)
 	r.NoError(err, "failed to create custom temp dir")
@@ -357,15 +522,17 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 			// Verify the config is available and correct
 			r.NotNil(fsCfg, "filesystem config should be available in command")
 			r.Equal(customTempDir, fsCfg.TempFolder, "temp folder should be set from CLI flag")
+			r.Equal(workingDir, fsCfg.WorkingDirectory, "working directory should be set from CLI flag")
 			return nil
 		},
 	}
 
 	// Add the temp-folder flag like the real command does
 	cmd.PersistentFlags().String(tempFolderFlag, "", "test flag")
+	cmd.PersistentFlags().String(workingDirectoryFlag, "", "working directory flag")
 
 	// Set up the command with arguments
-	cmd.SetArgs([]string{"--temp-folder", customTempDir})
+	cmd.SetArgs([]string{"--temp-folder", customTempDir, "--working-directory", workingDir})
 
 	// Execute the command
 	err = cmd.ExecuteContext(context.Background())

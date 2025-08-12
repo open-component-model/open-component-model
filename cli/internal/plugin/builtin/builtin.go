@@ -37,7 +37,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := utf8.Register(manager.InputRegistry); err != nil {
 		return fmt.Errorf("could not register utf8 input plugin: %w", err)
 	}
-	if err := dir.Register(manager.InputRegistry); err != nil {
+	if err := dir.Register(manager.InputRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register dir input plugin: %w", err)
 	}
 
