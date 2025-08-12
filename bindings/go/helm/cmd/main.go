@@ -12,8 +12,8 @@ import (
 
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
-	"ocm.software/open-component-model/bindings/go/input/helm"
-	helmv1 "ocm.software/open-component-model/bindings/go/input/helm/spec/v1"
+	helminput "ocm.software/open-component-model/bindings/go/helm/input"
+	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
@@ -127,7 +127,7 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 		},
 	}
 
-	helmMethod := &helm.InputMethod{}
+	helmMethod := &helminput.InputMethod{}
 	result, err := helmMethod.ProcessResource(ctx, resource, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("helm input method failed: %w", err)

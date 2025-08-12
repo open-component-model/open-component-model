@@ -1,4 +1,4 @@
-package helm
+package input
 
 import (
 	"compress/gzip"
@@ -19,7 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	v1 "ocm.software/open-component-model/bindings/go/input/helm/spec/v1"
+	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )

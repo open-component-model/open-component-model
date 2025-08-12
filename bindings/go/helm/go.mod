@@ -1,4 +1,4 @@
-module ocm.software/open-component-model/bindings/go/input/helm
+module ocm.software/open-component-model/bindings/go/helm
 
 go 1.25.0
 

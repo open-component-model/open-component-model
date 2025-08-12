@@ -9,7 +9,7 @@ tasks:
       - test -d tmp
   build:
     cmds:
-      - go build -o tmp/testdata/test-input-plugin plugin/main.go
+      - go build -o tmp/testdata/test-input-plugin cmd/main.go
   test:
     sources:
       - ./**/*.go
@@ -19,3 +19,4 @@ tasks:
       - go test -v -coverprofile=tmp/coverage.out ./...
     deps:
       - tmp
+      - build

@@ -293,6 +293,7 @@ ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250812064957-dc4c4
 ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250812064957-dc4c4a98e941/go.mod h1:KJRMOELTM60Fg8RTAkTIDveb/EVDVyUO5gbN9lK4nR4=
 ocm.software/open-component-model/bindings/go/repository v0.0.0-20250807092808-c85e55d93cab h1:K0wzC+unCj11bVdyrST3v6Zx9mCUXjm4sqYPw1nEJC8=
 ocm.software/open-component-model/bindings/go/repository v0.0.0-20250807092808-c85e55d93cab/go.mod h1:uuSqzweegOQVFb8dPxNFp11kFyju+mYIHEsPtzRAAw8=
+ocm.software/open-component-model/bindings/go/repository v0.0.0-20250814064219-ee0cd5dc3dcf/go.mod h1:08iz5O9gvK+s4Vcbqdz/Qdi9a1xwUxbFfJclWE3ecus=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2 h1:YA20enOxMsk4gDWF+Anltwkc616dXebfgPz/0Bl0EKE=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
