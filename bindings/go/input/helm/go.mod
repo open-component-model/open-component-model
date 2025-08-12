@@ -10,6 +10,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.7
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250814064219-ee0cd5dc3dcf
 	ocm.software/open-component-model/bindings/go/oci v0.0.4
+	ocm.software/open-component-model/bindings/go/plugin v0.0.0-20250812064957-dc4c4a98e941
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 )
