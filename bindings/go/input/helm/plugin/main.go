@@ -156,8 +156,8 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 		Resource: &constructorv1.Resource{
 			ElementMeta: constructorv1.ElementMeta{
 				ObjectMeta: constructorv1.ObjectMeta{
-					Name:    result.ProcessedResource.Name,
-					Version: result.ProcessedResource.Version,
+					Name:    request.Resource.Name,
+					Version: request.Resource.Version,
 				},
 			},
 			Type: "helmChart",
@@ -171,6 +171,5 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 
 // processHelmSource wraps the helm.InputMethod to process sources
 func processHelmSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (_ *v1.ProcessSourceInputResponse, err error) {
-	// TODO: implement
-	return nil, nil
+	return nil, fmt.Errorf("not implemented")
 }

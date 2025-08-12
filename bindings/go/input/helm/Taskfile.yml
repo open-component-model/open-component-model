@@ -7,6 +7,9 @@ tasks:
       - mkdir -p tmp
     status:
       - test -d tmp
+  build:
+    cmds:
+      - go build -o tmp/testdata/test-input-plugin plugin/main.go
   test:
     sources:
       - ./**/*.go
