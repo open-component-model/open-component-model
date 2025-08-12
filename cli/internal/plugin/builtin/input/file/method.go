@@ -17,7 +17,10 @@ func Register(inputRegistry *input.RepositoryRegistry, filesystemConfig *filesys
 }
 
 func RegisterFileInputV1(inputRegistry *input.RepositoryRegistry, filesystemConfig *filesystemv1alpha1.Config) error {
-	method := &file.InputMethod{}
+	method := &file.InputMethod{
+		WorkingDirectory: filesystemConfig.WorkingDirectory,
+	}
+	
 	spec := &filev1.File{}
 	if err := input.RegisterInternalResourceInputPlugin(file.Scheme, inputRegistry, method, spec); err != nil {
 		return fmt.Errorf("could not register file resource input method: %w", err)

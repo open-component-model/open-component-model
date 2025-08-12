@@ -3,6 +3,8 @@ package dir
 import (
 	"context"
 	"fmt"
+	"os"
+	goPath "path"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -41,7 +43,9 @@ func init() {
 //
 // Since directories are accessed directly from the local filesystem, no credentials
 // are required for any operations.
-type InputMethod struct{}
+type InputMethod struct {
+	WorkingDirectory string
+}
 
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrDirsDoNotRequireCredentials
 // since directory inputs do not require any credentials for access. Directories are read directly
@@ -63,6 +67,10 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	dir := v1.Dir{}
 	if err := Scheme.Convert(resource.Input, &dir); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
+	}
+	
+	if err := ensureAbsolutePath(&dir, i.WorkingDirectory); err != nil {
+		return nil, fmt.Errorf("error ensuring absolute path for dir: %w", err)
 	}
 
 	dirBlob, err := GetV1DirBlob(ctx, dir)
@@ -97,6 +105,10 @@ func (i *InputMethod) ProcessSource(ctx context.Context, src *constructorruntime
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
+	if err := ensureAbsolutePath(&dir, i.WorkingDirectory); err != nil {
+		return nil, fmt.Errorf("error ensuring absolute path for dir: %w", err)
+	}
+
 	fileBlob, err := GetV1DirBlob(ctx, dir)
 	if err != nil {
 		return nil, fmt.Errorf("error getting dir blob based on source input specification: %w", err)
@@ -105,4 +117,26 @@ func (i *InputMethod) ProcessSource(ctx context.Context, src *constructorruntime
 	return &constructor.SourceInputMethodResult{
 		ProcessedBlobData: fileBlob,
 	}, nil
+}
+
+// EnsureAbsolutePath checks if the provided path is absolute. If it is not,
+// it prepends the working directory to the path to make it absolute.
+// If the working directory is not provided, it uses the current working directory.
+// The function modifies the path in place and returns an error if it fails to get the current working directory.
+func ensureAbsolutePath(dir *v1.Dir, workingDir string) error {
+	if goPath.IsAbs(dir.Path) {
+		return nil
+	}
+
+	if workingDir == "" {
+		if dir, err := os.Getwd(); err != nil {
+			return fmt.Errorf("error getting current working directory: %w", err)
+		} else {
+			workingDir = dir
+		}
+	}
+	// make sure that we do not have two slashes in the path
+	dir.Path = goPath.Clean(workingDir + "/" + dir.Path)
+
+	return nil
 }

@@ -3,6 +3,8 @@ package file
 import (
 	"context"
 	"fmt"
+	"os"
+	goPath "path"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -67,7 +69,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	if err := EnsureAbsolutePath(&file.Path, i.WorkingDirectory); err != nil {
+	if err := ensureAbsolutePath(&file, i.WorkingDirectory); err != nil {
 		return nil, fmt.Errorf("error ensuring absolute path for file: %w", err)
 	}
 
@@ -103,7 +105,7 @@ func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.S
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	if err := EnsureAbsolutePath(&file.Path, i.WorkingDirectory); err != nil {
+	if err := ensureAbsolutePath(&file, i.WorkingDirectory); err != nil {
 		return nil, fmt.Errorf("error ensuring absolute path for file: %w", err)
 	}
 
@@ -115,4 +117,26 @@ func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.S
 	return &constructor.SourceInputMethodResult{
 		ProcessedBlobData: fileBlob,
 	}, nil
+}
+
+// EnsureAbsolutePath checks if the provided path is absolute. If it is not,
+// it prepends the working directory to the path to make it absolute.
+// If the working directory is not provided, it uses the current working directory.
+// The function modifies the path in place and returns an error if it fails to get the current working directory.
+func ensureAbsolutePath(file *v1.File, workingDir string) error {
+	if goPath.IsAbs(file.Path) {
+		return nil
+	}
+
+	if workingDir == "" {
+		if dir, err := os.Getwd(); err != nil {
+			return fmt.Errorf("error getting current working directory: %w", err)
+		} else {
+			workingDir = dir
+		}
+	}
+	// make sure that we do not have two slashes in the path
+	file.Path = goPath.Clean(workingDir + "/" + file.Path)
+
+	return nil
 }

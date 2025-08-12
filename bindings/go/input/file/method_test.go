@@ -1,4 +1,4 @@
-package file_test
+package file
 
 import (
 	"fmt"
@@ -7,10 +7,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/input/file"
+	v1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 )
 
-func Test_EnsureAbsolutePath(t *testing.T) {
+func Test_ensureAbsolutePath(t *testing.T) {
 	type args struct {
 		path       string
 		workingDir string
@@ -56,13 +56,13 @@ func Test_EnsureAbsolutePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			path := tt.args.path
-			err := file.EnsureAbsolutePath(&path, tt.args.workingDir)
+			file := v1.File{Path: tt.args.path}
+			err := ensureAbsolutePath(&file, tt.args.workingDir)
 			if !tt.wantErr(t, err, fmt.Sprintf("ensureAbsolutePath(%v, %v)", tt.args.path, tt.args.workingDir)) {
 				return
 			}
 
-			assert.Equalf(t, tt.wantPath, path, "ensureAbsolutePath(%v, %v)", tt.args.path, tt.args.workingDir)
+			assert.Equalf(t, tt.wantPath, file.Path, "ensureAbsolutePath(%v, %v)", tt.args.path, tt.args.workingDir)
 		})
 	}
 }
