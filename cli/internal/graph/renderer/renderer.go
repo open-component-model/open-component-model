@@ -1,7 +1,6 @@
 package displaymanager
 
 import (
-	"bufio"
 	"bytes"
 	"cmp"
 	"context"
@@ -77,6 +76,8 @@ type TreeRenderer[T cmp.Ordered] struct {
 	// This is used to e.g. clear the previous output in ModeLive or to track
 	// which lines have already been displayed in ModeStatic.
 	outputState struct {
+		skipLines      []int
+		currentLine    int
 		displayedLines int
 		lastOutput     string
 	}
@@ -129,6 +130,12 @@ func NewTreeRenderer[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], vertex
 		listWriter:       listWriter,
 		vertexSerializer: vertexSerializer,
 		dag:              dag,
+		outputState: struct {
+			skipLines      []int
+			currentLine    int
+			displayedLines int
+			lastOutput     string
+		}{currentLine: -1},
 	}
 }
 
@@ -228,86 +235,123 @@ func (tdm *TreeRenderer[T]) renderLive() error {
 	return nil
 }
 
+// TODO(fabianburth): static rendering could render the first children
+//
+//	immediately
 func (tdm *TreeRenderer[T]) renderStatic() error {
-	defer tdm.listWriter.Reset()
+	defer func() {
+		tdm.listWriter.Reset()
+		tdm.outputState.skipLines = []int{}
+		tdm.outputState.currentLine = -1
+	}()
 
 	tdm.generateTreeOutput(tdm.rootID)
-	numberOfListItems := tdm.listWriter.Length()
+	//numberOfListItems := tdm.listWriter.Length()
 
-	rootVertex, ok := tdm.dag.GetVertex(tdm.rootID)
-	if !ok {
-		return fmt.Errorf("vertex for rootID %v does not exist", tdm.rootID)
-	}
-	var err error
-	rootVertex.Edges.Range(func(key, _ any) bool {
-		directNeighbor, ok := tdm.dag.GetVertex(key.(T))
-		if !ok {
-			err = fmt.Errorf("direct neighbor vertex %v for rootID %v does not exist", key, tdm.rootID)
-			return false
-		}
-		state, ok := directNeighbor.Attributes.Load(syncdag.AttributeTraversalState)
-		if !ok {
-			err = fmt.Errorf("vertex %v does not have a discovery state", tdm.rootID)
-		}
-		switch state {
-		case syncdag.StateCompleted:
-			return true
-		default:
-			// In this case, there are still neighbored vertices to be discovered.
-			// Since the list rendering renders to
-			// -- rootID
-			//    |-- child1
-			//         |-- child1.1
-			// while there is no other neighbor, but to
-			// -- rootID
-			//    |-- child1
-			//    |    |-- child1.1\
-			//    |-- child2
-			// if there is another neighbor, the line of child1.1 would have to
-			// change once the next neighbor is discovered.
-			// Since this is not possible in case of static display, we add an empty
-			// list item to the end of the list.
-			// Since we only render the number of lines after generateTreeOutput(),
-			// this additional empty item will not be displayed.
-			tdm.listWriter.Indent()
-			tdm.listWriter.AppendItem("")
-			return false
-		}
-	})
-	if err != nil {
-		return fmt.Errorf("error checking discovery state of direct neighbors of rootID %v: %w", tdm.rootID, err)
-	}
+	//rootVertex, ok := tdm.dag.GetVertex(tdm.rootID)
+	//if !ok {
+	//	return fmt.Errorf("vertex for rootID %v does not exist", tdm.rootID)
+	//}
+	//var err error
+	//rootVertex.Edges.Range(func(key, _ any) bool {
+	//	directNeighbor, ok := tdm.dag.GetVertex(key.(T))
+	//	if !ok {
+	//		err = fmt.Errorf("direct neighbor vertex %v for rootID %v does not exist", key, tdm.rootID)
+	//		return false
+	//	}
+	//	state, ok := directNeighbor.Attributes.Load(syncdag.AttributeTraversalState)
+	//	if !ok {
+	//		err = fmt.Errorf("vertex %v does not have a discovery state", tdm.rootID)
+	//	}
+	//	switch state {
+	//	case syncdag.StateCompleted:
+	//		return true
+	//	default:
+	//		// In this case, there are still neighbored vertices to be discovered.
+	//		// Since the list rendering renders to
+	//		// -- rootID
+	//		//    |-- child1
+	//		//         |-- child1.1
+	//		// while there is no other neighbor, but to
+	//		// -- rootID
+	//		//    |-- child1
+	//		//    |    |-- child1.1\
+	//		//    |-- child2
+	//		// if there is another neighbor, the line of child1.1 would have to
+	//		// change once the next neighbor is discovered.
+	//		// Since this is not possible in case of static display, we add an empty
+	//		// list item to the end of the list.
+	//		// Since we only render the number of lines after generateTreeOutput(),
+	//		// this additional empty item will not be displayed.
+	//		tdm.listWriter.Indent()
+	//		tdm.listWriter.AppendItem("")
+	//		return false
+	//	}
+	//})
+	//if err != nil {
+	//	return fmt.Errorf("error checking discovery state of direct neighbors of rootID %v: %w", tdm.rootID, err)
+	//}
 
 	output := tdm.listWriter.Render()
+	lines := strings.Split(output, "\n")
+	outputLines := make([]string, 0)
+	var lastOutputLines []string
+	if tdm.outputState.lastOutput != "" {
+		lastOutputLines = strings.Split(tdm.outputState.lastOutput, "\n")
+	}
+	for index, line := range lines {
+		if slices.Contains(tdm.outputState.skipLines, index) {
+			// Skip lines that are already displayed or that are marked to be skipped.
+			continue
+		}
+		outputLines = append(outputLines, line)
+	}
+	if slices.Equal(lastOutputLines, outputLines) {
+		// If the output has not changed, we do not need to update the display.
+		return nil
+	}
+	//fmt.Printf("last output lines: %v / len %d, current output lines: %v\n", lastOutputLines, len(lastOutputLines), outputLines)
+	//fmt.Printf("last output: %q, current output: %q\n", tdm.outputState.lastOutput, strings.Join(outputLines, "\n"))
+	actualOutputLines := outputLines[len(lastOutputLines):]
+	//actualOutput := strings.Join(actualOutputLines, "\n")
 
-	// Only update if the output has changed
-	if !tdm.outputEquals(output, tdm.outputState.lastOutput) {
-		scanner := bufio.NewScanner(strings.NewReader(output))
-		lineNum := 0
-		actualOutput := &bytes.Buffer{}
-		for scanner.Scan() {
-			if lineNum < tdm.outputState.displayedLines || lineNum >= numberOfListItems {
-				lineNum++
-				continue
-			}
-			lineNum++
-			_, err := fmt.Fprint(actualOutput, scanner.Text()+"\n")
-			if err != nil {
-				return fmt.Errorf("error writing to static rendering output buffer: %w", err)
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			return fmt.Errorf("error reading list rendering output: %w", err)
-		}
-		_, err := fmt.Fprint(tdm.writer, actualOutput.String())
+	for _, line := range actualOutputLines {
+		_, err := fmt.Fprint(tdm.writer, line+"\n")
 		if err != nil {
 			return fmt.Errorf("error writing static rendering output to tree display manager writer: %w", err)
 		}
-
-		tdm.outputState.lastOutput = output
-		tdm.outputState.displayedLines = numberOfListItems
 	}
+	tdm.outputState.lastOutput = strings.Join(outputLines, "\n")
 	return nil
+
+	//// Only update if the output has changed
+	//if !tdm.outputEquals(output, tdm.outputState.lastOutput) {
+	//	scanner := bufio.NewScanner(strings.NewReader(output))
+	//	lineNum := 0
+	//	actualOutput := &bytes.Buffer{}
+	//	for scanner.Scan() {
+	//		if lineNum < tdm.outputState.displayedLines || lineNum >= numberOfListItems || slices.Contains(tdm.outputState.skipLines, lineNum) {
+	//			lineNum++
+	//			continue
+	//		}
+	//		lineNum++
+	//		_, err := fmt.Fprint(actualOutput, scanner.Text()+"\n")
+	//		if err != nil {
+	//			return fmt.Errorf("error writing to static rendering output buffer: %w", err)
+	//		}
+	//	}
+	//	if err := scanner.Err(); err != nil {
+	//		return fmt.Errorf("error reading list rendering output: %w", err)
+	//	}
+	//	_, err := fmt.Fprint(tdm.writer, actualOutput.String())
+	//	if err != nil {
+	//		return fmt.Errorf("error writing static rendering output to tree display manager writer: %w", err)
+	//	}
+	//
+	//	tdm.outputState.lastOutput = output
+	//	tdm.outputState.displayedLines = numberOfListItems
+	//}
+	//return nil
 }
 
 func (tdm *TreeRenderer[T]) outputEquals(a, b string) bool {
@@ -327,23 +371,46 @@ func (tdm *TreeRenderer[T]) generateTreeOutput(nodeId T) {
 	}
 	output := tdm.vertexSerializer(vertex)
 	tdm.listWriter.AppendItem(output)
+	tdm.outputState.currentLine += 1
 
 	// Get children and sort them for stable output
 	children := tdm.getNeighborsSorted(vertex)
 
-	for _, child := range children {
+	for index, child := range children {
 		vertex, _ := tdm.dag.GetVertex(child)
 		switch tdm.mode {
 		case ModeStatic:
 			state, _ := vertex.Attributes.Load(syncdag.AttributeTraversalState)
-			if state != syncdag.StateCompleted {
+			switch state {
+			case syncdag.StateDiscovered:
+				if index > 0 {
+					prevvertex, _ := tdm.dag.GetVertex(children[index-1])
+					state := prevvertex.MustGetAttribute(syncdag.AttributeTraversalState)
+					if state != syncdag.StateCompleted {
+						return
+					}
+				}
+				tdm.listWriter.Indent()
+				tdm.generateTreeOutput(child)
+				if len(children) > index+1 {
+					tdm.listWriter.AppendItem("")
+					tdm.outputState.currentLine += 1
+					tdm.outputState.skipLines = append(tdm.outputState.skipLines, tdm.outputState.currentLine)
+				}
+				tdm.listWriter.UnIndent()
+				return
+			case syncdag.StateCompleted:
+				tdm.listWriter.Indent()
+				tdm.generateTreeOutput(child)
+				tdm.listWriter.UnIndent()
+			default:
 				return
 			}
 		case ModeLive:
+			tdm.listWriter.Indent()
+			tdm.generateTreeOutput(child)
+			tdm.listWriter.UnIndent()
 		}
-		tdm.listWriter.Indent()
-		tdm.generateTreeOutput(child)
-		tdm.listWriter.UnIndent()
 	}
 }
 
