@@ -72,11 +72,13 @@ func setupFilesystemConfig(cmd *cobra.Command) {
 	}
 
 	// CLI flag takes precedence over the config file
-	tempFolderValue, _ := loadFlagFromCommand(cmd, tempFolderFlag)
-	workingDirectoryValue, _ := loadFlagFromCommand(cmd, workingDirectoryFlag)
+	if tempFolderValue, _ := loadFlagFromCommand(cmd, tempFolderFlag); tempFolderValue != "" {
+		overrideFileConfigValue(cmd, fsCfg, &fsCfg.TempFolder, tempFolderValue)
+	}
 
-	overrideFileConfigValue(cmd, fsCfg, &fsCfg.TempFolder, tempFolderValue)
-	overrideFileConfigValue(cmd, fsCfg, &fsCfg.WorkingDirectory, workingDirectoryValue)
+	if workingDirectoryValue, _ := loadFlagFromCommand(cmd, workingDirectoryFlag); workingDirectoryValue != "" {
+		overrideFileConfigValue(cmd, fsCfg, &fsCfg.WorkingDirectory, workingDirectoryValue)
+	}
 
 	ensureFilesystemConfig(cmd, cfg, fsCfg)
 

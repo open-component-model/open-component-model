@@ -10,43 +10,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/input/file"
 )
 
-func Test_IsAbsolutePath(t *testing.T) {
-	type args struct {
-		path string
-	}
-	tests := []struct {
-		name string
-		args args
-		want bool
-	}{
-		{
-			name: "absolute path on Unix",
-			args: args{path: "/absolute/path/to/file.txt"},
-			want: true,
-		},
-		{
-			name: "absolute path on Windows",
-			args: args{path: "C:\\absolute\\path\\to\\file.txt"},
-			want: true,
-		},
-		{
-			name: "relative path",
-			args: args{path: "relative/path/to/file.txt"},
-			want: false,
-		},
-		{
-			name: "empty path",
-			args: args{path: ""},
-			want: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equalf(t, tt.want, file.IsAbsolutePath(tt.args.path), "isAbsolutePath(%v)", tt.args.path)
-		})
-	}
-}
-
 func Test_EnsureAbsolutePath(t *testing.T) {
 	type args struct {
 		path       string
