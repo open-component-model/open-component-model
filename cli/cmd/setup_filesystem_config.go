@@ -37,7 +37,7 @@ func overrideFileConfigValue(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Confi
 
 	if value != "" {
 		if *target != "" {
-			slog.WarnContext(cmd.Context(), "temp folder was defined in ocm config with value, will be overwritten by value", slog.String("original", fsCfg.TempFolder), slog.String("new", value))
+			slog.WarnContext(cmd.Context(), fmt.Sprintf("%s was defined in ocm config with value, will be overwritten by value", fieldName), slog.String("original", originalValue), slog.String("new", value))
 		}
 
 		*target = value
