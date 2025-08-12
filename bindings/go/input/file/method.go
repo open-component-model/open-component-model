@@ -41,7 +41,9 @@ func init() {
 //
 // Since files are accessed directly from the local filesystem, no credentials
 // are required for any operations.
-type InputMethod struct{}
+type InputMethod struct {
+	WorkingDirectory string
+}
 
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
@@ -63,6 +65,10 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	file := v1.File{}
 	if err := Scheme.Convert(resource.Input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
+	}
+
+	if err := EnsureAbsolutePath(&file.Path, i.WorkingDirectory); err != nil {
+		return nil, fmt.Errorf("error ensuring absolute path for file: %w", err)
 	}
 
 	fileBlob, err := GetV1FileBlob(file)
