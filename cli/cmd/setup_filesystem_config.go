@@ -56,9 +56,6 @@ func ensureFilesystemConfig(cmd *cobra.Command, cfg *genericv1.Config, fsCfg *fi
 
 // setupFilesystemConfig sets up file system configuration entity.
 func setupFilesystemConfig(cmd *cobra.Command) {
-	tempFolderValue, _ := loadFlagFromCommand(cmd, tempFolderFlag)
-	workingDirectoryValue, _ := loadFlagFromCommand(cmd, workingDirectoryFlag)
-
 	ocmCtx := ocmctx.FromContext(cmd.Context())
 	cfg := ocmCtx.Configuration()
 	var fsCfg *filesystemv1alpha1.Config
@@ -75,6 +72,9 @@ func setupFilesystemConfig(cmd *cobra.Command) {
 	}
 
 	// CLI flag takes precedence over the config file
+	tempFolderValue, _ := loadFlagFromCommand(cmd, tempFolderFlag)
+	workingDirectoryValue, _ := loadFlagFromCommand(cmd, workingDirectoryFlag)
+
 	overrideFileConfigValue(cmd, fsCfg, &fsCfg.TempFolder, tempFolderValue)
 	overrideFileConfigValue(cmd, fsCfg, &fsCfg.WorkingDirectory, workingDirectoryValue)
 
