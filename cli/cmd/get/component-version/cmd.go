@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -67,7 +66,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 		DisableAutoGenTag: true,
 	}
 
-	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{"table", "yaml", "json"}, "output format of the component descriptors")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", Encodings[string](), "output format of the component descriptors")
 	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
@@ -130,7 +129,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
 
-	reader, size, err := encodeDescriptors(output, descs)
+	reader, size, err := encodeDescriptors(EncodingType(output), descs)
 	if err != nil {
 		return fmt.Errorf("generating output failed: %w", err)
 	}

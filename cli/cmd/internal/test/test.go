@@ -5,13 +5,24 @@ package test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
+	"ocm.software/open-component-model/cli/internal/plugin/builtin"
 
 	"ocm.software/open-component-model/cli/cmd"
 	"ocm.software/open-component-model/cli/internal/flags/log"
@@ -156,4 +167,101 @@ func (logs *JSONLogReader) List() ([]*JSONLogEntry, error) {
 // This contains any non-JSON log entries that were encountered
 func (logs *JSONLogReader) GetDiscarded() string {
 	return logs.Discarded.String()
+}
+
+// SetupTestCommand creates a properly configured ocm cobra command for testing
+func SetupTestCommand(t *testing.T, creator func() *cobra.Command) *cobra.Command {
+	t.Helper()
+	cmd := creator()
+
+	// Add logging flags using the correct enum flags
+	log.RegisterLoggingFlags(cmd.Flags())
+
+	// Set default values for logging flags
+	_ = cmd.Flags().Set(log.LevelFlagName, log.LevelWarn)
+	_ = cmd.Flags().Set(log.FormatFlagName, log.FormatText)
+	_ = cmd.Flags().Set(log.OutputFlagName, log.OutputStderr)
+
+	// Set up context with plugin manager and credential graph
+	ctx := t.Context()
+
+	// Create plugin manager
+	pluginManager := manager.NewPluginManager(ctx)
+
+	// Create filesystem config for built-in plugins
+	filesystemConfig := &filesystemv1alpha1.Config{}
+
+	// Register built-in plugins
+	require.NoError(t, builtin.Register(pluginManager, filesystemConfig))
+
+	// Create credential graph using proper initialization like in setup.go
+	opts := credentials.Options{
+		RepositoryPluginProvider: pluginManager.CredentialRepositoryRegistry,
+		CredentialPluginProvider: credentials.GetCredentialPluginFn(
+			func(ctx context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
+				return nil, fmt.Errorf("no credential plugin found for type %s", typed)
+			},
+		),
+		CredentialRepositoryTypeScheme: pluginManager.CredentialRepositoryRegistry.RepositoryScheme(),
+	}
+
+	user, password := getUserAndPasswordForTest(t)
+	credCfg := &credentialsRuntime.Config{
+		Repositories: []credentialsRuntime.RepositoryConfigEntry{
+			{
+				Repository: &runtime.Raw{
+					Type: runtime.Type{
+						Name:    "DockerConfig",
+						Version: "v1",
+					},
+					Data: []byte(fmt.Sprintf(`{
+							"auths": {
+								"ghcr.io": {
+									"username": "%s",
+									"password": "%s"
+								}
+							}
+						}`, user, password)),
+				},
+			},
+		},
+	}
+
+	credentialGraph, err := credentials.ToGraph(ctx, credCfg, opts)
+	require.NoError(t, err, "creating credential graph should succeed")
+
+	// Set up context
+	ctx = ocmctx.WithPluginManager(ctx, pluginManager)
+	ctx = ocmctx.WithCredentialGraph(ctx, credentialGraph)
+	ctx = ocmctx.WithFilesystemConfig(ctx, filesystemConfig)
+	cmd.SetContext(ctx)
+
+	return cmd
+}
+
+// getUserAndPasswordForTest safely gets GitHub credentials for testing
+func getUserAndPasswordForTest(t *testing.T) (string, string) {
+	t.Helper()
+	gh, err := exec.LookPath("gh")
+	if err != nil {
+		t.Skip("gh CLI not found, skipping test")
+	}
+
+	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
+	if err != nil {
+		t.Skipf("gh CLI for user failed: %v", err)
+	}
+	structured := map[string]interface{}{}
+	if err := json.Unmarshal(out, &structured); err != nil {
+		t.Skipf("gh CLI for user failed: %v", err)
+	}
+	user := structured["login"].(string)
+
+	pw := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s auth token", gh))
+	if out, err = pw.CombinedOutput(); err != nil {
+		t.Skipf("gh CLI for password failed: %v", err)
+	}
+	password := strings.TrimSpace(string(out))
+
+	return user, password
 }
