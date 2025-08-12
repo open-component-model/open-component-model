@@ -151,13 +151,23 @@ func DefaultComponent(d *v2.Descriptor) {
 // ProviderAsMap converts a provider string into a map structure if possible.
 // This function is used during normalization to handle provider information
 // in a standardized way.
-func ProviderAsMap(v interface{}) interface{} {
-	var provider map[string]interface{}
-	err := json.Unmarshal([]byte(v.(string)), &provider)
-	if err == nil {
-		return provider
+// ProviderAsMap tries to parse a JSON-encoded provider string into a map.
+func ProviderAsMap(v any) any {
+	switch v := v.(type) {
+	case []byte:
+		var provider map[string]any
+		if err := json.Unmarshal(v, &provider); err == nil {
+			return provider
+		}
+	case string:
+		var provider map[string]any
+		if err := json.Unmarshal([]byte(v), &provider); err == nil {
+			return provider
+		}
 	}
-	return v
+	return map[string]any{
+		"name": v,
+	}
 }
 
 // IgnoreLabelsWithoutSignature checks if a label lacks a valid signature and should be ignored.
