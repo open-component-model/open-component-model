@@ -4,8 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/spf13/cobra"
-
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -98,15 +96,16 @@ func WithConfiguration(ctx context.Context, cfg *genericv1.Config) context.Conte
 	return ctx
 }
 
-// Register registers the command to contain a new Context object, with
-// the root command set as entrypoint.
-// From this point on any call to the Context.RootCommand based on [cobra.Command.Context]
-// will return this command.
-func Register(cmd *cobra.Command) {
-	ctx, ocmctx := retrieveOrCreateOCMContext(cmd.Context())
+// Register registers the ReaderWriter to contain a new Context object.
+// It retrieves the current context from the ReaderWriter,
+// or creates a new one if it does not exist.
+// The ReaderWriter's context is then set to the new or existing OCM context.
+// This function could be called in the main function of the CLI application
+func Register(rw ReaderWriter) {
+	ctx, ocmctx := retrieveOrCreateOCMContext(rw.Context())
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
-	cmd.SetContext(ctx)
+	rw.SetContext(ctx)
 }
 
 func (ctx *Context) PluginManager() *manager.PluginManager {
