@@ -103,6 +103,10 @@ func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.S
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
+	if err := EnsureAbsolutePath(&file.Path, i.WorkingDirectory); err != nil {
+		return nil, fmt.Errorf("error ensuring absolute path for file: %w", err)
+	}
+
 	fileBlob, err := GetV1FileBlob(file)
 	if err != nil {
 		return nil, fmt.Errorf("error getting file blob based on source input specification: %w", err)

@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	tempFolderFlag = "temp-folder"
+	tempFolderFlag       = "temp-folder"
+	workingDirectoryFlag = "working-directory"
 )
 
 // Execute adds all child commands to the Cmd command and sets flags appropriately.

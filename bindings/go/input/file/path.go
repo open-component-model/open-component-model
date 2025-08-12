@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+// IsAbsolutePath checks if the provided path is an absolute path.
+// It returns true if the path starts with a '/' (Unix-like systems) or has a drive letter followed by ':' (Windows).
+// It returns false for relative paths or empty strings.
+// Note: This function does not validate the path format, it only checks for absolute path characteristics.
 func IsAbsolutePath(path string) bool {
 	if len(path) == 0 {
 		return false
@@ -16,6 +20,10 @@ func IsAbsolutePath(path string) bool {
 	return false
 }
 
+// EnsureAbsolutePath checks if the provided path is absolute. If it is not,
+// it prepends the working directory to the path to make it absolute.
+// If the working directory is not provided, it uses the current working directory.
+// The function modifies the path in place and returns an error if it fails to get the current working directory.
 func EnsureAbsolutePath(path *string, workingDir string) error {
 	if IsAbsolutePath(*path) {
 		return nil

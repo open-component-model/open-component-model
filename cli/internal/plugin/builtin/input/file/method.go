@@ -3,19 +3,20 @@ package file
 import (
 	"fmt"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/input/file"
 	filev1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 )
 
-func Register(inputRegistry *input.RepositoryRegistry) error {
-	if err := RegisterFileInputV1(inputRegistry); err != nil {
+func Register(inputRegistry *input.RepositoryRegistry, filesystemConfig *filesystemv1alpha1.Config) error {
+	if err := RegisterFileInputV1(inputRegistry, filesystemConfig); err != nil {
 		return err
 	}
 	return nil
 }
 
-func RegisterFileInputV1(inputRegistry *input.RepositoryRegistry) error {
+func RegisterFileInputV1(inputRegistry *input.RepositoryRegistry, filesystemConfig *filesystemv1alpha1.Config) error {
 	method := &file.InputMethod{}
 	spec := &filev1.File{}
 	if err := input.RegisterInternalResourceInputPlugin(file.Scheme, inputRegistry, method, spec); err != nil {
