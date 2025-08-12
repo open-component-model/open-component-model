@@ -1,4 +1,4 @@
-package serialreader
+package serial
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 )
 
-// Blob is a blob hands out ReadClosers ("leases") that serialize access to a single
-// underlying [io.Reader]. You can call ReadCloser() at any time; the *first* [io.Reader.Read]
+// Blob is a blob that hands out [io.ReadCloser] instances ("leases") that serialize access to a single
+// underlying [io.Reader]. You can call ReadCloser at any time, also concurrently; the *first* [io.Reader.Read]
 // on that lease will block until the previous lease is closed (or until the
 // context is canceled, whatever comes first).
 //

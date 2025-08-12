@@ -1,4 +1,4 @@
-package serialreader
+package serial
 
 import (
 	"bytes"
@@ -19,8 +19,7 @@ const (
 
 func TestSerialBlob(t *testing.T) {
 	t.Run("ReadCloser handle returns immediately", func(t *testing.T) {
-		ctx := context.Background()
-		s := New(ctx, bytes.NewBufferString("abcdef"))
+		s := New(t.Context(), bytes.NewBufferString("abcdef"))
 
 		l1 := mustGet(t, s.ReadCloser)
 		mustCloseAtTestEnd(t, l1)
@@ -41,7 +40,7 @@ func TestSerialBlob(t *testing.T) {
 	})
 
 	t.Run("acquire 'times out' via context while previous lease is active", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), short)
+		ctx, cancel := context.WithTimeout(t.Context(), short)
 		defer cancel()
 		s := New(ctx, bytes.NewBufferString("abcdef"))
 
@@ -61,7 +60,7 @@ func TestSerialBlob(t *testing.T) {
 		// To verify normal behavior after a release, create a fresh blob with a fresh context.
 		_ = l1.Close()
 
-		ctx2 := context.Background()
+		ctx2 := t.Context()
 		s2 := New(ctx2, bytes.NewBufferString("abcdef"))
 		l3 := mustGet(t, s2.ReadCloser)
 		mustCloseAtTestEnd(t, l3)
@@ -73,7 +72,7 @@ func TestSerialBlob(t *testing.T) {
 	})
 
 	t.Run("acquire succeeds before context deadline when lease is released", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), long)
+		ctx, cancel := context.WithTimeout(t.Context(), long)
 		defer cancel()
 		s := New(ctx, bytes.NewBufferString("hello world"))
 
@@ -97,7 +96,7 @@ func TestSerialBlob(t *testing.T) {
 	})
 
 	t.Run("closing without read does not leak a token (simplified)", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		s := New(ctx, bytes.NewBufferString("XYZ"))
 

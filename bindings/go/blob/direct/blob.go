@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	serialreader "ocm.software/open-component-model/bindings/go/blob/direct/serial"
+	"ocm.software/open-component-model/bindings/go/blob/direct/serial"
 )
 
 // NewFromBuffer creates a Blob from a bytes.Buffer. If unsafe is false,
@@ -37,7 +37,7 @@ func NewFromBytes(data []byte, opts ...DirectBlobOption) *Blob {
 		append([]DirectBlobOption{WithSize(int64(len(data)))}, opts...)...)
 }
 
-// New constructs a Blob from a [io.ReaderAt] source, applying any DirectBlobOption values.
+// New constructs a Blob from a [io.Reader] source, applying any DirectBlobOption values.
 // By default, the media type is set to "application/octet-stream" if not overwritten by
 // WithMediaType.
 //
@@ -47,9 +47,11 @@ func NewFromBytes(data []byte, opts ...DirectBlobOption) *Blob {
 //   - seeking to the end of the reader and rewinding back to the start via io.Seeker.
 //   - If it cannot seek, size defaults to -1 (SizeUnknown).
 //
-// Note that if you do not have the ability to open readers on demand on the source,
+// If the reader does not support io.ReaderAt, it will be serialized with serial.New, to ensure
+// that concurrent access to Blob.ReadCloser does not race.
+// To avoid serialization, if you do not have the ability to open readers on demand on the source,
 // you can use a memory buffered blob instead (see package inmemory for that) to avoid the need for seeking or
-// to allow repetitive reads.
+// to allow repetitive reads. This trades off memory usage for performance during concurrent reads.
 //
 // If possible, you should also use native implementations that access the underlying data structures directly.
 // For example, for filesystem blobs, use the filesystem package which directly works with stat calls.
@@ -76,7 +78,7 @@ func New(src io.Reader, opts ...DirectBlobOption) *Blob {
 		// if we need serial access, we wrap the original source in a serial reader once
 		// and then reuse that serial pointer to get serialized access to it
 		// TODO: we should maybe offer a timeout on serialization locks as an option
-		return serialreader.New(context.TODO(), src)
+		return serial.New(context.TODO(), src)
 	})
 
 	return b
