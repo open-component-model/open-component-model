@@ -68,7 +68,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	if err := Scheme.Convert(resource.Input, &dir); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
-	
+
 	if err := ensureAbsolutePath(&dir, i.WorkingDirectory); err != nil {
 		return nil, fmt.Errorf("error ensuring absolute path for dir: %w", err)
 	}
@@ -139,4 +139,16 @@ func ensureAbsolutePath(dir *v1.Dir, workingDir string) error {
 	dir.Path = goPath.Clean(workingDir + "/" + dir.Path)
 
 	return nil
+}
+
+// GetWd returns the working directory for the InputMethod.
+// This directory is used to resolve relative paths in input specifications.
+func (i *InputMethod) GetWd() string {
+	return i.WorkingDirectory
+}
+
+// SetWd sets the working directory for the InputMethod.
+// This directory is used to resolve relative paths in input specifications.
+func (i *InputMethod) SetWd(workingDir string) {
+	i.WorkingDirectory = workingDir
 }

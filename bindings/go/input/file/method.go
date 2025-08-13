@@ -140,3 +140,11 @@ func ensureAbsolutePath(file *v1.File, workingDir string) error {
 
 	return nil
 }
+
+func (i *InputMethod) GetWd() string {
+	return i.WorkingDirectory
+}
+
+func (i *InputMethod) SetWd(workingDir string) {
+	i.WorkingDirectory = workingDir
+}

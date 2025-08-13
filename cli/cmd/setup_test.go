@@ -163,7 +163,6 @@ func createWorkingDirConfigWithFilesystemConfig(workingDir string) *genericv1.Co
 }
 
 func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
-	wd, _ := os.Getwd()
 	tests := []struct {
 		name                string
 		cliFlag             string
@@ -203,7 +202,7 @@ func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
 			name:                "No CLI flag and no existing config",
 			cliFlag:             "",
 			existingConfig:      &genericv1.Config{},
-			expectedWorkingDir:  wd,
+			expectedWorkingDir:  "",
 			expectedConfigMerge: false,
 		},
 	}
