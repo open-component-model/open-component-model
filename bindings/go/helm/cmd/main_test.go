@@ -231,22 +231,16 @@ func (s *pluginTestSetup) makeHTTPRequest(t *testing.T, method, path string, bod
 func createHelmResourceRequest(t *testing.T, chartPath string) *v1.ProcessResourceInputRequest {
 	t.Helper()
 
-	helmInput := &runtime.Raw{
-		Type: runtime.Type{
-			Name:    helmv1.Type,
-			Version: helmv1.Version,
-		},
-		Data: func() []byte {
-			data, _ := json.Marshal(helmv1.Helm{
-				Type: runtime.Type{
-					Name:    helmv1.Type,
-					Version: helmv1.Version,
-				},
-				Path: chartPath,
-			})
-			return data
-		}(),
+	scheme := runtime.NewScheme()
+	scheme.MustRegisterWithAlias(&helmv1.Helm{}, runtime.NewVersionedType(helmv1.Type, helmv1.Version))
+
+	helmSpec := &helmv1.Helm{
+		Path: chartPath,
 	}
+
+	var helmInput runtime.Raw
+	err := scheme.Convert(helmSpec, &helmInput)
+	require.NoError(t, err)
 
 	return &v1.ProcessResourceInputRequest{
 		Resource: &constructorv1.Resource{
@@ -259,7 +253,7 @@ func createHelmResourceRequest(t *testing.T, chartPath string) *v1.ProcessResour
 			Type:     "helmChart",
 			Relation: "local",
 			AccessOrInput: constructorv1.AccessOrInput{
-				Input: helmInput,
+				Input: &helmInput,
 			},
 		},
 	}

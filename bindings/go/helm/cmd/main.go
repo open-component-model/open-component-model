@@ -16,6 +16,7 @@ import (
 	helminput "ocm.software/open-component-model/bindings/go/helm/input"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
@@ -23,7 +24,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// HelmInputPlugin is a plugin that implements the helm.InputMethod interface as an external binary.
 type HelmInputPlugin struct {
+	contracts.EmptyBasePlugin
 	filesystemConfig *filesystemv1alpha1.Config
 }
 
@@ -41,10 +44,6 @@ func (h *HelmInputPlugin) ProcessResource(ctx context.Context, request *v1.Proce
 
 func (h *HelmInputPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
 	return nil, fmt.Errorf("not implemented")
-}
-
-func (h *HelmInputPlugin) Ping(_ context.Context) error {
-	return nil
 }
 
 var _ v1.ResourceInputPluginContract = &HelmInputPlugin{}
