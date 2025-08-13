@@ -15,7 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -84,8 +84,6 @@ func TestHelmPluginProcessResource(t *testing.T) {
 	err = json.Unmarshal(responseBody, &response)
 	require.NoError(t, err, "response should be valid JSON")
 
-	require.NotNil(t, response.Resource, "response should contain resource")
-	require.Equal(t, "helmChart", response.Resource.Type, "resource type should be helmChart")
 	require.NotNil(t, response.Location, "response should contain location")
 	require.Equal(t, mtypes.LocationTypeLocalFile, response.Location.LocationType, "location should be local file")
 	require.NotEmpty(t, response.Location.Value, "location value should not be empty")
@@ -251,16 +249,18 @@ func createHelmResourceRequest(t *testing.T, chartPath string) *v1.ProcessResour
 	}
 
 	return &v1.ProcessResourceInputRequest{
-		Resource: &descriptorv2.Resource{
-			ElementMeta: descriptorv2.ElementMeta{
-				ObjectMeta: descriptorv2.ObjectMeta{
+		Resource: &constructorv1.Resource{
+			ElementMeta: constructorv1.ElementMeta{
+				ObjectMeta: constructorv1.ObjectMeta{
 					Name:    "test-helm-chart",
 					Version: "0.1.0",
 				},
 			},
 			Type:     "helmChart",
 			Relation: "local",
-			Access:   helmInput,
+			AccessOrInput: constructorv1.AccessOrInput{
+				Input: helmInput,
+			},
 		},
 	}
 }

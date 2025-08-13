@@ -163,7 +163,7 @@ func parseFilesystemConfig(conf types.Config) (*filesystemv1alpha1.Config, error
 func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string, filesystemConfig *filesystemv1alpha1.Config) (*v1.ProcessResourceInputResponse, error) {
 	resource := &constructorruntime.Resource{
 		AccessOrInput: constructorruntime.AccessOrInput{
-			Access: request.Resource.Access,
+			Input: request.Resource.Input,
 		},
 	}
 
