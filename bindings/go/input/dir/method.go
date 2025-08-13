@@ -3,7 +3,6 @@ package dir
 import (
 	"context"
 	"fmt"
-	"os"
 	"path"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
@@ -69,9 +68,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	if err := ensureAbsolutePath(&dir, i.WorkingDirectory); err != nil {
-		return nil, fmt.Errorf("error ensuring absolute path for dir: %w", err)
-	}
+	dir.Path = ensureWdOrPath(dir.Path, i.WorkingDirectory)
 
 	dirBlob, err := GetV1DirBlob(ctx, dir)
 	if err != nil {
@@ -105,9 +102,7 @@ func (i *InputMethod) ProcessSource(ctx context.Context, src *constructorruntime
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	if err := ensureAbsolutePath(&dir, i.WorkingDirectory); err != nil {
-		return nil, fmt.Errorf("error ensuring absolute path for dir: %w", err)
-	}
+	dir.Path = ensureWdOrPath(dir.Path, i.WorkingDirectory)
 
 	fileBlob, err := GetV1DirBlob(ctx, dir)
 	if err != nil {
@@ -119,26 +114,20 @@ func (i *InputMethod) ProcessSource(ctx context.Context, src *constructorruntime
 	}, nil
 }
 
-// EnsureAbsolutePath checks if the provided path is absolute. If it is not,
-// it prepends the working directory to the path to make it absolute.
-// If the working directory is not provided, it uses the current working directory.
-// The function modifies the path in place and returns an error if it fails to get the current working directory.
-func ensureAbsolutePath(dir *v1.Dir, workingDir string) error {
-	if path.IsAbs(dir.Path) {
-		return nil
+// ensureWdOrPath ensures that the dirPath is absolute.
+// If the path is relative, it prepends the working directory to it.
+// If the working directory is empty, it does nothing.
+func ensureWdOrPath(dirPath, workingDirectory string) string {
+	if path.IsAbs(dirPath) {
+		return dirPath
 	}
 
-	if workingDir == "" {
-		if dir, err := os.Getwd(); err != nil {
-			return fmt.Errorf("error getting current working directory: %w", err)
-		} else {
-			workingDir = dir
-		}
+	if workingDirectory == "" {
+		return dirPath
 	}
+
 	// make sure that we do not have two slashes in the path
-	dir.Path = path.Clean(workingDir + "/" + dir.Path)
-
-	return nil
+	return path.Clean(workingDirectory + "/" + dirPath)
 }
 
 // GetWd returns the working directory for the InputMethod.
