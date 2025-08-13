@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	goPath "path"
+	"path"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -50,7 +50,7 @@ type InputMethod struct {
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	return nil, ErrFilesDoNotRequireCredentials
 }
 
@@ -63,7 +63,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 //  1. Converts the resource input to v1.File specification
 //  2. Calls GetV1FileBlob to read and process the file
 //  3. Returns the processed blob data wrapped in a ResourceInputMethodResult
-func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
+func (i *InputMethod) ProcessResource(_ context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	file := v1.File{}
 	if err := Scheme.Convert(resource.Input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
@@ -86,7 +86,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 // GetSourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Source) (identity runtime.Identity, err error) {
 	return nil, ErrFilesDoNotRequireCredentials
 }
 
@@ -124,7 +124,7 @@ func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.S
 // If the working directory is not provided, it uses the current working directory.
 // The function modifies the path in place and returns an error if it fails to get the current working directory.
 func ensureAbsolutePath(file *v1.File, workingDir string) error {
-	if goPath.IsAbs(file.Path) {
+	if path.IsAbs(file.Path) {
 		return nil
 	}
 
@@ -136,7 +136,7 @@ func ensureAbsolutePath(file *v1.File, workingDir string) error {
 		}
 	}
 	// make sure that we do not have two slashes in the path
-	file.Path = goPath.Clean(workingDir + "/" + file.Path)
+	file.Path = path.Clean(workingDir + "/" + file.Path)
 
 	return nil
 }

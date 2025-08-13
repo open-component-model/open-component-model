@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	goPath "path"
+	"path"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -50,7 +50,7 @@ type InputMethod struct {
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrDirsDoNotRequireCredentials
 // since directory inputs do not require any credentials for access. Directories are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	return nil, ErrDirsDoNotRequireCredentials
 }
 
@@ -86,7 +86,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 // GetSourceCredentialConsumerIdentity returns nil identity and ErrDirsDoNotRequireCredentials
 // since directory inputs do not require any credentials for access. Directories are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Source) (identity runtime.Identity, err error) {
 	return nil, ErrDirsDoNotRequireCredentials
 }
 
@@ -124,7 +124,7 @@ func (i *InputMethod) ProcessSource(ctx context.Context, src *constructorruntime
 // If the working directory is not provided, it uses the current working directory.
 // The function modifies the path in place and returns an error if it fails to get the current working directory.
 func ensureAbsolutePath(dir *v1.Dir, workingDir string) error {
-	if goPath.IsAbs(dir.Path) {
+	if path.IsAbs(dir.Path) {
 		return nil
 	}
 
@@ -136,7 +136,7 @@ func ensureAbsolutePath(dir *v1.Dir, workingDir string) error {
 		}
 	}
 	// make sure that we do not have two slashes in the path
-	dir.Path = goPath.Clean(workingDir + "/" + dir.Path)
+	dir.Path = path.Clean(workingDir + "/" + dir.Path)
 
 	return nil
 }

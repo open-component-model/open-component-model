@@ -83,8 +83,6 @@ type SourceInputMethodResult struct {
 // The resolved credentials MAY be passed to the input method via the credentials map, but a method MAY
 // work without credentials as well.
 type SourceInputMethod interface {
-	// TODO: #565 maybe override working directory for resources?
-
 	// SourceConsumerIdentityProvider that resolves the identity of the given source to use for credential resolution.
 	// These can then be passed to ProcessSource.
 	SourceConsumerIdentityProvider

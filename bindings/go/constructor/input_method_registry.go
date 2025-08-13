@@ -91,8 +91,6 @@ func (r *InputMethodRegistry) GetSourceInputMethod(_ context.Context, src *const
 		return nil, fmt.Errorf("source input method requested for source without input: %v", src)
 	}
 
-	// TODO: #565 maybe override working directory for resources?
-
 	typ, err := r.typeInsideRegistry(src.Input)
 	if err != nil {
 		return nil, fmt.Errorf("error getting source input method: %w", err)
