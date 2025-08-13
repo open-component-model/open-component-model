@@ -62,6 +62,7 @@ componentreferences
 componentversionaccess
 componentversionaccessimpl
 componentversions
+componentsignaturehandler
 compvers
 config
 configfile
@@ -75,6 +76,7 @@ credentialrequest
 credentialsspec
 crossplatform
 crypto
+cryptographic
 ctf
 ctfs
 ctx
@@ -175,6 +177,7 @@ https
 iaas
 imagemapping
 imagereference
+implementors
 inlined
 installable
 instantiation
@@ -397,6 +400,7 @@ utils
 valuemergehandler
 valuemergehandlerdescriptor
 valueset
+verifier
 versionedtypedobjects
 walkthrough
 wget
