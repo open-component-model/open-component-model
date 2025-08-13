@@ -40,16 +40,16 @@ var _ interface {
 //
 // The function performs the following steps:
 //  1. Validates that the file path is not empty
-//  2. Reads the file from the filesystem using filesystem.GetBlobFromOSPath
+//  2. Reads the file from the filesystem using filesystem.GetBlobInWorkingDirectory
 //  3. Detects the media type using mimetype.DetectFile if not explicitly provided
 //  4. Wraps the blob with InputFileBlob to provide media type awareness
 //  5. Applies gzip compression with [compression.Compress] if the Compress flag is set
-func GetV1FileBlob(file v1.File) (blob.ReadOnlyBlob, error) {
+func GetV1FileBlob(file v1.File, workingDirectory string) (blob.ReadOnlyBlob, error) {
 	if file.Path == "" {
 		return nil, fmt.Errorf("file path must not be empty")
 	}
 
-	b, err := filesystem.GetBlobFromOSPath(file.Path)
+	b, err := filesystem.GetBlobInWorkingDirectory(file.Path, workingDirectory)
 	if err != nil {
 		return nil, err
 	}

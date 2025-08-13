@@ -107,7 +107,9 @@ func TestInputFileBlob_InterfaceCompliance(t *testing.T) {
 
 	reader, err := inputBlob.ReadCloser()
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func(reader io.ReadCloser) {
+		require.NoError(t, reader.Close())
+	}(reader)
 
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
@@ -176,7 +178,7 @@ func TestGetV1FileBlob_Success(t *testing.T) {
 			}
 
 			// Get blob
-			b, err := file.GetV1FileBlob(fileSpec)
+			b, err := file.GetV1FileBlob(fileSpec, tempDir)
 			require.NoError(t, err)
 			require.NotNil(t, b)
 
@@ -195,7 +197,9 @@ func TestGetV1FileBlob_Success(t *testing.T) {
 			// Test reading data
 			reader, err := b.ReadCloser()
 			require.NoError(t, err)
-			defer reader.Close()
+			defer func(reader io.ReadCloser) {
+				require.NoError(t, reader.Close())
+			}(reader)
 
 			data, err := io.ReadAll(reader)
 			require.NoError(t, err)
@@ -204,7 +208,9 @@ func TestGetV1FileBlob_Success(t *testing.T) {
 				// Decompress gzipped data
 				gzReader, err := gzip.NewReader(bytes.NewReader(data))
 				require.NoError(t, err)
-				defer gzReader.Close()
+				defer func(gzReader *gzip.Reader) {
+					require.NoError(t, gzReader.Close())
+				}(gzReader)
 
 				decompressedData, err := io.ReadAll(gzReader)
 				require.NoError(t, err)
@@ -231,20 +237,24 @@ func TestGetV1FileBlob_Success(t *testing.T) {
 }
 
 func TestGetV1FileBlob_FileNotFound(t *testing.T) {
+	tempDir := t.TempDir()
+
 	// Create v1.File spec with non-existent file
 	fileSpec := v1.File{
 		Type: runtime.NewUnversionedType("file"),
-		Path: "/non/existent/file.txt",
+		Path: tempDir + "/non/existent/file.txt",
 	}
 
 	// Get blob should fail
-	blob, err := file.GetV1FileBlob(fileSpec)
+	b, err := file.GetV1FileBlob(fileSpec, tempDir)
 	assert.Error(t, err)
-	assert.Nil(t, blob)
-	assert.Contains(t, err.Error(), "path does not exist")
+	assert.Nil(t, b)
+	assert.Contains(t, err.Error(), "failed to open path")
 }
 
 func TestGetV1FileBlob_EmptyPath(t *testing.T) {
+	tempDir := t.TempDir()
+
 	// Create v1.File spec with empty path
 	fileSpec := v1.File{
 		Type: runtime.NewUnversionedType("file"),
@@ -252,9 +262,9 @@ func TestGetV1FileBlob_EmptyPath(t *testing.T) {
 	}
 
 	// Get blob should fail
-	blob, err := file.GetV1FileBlob(fileSpec)
+	b, err := file.GetV1FileBlob(fileSpec, tempDir)
 	assert.Error(t, err)
-	assert.Nil(t, blob)
+	assert.Nil(t, b)
 }
 
 func TestGetV1FileBlob_BinaryFile(t *testing.T) {
@@ -275,14 +285,16 @@ func TestGetV1FileBlob_BinaryFile(t *testing.T) {
 	}
 
 	// Get blob
-	b, err := file.GetV1FileBlob(fileSpec)
+	b, err := file.GetV1FileBlob(fileSpec, tempDir)
 	require.NoError(t, err)
 	require.NotNil(t, b)
 
 	// Test reading data
 	reader, err := b.ReadCloser()
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func(reader io.ReadCloser) {
+		require.NoError(t, reader.Close())
+	}(reader)
 
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
@@ -314,13 +326,13 @@ func TestGetV1FileBlob_MultipleReads(t *testing.T) {
 	}
 
 	// Get blob
-	blob, err := file.GetV1FileBlob(fileSpec)
+	b, err := file.GetV1FileBlob(fileSpec, tempDir)
 	require.NoError(t, err)
-	require.NotNil(t, blob)
+	require.NotNil(t, b)
 
 	// Test multiple reads
 	for i := 0; i < 3; i++ {
-		reader, err := blob.ReadCloser()
+		reader, err := b.ReadCloser()
 		require.NoError(t, err)
 
 		data, err := io.ReadAll(reader)
@@ -349,12 +361,14 @@ func TestGetV1FileBlob_Compression(t *testing.T) {
 		Compress:  false,
 	}
 
-	blobUncompressed, err := file.GetV1FileBlob(fileSpecUncompressed)
+	blobUncompressed, err := file.GetV1FileBlob(fileSpecUncompressed, tempDir)
 	require.NoError(t, err)
 
 	readerUncompressed, err := blobUncompressed.ReadCloser()
 	require.NoError(t, err)
-	defer readerUncompressed.Close()
+	defer func(readerUncompressed io.ReadCloser) {
+		require.NoError(t, readerUncompressed.Close())
+	}(readerUncompressed)
 
 	dataUncompressed, err := io.ReadAll(readerUncompressed)
 	require.NoError(t, err)
@@ -368,12 +382,14 @@ func TestGetV1FileBlob_Compression(t *testing.T) {
 		Compress:  true,
 	}
 
-	blobCompressed, err := file.GetV1FileBlob(fileSpecCompressed)
+	blobCompressed, err := file.GetV1FileBlob(fileSpecCompressed, tempDir)
 	require.NoError(t, err)
 
 	readerCompressed, err := blobCompressed.ReadCloser()
 	require.NoError(t, err)
-	defer readerCompressed.Close()
+	defer func(readerCompressed io.ReadCloser) {
+		require.NoError(t, readerCompressed.Close())
+	}(readerCompressed)
 
 	dataCompressed, err := io.ReadAll(readerCompressed)
 	require.NoError(t, err)
@@ -385,7 +401,9 @@ func TestGetV1FileBlob_Compression(t *testing.T) {
 	// Verify decompression works correctly
 	gzReader, err := gzip.NewReader(bytes.NewReader(dataCompressed))
 	require.NoError(t, err)
-	defer gzReader.Close()
+	defer func(gzReader *gzip.Reader) {
+		require.NoError(t, gzReader.Close())
+	}(gzReader)
 
 	decompressedData, err := io.ReadAll(gzReader)
 	require.NoError(t, err)

@@ -23,25 +23,27 @@ import (
 
 func TestGetV1DirBlob_Symlinks(t *testing.T) {
 	ctx := t.Context()
+	r := require.New(t)
+	a := assert.New(t)
 
 	// Create a folder with a file.
 	tempDir := t.TempDir()
 	dirAbs := filepath.Join(tempDir, "dir-input")
 	filePath := filepath.Join(dirAbs, "hello.txt")
 	err := os.MkdirAll(filepath.Dir(filePath), 0o755)
-	require.NoError(t, err)
+	r.NoError(err)
 	err = os.WriteFile(filePath, []byte("This file is a symlink target"), 0o644)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	// Create a symlink to the file in the same folder.
 	linkPath := filepath.Join(dirAbs, "hello.link")
 	err = os.Symlink("hello.txt", linkPath)
-	require.NoError(t, err)
+	r.NoError(err)
 
 	// Read the link.
 	dst, err := os.Readlink(linkPath)
-	require.NoError(t, err)
-	require.Equal(t, "hello.txt", dst)
+	r.NoError(err)
+	r.Equal("hello.txt", dst)
 
 	// Create v1.Dir spec.
 	dirSpec := v1.Dir{
@@ -50,23 +52,24 @@ func TestGetV1DirBlob_Symlinks(t *testing.T) {
 	}
 
 	// Create blob.
-	b, err := dir.GetV1DirBlob(ctx, dirSpec)
-	require.NoError(t, err)
-	require.NotNil(t, b)
+	b, err := dir.GetV1DirBlob(ctx, dirSpec, tempDir)
+	r.NoError(err)
+	r.NotNil(b)
 
 	// Read the tar data.
 	reader, err := b.ReadCloser()
-	assert.NoError(t, err)
-	assert.NotNil(t, reader)
+	a.NoError(err)
+	a.NotNil(reader)
 
 	// Expect an error on read, as symlinks are not supported yet.
 	_, err = io.ReadAll(reader)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "symlinks not supported")
+	a.Error(err)
+	a.Contains(err.Error(), "symlinks not supported")
 }
 
 func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 	ctx := t.Context()
+	r := require.New(t)
 
 	tests := []struct {
 		name         string
@@ -98,9 +101,9 @@ func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 			dirAbs := filepath.Join(tempDir, tt.baseDir)
 			filePath := filepath.Join(dirAbs, tt.fileName)
 			err := os.MkdirAll(filepath.Dir(filePath), 0o755)
-			require.NoError(t, err)
+			r.NoError(err)
 			err = os.WriteFile(filePath, []byte(tt.fileContents), 0o644)
-			require.NoError(t, err)
+			r.NoError(err)
 
 			// Create v1.Dir spec.
 			dirSpec := v1.Dir{
@@ -110,40 +113,44 @@ func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 			}
 
 			// Create blob.
-			b, err := dir.GetV1DirBlob(ctx, dirSpec)
-			require.NoError(t, err)
-			require.NotNil(t, b)
+			b, err := dir.GetV1DirBlob(ctx, dirSpec, tempDir)
+			r.NoError(err)
+			r.NotNil(b)
 
 			// Read the tar data.
 			readerBefore, err := b.ReadCloser()
-			require.NoError(t, err)
-			defer readerBefore.Close()
+			r.NoError(err)
+			defer func() {
+				r.NoError(readerBefore.Close())
+			}()
 			tarBefore, err := io.ReadAll(readerBefore)
-			require.NoError(t, err)
+			r.NoError(err)
 
 			// Change file access and modification times.
 			fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
 			err = os.Chtimes(filePath, fiveMinutesAgo, fiveMinutesAgo)
-			require.NoError(t, err)
+			r.NoError(err)
 
 			// Create new blob.
-			b, err = dir.GetV1DirBlob(ctx, dirSpec)
-			require.NoError(t, err)
-			require.NotNil(t, b)
+			b, err = dir.GetV1DirBlob(ctx, dirSpec, tempDir)
+			r.NoError(err)
+			r.NotNil(b)
 
 			// Read the tar data after modification.
 			readerAfter, err := b.ReadCloser()
-			require.NoError(t, err)
-			defer readerAfter.Close()
+			r.NoError(err)
+			defer func() {
+				r.NoError(readerAfter.Close())
+			}()
 			tarAfter, err := io.ReadAll(readerAfter)
-			require.NoError(t, err)
+			r.NoError(err)
 
 			// Compare the two tar data blobs.
 			equal := bytes.Equal(tarBefore, tarAfter)
 			if tt.reproducible {
-				require.True(t, equal, "tar data expected to be byte-equivalent")
+				r.True(equal, "tar data expected to be byte-equivalent")
 			} else {
-				require.False(t, equal, "tar data is expected to be not byte-equivalent")
+				r.False(equal, "tar data is expected to be not byte-equivalent")
 			}
 		})
 	}
@@ -284,6 +291,8 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 	}
 
 	ctx := t.Context()
+	r := require.New(t)
+	a := assert.New(t)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create directory structure to test with.
@@ -292,9 +301,9 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 			for _, tf := range tt.testFiles {
 				filePath := filepath.Join(dirAbs, tf.relPath)
 				err := os.MkdirAll(filepath.Dir(filePath), 0o755)
-				require.NoError(t, err)
+				r.NoError(err)
 				err = os.WriteFile(filePath, []byte(tf.content), 0o644)
-				require.NoError(t, err)
+				r.NoError(err)
 			}
 
 			// Create v1.Dir spec.
@@ -310,38 +319,42 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 			}
 
 			// Get blob.
-			b, err := dir.GetV1DirBlob(ctx, dirSpec)
-			require.NoError(t, err)
-			require.NotNil(t, b)
+			b, err := dir.GetV1DirBlob(ctx, dirSpec, tempDir)
+			r.NoError(err)
+			r.NotNil(b)
 
 			// Test blob properties.
 			if sizeAware, ok := b.(blob.SizeAware); ok {
 				size := sizeAware.Size()
-				assert.GreaterOrEqual(t, size, blob.SizeUnknown)
+				a.GreaterOrEqual(size, blob.SizeUnknown)
 			}
 
 			if digestAware, ok := b.(blob.DigestAware); ok {
 				digest, ok := digestAware.Digest()
-				assert.True(t, ok)
-				assert.NotEmpty(t, digest)
+				a.True(ok)
+				a.NotEmpty(digest)
 			}
 
 			// Test reading data.
 			reader, err := b.ReadCloser()
-			require.NoError(t, err)
-			defer reader.Close()
+			r.NoError(err)
+			defer func() {
+				r.NoError(reader.Close())
+			}()
 
 			data, err := io.ReadAll(reader)
-			require.NoError(t, err)
+			r.NoError(err)
 
 			if tt.expectGzip {
 				// Decompress gzipped data.
 				gzReader, err := gzip.NewReader(bytes.NewReader(data))
-				require.NoError(t, err)
-				defer gzReader.Close()
+				r.NoError(err)
+				defer func() {
+					r.NoError(gzReader.Close())
+				}()
 
 				data, err = io.ReadAll(gzReader)
-				require.NoError(t, err)
+				r.NoError(err)
 
 				// Test media type for compressed blob.
 				if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
@@ -352,8 +365,8 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 						expectedType = dir.DEFAULT_TAR_MIME_TYPE
 					}
 					expectedType += "+gzip"
-					assert.True(t, known)
-					assert.Equal(t, expectedType, actualType)
+					a.True(known)
+					a.Equal(expectedType, actualType)
 				}
 			} else {
 				// Test media type for uncompressed blob.
@@ -364,8 +377,8 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 						// If media type isn't set in the spec, expect the default.
 						expectedType = dir.DEFAULT_TAR_MIME_TYPE
 					}
-					assert.True(t, known)
-					assert.Equal(t, expectedType, actualType)
+					a.True(known)
+					a.Equal(expectedType, actualType)
 				}
 			}
 
@@ -379,11 +392,11 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 				untarredData, err := extractFileFromTar(data, fileName)
 				if tf.expectedInTar {
 					// If the file should have been included in the tar, check if it is there.
-					require.NoError(t, err)
-					assert.Equal(t, tf.content, string(untarredData))
+					r.NoError(err)
+					a.Equal(tf.content, string(untarredData))
 				} else {
 					// If the file should NOT have been included, an error is expected when trying to extract it.
-					assert.Error(t, err)
+					a.Error(err)
 				}
 			}
 		})
@@ -391,6 +404,8 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 }
 
 func TestGetV1DirBlob_EmptyPath(t *testing.T) {
+	a := assert.New(t)
+	tempDir := t.TempDir()
 	// Create v1.Dir spec with empty path.
 	dirSpec := v1.Dir{
 		Type: runtime.NewUnversionedType(v1.Type),
@@ -399,31 +414,35 @@ func TestGetV1DirBlob_EmptyPath(t *testing.T) {
 
 	// Get blob should fail.
 	ctx := t.Context()
-	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec)
-	assert.Nil(t, dirBlob)
-	assert.Error(t, err)
-	assert.Truef(t, errors.Is(err, dir.ErrEmptyPath), "expected %q to be returned, got: %q", dir.ErrEmptyPath, err)
+	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec, tempDir)
+	a.Nil(dirBlob)
+	a.Error(err)
+	a.True(errors.Is(err, dir.ErrEmptyPath), "expected %q to be returned, got: %q", dir.ErrEmptyPath, err)
 }
 
 func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
+	tempDir := t.TempDir()
+	r := require.New(t)
+	a := assert.New(t)
+
 	// Create v1.Dir spec with non-existing path.
 	dirSpec := v1.Dir{
 		Type: runtime.NewUnversionedType(v1.Type),
-		Path: "/non/existent/path",
+		Path: tempDir + "/non/existent/path",
 	}
 
 	// Get blob should fail. The error:
 	// "failed to create filesystem while trying to access <path>: path does not exist: <path>".
 	ctx := t.Context()
-	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec)
-	assert.Nil(t, dirBlob)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "path does not exist")
+	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec, tempDir)
+	a.Nil(dirBlob)
+	a.Error(err)
+	a.Contains(err.Error(), "no such file or directory")
 
 	// Another case: the input directory does not exist, but its parent folder does.
-	// In this case, and if PreserveDir is true, the FileSystem instance is created for the existing parent folder.
-	// Still, as there is nothing to tar, we expect an error.
-	tempDir := t.TempDir()
+	// Create v1.Dir spec with a non-existent path, but the parent directory exists.
+	// This should also fail, as the specified path does not exist.
+	// The error should be similar to the previous one, indicating that the path does not exist
 	dirSpec = v1.Dir{
 		Type:        runtime.NewUnversionedType(v1.Type),
 		Path:        filepath.Join(tempDir, "non-existent-path"),
@@ -431,20 +450,10 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 	}
 
 	// Create the blob.
-	dirBlob, err = dir.GetV1DirBlob(ctx, dirSpec)
-	// Expect no error here, because the pipe is not processed yet.
-	require.NotNil(t, dirBlob)
-	require.NoError(t, err)
-
-	// Try to read the data. Expect error propagation from the pipe packaging the tar.
-	// Getting the reader should fail. The error: "... non-existent-path: no such file or directory".
-	reader, err := dirBlob.ReadCloser()
-	assert.NotNil(t, reader)
-	assert.NoError(t, err)
-
-	_, err = io.ReadAll(reader)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no such file or directory")
+	dirBlob, err = dir.GetV1DirBlob(ctx, dirSpec, tempDir)
+	// Expect error here
+	r.Nil(dirBlob)
+	r.Error(err)
 }
 
 // extractFileFromTar extracts a specific file from a tar archive and returns its content
