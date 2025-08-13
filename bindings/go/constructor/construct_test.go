@@ -495,3 +495,134 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 		})
 	}
 }
+
+func TestConstructWithSourceAndResourceWithWorkingDirectoryOverride(t *testing.T) {
+	// Create mock input methods for both source and resource
+	mockSourceInput := &mockSourceInputMethodWorkingDir{
+		mockSourceInputMethod: mockSourceInputMethod{
+			processedSource: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-source",
+						Version: "v1.0.0",
+					},
+				},
+				Type: "file",
+				Access: &v2.LocalBlob{
+					MediaType: "application/octet-stream",
+				},
+			},
+		},
+	}
+
+	mockResourceInput := &mockInputMethodWithWorkingDir{
+		mockInputMethod: mockInputMethod{
+			processedResource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "v1.0.0",
+					},
+				},
+				Access: &v2.LocalBlob{
+					MediaType: "application/octet-stream",
+				},
+				Relation: descriptor.LocalRelation,
+			},
+		},
+	}
+
+	// Create mock providers for both source and resource
+	sourceProvider := &mockSourceInputMethodProvider{
+		methods: map[runtime.Type]SourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockSourceInput,
+		},
+	}
+
+	resourceProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockResourceInput,
+		},
+	}
+
+	// Create a component with both source and resource
+	yamlData := `
+components:
+  - name: ocm.software/test-component
+    version: v1.0.0
+    provider:
+      name: test-provider
+    resources:
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: file
+        input:
+          type: mock/v1
+    sources:
+      - name: test-source
+        version: v1.0.0
+        type: file
+        input:
+          type: mock/v1
+`
+
+	var constructor constructorv1.ComponentConstructor
+	err := yaml.Unmarshal([]byte(yamlData), &constructor)
+	require.NoError(t, err)
+
+	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
+
+	// Create a mock target repository
+	mockRepo := newMockTargetRepository()
+
+	// Create the constructor with our mocks
+	specFilePath := "/mock/source/working/dir/constructor.yaml"
+	opts := Options{
+		SourceInputMethodProvider:   sourceProvider,
+		ResourceInputMethodProvider: resourceProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
+		SpecFilePath:                specFilePath,
+	}
+	constructorInstance := NewDefaultConstructor(opts)
+
+	// Process the constructor
+	descriptors, err := constructorInstance.Construct(t.Context(), converted)
+	require.NoError(t, err)
+	require.Len(t, descriptors, 1)
+
+	// Verify the results
+	desc := descriptors[0]
+	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
+	assert.Equal(t, "v1.0.0", desc.Component.Version)
+	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
+	assert.Len(t, desc.Component.Resources, 1)
+	assert.Len(t, desc.Component.Sources, 1)
+
+	// Verify the resource
+	resource := desc.Component.Resources[0]
+	assert.Equal(t, "test-resource", resource.Name)
+	assert.Equal(t, "v1.0.0", resource.Version)
+	assert.Equal(t, descriptor.LocalRelation, resource.Relation)
+	assert.NotNil(t, resource.Access)
+	resourceAccess, ok := resource.Access.(*v2.LocalBlob)
+	require.True(t, ok, "Resource access should be of type LocalBlob")
+	assert.Equal(t, "application/octet-stream", resourceAccess.MediaType)
+	// Verify the working directory was set correctly
+	assert.Equal(t, "/mock/source/working/dir", mockResourceInput.wd)
+
+	// Verify the source
+	source := desc.Component.Sources[0]
+	assert.Equal(t, "test-source", source.Name)
+	assert.Equal(t, "v1.0.0", source.Version)
+	assert.Equal(t, "file", source.Type)
+	assert.NotNil(t, source.Access)
+	sourceAccess, ok := source.Access.(*v2.LocalBlob)
+	require.True(t, ok, "Source access should be of type LocalBlob")
+	assert.Equal(t, "application/octet-stream", sourceAccess.MediaType)
+	// Verify the working directory was set correctly
+	assert.Equal(t, "/mock/source/working/dir", mockSourceInput.wd)
+
+	// Verify the repository was called correctly
+	assert.Len(t, mockRepo.components, 1)
+}

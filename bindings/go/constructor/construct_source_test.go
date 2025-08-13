@@ -571,3 +571,130 @@ components:
 	assert.Len(t, mockRepo.addedSources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
 }
+
+// mockSourceInputMethodWorkingDir is a mock implementation of SourceInputMethod
+// that also implements WorkingDirectoryOverride
+type mockSourceInputMethodWorkingDir struct {
+	mockSourceInputMethod
+	wd string
+}
+
+func (m *mockSourceInputMethodWorkingDir) GetWd() string {
+	return m.wd
+}
+
+func (m *mockSourceInputMethodWorkingDir) SetWd(workingDir string) {
+	m.wd = workingDir
+}
+
+func TestConstructWithSpecFilePath_ShouldSetTheDirectoryInSource(t *testing.T) {
+	// Create a mock source input method that returns a processed source
+	mockInput := &mockSourceInputMethodWorkingDir{
+		mockSourceInputMethod: mockSourceInputMethod{
+			processedSource: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-source",
+						Version: "v1.0.0",
+					},
+				},
+				Type: "git",
+				Access: &v2.LocalBlob{
+					MediaType: "application/octet-stream",
+				},
+			},
+		},
+	}
+
+	// Create a mock source input method provider
+	mockProvider := &mockSourceInputMethodProvider{
+		methods: map[runtime.Type]SourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockInput,
+		},
+	}
+
+	constructor := setupTestComponentWithSource(t, `
+      - name: test-source
+        version: v1.0.0
+        type: git
+        input:
+          type: mock/v1
+`)
+
+	// Create a mock target repository
+	mockRepo := newMockTargetRepository()
+
+	// Create the constructor with our mocks
+	specFilePath := "/mock/working/dir/component.yaml"
+	opts := Options{
+		SourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
+		SpecFilePath:              specFilePath,
+	}
+	constructorInstance := NewDefaultConstructor(opts)
+
+	// Process the constructor
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	require.NoError(t, err)
+	require.Len(t, descriptors, 1)
+
+	// Verify the working directory was set correctly
+	assert.Equal(t, "/mock/working/dir", mockInput.wd, "Working directory should be set to the directory of the spec file path")
+}
+
+func TestConstructWithSpecFilePath_ShouldNotSetTheDirectoryWhenSet(t *testing.T) {
+	// Create a mock source input method that returns a processed source
+	mockInput := &mockSourceInputMethodWorkingDir{
+		mockSourceInputMethod: mockSourceInputMethod{
+			processedSource: &descriptor.Source{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-source",
+						Version: "v1.0.0",
+					},
+				},
+				Type: "git",
+				Access: &v2.LocalBlob{
+					MediaType: "application/octet-stream",
+				},
+			},
+		},
+		wd: "/already/set/working/dir", // Set a working directory before processing
+	}
+
+	// Create a mock source input method provider
+	mockProvider := &mockSourceInputMethodProvider{
+		methods: map[runtime.Type]SourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockInput,
+		},
+	}
+
+	constructor := setupTestComponentWithSource(t, `
+      - name: test-source
+        version: v1.0.0
+        type: git
+        input:
+          type: mock/v1
+`)
+
+	// Create a mock target repository
+	mockRepo := newMockTargetRepository()
+
+	// Create the constructor with our mocks
+	opts := Options{
+		SourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
+	}
+	constructorInstance := NewDefaultConstructor(opts)
+
+	// Set a working directory before processing
+	mockInput.SetWd("/already/set/working/dir")
+
+	// Process the constructor
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	require.NoError(t, err)
+	require.Len(t, descriptors, 1)
+
+	// Verify the working directory was not overwritten
+	assert.Equal(t, "/already/set/working/dir", mockInput.wd, "Working directory should not be overwritten by the spec file path")
+}

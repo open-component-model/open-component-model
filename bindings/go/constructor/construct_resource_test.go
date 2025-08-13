@@ -789,3 +789,126 @@ components:
 	assert.Len(t, mockRepo.addedLocalResources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
 }
+
+// mockInputMethodWithWorkingDir implements ResourceInputMethod for testing that also implements WorkingDirectoryOverride
+type mockInputMethodWithWorkingDir struct {
+	mockInputMethod
+	wd string
+}
+
+func (m *mockInputMethodWithWorkingDir) GetWd() string {
+	return m.wd
+}
+
+func (m *mockInputMethodWithWorkingDir) SetWd(workingDir string) {
+	m.wd = workingDir
+}
+
+func TestConstructWithSpecFilePath_ShouldSetTheDirectoryInInput(t *testing.T) {
+	constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: blob
+        input:
+          type: mock/v1
+`)
+
+	// Create a mock target repository
+	mockRepo := newMockTargetRepository()
+
+	// Create a mock input method with a working directory override
+	mockInput := &mockInputMethodWithWorkingDir{
+		mockInputMethod: mockInputMethod{
+			processedResource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "v1.0.0",
+					},
+				},
+				Access: &v2.LocalBlob{
+					MediaType: "application/octet-stream",
+				},
+			},
+		},
+	}
+
+	// Create a mock input method provider
+	mockProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockInput,
+		},
+	}
+
+	// used to fill working directory in the resource and file methods
+	specFilePath := "/mock/working/dir/component.yaml"
+	opts := Options{
+		ResourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
+		SpecFilePath:                specFilePath,
+	}
+	constructorInstance := NewDefaultConstructor(opts)
+
+	// Process the constructor
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	require.NoError(t, err)
+	require.Len(t, descriptors, 1)
+
+	assert.Equal(t, "/mock/working/dir", mockInput.wd)
+}
+
+func TestConstructWithSpecFilePath_ShouldNotSetTheDirectoryInInputWhenSet(t *testing.T) {
+	constructor := setupTestComponent(t, `
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: blob
+        input:
+          type: mock/v1
+`)
+
+	// Create a mock target repository
+	mockRepo := newMockTargetRepository()
+
+	// Create a mock input method with a working directory override
+	mockInput := &mockInputMethodWithWorkingDir{
+		mockInputMethod: mockInputMethod{
+			processedResource: &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name:    "test-resource",
+						Version: "v1.0.0",
+					},
+				},
+				Access: &v2.LocalBlob{
+					MediaType: "application/octet-stream",
+				},
+			},
+		},
+		wd: "/already/set/working/dir", // Set a different working directory
+	}
+
+	// Create a mock input method provider
+	mockProvider := &mockInputMethodProvider{
+		methods: map[runtime.Type]ResourceInputMethod{
+			runtime.NewVersionedType("mock", "v1"): mockInput,
+		},
+	}
+
+	// used to fill working directory in the resource and file methods
+	specFilePath := "/mock/working/dir/component.yaml"
+	opts := Options{
+		ResourceInputMethodProvider: mockProvider,
+		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
+		SpecFilePath:                specFilePath,
+	}
+	constructorInstance := NewDefaultConstructor(opts)
+
+	// Process the constructor
+	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	require.NoError(t, err)
+	require.Len(t, descriptors, 1)
+
+	assert.Equal(t, "/already/set/working/dir", mockInput.wd)
+}
