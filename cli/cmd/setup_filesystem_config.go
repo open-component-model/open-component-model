@@ -29,18 +29,23 @@ func loadFlagFromCommand(cmd *cobra.Command, flagName string) (string, error) {
 	return value, err
 }
 
-func overrideFileConfigValue(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config, target *string, value string) {
-	if target == nil {
-		slog.WarnContext(cmd.Context(), "target for override is nil, cannot set value", slog.String("value", value))
-		return
-	}
-
+func overrideTempFolder(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config, value string) {
 	if value != "" {
-		if *target != "" {
-			slog.WarnContext(cmd.Context(), fmt.Sprintf("%s was defined in ocm config with value, will be overwritten by value", fieldName), slog.String("original", originalValue), slog.String("new", value))
+		if fsCfg.TempFolder != "" {
+			slog.WarnContext(cmd.Context(), "temp folder was defined in ocm config with value, will be overwritten by value", slog.String("original", fsCfg.TempFolder), slog.String("new", value))
 		}
 
-		*target = value
+		fsCfg.TempFolder = value
+	}
+}
+
+func overrideWorkingDirectory(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config, value string) {
+	if value != "" {
+		if fsCfg.WorkingDirectory != "" {
+			slog.WarnContext(cmd.Context(), "working-directory was defined in ocm config with value, will be overwritten by value", slog.String("original", fsCfg.WorkingDirectory), slog.String("new", value))
+		}
+
+		fsCfg.WorkingDirectory = value
 	}
 }
 
@@ -73,11 +78,11 @@ func setupFilesystemConfig(cmd *cobra.Command) {
 
 	// CLI flag takes precedence over the config file
 	if tempFolderValue, _ := loadFlagFromCommand(cmd, tempFolderFlag); tempFolderValue != "" {
-		overrideFileConfigValue(cmd, fsCfg, &fsCfg.TempFolder, tempFolderValue)
+		overrideTempFolder(cmd, fsCfg, tempFolderValue)
 	}
 
 	if workingDirectoryValue, _ := loadFlagFromCommand(cmd, workingDirectoryFlag); workingDirectoryValue != "" {
-		overrideFileConfigValue(cmd, fsCfg, &fsCfg.WorkingDirectory, workingDirectoryValue)
+		overrideWorkingDirectory(cmd, fsCfg, workingDirectoryValue)
 	}
 
 	ensureFilesystemConfig(cmd, cfg, fsCfg)
