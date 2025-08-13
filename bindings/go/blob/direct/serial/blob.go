@@ -66,7 +66,7 @@ func (s *Blob) ReadCloser() (io.ReadCloser, error) {
 		return nil
 	})
 	l.close = func() error {
-		if !acquired.Load() {
+		if acquired.Load() {
 			// Release the token if we did acquire it before.
 			l.parent.token <- struct{}{}
 		}

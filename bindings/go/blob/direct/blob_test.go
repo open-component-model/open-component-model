@@ -215,7 +215,7 @@ func TestCompatibility(t *testing.T) {
 				rc, err := b.ReadCloser()
 				require.NoError(t, err)
 				require.NotNil(t, rc)
-				result, err := io.ReadAll(br)
+				result, err := io.ReadAll(rc)
 				assert.NoError(t, err)
 				assert.Empty(t, result, "because the original read closer should have read all data, the next result should be empty")
 				parallel.Store(true)
