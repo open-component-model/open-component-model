@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/opencontainers/go-digest"
 
@@ -28,6 +29,22 @@ var (
 	_ blob.DigestAware = (*Blob)(nil)
 )
 
+// NewFileBlobFromPath creates a new Blob from a path, defaulting to read only access.
+func NewFileBlobFromPath(path string) (*Blob, error) {
+	return NewFileBlobFromPathWithFlag(path, os.O_RDONLY)
+}
+
+func NewFileBlobFromPathWithFlag(path string, flag int) (*Blob, error) {
+	path = filepath.Clean(path)
+	dir, base := filepath.Dir(path), filepath.Base(path)
+	rofs, err := NewFS(dir, flag)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup filesystem in %q while trying to create file blob %q: %w", dir, base, err)
+	}
+	return NewFileBlob(rofs, base), nil
+}
+
+// NewFileBlob creates a new Blob from an underlying fs.FS.
 func NewFileBlob(fs fs.FS, path string) *Blob {
 	return &Blob{
 		path:       path,
