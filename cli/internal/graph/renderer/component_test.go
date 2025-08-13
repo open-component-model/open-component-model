@@ -129,7 +129,7 @@ import (
 //		}
 //
 //		treeDisplayManager := NewTreeRenderer(mydag, f, WithMode(ModeLive))
-//		treeDisplayManager.Start(ctx, components[0].ToIdentity().String())
+//		treeDisplayManager.StartRenderLoop(ctx, components[0].ToIdentity().String())
 //		r.NoError(mydag.Traverse(ctx, &syncdag.Vertex[string]{
 //			ID: components[0].ToIdentity().String(),
 //			Attributes: func() *sync.Map {
