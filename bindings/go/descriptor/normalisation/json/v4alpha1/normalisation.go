@@ -153,18 +153,19 @@ func DefaultComponent(d *v2.Descriptor) {
 // in a standardized way.
 // ProviderAsMap tries to parse a JSON-encoded provider string into a map.
 func ProviderAsMap(v any) any {
+	var provider map[string]any
+
 	switch v := v.(type) {
 	case []byte:
-		var provider map[string]any
 		if err := json.Unmarshal(v, &provider); err == nil {
 			return provider
 		}
 	case string:
-		var provider map[string]any
 		if err := json.Unmarshal([]byte(v), &provider); err == nil {
 			return provider
 		}
 	}
+
 	return map[string]any{
 		"name": v,
 	}
