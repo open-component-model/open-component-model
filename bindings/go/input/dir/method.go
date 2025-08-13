@@ -127,7 +127,7 @@ func ensureWdOrPath(dirPath, workingDirectory string) string {
 	}
 
 	// make sure that we do not have two slashes in the path
-	return path.Clean(workingDirectory + "/" + dirPath)
+	return path.Clean(path.Join(workingDirectory, dirPath))
 }
 
 // GetWd returns the working directory for the InputMethod.
