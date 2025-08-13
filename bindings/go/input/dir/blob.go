@@ -12,8 +12,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
+	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	v1 "ocm.software/open-component-model/bindings/go/input/dir/spec/v1"
 )
 
@@ -46,7 +46,8 @@ func GetV1DirBlob(ctx context.Context, dir v1.Dir) (blob.ReadOnlyBlob, error) {
 	if mediaType == "" {
 		mediaType = DEFAULT_TAR_MIME_TYPE
 	}
-	var dirBlob blob.ReadOnlyBlob = inmemory.New(reader, inmemory.WithMediaType(mediaType))
+
+	var dirBlob blob.ReadOnlyBlob = direct.New(reader, direct.WithMediaType(mediaType))
 
 	// gzip the blob, if requested in the spec.
 	if dir.Compress {
