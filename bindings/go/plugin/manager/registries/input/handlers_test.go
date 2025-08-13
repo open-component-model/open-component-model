@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -58,9 +58,9 @@ func TestResourceInputProcessorHandlerFunc(t *testing.T) {
 			handlerFunc: func() http.HandlerFunc {
 				handler := ResourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessResourceInputRequest, credentials map[string]string) (*inputv1.ProcessResourceInputResponse, error) {
 					return &inputv1.ProcessResourceInputResponse{
-						Resource: &constructorv1.Resource{
-							ElementMeta: constructorv1.ElementMeta{
-								ObjectMeta: constructorv1.ObjectMeta{
+						Resource: &v2.Resource{
+							ElementMeta: v2.ElementMeta{
+								ObjectMeta: v2.ObjectMeta{
 									Name:    "test-resource",
 									Version: "v1.0.0",
 								},
@@ -166,9 +166,9 @@ func TestSourceInputProcessorHandlerFunc(t *testing.T) {
 			handlerFunc: func() http.HandlerFunc {
 				handler := SourceInputProcessorHandlerFunc(func(ctx context.Context, request *inputv1.ProcessSourceInputRequest, credentials map[string]string) (*inputv1.ProcessSourceInputResponse, error) {
 					return &inputv1.ProcessSourceInputResponse{
-						Source: &constructorv1.Source{
-							ElementMeta: constructorv1.ElementMeta{
-								ObjectMeta: constructorv1.ObjectMeta{
+						Source: &v2.Source{
+							ElementMeta: v2.ElementMeta{
+								ObjectMeta: v2.ObjectMeta{
 									Name:    "test-source",
 									Version: "v1.0.0",
 								},
