@@ -57,8 +57,8 @@ func (s *Blob) ReadCloser() (io.ReadCloser, error) {
 			return s.ctx.Err()
 		}
 		// If underlying reader is a seeker, reset to start for this lease.
-		// Otherwise, the reader is stateful and we can't reset. Then we do best effort.
-		// and leave it up to the caller to handle errors like
+		// Otherwise, the reader is stateful and we can't reset.
+		// Then we do best effort and leave it up to the caller to handle errors.
 		if seeker, ok := l.reader.(io.Seeker); ok {
 			_, err := seeker.Seek(0, io.SeekStart)
 			return err
