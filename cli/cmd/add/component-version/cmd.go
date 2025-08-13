@@ -73,7 +73,7 @@ func ComponentVersionConflictPolicies() []string {
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:        "component-version",
-		Aliases:    []string{"cv", "component-versions", "cvs"},
+		Aliases:    []string{"cv", "componentversion", "component-versions", "cvs", "componentversions"},
 		SuggestFor: []string{"component", "components", "version", "versions"},
 		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a %[1]q file", DefaultComponentConstructorBaseName),
 		Args:       cobra.NoArgs,
