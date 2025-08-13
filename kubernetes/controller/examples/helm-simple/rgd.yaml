@@ -1,0 +1,54 @@
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: helm-simple
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: HelmSimple
+    spec:
+      prefix: string | default="helm-simple"
+  resources:
+    - id: resourceChart
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-chart-name"
+        spec:
+          componentRef:
+            name: helm-simple-component
+          resource:
+            byReference:
+              resource:
+                name: helm-resource
+          interval: 10m
+    - id: ocirepository
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        kind: OCIRepository
+        metadata:
+          name: "${schema.spec.prefix}-oci-repository-name"
+        spec:
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: oci://${resourceChart.status.reference.registry}/${resourceChart.status.reference.repository}
+          ref:
+            digest: ${resourceChart.status.reference.digest}
+    - id: helmrelease
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: "${schema.spec.prefix}-helm-release-name"
+        spec:
+          releaseName: helm-simple
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${ocirepository.metadata.name}
+            namespace: default
