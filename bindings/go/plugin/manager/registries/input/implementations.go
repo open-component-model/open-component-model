@@ -71,7 +71,7 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 }
 
 func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
-	if err := r.validateEndpoint(request.Resource.Input, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Resource.Access, r.jsonSchema); err != nil {
 		return nil, err
 	}
 
@@ -89,7 +89,7 @@ func (r *RepositoryPlugin) ProcessResource(ctx context.Context, request *v1.Proc
 }
 
 func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
-	if err := r.validateEndpoint(request.Source.Input, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Source.Access, r.jsonSchema); err != nil {
 		return nil, err
 	}
 
