@@ -75,9 +75,9 @@ func New() *cobra.Command {
 		Use:        "component-version",
 		Aliases:    []string{"cv", "componentversion", "component-versions", "cvs", "componentversions"},
 		SuggestFor: []string{"component", "components", "version", "versions"},
-		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a %[1]q file", DefaultComponentConstructorBaseName),
+		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository stored as Common Transport Format archive (CTF) based on a %[1]q file", DefaultComponentConstructorBaseName),
 		Args:       cobra.NoArgs,
-		Long: fmt.Sprintf(`Add component version(s) to an OCM Common Transport Format Archive (CTF) that can be reused for transfers.
+		Long: fmt.Sprintf(`Add component version(s) to an OCM Common Transport Format archive (CTF) that can be reused for transfers.
 
 A %[1]q file is used to specify the component version(s) to be added. It can contain both a single component or many components. The component reference is used to determine the repository to add the components to.
 
@@ -86,6 +86,7 @@ If given a path to a directory, the command will look for a file named "%[1]s.ya
 If given a path to a file, the command will attempt to use that file as the %[1]q file.
 
 In case the component archive does not exist, it will be created by default.
+If not specified, it will be created with the name "transport-archive".
 `,
 			DefaultComponentConstructorBaseName,
 		),
