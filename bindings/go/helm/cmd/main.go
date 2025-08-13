@@ -10,8 +10,9 @@ import (
 	"log/slog"
 	"os"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	helminput "ocm.software/open-component-model/bindings/go/helm/input"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
@@ -22,7 +23,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type HelmInputPlugin struct{}
+type HelmInputPlugin struct {
+	filesystemConfig *filesystemv1alpha1.Config
+}
 
 var logger *slog.Logger
 
@@ -33,7 +36,7 @@ func (h *HelmInputPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRe
 
 func (h *HelmInputPlugin) ProcessResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
 	logger.Info("ProcessResource called for Helm input")
-	return processHelmResource(ctx, request, credentials)
+	return processHelmResource(ctx, request, credentials, h.filesystemConfig)
 }
 
 func (h *HelmInputPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
@@ -62,14 +65,13 @@ func main() {
 
 	capabilities := endpoints.NewEndpoints(scheme)
 
-	if err := input.RegisterInputProcessor(&helmv1.Helm{}, &HelmInputPlugin{}, capabilities); err != nil {
-		logger.Error("failed to register helm input plugin", "error", err.Error())
-		os.Exit(1)
-	}
-
-	logger.Info("registered helm input plugin")
-
 	if len(args) > 0 && args[0] == "capabilities" {
+		// Register a temporary plugin instance for capabilities
+		if err := input.RegisterInputProcessor(&helmv1.Helm{}, &HelmInputPlugin{}, capabilities); err != nil {
+			logger.Error("failed to register helm input plugin", "error", err.Error())
+			os.Exit(1)
+		}
+
 		content, err := json.Marshal(capabilities)
 		if err != nil {
 			logger.Error("failed to marshal capabilities", "error", err)
@@ -104,6 +106,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Parse filesystem config from plugin config
+	filesystemConfig, err := parseFilesystemConfig(conf)
+	if err != nil {
+		logger.Error("failed to parse filesystem config", "error", err.Error())
+		os.Exit(1)
+	}
+
+	helmPlugin := &HelmInputPlugin{
+		filesystemConfig: filesystemConfig,
+	}
+
+	if err := input.RegisterInputProcessor(&helmv1.Helm{}, helmPlugin, capabilities); err != nil {
+		logger.Error("failed to register helm input plugin", "error", err.Error())
+		os.Exit(1)
+	}
+
+	logger.Info("registered helm input plugin")
+
 	separateContext := context.Background()
 	ocmPlugin := plugin.NewPlugin(separateContext, logger, conf, os.Stdout)
 	if err := ocmPlugin.RegisterHandlers(capabilities.GetHandlers()...); err != nil {
@@ -119,11 +139,31 @@ func main() {
 	}
 }
 
+// parseFilesystemConfig extracts filesystem configuration from plugin config
+func parseFilesystemConfig(conf types.Config) (*filesystemv1alpha1.Config, error) {
+	if len(conf.ConfigTypes) == 0 {
+		return &filesystemv1alpha1.Config{}, nil
+	}
+
+	// Convert plugin config types to generic config
+	genericConfig := &genericv1.Config{
+		Configurations: conf.ConfigTypes,
+	}
+
+	// Use LookupConfig to get filesystem config with defaults
+	filesystemConfig, err := filesystemv1alpha1.LookupConfig(genericConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup filesystem config: %w", err)
+	}
+
+	return filesystemConfig, nil
+}
+
 // processHelmResource wraps the helm.InputMethod to process resources
-func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string) (*v1.ProcessResourceInputResponse, error) {
+func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string, filesystemConfig *filesystemv1alpha1.Config) (*v1.ProcessResourceInputResponse, error) {
 	resource := &constructorruntime.Resource{
 		AccessOrInput: constructorruntime.AccessOrInput{
-			Input: request.Resource.Input,
+			Access: request.Resource.Access,
 		},
 	}
 
@@ -133,7 +173,11 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 		return nil, fmt.Errorf("helm input method failed: %w", err)
 	}
 
-	tmp, err := os.CreateTemp("", "helm-source-*.tar.gz")
+	tempDir := ""
+	if filesystemConfig != nil {
+		tempDir = filesystemConfig.TempFolder
+	}
+	tmp, err := os.CreateTemp(tempDir, "helm-resource-*.tar.gz")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temp file: %w", err)
 	}
@@ -153,15 +197,6 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 	}
 
 	return &v1.ProcessResourceInputResponse{
-		Resource: &constructorv1.Resource{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
-					Name:    request.Resource.Name,
-					Version: request.Resource.Version,
-				},
-			},
-			Type: "helmChart",
-		},
 		Location: &types.Location{
 			LocationType: types.LocationTypeLocalFile,
 			Value:        tmp.Name(),

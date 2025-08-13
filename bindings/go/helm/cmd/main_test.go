@@ -15,7 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -117,32 +117,6 @@ func TestHelmPluginProcessResourceWithInvalidInput(t *testing.T) {
 	defer resp.Body.Close()
 
 	require.NotEqual(t, http.StatusOK, resp.StatusCode, "processing invalid chart should fail")
-}
-
-func TestHelmPluginProcessSource(t *testing.T) {
-	setup := newPluginTestSetup(t)
-	request := &v1.ProcessSourceInputRequest{
-		Source: &constructorv1.Source{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
-					Name:    "test-helm-source",
-					Version: "0.1.0",
-				},
-			},
-			Type: "helmChart",
-		},
-	}
-
-	requestBody, err := json.Marshal(request)
-	require.NoError(t, err)
-
-	headers := map[string]string{
-		"Authorization": `{"access_token": "test"}`,
-	}
-	resp := setup.makeHTTPRequest(t, "POST", "/source/process", requestBody, headers)
-	defer resp.Body.Close()
-
-	require.True(t, resp.StatusCode >= 400, "process source should return an error status code since it's not implemented")
 }
 
 func TestHelmPluginWithInvalidConfig(t *testing.T) {
@@ -277,18 +251,16 @@ func createHelmResourceRequest(t *testing.T, chartPath string) *v1.ProcessResour
 	}
 
 	return &v1.ProcessResourceInputRequest{
-		Resource: &constructorv1.Resource{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
+		Resource: &descriptorv2.Resource{
+			ElementMeta: descriptorv2.ElementMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{
 					Name:    "test-helm-chart",
 					Version: "0.1.0",
 				},
 			},
 			Type:     "helmChart",
 			Relation: "local",
-			AccessOrInput: constructorv1.AccessOrInput{
-				Input: helmInput,
-			},
+			Access:   helmInput,
 		},
 	}
 }
