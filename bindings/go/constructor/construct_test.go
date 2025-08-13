@@ -177,6 +177,7 @@ components:
 	mockRepo := newMockTargetRepository()
 
 	// Create the constructor with our mocks
+	// TODO: # 565 Add WorkingDirectory tests
 	opts := Options{
 		SourceInputMethodProvider:   sourceProvider,
 		ResourceInputMethodProvider: resourceProvider,
