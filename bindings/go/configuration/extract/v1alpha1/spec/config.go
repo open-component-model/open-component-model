@@ -12,10 +12,13 @@ const (
 	ConfigType = "extract.oci.artifact.ocm.software"
 )
 
-var scheme = runtime.NewScheme()
+var Scheme = runtime.NewScheme()
 
 func init() {
-	scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, Version))
+	Scheme.MustRegisterWithAlias(&Config{},
+		runtime.NewVersionedType(ConfigType, Version),
+		runtime.NewUnversionedType(ConfigType),
+	)
 }
 
 // Config represents the top-level configuration for the transformation.
@@ -57,7 +60,7 @@ func LookupConfig(cfg *v1.Config) (*Config, error) {
 		cfgs := make([]*Config, 0, len(cfg.Configurations))
 		for _, entry := range cfg.Configurations {
 			var config Config
-			if err := scheme.Convert(entry, &config); err != nil {
+			if err := Scheme.Convert(entry, &config); err != nil {
 				return nil, fmt.Errorf("failed to decode credential config: %w", err)
 			}
 			cfgs = append(cfgs, &config)
@@ -82,7 +85,7 @@ func Merge(configs ...*Config) *Config {
 	}
 
 	merged := new(Config)
-	_, _ = scheme.DefaultType(merged)
+	_, _ = Scheme.DefaultType(merged)
 
 	return merged
 }
