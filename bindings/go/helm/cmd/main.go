@@ -6,10 +6,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -40,8 +40,7 @@ func (h *HelmInputPlugin) ProcessResource(ctx context.Context, request *v1.Proce
 }
 
 func (h *HelmInputPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (*v1.ProcessSourceInputResponse, error) {
-	logger.Info("ProcessSource called for Helm input")
-	return processHelmSource(ctx, request, credentials)
+	return nil, fmt.Errorf("not implemented")
 }
 
 func (h *HelmInputPlugin) Ping(_ context.Context) error {
@@ -160,7 +159,7 @@ func parseFilesystemConfig(conf types.Config) (*filesystemv1alpha1.Config, error
 }
 
 // processHelmResource wraps the helm.InputMethod to process resources
-func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string, filesystemConfig *filesystemv1alpha1.Config) (*v1.ProcessResourceInputResponse, error) {
+func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRequest, credentials map[string]string, filesystemConfig *filesystemv1alpha1.Config) (_ *v1.ProcessResourceInputResponse, err error) {
 	resource := &constructorruntime.Resource{
 		AccessOrInput: constructorruntime.AccessOrInput{
 			Input: request.Resource.Input,
@@ -170,7 +169,7 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 	helmMethod := &helminput.InputMethod{}
 	result, err := helmMethod.ProcessResource(ctx, resource, credentials)
 	if err != nil {
-		return nil, fmt.Errorf("helm input method failed: %w", err)
+		return nil, fmt.Errorf("failed to process resource: %w", err)
 	}
 
 	tempDir := ""
@@ -187,13 +186,8 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 		}
 	}()
 
-	closer, err := result.ProcessedBlobData.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("error reading blob data: %w", err)
-	}
-
-	if _, err := io.Copy(tmp, closer); err != nil {
-		return nil, fmt.Errorf("error writing temp file: %w", err)
+	if err := blob.Copy(tmp, result.ProcessedBlobData); err != nil {
+		return nil, fmt.Errorf("error copying blob data: %w", err)
 	}
 
 	return &v1.ProcessResourceInputResponse{
@@ -202,9 +196,4 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 			Value:        tmp.Name(),
 		},
 	}, nil
-}
-
-// processHelmSource wraps the helm.InputMethod to process sources
-func processHelmSource(ctx context.Context, request *v1.ProcessSourceInputRequest, credentials map[string]string) (_ *v1.ProcessSourceInputResponse, err error) {
-	return nil, fmt.Errorf("not implemented")
 }
