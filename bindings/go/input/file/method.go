@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -41,12 +42,33 @@ func init() {
 //
 // Since files are accessed directly from the local filesystem, no credentials
 // are required for any operations.
-type InputMethod struct{}
+type InputMethod struct {
+	// WorkingDirectory is the base directory used to resolve relative paths in input specifications.
+	// If a path in the input specification is relative, it will be resolved against this directory.
+	WorkingDirectory string
+}
+
+// NewInputMethod creates a new InputMethod instance with the specified working directory.
+// The working directory is used to resolve relative paths in input specifications.
+// If the working directory is empty, it defaults to the current working directory of the process.
+func NewInputMethod(workingDir string) (*InputMethod, error) {
+	if workingDir == "" {
+		if wg, err := os.Getwd(); err != nil {
+			return nil, fmt.Errorf("error getting current working directory: %w", err)
+		} else {
+			workingDir = wg
+		}
+	}
+
+	return &InputMethod{
+		WorkingDirectory: workingDir,
+	}, nil
+}
 
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	return nil, ErrFilesDoNotRequireCredentials
 }
 
@@ -59,13 +81,13 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 //  1. Converts the resource input to v1.File specification
 //  2. Calls GetV1FileBlob to read and process the file
 //  3. Returns the processed blob data wrapped in a ResourceInputMethodResult
-func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
+func (i *InputMethod) ProcessResource(_ context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	file := v1.File{}
 	if err := Scheme.Convert(resource.Input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	fileBlob, err := GetV1FileBlob(file)
+	fileBlob, err := GetV1FileBlob(file, i.WorkingDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("error getting file blob based on resource input specification: %w", err)
 	}
@@ -78,7 +100,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 // GetSourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Source) (identity runtime.Identity, err error) {
 	return nil, ErrFilesDoNotRequireCredentials
 }
 
@@ -97,7 +119,7 @@ func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.S
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	fileBlob, err := GetV1FileBlob(file)
+	fileBlob, err := GetV1FileBlob(file, i.WorkingDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("error getting file blob based on source input specification: %w", err)
 	}
