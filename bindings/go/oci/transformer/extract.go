@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -21,12 +22,29 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+const (
+	// Helm OCI media types
+	helmConfigMediaType       = "application/vnd.cncf.helm.config.v1+json"
+	helmChartContentMediaType = "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+	helmProvenanceMediaType   = "application/vnd.cncf.helm.chart.provenance.v1.prov"
+)
+
+// helmChartMetadata represents chart metadata from Helm config.
+type helmChartMetadata struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
 // Transformer extracts OCI artifacts with media-type specific handling.
-type Transformer struct{}
+type Transformer struct {
+	logger *slog.Logger
+}
 
 // New creates a new OCI artifact transformer.
-func New() *Transformer {
-	return &Transformer{}
+func New(logger *slog.Logger) *Transformer {
+	return &Transformer{
+		logger: logger,
+	}
 }
 
 // TransformBlob transforms an OCI Layout blob by extracting its main artifacts.
@@ -82,10 +100,17 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 		err = errors.Join(err, tarWriter.Close())
 	}()
 
+	// Helm is a special snowflake. The filename for the generated output needs to follow a specific naming convention.
+	// The filename needs to be chartname-version.tgz for charts and chartname-version.tgz.prov for provenance.
+	helmMetadata, err := t.extractHelmMetadata(ctx, store, manifest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract Helm metadata: %w", err)
+	}
+
 	// If no config provided, extract all layers with default naming
 	if config == nil || len(config.Rules) == 0 {
 		for _, layer := range manifest.Layers {
-			filename := t.getDefaultFilename(layer.Digest.String())
+			filename := t.getFilenameForLayer(layer, helmMetadata)
 			if err := t.processLayer(ctx, store, layer, tarWriter, filename); err != nil {
 				return nil, fmt.Errorf("failed to process layer %s: %w", layer.Digest, err)
 			}
@@ -93,7 +118,7 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 	} else {
 		// Process layers according to configured rules
 		for _, rule := range config.Rules {
-			if err := t.processRule(ctx, store, manifest.Layers, rule, tarWriter); err != nil {
+			if err := t.processRuleWithHelm(ctx, store, manifest.Layers, rule, tarWriter, helmMetadata); err != nil {
 				return nil, fmt.Errorf("failed to process rule for file %s: %w", rule.Filename, err)
 			}
 		}
@@ -105,8 +130,8 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 	return resultBlob, nil
 }
 
-// processRule processes layers that match the rule's selectors into a single tar file.
-func (t *Transformer) processRule(ctx context.Context, store content.Fetcher, layers []ociImageSpecV1.Descriptor, rule spec.Rule, tarWriter *tar.Writer) error {
+// processRuleWithHelm processes layers that match the rule's selectors into a single tar file, with Helm-aware filename handling.
+func (t *Transformer) processRuleWithHelm(ctx context.Context, store content.Fetcher, layers []ociImageSpecV1.Descriptor, rule spec.Rule, tarWriter *tar.Writer, helmMetadata *helmChartMetadata) error {
 	for i, layer := range layers {
 		layerInfo := spec.LayerInfo{
 			Index:       i,
@@ -120,10 +145,19 @@ func (t *Transformer) processRule(ctx context.Context, store content.Fetcher, la
 			continue
 		}
 
-		// if we have a filename, use it, otherwise use default based on digest
-		filename := rule.Filename
-		if filename == "" {
-			filename = t.getDefaultFilename(layer.Digest.String())
+		// For Helm layers (chart and provenance), ignore the configured filename and use Helm naming conventions
+		// For non-Helm layers, use the configured filename or default
+		var filename string
+		if t.isHelmLayer(layer) && helmMetadata != nil {
+			if rule.Filename != "" {
+				t.logger.WarnContext(ctx, "filename for helm is generated based on config data, settings a filename will be ignored", "filename", rule.Filename)
+			}
+			filename = t.getFilenameForLayer(layer, helmMetadata)
+		} else {
+			filename = rule.Filename
+			if filename == "" {
+				filename = t.getDefaultFilename(layer.Digest.String())
+			}
 		}
 
 		if err := t.processLayer(ctx, store, layer, tarWriter, filename); err != nil {
@@ -176,4 +210,48 @@ func (t *Transformer) getDefaultFilename(digest string) string {
 
 	// Fallback if digest's format is unexpected
 	return digest
+}
+
+// extractHelmMetadata extracts chart metadata from the OCI config if this is a Helm chart.
+func (t *Transformer) extractHelmMetadata(ctx context.Context, store content.Fetcher, manifest ociImageSpecV1.Manifest) (*helmChartMetadata, error) {
+	if manifest.Config.MediaType != helmConfigMediaType {
+		return nil, nil // Not a Helm chart
+	}
+
+	configReader, err := store.Fetch(ctx, manifest.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Helm config: %w", err)
+	}
+	defer configReader.Close()
+
+	configData, err := io.ReadAll(configReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read Helm config data: %w", err)
+	}
+
+	var metadata helmChartMetadata
+	if err := json.Unmarshal(configData, &metadata); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal Helm config: %w", err)
+	}
+
+	return &metadata, nil
+}
+
+// isHelmLayer checks if a layer contains Helm-related content (chart or provenance).
+func (t *Transformer) isHelmLayer(layer ociImageSpecV1.Descriptor) bool {
+	return layer.MediaType == helmChartContentMediaType || layer.MediaType == helmProvenanceMediaType
+}
+
+// getFilenameForLayer determines the appropriate filename for a layer, considering Helm naming conventions.
+// https://helm.sh/docs/topics/charts/#charts-and-versioning details this requirement.
+func (t *Transformer) getFilenameForLayer(layer ociImageSpecV1.Descriptor, helmMetadata *helmChartMetadata) string {
+	if helmMetadata != nil {
+		switch layer.MediaType {
+		case helmChartContentMediaType:
+			return fmt.Sprintf("%s-%s.tgz", helmMetadata.Name, helmMetadata.Version)
+		case helmProvenanceMediaType:
+			return fmt.Sprintf("%s-%s.tgz.prov", helmMetadata.Name, helmMetadata.Version)
+		}
+	}
+	return t.getDefaultFilename(layer.Digest.String())
 }

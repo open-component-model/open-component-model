@@ -6,6 +6,8 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	descriptorruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -50,8 +52,14 @@ func (r *sourceInputPluginConverter) ProcessSource(ctx context.Context, source *
 		return nil, fmt.Errorf("failed to create blob data: %w", err)
 	}
 
-	converted := constructorruntime.ConvertFromV1Source(result.Source)
-	descSource := constructorruntime.ConvertToDescriptorSource(&converted)
+	// Convert v2 source back to descriptor source
+	descriptorSources := descriptorruntime.ConvertFromV2Sources([]v2.Source{*result.Source})
+	if len(descriptorSources) == 0 {
+		return nil, fmt.Errorf("conversion resulted in empty source list")
+	}
+	// Convert descriptor source to constructor runtime source
+	converted := constructorruntime.ConvertFromDescriptorSource(&descriptorSources[0])
+	descSource := constructorruntime.ConvertToDescriptorSource(converted)
 	resourceInputMethodResult := &constructor.SourceInputMethodResult{
 		ProcessedSource:   descSource,
 		ProcessedBlobData: rBlob,
