@@ -13,13 +13,11 @@ Add component version(s) to an OCM Repository stored as Common Transport Format 
 
 ### Synopsis
 
-Add component version(s) to an OCM Common Transport Format Archive (CTF) that can be reused
-for transfers.
+Add component version(s) to an OCM Common Transport Format Archive (CTF) that can be reused for transfers.
 
-A "component-constructor" file is used to specify the component version(s) to be added. It can contain both a single component or many
-components. The component reference is used to determine the repository to add the components to.
+A "component-constructor" file is used to specify the component version(s) to be added. It can contain both a single component or many components. The component reference is used to determine the repository to add the components to.
 
-By default, the command will look for a file named ""component-constructor".yaml" or ""component-constructor".yml" in the current directory.
+By default, the command will look for a file named "component-constructor.yaml" or "component-constructor.yml" in the current directory.
 If given a path to a directory, the command will look for a file named "component-constructor.yaml" or "component-constructor.yml" in that directory.
 If given a path to a file, the command will attempt to use that file as the "component-constructor" file.
 
