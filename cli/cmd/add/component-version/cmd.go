@@ -146,7 +146,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting blob cache directory flag failed: %w", err)
 	}
 
-	constructorSpec, err := GetComponentConstructor(cmd)
+	constructorSpec, descriptorPath, err := GetComponentConstructor(cmd)
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
@@ -166,6 +166,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		CredentialProvider:             instance.graph,
 		ConcurrencyLimit:               concurrencyLimit,
 		ComponentVersionConflictPolicy: ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
+		SpecFilePath:                   descriptorPath,
 	}
 	if !skipReferenceDigestProcessing {
 		opts.ResourceDigestProcessorProvider = instance
@@ -198,19 +199,20 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	return &repoSpec, nil
 }
 
-func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentConstructor, error) {
+func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentConstructor, string, error) {
 	constructorFlag, err := file.Get(cmd.Flags(), FlagComponentConstructorPath)
 	if err != nil {
-		return nil, fmt.Errorf("getting component constructor path flag failed: %w", err)
+		return nil, "", fmt.Errorf("getting component constructor path flag failed: %w", err)
 	}
 	if !constructorFlag.Exists() {
-		return nil, fmt.Errorf("component constructor %q does not exist", constructorFlag.String())
+		return nil, "", fmt.Errorf("component constructor %q does not exist", constructorFlag.String())
 	} else if constructorFlag.IsDir() {
-		return nil, fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
+		return nil, "", fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
 	}
+
 	constructorStream, err := constructorFlag.Open()
 	if err != nil {
-		return nil, fmt.Errorf("opening component constructor %q failed: %w", constructorFlag.String(), err)
+		return nil, "", fmt.Errorf("opening component constructor %q failed: %w", constructorFlag.String(), err)
 	}
 	defer func() {
 		if err := constructorStream.Close(); err != nil {
@@ -219,15 +221,20 @@ func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentC
 	}()
 	constructorData, err := io.ReadAll(constructorStream)
 	if err != nil {
-		return nil, fmt.Errorf("reading component constructor %q failed: %w", constructorFlag.String(), err)
+		return nil, "", fmt.Errorf("reading component constructor %q failed: %w", constructorFlag.String(), err)
 	}
 
 	data := constructorv1.ComponentConstructor{}
 	if err := yaml.Unmarshal(constructorData, &data); err != nil {
-		return nil, fmt.Errorf("unmarshalling component constructor %q failed: %w", constructorFlag.String(), err)
+		return nil, "", fmt.Errorf("unmarshalling component constructor %q failed: %w", constructorFlag.String(), err)
 	}
 
-	return constructorruntime.ConvertToRuntimeConstructor(&data), nil
+	absPath, err := filepath.Abs(constructorFlag.String())
+	if err != nil {
+		return nil, "", fmt.Errorf("getting absolute path for component constructor %q failed: %w", constructorFlag.String(), err)
+	}
+
+	return constructorruntime.ConvertToRuntimeConstructor(&data), absPath, nil
 }
 
 var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)

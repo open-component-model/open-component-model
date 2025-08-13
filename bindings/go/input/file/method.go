@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"fmt"
+	"path"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -41,12 +42,14 @@ func init() {
 //
 // Since files are accessed directly from the local filesystem, no credentials
 // are required for any operations.
-type InputMethod struct{}
+type InputMethod struct {
+	WorkingDirectory string
+}
 
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	return nil, ErrFilesDoNotRequireCredentials
 }
 
@@ -59,11 +62,13 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 //  1. Converts the resource input to v1.File specification
 //  2. Calls GetV1FileBlob to read and process the file
 //  3. Returns the processed blob data wrapped in a ResourceInputMethodResult
-func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
+func (i *InputMethod) ProcessResource(_ context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	file := v1.File{}
 	if err := Scheme.Convert(resource.Input, &file); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
+
+	file.Path = ensureWdOrPath(file.Path, i.WorkingDirectory)
 
 	fileBlob, err := GetV1FileBlob(file)
 	if err != nil {
@@ -78,7 +83,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 // GetSourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Source) (identity runtime.Identity, err error) {
 	return nil, ErrFilesDoNotRequireCredentials
 }
 
@@ -97,6 +102,8 @@ func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.S
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
+	file.Path = ensureWdOrPath(file.Path, i.WorkingDirectory)
+
 	fileBlob, err := GetV1FileBlob(file)
 	if err != nil {
 		return nil, fmt.Errorf("error getting file blob based on source input specification: %w", err)
@@ -105,4 +112,28 @@ func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.S
 	return &constructor.SourceInputMethodResult{
 		ProcessedBlobData: fileBlob,
 	}, nil
+}
+
+// ensureWdOrPath ensures that the filePath is absolute.
+// If the path is relative, it prepends the working file to it.
+// If the working directory is empty, it does nothing.
+func ensureWdOrPath(filePath, workingDirectory string) string {
+	if path.IsAbs(filePath) {
+		return filePath
+	}
+
+	if workingDirectory == "" {
+		return filePath
+	}
+
+	// make sure that we do not have two slashes in the path
+	return path.Clean(path.Join(workingDirectory, filePath))
+}
+
+func (i *InputMethod) GetWd() string {
+	return i.WorkingDirectory
+}
+
+func (i *InputMethod) SetWd(workingDir string) {
+	i.WorkingDirectory = workingDir
 }

@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	tempFolderFlag = "temp-folder"
+	tempFolderFlag       = "temp-folder"
+	workingDirectoryFlag = "working-directory"
 )
 
 // Execute adds all child commands to the Cmd command and sets flags appropriately.
@@ -46,7 +47,10 @@ func New() *cobra.Command {
 	}
 
 	configuration.RegisterConfigFlag(cmd)
+
 	cmd.PersistentFlags().String(tempFolderFlag, "", `Specify a custom temporary folder path for filesystem operations.`)
+	cmd.PersistentFlags().String(workingDirectoryFlag, "", `Specify a custom working directory path to load resources from.`)
+
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())

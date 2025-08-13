@@ -89,6 +89,14 @@ type SourceInputMethod interface {
 	ProcessSource(ctx context.Context, source *constructor.Source, credentials map[string]string) (result *SourceInputMethodResult, err error)
 }
 
+// WorkingDirectoryOverride is an interface that allows overriding the working directory for input methods.
+// This is useful for input methods that need to resolve paths relative to a specific working directory.
+// The working directory can be set and retrieved, allowing input methods to operate in a specific context.
+type WorkingDirectoryOverride interface {
+	GetWd() string
+	SetWd(workingDir string)
+}
+
 type ResourceInputMethodProvider interface {
 	// GetResourceInputMethod returns the input method for the given resource constructor specification.
 	GetResourceInputMethod(ctx context.Context, resource *constructor.Resource) (ResourceInputMethod, error)
