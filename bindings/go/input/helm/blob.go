@@ -14,11 +14,11 @@ import (
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/registry"
+	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"oras.land/oras-go/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	v1 "ocm.software/open-component-model/bindings/go/input/helm/spec/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
@@ -140,13 +140,13 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 // Three OCI layers are expected: config, tgz contents and optionally a provenance file.
 // The result is tagged with the helm chart version.
 // See also: https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
-func copyChartToOCILayout(ctx context.Context, chart *ReadOnlyChart) *inmemory.Blob {
+func copyChartToOCILayout(ctx context.Context, chart *ReadOnlyChart) *direct.Blob {
 	r, w := io.Pipe()
 
 	go copyChartToOCILayoutAsync(ctx, chart, w)
 
 	// TODO(ikhandamirov): replace this with a direct/unbuffered blob.
-	return inmemory.New(r, inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1))
+	return direct.New(r, direct.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1))
 }
 
 func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.PipeWriter) {
@@ -158,13 +158,13 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.
 
 	zippedBuf := gzip.NewWriter(w)
 	defer func() {
-		err = errors.Join(err, zippedBuf.Close()) //nolint:deferrlint // err is used within pipe closure
+		err = errors.Join(err, zippedBuf.Close())
 	}()
 
 	// Create an OCI layout writer over the gzip stream.
 	target := tar.NewOCILayoutWriter(zippedBuf)
 	defer func() {
-		err = errors.Join(err, target.Close()) //nolint:deferrlint // err is used within pipe closure
+		err = errors.Join(err, target.Close())
 	}()
 
 	// Generate and Push layers based on the chart to the OCI layout.
