@@ -290,7 +290,7 @@ jobs:
       - name: Setup Go (required by some generators)
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
         with:
-          go-version: '1.24.x'
+          go-version: '1.25.x'
       - name: Run Code Generation
         run: task generate
       - name: Ensure Clean Target Repository
