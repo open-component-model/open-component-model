@@ -5,19 +5,19 @@
 * **Date**: 2025.08.13
 
 **Technical Story**:
-Enable easy interpretation of component descriptors in normalized form and provide a consistent experience for signing and verifying component descriptors.
+Provide a consistent, pluggable way to sign and verify component descriptors based on a normalized representation.
 
 ---
 
 ## Context and Problem Statement
 
-When users want to verify the integrity of a component version, they can run:
+To verify the integrity of a component version, users run:
 
 ```shell
 ocm verify componentversion --signature mysig --verifier mypublickey ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
-This will:
+This does:
 
 1. Download the component version descriptor from the repository.
 2. Inspect the [`signatures`](https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#signatures) field:
@@ -56,7 +56,7 @@ This downloads, normalizes, signs, and re-uploads the descriptor. Signing and ve
 
 ## Outcome
 
-Implement a plugin-driven transformation and signing system based on a **ComponentSignatureHandler** contract to compute and interpret normalized digests and to sign and verify these digests.
+Implement a plugin-driven signing/verification system based on a **ComponentSignatureHandler** contract to compute normalized digests and sign/verify them.
 
 ---
 
@@ -72,7 +72,7 @@ bindings/go/descriptor/signature
 
 * Working with `ComponentSignatureHandler` implementations defined by an interface.
 * Config parsing and resolution.
-* Orchestration of normalization, digesting, signing, and verification.
+* Orchestration of normalization, digest calculation, signing, and verification.
 
 ### Adding new Signing / Verification Handlers
 
@@ -197,7 +197,7 @@ verifiers:
 
     * Descriptor reference or JSON/YAML.
     * Operation mode: sign or verify.
-    * Resolved config from `.ocmconfig` or flags.
+    * Resolved config from `.ocmconfig` or CLI flags.
 
 2. **Normalization**
 
@@ -244,4 +244,4 @@ verifiers:
 
 ## Conclusion
 
-Adopt a unified, pluggable signing and verification contract around normalized component descriptors. This enforces spec compliance, preserves interoperability, and enables new cryptographic algorithms and trust models without changes to core CLI logic.
+Adopt a unified, pluggable signing/verification contract around normalized component descriptors. This enforces spec compliance, preserves interoperability, and enables new cryptographic algorithms and trust models without changes to core CLI logic.
