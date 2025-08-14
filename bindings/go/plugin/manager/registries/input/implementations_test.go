@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
@@ -37,7 +37,7 @@ func TestProcessResourceHandler(t *testing.T) {
 
 	ctx := context.Background()
 	_, err := plugin.ProcessResource(ctx, &v1.ProcessResourceInputRequest{
-		Resource: &v2.Resource{},
+		Resource: &constructorv1.Resource{},
 	}, map[string]string{})
 	require.NoError(t, err)
 }

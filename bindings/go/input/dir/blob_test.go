@@ -56,8 +56,11 @@ func TestGetV1DirBlob_Symlinks(t *testing.T) {
 
 	// Read the tar data.
 	reader, err := b.ReadCloser()
-	assert.Nil(t, reader)
-	// Expect an error, as symlinks are not supported yet.
+	assert.NoError(t, err)
+	assert.NotNil(t, reader)
+
+	// Expect an error on read, as symlinks are not supported yet.
+	_, err = io.ReadAll(reader)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "symlinks not supported")
 }
@@ -314,7 +317,7 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 			// Test blob properties.
 			if sizeAware, ok := b.(blob.SizeAware); ok {
 				size := sizeAware.Size()
-				assert.GreaterOrEqual(t, size, int64(0))
+				assert.GreaterOrEqual(t, size, blob.SizeUnknown)
 			}
 
 			if digestAware, ok := b.(blob.DigestAware); ok {
@@ -436,7 +439,10 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 	// Try to read the data. Expect error propagation from the pipe packaging the tar.
 	// Getting the reader should fail. The error: "... non-existent-path: no such file or directory".
 	reader, err := dirBlob.ReadCloser()
-	assert.Nil(t, reader)
+	assert.NotNil(t, reader)
+	assert.NoError(t, err)
+
+	_, err = io.ReadAll(reader)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no such file or directory")
 }

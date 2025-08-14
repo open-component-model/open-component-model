@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/oci/integration
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/nlepage/go-tarfs v1.2.1
@@ -10,12 +10,12 @@ require (
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.38.0
 	golang.org/x/crypto v0.41.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.6
+	ocm.software/open-component-model/bindings/go/blob v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250807092808-c85e55d93cab
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250814064219-ee0cd5dc3dcf
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.4
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250807092808-c85e55d93cab
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250814064219-ee0cd5dc3dcf
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 )
