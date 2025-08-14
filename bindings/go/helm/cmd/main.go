@@ -54,14 +54,7 @@ func main() {
 		Level: slog.LevelDebug,
 	}))
 
-	scheme := runtime.NewScheme()
-	// Register Helm input spec types
-	scheme.MustRegisterWithAlias(&helmv1.Helm{},
-		runtime.NewVersionedType(helmv1.Type, helmv1.Version),
-		runtime.NewUnversionedType(helmv1.Type),
-	)
-
-	capabilities := endpoints.NewEndpoints(scheme)
+	capabilities := endpoints.NewEndpoints(helminput.Scheme)
 
 	if len(args) > 0 && args[0] == "capabilities" {
 		// Register a temporary plugin instance for capabilities
