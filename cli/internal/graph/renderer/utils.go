@@ -2,8 +2,8 @@ package renderer
 
 import (
 	"cmp"
+	"context"
 	"slices"
-	"sync"
 
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 )
@@ -12,7 +12,7 @@ import (
 // order index if available, otherwise by their key.
 // This function may be used to implement GraphRenderer with a consistent
 // order of neighbors in the output.
-func GetNeighborsSorted[T cmp.Ordered](vertex *syncdag.Vertex[T]) []T {
+func GetNeighborsSorted[T cmp.Ordered](ctx context.Context, vertex *syncdag.Vertex[T]) []T {
 	var neighbors []T
 
 	vertex.Edges.Range(func(key, value any) bool {
@@ -23,15 +23,15 @@ func GetNeighborsSorted[T cmp.Ordered](vertex *syncdag.Vertex[T]) []T {
 	})
 
 	slices.SortFunc(neighbors, func(a, b T) int {
-		return compareByOrderIndex(vertex, a, b)
+		return compareByOrderIndex(ctx, vertex, a, b)
 	})
 
 	return neighbors
 }
 
-func compareByOrderIndex[T cmp.Ordered](vertex *syncdag.Vertex[T], a, b T) int {
-	orderA := getOrderIndex(vertex, a)
-	orderB := getOrderIndex(vertex, b)
+func compareByOrderIndex[T cmp.Ordered](ctx context.Context, vertex *syncdag.Vertex[T], a, b T) int {
+	orderA := getOrderIndex(ctx, vertex, a)
+	orderB := getOrderIndex(ctx, vertex, b)
 
 	if orderA != nil && orderB != nil {
 		return *orderA - *orderB
@@ -45,15 +45,14 @@ func compareByOrderIndex[T cmp.Ordered](vertex *syncdag.Vertex[T], a, b T) int {
 	return cmp.Compare(a, b)
 }
 
-func getOrderIndex[T cmp.Ordered](vertex *syncdag.Vertex[T], key T) *int {
-	if value, exists := vertex.Edges.Load(key); exists {
-		if attrs, ok := value.(*sync.Map); ok {
-			if order, exists := attrs.Load(syncdag.AttributeOrderIndex); exists {
-				if orderInt, ok := order.(int); ok {
-					return &orderInt
-				}
-			}
-		}
+func getOrderIndex[T cmp.Ordered](_ context.Context, vertex *syncdag.Vertex[T], key T) *int {
+	value, exists := vertex.GetEdgeAttribute(key, syncdag.AttributeOrderIndex)
+	if !exists {
+		return nil
 	}
-	return nil
+	order, ok := value.(int)
+	if !ok {
+		return nil
+	}
+	return &order
 }
