@@ -128,7 +128,7 @@ func TestBlob_FromPath(t *testing.T) {
 		filePath := filepath.Join(t.TempDir(), "foo")
 		r.NoError(os.WriteFile(filePath, td, 0644))
 
-		b, err := filesystem.NewFileBlobFromPath(filePath)
+		b, err := filesystem.GetBlobFromOSPath(filePath)
 		r.NoError(err)
 		reader, err := b.ReadCloser()
 		r.NoError(err)
