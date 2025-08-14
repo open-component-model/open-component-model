@@ -102,7 +102,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		IdleTimeout: &defaultOpts.IdleTimeout,
 	}
 
-	t, err := determineConnectionType()
+	t, err := determineConnectionType(ctx)
 	if err != nil {
 		return fmt.Errorf("could not determine connection type: %w", err)
 	}
@@ -277,7 +277,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 	return nil
 }
 
-func determineConnectionType() (mtypes.ConnectionType, error) {
+func determineConnectionType(ctx context.Context) (mtypes.ConnectionType, error) {
 	tmp, err := os.MkdirTemp("", "")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary directory: %w", err)
@@ -287,7 +287,8 @@ func determineConnectionType() (mtypes.ConnectionType, error) {
 	}()
 
 	socketPath := filepath.Join(tmp, "plugin.sock")
-	listener, err := net.Listen("unix", socketPath)
+	var lc net.ListenConfig
+	listener, err := lc.Listen(ctx, "unix", socketPath)
 	if err != nil {
 		return mtypes.TCP, nil
 	}

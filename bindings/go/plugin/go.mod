@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/plugin
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/invopop/jsonschema v0.13.0
@@ -8,11 +8,11 @@ require (
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.7
 	ocm.software/open-component-model/bindings/go/configuration v0.0.5
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250813133321-c0023f886dfc
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250814064219-ee0cd5dc3dcf
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250813133321-c0023f886dfc
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250814064219-ee0cd5dc3dcf
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250813133321-c0023f886dfc
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250814064219-ee0cd5dc3dcf
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
