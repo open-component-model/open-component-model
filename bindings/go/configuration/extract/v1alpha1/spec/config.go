@@ -15,7 +15,10 @@ const (
 var Scheme = runtime.NewScheme()
 
 func init() {
-	Scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, Version))
+	Scheme.MustRegisterWithAlias(&Config{},
+		runtime.NewVersionedType(ConfigType, Version),
+		runtime.NewUnversionedType(ConfigType),
+	)
 }
 
 // Config represents the top-level configuration for the transformation.

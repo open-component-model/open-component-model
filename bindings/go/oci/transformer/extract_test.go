@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,10 +46,10 @@ func TestTransformer_TransformBlob(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			transformer := New()
+			transformer := New(slog.Default())
 			inputBlob := tt.setupBlob(t)
 
-			result, err := transformer.TransformBlob(t.Context(), inputBlob, nil)
+			result, err := transformer.TransformBlob(t.Context(), inputBlob, nil, nil)
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, result)
@@ -67,7 +68,7 @@ func TestTransformer_TransformBlob(t *testing.T) {
 }
 
 func TestTransformer_getDefaultFilename(t *testing.T) {
-	transformer := New()
+	transformer := New(slog.Default())
 
 	tests := []struct {
 		name     string
@@ -95,9 +96,9 @@ func TestTransformerIntegration(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(ociLayoutBlob, "OCI layout blob should not be nil")
 
-	transformer := New()
+	transformer := New(slog.Default())
 	// no config should default to all layers
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, nil)
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, nil, nil)
 
 	r.NoError(err, "Transformation should succeed")
 	r.NotNil(result, "Result should not be nil")
@@ -111,7 +112,8 @@ func TestTransformerIntegration(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err, "Should be able to read result")
 
-	expectedFiles := []string{"b4d308c16f0492bff4efa51ac9aab718bc819413008aec39007ef4abc309504a", "c25ba77a4c310dc0a36a4e587a216db0001488353a262b9147662ca6c2d25c69"}
+	// With Helm support, both chart and provenance layers should be named according to Helm conventions
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz", "test-helm-chart-0.1.0.tgz.prov"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully transformed and validated OCI artifact")
@@ -210,8 +212,8 @@ func TestTransformerWithRules(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(ociLayoutBlob)
 
-	transformer := New()
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	transformer := New(slog.Default())
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)
@@ -219,7 +221,8 @@ func TestTransformerWithRules(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	expectedFiles := []string{"chart.tar.gz", "chart.prov"}
+	// For Helm layers, the filename config is ignored and Helm naming convention is used
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz", "test-helm-chart-0.1.0.tgz.prov"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully filtered layers using Rules")
@@ -250,8 +253,8 @@ func TestTransformerWithIndexSelector(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(ociLayoutBlob)
 
-	transformer := New()
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	transformer := New(slog.Default())
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)
@@ -306,8 +309,8 @@ func TestTransformerWithMatchExpressions(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(ociLayoutBlob)
 
-	transformer := New()
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	transformer := New(slog.Default())
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)
@@ -315,7 +318,8 @@ func TestTransformerWithMatchExpressions(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	expectedFiles := []string{"helm-artifacts.tar"}
+	// For Helm layers, the configured filename is ignored and Helm naming conventions are used
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz", "test-helm-chart-0.1.0.tgz.prov"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully filtered layers using match expressions")
@@ -346,8 +350,8 @@ func TestTransformerWithRuleWithoutFilename(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(ociLayoutBlob)
 
-	transformer := New()
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	transformer := New(slog.Default())
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)
@@ -355,8 +359,8 @@ func TestTransformerWithRuleWithoutFilename(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	// Should use default filename based on digest
-	expectedFiles := []string{"b4d308c16f0492bff4efa51ac9aab718bc819413008aec39007ef4abc309504a"}
+	// Should use Helm naming convention for Helm chart content layer
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully used default filename when rule doesn't specify one")
@@ -397,8 +401,8 @@ func TestTransformerWithHelmRulesWithoutFilenames(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(ociLayoutBlob)
 
-	transformer := New()
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	transformer := New(slog.Default())
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)
@@ -406,8 +410,8 @@ func TestTransformerWithHelmRulesWithoutFilenames(t *testing.T) {
 	reader, err := result.ReadCloser()
 	r.NoError(err)
 
-	// Should use default filenames based on digest
-	expectedFiles := []string{"b4d308c16f0492bff4efa51ac9aab718bc819413008aec39007ef4abc309504a", "c25ba77a4c310dc0a36a4e587a216db0001488353a262b9147662ca6c2d25c69"}
+	// Both Helm chart content and provenance should use Helm naming conventions
+	expectedFiles := []string{"test-helm-chart-0.1.0.tgz", "test-helm-chart-0.1.0.tgz.prov"}
 	validateTarContents(t, reader, expectedFiles)
 
 	t.Logf("Successfully used default filenames for Helm artifacts when rules don't specify them")

@@ -31,7 +31,7 @@ tasks:
 
   golangci-lint/run:
     desc: "Run golangci-lint on all go modules"
-    deps: [golangci-lint/install, deferrlint/install]
+    deps: [golangci-lint/install]
     cmds:
       - task: golangci-lint/run-concurrent
     aliases:
