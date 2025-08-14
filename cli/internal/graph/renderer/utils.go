@@ -13,47 +13,47 @@ import (
 // This function may be used to implement GraphRenderer with a consistent
 // order of neighbors in the output.
 func GetNeighborsSorted[T cmp.Ordered](vertex *syncdag.Vertex[T]) []T {
-	type kv struct {
-		Key   T
-		Value *sync.Map
-	}
-	var kvSlice []kv
+	var neighbors []T
 
 	vertex.Edges.Range(func(key, value any) bool {
-		childId, ok1 := key.(T)
-		attributes, ok2 := value.(*sync.Map)
-		if ok1 && ok2 {
-			kvSlice = append(kvSlice, kv{
-				Key:   childId,
-				Value: attributes,
-			})
+		if childId, ok := key.(T); ok {
+			neighbors = append(neighbors, childId)
 		}
 		return true
 	})
 
-	// Sort kvSlice by order index if available, otherwise by key
-	slices.SortFunc(kvSlice, func(a, b kv) int {
-		var orderA, orderB int
-		var okA, okB bool
-		if oa, ok := a.Value.Load(syncdag.AttributeOrderIndex); ok {
-			orderA, okA = oa.(int)
-		}
-		if ob, ok := b.Value.Load(syncdag.AttributeOrderIndex); ok {
-			orderB, okB = ob.(int)
-		}
-		if okA && okB {
-			return orderA - orderB
-		} else if okA {
-			return -1
-		} else if okB {
-			return 1
-		}
-		return cmp.Compare(a.Key, b.Key)
+	slices.SortFunc(neighbors, func(a, b T) int {
+		return compareByOrderIndex(vertex, a, b)
 	})
 
-	children := make([]T, len(kvSlice))
-	for i, kv := range kvSlice {
-		children[i] = kv.Key
+	return neighbors
+}
+
+func compareByOrderIndex[T cmp.Ordered](vertex *syncdag.Vertex[T], a, b T) int {
+	orderA := getOrderIndex(vertex, a)
+	orderB := getOrderIndex(vertex, b)
+
+	if orderA != nil && orderB != nil {
+		return *orderA - *orderB
 	}
-	return children
+	if orderA != nil {
+		return -1
+	}
+	if orderB != nil {
+		return 1
+	}
+	return cmp.Compare(a, b)
+}
+
+func getOrderIndex[T cmp.Ordered](vertex *syncdag.Vertex[T], key T) *int {
+	if value, exists := vertex.Edges.Load(key); exists {
+		if attrs, ok := value.(*sync.Map); ok {
+			if order, exists := attrs.Load(syncdag.AttributeOrderIndex); exists {
+				if orderInt, ok := order.(int); ok {
+					return &orderInt
+				}
+			}
+		}
+	}
+	return nil
 }
