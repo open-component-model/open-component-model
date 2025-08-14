@@ -28,14 +28,13 @@ func TestTreeRenderLoop(t *testing.T) {
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
 
 		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		renderer := NewTreeRenderer[string](vertexSerializer)
-		waitFunc := StartRenderLoop(ctx, d, WithWriter[string](writer), WithGraphRenderer[string](renderer), WithRefreshRate[string](10*time.Millisecond))
+		waitFunc := StartRenderLoop(ctx, d, []string{"A"}, writer, 10*time.Millisecond, renderer)
 
 		time.Sleep(30 * time.Millisecond)
-		//synctest.Wait()
+		synctest.Wait()
 		output := buf.String()
 		expected := "── A (discovering)\n"
 		r.Equal(expected, output)
@@ -46,7 +45,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		r.NoError(d.AddEdge("A", "B"))
 		vB, _ := d.GetVertex("B")
 		time.Sleep(30 * time.Millisecond)
-		//synctest.Wait()
+		synctest.Wait()
 		output = buf.String()
 		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ╰─ B (discovering)\n"
 		r.Equal(expected, output)
@@ -57,7 +56,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		r.NoError(d.AddEdge("B", "C"))
 		vC, _ := d.GetVertex("C")
 		time.Sleep(30 * time.Millisecond)
-		//synctest.Wait()
+		synctest.Wait()
 		output = buf.String()
 		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ╰─ B (discovering)\n      ╰─ C (discovering)\n"
 		r.Equal(expected, output)
@@ -68,7 +67,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		r.NoError(d.AddEdge("A", "D"))
 		vD, _ := d.GetVertex("D")
 		time.Sleep(30 * time.Millisecond)
-		//synctest.Wait()
+		synctest.Wait()
 		output = buf.String()
 		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ├─ B (discovering)\n   │  ╰─ C (discovering)\n   ╰─ D (discovering)\n"
 		r.Equal(expected, output)
@@ -77,7 +76,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		// Mark D as completed
 		vD.Attributes.Store(syncdag.AttributeTraversalState, syncdag.StateCompleted)
 		time.Sleep(30 * time.Millisecond)
-		//synctest.Wait()
+		synctest.Wait()
 		output = buf.String()
 		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ├─ B (discovering)\n   │  ╰─ C (discovering)\n   ╰─ D (completed)\n"
 		r.Equal(expected, output)
@@ -86,7 +85,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		// Mark C as completed
 		vC.Attributes.Store(syncdag.AttributeTraversalState, syncdag.StateCompleted)
 		time.Sleep(30 * time.Millisecond)
-		//synctest.Wait()
+		synctest.Wait()
 		output = buf.String()
 		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ├─ B (discovering)\n   │  ╰─ C (completed)\n   ╰─ D (completed)\n"
 		r.Equal(expected, output)
@@ -95,7 +94,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		// Mark B as completed
 		vB.Attributes.Store(syncdag.AttributeTraversalState, syncdag.StateCompleted)
 		time.Sleep(30 * time.Millisecond)
-		//synctest.Wait()
+		synctest.Wait()
 		output = buf.String()
 		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ├─ B (completed)\n   │  ╰─ C (completed)\n   ╰─ D (completed)\n"
 		r.Equal(expected, output)
@@ -104,11 +103,14 @@ func TestTreeRenderLoop(t *testing.T) {
 		// Mark A as completed
 		vA, _ := d.GetVertex("A")
 		vA.Attributes.Store(syncdag.AttributeTraversalState, syncdag.StateCompleted)
-		err := waitFunc()
-		r.NoError(err)
+		time.Sleep(30 * time.Millisecond)
+		synctest.Wait()
 		output = buf.String()
 		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (completed)\n   ├─ B (completed)\n   │  ╰─ C (completed)\n   ╰─ D (completed)\n"
 		r.Equal(expected, output)
+		cancel()
+		err := waitFunc()
+		r.ErrorIs(err, context.Canceled)
 	})
 }
 
@@ -121,12 +123,14 @@ func TestTreeRendererStatic(t *testing.T) {
 	logWriter := testLogWriter{t}
 	writer := io.MultiWriter(buf, logWriter)
 
+	renderer := NewTreeRenderer[string](nil)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	r.NoError(d.AddVertex("A"))
 	expected := "── A\n"
-	r.NoError(Render[string](ctx, d, WithWriter[string](writer)))
+	r.NoError(Render[string](ctx, d, []string{"A"}, writer, renderer))
 	output := buf.String()
 	buf.Reset()
 	r.Equal(expected, output)
@@ -134,14 +138,14 @@ func TestTreeRendererStatic(t *testing.T) {
 	// Add B
 	r.NoError(d.AddVertex("B"))
 	expected = "── A\n"
-	r.NoError(Render[string](ctx, d, WithRoot("A"), WithWriter[string](writer)))
+	r.NoError(Render[string](ctx, d, []string{"A"}, writer, renderer))
 	output = buf.String()
 	buf.Reset()
 	r.Equal(expected, output)
 	// Add B as child of A
 	r.NoError(d.AddEdge("A", "B"))
 	expected = "── A\n   ╰─ B\n"
-	r.NoError(Render(ctx, d, WithWriter[string](writer)))
+	r.NoError(Render(ctx, d, []string{"A"}, writer, renderer))
 	output = buf.String()
 	buf.Reset()
 	r.Equal(expected, output) // still only root
@@ -154,13 +158,13 @@ func TestTreeRendererStatic(t *testing.T) {
 	r.NoError(d.AddVertex("D"))
 	r.NoError(d.AddEdge("A", "D"))
 
-	r.NoError(Render[string](ctx, d, WithWriter[string](writer)))
+	r.NoError(Render[string](ctx, d, []string{"A"}, writer, renderer))
 	expected = "── A\n   ├─ B\n   │  ╰─ C\n   ╰─ D\n"
 	output = buf.String()
 	buf.Reset()
 	r.Equal(expected, output)
 
-	r.NoError(Render[string](ctx, d, WithWriter[string](writer)))
+	r.NoError(Render[string](ctx, d, []string{"A"}, writer, renderer))
 	output = buf.String()
 }
 
