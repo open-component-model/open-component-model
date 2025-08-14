@@ -149,7 +149,14 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 	defer pm.mu.Unlock()
 	var errs error
 
-	errs = errors.Join(errs, pm.ComponentVersionRepositoryRegistry.Shutdown(ctx))
+	errs = errors.Join(errs,
+		pm.ComponentVersionRepositoryRegistry.Shutdown(ctx),
+		pm.CredentialRepositoryRegistry.Shutdown(ctx),
+		pm.InputRegistry.Shutdown(ctx),
+		pm.DigestProcessorRegistry.Shutdown(ctx),
+		pm.ResourcePluginRegistry.Shutdown(ctx),
+		pm.BlobTransformerRegistry.Shutdown(ctx),
+	)
 
 	return errs
 }
