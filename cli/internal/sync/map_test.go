@@ -178,7 +178,7 @@ func TestMap_ConcurrentAccess(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	// StartRenderLoop multiple goroutines that read and write concurrently
+	// Start multiple goroutines that read and write concurrently
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(id int) {
@@ -256,7 +256,7 @@ func TestMap_StressTest(t *testing.T) {
 	const numWriters = 5
 	const numReaders = 10
 
-	// StartRenderLoop writers
+	// Start writers
 	for i := 0; i < numWriters; i++ {
 		wg.Add(1)
 		go func(writerID int) {
@@ -269,7 +269,7 @@ func TestMap_StressTest(t *testing.T) {
 		}(i)
 	}
 
-	// StartRenderLoop readers
+	// Start readers
 	for i := 0; i < numReaders; i++ {
 		wg.Add(1)
 		go func(readerID int) {
@@ -317,7 +317,7 @@ func TestMap_ConcurrentModification(t *testing.T) {
 		m.Store(i, "initial-"+strconv.Itoa(i))
 	}
 
-	// StartRenderLoop a goroutine that modifies the map while we iterate
+	// Start a goroutine that modifies the map while we iterate
 	done := make(chan bool)
 	go func() {
 		for i := 0; i < numItems; i++ {
