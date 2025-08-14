@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -18,7 +19,9 @@ import (
 )
 
 const (
-	tempFolderFlag = "temp-folder"
+	tempFolderFlag               = "temp-folder"
+	pluginShutdownTimeoutFlag    = "plugin-shutdown-timeout"
+	pluginShutdownTimeoutDefault = 10 * time.Second
 )
 
 // Execute adds all child commands to the Cmd command and sets flags appropriately.
@@ -47,6 +50,9 @@ func New() *cobra.Command {
 
 	configuration.RegisterConfigFlag(cmd)
 	cmd.PersistentFlags().String(tempFolderFlag, "", `Specify a custom temporary folder path for filesystem operations.`)
+	cmd.PersistentFlags().Duration(pluginShutdownTimeoutFlag, pluginShutdownTimeoutDefault,
+		`Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed`)
+
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())
