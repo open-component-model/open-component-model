@@ -343,7 +343,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 			PluginType: types.ComponentVersionRepositoryPluginType,
 		}, os.Stdout)
 
-		_, err = p2.determineLocation()
+		_, err = p2.determineLocation(t.Context())
 		r.Error(err)
 		r.Contains(err.Error(), "process using socket file is still alive")
 
@@ -374,7 +374,7 @@ func TestLockFileProcessValidation(t *testing.T) {
 			PluginType: types.ComponentVersionRepositoryPluginType,
 		}, os.Stdout)
 
-		loc, err := p.determineLocation()
+		loc, err := p.determineLocation(t.Context())
 		r.NoError(err)
 		r.Equal(location, loc)
 
