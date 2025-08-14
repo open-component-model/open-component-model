@@ -302,7 +302,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 
 	content, err := io.ReadAll(writer)
 	require.NoError(t, err)
-	require.Contains(t, string(content), "Gracefully shutting down plugin")
+	require.Contains(t, string(content), "gracefully shutting down plugin")
 }
 
 func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {

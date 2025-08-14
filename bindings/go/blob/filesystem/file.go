@@ -81,3 +81,39 @@ func GetBlobFromOSPath(path string) (*Blob, error) {
 
 	return data, nil
 }
+
+// GetBlobInWorkingDirectory returns a blob that reads from the operating system file system,
+// ensuring that the path is resolved against the specified working directory.
+// It uses EnsurePathInWorkingDirectory to ensure the path is relative to the working directory.
+// The blob is created using the GetBlobFromOSPath function.
+// If the path is not absolute, it will be resolved against the working directory.
+// If the path is invalid or cannot be resolved, it returns an error.
+func GetBlobInWorkingDirectory(path, workingDir string) (*Blob, error) {
+	path, err := EnsurePathInWorkingDirectory(path, workingDir)
+	if err != nil {
+		return nil, err
+	}
+	return GetBlobFromOSPath(path)
+}
+
+// EnsurePathInWorkingDirectory ensures that the given path is resolved against the specified working directory.
+// If the path is absolute, it checks if the path is valid within the working directory.
+// If the path is relative, it resolves it against the working directory and prevents escaping the working directory.
+// If the path cannot be resolved or is invalid, it returns an error.
+func EnsurePathInWorkingDirectory(path, workingDirectory string) (_ string, err error) {
+	if filepath.IsAbs(path) {
+		if path, err = filepath.Rel(workingDirectory, path); err != nil {
+			return "", err
+		}
+	}
+
+	fd, err := os.OpenInRoot(workingDirectory, path)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		err = errors.Join(err, fd.Close())
+	}()
+
+	return filepath.Join(workingDirectory, path), nil
+}

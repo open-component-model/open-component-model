@@ -62,3 +62,76 @@ func TestCopyBlobToOSPath_NamedPipe_Blocking(t *testing.T) {
 		r.Equal(testData, data)
 	}
 }
+
+func Test_GetBlobInWorkingDirectory(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	fp := filepath.Join(tempDir, "testfile.txt")
+	r.NoError(os.WriteFile(fp, []byte("test data"), 0644))
+
+	type args struct {
+		path       string
+		workingDir string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "valid relative path in working directory",
+			args: args{
+				path:       "testfile.txt",
+				workingDir: tempDir,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid absolute path in working directory",
+			args: args{
+				path:       fp,
+				workingDir: tempDir,
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid path escaping working directory",
+			args: args{
+				path:       "../testfile.txt",
+				workingDir: tempDir,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid absolute path not in working directory",
+			args: args{
+				path:       filepath.Join(tempDir, "../../testfile.txt"),
+				workingDir: tempDir,
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := filesystem.GetBlobInWorkingDirectory(tt.args.path, tt.args.workingDir)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("GetBlobInWorkingDirectory() expected error, got nil")
+				} else {
+					t.Logf("GetBlobInWorkingDirectory() expected error, got: %v", err)
+					return
+				}
+			}
+
+			reader, err := got.ReadCloser()
+			r.NoError(err)
+			defer func(reader io.ReadCloser) {
+				_ = reader.Close()
+			}(reader)
+
+			data, err := io.ReadAll(reader)
+			r.NoError(err)
+			r.Equal("test data", string(data))
+		})
+	}
+}
