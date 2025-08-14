@@ -58,7 +58,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
   -h, --help                       help for component-version
       --latest                     if set, only the latest version of the component is returned
   -o, --output enum                output format of the component descriptors
-                                   (must be one of [json table yaml]) (default table)
+                                   (must be one of [json jsonNormalisation/v4alpha1 jsonNormalisation/v4alpha1+sha256 jsonNormalisation/v4alpha1+sha512 ndjson table yaml]) (default table)
       --semver-constraint string   semantic version constraint restricting which versions to output (default "> 0.0.0-0")
 ```
 
