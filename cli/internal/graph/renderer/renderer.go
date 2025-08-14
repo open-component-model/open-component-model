@@ -91,7 +91,7 @@ func (t *TreeRenderer[T]) traverseGraph(ctx context.Context, dag *syncdag.Direct
 // If no writer is provided, it defaults to os.Stdout. If no GraphRenderer is
 // provided, it uses a default tree renderer that serializes the vertex ID.
 //
-// Render is a convenience function around renderer.Render providing a similar
+// Render is a convenience function around GraphRenderer.Render providing a similar
 // interface as StartRenderLoop, but without the live rendering loop.
 func Render[T cmp.Ordered](
 	ctx context.Context,
