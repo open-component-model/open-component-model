@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/text"
+	"golang.org/x/sync/errgroup"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 )
 
@@ -66,11 +68,6 @@ func StartRenderLoop[T cmp.Ordered](
 	refreshRate time.Duration,
 	renderer GraphRenderer[T],
 ) func() error {
-	errCh := make(chan error)
-	waitFunc := func() error {
-		err := <-errCh
-		return err
-	}
 
 	if renderer == nil {
 		renderer = NewTreeRenderer(func(v *syncdag.Vertex[T]) string {
@@ -92,7 +89,6 @@ func StartRenderLoop[T cmp.Ordered](
 	}
 
 	renderState := &renderLoopState{
-		errCh:       errCh,
 		refreshRate: refreshRate,
 		writer:      writer,
 		outputState: struct {
@@ -104,24 +100,20 @@ func StartRenderLoop[T cmp.Ordered](
 		},
 	}
 
-	go func() {
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() (err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				// Convert panic to error and send it
-				select {
-				case errCh <- fmt.Errorf("render loop panicked: %v", r):
-				default: // Channel might be full, don't block
-				}
+				err = errors.Join(err, fmt.Errorf("render loop panicked: %v", r))
 			}
-			close(errCh)
 		}()
-		renderLoop(ctx, dag, roots, renderer, renderState)
-	}()
-	return waitFunc
+		return renderLoop(ctx, dag, roots, renderer, renderState)
+	})
+
+	return eg.Wait
 }
 
 type renderLoopState struct {
-	errCh       chan error
 	refreshRate time.Duration
 	writer      io.Writer
 	outputState struct {
@@ -130,19 +122,17 @@ type renderLoopState struct {
 	}
 }
 
-func renderLoop[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], roots []T, renderer GraphRenderer[T], renderState *renderLoopState) {
+func renderLoop[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], roots []T, renderer GraphRenderer[T], renderState *renderLoopState) error {
 	ticker := time.NewTicker(renderState.refreshRate)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			renderState.errCh <- ctx.Err()
-			return
+			return ctx.Err()
 		case <-ticker.C:
 			if err := refreshOutput(ctx, dag, roots, renderer, renderState); err != nil {
-				renderState.errCh <- err
-				return
+				return err
 			}
 		}
 	}
