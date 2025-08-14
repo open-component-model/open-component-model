@@ -59,9 +59,9 @@ ocm generate docs [-d <directory>] [--mode <format>] [flags]
                                 error: Show errors only
                              (must be one of [debug error info warn]) (default info)
       --logoutput enum       set the log output destination
-                                stdout: Write logs to standard output (default)
+                                stdout: Write logs to standard output
                                 stderr: Write logs to standard error, useful for separating logs from normal output
-                             (must be one of [stderr stdout]) (default stdout)
+                             (must be one of [stderr stdout]) (default stderr)
       --temp-folder string   Specify a custom temporary folder path for filesystem operations.
 ```
 
