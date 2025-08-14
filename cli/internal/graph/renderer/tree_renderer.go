@@ -1,4 +1,4 @@
-package displaymanager
+package renderer
 
 import (
 	"cmp"
