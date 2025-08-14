@@ -174,7 +174,7 @@ type testLogWriter struct{ t *testing.T }
 func (w testLogWriter) Write(p []byte) (int, error) {
 	// This line can be commented in to see the actual output when running the
 	// tests from a terminal supporting ANSI escape codes.
-	//fmt.Print(string(p))
+	// fmt.Print(string(p))
 	w.t.Log("\n" + string(p))
 	return len(p), nil
 }
