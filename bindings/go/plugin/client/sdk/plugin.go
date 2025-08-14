@@ -105,19 +105,30 @@ func (p *Plugin) Start(ctx context.Context) error {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	go func(ctx context.Context) {
+	go func() {
 		sig := <-sigs
 
 		p.logger.InfoContext(ctx, "Received signal. Shutting down.", "signal", sig)
 
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		// wait for 5 seconds for the server to shutdown
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := p.GracefulShutdown(ctx); err != nil {
 			p.logger.ErrorContext(ctx, "Error shutting down plugin", "error", err)
 		}
-	}(ctx)
+		if err := p.server.Close(); err != nil {
+			p.logger.ErrorContext(ctx, "failed to close server", "error", err)
+		}
+		p.logger.InfoContext(ctx, "Plugin shutdown complete", "id", p.Config.ID)
+	}()
 
-	return p.listen(ctx)
+	err := p.listen(ctx)
+
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+
+	return err
 }
 
 func (p *Plugin) Healthz(w http.ResponseWriter, r *http.Request) {
@@ -243,7 +254,7 @@ func (p *Plugin) determineLocation(ctx context.Context) (_ string, err error) {
 // GracefulShutdown will stop the server and do cleanup if necessary.
 // In the case of sockets, it will remove the created socket.
 func (p *Plugin) GracefulShutdown(ctx context.Context) error {
-	p.logger.InfoContext(ctx, "Gracefully shutting down plugin", "id", p.Config.ID)
+	p.logger.InfoContext(ctx, "gracefully shutting down plugin", "id", p.Config.ID)
 	// We ignore server closed errors because server closing might race with the listener.
 	if err := p.server.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("failed to shutdown server: %w", err)
@@ -263,6 +274,7 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 		// empty case for now
 	}
 
+	p.logger.InfoContext(ctx, "plugin shutdown complete", "id", p.Config.ID)
 	return nil
 }
 
