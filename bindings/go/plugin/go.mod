@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/plugin
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/invopop/jsonschema v0.13.0

@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/input/utf8
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
