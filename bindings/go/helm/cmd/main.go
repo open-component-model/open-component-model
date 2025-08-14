@@ -55,14 +55,13 @@ func main() {
 	}))
 
 	capabilities := endpoints.NewEndpoints(helminput.Scheme)
+	helmPlugin := &HelmInputPlugin{}
+	if err := input.RegisterInputProcessor(&helmv1.Helm{}, helmPlugin, capabilities); err != nil {
+		logger.Error("failed to register helm input plugin", "error", err.Error())
+		os.Exit(1)
+	}
 
 	if len(args) > 0 && args[0] == "capabilities" {
-		// Register a temporary plugin instance for capabilities
-		if err := input.RegisterInputProcessor(&helmv1.Helm{}, &HelmInputPlugin{}, capabilities); err != nil {
-			logger.Error("failed to register helm input plugin", "error", err.Error())
-			os.Exit(1)
-		}
-
 		content, err := json.Marshal(capabilities)
 		if err != nil {
 			logger.Error("failed to marshal capabilities", "error", err)
@@ -104,16 +103,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	helmPlugin := &HelmInputPlugin{
-		filesystemConfig: filesystemConfig,
-	}
-
-	if err := input.RegisterInputProcessor(&helmv1.Helm{}, helmPlugin, capabilities); err != nil {
-		logger.Error("failed to register helm input plugin", "error", err.Error())
-		os.Exit(1)
-	}
-
-	logger.Info("registered helm input plugin")
+	// update to use the configuration
+	helmPlugin.filesystemConfig = filesystemConfig
 
 	separateContext := context.Background()
 	ocmPlugin := plugin.NewPlugin(separateContext, logger, conf, os.Stdout)
