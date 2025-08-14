@@ -3,6 +3,7 @@ package renderer
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"testing"
 	"testing/synctest"
@@ -24,7 +25,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		writer := io.MultiWriter(buf, logWriter)
 		vertexSerializer := func(v *syncdag.Vertex[string]) string {
 			state, _ := v.Attributes.Load(syncdag.AttributeTraversalState)
-			return v.ID + " (" + string(state.(syncdag.TraversalState)) + ")"
+			return fmt.Sprintf("%s (%s)", v.ID, state.(syncdag.TraversalState))
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
