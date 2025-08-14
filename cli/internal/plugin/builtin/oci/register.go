@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"errors"
+	"log/slog"
 
 	extractspecv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -26,6 +27,7 @@ func Register(
 	digRegistry *digestprocessor.RepositoryRegistry,
 	blobTransformerRegistry *blobtransformer.Registry,
 	filesystemConfig *filesystemv1alpha1.Config,
+	logger *slog.Logger,
 ) error {
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
@@ -36,7 +38,7 @@ func Register(
 
 	cvRepoPlugin := ComponentVersionRepositoryPlugin{manifests: manifests, layers: layers, filesystemConfig: filesystemConfig}
 	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, filesystemConfig: filesystemConfig}
-	ociBlobTransformerPlugin := transformer.New()
+	ociBlobTransformerPlugin := transformer.New(logger)
 
 	return errors.Join(
 		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(

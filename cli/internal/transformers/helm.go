@@ -20,7 +20,6 @@ const (
 var HELMTransformerConfig = extractspecv1alpha1.Config{
 	Rules: []extractspecv1alpha1.Rule{
 		{
-			Filename: "chart.tgz",
 			LayerSelectors: []*extractspecv1alpha1.LayerSelector{
 				{
 					MatchExpressions: []extractspecv1alpha1.LayerSelectorRequirement{
@@ -37,7 +36,6 @@ var HELMTransformerConfig = extractspecv1alpha1.Config{
 			},
 		},
 		{
-			Filename: "chart.tgz.prov",
 			LayerSelectors: []*extractspecv1alpha1.LayerSelector{
 				{
 					MatchExpressions: []extractspecv1alpha1.LayerSelectorRequirement{
