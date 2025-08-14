@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,71 +18,160 @@ import (
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 )
 
-type TreeRendererOption func(*TreeRendererOptions)
-
-type TreeRendererOptions struct {
-	RefreshRate time.Duration
+type GraphRenderer[T cmp.Ordered] interface {
+	Render(ctx context.Context, writer io.Writer, dag *syncdag.DirectedAcyclicGraph[T], root T) error
 }
 
-func WithRefreshRate(refreshRate time.Duration) TreeRendererOption {
-	return func(opts *TreeRendererOptions) {
-		opts.RefreshRate = refreshRate
+func NewTreeRenderer[T cmp.Ordered](vertexSerializer func(*syncdag.Vertex[T]) string) *TreeRenderer[T] {
+	return &TreeRenderer[T]{
+		listWriter:       list.NewWriter(),
+		vertexSerializer: vertexSerializer,
 	}
 }
 
-type RenderOption func(*RenderOptions)
-
-type RenderOptions struct {
-	Writer io.Writer
+type TreeRenderer[T cmp.Ordered] struct {
+	listWriter       list.Writer
+	vertexSerializer func(*syncdag.Vertex[T]) string
 }
 
-func WithWriter(writer io.Writer) RenderOption {
-	return func(opts *RenderOptions) {
+func (t *TreeRenderer[T]) Render(ctx context.Context, writer io.Writer, dag *syncdag.DirectedAcyclicGraph[T], root T) error {
+	t.listWriter.SetStyle(list.StyleConnectedRounded)
+	defer t.listWriter.Reset()
+
+	if err := t.traverseGraph(ctx, dag, root); err != nil {
+		return fmt.Errorf("failed to traverse graph: %w", err)
+	}
+	t.listWriter.SetOutputMirror(writer)
+	t.listWriter.Render()
+	return nil
+}
+
+func (t *TreeRenderer[T]) traverseGraph(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], nodeId T) error {
+	vertex, ok := dag.GetVertex(nodeId)
+	if !ok {
+		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
+	}
+	item := t.vertexSerializer(vertex)
+	t.listWriter.AppendItem(item)
+
+	// Get children and sort them for stable output
+	children := getNeighborsSorted(vertex)
+
+	for _, child := range children {
+		t.listWriter.Indent()
+		if err := t.traverseGraph(ctx, dag, child); err != nil {
+			return err
+		}
+		t.listWriter.UnIndent()
+	}
+	return nil
+}
+
+type TreeRendererOption[T cmp.Ordered] func(*TreeRendererOptions[T])
+
+type TreeRendererOptions[T cmp.Ordered] struct {
+	GraphRenderer GraphRenderer[T]
+	Writer        io.Writer
+	RefreshRate   time.Duration
+	Root          T
+}
+
+func WithGraphRenderer[T cmp.Ordered](renderer GraphRenderer[T]) TreeRendererOption[T] {
+	return func(opts *TreeRendererOptions[T]) {
+		opts.GraphRenderer = renderer
+	}
+}
+
+func WithWriter[T cmp.Ordered](writer io.Writer) TreeRendererOption[T] {
+	return func(opts *TreeRendererOptions[T]) {
 		opts.Writer = writer
 	}
 }
 
-// TreeRenderer handles the rendering of a tree represented as part of a
-// DirectedAcyclicGraph.
-type TreeRenderer[T cmp.Ordered] struct {
-	// The refreshRate is the time interval at which the rendering loop will
-	// refresh the output during StartRenderLoop.
-	// It defaults to 100 milliseconds if not set or set to 0.
-	refreshRate time.Duration
-	// The vertexSerializer is a function that serializes a vertex to a string.
-	vertexSerializer func(v *syncdag.Vertex[T]) string
-	// The dag is the DirectedAcyclicGraph that is to be displayed.
-	// This is supposed to be a reference to the actual DirectedAcyclicGraph.
-	// The rendering may run concurrently with the traversal. The concurrent
-	// access to the dag is synchronized through sync.RWMutex and sync.Map.
-	dag *syncdag.DirectedAcyclicGraph[T]
+func WithRoot[T cmp.Ordered](root T) TreeRendererOption[T] {
+	return func(opts *TreeRendererOptions[T]) {
+		opts.Root = root
+	}
 }
 
-// NewTreeRenderer creates a new TreeRenderer for the given DirectedAcyclicGraph.
-func NewTreeRenderer[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], vertexSerializer func(v *syncdag.Vertex[T]) string, opts ...TreeRendererOption) *TreeRenderer[T] {
-	options := &TreeRendererOptions{}
+func WithRefreshRate[T cmp.Ordered](rate time.Duration) TreeRendererOption[T] {
+	return func(opts *TreeRendererOptions[T]) {
+		opts.RefreshRate = rate
+	}
+}
+
+func WithTreeRendererOptions[T cmp.Ordered](opts *TreeRendererOptions[T]) TreeRendererOption[T] {
+	return func(options *TreeRendererOptions[T]) {
+		if opts.GraphRenderer != nil {
+			options.GraphRenderer = opts.GraphRenderer
+		}
+		if opts.Writer != nil {
+			options.Writer = opts.Writer
+		}
+		if opts.RefreshRate > 0 {
+			options.RefreshRate = opts.RefreshRate
+		}
+		var zero T
+		if opts.Root != zero {
+			options.Root = opts.Root
+		}
+	}
+}
+
+func completeOptions[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], opts []TreeRendererOption[T]) (*TreeRendererOptions[T], error) {
+	options := &TreeRendererOptions[T]{}
 
 	for _, opt := range opts {
 		opt(options)
+	}
+
+	if options.GraphRenderer == nil {
+		options.GraphRenderer = NewTreeRenderer(func(v *syncdag.Vertex[T]) string {
+			// Default serializer just returns the vertex ID.
+			// This can be overridden by the user.
+			return fmt.Sprintf("%v", v.ID)
+		})
 	}
 
 	if options.RefreshRate == 0 {
 		options.RefreshRate = 100 * time.Millisecond
 	}
 
-	if vertexSerializer == nil {
-		// Default serializer just returns the vertex ID.
-		// The caller should override this to provide meaningful output.
-		vertexSerializer = func(v *syncdag.Vertex[T]) string {
-			return fmt.Sprintf("%v", v.ID)
+	if options.Writer == nil {
+		options.Writer = os.Stdout
+		slog.InfoContext(ctx, "no writer provided, using default os.Stdout for rendering")
+	}
+	var zero T
+	if options.Root == zero {
+		roots := dag.Roots()
+		if len(roots) > 1 {
+			return options, fmt.Errorf("multiple roots found in the graph, please specify a root using WithRoot()")
+		}
+		if len(roots) == 0 {
+			options.Root = zero
+		} else {
+			options.Root = roots[0]
 		}
 	}
+	return options, nil
+}
 
-	return &TreeRenderer[T]{
-		refreshRate:      options.RefreshRate,
-		vertexSerializer: vertexSerializer,
-		dag:              dag,
+// Render renders the current state of the tree starting from the given root ID.
+func Render[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], opts ...TreeRendererOption[T]) error {
+	options, err := completeOptions(ctx, dag, opts)
+	if err != nil {
+		return fmt.Errorf("failed to complete options: %w", err)
 	}
+
+	_, exists := dag.GetVertex(options.Root)
+	if !exists {
+		return fmt.Errorf("vertex for rootID %v does not exist", options.Root)
+	}
+
+	if err := options.GraphRenderer.Render(ctx, options.Writer, dag, options.Root); err != nil {
+		return fmt.Errorf("failed to render graph: %w", err)
+	}
+	return nil
 }
 
 // StartRenderLoop starts the rendering loop. It returns a function that can be
@@ -88,17 +179,7 @@ func NewTreeRenderer[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], vertex
 // The rendering loop will run until the vertex with root id is in
 // syncdag.TraversalState StateCompleted, an error occurs or the context is
 // canceled.
-func (tdm *TreeRenderer[T]) StartRenderLoop(ctx context.Context, root T, opts ...RenderOption) func() error {
-	options := &RenderOptions{}
-
-	for _, opt := range opts {
-		opt(options)
-	}
-
-	if options.Writer == nil {
-		options.Writer = os.Stdout
-	}
-
+func StartRenderLoop[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], opts ...TreeRendererOption[T]) func() error {
 	doneCh := make(chan error)
 	waitFunc := func() error {
 		select {
@@ -109,9 +190,16 @@ func (tdm *TreeRenderer[T]) StartRenderLoop(ctx context.Context, root T, opts ..
 		}
 	}
 
+	options, err := completeOptions(ctx, dag, opts)
+	if err != nil {
+		return func() error {
+			return err
+		}
+	}
+
 	renderState := &renderLoopState{
-		doneCh: doneCh,
-		writer: options.Writer,
+		doneCh:      doneCh,
+		refreshRate: options.RefreshRate,
 		outputState: struct {
 			displayedLines int
 			lastOutput     string
@@ -119,33 +207,32 @@ func (tdm *TreeRenderer[T]) StartRenderLoop(ctx context.Context, root T, opts ..
 			displayedLines: 0,
 			lastOutput:     "",
 		},
-		listWriter: list.NewWriter(),
 	}
 
-	go tdm.renderLoop(ctx, root, renderState)
+	go renderLoop(ctx, dag, options.Root, renderState, options)
 	return waitFunc
 }
 
 type renderLoopState struct {
 	doneCh      chan error
-	writer      io.Writer
+	refreshRate time.Duration
 	outputState struct {
 		displayedLines int
 		lastOutput     string
 	}
-	listWriter list.Writer
 }
 
-func (tdm *TreeRenderer[T]) renderLoop(ctx context.Context, root T, renderState *renderLoopState) {
-	ticker := time.NewTicker(tdm.refreshRate)
+func renderLoop[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], root T, renderState *renderLoopState, options *TreeRendererOptions[T]) {
+	ticker := time.NewTicker(renderState.refreshRate)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			renderState.doneCh <- ctx.Err()
 			return
 		case <-ticker.C:
-			if err, done := tdm.refreshOutput(ctx, root, renderState); err != nil || done {
+			if err, done := refreshOutput(ctx, dag, root, renderState, options); err != nil || done {
 				renderState.doneCh <- err
 				close(renderState.doneCh)
 				return
@@ -154,10 +241,11 @@ func (tdm *TreeRenderer[T]) renderLoop(ctx context.Context, root T, renderState 
 	}
 }
 
-func (tdm *TreeRenderer[T]) refreshOutput(_ context.Context, root T, renderState *renderLoopState) (error, bool) {
-	vertex, ok := tdm.dag.GetVertex(root)
+func refreshOutput[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], root T, renderState *renderLoopState, options *TreeRendererOptions[T]) (error, bool) {
+	vertex, ok := dag.GetVertex(root)
 	if !ok {
-		return fmt.Errorf("vertex for rootID %vertex does not exist", root), true
+		slog.InfoContext(ctx, "vertex for rootID does not exist yet, skipping rendering", "rootID", root)
+		return nil, false
 	}
 	// It is important to retrieve the traversal state BEFORE rendering the graph.
 	// Otherwise, there might be a race condition where the graph traversal
@@ -167,87 +255,37 @@ func (tdm *TreeRenderer[T]) refreshOutput(_ context.Context, root T, renderState
 	// that does not affect the output.
 	state, ok := vertex.Attributes.Load(syncdag.AttributeTraversalState)
 	if !ok {
-		return fmt.Errorf("vertex %vertex does not have a discovery state", root), true
+		return fmt.Errorf("vertex %v does not have a discovery state", root), true
 	}
 
-	renderState.listWriter.SetStyle(list.StyleConnectedRounded)
-	defer renderState.listWriter.Reset()
-
-	tdm.generateTreeOutput(root, renderState.listWriter)
-	output := renderState.listWriter.Render()
+	outbuf := new(bytes.Buffer)
+	if err := Render(ctx, dag, WithTreeRendererOptions(options), WithWriter[T](outbuf)); err != nil {
+		return err, false
+	}
+	output := outbuf.String()
 
 	// only update if the output has changed
-	if !tdm.outputEquals(output, renderState.outputState.lastOutput) {
+	if !outputEquals(output, renderState.outputState.lastOutput) {
 		// clear previous output
 		var buf bytes.Buffer
 		for range renderState.outputState.displayedLines {
 			buf.WriteString(text.CursorUp.Sprint())
 			buf.WriteString(text.EraseLine.Sprint())
 		}
-		if _, err := fmt.Fprint(renderState.writer, buf.String()); err != nil {
+		if _, err := fmt.Fprint(options.Writer, buf.String()); err != nil {
 			return fmt.Errorf("error clearing previous output: %w", err), false
 		}
 
-		if _, err := fmt.Fprintln(renderState.writer, output); err != nil {
+		if _, err := fmt.Fprint(options.Writer, output); err != nil {
 			return fmt.Errorf("error writing live rendering output to tree display manager writer: %w", err), false
 		}
 		renderState.outputState.lastOutput = output
-		renderState.outputState.displayedLines = renderState.listWriter.Length()
+		renderState.outputState.displayedLines = strings.Count(output, "\n")
 	}
 	return nil, state == syncdag.StateCompleted
 }
 
-// Render renders the current state of the tree starting from the given root ID.
-func (tdm *TreeRenderer[T]) Render(_ context.Context, root T, opts ...RenderOption) error {
-	options := &RenderOptions{}
-	for _, opt := range opts {
-		opt(options)
-	}
-	if options.Writer == nil {
-		options.Writer = os.Stdout
-	}
-
-	_, exists := tdm.dag.GetVertex(root)
-	if !exists {
-		return fmt.Errorf("vertex for rootID %v does not exist", root)
-	}
-
-	listWriter := list.NewWriter()
-	listWriter.SetStyle(list.StyleConnectedRounded)
-	defer listWriter.Reset()
-
-	tdm.generateTreeOutput(root, listWriter)
-	listWriter.SetOutputMirror(options.Writer)
-	listWriter.Render()
-	return nil
-}
-
-func (tdm *TreeRenderer[T]) outputEquals(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	return a == b
-}
-
-func (tdm *TreeRenderer[T]) generateTreeOutput(nodeId T, listWriter list.Writer) {
-	vertex, ok := tdm.dag.GetVertex(nodeId)
-	if !ok {
-		return
-	}
-	output := tdm.vertexSerializer(vertex)
-	listWriter.AppendItem(output)
-
-	// Get children and sort them for stable output
-	children := tdm.getNeighborsSorted(vertex)
-
-	for _, child := range children {
-		listWriter.Indent()
-		tdm.generateTreeOutput(child, listWriter)
-		listWriter.UnIndent()
-	}
-}
-
-func (tdm *TreeRenderer[T]) getNeighborsSorted(vertex *syncdag.Vertex[T]) []T {
+func getNeighborsSorted[T cmp.Ordered](vertex *syncdag.Vertex[T]) []T {
 	type kv struct {
 		Key   T
 		Value *sync.Map
@@ -291,4 +329,11 @@ func (tdm *TreeRenderer[T]) getNeighborsSorted(vertex *syncdag.Vertex[T]) []T {
 		children[i] = kv.Key
 	}
 	return children
+}
+
+func outputEquals(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return a == b
 }

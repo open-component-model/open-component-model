@@ -128,7 +128,7 @@ import (
 //			return v.ID
 //		}
 //
-//		treeDisplayManager := NewTreeRenderer(mydag, f, WithMode(ModeLive))
+//		treeDisplayManager := NewGraphRenderer(mydag, f, WithMode(ModeLive))
 //		treeDisplayManager.StartRenderLoop(ctx, components[0].ToIdentity().String())
 //		r.NoError(mydag.Traverse(ctx, &syncdag.Vertex[string]{
 //			ID: components[0].ToIdentity().String(),
