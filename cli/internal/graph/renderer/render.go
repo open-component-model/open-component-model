@@ -8,83 +8,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"slices"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/jedib0t/go-pretty/v6/list"
 	"github.com/jedib0t/go-pretty/v6/text"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 )
-
-type GraphRenderer[T cmp.Ordered] interface {
-	Render(ctx context.Context, writer io.Writer, dag *syncdag.DirectedAcyclicGraph[T], roots []T) error
-}
-
-func NewTreeRenderer[T cmp.Ordered](vertexSerializer func(*syncdag.Vertex[T]) string) *TreeRenderer[T] {
-	if vertexSerializer == nil {
-		vertexSerializer = func(v *syncdag.Vertex[T]) string {
-			// Default serializer just returns the vertex ID.
-			// This can be overridden by the user.
-			return fmt.Sprintf("%v", v.ID)
-		}
-	}
-	return &TreeRenderer[T]{
-		listWriter:       list.NewWriter(),
-		vertexSerializer: vertexSerializer,
-	}
-}
-
-type TreeRenderer[T cmp.Ordered] struct {
-	listWriter       list.Writer
-	vertexSerializer func(*syncdag.Vertex[T]) string
-}
-
-func (t *TreeRenderer[T]) Render(ctx context.Context, writer io.Writer, dag *syncdag.DirectedAcyclicGraph[T], roots []T) error {
-	t.listWriter.SetStyle(list.StyleConnectedRounded)
-	defer t.listWriter.Reset()
-
-	if len(roots) == 0 {
-		return fmt.Errorf("no roots provided for rendering")
-	} else if len(roots) > 1 {
-		return fmt.Errorf("multiple roots provided for rendering, only one root is supported")
-	}
-
-	root := roots[0]
-	_, exists := dag.GetVertex(root)
-	if !exists {
-		return fmt.Errorf("vertex for rootID %v does not exist", root)
-	}
-
-	if err := t.traverseGraph(ctx, dag, root); err != nil {
-		return fmt.Errorf("failed to traverse graph: %w", err)
-	}
-	t.listWriter.SetOutputMirror(writer)
-	t.listWriter.Render()
-	return nil
-}
-
-func (t *TreeRenderer[T]) traverseGraph(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], nodeId T) error {
-	vertex, ok := dag.GetVertex(nodeId)
-	if !ok {
-		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
-	}
-	item := t.vertexSerializer(vertex)
-	t.listWriter.AppendItem(item)
-
-	// Get children and sort them for stable output
-	children := GetNeighborsSorted(vertex)
-
-	for _, child := range children {
-		t.listWriter.Indent()
-		if err := t.traverseGraph(ctx, dag, child); err != nil {
-			return err
-		}
-		t.listWriter.UnIndent()
-	}
-	return nil
-}
 
 // Render renders the current state of the tree starting from the given root ID.
 // If no root is provided, it attempts to determine the root from the graph.
@@ -238,56 +167,6 @@ func refreshOutput[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyc
 		renderState.outputState.displayedLines = strings.Count(output, "\n")
 	}
 	return nil
-}
-
-// GetNeighborsSorted returns the neighbors of the given vertex sorted by their
-// order index if available, otherwise by their key.
-// This function may be used to implement GraphRenderer with a consistent
-// order of neighbors in the output.
-func GetNeighborsSorted[T cmp.Ordered](vertex *syncdag.Vertex[T]) []T {
-	type kv struct {
-		Key   T
-		Value *sync.Map
-	}
-	var kvSlice []kv
-
-	vertex.Edges.Range(func(key, value any) bool {
-		childId, ok1 := key.(T)
-		attributes, ok2 := value.(*sync.Map)
-		if ok1 && ok2 {
-			kvSlice = append(kvSlice, kv{
-				Key:   childId,
-				Value: attributes,
-			})
-		}
-		return true
-	})
-
-	// Sort kvSlice by order index if available, otherwise by key
-	slices.SortFunc(kvSlice, func(a, b kv) int {
-		var orderA, orderB int
-		var okA, okB bool
-		if oa, ok := a.Value.Load(syncdag.AttributeOrderIndex); ok {
-			orderA, okA = oa.(int)
-		}
-		if ob, ok := b.Value.Load(syncdag.AttributeOrderIndex); ok {
-			orderB, okB = ob.(int)
-		}
-		if okA && okB {
-			return orderA - orderB
-		} else if okA {
-			return -1
-		} else if okB {
-			return 1
-		}
-		return cmp.Compare(a.Key, b.Key)
-	})
-
-	children := make([]T, len(kvSlice))
-	for i, kv := range kvSlice {
-		children[i] = kv.Key
-	}
-	return children
 }
 
 func outputEquals(a, b string) bool {
