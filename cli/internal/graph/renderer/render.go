@@ -68,11 +68,8 @@ func StartRenderLoop[T cmp.Ordered](
 ) func() error {
 	errCh := make(chan error)
 	waitFunc := func() error {
-		select {
-		case err := <-errCh:
-			slog.InfoContext(ctx, "context canceled")
-			return err
-		}
+		err := <-errCh
+		return err
 	}
 
 	if renderer == nil {
@@ -107,7 +104,19 @@ func StartRenderLoop[T cmp.Ordered](
 		},
 	}
 
-	go renderLoop(ctx, dag, roots, renderer, renderState)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Convert panic to error and send it
+				select {
+				case errCh <- fmt.Errorf("render loop panicked: %v", r):
+				default: // Channel might be full, don't block
+				}
+			}
+			close(errCh)
+		}()
+		renderLoop(ctx, dag, roots, renderer, renderState)
+	}()
 	return waitFunc
 }
 
@@ -129,12 +138,10 @@ func renderLoop[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclic
 		select {
 		case <-ctx.Done():
 			renderState.errCh <- ctx.Err()
-			close(renderState.errCh)
 			return
 		case <-ticker.C:
 			if err := refreshOutput(ctx, dag, roots, renderer, renderState); err != nil {
 				renderState.errCh <- err
-				close(renderState.errCh)
 				return
 			}
 		}
@@ -149,7 +156,7 @@ func refreshOutput[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyc
 	output := outbuf.String()
 
 	// only update if the output has changed
-	if !outputEquals(output, renderState.outputState.lastOutput) {
+	if output != renderState.outputState.lastOutput {
 		// clear previous output
 		var buf bytes.Buffer
 		for range renderState.outputState.displayedLines {
@@ -167,11 +174,4 @@ func refreshOutput[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyc
 		renderState.outputState.displayedLines = strings.Count(output, "\n")
 	}
 	return nil
-}
-
-func outputEquals(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	return a == b
 }

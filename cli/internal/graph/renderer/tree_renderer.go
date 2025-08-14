@@ -40,7 +40,7 @@ func (t *TreeRenderer[T]) Render(ctx context.Context, writer io.Writer, dag *syn
 	if len(roots) == 0 {
 		return fmt.Errorf("no roots provided for rendering")
 	} else if len(roots) > 1 {
-		return fmt.Errorf("multiple roots provided for rendering, only one root is supported")
+		return fmt.Errorf("multiple roots provided for rendering, tree renderer only supports one root")
 	}
 
 	root := roots[0]
@@ -66,7 +66,7 @@ func (t *TreeRenderer[T]) traverseGraph(ctx context.Context, dag *syncdag.Direct
 	t.listWriter.AppendItem(item)
 
 	// Get children and sort them for stable output
-	children := GetNeighborsSorted(vertex)
+	children := GetNeighborsSorted(ctx, vertex)
 
 	for _, child := range children {
 		t.listWriter.Indent()
