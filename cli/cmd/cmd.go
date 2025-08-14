@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -18,7 +19,8 @@ import (
 )
 
 const (
-	tempFolderFlag = "temp-folder"
+	tempFolderFlag      = "temp-folder"
+	pluginDirectoryFlag = "plugin-directory"
 )
 
 // Execute adds all child commands to the Cmd command and sets flags appropriately.
@@ -47,6 +49,7 @@ func New() *cobra.Command {
 
 	configuration.RegisterConfigFlag(cmd)
 	cmd.PersistentFlags().String(tempFolderFlag, "", `Specify a custom temporary folder path for filesystem operations.`)
+	cmd.PersistentFlags().String(pluginDirectoryFlag, filepath.Join("$HOME", ".config", "ocm", "plugins"), `default directory path for ocm plugins.`)
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())

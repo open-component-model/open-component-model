@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -39,6 +40,16 @@ func setupPluginManager(cmd *cobra.Command) error {
 		if err != nil {
 			return fmt.Errorf("could not get plugin configuration: %w", err)
 		}
+
+		if defaultDir, err := cmd.PersistentFlags().GetString(pluginDirectoryFlag); err == nil {
+			expanded := os.ExpandEnv(defaultDir)
+			pluginCfg.Locations = []string{expanded}
+		}
+
+		if pluginCfg.IdleTimeout == 0 {
+			pluginCfg.IdleTimeout = v2alpha1.Duration(time.Hour)
+		}
+
 		for _, pluginLocation := range pluginCfg.Locations {
 			err := pluginManager.RegisterPlugins(cmd.Context(), pluginLocation,
 				manager.WithIdleTimeout(time.Duration(pluginCfg.IdleTimeout)),
