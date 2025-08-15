@@ -1,4 +1,4 @@
-package renderer
+package graph
 
 import (
 	"cmp"
@@ -10,12 +10,12 @@ import (
 
 // GetNeighborsSorted returns the neighbors of the given vertex sorted by their
 // order index if available, otherwise by their key.
-// This function may be used to implement GraphRenderer with a consistent
+// This function may be used to implement Renderer with a consistent
 // order of neighbors in the output.
 func GetNeighborsSorted[T cmp.Ordered](ctx context.Context, vertex *syncdag.Vertex[T]) []T {
 	var neighbors []T
 
-	vertex.Edges.Range(func(key, value any) bool {
+	vertex.Edges.Range(func(key, _ any) bool {
 		if childId, ok := key.(T); ok {
 			neighbors = append(neighbors, childId)
 		}
@@ -33,15 +33,12 @@ func compareByOrderIndex[T cmp.Ordered](ctx context.Context, vertex *syncdag.Ver
 	orderA := getOrderIndex(ctx, vertex, a)
 	orderB := getOrderIndex(ctx, vertex, b)
 
+	// If both edges have order indices, compare them.
 	if orderA != nil && orderB != nil {
 		return *orderA - *orderB
 	}
-	if orderA != nil {
-		return -1
-	}
-	if orderB != nil {
-		return 1
-	}
+	// If one of the order indices is nil, we cannot compare the order indexes
+	// and compare by the keys directly.
 	return cmp.Compare(a, b)
 }
 
