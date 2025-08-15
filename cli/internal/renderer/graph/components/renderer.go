@@ -1,4 +1,4 @@
-package jsontree
+package components
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	AttributeComponentDescriptor = "componentDescriptor"
+	AttributeComponentDescriptor = "component-descriptor"
 )
 
 //type OutputFormat int
@@ -52,11 +52,11 @@ const (
 //}
 
 // Renderer renders a tree structure from a DirectedAcyclicGraph.
-type Renderer[T cmp.Ordered, U any] struct {
-	objects []U
-	encoder func(U) ([]byte, error)
-	root    T
-	dag     *syncdag.DirectedAcyclicGraph[T]
+type Renderer[T cmp.Ordered] struct {
+	descriptors  []*descruntime.Descriptor
+	outputFormat string
+	root         T
+	dag          *syncdag.DirectedAcyclicGraph[T]
 }
 
 //// NewTreeRenderer creates a new TreeRenderer for the given DirectedAcyclicGraph.
@@ -84,7 +84,10 @@ type Renderer[T cmp.Ordered, U any] struct {
 
 // Render renders the tree structure starting from the root ID.
 // It writes the output to the provided writer.
-func (t *Renderer[T, U]) Render(ctx context.Context, writer io.Writer) error {
+func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
+	defer func() {
+		t.descriptors = t.descriptors[:0]
+	}()
 	var zero T
 	if t.root == zero {
 		return fmt.Errorf("root ID is not set")
@@ -98,7 +101,7 @@ func (t *Renderer[T, U]) Render(ctx context.Context, writer io.Writer) error {
 	if err := t.traverseGraph(ctx, t.root); err != nil {
 		return fmt.Errorf("failed to traverse graph: %w", err)
 	}
-	r, _, err := encodeDescriptors(t.outputFormat, t.componentDescriptors)
+	r, _, err := encodeDescriptors(t.outputFormat, t.descriptors)
 	if err != nil {
 		return fmt.Errorf("failed to encode descriptors: %w", err)
 	}
@@ -121,13 +124,13 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
 	}
 	descriptor, ok := vertex.GetAttribute(AttributeComponentDescriptor)
 	if !ok {
-		return fmt.Errorf("failed to get attribute %s from vertex %s", AttributeComponentDescriptor, nodeId)
+		return fmt.Errorf("failed to get attribute %s from vertex %v", AttributeComponentDescriptor, nodeId)
 	}
 	desc, ok := descriptor.(*descruntime.Descriptor)
 	if !ok {
 		return fmt.Errorf("expected attribute %s to be of type %T, got %T", AttributeComponentDescriptor, &descruntime.Descriptor{}, descriptor)
 	}
-	t.componentDescriptors = append(t.componentDescriptors, desc)
+	t.descriptors = append(t.descriptors, desc)
 
 	// Get children and sort them for stable output
 	children := graph.GetNeighborsSorted(ctx, vertex)
