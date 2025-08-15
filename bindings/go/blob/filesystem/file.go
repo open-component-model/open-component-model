@@ -84,7 +84,7 @@ func GetBlobFromOSPath(path string) (*Blob, error) {
 
 // GetBlobInWorkingDirectory returns a blob that reads from the operating system file system,
 // ensuring that the path is resolved against the specified working directory.
-// It uses EnsurePathInWorkingDirectory to ensure the path is relative to the working directory.
+// It uses EnsurePathInWorkingDirectory to ensure the path does not escape the working directory.
 // The blob is created using the GetBlobFromOSPath function.
 // If the path is not absolute, it will be resolved against the working directory.
 // If the path is invalid or cannot be resolved, it returns an error.
