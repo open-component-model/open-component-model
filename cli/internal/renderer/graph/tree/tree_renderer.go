@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/jedib0t/go-pretty/v6/list"
+
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/cli/internal/renderer/graph"
 )
