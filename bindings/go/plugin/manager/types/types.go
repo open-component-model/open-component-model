@@ -19,6 +19,7 @@ var (
 type Location struct {
 	LocationType `json:"type"`
 	Value        string `json:"value"`
+	MediaType    string `json:"mediaType,omitempty"`
 }
 
 type LocationType string

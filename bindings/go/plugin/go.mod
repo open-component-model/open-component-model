@@ -32,3 +32,5 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace ocm.software/open-component-model/bindings/go/blob => ../blob
