@@ -3,6 +3,7 @@ package dir
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -41,12 +42,33 @@ func init() {
 //
 // Since directories are accessed directly from the local filesystem, no credentials
 // are required for any operations.
-type InputMethod struct{}
+type InputMethod struct {
+	// WorkingDirectory is the base directory used to resolve relative paths in input specifications.
+	// If a path in the input specification is relative, it will be resolved against this directory.
+	WorkingDirectory string
+}
+
+// NewInputMethod creates a new InputMethod instance with the specified working directory.
+// The working directory is used to resolve relative paths in input specifications.
+// If the working directory is empty, it defaults to the current working directory of the process.
+func NewInputMethod(workingDir string) (*InputMethod, error) {
+	if workingDir == "" {
+		if wg, err := os.Getwd(); err != nil {
+			return nil, fmt.Errorf("error getting current working directory: %w", err)
+		} else {
+			workingDir = wg
+		}
+	}
+
+	return &InputMethod{
+		WorkingDirectory: workingDir,
+	}, nil
+}
 
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrDirsDoNotRequireCredentials
 // since directory inputs do not require any credentials for access. Directories are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	return nil, ErrDirsDoNotRequireCredentials
 }
 
@@ -65,7 +87,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	dirBlob, err := GetV1DirBlob(ctx, dir)
+	dirBlob, err := GetV1DirBlob(ctx, dir, i.WorkingDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("error getting dir blob based on resource input specification: %w", err)
 	}
@@ -78,7 +100,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 // GetSourceCredentialConsumerIdentity returns nil identity and ErrDirsDoNotRequireCredentials
 // since directory inputs do not require any credentials for access. Directories are read directly
 // from the local filesystem without authentication.
-func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
+func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, _ *constructorruntime.Source) (identity runtime.Identity, err error) {
 	return nil, ErrDirsDoNotRequireCredentials
 }
 
@@ -97,7 +119,7 @@ func (i *InputMethod) ProcessSource(ctx context.Context, src *constructorruntime
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	fileBlob, err := GetV1DirBlob(ctx, dir)
+	fileBlob, err := GetV1DirBlob(ctx, dir, i.WorkingDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("error getting dir blob based on source input specification: %w", err)
 	}
