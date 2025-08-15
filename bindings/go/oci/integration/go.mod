@@ -12,10 +12,10 @@ require (
 	golang.org/x/crypto v0.41.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.7
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250814064219-ee0cd5dc3dcf
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250815091936-3fce461ed6eb
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/oci v0.0.4
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250814064219-ee0cd5dc3dcf
+	ocm.software/open-component-model/bindings/go/oci v0.0.5
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250815091936-3fce461ed6eb
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 )
