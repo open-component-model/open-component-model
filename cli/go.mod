@@ -15,7 +15,7 @@ require (
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250814064219-ee0cd5dc3dcf
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
-	ocm.software/open-component-model/bindings/go/dag v0.0.2-0.20250814140440-2de7136f84d1
+	ocm.software/open-component-model/bindings/go/dag v0.0.2
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250814064219-ee0cd5dc3dcf
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.0-20250814064219-ee0cd5dc3dcf
