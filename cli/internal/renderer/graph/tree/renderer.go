@@ -14,15 +14,31 @@ import (
 
 type RendererOptions[T cmp.Ordered] struct {
 	// VertexSerializer is a function that serializes a vertex to a string.
-	VertexSerializer func(*syncdag.Vertex[T]) string
+	VertexSerializer VertexSerializer[T]
 }
 
 type RendererOption[T cmp.Ordered] func(*RendererOptions[T])
 
-func WithVertexSerializer[T cmp.Ordered](serializer func(*syncdag.Vertex[T]) string) RendererOption[T] {
+func WithVertexSerializer[T cmp.Ordered](serializer VertexSerializer[T]) RendererOption[T] {
 	return func(opts *RendererOptions[T]) {
 		opts.VertexSerializer = serializer
 	}
+}
+
+func WithVertexSerializerFunc[T cmp.Ordered](serializerFunc func(*syncdag.Vertex[T]) string) RendererOption[T] {
+	return func(opts *RendererOptions[T]) {
+		opts.VertexSerializer = VertexSerializerFunc[T](serializerFunc)
+	}
+}
+
+type VertexSerializer[T cmp.Ordered] interface {
+	Serialize(*syncdag.Vertex[T]) string
+}
+
+type VertexSerializerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) string
+
+func (f VertexSerializerFunc[T]) Serialize(v *syncdag.Vertex[T]) string {
+	return f(v)
 }
 
 // Renderer renders a tree structure from a DirectedAcyclicGraph.
@@ -32,7 +48,7 @@ type Renderer[T cmp.Ordered] struct {
 	listWriter list.Writer
 	// The vertexSerializer is a function that serializes a vertex to a string.
 	// It MUST perform READ-ONLY access to the vertex and its attributes.
-	vertexSerializer func(*syncdag.Vertex[T]) string
+	vertexSerializer VertexSerializer[T]
 	// The root ID of the tree to render.
 	root T
 	// The dag from which the tree is rendered.
@@ -47,12 +63,12 @@ func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...Re
 	}
 
 	if options.VertexSerializer == nil {
-		options.VertexSerializer = func(v *syncdag.Vertex[T]) string {
+		options.VertexSerializer = VertexSerializerFunc[T](func(v *syncdag.Vertex[T]) string {
 			// Default serializer just returns the vertex ID.
 			// This is supposed to be overridden by the user to provide a
 			// meaningful representation.
 			return fmt.Sprintf("%v", v.ID)
-		}
+		})
 	}
 	return &Renderer[T]{
 		listWriter:       list.NewWriter(),
@@ -91,7 +107,7 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
 	}
-	item := t.vertexSerializer(vertex)
+	item := t.vertexSerializer.Serialize(vertex)
 	t.listWriter.AppendItem(item)
 
 	// Get children and sort them for stable output
