@@ -32,7 +32,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
 		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
-		renderer := New[string](d, "A", WithVertexSerializer(vertexSerializer))
+		renderer := New[string](d, "A", WithVertexSerializerFunc(vertexSerializer))
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
 
 		time.Sleep(30 * time.Millisecond)
