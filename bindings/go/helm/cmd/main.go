@@ -173,10 +173,18 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 		return nil, fmt.Errorf("error copying blob data: %w", err)
 	}
 
+	mediaType := "application/x-gzip"
+	if mtAware, ok := result.ProcessedBlobData.(blob.MediaTypeAware); ok {
+		if mt, known := mtAware.MediaType(); known && mt != "" {
+			mediaType = mt
+		}
+	}
+
 	return &v1.ProcessResourceInputResponse{
 		Location: &types.Location{
 			LocationType: types.LocationTypeLocalFile,
 			Value:        tmp.Name(),
+			MediaType:    mediaType,
 		},
 	}, nil
 }

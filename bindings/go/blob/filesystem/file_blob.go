@@ -20,12 +20,18 @@ type Blob struct {
 	fileSystem fs.FS
 	// path is the original path to the blob.
 	path string
+	// mediaType is the media type of the blob.
+	mediaType string
+	// mediaTypeSet indicates if the media type has been explicitly set.
+	mediaTypeSet bool
 }
 
 var (
-	_ blob.Blob        = (*Blob)(nil)
-	_ blob.SizeAware   = (*Blob)(nil)
-	_ blob.DigestAware = (*Blob)(nil)
+	_ blob.Blob                  = (*Blob)(nil)
+	_ blob.SizeAware             = (*Blob)(nil)
+	_ blob.DigestAware           = (*Blob)(nil)
+	_ blob.MediaTypeAware        = (*Blob)(nil)
+	_ blob.MediaTypeOverrideable = (*Blob)(nil)
 )
 
 func NewFileBlob(fs fs.FS, path string) *Blob {
@@ -98,4 +104,15 @@ func (f *Blob) Digest() (string, bool) {
 		return "", false
 	}
 	return d.String(), true
+}
+
+// MediaType returns the media type of the blob if known.
+func (f *Blob) MediaType() (string, bool) {
+	return f.mediaType, f.mediaTypeSet
+}
+
+// SetMediaType overrides the media type of the blob.
+func (f *Blob) SetMediaType(mediaType string) {
+	f.mediaType = mediaType
+	f.mediaTypeSet = true
 }
