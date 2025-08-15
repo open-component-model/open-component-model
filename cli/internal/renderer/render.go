@@ -58,8 +58,7 @@ type Renderer interface {
 var DefaultRefreshRate = 100 * time.Millisecond
 
 // RenderOnce calls the Renderer.Render function once.
-// If no writer is provided, it defaults to os.Stdout. If no Renderer is
-// provided, it uses a default TreeRenderer[T] that serializes the vertex ID.
+// If no writer is provided, it defaults to os.Stdout.
 //
 // RenderOnce is a convenience function around Renderer.Render providing a similar
 // interface as RunRenderLoop, but without the live rendering loop.

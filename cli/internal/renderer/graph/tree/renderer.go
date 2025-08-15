@@ -12,21 +12,21 @@ import (
 	"ocm.software/open-component-model/cli/internal/renderer/graph"
 )
 
-type TreeRendererOptions[T cmp.Ordered] struct {
+type RendererOptions[T cmp.Ordered] struct {
 	// VertexSerializer is a function that serializes a vertex to a string.
 	VertexSerializer func(*syncdag.Vertex[T]) string
 }
 
-type TreeRendererOption[T cmp.Ordered] func(*TreeRendererOptions[T])
+type RendererOption[T cmp.Ordered] func(*RendererOptions[T])
 
-func WithVertexSerializer[T cmp.Ordered](serializer func(*syncdag.Vertex[T]) string) TreeRendererOption[T] {
-	return func(opts *TreeRendererOptions[T]) {
+func WithVertexSerializer[T cmp.Ordered](serializer func(*syncdag.Vertex[T]) string) RendererOption[T] {
+	return func(opts *RendererOptions[T]) {
 		opts.VertexSerializer = serializer
 	}
 }
 
-// TreeRenderer renders a tree structure from a DirectedAcyclicGraph.
-type TreeRenderer[T cmp.Ordered] struct {
+// Renderer renders a tree structure from a DirectedAcyclicGraph.
+type Renderer[T cmp.Ordered] struct {
 	// The listWriter is used to write the tree structure. It holds manages
 	// the indentation and style of the output.
 	listWriter list.Writer
@@ -39,9 +39,9 @@ type TreeRenderer[T cmp.Ordered] struct {
 	dag *syncdag.DirectedAcyclicGraph[T]
 }
 
-// NewTreeRenderer creates a new TreeRenderer for the given DirectedAcyclicGraph.
-func NewTreeRenderer[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...TreeRendererOption[T]) *TreeRenderer[T] {
-	options := &TreeRendererOptions[T]{}
+// New creates a new TreeRenderer for the given DirectedAcyclicGraph.
+func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...RendererOption[T]) *Renderer[T] {
+	options := &RendererOptions[T]{}
 	for _, opt := range opts {
 		opt(options)
 	}
@@ -54,7 +54,7 @@ func NewTreeRenderer[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T
 			return fmt.Sprintf("%v", v.ID)
 		}
 	}
-	return &TreeRenderer[T]{
+	return &Renderer[T]{
 		listWriter:       list.NewWriter(),
 		vertexSerializer: options.VertexSerializer,
 		root:             root,
@@ -64,7 +64,7 @@ func NewTreeRenderer[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T
 
 // Render renders the tree structure starting from the root ID.
 // It writes the output to the provided writer.
-func (t *TreeRenderer[T]) Render(ctx context.Context, writer io.Writer) error {
+func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	t.listWriter.SetStyle(list.StyleConnectedRounded)
 	defer t.listWriter.Reset()
 
@@ -86,7 +86,7 @@ func (t *TreeRenderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	return nil
 }
 
-func (t *TreeRenderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
+func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
 	vertex, ok := t.dag.GetVertex(nodeId)
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
