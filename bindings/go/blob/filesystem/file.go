@@ -91,7 +91,7 @@ func GetBlobFromOSPath(path string) (*Blob, error) {
 func GetBlobInWorkingDirectory(path, workingDir string) (*Blob, error) {
 	path, err := EnsurePathInWorkingDirectory(path, workingDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to ensure path in working directory: %w", err)
 	}
 	return GetBlobFromOSPath(path)
 }
@@ -103,17 +103,14 @@ func GetBlobInWorkingDirectory(path, workingDir string) (*Blob, error) {
 func EnsurePathInWorkingDirectory(path, workingDirectory string) (_ string, err error) {
 	if filepath.IsAbs(path) {
 		if path, err = filepath.Rel(workingDirectory, path); err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to create relative path for %q based on working directory %q: %w", path, workingDirectory, err)
 		}
 	}
 
-	fd, err := os.OpenInRoot(workingDirectory, path)
+	_, err = os.OpenInRoot(workingDirectory, path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to open path %q in root %q: %w", path, workingDirectory, err)
 	}
-	defer func() {
-		err = errors.Join(err, fd.Close())
-	}()
 
 	return filepath.Join(workingDirectory, path), nil
 }

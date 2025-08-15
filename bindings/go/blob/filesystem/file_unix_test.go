@@ -119,9 +119,11 @@ func Test_GetBlobInWorkingDirectory(t *testing.T) {
 					t.Errorf("GetBlobInWorkingDirectory() expected error, got nil")
 				} else {
 					t.Logf("GetBlobInWorkingDirectory() expected error, got: %v", err)
-					return
 				}
+				return
 			}
+
+			r.NoError(err, "GetBlobInWorkingDirectory() unexpected error")
 
 			reader, err := got.ReadCloser()
 			r.NoError(err)
@@ -193,8 +195,12 @@ func TestEnsurePathInWorkingDirectory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := filesystem.EnsurePathInWorkingDirectory(tt.args.path, tt.args.workingDirectory)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("EnsurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("EnsurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
+				} else {
+					t.Logf("EnsurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
+				}
 				return
 			}
 			if got != tt.want {
