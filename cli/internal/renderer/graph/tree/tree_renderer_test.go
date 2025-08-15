@@ -1,4 +1,4 @@
-package renderer
+package tree
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/stretchr/testify/require"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	render "ocm.software/open-component-model/cli/internal/renderer"
 )
 
 func TestTreeRenderLoop(t *testing.T) {
@@ -31,8 +32,8 @@ func TestTreeRenderLoop(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
 		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
-		renderer := NewTreeRenderer[string](vertexSerializer)
-		waitFunc := StartRenderLoop(ctx, d, []string{"A"}, writer, 10*time.Millisecond, renderer)
+		renderer := NewTreeRenderer[string](d, "A", WithVertexSerializer(vertexSerializer))
+		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
 
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
@@ -124,14 +125,14 @@ func TestTreeRendererStatic(t *testing.T) {
 	logWriter := testLogWriter{t}
 	writer := io.MultiWriter(buf, logWriter)
 
-	renderer := NewTreeRenderer[string](nil)
+	renderer := NewTreeRenderer(d, "A")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	r.NoError(d.AddVertex("A"))
 	expected := "── A\n"
-	r.NoError(Render[string](ctx, d, []string{"A"}, writer, renderer))
+	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output := buf.String()
 	buf.Reset()
 	r.Equal(expected, output)
@@ -139,14 +140,14 @@ func TestTreeRendererStatic(t *testing.T) {
 	// Add B
 	r.NoError(d.AddVertex("B"))
 	expected = "── A\n"
-	r.NoError(Render[string](ctx, d, []string{"A"}, writer, renderer))
+	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
 	buf.Reset()
 	r.Equal(expected, output)
 	// Add B as child of A
 	r.NoError(d.AddEdge("A", "B"))
 	expected = "── A\n   ╰─ B\n"
-	r.NoError(Render(ctx, d, []string{"A"}, writer, renderer))
+	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
 	buf.Reset()
 	r.Equal(expected, output) // still only root
@@ -159,13 +160,13 @@ func TestTreeRendererStatic(t *testing.T) {
 	r.NoError(d.AddVertex("D"))
 	r.NoError(d.AddEdge("A", "D"))
 
-	r.NoError(Render[string](ctx, d, []string{"A"}, writer, renderer))
+	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	expected = "── A\n   ├─ B\n   │  ╰─ C\n   ╰─ D\n"
 	output = buf.String()
 	buf.Reset()
 	r.Equal(expected, output)
 
-	r.NoError(Render[string](ctx, d, []string{"A"}, writer, renderer))
+	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
 }
 
