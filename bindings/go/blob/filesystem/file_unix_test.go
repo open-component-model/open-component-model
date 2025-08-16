@@ -3,6 +3,7 @@
 package filesystem_test
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -149,10 +150,11 @@ func TestEnsurePathInWorkingDirectory(t *testing.T) {
 		workingDirectory string
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    string
-		wantErr bool
+		name        string
+		args        args
+		want        string
+		wantErr     bool
+		wantErrType error
 	}{
 		{
 			name: "valid path in working directory",
@@ -190,6 +192,24 @@ func TestEnsurePathInWorkingDirectory(t *testing.T) {
 			want:    "",
 			wantErr: true,
 		},
+		{
+			name: "invalid path with os.ErrInvalid",
+			args: args{
+				path:             "\x00invalid.txt",
+				workingDirectory: tempDir,
+			},
+			wantErr:     true,
+			wantErrType: filesystem.ErrInvalidPath,
+		},
+		{
+			name: "non-existent file",
+			args: args{
+				path:             "nonexistent.txt",
+				workingDirectory: tempDir,
+			},
+			wantErr:     true,
+			wantErrType: filesystem.ErrFileNotFound,
+		},
 	}
 
 	for _, tt := range tests {
@@ -197,9 +217,13 @@ func TestEnsurePathInWorkingDirectory(t *testing.T) {
 			got, err := filesystem.EnsurePathInWorkingDirectory(tt.args.path, tt.args.workingDirectory)
 			if tt.wantErr {
 				if err == nil {
-					t.Errorf("EnsurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
+					t.Errorf("GetBlobInWorkingDirectory() expected error, got nil")
 				} else {
-					t.Logf("EnsurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
+					if tt.wantErrType != nil && !errors.Is(err, tt.wantErrType) {
+						t.Errorf("GetBlobInWorkingDirectory() expected error type %v, got: %v", tt.wantErrType, err)
+					} else {
+						t.Logf("GetBlobInWorkingDirectory() expected error, got: %v", err)
+					}
 				}
 				return
 			}
@@ -208,4 +232,20 @@ func TestEnsurePathInWorkingDirectory(t *testing.T) {
 			}
 		})
 	}
+
+	// ErrPermissionDenied
+	t.Run("permission denied", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testFile := filepath.Join(tempDir, "testfile.txt")
+		r.NoError(os.WriteFile(testFile, []byte("test data"), 0644))
+		r.NoError(os.Chmod(testFile, 0o000)) // Change permissions to simulate permission denied
+		_, err := filesystem.EnsurePathInWorkingDirectory("testfile.txt", tempDir)
+		if err == nil {
+			t.Error("EnsurePathInWorkingDirectory() expected error for permission denied, got nil")
+		} else {
+			if !errors.Is(err, filesystem.ErrPermissionDenied) {
+				t.Errorf("EnsurePathInWorkingDirectory() expected ErrPermissionDenied, got: %v", err)
+			}
+		}
+	})
 }

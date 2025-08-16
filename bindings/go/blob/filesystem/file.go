@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,6 +13,12 @@ import (
 )
 
 const DefaultFileIOBufferSize = 1 << 20 // 1 MiB
+
+var (
+	ErrFileNotFound     = errors.New("file not found")
+	ErrPermissionDenied = errors.New("permission denied")
+	ErrInvalidPath      = errors.New("invalid path")
+)
 
 // ioBufPool is a pool of byte buffers that can be reused for copying content
 // between i/o relevant data, such as files.
@@ -109,6 +116,19 @@ func EnsurePathInWorkingDirectory(path, workingDirectory string) (_ string, err 
 
 	_, err = os.OpenInRoot(workingDirectory, path)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("path %q does not exist in directory %q: %w %w", path, workingDirectory, ErrFileNotFound, err)
+		}
+		if errors.Is(err, os.ErrPermission) {
+			return "", fmt.Errorf("permission denied for path %q in directory %q: %v %w", path, workingDirectory, ErrPermissionDenied, err)
+		}
+		if errors.Is(err, os.ErrInvalid) {
+			return "", fmt.Errorf("invalid path %q in directory %q: %w %w", path, workingDirectory, ErrInvalidPath, err)
+		}
+		var pathError *fs.PathError
+		if errors.As(err, &pathError) {
+			return "", fmt.Errorf("path error for %q in directory %q: %w %w", path, workingDirectory, ErrInvalidPath, err)
+		}
 		return "", fmt.Errorf("failed to open path %q in root %q: %w", path, workingDirectory, err)
 	}
 
