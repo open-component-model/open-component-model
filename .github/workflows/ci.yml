@@ -231,6 +231,7 @@ jobs:
       - name: Run Tests
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GITHUB_USER: ocmbot[ocm]
         run: task ${{ matrix.module }}:test/integration
 
   run_unit_tests:

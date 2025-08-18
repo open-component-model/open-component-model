@@ -1,6 +1,7 @@
 version: '3'
 
 vars:
+  INTEGRATION_TEST_IDENTIFIER: 'Integration'
   CLI_DOCUMENTATION_MODE: "markdown"
   CLI_DOCUMENTATION_DIRECTORY: tmp/docs
   PROVIDER: ocm.software
@@ -29,7 +30,7 @@ tasks:
       - ./go.mod
       - ./go.sum
     cmds:
-      - go test -v -coverprofile=tmp/coverage.out ./...
+      - go test -skip "{{ .INTEGRATION_TEST_IDENTIFIER }}" -v -coverprofile=tmp/coverage.out ./...
     deps:
       - tmp
 
