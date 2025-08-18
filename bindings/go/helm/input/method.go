@@ -1,4 +1,4 @@
-package helm
+package input
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
-	v1 "ocm.software/open-component-model/bindings/go/input/helm/spec/v1"
+	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 

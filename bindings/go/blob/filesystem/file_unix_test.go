@@ -62,3 +62,150 @@ func TestCopyBlobToOSPath_NamedPipe_Blocking(t *testing.T) {
 		r.Equal(testData, data)
 	}
 }
+
+func Test_GetBlobInWorkingDirectory(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	fp := filepath.Join(tempDir, "testfile.txt")
+	r.NoError(os.WriteFile(fp, []byte("test data"), 0644))
+
+	type args struct {
+		path       string
+		workingDir string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "valid relative path in working directory",
+			args: args{
+				path:       "testfile.txt",
+				workingDir: tempDir,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid absolute path in working directory",
+			args: args{
+				path:       fp,
+				workingDir: tempDir,
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid path escaping working directory",
+			args: args{
+				path:       "../testfile.txt",
+				workingDir: tempDir,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid absolute path not in working directory",
+			args: args{
+				path:       filepath.Join(tempDir, "../../testfile.txt"),
+				workingDir: tempDir,
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := filesystem.GetBlobInWorkingDirectory(tt.args.path, tt.args.workingDir)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("GetBlobInWorkingDirectory() expected error, got nil")
+				} else {
+					t.Logf("GetBlobInWorkingDirectory() expected error, got: %v", err)
+				}
+				return
+			}
+
+			r.NoError(err, "GetBlobInWorkingDirectory() unexpected error")
+
+			reader, err := got.ReadCloser()
+			r.NoError(err)
+			defer func(reader io.ReadCloser) {
+				_ = reader.Close()
+			}(reader)
+
+			data, err := io.ReadAll(reader)
+			r.NoError(err)
+			r.Equal("test data", string(data))
+		})
+	}
+}
+
+func TestEnsurePathInWorkingDirectory(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	fp := filepath.Join(tempDir, "testfile.txt")
+	r.NoError(os.WriteFile(fp, []byte("test data"), 0644))
+
+	type args struct {
+		path             string
+		workingDirectory string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "valid path in working directory",
+			args: args{
+				path:             "testfile.txt",
+				workingDirectory: tempDir,
+			},
+			want:    filepath.Join(tempDir, "testfile.txt"),
+			wantErr: false,
+		},
+		{
+			name: "valid absolute path in working directory",
+			args: args{
+				path:             fp,
+				workingDirectory: tempDir,
+			},
+			want:    fp,
+			wantErr: false,
+		},
+		{
+			name: "invalid path escaping working directory",
+			args: args{
+				path:             "../testfile.txt",
+				workingDirectory: tempDir,
+			},
+			want:    "",
+			wantErr: true,
+		},
+		{
+			name: "invalid absolute path not in working directory",
+			args: args{
+				path:             filepath.Join(tempDir, "../../testfile.txt"),
+				workingDirectory: tempDir,
+			},
+			want:    "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := filesystem.EnsurePathInWorkingDirectory(tt.args.path, tt.args.workingDirectory)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("EnsurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
+				} else {
+					t.Logf("EnsurePathInWorkingDirectory() error = %v, wantErr %v", err, tt.wantErr)
+				}
+				return
+			}
+			if got != tt.want {
+				t.Errorf("EnsurePathInWorkingDirectory() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -7,7 +7,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptorruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -54,13 +53,8 @@ func (r *resourceInputPluginConverter) ProcessResource(ctx context.Context, reso
 		return nil, fmt.Errorf("failed to create blob data: %w", err)
 	}
 
-	// Convert v2 resource back to descriptor resource
-	descriptorResources := descriptorruntime.ConvertFromV2Resources([]v2.Resource{*result.Resource})
-	if len(descriptorResources) == 0 {
-		return nil, fmt.Errorf("conversion resulted in empty resource list")
-	}
 	// Convert descriptor resource to constructor runtime resource
-	converted := constructorruntime.ConvertFromDescriptorResource(&descriptorResources[0])
+	converted := constructorruntime.ConvertFromDescriptorResource(descriptorruntime.ConvertFromV2Resource(result.Resource))
 	descResource := constructorruntime.ConvertToDescriptorResource(converted)
 	resourceInputMethodResult := &constructor.ResourceInputMethodResult{
 		ProcessedResource: descResource,
