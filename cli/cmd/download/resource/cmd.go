@@ -14,16 +14,16 @@ import (
 
 	"github.com/nlepage/go-tarfs"
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/bindings/go/blob/compression"
-	"ocm.software/open-component-model/cli/internal/flags/enum"
-	"ocm.software/open-component-model/cli/internal/transformers"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
+	"ocm.software/open-component-model/cli/internal/transformers"
 )
 
 const (
@@ -58,13 +58,13 @@ the appropriate file extension will be added to the output file name if no outpu
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
-  ocm resource ghcr.io/org/component:v1 --identity name=example
+  ocm download resource ghcr.io/org/component:v1 --identity name=example
 
   # Download a resource and specify an output file
-  ocm resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
 		RunE:              DownloadResource,
 		DisableAutoGenTag: true,
 	}
@@ -231,7 +231,7 @@ func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
 func isTar(mediaType string) bool {
 	return slices.Contains([]string{
 		"application/tar", "application/x-tar",
-	}, mediaType) || strings.HasPrefix(mediaType, "application/x-tar+compressed")
+	}, mediaType) || strings.HasSuffix(mediaType, "+tar")
 }
 
 func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {
