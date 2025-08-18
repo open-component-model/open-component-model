@@ -8,11 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/jedib0t/go-pretty/v6/list"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/renderer/graph"
 	"sigs.k8s.io/yaml"
 )
@@ -25,6 +21,8 @@ func (o OutputFormat) String() string {
 		return "json"
 	case OutputFormatYAML:
 		return "yaml"
+	case OutputFormatNDJSON:
+		return "ndjson"
 	default:
 		return fmt.Sprintf("unknown(%d)", o)
 	}
@@ -35,6 +33,7 @@ const (
 
 	OutputFormatJSON OutputFormat = iota
 	OutputFormatYAML
+	OutputFormatNDJSON
 )
 
 type RendererOptions[T cmp.Ordered, U any] struct {
@@ -111,7 +110,7 @@ func (t *Renderer[T, U]) Render(ctx context.Context, writer io.Writer) error {
 	if err := t.traverseGraph(ctx, t.root); err != nil {
 		return fmt.Errorf("failed to traverse graph: %w", err)
 	}
-	r, _, err := encodeDescriptors(t.outputFormat, t.objects)
+	r, _, err := t.encodeObjects()
 	if err != nil {
 		return fmt.Errorf("failed to encode objects: %w", err)
 	}
@@ -146,7 +145,7 @@ func (t *Renderer[T, U]) traverseGraph(ctx context.Context, nodeId T) error {
 	return nil
 }
 
-func (t *Renderer[T, U]) encodeObjects() (io.Reader, error) {
+func (t *Renderer[T, U]) encodeObjects() (io.Reader, int64, error) {
 	var data []byte
 	var err error
 	switch t.outputFormat {
@@ -155,63 +154,37 @@ func (t *Renderer[T, U]) encodeObjects() (io.Reader, error) {
 	case OutputFormatYAML:
 		data, err = yaml.Marshal(t.objects)
 	default:
-		err = fmt.Errorf("unknown output format: %s", t.outputFormat)
+		err = fmt.Errorf("unknown output format: %s", t.outputFormat.String())
 	}
 	if err != nil {
-		return nil, fmt.Errorf("encoding objects as %s failed: %w", t.outputFormat, err)
-	}
-	return bytes.NewReader(data), nil
-}
-
-func encodeDescriptors(output string, descs []*descruntime.Descriptor) (io.Reader, int64, error) {
-	var data []byte
-	var err error
-	switch output {
-	case "json":
-		data, err = encodeDescriptorsAsNDJSON(descs)
-	case "yaml":
-		data, err = encodeDescriptorsAsYAML(descs)
-	default:
-		err = fmt.Errorf("unknown output format: %q", output)
-	}
-	if err != nil {
-		return nil, 0, fmt.Errorf("encoding component version descriptor as %q failed: %w", output, err)
+		return nil, 0, fmt.Errorf("encoding objects as %s failed: %w", t.outputFormat.String(), err)
 	}
 	return bytes.NewReader(data), int64(len(data)), nil
 }
 
-func encodeDescriptorsAsNDJSON(descs []*descruntime.Descriptor) ([]byte, error) {
+func (t *Renderer[T, U]) encodeObjectsAsNDJSON(objects []U) ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
-	for _, desc := range descs {
-		// TODO(jakobmoellerdev): add formatting options for scheme version with v2 as only option
-		v2descriptor, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
-		if err != nil {
-			return nil, fmt.Errorf("converting component version to v2 descriptor failed: %w", err)
-		}
-		// TODO(jakobmoellerdev): add formatting options for yaml/json
-		// multiple output is equivalent to NDJSON (new line delimited json), may want array access
-		if err := encoder.Encode(v2descriptor); err != nil {
+	for _, obj := range objects {
+		if err := encoder.Encode(obj); err != nil {
 			return nil, fmt.Errorf("encoding component version descriptor failed: %w", err)
 		}
 	}
 	return buf.Bytes(), nil
 }
 
-func encodeDescriptorsAsYAML(descriptor []*descruntime.Descriptor) ([]byte, error) {
-	// TODO(jakobmoellerdev): add formatting options for scheme version with v2 as only option
-	v2List := make([]*v2.Descriptor, len(descriptor))
-	for i, desc := range descriptor {
-		v2descriptor, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
-		if err != nil {
-			return nil, fmt.Errorf("converting component version to v2 descriptor failed: %w", err)
-		}
-		v2List[i] = v2descriptor
+func (t *Renderer[T, U]) encodeObjectsAsJSON(objects []U) ([]byte, error) {
+	if len(objects) == 1 {
+		return json.Marshal(objects[0])
 	}
 
-	if len(v2List) == 1 {
-		return yaml.Marshal(v2List[0])
+	return json.Marshal(objects)
+}
+
+func (t *Renderer[T, U]) encodeObjectsAsYAML(objects []U) ([]byte, error) {
+	if len(objects) == 1 {
+		return yaml.Marshal(objects[0])
 	}
 
-	return yaml.Marshal(v2List)
+	return yaml.Marshal(objects)
 }
