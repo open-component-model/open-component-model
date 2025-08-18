@@ -73,6 +73,17 @@ func setupPluginManager(cmd *cobra.Command) error {
 	ctx := ocmctx.WithPluginManager(cmd.Context(), pluginManager)
 	cmd.SetContext(ctx)
 
+	previouspostRunE := cmd.PersistentPostRunE
+	cmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
+		var err error
+		if previouspostRunE != nil {
+			err = previouspostRunE(cmd, args)
+		}
+		ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
+		defer cancel()
+		return errors.Join(err, pluginManager.Shutdown(ctx))
+	}
+
 	return nil
 }
 
