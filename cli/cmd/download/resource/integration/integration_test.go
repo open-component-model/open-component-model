@@ -234,7 +234,7 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 		r := require.New(t)
 
 		root := getRepoRootBasedOnGit(t)
-		buildHelmInputMethodInMonoRepoRoot(t, root)
+		pluginDir := buildHelmInputMethodInMonoRepoRoot(t, root)
 
 		name, version := "ocm.software/helm-chart", "v1.0.0"
 		resourceName, resourceVersion := "mychart", "0.1.0"
@@ -267,6 +267,8 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 			"component-version",
 			"--repository", transportArchivePath,
 			"--constructor", constructorPath,
+			"--plugin-directory",
+			pluginDir,
 		})
 		r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version to the repository must succeed")
 
@@ -282,6 +284,8 @@ func Test_Integration_HelmTransformer(t *testing.T) {
 			output,
 			"--transformer",
 			"helm",
+			"--plugin-directory",
+			pluginDir,
 		})
 		r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading and transforming the resource must succeed")
 
@@ -366,7 +370,7 @@ func getRepoRootBasedOnGit(t *testing.T) string {
 	return strings.TrimSpace(string(rootRaw))
 }
 
-func buildHelmInputMethodInMonoRepoRoot(t *testing.T, root string) {
+func buildHelmInputMethodInMonoRepoRoot(t *testing.T, root string) string {
 	t.Helper()
 	r := require.New(t)
 	task, err := exec.LookPath("task")
@@ -375,4 +379,5 @@ func buildHelmInputMethodInMonoRepoRoot(t *testing.T, root string) {
 	buildHelmInput.Stdout = os.Stdout
 	buildHelmInput.Stderr = os.Stderr
 	r.NoError(buildHelmInput.Run(), "helm input build must succeed")
+	return filepath.Join(root, "bindings", "go", "helm", "tmp", "testdata")
 }

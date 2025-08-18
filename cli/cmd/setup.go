@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -22,12 +23,14 @@ import (
 )
 
 func setupOCMConfig(cmd *cobra.Command) {
-	if cfg, err := configuration.GetFlattenedOCMConfigForCommand(cmd); err != nil {
+	cfg, err := configuration.GetFlattenedOCMConfigForCommand(cmd)
+	if err != nil {
 		slog.DebugContext(cmd.Context(), "could not get configuration", slog.String("error", err.Error()))
-	} else {
-		ctx := ocmctx.WithConfiguration(cmd.Context(), cfg)
-		cmd.SetContext(ctx)
+		cfg = &genericv1.Config{}
 	}
+
+	ctx := ocmctx.WithConfiguration(cmd.Context(), cfg)
+	cmd.SetContext(ctx)
 }
 
 func setupPluginManager(cmd *cobra.Command) error {
@@ -41,7 +44,7 @@ func setupPluginManager(cmd *cobra.Command) error {
 			return fmt.Errorf("could not get plugin configuration: %w", err)
 		}
 
-		if defaultDir, err := cmd.PersistentFlags().GetString(pluginDirectoryFlag); err == nil {
+		if defaultDir, err := cmd.Flags().GetString(pluginDirectoryFlag); err == nil {
 			expanded := os.ExpandEnv(defaultDir)
 			pluginCfg.Locations = []string{expanded}
 		}
@@ -108,9 +111,11 @@ func setupCredentialGraph(cmd *cobra.Command) error {
 	var err error
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize credential graph")
-		credCfg = &credentialsRuntime.Config{}
 	} else if credCfg, err = credentialsConfig.LookupCredentialConfiguration(cfg); err != nil {
 		return fmt.Errorf("could not get credential configuration: %w", err)
+	}
+	if credCfg == nil {
+		credCfg = &credentialsRuntime.Config{}
 	}
 
 	graph, err := credentials.ToGraph(cmd.Context(), credCfg, opts)
