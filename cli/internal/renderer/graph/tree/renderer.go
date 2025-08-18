@@ -50,6 +50,9 @@ type Renderer[T cmp.Ordered] struct {
 	// It MUST perform READ-ONLY access to the vertex and its attributes.
 	vertexSerializer VertexSerializer[T]
 	// The root ID of the tree to render.
+	// The root ID is part of the Renderer instead of being passed to the
+	// Render method to keep renderer.Renderer decoupled of specific data
+	// structures.
 	root T
 	// The dag from which the tree is rendered.
 	dag *syncdag.DirectedAcyclicGraph[T]
