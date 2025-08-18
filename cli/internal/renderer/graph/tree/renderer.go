@@ -12,35 +12,6 @@ import (
 	"ocm.software/open-component-model/cli/internal/renderer/graph"
 )
 
-type RendererOptions[T cmp.Ordered] struct {
-	// VertexSerializer is a function that serializes a vertex to a string.
-	VertexSerializer VertexSerializer[T]
-}
-
-type RendererOption[T cmp.Ordered] func(*RendererOptions[T])
-
-func WithVertexSerializer[T cmp.Ordered](serializer VertexSerializer[T]) RendererOption[T] {
-	return func(opts *RendererOptions[T]) {
-		opts.VertexSerializer = serializer
-	}
-}
-
-func WithVertexSerializerFunc[T cmp.Ordered](serializerFunc func(*syncdag.Vertex[T]) string) RendererOption[T] {
-	return func(opts *RendererOptions[T]) {
-		opts.VertexSerializer = VertexSerializerFunc[T](serializerFunc)
-	}
-}
-
-type VertexSerializer[T cmp.Ordered] interface {
-	Serialize(*syncdag.Vertex[T]) string
-}
-
-type VertexSerializerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) string
-
-func (f VertexSerializerFunc[T]) Serialize(v *syncdag.Vertex[T]) string {
-	return f(v)
-}
-
 // Renderer renders a tree structure from a DirectedAcyclicGraph.
 type Renderer[T cmp.Ordered] struct {
 	// The listWriter is used to write the tree structure. It holds manages
@@ -56,6 +27,20 @@ type Renderer[T cmp.Ordered] struct {
 	root T
 	// The dag from which the tree is rendered.
 	dag *syncdag.DirectedAcyclicGraph[T]
+}
+
+// VertexSerializer is an interface that defines a method to serialize a vertex.
+type VertexSerializer[T cmp.Ordered] interface {
+	Serialize(*syncdag.Vertex[T]) string
+}
+
+// VertexSerializerFunc is a function type that implements the VertexSerializer
+// interface.
+type VertexSerializerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) string
+
+// Serialize implements the VertexSerializer interface for VertexSerializerFunc.
+func (f VertexSerializerFunc[T]) Serialize(v *syncdag.Vertex[T]) string {
+	return f(v)
 }
 
 // New creates a new TreeRenderer for the given DirectedAcyclicGraph.
