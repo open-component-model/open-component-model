@@ -907,16 +907,19 @@ func getUserAndPasswordWithGitHubCLIAndJQ(t *testing.T) (string, string) {
 
 	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
 	if err != nil {
+		t.Logf("gh CLI output: %s", out)
 		t.Errorf("gh CLI for user failed: %v", err)
 	}
 	structured := map[string]interface{}{}
 	if err := json.Unmarshal(out, &structured); err != nil {
+		t.Logf("gh CLI output: %s", out)
 		t.Errorf("gh failed to parse output: %v", err)
 	}
 	user := structured["login"].(string)
 
 	pw := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s auth token", gh))
 	if out, err = pw.CombinedOutput(); err != nil {
+		t.Logf("gh auth token output: %s", out)
 		t.Errorf("gh CLI for password failed: %v", err)
 	}
 	password := strings.TrimSpace(string(out))
