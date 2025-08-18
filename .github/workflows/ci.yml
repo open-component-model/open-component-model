@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request_target:
+    branches:
+    - main
   push:
     branches:
     - main
@@ -25,6 +27,8 @@ jobs:
       unit_test_modules_json: ${{ steps.filtered_test.outputs.unit_test_modules_json }}
     env:
       DIR: ${{ github.workspace }}
+      REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
+      REPO: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
     steps:
       - name: Install Task
         uses: arduino/setup-task@v2
@@ -32,6 +36,9 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          repository: ${{ env.REPO }}
+          ref: ${{ env.REF }}
       - name: Discover Go Modules
         id: discover
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
