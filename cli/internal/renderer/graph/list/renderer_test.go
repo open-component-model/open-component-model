@@ -41,7 +41,7 @@ func TestTreeRenderLoop(t *testing.T) {
 			},
 		}}))
 		renderer := &Renderer[string]{
-			descriptors:  make([]*descruntime.Descriptor, 0),
+			objects:      make([]*descruntime.Descriptor, 0),
 			outputFormat: "yaml",
 			root:         "A",
 			dag:          d,

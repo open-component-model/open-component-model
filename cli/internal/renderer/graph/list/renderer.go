@@ -16,12 +16,31 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+type OutputFormat int
+
+func (o OutputFormat) String() string {
+	switch o {
+	case OutputFormatJSON:
+		return "json"
+	case OutputFormatYAML:
+		return "yaml"
+	default:
+		return fmt.Sprintf("unknown(%d)", o)
+	}
+}
+
 const (
 	AttributeComponentDescriptor = "component-descriptor"
+
+	OutputFormatJSON OutputFormat = iota
+	OutputFormatYAML
 )
 
 type RendererOptions[T cmp.Ordered, U any] struct {
-	// VertexSerializer is a function that serializes a vertex to a string.
+	// VertexMarshalizer converts a vertex to an object of type U. U is expected
+	// to be a serializable type (e.g., a struct or map).
+	// The marshalizer MUST perform READ-ONLY access to the vertex and its
+	// attributes.
 	VertexMarshalizer VertexMarshalizer[T, U]
 }
 
@@ -49,43 +68,17 @@ func (f VertexMarshalizerFunc[T, U]) Marshalize(v *syncdag.Vertex[T]) U {
 	return f(v)
 }
 
-//type OutputFormat int
-//
-//func (o OutputFormat) String() string {
-//	switch o {
-//	case OutputFormatJSON:
-//		return "json"
-//	case OutputFormatYAML:
-//		return "yaml"
-//	default:
-//		return fmt.Sprintf("unknown(%d)", o)
-//	}
-//}
-//
-//const (
-//	OutputFormatJSON OutputFormat = iota
-//	OutputFormatYAML
-//)
-
-//type TreeRendererOptions[T cmp.Ordered] struct {
-//	// VertexSerializer is a function that serializes a vertex to a string.
-//	VertexSerializer func(*syncdag.Vertex[T]) string
-//}
-//
-//type TreeRendererOption[T cmp.Ordered] func(*TreeRendererOptions[T])
-//
-//func WithVertexSerializer[T cmp.Ordered](serializer func(*syncdag.Vertex[T]) string) TreeRendererOption[T] {
-//	return func(opts *TreeRendererOptions[T]) {
-//		opts.VertexSerializer = serializer
-//	}
-//}
-
 // Renderer renders a tree structure from a DirectedAcyclicGraph.
-type Renderer[T cmp.Ordered] struct {
-	descriptors  []*descruntime.Descriptor
-	outputFormat string
-	root         T
-	dag          *syncdag.DirectedAcyclicGraph[T]
+type Renderer[T cmp.Ordered, U any] struct {
+	objects []U
+	// VertexMarshalizer converts a vertex to an object of type U. U is expected
+	// to be a serializable type (e.g., a struct or map).
+	// The marshalizer MUST perform READ-ONLY access to the vertex and its
+	// attributes.
+	vertexMarshalizer VertexMarshalizer[T, U]
+	outputFormat      string
+	root              T
+	dag               *syncdag.DirectedAcyclicGraph[T]
 }
 
 //// NewTreeRenderer creates a new TreeRenderer for the given DirectedAcyclicGraph.
@@ -113,9 +106,9 @@ type Renderer[T cmp.Ordered] struct {
 
 // Render renders the tree structure starting from the root ID.
 // It writes the output to the provided writer.
-func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
+func (t *Renderer[T, U]) Render(ctx context.Context, writer io.Writer) error {
 	defer func() {
-		t.descriptors = t.descriptors[:0]
+		t.objects = t.objects[:0]
 	}()
 	var zero T
 	if t.root == zero {
@@ -130,18 +123,18 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	if err := t.traverseGraph(ctx, t.root); err != nil {
 		return fmt.Errorf("failed to traverse graph: %w", err)
 	}
-	r, _, err := encodeDescriptors(t.outputFormat, t.descriptors)
+	r, _, err := encodeDescriptors(t.outputFormat, t.objects)
 	if err != nil {
-		return fmt.Errorf("failed to encode descriptors: %w", err)
+		return fmt.Errorf("failed to encode objects: %w", err)
 	}
 
 	buf, err := io.ReadAll(r)
 	if err != nil {
-		return fmt.Errorf("failed to read encoded descriptors: %w", err)
+		return fmt.Errorf("failed to read encoded objects: %w", err)
 	}
 	_, err = writer.Write(buf)
 	if err != nil {
-		return fmt.Errorf("failed to write encoded descriptors to writer: %w", err)
+		return fmt.Errorf("failed to write encoded objects to writer: %w", err)
 	}
 	return nil
 }
@@ -159,7 +152,7 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
 	if !ok {
 		return fmt.Errorf("expected attribute %s to be of type %T, got %T", AttributeComponentDescriptor, &descruntime.Descriptor{}, descriptor)
 	}
-	t.descriptors = append(t.descriptors, desc)
+	t.objects = append(t.objects, desc)
 
 	// Get children and sort them for stable output
 	children := graph.GetNeighborsSorted(ctx, vertex)
