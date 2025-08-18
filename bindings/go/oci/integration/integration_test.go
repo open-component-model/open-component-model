@@ -905,21 +905,37 @@ func getUserAndPasswordWithGitHubCLIAndJQ(t *testing.T) (string, string) {
 		t.Errorf("gh CLI not found, skipping test %v", err)
 	}
 
-	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
+	user, err := getUsername(t, gh)
 	if err != nil {
-		t.Errorf("gh CLI for user failed: %v", err)
+		t.Errorf("gh CLI for username failed: %v", err)
+		return "", ""
 	}
-	structured := map[string]interface{}{}
-	if err := json.Unmarshal(out, &structured); err != nil {
-		t.Errorf("gh failed to parse output: %v", err)
-	}
-	user := structured["login"].(string)
-
 	pw := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s auth token", gh))
-	if out, err = pw.CombinedOutput(); err != nil {
+	out, err := pw.CombinedOutput()
+	if err != nil {
+		t.Logf("gh auth token output: %s", out)
 		t.Errorf("gh CLI for password failed: %v", err)
 	}
 	password := strings.TrimSpace(string(out))
 
 	return user, password
+}
+
+func getUsername(t *testing.T, gh string) (string, error) {
+	if githubUser := os.Getenv("GITHUB_USER"); githubUser != "" {
+		return githubUser, nil
+	}
+
+	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
+	if err != nil {
+		t.Logf("gh CLI output: %s", out)
+		return "", fmt.Errorf("gh CLI for user failed: %w", err)
+	}
+	structured := map[string]interface{}{}
+	if err := json.Unmarshal(out, &structured); err != nil {
+		t.Logf("gh CLI output: %s", out)
+		return "", fmt.Errorf("gh failed to parse output: %w", err)
+	}
+
+	return structured["login"].(string), nil
 }
