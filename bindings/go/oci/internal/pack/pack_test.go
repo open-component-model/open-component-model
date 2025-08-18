@@ -259,7 +259,7 @@ func TestResourceBlob(t *testing.T) {
 			},
 		},
 		{
-			name: "success with local blob access",
+			name: "success with local blob access (nil resource digest)",
 			blob: &testBlob{
 				content:   content,
 				mediaType: "application/vnd.test",
