@@ -7,6 +7,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.38.0
 	golang.org/x/crypto v0.41.0
+	helm.sh/helm/v3 v3.18.5
 	ocm.software/open-component-model/bindings/go/blob v0.0.8
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250816122110-cde8f3437bb7
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
@@ -83,7 +84,6 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.62.0 // indirect
 	go.opentelemetry.io/otel v1.37.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.37.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.32.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
@@ -105,7 +105,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.0-20250816122110-cde8f3437bb7 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250816122110-cde8f3437bb7 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250816122110-cde8f3437bb7 // indirect
-	ocm.software/open-component-model/bindings/go/plugin v0.0.2 // indirect
+	ocm.software/open-component-model/bindings/go/plugin v0.0.3 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 

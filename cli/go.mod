@@ -22,8 +22,8 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.0-20250816122110-cde8f3437bb7
 	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250816122110-cde8f3437bb7
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250816122110-cde8f3437bb7
-	ocm.software/open-component-model/bindings/go/oci v0.0.6-0.20250818151419-240a0b9350bb
-	ocm.software/open-component-model/bindings/go/plugin v0.0.2
+	ocm.software/open-component-model/bindings/go/oci v0.0.6
+	ocm.software/open-component-model/bindings/go/plugin v0.0.3
 	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250816122110-cde8f3437bb7
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0

@@ -6,12 +6,15 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v3/pkg/chart/loader"
 	"oras.land/oras-go/v2"
 	orasoci "oras.land/oras-go/v2/content/oci"
 
@@ -220,6 +223,83 @@ configurations:
 			r.Equal("foobar", string(layerData))
 		})
 	})
+
+}
+
+func Test_Integration_HelmTransformer(t *testing.T) {
+	t.Run("upload and download helm chart", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping test in short mode")
+		}
+		r := require.New(t)
+
+		root := getRepoRootBasedOnGit(t)
+		buildHelmInputMethodInMonoRepoRoot(t, root)
+
+		name, version := "ocm.software/helm-chart", "v1.0.0"
+		resourceName, resourceVersion := "mychart", "0.1.0"
+		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+		transportArchivePath := filepath.Join(t.TempDir(), "transport-archive")
+
+		// The testing Helm chart should exist at the expected path, we reuse it for our test here
+		chartPath := filepath.Join(root, "bindings/go/helm/input/testdata/provenance/mychart-0.1.0.tgz")
+		_, err := os.Stat(chartPath)
+		r.NoError(err, "Helm chart should exist at %s", chartPath)
+
+		constructor := fmt.Sprintf(`components:
+- name: %[1]s
+  version: %[2]s
+  provider:
+    name: acme.org
+  resources:
+    - name: %[3]s
+      version: %[4]s
+      type: helmChart
+      input:
+        type: helm/v1
+        path: %[5]s
+`, name, version, resourceName, resourceVersion, chartPath)
+		r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm), "constructor file must be written without error")
+
+		addCMD := cmd.New()
+		addCMD.SetArgs([]string{
+			"add",
+			"component-version",
+			"--repository", transportArchivePath,
+			"--constructor", constructorPath,
+		})
+		r.NoError(addCMD.ExecuteContext(t.Context()), "adding the component-version to the repository must succeed")
+
+		output := filepath.Join(t.TempDir(), "downloaded-transformed-chart")
+		downloadCMD := cmd.New()
+		downloadCMD.SetArgs([]string{
+			"download",
+			"resource",
+			fmt.Sprintf("%s//%s:%s", transportArchivePath, name, version),
+			"--identity",
+			fmt.Sprintf("name=%s,version=%s", resourceName, resourceVersion),
+			"--output",
+			output,
+			"--transformer",
+			"helm",
+		})
+		r.NoError(downloadCMD.ExecuteContext(t.Context()), "downloading and transforming the resource must succeed")
+
+		downloaded, err := os.Stat(output)
+		r.NoError(err, "the output directory must exist")
+		r.True(downloaded.IsDir(), "the output is a directory that was automatically extracted by the command and transformed")
+
+		entries, err := os.ReadDir(output)
+		r.NoError(err, "reading output directory must succeed")
+		r.Len(entries, 2, "the output directory should contain exactly two files for the chart and the provenance file")
+
+		chartFile, _ := mustFindChartAndProv(t, output)
+
+		chart, err := loader.LoadFile(chartFile)
+		r.NoError(err, "chart should load successfully")
+		r.Equal("mychart", chart.Name(), "the chart name should match the resource name")
+		r.Equal("0.1.0", chart.Metadata.Version, "the chart version should match the resource version")
+	})
 }
 
 type resource struct {
@@ -254,4 +334,45 @@ func uploadComponentVersion(t *testing.T, repo repository.ComponentVersionReposi
 	}
 
 	r.NoError(repo.AddComponentVersion(ctx, &desc))
+}
+
+func mustFindChartAndProv(t *testing.T, dir string) (chartFile, provFile string) {
+	t.Helper()
+	r := require.New(t)
+	ents, err := os.ReadDir(dir)
+	r.NoError(err)
+	r.Len(ents, 2, "expected chart and .prov only")
+
+	for _, e := range ents {
+		switch name := e.Name(); {
+		case strings.HasSuffix(name, ".tgz"):
+			chartFile = filepath.Join(dir, name)
+		case strings.HasSuffix(name, ".prov"):
+			provFile = filepath.Join(dir, name)
+		}
+	}
+	r.NotEmpty(chartFile, "chart .tgz missing")
+	r.NotEmpty(provFile, ".prov missing")
+	return
+}
+
+func getRepoRootBasedOnGit(t *testing.T) string {
+	t.Helper()
+	r := require.New(t)
+	git, err := exec.LookPath("git")
+	r.NoError(err, "git binary should be available in PATH to build helm input")
+	rootRaw, err := exec.CommandContext(t.Context(), git, "rev-parse", "--show-toplevel").Output()
+	r.NoError(err, "git rev-parse --show-toplevel must succeed to get repository root")
+	return strings.TrimSpace(string(rootRaw))
+}
+
+func buildHelmInputMethodInMonoRepoRoot(t *testing.T, root string) {
+	t.Helper()
+	r := require.New(t)
+	task, err := exec.LookPath("task")
+	r.NoError(err, "task binary should be available in PATH to build helm input")
+	buildHelmInput := exec.CommandContext(t.Context(), task, "bindings/go/helm:build", "--dir", root)
+	buildHelmInput.Stdout = os.Stdout
+	buildHelmInput.Stderr = os.Stderr
+	r.NoError(buildHelmInput.Run(), "helm input build must succeed")
 }
