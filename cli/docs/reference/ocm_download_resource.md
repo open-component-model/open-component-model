@@ -80,9 +80,9 @@ ocm download resource [flags]
                                               error: Show errors only
                                            (must be one of [debug error info warn]) (default info)
       --logoutput enum                     set the log output destination
-                                              stdout: Write logs to standard output (default)
+                                              stdout: Write logs to standard output
                                               stderr: Write logs to standard error, useful for separating logs from normal output
-                                           (must be one of [stderr stdout]) (default stdout)
+                                           (must be one of [stderr stdout]) (default stderr)
       --plugin-shutdown-timeout duration   Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
       --temp-folder string                 Specify a custom temporary folder path for filesystem operations.
 ```
