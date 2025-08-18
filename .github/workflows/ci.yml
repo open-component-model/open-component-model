@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  pull_request:
+  pull_request_target:
   push:
     branches:
     - main
@@ -197,7 +197,6 @@ jobs:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json) }}
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TESTCONTAINER_DOCKER_NETWORK: integration-testcontainers
     steps:
       - name: Install Task
@@ -205,6 +204,12 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate token
+        id: generate_token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        with:
+          app_id: ${{ secrets.OCMBOT_APP_ID }}
+          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
@@ -214,6 +219,8 @@ jobs:
       - name: Create Docker network for running Testcontainers
         run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
       - name: Run Tests
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: task ${{ matrix.module }}:test/integration
 
   run_unit_tests:
