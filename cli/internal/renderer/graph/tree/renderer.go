@@ -13,11 +13,20 @@ import (
 )
 
 // Renderer renders a tree structure from a DirectedAcyclicGraph.
+// The output rendered by the Renderer looks like this:
+// ── A
+//
+//	├─ B
+//	│  ╰─ C
+//	╰─ D
+//
+// Each letter corresponds to a vertex in the DirectedAcyclicGraph. The concrete
+// representation of the vertex is defined by the VertexSerializer.
 type Renderer[T cmp.Ordered] struct {
 	// The listWriter is used to write the tree structure. It holds manages
 	// the indentation and style of the output.
 	listWriter list.Writer
-	// The vertexSerializer is a function that serializes a vertex to a string.
+	// The VertexSerializer serializes a vertex to a string.
 	// It MUST perform READ-ONLY access to the vertex and its attributes.
 	vertexSerializer VertexSerializer[T]
 	// The root ID of the tree to render.
