@@ -108,7 +108,7 @@ func setupTestCommand(t *testing.T, resourceName, resourceVersion, output string
 	return cmd, ctx
 }
 
-func TestDownloadPlugin(t *testing.T) {
+func TestDownloadPluginIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -129,7 +129,7 @@ func TestDownloadPlugin(t *testing.T) {
 	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
 }
 
-func TestDownloadPluginMissingResource(t *testing.T) {
+func TestDownloadPluginMissingResourceIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -144,7 +144,7 @@ func TestDownloadPluginMissingResource(t *testing.T) {
 	assert.NoFileExists(t, outputPath, "plugin binary should not be downloaded for non-existent resource")
 }
 
-func TestDownloadPluginInvalidComponentReference(t *testing.T) {
+func TestDownloadPluginInvalidComponentReferenceIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -158,7 +158,7 @@ func TestDownloadPluginInvalidComponentReference(t *testing.T) {
 	assert.NoFileExists(t, outputPath, "plugin binary should not be downloaded for invalid component reference")
 }
 
-func TestDownloadPluginWithValidationFailure(t *testing.T) {
+func TestDownloadPluginWithValidationFailureIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
