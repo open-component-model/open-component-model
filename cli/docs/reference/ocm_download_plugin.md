@@ -43,7 +43,7 @@ ocm download plugin [flags]
       --extra-identity strings    extra identity parameters for resource matching (e.g., os=linux,arch=amd64)
   -h, --help                      help for plugin
       --output string             output location to download the plugin binary to (required) (default ".")
-  -f, --output-format enum        output format of the plugin information
+  -f, --output-format enum        output format of the plugin information, defaults to table
                                   (must be one of [json table yaml]) (default table)
       --resource-name string      name of the plugin resource to download (required)
       --resource-version string   version of the plugin resource to download (optional, defaults to component version)

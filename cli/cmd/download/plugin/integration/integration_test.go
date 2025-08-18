@@ -190,6 +190,7 @@ func getUserAndPasswordForTest(t *testing.T) (string, string) {
 
 	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
 	if err != nil {
+		t.Logf("output from gh CLI: %s", out)
 		t.Skipf("gh CLI for user failed: %v", err)
 	}
 	structured := map[string]interface{}{}
@@ -200,6 +201,7 @@ func getUserAndPasswordForTest(t *testing.T) (string, string) {
 
 	pw := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s auth token", gh))
 	if out, err = pw.CombinedOutput(); err != nil {
+		t.Logf("output from sh auth token: %s", out)
 		t.Skipf("gh CLI for password failed: %v", err)
 	}
 	password := strings.TrimSpace(string(out))
