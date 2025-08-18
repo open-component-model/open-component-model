@@ -197,9 +197,14 @@ jobs:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.integration_test_modules_json) }}
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TESTCONTAINER_DOCKER_NETWORK: integration-testcontainers
     steps:
+      - name: Generate token
+        id: generate_token
+        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
+        with:
+          app_id: ${{ secrets.OCMBOT_APP_ID }}
+          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
@@ -214,6 +219,8 @@ jobs:
       - name: Create Docker network for running Testcontainers
         run: docker network create ${{ env.TESTCONTAINER_DOCKER_NETWORK }}
       - name: Run Tests
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: task ${{ matrix.module }}:test/integration
 
   run_unit_tests:
