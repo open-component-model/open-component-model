@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
@@ -41,9 +40,6 @@ func GetV1DirBlob(ctx context.Context, dir v1.Dir, workingDirectory string) (blo
 	// Pack directory contents as a tar archive.
 
 	if _, err := filesystem.EnsurePathInWorkingDirectory(dir.Path, workingDirectory); err != nil {
-		if strings.Contains(err.Error(), "empty path") {
-			return nil, ErrEmptyPath
-		}
 		return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", dir.Path, workingDirectory, err)
 	}
 

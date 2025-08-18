@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -417,7 +416,6 @@ func TestGetV1DirBlob_EmptyPath(t *testing.T) {
 	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec, tempDir)
 	a.Nil(dirBlob)
 	a.Error(err)
-	a.True(errors.Is(err, dir.ErrEmptyPath), "expected %q to be returned, got: %q", dir.ErrEmptyPath, err)
 }
 
 func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
