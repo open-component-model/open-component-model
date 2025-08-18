@@ -41,7 +41,7 @@ func compareByOrderIndex[T cmp.Ordered](ctx context.Context, vertex *syncdag.Ver
 
 	// If both edges have order indices, compare them.
 	if orderA != nil && orderB != nil {
-		return *orderA - *orderB
+		return cmp.Compare(*orderA, *orderB)
 	}
 	// If one of the order indices is nil, we cannot compare the order indexes
 	// and compare by the IDs directly.
