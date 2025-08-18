@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/jedib0t/go-pretty/v6/list"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -76,33 +77,20 @@ type Renderer[T cmp.Ordered, U any] struct {
 	// The marshalizer MUST perform READ-ONLY access to the vertex and its
 	// attributes.
 	vertexMarshalizer VertexMarshalizer[T, U]
-	outputFormat      string
+	outputFormat      OutputFormat
 	root              T
 	dag               *syncdag.DirectedAcyclicGraph[T]
 }
 
-//// NewTreeRenderer creates a new TreeRenderer for the given DirectedAcyclicGraph.
-//func NewTreeRenderer[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...TreeRendererOption[T]) *TreeRenderer[T] {
-//	options := &TreeRendererOptions[T]{}
-//	for _, opt := range opts {
-//		opt(options)
-//	}
-//
-//	if options.VertexSerializer == nil {
-//		options.VertexSerializer = func(v *syncdag.Vertex[T]) string {
-//			// Default serializer just returns the vertex ID.
-//			// This is supposed to be overridden by the user to provide a
-//			// meaningful representation.
-//			return fmt.Sprintf("%v", v.ID)
-//		}
-//	}
-//	return &TreeRenderer[T]{
-//		listWriter:       list.NewWriter(),
-//		vertexSerializer: options.VertexSerializer,
-//		root:             root,
-//		dag:              dag,
-//	}
-//}
+// New creates a new Renderer for the given DirectedAcyclicGraph.
+func New[T cmp.Ordered, U any](dag *syncdag.DirectedAcyclicGraph[T], root T, marshalizer VertexMarshalizer[T, U]) *Renderer[T, U] {
+	return &Renderer[T, U]{
+		objects:           make([]U, 0),
+		vertexMarshalizer: marshalizer,
+		root:              root,
+		dag:               dag,
+	}
+}
 
 // Render renders the tree structure starting from the root ID.
 // It writes the output to the provided writer.
@@ -139,20 +127,13 @@ func (t *Renderer[T, U]) Render(ctx context.Context, writer io.Writer) error {
 	return nil
 }
 
-func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
+func (t *Renderer[T, U]) traverseGraph(ctx context.Context, nodeId T) error {
 	vertex, ok := t.dag.GetVertex(nodeId)
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
 	}
-	descriptor, ok := vertex.GetAttribute(AttributeComponentDescriptor)
-	if !ok {
-		return fmt.Errorf("failed to get attribute %s from vertex %v", AttributeComponentDescriptor, nodeId)
-	}
-	desc, ok := descriptor.(*descruntime.Descriptor)
-	if !ok {
-		return fmt.Errorf("expected attribute %s to be of type %T, got %T", AttributeComponentDescriptor, &descruntime.Descriptor{}, descriptor)
-	}
-	t.objects = append(t.objects, desc)
+	object := t.vertexMarshalizer.Marshalize(vertex)
+	t.objects = append(t.objects, object)
 
 	// Get children and sort them for stable output
 	children := graph.GetNeighborsSorted(ctx, vertex)
@@ -163,6 +144,23 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
 		}
 	}
 	return nil
+}
+
+func (t *Renderer[T, U]) encodeObjects() (io.Reader, error) {
+	var data []byte
+	var err error
+	switch t.outputFormat {
+	case OutputFormatJSON:
+		data, err = json.Marshal(t.objects)
+	case OutputFormatYAML:
+		data, err = yaml.Marshal(t.objects)
+	default:
+		err = fmt.Errorf("unknown output format: %s", t.outputFormat)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("encoding objects as %s failed: %w", t.outputFormat, err)
+	}
+	return bytes.NewReader(data), nil
 }
 
 func encodeDescriptors(output string, descs []*descruntime.Descriptor) (io.Reader, int64, error) {
