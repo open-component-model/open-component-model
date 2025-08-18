@@ -58,7 +58,14 @@ func ArtifactBlob(ctx context.Context, storage content.Storage, b *ociblob.Artif
 }
 
 func ResourceLocalBlob(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (desc ociImageSpecV1.Descriptor, err error) {
-	switch mediaType := access.MediaType; mediaType {
+	mediaType := access.MediaType
+	if mediaType == "" {
+		if mtAware, ok := b.ReadOnlyBlob.(blob.MediaTypeAware); ok {
+			mediaType, _ = mtAware.MediaType()
+		}
+	}
+
+	switch mediaType {
 	case layout.MediaTypeOCIImageLayoutTarV1, layout.MediaTypeOCIImageLayoutTarGzipV1:
 		return ResourceLocalBlobOCILayout(ctx, storage, b, opts)
 	default:
@@ -238,6 +245,9 @@ func updateArtifactAccess(artifact descriptor.Artifact, desc ociImageSpecV1.Desc
 		typed.Access = access
 	case *descriptor.Resource:
 		typed.Access = access
+		if typed.Digest == nil {
+			typed.Digest = &descriptor.Digest{}
+		}
 		if err := internaldigest.Apply(typed.Digest, desc.Digest); err != nil {
 			return fmt.Errorf("failed to apply digest to artifact: %w", err)
 		}
