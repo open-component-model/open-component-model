@@ -15,10 +15,10 @@ import (
 // Renderer renders a tree structure from a DirectedAcyclicGraph.
 // The output rendered by the Renderer looks like this:
 //
-//	  ── A
-//		    ├─ B
-//		    │  ╰─ C
-//		    ╰─ D
+//	── A
+//	   ├─ B
+//	   │  ╰─ C
+//	   ╰─ D
 //
 // Each letter corresponds to a vertex in the DirectedAcyclicGraph. The concrete
 // representation of the vertex is defined by the VertexSerializer.
