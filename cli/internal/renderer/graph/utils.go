@@ -22,26 +22,34 @@ func GetNeighborsSorted[T cmp.Ordered](ctx context.Context, vertex *syncdag.Vert
 		return true
 	})
 
-	slices.SortFunc(neighbors, func(a, b T) int {
-		return compareByOrderIndex(ctx, vertex, a, b)
+	slices.SortFunc(neighbors, func(edgeIdA, edgeIdB T) int {
+		return compareByOrderIndex(ctx, vertex, edgeIdA, edgeIdB)
 	})
 
 	return neighbors
 }
 
-func compareByOrderIndex[T cmp.Ordered](ctx context.Context, vertex *syncdag.Vertex[T], a, b T) int {
-	orderA := getOrderIndex(ctx, vertex, a)
-	orderB := getOrderIndex(ctx, vertex, b)
+// compareByOrderIndex compares two edges.
+// If the AttributeOrderIndex is set on the edges with edgeIdA and edgeIdB,
+// this function compares the order indices and returns the
+// difference (i.e. edgeA.Index - edgeB.Index).
+// If the order index is not set on one of both edges, it falls back to
+// comparing the edge IDs.
+func compareByOrderIndex[T cmp.Ordered](ctx context.Context, vertex *syncdag.Vertex[T], edgeIdA, edgeIdB T) int {
+	orderA := getOrderIndex(ctx, vertex, edgeIdA)
+	orderB := getOrderIndex(ctx, vertex, edgeIdB)
 
 	// If both edges have order indices, compare them.
 	if orderA != nil && orderB != nil {
 		return *orderA - *orderB
 	}
 	// If one of the order indices is nil, we cannot compare the order indexes
-	// and compare by the keys directly.
-	return cmp.Compare(a, b)
+	// and compare by the IDs directly.
+	return cmp.Compare(edgeIdA, edgeIdB)
 }
 
+// getOrderIndex retrieves the value of AttributeOrderIndex for the given
+// edgeId.
 func getOrderIndex[T cmp.Ordered](_ context.Context, vertex *syncdag.Vertex[T], key T) *int {
 	value, exists := vertex.GetEdgeAttribute(key, syncdag.AttributeOrderIndex)
 	if !exists {

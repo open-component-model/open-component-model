@@ -15,42 +15,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type RenderLoopOptions struct {
-	// RefreshRate is the rate at which the renderer should refresh the output.
-	RefreshRate time.Duration
-	RenderOptions
-}
-
-type RenderLoopOption func(*RenderLoopOptions)
-
-func WithRefreshRate(refreshRate time.Duration) RenderLoopOption {
-	return func(opts *RenderLoopOptions) {
-		opts.RefreshRate = refreshRate
-	}
-}
-
-func WithRenderOptions(opts ...RenderOption) RenderLoopOption {
-	return func(options *RenderLoopOptions) {
-		for _, opt := range opts {
-			opt(&options.RenderOptions)
-		}
-	}
-}
-
-type RenderOptions struct {
-	// Writer is the writer to which the renderer should write the output.
-	// Typically, this is os.Stdout.
-	Writer io.Writer
-}
-
-type RenderOption func(*RenderOptions)
-
-func WithWriter(writer io.Writer) RenderOption {
-	return func(opts *RenderOptions) {
-		opts.Writer = writer
-	}
-}
-
 type Renderer interface {
 	Render(ctx context.Context, writer io.Writer) error
 }
