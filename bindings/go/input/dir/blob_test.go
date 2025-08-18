@@ -53,7 +53,7 @@ func TestGetV1DirBlob_Symlinks(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(b)
 
-	// Read the tar datr.
+	// Read the tar data.
 	reader, err := b.ReadCloser()
 	r.NoError(err)
 	r.NotNil(reader)
@@ -114,7 +114,7 @@ func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 			r.NoError(err)
 			r.NotNil(b)
 
-			// Read the tar datr.
+			// Read the tar data.
 			readerBefore, err := b.ReadCloser()
 			r.NoError(err)
 			defer func() {
@@ -331,7 +331,7 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 				r.NotEmpty(digest)
 			}
 
-			// Test reading datr.
+			// Test reading data.
 			reader, err := b.ReadCloser()
 			r.NoError(err)
 			defer func() {
@@ -342,7 +342,7 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 			r.NoError(err)
 
 			if tt.expectGzip {
-				// Decompress gzipped datr.
+				// Decompress gzipped data.
 				gzReader, err := gzip.NewReader(bytes.NewReader(data))
 				r.NoError(err)
 				defer func() {
@@ -452,7 +452,7 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 
 // extractFileFromTar extracts a specific file from a tar archive and returns its content
 func extractFileFromTar(tarData []byte, fileName string) ([]byte, error) {
-	// Create a reader from the byte datr.
+	// Create a reader from the byte data.
 	reader := bytes.NewReader(tarData)
 
 	// Create a tar reader.
