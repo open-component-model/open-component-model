@@ -1,4 +1,4 @@
-package components
+package list
 
 import (
 	"bytes"
@@ -19,6 +19,35 @@ import (
 const (
 	AttributeComponentDescriptor = "component-descriptor"
 )
+
+type RendererOptions[T cmp.Ordered, U any] struct {
+	// VertexSerializer is a function that serializes a vertex to a string.
+	VertexMarshalizer VertexMarshalizer[T, U]
+}
+
+type RendererOption[T cmp.Ordered, U any] func(*RendererOptions[T, U])
+
+func WithVertexMarshalizer[T cmp.Ordered, U any](marshalizer VertexMarshalizer[T, U]) RendererOption[T, U] {
+	return func(opts *RendererOptions[T, U]) {
+		opts.VertexMarshalizer = marshalizer
+	}
+}
+
+func WithVertexMarshalizerFunc[T cmp.Ordered, U any](marshalizerFunc func(*syncdag.Vertex[T]) U) RendererOption[T, U] {
+	return func(opts *RendererOptions[T, U]) {
+		opts.VertexMarshalizer = VertexMarshalizerFunc[T, U](marshalizerFunc)
+	}
+}
+
+type VertexMarshalizer[T cmp.Ordered, U any] interface {
+	Marshalize(*syncdag.Vertex[T]) U
+}
+
+type VertexMarshalizerFunc[T cmp.Ordered, U any] func(*syncdag.Vertex[T]) U
+
+func (f VertexMarshalizerFunc[T, U]) Marshalize(v *syncdag.Vertex[T]) U {
+	return f(v)
+}
 
 //type OutputFormat int
 //
