@@ -34,7 +34,11 @@ const (
 )
 
 const (
-	ExtractionPolicyAuto    = "auto"
+	// ExtractionPolicyAuto is a policy that automatically extracts a resource if it is a recognized archive format.
+	// If the resource is not recognized as an archive format, it is downloaded as is.
+	ExtractionPolicyAuto = "auto"
+	// ExtractionPolicyDisable is a policy that disables extraction of a resource.
+	// The resource will not be extracted, even if it is a recognized archive format.
 	ExtractionPolicyDisable = "disable"
 )
 

@@ -83,9 +83,10 @@ func StartLogStreamer(ctx context.Context, plugin *types.Plugin) {
 			}
 
 			log(ctx, parsed.msg, parsed.args...)
-		case err := <-errChan:
-			slog.ErrorContext(ctx, "streaming logs from plugin failed", "error", err)
-			return
+		case err, ok := <-errChan:
+			if ok {
+				slog.ErrorContext(ctx, "streaming logs from plugin failed", "error", err)
+			}
 		case <-ctx.Done():
 			// context is done, we stop streaming logs
 			slog.DebugContext(ctx, "stopping log streamer, context is done")

@@ -14,6 +14,21 @@ import (
 // on each vertex to indicate its traversal state:
 type TraversalState int
 
+func (t TraversalState) String() string {
+	switch t {
+	case StateDiscovering:
+		return "discovering"
+	case StateDiscovered:
+		return "discovered"
+	case StateCompleted:
+		return "completed"
+	case StateError:
+		return "error"
+	default:
+		return fmt.Sprintf("unknown(%d)", t)
+	}
+}
+
 const (
 	AttributeTraversalState = "dag/traversal-state"
 	AttributeOrderIndex     = "dag/order-index"

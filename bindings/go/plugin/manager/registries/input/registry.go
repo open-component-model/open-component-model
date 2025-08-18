@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"sync"
 
+	"golang.org/x/sync/errgroup"
+
 	"ocm.software/open-component-model/bindings/go/constructor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
@@ -200,16 +202,33 @@ type constructedPlugin struct {
 func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var errs error
+	eg, ctx := errgroup.WithContext(ctx)
 	for _, p := range r.constructedPlugins {
-		// The plugins should handle the Interrupt signal for shutdowns.
-		// TODO(Skarlso): Use context to wait for the plugin to actually shut down.
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil {
-			errs = errors.Join(errs, perr)
-		}
+		eg.Go(func() error {
+			// The plugins should handle the Interrupt signal for shutdowns.
+			if err := p.cmd.Process.Signal(os.Interrupt); err != nil {
+				return fmt.Errorf("failed to send interrupt signal to plugin: %w", errors.Join(err, p.cmd.Process.Kill()))
+			}
+
+			shutdownSig := make(chan error, 1)
+			defer func() {
+				close(shutdownSig)
+			}()
+			go func() {
+				_, err := p.cmd.Process.Wait()
+				shutdownSig <- err
+			}()
+
+			select {
+			case err := <-shutdownSig:
+				return err
+			case <-ctx.Done():
+				return errors.Join(ctx.Err(), p.cmd.Process.Kill())
+			}
+		})
 	}
 
-	return errs
+	return eg.Wait()
 }
 
 func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (v1.InputPluginContract, error) {
@@ -224,7 +243,7 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *ty
 
 	// start log streaming once the plugin is up and running.
 	// use the baseCtx here from the manager here so the streaming isn't stopped when the request is stopped.
-	go plugins.StartLogStreamer(r.ctx, plugin)
+	go plugins.StartLogStreamer(context.TODO(), plugin)
 
 	// think about this better, we have a single json schema, maybe even have different maps for different types + schemas?
 	var jsonSchema []byte
