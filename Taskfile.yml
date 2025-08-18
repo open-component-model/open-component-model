@@ -85,7 +85,7 @@ includes:
     optional: true
     taskfile: ./cli/Taskfile.yml
     dir: ./cli
-  cli/download/plugin/integration:
+  cli/cmd/download/plugin/integration:
     optional: true
     taskfile: ./cli/cmd/download/plugin/integration/Taskfile.yml
     dir: ./cli/cmd/download/plugin/integration
