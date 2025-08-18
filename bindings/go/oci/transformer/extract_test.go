@@ -49,7 +49,7 @@ func TestTransformer_TransformBlob(t *testing.T) {
 			transformer := New(slog.Default())
 			inputBlob := tt.setupBlob(t)
 
-			result, err := transformer.TransformBlob(t.Context(), inputBlob, nil)
+			result, err := transformer.TransformBlob(t.Context(), inputBlob, nil, nil)
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, result)
@@ -98,7 +98,7 @@ func TestTransformerIntegration(t *testing.T) {
 
 	transformer := New(slog.Default())
 	// no config should default to all layers
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, nil)
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, nil, nil)
 
 	r.NoError(err, "Transformation should succeed")
 	r.NotNil(result, "Result should not be nil")
@@ -213,7 +213,7 @@ func TestTransformerWithRules(t *testing.T) {
 	r.NotNil(ociLayoutBlob)
 
 	transformer := New(slog.Default())
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)
@@ -254,7 +254,7 @@ func TestTransformerWithIndexSelector(t *testing.T) {
 	r.NotNil(ociLayoutBlob)
 
 	transformer := New(slog.Default())
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)
@@ -310,7 +310,7 @@ func TestTransformerWithMatchExpressions(t *testing.T) {
 	r.NotNil(ociLayoutBlob)
 
 	transformer := New(slog.Default())
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)
@@ -351,7 +351,7 @@ func TestTransformerWithRuleWithoutFilename(t *testing.T) {
 	r.NotNil(ociLayoutBlob)
 
 	transformer := New(slog.Default())
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)
@@ -402,7 +402,7 @@ func TestTransformerWithHelmRulesWithoutFilenames(t *testing.T) {
 	r.NotNil(ociLayoutBlob)
 
 	transformer := New(slog.Default())
-	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config)
+	result, err := transformer.TransformBlob(ctx, ociLayoutBlob, config, nil)
 
 	r.NoError(err)
 	r.NotNil(result)

@@ -8,12 +8,11 @@ import (
 	"io"
 	"strings"
 
-	"github.com/opencontainers/go-digest"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/input/utf8/spec/v1"
@@ -109,7 +108,6 @@ func GetV1UTF8Blob(utf8 v1.UTF8) (blob.ReadOnlyBlob, error) {
 		reader    io.Reader
 		mediaType string
 		size      int64
-		dig       digest.Digest
 	)
 
 	switch {
@@ -117,7 +115,6 @@ func GetV1UTF8Blob(utf8 v1.UTF8) (blob.ReadOnlyBlob, error) {
 		reader = strings.NewReader(utf8.Text)
 		mediaType = "text/plain"
 		size = int64(len(utf8.Text))
-		dig = digest.FromString(utf8.Text)
 	case len(utf8.JSON) > 0, len(utf8.FormattedJSON) > 0:
 		var data []byte
 		var err error
@@ -133,7 +130,6 @@ func GetV1UTF8Blob(utf8 v1.UTF8) (blob.ReadOnlyBlob, error) {
 		reader = bytes.NewReader(data)
 		mediaType = "application/json"
 		size = int64(len(data))
-		dig = digest.FromBytes(data)
 	case len(utf8.YAML) > 0:
 		data, err := yaml.Marshal(utf8.YAML)
 		if err != nil {
@@ -142,15 +138,13 @@ func GetV1UTF8Blob(utf8 v1.UTF8) (blob.ReadOnlyBlob, error) {
 		reader = bytes.NewReader(data)
 		mediaType = "application/x-yaml"
 		size = int64(len(data))
-		dig = digest.FromBytes(data)
 	default:
 		return nil, fmt.Errorf("utf8 input must contain a valid content description")
 	}
 
-	var utf8Blob blob.ReadOnlyBlob = inmemory.New(reader,
-		inmemory.WithMediaType(mediaType),
-		inmemory.WithSize(size),
-		inmemory.WithDigest(dig),
+	var utf8Blob blob.ReadOnlyBlob = direct.New(reader,
+		direct.WithMediaType(mediaType),
+		direct.WithSize(size),
 	)
 
 	if utf8.Compress {

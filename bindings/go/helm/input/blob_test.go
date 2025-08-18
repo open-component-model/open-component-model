@@ -1,4 +1,4 @@
-package helm_test
+package input_test
 
 import (
 	"encoding/json"
@@ -14,8 +14,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/input/helm"
-	v1 "ocm.software/open-component-model/bindings/go/input/helm/spec/v1"
+	"ocm.software/open-component-model/bindings/go/helm/input"
+	v1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
@@ -63,10 +63,10 @@ func TestGetV1HelmBlob_ValidateFields(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := helm.GetV1HelmBlob(ctx, tt.helmSpec, "")
+			b, err := input.GetV1HelmBlob(ctx, tt.helmSpec, "")
 			require.Error(t, err)
 			assert.True(t, func() bool {
-				return errors.Is(err, helm.ErrEmptyPath) || errors.Is(err, helm.ErrUnsupportedField)
+				return errors.Is(err, input.ErrEmptyPath) || errors.Is(err, input.ErrUnsupportedField)
 			}(), "Expected ErrEmptyPath or ErrUnsupportedField, got: %v", err)
 			assert.Nil(t, b, "expected nil blob for invalid helm spec")
 		})
@@ -108,7 +108,7 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 			spec := v1.Helm{
 				Path: tt.path,
 			}
-			b, err := helm.GetV1HelmBlob(ctx, spec, "")
+			b, err := input.GetV1HelmBlob(ctx, spec, "")
 			require.NoError(t, err)
 			require.NotNil(t, b)
 
@@ -184,7 +184,7 @@ func TestGetV1HelmBlob_BadCharts(t *testing.T) {
 			spec := v1.Helm{
 				Path: tt.path,
 			}
-			b, err := helm.GetV1HelmBlob(ctx, spec, "")
+			b, err := input.GetV1HelmBlob(ctx, spec, "")
 			require.Error(t, err)
 			require.Nil(t, b)
 			assert.Contains(t, err.Error(), tt.wantErrMgs)

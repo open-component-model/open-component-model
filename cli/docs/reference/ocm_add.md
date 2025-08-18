@@ -52,14 +52,14 @@ ocm add {component-version|component-versions|cv|cvs} [flags]
                                 error: Show errors only
                              (must be one of [debug error info warn]) (default info)
       --logoutput enum       set the log output destination
-                                stdout: Write logs to standard output (default)
+                                stdout: Write logs to standard output
                                 stderr: Write logs to standard error, useful for separating logs from normal output
-                             (must be one of [stderr stdout]) (default stdout)
+                             (must be one of [stderr stdout]) (default stderr)
       --temp-folder string   Specify a custom temporary folder path for filesystem operations.
 ```
 
 ### SEE ALSO
 
 * [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
-* [ocm add component-version]({{< relref "ocm_add_component-version.md" >}})	 - Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a "component-constructor" file
+* [ocm add component-version]({{< relref "ocm_add_component-version.md" >}})	 - Add component version(s) to an OCM Repository stored as Common Transport Format archive (CTF) based on a "component-constructor" file
 

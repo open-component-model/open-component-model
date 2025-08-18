@@ -1,6 +1,6 @@
 ---
 title: ocm add component-version
-description: Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a "component-constructor" file.
+description: Add component version(s) to an OCM Repository stored as Common Transport Format archive (CTF) based on a "component-constructor" file.
 suppressTitle: true
 toc: true
 sidebar:
@@ -9,21 +9,20 @@ sidebar:
 
 ## ocm add component-version
 
-Add component version(s) to an OCM Repository stored as Common Transport Format Archive (CTF) based on a "component-constructor" file
+Add component version(s) to an OCM Repository stored as Common Transport Format archive (CTF) based on a "component-constructor" file
 
 ### Synopsis
 
-Add component version(s) to an OCM Common Transport Format Archive (CTF) that can be reused
-for transfers.
+Add component version(s) to an OCM Common Transport Format archive (CTF) that can be reused for transfers.
 
-A "component-constructor" file is used to specify the component version(s) to be added. It can contain both a single component or many
-components. The component reference is used to determine the repository to add the components to.
+A "component-constructor" file is used to specify the component version(s) to be added. It can contain both a single component or many components. The component reference is used to determine the repository to add the components to.
 
-By default, the command will look for a file named ""component-constructor".yaml" or ""component-constructor".yml" in the current directory.
+By default, the command will look for a file named "component-constructor.yaml" or "component-constructor.yml" in the current directory.
 If given a path to a directory, the command will look for a file named "component-constructor.yaml" or "component-constructor.yml" in that directory.
 If given a path to a file, the command will attempt to use that file as the "component-constructor" file.
 
 In case the component archive does not exist, it will be created by default.
+If not specified, it will be created with the name "transport-archive".
 
 
 ```
@@ -82,9 +81,9 @@ add component-version  --repository ./path/to/transport-archive --constructor ./
                                 error: Show errors only
                              (must be one of [debug error info warn]) (default info)
       --logoutput enum       set the log output destination
-                                stdout: Write logs to standard output (default)
+                                stdout: Write logs to standard output
                                 stderr: Write logs to standard error, useful for separating logs from normal output
-                             (must be one of [stderr stdout]) (default stdout)
+                             (must be one of [stderr stdout]) (default stderr)
       --temp-folder string   Specify a custom temporary folder path for filesystem operations.
 ```
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 
 	"github.com/opencontainers/go-digest"
@@ -191,7 +192,7 @@ func Blob(ctx context.Context, storage content.Pusher, b blob.ReadOnlyBlob, desc
 		err = errors.Join(err, layerData.Close())
 	}()
 
-	if err := storage.Push(ctx, desc, layerData); err != nil {
+	if err := storage.Push(ctx, desc, io.NopCloser(layerData)); err != nil {
 		return fmt.Errorf("failed to push layer: %w", err)
 	}
 
