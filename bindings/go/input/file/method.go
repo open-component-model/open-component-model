@@ -53,10 +53,9 @@ type InputMethod struct {
 // If the working directory is empty, it defaults to the current working directory of the process.
 func NewInputMethod(workingDir string) (*InputMethod, error) {
 	if workingDir == "" {
-		if wg, err := os.Getwd(); err != nil {
+		workingDir, err := os.Getwd()
+		if err != nil {
 			return nil, fmt.Errorf("error getting current working directory: %w", err)
-		} else {
-			workingDir = wg
 		}
 	}
 
