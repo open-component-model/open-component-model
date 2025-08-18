@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Renderer defines an interface for rendering arbitrary data structures.
 type Renderer interface {
 	Render(ctx context.Context, writer io.Writer) error
 }
