@@ -52,8 +52,9 @@ type InputMethod struct {
 // The working directory is used to resolve relative paths in input specifications.
 // If the working directory is empty, it defaults to the current working directory of the process.
 func NewInputMethod(workingDir string) (*InputMethod, error) {
+	var err error
 	if workingDir == "" {
-		workingDir, err := os.Getwd()
+		workingDir, err = os.Getwd()
 		if err != nil {
 			return nil, fmt.Errorf("error getting current working directory: %w", err)
 		}
