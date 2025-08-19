@@ -9,7 +9,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/stretchr/testify/require"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	render "ocm.software/open-component-model/cli/internal/renderer"
@@ -39,7 +38,8 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output := buf.String()
-		expected := "── A (discovering)\n"
+		expected := `── A (discovering)
+`
 		r.Equal(expected, output)
 		buf.Reset()
 
@@ -50,7 +50,9 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ╰─ B (discovering)\n"
+		expected = render.EraseNLines(1) + `── A (discovering)
+   ╰─ B (discovering)
+`
 		r.Equal(expected, output)
 		buf.Reset()
 
@@ -61,7 +63,10 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ╰─ B (discovering)\n      ╰─ C (discovering)\n"
+		expected = render.EraseNLines(2) + `── A (discovering)
+   ╰─ B (discovering)
+      ╰─ C (discovering)
+`
 		r.Equal(expected, output)
 		buf.Reset()
 
@@ -72,7 +77,11 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ├─ B (discovering)\n   │  ╰─ C (discovering)\n   ╰─ D (discovering)\n"
+		expected = render.EraseNLines(3) + `── A (discovering)
+   ├─ B (discovering)
+   │  ╰─ C (discovering)
+   ╰─ D (discovering)
+`
 		r.Equal(expected, output)
 		buf.Reset()
 
@@ -81,7 +90,11 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ├─ B (discovering)\n   │  ╰─ C (discovering)\n   ╰─ D (completed)\n"
+		expected = render.EraseNLines(4) + `── A (discovering)
+   ├─ B (discovering)
+   │  ╰─ C (discovering)
+   ╰─ D (completed)
+`
 		r.Equal(expected, output)
 		buf.Reset()
 
@@ -90,7 +103,11 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ├─ B (discovering)\n   │  ╰─ C (completed)\n   ╰─ D (completed)\n"
+		expected = render.EraseNLines(4) + `── A (discovering)
+   ├─ B (discovering)
+   │  ╰─ C (completed)
+   ╰─ D (completed)
+`
 		r.Equal(expected, output)
 		buf.Reset()
 
@@ -99,7 +116,11 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ├─ B (completed)\n   │  ╰─ C (completed)\n   ╰─ D (completed)\n"
+		expected = render.EraseNLines(4) + `── A (discovering)
+   ├─ B (completed)
+   │  ╰─ C (completed)
+   ╰─ D (completed)
+`
 		r.Equal(expected, output)
 		buf.Reset()
 
@@ -109,8 +130,13 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (completed)\n   ├─ B (completed)\n   │  ╰─ C (completed)\n   ╰─ D (completed)\n"
+		expected = render.EraseNLines(4) + `── A (completed)
+   ├─ B (completed)
+   │  ╰─ C (completed)
+   ╰─ D (completed)
+`
 		r.Equal(expected, output)
+
 		cancel()
 		err := waitFunc()
 		r.ErrorIs(err, context.Canceled)
@@ -130,7 +156,8 @@ func TestRenderOnce(t *testing.T) {
 	renderer := New(d, "A")
 
 	r.NoError(d.AddVertex("A"))
-	expected := "── A\n"
+	expected := `── A
+`
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output := buf.String()
 	buf.Reset()
@@ -138,14 +165,17 @@ func TestRenderOnce(t *testing.T) {
 
 	// Add B
 	r.NoError(d.AddVertex("B"))
-	expected = "── A\n"
+	expected = `── A
+`
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
 	buf.Reset()
 	r.Equal(expected, output)
 	// Add B as child of A
 	r.NoError(d.AddEdge("A", "B"))
-	expected = "── A\n   ╰─ B\n"
+	expected = `── A
+   ╰─ B
+`
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
 	buf.Reset()
@@ -160,7 +190,11 @@ func TestRenderOnce(t *testing.T) {
 	r.NoError(d.AddEdge("A", "D"))
 
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
-	expected = "── A\n   ├─ B\n   │  ╰─ C\n   ╰─ D\n"
+	expected = `── A
+   ├─ B
+   │  ╰─ C
+   ╰─ D
+`
 	output = buf.String()
 	buf.Reset()
 	r.Equal(expected, output)
