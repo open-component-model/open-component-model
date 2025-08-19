@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/descriptor/runtime
 
-go 1.24.1
+go 1.25.0
 
 require (
 	github.com/stretchr/testify v1.10.0

@@ -3,7 +3,7 @@ package file
 import (
 	"context"
 	"fmt"
-	"path"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -43,7 +43,26 @@ func init() {
 // Since files are accessed directly from the local filesystem, no credentials
 // are required for any operations.
 type InputMethod struct {
+	// WorkingDirectory is the base directory used to resolve relative paths in input specifications.
+	// If a path in the input specification is relative, it will be resolved against this directory.
 	WorkingDirectory string
+}
+
+// NewInputMethod creates a new InputMethod instance with the specified working directory.
+// The working directory is used to resolve relative paths in input specifications.
+// If the working directory is empty, it defaults to the current working directory of the process.
+func NewInputMethod(workingDir string) (*InputMethod, error) {
+	var err error
+	if workingDir == "" {
+		workingDir, err = os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("error getting current working directory: %w", err)
+		}
+	}
+
+	return &InputMethod{
+		WorkingDirectory: workingDir,
+	}, nil
 }
 
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
@@ -68,9 +87,7 @@ func (i *InputMethod) ProcessResource(_ context.Context, resource *constructorru
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	file.Path = ensureWdOrPath(file.Path, i.WorkingDirectory)
-
-	fileBlob, err := GetV1FileBlob(file)
+	fileBlob, err := GetV1FileBlob(file, i.WorkingDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("error getting file blob based on resource input specification: %w", err)
 	}
@@ -102,9 +119,7 @@ func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.S
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	file.Path = ensureWdOrPath(file.Path, i.WorkingDirectory)
-
-	fileBlob, err := GetV1FileBlob(file)
+	fileBlob, err := GetV1FileBlob(file, i.WorkingDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("error getting file blob based on source input specification: %w", err)
 	}
@@ -112,28 +127,4 @@ func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.S
 	return &constructor.SourceInputMethodResult{
 		ProcessedBlobData: fileBlob,
 	}, nil
-}
-
-// ensureWdOrPath ensures that the filePath is absolute.
-// If the path is relative, it prepends the working file to it.
-// If the working directory is empty, it does nothing.
-func ensureWdOrPath(filePath, workingDirectory string) string {
-	if path.IsAbs(filePath) {
-		return filePath
-	}
-
-	if workingDirectory == "" {
-		return filePath
-	}
-
-	// make sure that we do not have two slashes in the path
-	return path.Clean(path.Join(workingDirectory, filePath))
-}
-
-func (i *InputMethod) GetWd() string {
-	return i.WorkingDirectory
-}
-
-func (i *InputMethod) SetWd(workingDir string) {
-	i.WorkingDirectory = workingDir
 }

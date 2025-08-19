@@ -1,17 +1,70 @@
 package v4alpha1_test
 
 import (
+	"embed"
+	_ "embed"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/engine/jcs"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	descriptor2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 )
+
+//go:embed testdata
+var testdata embed.FS
+
+func TestConformance(t *testing.T) {
+	baseName := t.Name()
+	prefix := filepath.Join("testdata", "conformance")
+
+	run := func(t *testing.T, folder string) {
+		t.Helper()
+		r := require.New(t)
+		desc, err := testdata.ReadFile(filepath.Join(prefix, folder, "README.md"))
+		r.NoError(err, "failed to read test README")
+		t.Log(string(desc))
+
+		input, err := testdata.ReadFile(filepath.Join(prefix, folder, "input.yaml"))
+		r.NoError(err, "failed to read test input")
+		expected, err := testdata.ReadFile(filepath.Join(prefix, folder, "expected.json"))
+		r.NoError(err, "failed to read test expected output")
+
+		var descriptor descriptorv2.Descriptor
+		if err := yaml.Unmarshal(input, &descriptor); err != nil {
+			t.Fatalf("failed to unmarshal YAML: %v", err)
+		}
+		runtimeDescriptor, err := runtime.ConvertFromV2(&descriptor)
+		r.NoError(err, "failed to convert descriptor")
+
+		// Normalise the descriptor using our normalization (ExclusionRules applied).
+		normalizedBytes, err := normalisation.Normalise(runtimeDescriptor, v4alpha1.Algorithm)
+		r.NoError(err, "failed to normalise descriptor")
+
+		r.Equal(string(expected), string(normalizedBytes),
+			"normalized output does not match expected output from testcase",
+		)
+	}
+
+	t.Run(filepath.Join("legacy", "jsonNormalisation", "v3"), func(t *testing.T) {
+		prefix = filepath.Join(prefix, strings.TrimPrefix(t.Name(), baseName))
+		tests, err := testdata.ReadDir(prefix)
+		require.NoError(t, err, "failed to read conformance test directory")
+		for _, folder := range tests {
+			t.Run(folder.Name(), func(t *testing.T) {
+				run(t, folder.Name())
+			})
+		}
+	})
+
+}
 
 // TestNormalization verifies that the normalization (using ExclusionRules)
 // produces the expected canonical JSON output.
@@ -85,7 +138,7 @@ meta:
 `
 
 	// Unmarshal YAML into a generic map.
-	var descriptor descriptor2.Descriptor
+	var descriptor descriptorv2.Descriptor
 	if err := yaml.Unmarshal([]byte(inputYAML), &descriptor); err != nil {
 		t.Fatalf("failed to unmarshal YAML: %v", err)
 	}
@@ -105,7 +158,7 @@ meta:
 	// Expected canonical JSON output.
 	// Note: Fields that are excluded (e.g. "meta", "repositoryContexts", "access" in resources, etc.)
 	// are omitted and maps/arrays are canonically ordered.
-	expected := `{"component":{"componentReferences":[],"name":"github.com/vasu1124/introspect","provider":"internal","resources":[{"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"ociArtifactDigest/v1","value":"6a1c7637a528ab5957ab60edf73b5298a0a03de02a96be0313ee89b22544840c"},"labels":[{"name":"label2","signing":true,"value":"bar"}],"name":"introspect-image","relation":"local","type":"ociImage","version":"1.0.0"},{"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"genericBlobDigest/v1","value":"d1187ac17793b2f5fa26175c21cabb6ce388871ae989e16ff9a38bd6b32507bf"},"name":"introspect-blueprint","relation":"local","type":"landscaper.gardener.cloud/blueprint","version":"1.0.0"},{"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"ociArtifactDigest/v1","value":"6229be2be7e328f74ba595d93b814b590b1aa262a1b85e49cc1492795a9e564c"},"name":"introspect-helm","relation":"external","type":"helm","version":"0.1.0"}],"sources":[{"name":"introspect","type":"git","version":"1.0.0"}],"version":"1.0.0"}}`
+	expected := `{"component":{"componentReferences":[],"name":"github.com/vasu1124/introspect","provider":{"name":"internal"},"resources":[{"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"ociArtifactDigest/v1","value":"6a1c7637a528ab5957ab60edf73b5298a0a03de02a96be0313ee89b22544840c"},"labels":[{"name":"label2","signing":true,"value":"bar"}],"name":"introspect-image","relation":"local","type":"ociImage","version":"1.0.0"},{"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"genericBlobDigest/v1","value":"d1187ac17793b2f5fa26175c21cabb6ce388871ae989e16ff9a38bd6b32507bf"},"name":"introspect-blueprint","relation":"local","type":"landscaper.gardener.cloud/blueprint","version":"1.0.0"},{"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"ociArtifactDigest/v1","value":"6229be2be7e328f74ba595d93b814b590b1aa262a1b85e49cc1492795a9e564c"},"name":"introspect-helm","relation":"external","type":"helm","version":"0.1.0"}],"sources":[{"name":"introspect","type":"git","version":"1.0.0"}],"version":"1.0.0"}}`
 
 	assert.JSONEq(t, expected, normalized)
 	if normalized != expected {

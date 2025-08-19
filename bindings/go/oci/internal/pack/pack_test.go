@@ -231,12 +231,13 @@ func TestResourceBlob(t *testing.T) {
 	digest := digest.FromBytes(content)
 
 	tests := []struct {
-		name              string
-		blob              *testBlob
-		resource          *descriptor.Resource
-		opts              Options
-		expectedError     string
-		checkGlobalAccess func(t *testing.T, resource *descriptor.Resource)
+		name                     string
+		blob                     *testBlob
+		resource                 *descriptor.Resource
+		opts                     Options
+		expectedError            string
+		nilOutResourceBlobDigest bool
+		checkGlobalAccess        func(t *testing.T, resource *descriptor.Resource)
 	}{
 		{
 			name: "success with local blob access",
@@ -250,6 +251,44 @@ func TestResourceBlob(t *testing.T) {
 					Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
 					LocalReference: digest.String(),
 					MediaType:      "application/vnd.test",
+				},
+			},
+			opts: Options{
+				AccessScheme:  runtime.NewScheme(),
+				BaseReference: "test-ref",
+			},
+		},
+		{
+			name: "success with local blob access (nil resource digest)",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.test",
+				digest:    digest,
+			},
+			resource: &descriptor.Resource{
+				Access: &v2.LocalBlob{
+					Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					LocalReference: digest.String(),
+					MediaType:      "application/vnd.test",
+				},
+			},
+			opts: Options{
+				AccessScheme:  runtime.NewScheme(),
+				BaseReference: "test-ref",
+			},
+			nilOutResourceBlobDigest: true,
+		},
+		{
+			name: "success with local blob access (but media type derived from blob not access)",
+			blob: &testBlob{
+				content:   content,
+				mediaType: "application/vnd.test",
+				digest:    digest,
+			},
+			resource: &descriptor.Resource{
+				Access: &v2.LocalBlob{
+					Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+					LocalReference: digest.String(),
 				},
 			},
 			opts: Options{
@@ -353,6 +392,9 @@ func TestResourceBlob(t *testing.T) {
 			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
+			if tt.nilOutResourceBlobDigest {
+				resourceBlob.Artifact.(*descriptor.Resource).Digest = nil
+			}
 			desc, err := ArtifactBlob(ctx, store, resourceBlob, tt.opts)
 
 			if tt.expectedError != "" {

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	generic "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -92,20 +90,6 @@ func LookupConfig(cfg *generic.Config) (*Config, error) {
 		}
 	} else {
 		merged = new(Config)
-	}
-
-	if len(merged.Locations) == 0 {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get user home directory to compute the default plugin directory: %w", err)
-		}
-		merged.Locations = []string{
-			filepath.Join(home, ".config", "ocm", "plugins"),
-		}
-	}
-
-	if merged.IdleTimeout == 0 {
-		merged.IdleTimeout = Duration(time.Hour)
 	}
 
 	return merged, nil

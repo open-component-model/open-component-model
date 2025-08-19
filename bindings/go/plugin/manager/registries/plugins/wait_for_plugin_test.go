@@ -63,7 +63,8 @@ func TestWaitForPlugin(t *testing.T) {
 		socketPath := filepath.Join(tempDir, "test.sock")
 
 		// Start a Unix socket server
-		listener, err := net.Listen("unix", socketPath)
+		var lc net.ListenConfig
+		listener, err := lc.Listen(t.Context(), "unix", socketPath)
 		require.NoError(t, err)
 		defer listener.Close()
 
@@ -91,8 +92,7 @@ func TestWaitForPlugin(t *testing.T) {
 		}
 		output.Write([]byte("http+unix://" + socketPath))
 		// Test the WaitForPlugin function
-		ctx := context.Background()
-		client, _, err := WaitForPlugin(ctx, p)
+		client, _, err := WaitForPlugin(t.Context(), p)
 
 		require.NoError(t, err)
 		require.NotNil(t, client)
