@@ -13,8 +13,7 @@ func EraseNLines(n int) string {
 	}
 	b := strings.Builder{}
 	for range n {
-		b.WriteString(CursorUp)
-		b.WriteString(EraseLine)
+		b.WriteString(CursorUp + EraseLine)
 	}
 	return b.String()
 }
