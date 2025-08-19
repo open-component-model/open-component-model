@@ -43,7 +43,7 @@ ocm download plugin [flags]
       --extra-identity strings    extra identity parameters for resource matching (e.g., os=linux,arch=amd64)
   -h, --help                      help for plugin
       --output string             output location to download the plugin binary to (required) (default ".")
-  -f, --output-format enum        output format of the plugin information
+  -f, --output-format enum        output format of the plugin information, defaults to table
                                   (must be one of [json table yaml]) (default table)
       --resource-name string      name of the plugin resource to download (required)
       --resource-version string   version of the plugin resource to download (optional, defaults to component version)
@@ -84,6 +84,7 @@ ocm download plugin [flags]
                                               stdout: Write logs to standard output
                                               stderr: Write logs to standard error, useful for separating logs from normal output
                                            (must be one of [stderr stdout]) (default stderr)
+      --plugin-directory string            default directory path for ocm plugins. (default "$HOME/.config/ocm/plugins")
       --plugin-shutdown-timeout duration   Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
       --temp-folder string                 Specify a custom temporary folder path for filesystem operations.
 ```

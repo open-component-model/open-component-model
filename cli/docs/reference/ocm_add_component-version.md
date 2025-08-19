@@ -84,6 +84,7 @@ add component-version  --repository ./path/to/transport-archive --constructor ./
                                               stdout: Write logs to standard output
                                               stderr: Write logs to standard error, useful for separating logs from normal output
                                            (must be one of [stderr stdout]) (default stderr)
+      --plugin-directory string            default directory path for ocm plugins. (default "$HOME/.config/ocm/plugins")
       --plugin-shutdown-timeout duration   Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
       --temp-folder string                 Specify a custom temporary folder path for filesystem operations.
 ```
