@@ -121,10 +121,6 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	if err := t.renderObjects(writer); err != nil {
 		return err
 	}
-	// The render loop logic expects a newline at the end of the output.
-	//if _, err := writer.Write([]byte("\n")); err != nil {
-	//	return err
-	//}
 
 	return nil
 }
