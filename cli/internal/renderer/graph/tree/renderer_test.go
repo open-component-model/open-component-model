@@ -15,8 +15,9 @@ import (
 	render "ocm.software/open-component-model/cli/internal/renderer"
 )
 
-func TestTreeRenderLoop(t *testing.T) {
+func TestRunRenderLoop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
 		r := require.New(t)
 
 		d := syncdag.NewDirectedAcyclicGraph[string]()
@@ -29,7 +30,7 @@ func TestTreeRenderLoop(t *testing.T) {
 			return fmt.Sprintf("%s (%s)", v.ID, state.(syncdag.TraversalState))
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 
 		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		renderer := New[string](d, "A", WithVertexSerializerFunc(vertexSerializer))
@@ -116,7 +117,8 @@ func TestTreeRenderLoop(t *testing.T) {
 	})
 }
 
-func TestTreeRendererStatic(t *testing.T) {
+func TestRenderOnce(t *testing.T) {
+	ctx := t.Context()
 	r := require.New(t)
 
 	d := syncdag.NewDirectedAcyclicGraph[string]()
@@ -126,9 +128,6 @@ func TestTreeRendererStatic(t *testing.T) {
 	writer := io.MultiWriter(buf, logWriter)
 
 	renderer := New(d, "A")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
 
 	r.NoError(d.AddVertex("A"))
 	expected := "── A\n"
@@ -150,7 +149,7 @@ func TestTreeRendererStatic(t *testing.T) {
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
 	buf.Reset()
-	r.Equal(expected, output) // still only root
+	r.Equal(expected, output)
 
 	// Add C as child of B
 	r.NoError(d.AddVertex("C"))
