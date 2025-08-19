@@ -110,19 +110,10 @@ func (t *Renderer[T, U]) Render(ctx context.Context, writer io.Writer) error {
 	if err := t.traverseGraph(ctx, t.root); err != nil {
 		return fmt.Errorf("failed to traverse graph: %w", err)
 	}
-	r, _, err := t.encodeObjects()
-	if err != nil {
-		return fmt.Errorf("failed to encode objects: %w", err)
+	if err := t.renderObjects(writer); err != nil {
+		return err
 	}
 
-	buf, err := io.ReadAll(r)
-	if err != nil {
-		return fmt.Errorf("failed to read encoded objects: %w", err)
-	}
-	_, err = writer.Write(buf)
-	if err != nil {
-		return fmt.Errorf("failed to write encoded objects to writer: %w", err)
-	}
 	return nil
 }
 
@@ -145,27 +136,34 @@ func (t *Renderer[T, U]) traverseGraph(ctx context.Context, nodeId T) error {
 	return nil
 }
 
-func (t *Renderer[T, U]) encodeObjects() (io.Reader, int64, error) {
-	var data []byte
-	var err error
+func (t *Renderer[T, U]) renderObjects(writer io.Writer) error {
+	var (
+		err  error
+		data []byte
+	)
 	switch t.outputFormat {
 	case OutputFormatJSON:
-		data, err = json.Marshal(t.objects)
+		data, err = t.encodeObjectsAsJSON()
 	case OutputFormatYAML:
-		data, err = yaml.Marshal(t.objects)
+		data, err = t.encodeObjectsAsYAML()
+	case OutputFormatNDJSON:
+		data, err = t.encodeObjectsAsNDJSON()
 	default:
 		err = fmt.Errorf("unknown output format: %s", t.outputFormat.String())
 	}
 	if err != nil {
-		return nil, 0, fmt.Errorf("encoding objects as %s failed: %w", t.outputFormat.String(), err)
+		return fmt.Errorf("failed to encode objects: %w", err)
 	}
-	return bytes.NewReader(data), int64(len(data)), nil
+	if _, err := writer.Write(data); err != nil {
+		return fmt.Errorf("failed to write encoded objects to writer: %w", err)
+	}
+	return err
 }
 
-func (t *Renderer[T, U]) encodeObjectsAsNDJSON(objects []U) ([]byte, error) {
+func (t *Renderer[T, U]) encodeObjectsAsNDJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
-	for _, obj := range objects {
+	for _, obj := range t.objects {
 		if err := encoder.Encode(obj); err != nil {
 			return nil, fmt.Errorf("encoding component version descriptor failed: %w", err)
 		}
@@ -173,18 +171,18 @@ func (t *Renderer[T, U]) encodeObjectsAsNDJSON(objects []U) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (t *Renderer[T, U]) encodeObjectsAsJSON(objects []U) ([]byte, error) {
-	if len(objects) == 1 {
-		return json.Marshal(objects[0])
+func (t *Renderer[T, U]) encodeObjectsAsJSON() ([]byte, error) {
+	if len(t.objects) == 1 {
+		return json.Marshal(t.objects[0])
 	}
 
-	return json.Marshal(objects)
+	return json.Marshal(t.objects)
 }
 
-func (t *Renderer[T, U]) encodeObjectsAsYAML(objects []U) ([]byte, error) {
-	if len(objects) == 1 {
-		return yaml.Marshal(objects[0])
+func (t *Renderer[T, U]) encodeObjectsAsYAML() ([]byte, error) {
+	if len(t.objects) == 1 {
+		return yaml.Marshal(t.objects[0])
 	}
 
-	return yaml.Marshal(objects)
+	return yaml.Marshal(t.objects)
 }

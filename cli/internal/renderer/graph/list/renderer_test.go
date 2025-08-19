@@ -181,7 +181,7 @@ func TestTreeRenderLoop(t *testing.T) {
 //
 //	r.NoError(d.AddVertex("A"))
 //	expected := "── A\n"
-//	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
+//	r.NoError(renderObjects.RenderOnce(ctx, renderer, renderObjects.WithWriter(writer)))
 //	output := buf.String()
 //	buf.Reset()
 //	r.Equal(expected, output)
@@ -189,14 +189,14 @@ func TestTreeRenderLoop(t *testing.T) {
 //	// Add B
 //	r.NoError(d.AddVertex("B"))
 //	expected = "── A\n"
-//	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
+//	r.NoError(renderObjects.RenderOnce(ctx, renderer, renderObjects.WithWriter(writer)))
 //	output = buf.String()
 //	buf.Reset()
 //	r.Equal(expected, output)
 //	// Add B as child of A
 //	r.NoError(d.AddEdge("A", "B"))
 //	expected = "── A\n   ╰─ B\n"
-//	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
+//	r.NoError(renderObjects.RenderOnce(ctx, renderer, renderObjects.WithWriter(writer)))
 //	output = buf.String()
 //	buf.Reset()
 //	r.Equal(expected, output) // still only root
@@ -209,13 +209,13 @@ func TestTreeRenderLoop(t *testing.T) {
 //	r.NoError(d.AddVertex("D"))
 //	r.NoError(d.AddEdge("A", "D"))
 //
-//	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
+//	r.NoError(renderObjects.RenderOnce(ctx, renderer, renderObjects.WithWriter(writer)))
 //	expected = "── A\n   ├─ B\n   │  ╰─ C\n   ╰─ D\n"
 //	output = buf.String()
 //	buf.Reset()
 //	r.Equal(expected, output)
 //
-//	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
+//	r.NoError(renderObjects.RenderOnce(ctx, renderer, renderObjects.WithWriter(writer)))
 //	output = buf.String()
 //}
 
