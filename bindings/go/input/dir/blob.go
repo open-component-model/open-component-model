@@ -31,11 +31,18 @@ var ErrEmptyPath = errors.New("dir path must not be empty")
 //
 // The function performs the following steps:
 //  1. Validates that the directory path is not empty
-//  2. Reads the directory contents using an instance of the virtual FileSystem
-//  3. Packs the directory contents into a tar archive
-//  4. Applies different configuration options of the v1.Dir specification
-func GetV1DirBlob(ctx context.Context, dir v1.Dir) (blob.ReadOnlyBlob, error) {
+//  2. Ensures that the directory path is within the working directory
+//     (this is to prevent directory traversal attacks and ensure security)
+//  3. Reads the directory contents using an instance of the virtual FileSystem
+//  4. Packs the directory contents into a tar archive
+//  5. Applies different configuration options of the v1.Dir specification
+func GetV1DirBlob(ctx context.Context, dir v1.Dir, workingDirectory string) (blob.ReadOnlyBlob, error) {
 	// Pack directory contents as a tar archive.
+
+	if _, err := filesystem.EnsurePathInWorkingDirectory(dir.Path, workingDirectory); err != nil {
+		return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", dir.Path, workingDirectory, err)
+	}
+
 	reader, err := packDirToTar(ctx, dir.Path, &dir)
 	if err != nil {
 		return nil, fmt.Errorf("error producing blob for a dir input: %w", err)
