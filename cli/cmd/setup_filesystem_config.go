@@ -12,19 +12,55 @@ import (
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
-// setupFilesystemConfig sets up file system configuration entity.
-func setupFilesystemConfig(cmd *cobra.Command) {
+func loadFlagFromCommand(cmd *cobra.Command, flagName string) (string, error) {
 	var (
 		value string
 		err   error
 	)
-	if flag := cmd.Flags().Lookup(tempFolderFlag); flag != nil && flag.Changed {
-		value, err = cmd.Flags().GetString(tempFolderFlag)
+	if flag := cmd.Flags().Lookup(flagName); flag != nil && flag.Changed {
+		value, err = cmd.Flags().GetString(flagName)
 		if err != nil {
-			slog.DebugContext(cmd.Context(), "could not read temp folder flag value", slog.String("error", err.Error()))
+			slog.DebugContext(cmd.Context(), "could not read flag value",
+				slog.String("flag", flagName),
+				slog.String("error", err.Error()))
 		}
 	}
 
+	return value, err
+}
+
+func overrideTempFolder(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config, value string) {
+	if value != "" {
+		if fsCfg.TempFolder != "" {
+			slog.WarnContext(cmd.Context(), "temp folder was defined in ocm config with value, will be overwritten by value", slog.String("original", fsCfg.TempFolder), slog.String("new", value))
+		}
+
+		fsCfg.TempFolder = value
+	}
+}
+
+func overrideWorkingDirectory(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config, value string) {
+	if value != "" {
+		if fsCfg.WorkingDirectory != "" {
+			slog.WarnContext(cmd.Context(), "working-directory was defined in ocm config with value, will be overwritten by value", slog.String("original", fsCfg.WorkingDirectory), slog.String("new", value))
+		}
+
+		fsCfg.WorkingDirectory = value
+	}
+}
+
+func ensureFilesystemConfig(cmd *cobra.Command, cfg *genericv1.Config, fsCfg *filesystemv1alpha1.Config) {
+	// If we have a CLI flag but no filesystem config in the config,
+	// we need to add it to the configuration
+	if cfg != nil && !hasFilesystemConfig(cfg) {
+		if err := addFilesystemConfigToCentralConfig(cmd, fsCfg); err != nil {
+			slog.WarnContext(cmd.Context(), "could not add filesystem config to central configuration", slog.String("error", err.Error()))
+		}
+	}
+}
+
+// setupFilesystemConfig sets up file system configuration entity.
+func setupFilesystemConfig(cmd *cobra.Command) {
 	ocmCtx := ocmctx.FromContext(cmd.Context())
 	cfg := ocmCtx.Configuration()
 	var fsCfg *filesystemv1alpha1.Config
@@ -32,29 +68,24 @@ func setupFilesystemConfig(cmd *cobra.Command) {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize filesystem config")
 		fsCfg = &filesystemv1alpha1.Config{}
 	} else {
-		fsCfg, err = filesystemv1alpha1.LookupConfig(cfg)
-		if err != nil {
+		if _fsCfg, err := filesystemv1alpha1.LookupConfig(cfg); err != nil {
 			slog.DebugContext(cmd.Context(), "could not get filesystem configuration", slog.String("error", err.Error()))
 			fsCfg = &filesystemv1alpha1.Config{}
+		} else {
+			fsCfg = _fsCfg
 		}
 	}
 
 	// CLI flag takes precedence over the config file
-	if value != "" {
-		if fsCfg.TempFolder != "" {
-			slog.WarnContext(cmd.Context(), "temp folder was defined in ocm config with value, will be overwritten by value", slog.String("original", fsCfg.TempFolder), slog.String("new", value))
-		}
-
-		fsCfg.TempFolder = value
-
-		// If we have a CLI flag but no filesystem config in the config,
-		// we need to add it to the configuration
-		if cfg != nil && !hasFilesystemConfig(cfg) {
-			if err := addFilesystemConfigToCentralConfig(cmd, fsCfg); err != nil {
-				slog.WarnContext(cmd.Context(), "could not add filesystem config to central configuration", slog.String("error", err.Error()))
-			}
-		}
+	if tempFolderValue, _ := loadFlagFromCommand(cmd, tempFolderFlag); tempFolderValue != "" {
+		overrideTempFolder(cmd, fsCfg, tempFolderValue)
 	}
+
+	if workingDirectoryValue, _ := loadFlagFromCommand(cmd, workingDirectoryFlag); workingDirectoryValue != "" {
+		overrideWorkingDirectory(cmd, fsCfg, workingDirectoryValue)
+	}
+
+	ensureFilesystemConfig(cmd, cfg, fsCfg)
 
 	ctx := ocmctx.WithFilesystemConfig(cmd.Context(), fsCfg)
 	cmd.SetContext(ctx)
