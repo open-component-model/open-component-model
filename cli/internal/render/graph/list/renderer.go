@@ -122,9 +122,9 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 		return err
 	}
 	// The render loop logic expects a newline at the end of the output.
-	if _, err := writer.Write([]byte("\n")); err != nil {
-		return err
-	}
+	//if _, err := writer.Write([]byte("\n")); err != nil {
+	//	return err
+	//}
 
 	return nil
 }
@@ -177,11 +177,23 @@ func (t *Renderer[T]) renderObjects(writer io.Writer) error {
 }
 
 func (t *Renderer[T]) encodeObjectsAsJSON() ([]byte, error) {
+	var data []byte
+	var err error
 	if len(t.objects) == 1 {
-		return json.MarshalIndent(t.objects[0], "", "  ")
+		data, err = json.MarshalIndent(t.objects[0], "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("encoding single object as JSON failed: %w", err)
+		}
+	} else {
+		data, err = json.MarshalIndent(t.objects, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("encoding multiple objects as JSON failed: %w", err)
+		}
 	}
-
-	return json.MarshalIndent(t.objects, "", "  ")
+	// RunRenderLoop expects a newline at the end of the output.
+	// Other formats - such as yaml - automatically add a newline at the end.
+	data = append(data, '\n')
+	return data, nil
 }
 
 func (t *Renderer[T]) encodeObjectsAsYAML() ([]byte, error) {
