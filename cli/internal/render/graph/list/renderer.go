@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"io"
 
+	"sigs.k8s.io/yaml"
+
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/render/graph"
-	"sigs.k8s.io/yaml"
 )
 
 // Renderer renders a tree from a DirectedAcyclicGraph as a flat last in a

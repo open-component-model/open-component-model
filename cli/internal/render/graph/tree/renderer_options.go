@@ -23,7 +23,7 @@ func WithVertexSerializer[T cmp.Ordered](serializer VertexSerializer[T]) Rendere
 }
 
 // WithVertexSerializerFunc sets the VertexSerializer based on a function.
-func WithVertexSerializerFunc[T cmp.Ordered](serializerFunc func(*syncdag.Vertex[T]) string) RendererOption[T] {
+func WithVertexSerializerFunc[T cmp.Ordered](serializerFunc func(*syncdag.Vertex[T]) (string, error)) RendererOption[T] {
 	return func(opts *RendererOptions[T]) {
 		opts.VertexSerializer = VertexSerializerFunc[T](serializerFunc)
 	}

@@ -24,9 +24,9 @@ func TestRunRenderLoop(t *testing.T) {
 		buf := &bytes.Buffer{}
 		logWriter := testLogWriter{t}
 		writer := io.MultiWriter(buf, logWriter)
-		vertexSerializer := func(v *syncdag.Vertex[string]) string {
+		vertexSerializer := func(v *syncdag.Vertex[string]) (string, error) {
 			state, _ := v.Attributes.Load(syncdag.AttributeTraversalState)
-			return fmt.Sprintf("%s (%s)", v.ID, state.(syncdag.TraversalState))
+			return fmt.Sprintf("%s (%s)", v.ID, state.(syncdag.TraversalState)), nil
 		}
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
