@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -18,8 +20,13 @@ import (
 )
 
 const (
-	tempFolderFlag = "temp-folder"
+	tempFolderFlag               = "temp-folder"
+	pluginShutdownTimeoutFlag    = "plugin-shutdown-timeout"
+	pluginShutdownTimeoutDefault = 10 * time.Second
+	pluginDirectoryFlag          = "plugin-directory"
 )
+
+var pluginDirectoryDefault = filepath.Join("$HOME", ".config", "ocm", "plugins")
 
 // Execute adds all child commands to the Cmd command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the Cmd.
@@ -47,6 +54,9 @@ func New() *cobra.Command {
 
 	configuration.RegisterConfigFlag(cmd)
 	cmd.PersistentFlags().String(tempFolderFlag, "", `Specify a custom temporary folder path for filesystem operations.`)
+	cmd.PersistentFlags().Duration(pluginShutdownTimeoutFlag, pluginShutdownTimeoutDefault,
+		`Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed`)
+	cmd.PersistentFlags().String(pluginDirectoryFlag, pluginDirectoryDefault, `default directory path for ocm plugins.`)
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())

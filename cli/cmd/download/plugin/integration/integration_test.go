@@ -1,4 +1,4 @@
-package integration
+package integration_test
 
 import (
 	"context"
@@ -108,7 +108,7 @@ func setupTestCommand(t *testing.T, resourceName, resourceVersion, output string
 	return cmd, ctx
 }
 
-func TestDownloadPlugin(t *testing.T) {
+func TestDownloadPluginIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -129,7 +129,7 @@ func TestDownloadPlugin(t *testing.T) {
 	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
 }
 
-func TestDownloadPluginMissingResource(t *testing.T) {
+func TestDownloadPluginMissingResourceIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -144,7 +144,7 @@ func TestDownloadPluginMissingResource(t *testing.T) {
 	assert.NoFileExists(t, outputPath, "plugin binary should not be downloaded for non-existent resource")
 }
 
-func TestDownloadPluginInvalidComponentReference(t *testing.T) {
+func TestDownloadPluginInvalidComponentReferenceIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -158,7 +158,7 @@ func TestDownloadPluginInvalidComponentReference(t *testing.T) {
 	assert.NoFileExists(t, outputPath, "plugin binary should not be downloaded for invalid component reference")
 }
 
-func TestDownloadPluginWithValidationFailure(t *testing.T) {
+func TestDownloadPluginWithValidationFailureIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -188,21 +188,38 @@ func getUserAndPasswordForTest(t *testing.T) (string, string) {
 		t.Skip("gh CLI not found, skipping test")
 	}
 
-	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
+	user, err := getUsername(t, gh)
 	if err != nil {
-		t.Skipf("gh CLI for user failed: %v", err)
+		t.Errorf("gh CLI for username failed: %v", err)
+		return "", ""
 	}
-	structured := map[string]interface{}{}
-	if err := json.Unmarshal(out, &structured); err != nil {
-		t.Skipf("gh CLI for user failed: %v", err)
-	}
-	user := structured["login"].(string)
 
 	pw := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s auth token", gh))
-	if out, err = pw.CombinedOutput(); err != nil {
-		t.Skipf("gh CLI for password failed: %v", err)
+	out, err := pw.CombinedOutput()
+	if err != nil {
+		t.Logf("gh auth token output: %s", out)
+		t.Errorf("gh CLI for password failed: %v", err)
 	}
 	password := strings.TrimSpace(string(out))
 
 	return user, password
+}
+
+func getUsername(t *testing.T, gh string) (string, error) {
+	if githubUser := os.Getenv("GITHUB_USER"); githubUser != "" {
+		return githubUser, nil
+	}
+
+	out, err := exec.CommandContext(t.Context(), "sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
+	if err != nil {
+		t.Logf("gh CLI output: %s", out)
+		return "", fmt.Errorf("gh CLI for user failed: %w", err)
+	}
+	structured := map[string]interface{}{}
+	if err := json.Unmarshal(out, &structured); err != nil {
+		t.Logf("gh CLI output: %s", out)
+		return "", fmt.Errorf("gh failed to parse output: %w", err)
+	}
+
+	return structured["login"].(string), nil
 }
