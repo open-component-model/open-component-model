@@ -12,9 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	render "ocm.software/open-component-model/cli/internal/renderer"
+)
+
+const (
+	AttributeComponentDescriptor = "component-descriptor"
 )
 
 func TestTreeRenderLoop(t *testing.T) {
@@ -42,22 +44,23 @@ func TestTreeRenderLoop(t *testing.T) {
 				},
 			},
 		}}))
-		renderer := New(d, "A", VertexMarshalizerFunc[string, *descriptorv2.Descriptor](func(v *syncdag.Vertex[string]) (*descriptorv2.Descriptor, error) {
-			descriptor, ok := v.GetAttribute(AttributeComponentDescriptor)
-			if !ok {
-				return nil, fmt.Errorf("attribute %s not found for vertex %s", AttributeComponentDescriptor, v.ID)
-			}
-			runtimeDescriptor, ok := descriptor.(*descruntime.Descriptor)
-			if !ok {
-				return nil, fmt.Errorf("expected attribute %s for vertex %s to be of type %T, got %T",
-					AttributeComponentDescriptor, v.ID, &descruntime.Descriptor{}, descriptor)
-			}
-			v2Descriptor, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), runtimeDescriptor)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert descriptor %s to v2: %w", v.ID, err)
-			}
-			return v2Descriptor, nil
-		}), OutputFormatJSON)
+		//marshalizer := VertexMarshalizerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
+		//	descriptor, ok := v.GetAttribute(AttributeComponentDescriptor)
+		//	if !ok {
+		//		return nil, fmt.Errorf("attribute %s not found for vertex %s", AttributeComponentDescriptor, v.ID)
+		//	}
+		//	runtimeDescriptor, ok := descriptor.(*descruntime.Descriptor)
+		//	if !ok {
+		//		return nil, fmt.Errorf("expected attribute %s for vertex %s to be of type %T, got %T",
+		//			AttributeComponentDescriptor, v.ID, &descruntime.Descriptor{}, descriptor)
+		//	}
+		//	v2Descriptor, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), runtimeDescriptor)
+		//	if err != nil {
+		//		return nil, fmt.Errorf("failed to convert descriptor %s to v2: %w", v.ID, err)
+		//	}
+		//	return v2Descriptor, nil
+		//})
+		renderer := New(d, "A", WithOutputFormat[string](OutputFormatJSON))
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
 
 		time.Sleep(30 * time.Millisecond)

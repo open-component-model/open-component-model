@@ -13,58 +13,53 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-type OutputFormat int
-
-func (o OutputFormat) String() string {
-	switch o {
-	case OutputFormatJSON:
-		return "json"
-	case OutputFormatYAML:
-		return "yaml"
-	case OutputFormatNDJSON:
-		return "ndjson"
-	default:
-		return fmt.Sprintf("unknown(%d)", o)
-	}
-}
-
-const (
-	AttributeComponentDescriptor = "component-descriptor"
-
-	OutputFormatJSON OutputFormat = iota
-	OutputFormatYAML
-	OutputFormatNDJSON
-)
-
-type VertexMarshalizer[T cmp.Ordered, U any] interface {
-	Marshalize(*syncdag.Vertex[T]) (U, error)
-}
-
-type VertexMarshalizerFunc[T cmp.Ordered, U any] func(*syncdag.Vertex[T]) (U, error)
-
-func (f VertexMarshalizerFunc[T, U]) Marshalize(v *syncdag.Vertex[T]) (U, error) {
-	return f(v)
-}
-
 // Renderer renders a tree structure from a DirectedAcyclicGraph.
-type Renderer[T cmp.Ordered, U any] struct {
-	objects []U
+type Renderer[T cmp.Ordered] struct {
+	objects []any
 	// VertexMarshalizer converts a vertex to an object of type U. U is expected
 	// to be a serializable type (e.g., a struct or map).
 	// The marshalizer MUST perform READ-ONLY access to the vertex and its
 	// attributes.
-	vertexMarshalizer VertexMarshalizer[T, U]
+	vertexMarshalizer VertexMarshalizer[T]
 	outputFormat      OutputFormat
 	root              T
 	dag               *syncdag.DirectedAcyclicGraph[T]
 }
 
+type VertexMarshalizer[T cmp.Ordered] interface {
+	Marshalize(*syncdag.Vertex[T]) (any, error)
+}
+
+type VertexMarshalizerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) (any, error)
+
+func (f VertexMarshalizerFunc[T]) Marshalize(v *syncdag.Vertex[T]) (any, error) {
+	return f(v)
+}
+
 // New creates a new Renderer for the given DirectedAcyclicGraph.
-func New[T cmp.Ordered, U any](dag *syncdag.DirectedAcyclicGraph[T], root T, marshalizer VertexMarshalizer[T, U], format OutputFormat) *Renderer[T, U] {
-	return &Renderer[T, U]{
-		objects:           make([]U, 0),
-		outputFormat:      format,
-		vertexMarshalizer: marshalizer,
+func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...RendererOption[T]) *Renderer[T] {
+	options := &RendererOptions[T]{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if options.VertexMarshalizer == nil {
+		options.VertexMarshalizer = VertexMarshalizerFunc[T](func(v *syncdag.Vertex[T]) (any, error) {
+			// Default marshalizer just returns the vertex ID.
+			// This is supposed to be overridden by the user to provide a
+			// meaningful representation.
+			return fmt.Sprintf("%v", v.ID), nil
+		})
+	}
+
+	if options.OutputFormat == 0 {
+		options.OutputFormat = OutputFormatJSON
+	}
+
+	return &Renderer[T]{
+		objects:           make([]any, 0),
+		outputFormat:      options.OutputFormat,
+		vertexMarshalizer: options.VertexMarshalizer,
 		root:              root,
 		dag:               dag,
 	}
@@ -72,7 +67,7 @@ func New[T cmp.Ordered, U any](dag *syncdag.DirectedAcyclicGraph[T], root T, mar
 
 // Render renders the tree structure starting from the root ID.
 // It writes the output to the provided writer.
-func (t *Renderer[T, U]) Render(ctx context.Context, writer io.Writer) error {
+func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	defer func() {
 		t.objects = t.objects[:0]
 	}()
@@ -96,7 +91,7 @@ func (t *Renderer[T, U]) Render(ctx context.Context, writer io.Writer) error {
 	return nil
 }
 
-func (t *Renderer[T, U]) traverseGraph(ctx context.Context, nodeId T) error {
+func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
 	vertex, ok := t.dag.GetVertex(nodeId)
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
@@ -118,7 +113,7 @@ func (t *Renderer[T, U]) traverseGraph(ctx context.Context, nodeId T) error {
 	return nil
 }
 
-func (t *Renderer[T, U]) renderObjects(writer io.Writer) error {
+func (t *Renderer[T]) renderObjects(writer io.Writer) error {
 	var (
 		err  error
 		data []byte
@@ -142,7 +137,7 @@ func (t *Renderer[T, U]) renderObjects(writer io.Writer) error {
 	return err
 }
 
-func (t *Renderer[T, U]) encodeObjectsAsNDJSON() ([]byte, error) {
+func (t *Renderer[T]) encodeObjectsAsNDJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
 	for _, obj := range t.objects {
@@ -153,7 +148,7 @@ func (t *Renderer[T, U]) encodeObjectsAsNDJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (t *Renderer[T, U]) encodeObjectsAsJSON() ([]byte, error) {
+func (t *Renderer[T]) encodeObjectsAsJSON() ([]byte, error) {
 	if len(t.objects) == 1 {
 		return json.MarshalIndent(t.objects[0], "", "  ")
 	}
@@ -161,7 +156,7 @@ func (t *Renderer[T, U]) encodeObjectsAsJSON() ([]byte, error) {
 	return json.MarshalIndent(t.objects, "", "  ")
 }
 
-func (t *Renderer[T, U]) encodeObjectsAsYAML() ([]byte, error) {
+func (t *Renderer[T]) encodeObjectsAsYAML() ([]byte, error) {
 	if len(t.objects) == 1 {
 		return yaml.Marshal(t.objects[0])
 	}
