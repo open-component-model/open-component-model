@@ -145,7 +145,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting blob cache directory flag failed: %w", err)
 	}
 
-	constructorSpec, descriptorPath, err := GetComponentConstructor(cmd)
+	constructorSpec, _, err := GetComponentConstructor(cmd)
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
@@ -165,7 +165,6 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		CredentialProvider:             instance.graph,
 		ConcurrencyLimit:               concurrencyLimit,
 		ComponentVersionConflictPolicy: ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
-		SpecFilePath:                   descriptorPath,
 	}
 	if !skipReferenceDigestProcessing {
 		opts.ResourceDigestProcessorProvider = instance

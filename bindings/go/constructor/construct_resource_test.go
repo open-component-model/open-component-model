@@ -789,5 +789,3 @@ components:
 	assert.Len(t, mockRepo.addedLocalResources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
 }
-
-// TODO: # 565 Add WorkingDirectory tests

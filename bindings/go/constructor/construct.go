@@ -324,7 +324,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 }
 
 func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
-	repo, err := c.opts.GetResourceRepository(ctx, resource)
+	repository, err := c.opts.GetResourceRepository(ctx, resource)
 	if err != nil {
 		return nil, err
 	}
@@ -334,13 +334,13 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 	// best effort to resolve credentials for by value resource download.
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
-	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+	if identity, err := repository.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.CredentialProvider, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
 		}
 	}
 
-	data, err := repo.DownloadResource(ctx, converted, creds)
+	data, err := repository.DownloadResource(ctx, converted, creds)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}
@@ -387,8 +387,6 @@ func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetR
 		return nil, fmt.Errorf("no input method resolvable for input specification of type %q: %w", src.Input.GetType(), err)
 	}
 
-	overrideWorkingDirectory(method, c.opts.SpecFileDir())
-
 	// best effort to resolve credentials for the input method.
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
@@ -429,8 +427,6 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	if err != nil {
 		return nil, fmt.Errorf("no input method resolvable for input specification of type %q: %w", resource.Input.GetType(), err)
 	}
-
-	overrideWorkingDirectory(method, c.opts.SpecFileDir())
 
 	// best effort to resolve credentials for the input method.
 	// if no identity is resolved, we assume resolution is simply skipped.
@@ -579,26 +575,4 @@ func resolveCredentials(ctx context.Context, provider CredentialProvider, consum
 	}
 
 	return provider.Resolve(ctx, consumerIdentity)
-}
-
-// overrideWorkingDirectory overrides the working directory for a given WorkingDirectoryOverride.
-// This is useful for methods that require a specific working directory to operate correctly.
-// If the method does not implement WorkingDirectoryOverride, it will be ignored.
-// If the working directory is an absolute path, it will not be overridden.
-func overrideWorkingDirectory(method any, workingDir string) {
-	if method == nil {
-		return
-	}
-
-	if wdOverride, ok := method.(WorkingDirectoryOverride); !ok {
-		return
-	} else {
-		// only override the working directory if it is empty
-		// it might have been set by the input method already
-		// causes could be the working-directory flag in the cli
-		if wdOverride.GetWd() == "" {
-			wdOverride.SetWd(workingDir)
-		}
-
-	}
 }

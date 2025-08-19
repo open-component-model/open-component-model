@@ -2,7 +2,6 @@ package constructor
 
 import (
 	"context"
-	"path/filepath"
 
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -53,18 +52,6 @@ type Options struct {
 	// While constructing a component version, the constructor library will use the given callbacks to notify about
 	// the construction process. This can be used to implement custom logging or other actions such as progress trackers.
 	ComponentConstructionCallbacks
-
-	// While constructing a component version, the constructor library will use the given spec file directory
-	// to resolve the component specification file. This is the directory where the component specification file is
-	// located.
-	SpecFilePath string
-}
-
-func (o *Options) SpecFileDir() string {
-	if o.SpecFilePath == "" {
-		return ""
-	}
-	return filepath.Dir(o.SpecFilePath)
 }
 
 type ComponentConstructionCallbacks struct {
