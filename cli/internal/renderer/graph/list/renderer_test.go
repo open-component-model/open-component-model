@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	render "ocm.software/open-component-model/cli/internal/renderer"
 )
 
@@ -40,12 +42,22 @@ func TestTreeRenderLoop(t *testing.T) {
 				},
 			},
 		}}))
-		renderer := &Renderer[string]{
-			objects:      make([]*descruntime.Descriptor, 0),
-			outputFormat: "yaml",
-			root:         "A",
-			dag:          d,
-		}
+		renderer := New(d, "A", VertexMarshalizerFunc[string, *descriptorv2.Descriptor](func(v *syncdag.Vertex[string]) (*descriptorv2.Descriptor, error) {
+			descriptor, ok := v.GetAttribute(AttributeComponentDescriptor)
+			if !ok {
+				return nil, fmt.Errorf("attribute %s not found for vertex %s", AttributeComponentDescriptor, v.ID)
+			}
+			runtimeDescriptor, ok := descriptor.(*descruntime.Descriptor)
+			if !ok {
+				return nil, fmt.Errorf("expected attribute %s for vertex %s to be of type %T, got %T",
+					AttributeComponentDescriptor, v.ID, &descruntime.Descriptor{}, descriptor)
+			}
+			v2Descriptor, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), runtimeDescriptor)
+			if err != nil {
+				return nil, fmt.Errorf("failed to convert descriptor %s to v2: %w", v.ID, err)
+			}
+			return v2Descriptor, nil
+		}), OutputFormatJSON)
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
 
 		time.Sleep(30 * time.Millisecond)
@@ -94,6 +106,14 @@ func TestTreeRenderLoop(t *testing.T) {
 		}}))
 		r.NoError(d.AddEdge("B", "C"))
 		vC, _ := d.GetVertex("C")
+		time.Sleep(30 * time.Millisecond)
+		synctest.Wait()
+		//output = buf.String()
+		//expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ╰─ B (discovering)\n      ╰─ C (discovering)\n"
+		//r.Equal(expected, output)
+		buf.Reset()
+
+		r.NoError(d.AddEdge("A", "C"))
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		//output = buf.String()

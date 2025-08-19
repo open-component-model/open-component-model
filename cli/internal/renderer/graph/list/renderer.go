@@ -36,35 +36,13 @@ const (
 	OutputFormatNDJSON
 )
 
-type RendererOptions[T cmp.Ordered, U any] struct {
-	// VertexMarshalizer converts a vertex to an object of type U. U is expected
-	// to be a serializable type (e.g., a struct or map).
-	// The marshalizer MUST perform READ-ONLY access to the vertex and its
-	// attributes.
-	VertexMarshalizer VertexMarshalizer[T, U]
-}
-
-type RendererOption[T cmp.Ordered, U any] func(*RendererOptions[T, U])
-
-func WithVertexMarshalizer[T cmp.Ordered, U any](marshalizer VertexMarshalizer[T, U]) RendererOption[T, U] {
-	return func(opts *RendererOptions[T, U]) {
-		opts.VertexMarshalizer = marshalizer
-	}
-}
-
-func WithVertexMarshalizerFunc[T cmp.Ordered, U any](marshalizerFunc func(*syncdag.Vertex[T]) U) RendererOption[T, U] {
-	return func(opts *RendererOptions[T, U]) {
-		opts.VertexMarshalizer = VertexMarshalizerFunc[T, U](marshalizerFunc)
-	}
-}
-
 type VertexMarshalizer[T cmp.Ordered, U any] interface {
-	Marshalize(*syncdag.Vertex[T]) U
+	Marshalize(*syncdag.Vertex[T]) (U, error)
 }
 
-type VertexMarshalizerFunc[T cmp.Ordered, U any] func(*syncdag.Vertex[T]) U
+type VertexMarshalizerFunc[T cmp.Ordered, U any] func(*syncdag.Vertex[T]) (U, error)
 
-func (f VertexMarshalizerFunc[T, U]) Marshalize(v *syncdag.Vertex[T]) U {
+func (f VertexMarshalizerFunc[T, U]) Marshalize(v *syncdag.Vertex[T]) (U, error) {
 	return f(v)
 }
 
@@ -82,9 +60,10 @@ type Renderer[T cmp.Ordered, U any] struct {
 }
 
 // New creates a new Renderer for the given DirectedAcyclicGraph.
-func New[T cmp.Ordered, U any](dag *syncdag.DirectedAcyclicGraph[T], root T, marshalizer VertexMarshalizer[T, U]) *Renderer[T, U] {
+func New[T cmp.Ordered, U any](dag *syncdag.DirectedAcyclicGraph[T], root T, marshalizer VertexMarshalizer[T, U], format OutputFormat) *Renderer[T, U] {
 	return &Renderer[T, U]{
 		objects:           make([]U, 0),
+		outputFormat:      format,
 		vertexMarshalizer: marshalizer,
 		root:              root,
 		dag:               dag,
@@ -122,7 +101,10 @@ func (t *Renderer[T, U]) traverseGraph(ctx context.Context, nodeId T) error {
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
 	}
-	object := t.vertexMarshalizer.Marshalize(vertex)
+	object, err := t.vertexMarshalizer.Marshalize(vertex)
+	if err != nil {
+		return fmt.Errorf("failed to marshal vertex %v: %w", nodeId, err)
+	}
 	t.objects = append(t.objects, object)
 
 	// Get children and sort them for stable output
@@ -173,10 +155,10 @@ func (t *Renderer[T, U]) encodeObjectsAsNDJSON() ([]byte, error) {
 
 func (t *Renderer[T, U]) encodeObjectsAsJSON() ([]byte, error) {
 	if len(t.objects) == 1 {
-		return json.Marshal(t.objects[0])
+		return json.MarshalIndent(t.objects[0], "", "  ")
 	}
 
-	return json.Marshal(t.objects)
+	return json.MarshalIndent(t.objects, "", "  ")
 }
 
 func (t *Renderer[T, U]) encodeObjectsAsYAML() ([]byte, error) {
