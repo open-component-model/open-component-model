@@ -1,4 +1,4 @@
-package list
+package tree
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	render "ocm.software/open-component-model/cli/internal/renderer"
+	"ocm.software/open-component-model/cli/internal/render"
 )
 
 func TestRunRenderLoop(t *testing.T) {
@@ -24,34 +24,21 @@ func TestRunRenderLoop(t *testing.T) {
 		buf := &bytes.Buffer{}
 		logWriter := testLogWriter{t}
 		writer := io.MultiWriter(buf, logWriter)
+		vertexSerializer := func(v *syncdag.Vertex[string]) string {
+			state, _ := v.Attributes.Load(syncdag.AttributeTraversalState)
+			return fmt.Sprintf("%s (%s)", v.ID, state.(syncdag.TraversalState))
+		}
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 
 		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
-		marshalizer := VertexMarshalizerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
-			state, ok := v.GetAttribute(syncdag.AttributeTraversalState)
-			if !ok {
-				return nil, fmt.Errorf("attribute %s not found for vertex %s", syncdag.AttributeTraversalState, v.ID)
-			}
-			traversalState, ok := state.(syncdag.TraversalState)
-			if !ok {
-				return nil, fmt.Errorf("attribute %s for vertex %s is not of type %T", syncdag.AttributeTraversalState, v.ID, syncdag.TraversalState(0))
-			}
-			return map[string]any{
-				"id":    v.ID,
-				"state": traversalState.String(),
-			}, nil
-		})
-		renderer := New(d, "A", WithOutputFormat[string](OutputFormatJSON), WithVertexMarshalizer(marshalizer))
+		renderer := New[string](d, "A", WithVertexSerializerFunc(vertexSerializer))
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
 
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output := buf.String()
-		expected := `{
-  "id": "A",
-  "state": "discovering"
-}
+		expected := `── A (discovering)
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -63,16 +50,8 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(4) + `[
-  {
-    "id": "A",
-    "state": "discovering"
-  },
-  {
-    "id": "B",
-    "state": "discovering"
-  }
-]
+		expected = render.EraseNLines(1) + `── A (discovering)
+   ╰─ B (discovering)
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -84,20 +63,9 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(10) + `[
-  {
-    "id": "A",
-    "state": "discovering"
-  },
-  {
-    "id": "B",
-    "state": "discovering"
-  },
-  {
-    "id": "C",
-    "state": "discovering"
-  }
-]
+		expected = render.EraseNLines(2) + `── A (discovering)
+   ╰─ B (discovering)
+      ╰─ C (discovering)
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -109,24 +77,10 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(14) + `[
-  {
-    "id": "A",
-    "state": "discovering"
-  },
-  {
-    "id": "B",
-    "state": "discovering"
-  },
-  {
-    "id": "C",
-    "state": "discovering"
-  },
-  {
-    "id": "D",
-    "state": "discovering"
-  }
-]
+		expected = render.EraseNLines(3) + `── A (discovering)
+   ├─ B (discovering)
+   │  ╰─ C (discovering)
+   ╰─ D (discovering)
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -136,24 +90,10 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(18) + `[
-  {
-    "id": "A",
-    "state": "discovering"
-  },
-  {
-    "id": "B",
-    "state": "discovering"
-  },
-  {
-    "id": "C",
-    "state": "discovering"
-  },
-  {
-    "id": "D",
-    "state": "completed"
-  }
-]
+		expected = render.EraseNLines(4) + `── A (discovering)
+   ├─ B (discovering)
+   │  ╰─ C (discovering)
+   ╰─ D (completed)
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -163,24 +103,10 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(18) + `[
-  {
-    "id": "A",
-    "state": "discovering"
-  },
-  {
-    "id": "B",
-    "state": "discovering"
-  },
-  {
-    "id": "C",
-    "state": "completed"
-  },
-  {
-    "id": "D",
-    "state": "completed"
-  }
-]
+		expected = render.EraseNLines(4) + `── A (discovering)
+   ├─ B (discovering)
+   │  ╰─ C (completed)
+   ╰─ D (completed)
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -190,24 +116,10 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(18) + `[
-  {
-    "id": "A",
-    "state": "discovering"
-  },
-  {
-    "id": "B",
-    "state": "completed"
-  },
-  {
-    "id": "C",
-    "state": "completed"
-  },
-  {
-    "id": "D",
-    "state": "completed"
-  }
-]
+		expected = render.EraseNLines(4) + `── A (discovering)
+   ├─ B (completed)
+   │  ╰─ C (completed)
+   ╰─ D (completed)
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -218,24 +130,10 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(18) + `[
-  {
-    "id": "A",
-    "state": "completed"
-  },
-  {
-    "id": "B",
-    "state": "completed"
-  },
-  {
-    "id": "C",
-    "state": "completed"
-  },
-  {
-    "id": "D",
-    "state": "completed"
-  }
-]
+		expected = render.EraseNLines(4) + `── A (completed)
+   ├─ B (completed)
+   │  ╰─ C (completed)
+   ╰─ D (completed)
 `
 		r.Equal(expected, output)
 
@@ -246,6 +144,7 @@ func TestRunRenderLoop(t *testing.T) {
 }
 
 func TestRenderOnce(t *testing.T) {
+	ctx := t.Context()
 	r := require.New(t)
 
 	d := syncdag.NewDirectedAcyclicGraph[string]()
@@ -254,13 +153,10 @@ func TestRenderOnce(t *testing.T) {
 	logWriter := testLogWriter{t}
 	writer := io.MultiWriter(buf, logWriter)
 
-	ctx := t.Context()
+	renderer := New(d, "A")
 
-	renderer := New(d, "A", WithOutputFormat[string](OutputFormatJSON))
-
-	// Add A
 	r.NoError(d.AddVertex("A"))
-	expected := `"A"
+	expected := `── A
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output := buf.String()
@@ -269,19 +165,16 @@ func TestRenderOnce(t *testing.T) {
 
 	// Add B
 	r.NoError(d.AddVertex("B"))
-	expected = `"A"
+	expected = `── A
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
 	buf.Reset()
 	r.Equal(expected, output)
-
 	// Add B as child of A
 	r.NoError(d.AddEdge("A", "B"))
-	expected = `[
-  "A",
-  "B"
-]
+	expected = `── A
+   ╰─ B
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
@@ -297,12 +190,10 @@ func TestRenderOnce(t *testing.T) {
 	r.NoError(d.AddEdge("A", "D"))
 
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
-	expected = `[
-  "A",
-  "B",
-  "C",
-  "D"
-]
+	expected = `── A
+   ├─ B
+   │  ╰─ C
+   ╰─ D
 `
 	output = buf.String()
 	buf.Reset()
@@ -317,7 +208,7 @@ type testLogWriter struct{ t *testing.T }
 func (w testLogWriter) Write(p []byte) (int, error) {
 	// This line can be commented in to see the actual output when running the
 	// tests from a terminal supporting ANSI escape codes.
-	//fmt.Print(string(p))
+	// fmt.Print(string(p))
 	w.t.Log("\n" + string(p))
 	return len(p), nil
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/jedib0t/go-pretty/v6/list"
 
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	"ocm.software/open-component-model/cli/internal/renderer/graph"
+	"ocm.software/open-component-model/cli/internal/render/graph"
 )
 
 // Renderer renders a tree structure from a DirectedAcyclicGraph.
@@ -52,7 +52,7 @@ func (f VertexSerializerFunc[T]) Serialize(v *syncdag.Vertex[T]) string {
 	return f(v)
 }
 
-// New creates a new TreeRenderer for the given DirectedAcyclicGraph.
+// New creates a new Renderer for the given DirectedAcyclicGraph.
 func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...RendererOption[T]) *Renderer[T] {
 	options := &RendererOptions[T]{}
 	for _, opt := range opts {

@@ -9,7 +9,8 @@ import (
 	"io"
 
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	"ocm.software/open-component-model/cli/internal/renderer/graph"
+	"ocm.software/open-component-model/cli/internal/render"
+	"ocm.software/open-component-model/cli/internal/render/graph"
 	"sigs.k8s.io/yaml"
 )
 
@@ -34,23 +35,36 @@ import (
 // Each letter corresponds to a vertex in the DirectedAcyclicGraph. The concrete
 // representation of the vertex is defined by the VertexMarshalizer.
 type Renderer[T cmp.Ordered] struct {
+	// The objects is a slice of objects that will be rendered.
 	objects []any
-	// VertexMarshalizer converts a vertex to an object of type U. U is expected
-	// to be a serializable type (e.g., a struct or map).
-	// The marshalizer MUST perform READ-ONLY access to the vertex and its
+	// The VertexMarshalizer converts a vertex to an object that is added to objects.
+	// The returned object is expected to be a serializable type (e.g., a struct
+	// or map). The marshalizer MUST perform READ-ONLY access to the vertex and its
 	// attributes.
 	vertexMarshalizer VertexMarshalizer[T]
-	outputFormat      OutputFormat
-	root              T
-	dag               *syncdag.DirectedAcyclicGraph[T]
+	// The outputFormat specifies the format in which the output should be
+	// rendered.
+	outputFormat render.OutputFormat
+	// The root ID of the tree to render.
+	// The root ID is part of the Renderer instead of being passed to the
+	// Render method to keep renderer.Renderer decoupled of specific data
+	// structures.
+	root T
+	// The dag from which the tree is rendered.
+	dag *syncdag.DirectedAcyclicGraph[T]
 }
 
+// VertexMarshalizer is an interface that defines a method to create a
+// serializable object from a vertex.
 type VertexMarshalizer[T cmp.Ordered] interface {
 	Marshalize(*syncdag.Vertex[T]) (any, error)
 }
 
+// VertexMarshalizerFunc is a function type that implements the VertexMarshalizer
+// interface.
 type VertexMarshalizerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) (any, error)
 
+// Marshalize implements the VertexMarshalizer interface for VertexMarshalizerFunc.
 func (f VertexMarshalizerFunc[T]) Marshalize(v *syncdag.Vertex[T]) (any, error) {
 	return f(v)
 }
@@ -72,7 +86,7 @@ func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...Re
 	}
 
 	if options.OutputFormat == 0 {
-		options.OutputFormat = OutputFormatJSON
+		options.OutputFormat = render.OutputFormatJSON
 	}
 
 	return &Renderer[T]{
@@ -136,17 +150,18 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
 	return nil
 }
 
+// renderObjects renders the objects based on the specified output format.
 func (t *Renderer[T]) renderObjects(writer io.Writer) error {
 	var (
 		err  error
 		data []byte
 	)
 	switch t.outputFormat {
-	case OutputFormatJSON:
+	case render.OutputFormatJSON:
 		data, err = t.encodeObjectsAsJSON()
-	case OutputFormatYAML:
+	case render.OutputFormatYAML:
 		data, err = t.encodeObjectsAsYAML()
-	case OutputFormatNDJSON:
+	case render.OutputFormatNDJSON:
 		data, err = t.encodeObjectsAsNDJSON()
 	default:
 		err = fmt.Errorf("unknown output format: %s", t.outputFormat.String())
@@ -158,17 +173,6 @@ func (t *Renderer[T]) renderObjects(writer io.Writer) error {
 		return fmt.Errorf("failed to write encoded objects to writer: %w", err)
 	}
 	return err
-}
-
-func (t *Renderer[T]) encodeObjectsAsNDJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
-	for _, obj := range t.objects {
-		if err := encoder.Encode(obj); err != nil {
-			return nil, fmt.Errorf("encoding component version descriptor failed: %w", err)
-		}
-	}
-	return buf.Bytes(), nil
 }
 
 func (t *Renderer[T]) encodeObjectsAsJSON() ([]byte, error) {
@@ -185,4 +189,15 @@ func (t *Renderer[T]) encodeObjectsAsYAML() ([]byte, error) {
 	}
 
 	return yaml.Marshal(t.objects)
+}
+
+func (t *Renderer[T]) encodeObjectsAsNDJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	for _, obj := range t.objects {
+		if err := encoder.Encode(obj); err != nil {
+			return nil, fmt.Errorf("encoding component version descriptor failed: %w", err)
+		}
+	}
+	return buf.Bytes(), nil
 }
