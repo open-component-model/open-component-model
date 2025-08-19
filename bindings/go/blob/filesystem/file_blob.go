@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"sync/atomic"
 
 	"github.com/opencontainers/go-digest"
 
@@ -21,9 +22,7 @@ type Blob struct {
 	// path is the original path to the blob.
 	path string
 	// mediaType is the media type of the blob.
-	mediaType string
-	// mediaTypeSet indicates if the media type has been explicitly set.
-	mediaTypeSet bool
+	mediaType atomic.Pointer[string]
 }
 
 var (
@@ -35,10 +34,16 @@ var (
 )
 
 func NewFileBlob(fs fs.FS, path string) *Blob {
-	return &Blob{
+	b := &Blob{
 		path:       path,
 		fileSystem: fs,
 	}
+
+	// set the default media type during creation
+	defaultMediaType := "application/octet-stream"
+	b.mediaType.Store(&defaultMediaType)
+
+	return b
 }
 
 func (f *Blob) ReadCloser() (io.ReadCloser, error) {
@@ -108,11 +113,14 @@ func (f *Blob) Digest() (string, bool) {
 
 // MediaType returns the media type of the blob if known.
 func (f *Blob) MediaType() (string, bool) {
-	return f.mediaType, f.mediaTypeSet
+	mt := f.mediaType.Load()
+	if mt == nil {
+		return "", false
+	}
+	return *mt, true
 }
 
 // SetMediaType overrides the media type of the blob.
 func (f *Blob) SetMediaType(mediaType string) {
-	f.mediaType = mediaType
-	f.mediaTypeSet = true
+	f.mediaType.Store(&mediaType)
 }
