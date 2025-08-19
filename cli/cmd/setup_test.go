@@ -369,7 +369,7 @@ func TestHasFilesystemConfig(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "config with filesystem config and tempt and working directory",
+			name: "config with filesystem config and temp and working directory",
 			config: func() *genericv1.Config {
 				configJSON := `{
 					"configurations": [
