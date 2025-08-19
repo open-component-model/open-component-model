@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	render "ocm.software/open-component-model/cli/internal/renderer"
 )
 
@@ -31,36 +30,22 @@ func TestTreeRenderLoop(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
-		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering, AttributeComponentDescriptor: &descruntime.Descriptor{
-			Component: descruntime.Component{
-				Provider: descruntime.Provider{
-					Name: "ocm.software",
-				},
-				ComponentMeta: descruntime.ComponentMeta{
-					ObjectMeta: descruntime.ObjectMeta{
-						Name:    "A",
-						Version: "1.0.0",
-					},
-				},
-			},
-		}}))
-		//marshalizer := VertexMarshalizerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
-		//	descriptor, ok := v.GetAttribute(AttributeComponentDescriptor)
-		//	if !ok {
-		//		return nil, fmt.Errorf("attribute %s not found for vertex %s", AttributeComponentDescriptor, v.ID)
-		//	}
-		//	runtimeDescriptor, ok := descriptor.(*descruntime.Descriptor)
-		//	if !ok {
-		//		return nil, fmt.Errorf("expected attribute %s for vertex %s to be of type %T, got %T",
-		//			AttributeComponentDescriptor, v.ID, &descruntime.Descriptor{}, descriptor)
-		//	}
-		//	v2Descriptor, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), runtimeDescriptor)
-		//	if err != nil {
-		//		return nil, fmt.Errorf("failed to convert descriptor %s to v2: %w", v.ID, err)
-		//	}
-		//	return v2Descriptor, nil
-		//})
-		renderer := New(d, "A", WithOutputFormat[string](OutputFormatJSON))
+		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
+		marshalizer := VertexMarshalizerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
+			state, ok := v.GetAttribute(syncdag.AttributeTraversalState)
+			if !ok {
+				return nil, fmt.Errorf("attribute %s not found for vertex %s", AttributeComponentDescriptor, v.ID)
+			}
+			traversalState, ok := state.(syncdag.TraversalState)
+			if !ok {
+				return nil, fmt.Errorf("attribute %s for vertex %s is not of type %T", syncdag.AttributeTraversalState, v.ID, syncdag.TraversalState(0))
+			}
+			return map[string]any{
+				"id":    v.ID,
+				"state": traversalState.String(),
+			}, nil
+		})
+		renderer := New(d, "A", WithOutputFormat[string](OutputFormatJSON), WithVertexMarshalizerFunc(marshalizer))
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
 
 		time.Sleep(30 * time.Millisecond)
@@ -71,19 +56,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Add B as child of A
-		r.NoError(d.AddVertex("B", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering, AttributeComponentDescriptor: &descruntime.Descriptor{
-			Component: descruntime.Component{
-				Provider: descruntime.Provider{
-					Name: "ocm.software",
-				},
-				ComponentMeta: descruntime.ComponentMeta{
-					ObjectMeta: descruntime.ObjectMeta{
-						Name:    "B",
-						Version: "1.0.0",
-					},
-				},
-			},
-		}}))
+		r.NoError(d.AddVertex("B", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		r.NoError(d.AddEdge("A", "B"))
 		vB, _ := d.GetVertex("B")
 		time.Sleep(30 * time.Millisecond)
@@ -94,19 +67,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Add C as child of B
-		r.NoError(d.AddVertex("C", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering, AttributeComponentDescriptor: &descruntime.Descriptor{
-			Component: descruntime.Component{
-				Provider: descruntime.Provider{
-					Name: "ocm.software",
-				},
-				ComponentMeta: descruntime.ComponentMeta{
-					ObjectMeta: descruntime.ObjectMeta{
-						Name:    "C",
-						Version: "1.0.0",
-					},
-				},
-			},
-		}}))
+		r.NoError(d.AddVertex("C", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		r.NoError(d.AddEdge("B", "C"))
 		vC, _ := d.GetVertex("C")
 		time.Sleep(30 * time.Millisecond)
@@ -125,19 +86,7 @@ func TestTreeRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Add D as another child of A
-		r.NoError(d.AddVertex("D", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering, AttributeComponentDescriptor: &descruntime.Descriptor{
-			Component: descruntime.Component{
-				Provider: descruntime.Provider{
-					Name: "ocm.software",
-				},
-				ComponentMeta: descruntime.ComponentMeta{
-					ObjectMeta: descruntime.ObjectMeta{
-						Name:    "D",
-						Version: "1.0.0",
-					},
-				},
-			},
-		}}))
+		r.NoError(d.AddVertex("D", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		r.NoError(d.AddEdge("A", "D"))
 		vD, _ := d.GetVertex("D")
 		time.Sleep(30 * time.Millisecond)
