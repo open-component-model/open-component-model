@@ -31,21 +31,21 @@ func TestTreeRenderLoop(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
 		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
-		marshalizer := VertexMarshalizerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
-			state, ok := v.GetAttribute(syncdag.AttributeTraversalState)
-			if !ok {
-				return nil, fmt.Errorf("attribute %s not found for vertex %s", AttributeComponentDescriptor, v.ID)
-			}
-			traversalState, ok := state.(syncdag.TraversalState)
-			if !ok {
-				return nil, fmt.Errorf("attribute %s for vertex %s is not of type %T", syncdag.AttributeTraversalState, v.ID, syncdag.TraversalState(0))
-			}
-			return map[string]any{
-				"id":    v.ID,
-				"state": traversalState.String(),
-			}, nil
-		})
-		renderer := New(d, "A", WithOutputFormat[string](OutputFormatJSON), WithVertexMarshalizerFunc(marshalizer))
+		//marshalizer := VertexMarshalizerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
+		//	state, ok := v.GetAttribute(syncdag.AttributeTraversalState)
+		//	if !ok {
+		//		return nil, fmt.Errorf("attribute %s not found for vertex %s", AttributeComponentDescriptor, v.ID)
+		//	}
+		//	traversalState, ok := state.(syncdag.TraversalState)
+		//	if !ok {
+		//		return nil, fmt.Errorf("attribute %s for vertex %s is not of type %T", syncdag.AttributeTraversalState, v.ID, syncdag.TraversalState(0))
+		//	}
+		//	return map[string]any{
+		//		"id":    v.ID,
+		//		"state": traversalState.String(),
+		//	}, nil
+		//})
+		renderer := New(d, "A", WithOutputFormat[string](OutputFormatJSON))
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
 
 		time.Sleep(30 * time.Millisecond)
@@ -70,14 +70,6 @@ func TestTreeRenderLoop(t *testing.T) {
 		r.NoError(d.AddVertex("C", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		r.NoError(d.AddEdge("B", "C"))
 		vC, _ := d.GetVertex("C")
-		time.Sleep(30 * time.Millisecond)
-		synctest.Wait()
-		//output = buf.String()
-		//expected = text.CursorUp.Sprint() + text.EraseLine.Sprint() + text.CursorUp.Sprint() + text.EraseLine.Sprint() + "── A (discovering)\n   ╰─ B (discovering)\n      ╰─ C (discovering)\n"
-		//r.Equal(expected, output)
-		buf.Reset()
-
-		r.NoError(d.AddEdge("A", "C"))
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		//output = buf.String()

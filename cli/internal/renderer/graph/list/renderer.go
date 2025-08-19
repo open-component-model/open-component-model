@@ -13,7 +13,26 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Renderer renders a tree structure from a DirectedAcyclicGraph.
+// Renderer renders a tree from a DirectedAcyclicGraph as a flat last in a
+// particular output format.
+// The output rendered by the Renderer with OutputFormatJSON looks like this:
+//
+//	[
+//	  "A",
+//	  "B",
+//	  "C",
+//	  "D"
+//	]
+//
+// The output is analogous to a tree structure, but without the indentation.
+//
+//	── A
+//	   ├─ B
+//	   │  ╰─ C
+//	   ╰─ D
+//
+// Each letter corresponds to a vertex in the DirectedAcyclicGraph. The concrete
+// representation of the vertex is defined by the VertexMarshalizer.
 type Renderer[T cmp.Ordered] struct {
 	objects []any
 	// VertexMarshalizer converts a vertex to an object of type U. U is expected
@@ -85,6 +104,10 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 		return fmt.Errorf("failed to traverse graph: %w", err)
 	}
 	if err := t.renderObjects(writer); err != nil {
+		return err
+	}
+	// The render loop logic expects a newline at the end of the output.
+	if _, err := writer.Write([]byte("\n")); err != nil {
 		return err
 	}
 
