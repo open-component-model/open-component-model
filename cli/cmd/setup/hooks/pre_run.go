@@ -91,7 +91,6 @@ func PreRunEWithOptions(cmd *cobra.Command, _ []string, opts ...PreRunOptions) e
 
 	setup.SetupFilesystemConfig(cmd, fsCfgOption...)
 
-	// TODO #565 fix: inject working dir stuff here before we use the working dir changes
 	if err := setup.SetupPluginManager(cmd); err != nil {
 		return fmt.Errorf("could not setup plugin manager: %w", err)
 	}
