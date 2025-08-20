@@ -6,7 +6,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.10.0
-	helm.sh/helm/v3 v3.18.5
+	helm.sh/helm/v3 v3.18.6
 	ocm.software/open-component-model/bindings/go/blob v0.0.8
 	ocm.software/open-component-model/bindings/go/configuration v0.0.6
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250816122110-cde8f3437bb7
