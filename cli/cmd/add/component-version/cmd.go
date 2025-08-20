@@ -145,6 +145,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting blob cache directory flag failed: %w", err)
 	}
 
+	// TODO: 565 - inject path to constructor.yml as default working dir
 	constructorSpec, _, err := GetComponentConstructor(cmd)
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)

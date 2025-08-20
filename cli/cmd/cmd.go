@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	tempFolderFlag       = "temp-folder"
-	workingDirectoryFlag = "working-directory"
+	tempFolderFlag               = "temp-folder"
+	workingDirectoryFlag         = "working-directory"
 	pluginShutdownTimeoutFlag    = "plugin-shutdown-timeout"
 	pluginShutdownTimeoutDefault = 10 * time.Second
 	pluginDirectoryFlag          = "plugin-directory"

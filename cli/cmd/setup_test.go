@@ -130,7 +130,7 @@ func TestSetupTempFolderFilesystemConfig(t *testing.T) {
 				// Verify the filesystem config was added correctly
 				found := false
 				for _, cfg := range centralCfg.Configurations {
-					if cfg.Type.Name == filesystemv1alpha1.ConfigType {
+					if cfg.Name == filesystemv1alpha1.ConfigType {
 						found = true
 						fsConfig := &filesystemv1alpha1.Config{}
 						err := genericv1.Scheme.Convert(cfg, fsConfig)
@@ -254,7 +254,7 @@ func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
 				// Verify the filesystem config was added correctly
 				found := false
 				for _, cfg := range centralCfg.Configurations {
-					if cfg.Type.Name == filesystemv1alpha1.ConfigType {
+					if cfg.Name == filesystemv1alpha1.ConfigType {
 						found = true
 						fsConfig := &filesystemv1alpha1.Config{}
 						err := genericv1.Scheme.Convert(cfg, fsConfig)
@@ -482,7 +482,7 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 			// Verify the filesystem config was added correctly
 			found := false
 			for _, cfg := range centralCfg.Configurations {
-				if cfg.Type.Name == filesystemv1alpha1.ConfigType {
+				if cfg.Name == filesystemv1alpha1.ConfigType {
 					found = true
 					fsConfig := &filesystemv1alpha1.Config{}
 					err := genericv1.Scheme.Convert(cfg, fsConfig)
