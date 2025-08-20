@@ -13,7 +13,7 @@ var ErrReadOnly = fmt.Errorf("read only file system")
 
 // FileSystem is an interface that needs to be fulfilled by any filesystem implementation
 // to be usable within the OCM Bindings.
-// The ComponentVersionReference Implementation is the osFileSystem which is backed by the os package.
+// RootFileSystem which is backed by the os package.
 type FileSystem interface {
 	String() string
 
@@ -76,7 +76,7 @@ type File interface {
 	io.Writer
 }
 
-func NewFS(base string, flag int) (FileSystem, error) {
+func NewFS(base string, flag int) (*RootFileSystem, error) {
 	base, err := filepath.Abs(base)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get absolute path: %w", err)
@@ -97,12 +97,16 @@ func NewFS(base string, flag int) (FileSystem, error) {
 	if fi != nil && !fi.IsDir() {
 		return nil, fmt.Errorf("path is not a directory: %s", base)
 	}
-	return &osFileSystem{base: base, flag: flag}, nil
+	r, err := os.OpenRoot(base)
+	if err != nil {
+		return nil, fmt.Errorf("unable to open root on base: %w", err)
+	}
+	return &RootFileSystem{root: r, flag: flag}, nil
 }
 
-type osFileSystem struct {
-	// base is the base path of the filesystem
-	base string
+type RootFileSystem struct {
+	// root may be used to only access files within a single directory tree.
+	root *os.Root
 	// flagMu is a mutex to protect the flag read / write access
 	flagMu sync.RWMutex
 	// flag is the bitmask applied to limit fs operations with e.g. os.O_RDONLY
@@ -110,57 +114,57 @@ type osFileSystem struct {
 	flag int
 }
 
-func (s *osFileSystem) String() string {
-	return s.base
+func (s *RootFileSystem) String() string {
+	return s.root.Name()
 }
 
-func (s *osFileSystem) Remove(name string) error {
+func (s *RootFileSystem) Remove(name string) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
-	return os.Remove(filepath.Join(s.base, name))
+	return s.root.Remove(name)
 }
 
-func (s *osFileSystem) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) {
+func (s *RootFileSystem) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) {
 	if s.ReadOnly() && !isFlagReadOnly(flag) {
 		return nil, ErrReadOnly
 	}
-	return os.OpenFile(filepath.Join(s.base, name), flag, perm)
+	return s.root.OpenFile(name, flag, perm)
 }
 
-func (s *osFileSystem) Open(name string) (fs.File, error) {
-	return os.Open(filepath.Join(s.base, name))
+func (s *RootFileSystem) Open(name string) (fs.File, error) {
+	return s.OpenFile(name, os.O_RDONLY, 0)
 }
 
-func (s *osFileSystem) ReadDir(name string) ([]fs.DirEntry, error) {
-	return os.ReadDir(filepath.Join(s.base, name))
+func (s *RootFileSystem) ReadDir(name string) ([]fs.DirEntry, error) {
+	return s.root.FS().(fs.ReadDirFS).ReadDir(name)
 }
 
-func (s *osFileSystem) MkdirAll(name string, perm os.FileMode) error {
+func (s *RootFileSystem) MkdirAll(name string, perm os.FileMode) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
-	return os.MkdirAll(filepath.Join(s.base, name), perm)
+	return s.root.MkdirAll(name, perm)
 }
 
-func (s *osFileSystem) RemoveAll(path string) error {
+func (s *RootFileSystem) RemoveAll(path string) error {
 	if s.ReadOnly() {
 		return ErrReadOnly
 	}
-	return os.RemoveAll(filepath.Join(s.base, path))
+	return s.root.RemoveAll(path)
 }
 
-func (s *osFileSystem) Stat(name string) (fs.FileInfo, error) {
-	return os.Stat(filepath.Join(s.base, name))
+func (s *RootFileSystem) Stat(name string) (fs.FileInfo, error) {
+	return s.root.Stat(name)
 }
 
-func (s *osFileSystem) ReadOnly() bool {
+func (s *RootFileSystem) ReadOnly() bool {
 	s.flagMu.RLock()
 	defer s.flagMu.RUnlock()
 	return isFlagReadOnly(s.flag)
 }
 
-func (s *osFileSystem) ForceReadOnly() {
+func (s *RootFileSystem) ForceReadOnly() {
 	s.flagMu.Lock()
 	defer s.flagMu.Unlock()
 	s.flag &= os.O_RDONLY

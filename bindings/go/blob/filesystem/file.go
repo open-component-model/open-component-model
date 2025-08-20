@@ -68,18 +68,9 @@ func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) (err error) {
 	return nil
 }
 
-// GetBlobFromOSPath returns a blob that reads from the operating system file system.
-// It creates a new virtual FileSystem instance based on the directory of the provided path.
-// The blob is created using the NewFileBlob function, see Blob for details.
+// GetBlobFromOSPath returns a read-only blob that reads from a file on the operating system's filesystem.
 func GetBlobFromOSPath(path string) (*Blob, error) {
-	fs, err := NewFS(filepath.Dir(path), os.O_RDONLY)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create filesystem while trying to access %v: %w", path, err)
-	}
-
-	data := NewFileBlob(fs, filepath.Base(path))
-
-	return data, nil
+	return NewFileBlobFromPathWithFlag(path, os.O_RDONLY)
 }
 
 // GetBlobInWorkingDirectory returns a blob that reads from the operating system file system,

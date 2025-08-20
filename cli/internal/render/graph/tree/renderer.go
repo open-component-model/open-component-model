@@ -9,7 +9,7 @@ import (
 	"github.com/jedib0t/go-pretty/v6/list"
 
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	"ocm.software/open-component-model/cli/internal/renderer/graph"
+	"ocm.software/open-component-model/cli/internal/render/graph"
 )
 
 // Renderer renders a tree structure from a DirectedAcyclicGraph.
@@ -40,19 +40,19 @@ type Renderer[T cmp.Ordered] struct {
 
 // VertexSerializer is an interface that defines a method to serialize a vertex.
 type VertexSerializer[T cmp.Ordered] interface {
-	Serialize(*syncdag.Vertex[T]) string
+	Serialize(*syncdag.Vertex[T]) (string, error)
 }
 
 // VertexSerializerFunc is a function type that implements the VertexSerializer
 // interface.
-type VertexSerializerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) string
+type VertexSerializerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) (string, error)
 
 // Serialize implements the VertexSerializer interface for VertexSerializerFunc.
-func (f VertexSerializerFunc[T]) Serialize(v *syncdag.Vertex[T]) string {
+func (f VertexSerializerFunc[T]) Serialize(v *syncdag.Vertex[T]) (string, error) {
 	return f(v)
 }
 
-// New creates a new TreeRenderer for the given DirectedAcyclicGraph.
+// New creates a new Renderer for the given DirectedAcyclicGraph.
 func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...RendererOption[T]) *Renderer[T] {
 	options := &RendererOptions[T]{}
 	for _, opt := range opts {
@@ -60,11 +60,11 @@ func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...Re
 	}
 
 	if options.VertexSerializer == nil {
-		options.VertexSerializer = VertexSerializerFunc[T](func(v *syncdag.Vertex[T]) string {
+		options.VertexSerializer = VertexSerializerFunc[T](func(v *syncdag.Vertex[T]) (string, error) {
 			// Default serializer just returns the vertex ID.
 			// This is supposed to be overridden by the user to provide a
 			// meaningful representation.
-			return fmt.Sprintf("%v", v.ID)
+			return fmt.Sprintf("%v", v.ID), nil
 		})
 	}
 	return &Renderer[T]{
@@ -104,7 +104,10 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
 	}
-	item := t.vertexSerializer.Serialize(vertex)
+	item, err := t.vertexSerializer.Serialize(vertex)
+	if err != nil {
+		return fmt.Errorf("failed to serialize vertex %v: %w", vertex.ID, err)
+	}
 	t.listWriter.AppendItem(item)
 
 	// Get children and sort them for stable output
