@@ -110,6 +110,26 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {
+	// TODO: 565 - inject path to constructor.yml as default working dir
+	constructorSpec, constructorPath, err := GetComponentConstructor(cmd)
+	if err != nil {
+		return fmt.Errorf("getting component constructor failed: %w", err)
+	} else {
+		ctx := cmd.Context()
+		fsCfg := ocmctx.FromContext(ctx).FilesystemConfig()
+
+		if fsCfg.WorkingDirectory == "" {
+			// If the working directory is not set, we use the directory of the constructor file as the working directory.
+			fsCfg.WorkingDirectory = filepath.Dir(constructorPath)
+			ctx = ocmctx.WithFilesystemConfig(ctx, fsCfg)
+			cmd.SetContext(ctx)
+
+			slog.DebugContext(cmd.Context(), "setting working directory from constructor path", slog.String("working-directory", fsCfg.WorkingDirectory))
+		} else {
+			slog.DebugContext(cmd.Context(), "using existing working directory from filesystem config", slog.String("working-directory", fsCfg.WorkingDirectory))
+		}
+	}
+
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not retrieve plugin manager from context")
@@ -143,12 +163,6 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	cacheDir, err := cmd.Flags().GetString(FlagBlobCacheDirectory)
 	if err != nil {
 		return fmt.Errorf("getting blob cache directory flag failed: %w", err)
-	}
-
-	// TODO: 565 - inject path to constructor.yml as default working dir
-	constructorSpec, _, err := GetComponentConstructor(cmd)
-	if err != nil {
-		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
 	instance := &constructorProvider{

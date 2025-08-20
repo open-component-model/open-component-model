@@ -80,6 +80,7 @@ func preRunE(cmd *cobra.Command, _ []string) error {
 	setupOCMConfig(cmd)
 	setupFilesystemConfig(cmd)
 
+	// TODO #565 fix: inject working dir stuff here before we use the working dir changes
 	if err := setupPluginManager(cmd); err != nil {
 		return fmt.Errorf("could not setup plugin manager: %w", err)
 	}
