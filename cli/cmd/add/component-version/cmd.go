@@ -42,6 +42,8 @@ const (
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
+
+	componentConstructorKey = "componentConstructor"
 )
 
 type ComponentVersionConflictPolicy string
@@ -96,7 +98,35 @@ Adding component versions to a non-default CTF named %[2]q based on a non-defaul
 
 add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 `, FlagRepositoryRef, LegacyDefaultArchiveName, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
-		RunE:              AddComponentVersion,
+		RunE: AddComponentVersion,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			var preRunOptions []hooks.PreRunOptions
+			constructorSpec, constructorPath, err := GetComponentConstructor(cmd)
+			if err != nil {
+				return fmt.Errorf("getting component constructor failed: %w", err)
+			} else {
+				ctx := cmd.Context()
+				fsCfg := ocmctx.FromContext(ctx).FilesystemConfig()
+
+				if fsCfg == nil || fsCfg.WorkingDirectory == "" {
+					// If the working directory is not set, we use the directory of the constructor file as the working directory.
+					dir := filepath.Dir(constructorPath)
+					preRunOptions = append(preRunOptions, hooks.WithWorkingDirectory(dir))
+
+					slog.DebugContext(cmd.Context(), "setting working directory from constructor path", slog.String("working-directory", dir))
+				}
+			}
+
+			if err := hooks.PreRunEWithOptions(cmd, nil, preRunOptions...); err != nil {
+				return fmt.Errorf("pre-run setup failed: %w", err)
+			}
+
+			ctx := cmd.Context()
+			ctx = context.WithValue(ctx, componentConstructorKey, constructorSpec)
+			cmd.SetContext(ctx)
+
+			return nil
+		},
 		DisableAutoGenTag: true,
 	}
 
@@ -111,27 +141,7 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {
-	var preRunOptions []hooks.PreRunOptions
-	constructorSpec, constructorPath, err := GetComponentConstructor(cmd)
-	if err != nil {
-		return fmt.Errorf("getting component constructor failed: %w", err)
-	} else {
-		ctx := cmd.Context()
-		fsCfg := ocmctx.FromContext(ctx).FilesystemConfig()
-
-		if fsCfg == nil || fsCfg.WorkingDirectory == "" {
-			// If the working directory is not set, we use the directory of the constructor file as the working directory.
-			preRunOptions = append(preRunOptions, hooks.WithWorkingDirectory(filepath.Dir(constructorPath)))
-
-			slog.DebugContext(cmd.Context(), "setting working directory from constructor path", slog.String("working-directory", fsCfg.WorkingDirectory))
-		} else {
-			slog.DebugContext(cmd.Context(), "using existing working directory from filesystem config", slog.String("working-directory", fsCfg.WorkingDirectory))
-		}
-	}
-
-	if err := hooks.PreRunEWithOptions(cmd, nil, preRunOptions...); err != nil {
-		return fmt.Errorf("pre-run setup failed: %w", err)
-	}
+	constructorSpec := cmd.Context().Value(componentConstructorKey).(*constructorruntime.ComponentConstructor)
 
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {

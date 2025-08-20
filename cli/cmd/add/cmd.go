@@ -2,7 +2,6 @@ package add
 
 import (
 	"github.com/spf13/cobra"
-
 	componentversion "ocm.software/open-component-model/cli/cmd/add/component-version"
 )
 
