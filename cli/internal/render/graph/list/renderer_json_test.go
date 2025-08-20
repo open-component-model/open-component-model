@@ -28,7 +28,7 @@ func TestRunRenderLoop(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 
 		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
-		marshalizer := VertexMarshalizerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
+		marshaller := VertexMarshallerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
 			state, ok := v.GetAttribute(syncdag.AttributeTraversalState)
 			if !ok {
 				return nil, fmt.Errorf("attribute %s not found for vertex %s", syncdag.AttributeTraversalState, v.ID)
@@ -42,16 +42,18 @@ func TestRunRenderLoop(t *testing.T) {
 				"state": traversalState.String(),
 			}, nil
 		})
-		renderer := New(d, "A", WithOutputFormat[string](render.OutputFormatJSON), WithVertexMarshalizer(marshalizer))
+		renderer := New(d, "A", WithOutputFormat[string](render.OutputFormatJSON), WithVertexMarshaller(marshaller))
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
 
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output := buf.String()
-		expected := `{
-  "id": "A",
-  "state": "discovering"
-}
+		expected := `[
+  {
+    "id": "A",
+    "state": "discovering"
+  }
+]
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -63,7 +65,7 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(4) + `[
+		expected = render.EraseNLines(6) + `[
   {
     "id": "A",
     "state": "discovering"
@@ -260,7 +262,9 @@ func TestRenderOnce(t *testing.T) {
 
 	// Add A
 	r.NoError(d.AddVertex("A"))
-	expected := `"A"
+	expected := `[
+  "A"
+]
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output := buf.String()
@@ -269,7 +273,9 @@ func TestRenderOnce(t *testing.T) {
 
 	// Add B
 	r.NoError(d.AddVertex("B"))
-	expected = `"A"
+	expected = `[
+  "A"
+]
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()

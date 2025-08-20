@@ -1,7 +1,6 @@
 package list
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -34,15 +33,15 @@ import (
 //	   ╰─ D
 //
 // Each letter corresponds to a vertex in the DirectedAcyclicGraph. The concrete
-// representation of the vertex is defined by the VertexMarshalizer.
+// representation of the vertex is defined by the VertexMarshaller.
 type Renderer[T cmp.Ordered] struct {
 	// The objects is a slice of objects that will be rendered.
 	objects []any
-	// The VertexMarshalizer converts a vertex to an object that is added to objects.
+	// The VertexMarshaller converts a vertex to an object that is added to objects.
 	// The returned object is expected to be a serializable type (e.g., a struct
-	// or map). The marshalizer MUST perform READ-ONLY access to the vertex and its
+	// or map). The VertexMarshaller MUST perform READ-ONLY access to the vertex and its
 	// attributes.
-	vertexMarshalizer VertexMarshalizer[T]
+	vertexMarshaller VertexMarshaller[T]
 	// The outputFormat specifies the format in which the output should be
 	// rendered.
 	outputFormat render.OutputFormat
@@ -55,18 +54,18 @@ type Renderer[T cmp.Ordered] struct {
 	dag *syncdag.DirectedAcyclicGraph[T]
 }
 
-// VertexMarshalizer is an interface that defines a method to create a
+// VertexMarshaller is an interface that defines a method to create a
 // serializable object from a vertex.
-type VertexMarshalizer[T cmp.Ordered] interface {
-	Marshalize(*syncdag.Vertex[T]) (any, error)
+type VertexMarshaller[T cmp.Ordered] interface {
+	Marshal(*syncdag.Vertex[T]) (any, error)
 }
 
-// VertexMarshalizerFunc is a function type that implements the VertexMarshalizer
+// VertexMarshallerFunc is a function type that implements the VertexMarshaller
 // interface.
-type VertexMarshalizerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) (any, error)
+type VertexMarshallerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) (any, error)
 
-// Marshalize implements the VertexMarshalizer interface for VertexMarshalizerFunc.
-func (f VertexMarshalizerFunc[T]) Marshalize(v *syncdag.Vertex[T]) (any, error) {
+// Marshal implements the VertexMarshaller interface for VertexMarshallerFunc.
+func (f VertexMarshallerFunc[T]) Marshal(v *syncdag.Vertex[T]) (any, error) {
 	return f(v)
 }
 
@@ -77,9 +76,9 @@ func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...Re
 		opt(options)
 	}
 
-	if options.VertexMarshalizer == nil {
-		options.VertexMarshalizer = VertexMarshalizerFunc[T](func(v *syncdag.Vertex[T]) (any, error) {
-			// Default marshalizer just returns the vertex ID.
+	if options.VertexMarshaller == nil {
+		options.VertexMarshaller = VertexMarshallerFunc[T](func(v *syncdag.Vertex[T]) (any, error) {
+			// Default marshaller just returns the vertex ID.
 			// This is supposed to be overridden by the user to provide a
 			// meaningful representation.
 			return fmt.Sprintf("%v", v.ID), nil
@@ -91,11 +90,11 @@ func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...Re
 	}
 
 	return &Renderer[T]{
-		objects:           make([]any, 0),
-		outputFormat:      options.OutputFormat,
-		vertexMarshalizer: options.VertexMarshalizer,
-		root:              root,
-		dag:               dag,
+		objects:          make([]any, 0),
+		outputFormat:     options.OutputFormat,
+		vertexMarshaller: options.VertexMarshaller,
+		root:             root,
+		dag:              dag,
 	}
 }
 
@@ -130,7 +129,7 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
 	}
-	object, err := t.vertexMarshalizer.Marshalize(vertex)
+	object, err := t.vertexMarshaller.Marshal(vertex)
 	if err != nil {
 		return fmt.Errorf("failed to marshal vertex %v: %w", nodeId, err)
 	}
@@ -155,11 +154,11 @@ func (t *Renderer[T]) renderObjects(writer io.Writer) error {
 	)
 	switch t.outputFormat {
 	case render.OutputFormatJSON:
-		data, err = t.encodeObjectsAsJSON()
+		err = t.encodeObjectsAsJSON(writer)
 	case render.OutputFormatYAML:
-		data, err = t.encodeObjectsAsYAML()
+		err = t.encodeObjectsAsYAML(writer)
 	case render.OutputFormatNDJSON:
-		data, err = t.encodeObjectsAsNDJSON()
+		err = t.encodeObjectsAsNDJSON(writer)
 	default:
 		err = fmt.Errorf("unknown output format: %s", t.outputFormat.String())
 	}
@@ -172,41 +171,40 @@ func (t *Renderer[T]) renderObjects(writer io.Writer) error {
 	return err
 }
 
-func (t *Renderer[T]) encodeObjectsAsJSON() ([]byte, error) {
-	var data []byte
-	var err error
-	if len(t.objects) == 1 {
-		data, err = json.MarshalIndent(t.objects[0], "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("encoding single object as JSON failed: %w", err)
-		}
-	} else {
-		data, err = json.MarshalIndent(t.objects, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("encoding multiple objects as JSON failed: %w", err)
-		}
+func (t *Renderer[T]) encodeObjectsAsJSON(writer io.Writer) error {
+	data, err := json.MarshalIndent(t.objects, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding multiple objects as JSON failed: %w", err)
 	}
+
 	// RunRenderLoop expects a newline at the end of the output.
 	// Other formats - such as yaml - automatically add a newline at the end.
 	data = append(data, '\n')
-	return data, nil
+
+	if _, err = writer.Write(data); err != nil {
+		return fmt.Errorf("failed to write JSON encoded objects to writer: %w", err)
+	}
+	return nil
 }
 
-func (t *Renderer[T]) encodeObjectsAsYAML() ([]byte, error) {
-	if len(t.objects) == 1 {
-		return yaml.Marshal(t.objects[0])
+func (t *Renderer[T]) encodeObjectsAsYAML(writer io.Writer) error {
+	data, err := yaml.Marshal(t.objects)
+	if err != nil {
+		return fmt.Errorf("encoding objects as YAML failed: %w", err)
+	}
+	if _, err = writer.Write(data); err != nil {
+		return fmt.Errorf("failed to write YAML encoded objects to writer: %w", err)
 	}
 
-	return yaml.Marshal(t.objects)
+	return nil
 }
 
-func (t *Renderer[T]) encodeObjectsAsNDJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
+func (t *Renderer[T]) encodeObjectsAsNDJSON(writer io.Writer) error {
+	encoder := json.NewEncoder(writer)
 	for _, obj := range t.objects {
 		if err := encoder.Encode(obj); err != nil {
-			return nil, fmt.Errorf("encoding component version descriptor failed: %w", err)
+			return fmt.Errorf("encoding component version descriptor failed: %w", err)
 		}
 	}
-	return buf.Bytes(), nil
+	return nil
 }

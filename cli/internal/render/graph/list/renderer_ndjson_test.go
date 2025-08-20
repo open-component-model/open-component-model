@@ -28,7 +28,7 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 
 		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
-		marshalizer := VertexMarshalizerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
+		marshaller := VertexMarshallerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
 			state, ok := v.GetAttribute(syncdag.AttributeTraversalState)
 			if !ok {
 				return nil, fmt.Errorf("attribute %s not found for vertex %s", syncdag.AttributeTraversalState, v.ID)
@@ -42,7 +42,7 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 				"state": traversalState.String(),
 			}, nil
 		})
-		renderer := New(d, "A", WithOutputFormat[string](render.OutputFormatNDJSON), WithVertexMarshalizer(marshalizer))
+		renderer := New(d, "A", WithOutputFormat[string](render.OutputFormatNDJSON), WithVertexMarshaller(marshaller))
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
 
 		time.Sleep(30 * time.Millisecond)
