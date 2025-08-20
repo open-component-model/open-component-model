@@ -11,6 +11,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -110,7 +111,7 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {
-	// TODO: 565 - inject path to constructor.yml as default working dir
+	var preRunOptions []hooks.PreRunOptions
 	constructorSpec, constructorPath, err := GetComponentConstructor(cmd)
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)
@@ -118,16 +119,18 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		ctx := cmd.Context()
 		fsCfg := ocmctx.FromContext(ctx).FilesystemConfig()
 
-		if fsCfg.WorkingDirectory == "" {
+		if fsCfg == nil || fsCfg.WorkingDirectory == "" {
 			// If the working directory is not set, we use the directory of the constructor file as the working directory.
-			fsCfg.WorkingDirectory = filepath.Dir(constructorPath)
-			ctx = ocmctx.WithFilesystemConfig(ctx, fsCfg)
-			cmd.SetContext(ctx)
+			preRunOptions = append(preRunOptions, hooks.WithWorkingDirectory(filepath.Dir(constructorPath)))
 
 			slog.DebugContext(cmd.Context(), "setting working directory from constructor path", slog.String("working-directory", fsCfg.WorkingDirectory))
 		} else {
 			slog.DebugContext(cmd.Context(), "using existing working directory from filesystem config", slog.String("working-directory", fsCfg.WorkingDirectory))
 		}
+	}
+
+	if err := hooks.PreRunEWithOptions(cmd, nil, preRunOptions...); err != nil {
+		return fmt.Errorf("pre-run setup failed: %w", err)
 	}
 
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()

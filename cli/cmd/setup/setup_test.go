@@ -1,4 +1,4 @@
-package cmd
+package setup
 
 import (
 	"context"
@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
-
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/cmd/global"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
@@ -91,9 +91,9 @@ func TestSetupTempFolderFilesystemConfig(t *testing.T) {
 			cmd := &cobra.Command{
 				Use: "test",
 			}
-			cmd.Flags().String(tempFolderFlag, "", "test flag")
+			cmd.Flags().String(global.TempFolderFlag, "", "test flag")
 			if tt.cliFlag != "" {
-				err := cmd.Flags().Set(tempFolderFlag, tt.cliFlag)
+				err := cmd.Flags().Set(global.TempFolderFlag, tt.cliFlag)
 				r.NoError(err, "failed to set CLI flag")
 			}
 
@@ -110,8 +110,8 @@ func TestSetupTempFolderFilesystemConfig(t *testing.T) {
 				configsBefore = len(tt.existingConfig.Configurations)
 			}
 
-			// Call setupFilesystemConfig
-			setupFilesystemConfig(cmd)
+			// Call SetupFilesystemConfig
+			SetupFilesystemConfig(cmd)
 
 			// Verify the filesystem config in context
 			ocmContext := ocmctx.FromContext(cmd.Context())
@@ -215,9 +215,9 @@ func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
 			cmd := &cobra.Command{
 				Use: "test",
 			}
-			cmd.Flags().String(workingDirectoryFlag, "", "test flag")
+			cmd.Flags().String(global.WorkingDirectoryFlag, "", "test flag")
 			if tt.cliFlag != "" {
-				err := cmd.Flags().Set(workingDirectoryFlag, tt.cliFlag)
+				err := cmd.Flags().Set(global.WorkingDirectoryFlag, tt.cliFlag)
 				r.NoError(err, "failed to set CLI flag")
 			}
 
@@ -234,8 +234,8 @@ func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
 				configsBefore = len(tt.existingConfig.Configurations)
 			}
 
-			// Call setupFilesystemConfig
-			setupFilesystemConfig(cmd)
+			// Call SetupFilesystemConfig
+			SetupFilesystemConfig(cmd)
 
 			// Verify the filesystem config in context
 			ocmContext := ocmctx.FromContext(cmd.Context())
@@ -510,7 +510,7 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 	cmd := &cobra.Command{
 		Use: "test",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			setupFilesystemConfig(cmd)
+			SetupFilesystemConfig(cmd)
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -527,8 +527,8 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 	}
 
 	// Add the temp-folder flag like the real command does
-	cmd.PersistentFlags().String(tempFolderFlag, "", "test flag")
-	cmd.PersistentFlags().String(workingDirectoryFlag, "", "working directory flag")
+	cmd.PersistentFlags().String(global.TempFolderFlag, "", "test flag")
+	cmd.PersistentFlags().String(global.WorkingDirectoryFlag, "", "working directory flag")
 
 	// Set up the command with arguments
 	cmd.SetArgs([]string{"--temp-folder", customTempDir, "--working-directory", workingDir})

@@ -1,10 +1,11 @@
-package cmd
+package setup
 
 import (
 	"fmt"
 	"log/slog"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/cmd/global"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -59,8 +60,22 @@ func ensureFilesystemConfig(cmd *cobra.Command, cfg *genericv1.Config, fsCfg *fi
 	}
 }
 
-// setupFilesystemConfig sets up file system configuration entity.
-func setupFilesystemConfig(cmd *cobra.Command) {
+type SetupFilesystemConfigOption func(fsCfg *filesystemv1alpha1.Config)
+
+func WithWorkingDirectory(workingDirectory string) SetupFilesystemConfigOption {
+	return func(fsCfg *filesystemv1alpha1.Config) {
+		fsCfg.WorkingDirectory = workingDirectory
+	}
+}
+
+func WithTempFolder(tempFolder string) SetupFilesystemConfigOption {
+	return func(fsCfg *filesystemv1alpha1.Config) {
+		fsCfg.TempFolder = tempFolder
+	}
+}
+
+// SetupFilesystemConfig sets up file system configuration entity.
+func SetupFilesystemConfig(cmd *cobra.Command, opts ...SetupFilesystemConfigOption) {
 	ocmCtx := ocmctx.FromContext(cmd.Context())
 	cfg := ocmCtx.Configuration()
 	var fsCfg *filesystemv1alpha1.Config
@@ -77,12 +92,16 @@ func setupFilesystemConfig(cmd *cobra.Command) {
 	}
 
 	// CLI flag takes precedence over the config file
-	if tempFolderValue, _ := loadFlagFromCommand(cmd, tempFolderFlag); tempFolderValue != "" {
+	if tempFolderValue, _ := loadFlagFromCommand(cmd, global.TempFolderFlag); tempFolderValue != "" {
 		overrideTempFolder(cmd, fsCfg, tempFolderValue)
 	}
 
-	if workingDirectoryValue, _ := loadFlagFromCommand(cmd, workingDirectoryFlag); workingDirectoryValue != "" {
+	if workingDirectoryValue, _ := loadFlagFromCommand(cmd, global.WorkingDirectoryFlag); workingDirectoryValue != "" {
 		overrideWorkingDirectory(cmd, fsCfg, workingDirectoryValue)
+	}
+
+	for _, opt := range opts {
+		opt(fsCfg)
 	}
 
 	ensureFilesystemConfig(cmd, cfg, fsCfg)
