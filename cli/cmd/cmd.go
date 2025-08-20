@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/cli/cmd/global"
-	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 
 	"ocm.software/open-component-model/cli/cmd/add"
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/download"
 	"ocm.software/open-component-model/cli/cmd/generate"
 	"ocm.software/open-component-model/cli/cmd/get"
+	"ocm.software/open-component-model/cli/cmd/global"
+	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	"ocm.software/open-component-model/cli/cmd/version"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )

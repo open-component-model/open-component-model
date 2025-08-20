@@ -11,6 +11,8 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -27,8 +29,9 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	ocmsync "ocm.software/open-component-model/cli/internal/sync"
-	"sigs.k8s.io/yaml"
 )
+
+type ctxKey string
 
 const (
 	FlagConcurrencyLimit               = "concurrency-limit"
@@ -41,9 +44,9 @@ const (
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
-)
 
-var componentConstructorKey = struct{}{}
+	componentConstructorKey ctxKey = "componentConstructor"
+)
 
 type ComponentVersionConflictPolicy string
 

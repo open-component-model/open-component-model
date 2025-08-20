@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
+
 	"ocm.software/open-component-model/cli/cmd/global"
 	"ocm.software/open-component-model/cli/cmd/setup"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
