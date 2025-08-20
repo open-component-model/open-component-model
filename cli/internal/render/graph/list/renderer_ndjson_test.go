@@ -43,9 +43,16 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 			}, nil
 		})
 		renderer := New(d, "A", WithOutputFormat[string](render.OutputFormatNDJSON), WithVertexMarshaller(marshaller))
-		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(10*time.Millisecond), render.WithRenderOptions(render.WithWriter(writer)))
+		refreshRate := 10 * time.Millisecond
+		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(refreshRate), render.WithRenderOptions(render.WithWriter(writer)))
 
-		time.Sleep(30 * time.Millisecond)
+		// Check that render loop does not print the output if it is equal to
+		// the last output.
+
+		// sleep to allow ticker based render loop to start
+		time.Sleep(refreshRate)
+		// wait for the first render to complete
+		// without this, the test would be flaky or fail
 		synctest.Wait()
 		output := buf.String()
 		expected := `{"id":"A","state":"discovering"}
@@ -53,11 +60,20 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 		r.Equal(expected, output)
 		buf.Reset()
 
+		// allow at least one more render loop to start
+		time.Sleep(refreshRate)
+		// again, wait for the render loop to complete
+		synctest.Wait()
+		output = buf.String()
+		expected = ""
+		r.Equal(expected, output)
+		buf.Reset()
+
 		// Add B as child of A
 		r.NoError(d.AddVertex("B", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		r.NoError(d.AddEdge("A", "B"))
 		vB, _ := d.GetVertex("B")
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
 		expected = render.EraseNLines(1) + `{"id":"A","state":"discovering"}
@@ -70,7 +86,7 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 		r.NoError(d.AddVertex("C", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		r.NoError(d.AddEdge("B", "C"))
 		vC, _ := d.GetVertex("C")
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
 		expected = render.EraseNLines(2) + `{"id":"A","state":"discovering"}
@@ -84,7 +100,7 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 		r.NoError(d.AddVertex("D", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		r.NoError(d.AddEdge("A", "D"))
 		vD, _ := d.GetVertex("D")
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
 		expected = render.EraseNLines(3) + `{"id":"A","state":"discovering"}
@@ -97,7 +113,7 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 
 		// Mark D as completed
 		vD.Attributes.Store(syncdag.AttributeTraversalState, syncdag.StateCompleted)
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
 		expected = render.EraseNLines(4) + `{"id":"A","state":"discovering"}
@@ -110,7 +126,7 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 
 		// Mark C as completed
 		vC.Attributes.Store(syncdag.AttributeTraversalState, syncdag.StateCompleted)
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
 		expected = render.EraseNLines(4) + `{"id":"A","state":"discovering"}
@@ -123,7 +139,7 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 
 		// Mark B as completed
 		vB.Attributes.Store(syncdag.AttributeTraversalState, syncdag.StateCompleted)
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
 		expected = render.EraseNLines(4) + `{"id":"A","state":"discovering"}
@@ -137,7 +153,7 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 		// Mark A as completed
 		vA, _ := d.GetVertex("A")
 		vA.Attributes.Store(syncdag.AttributeTraversalState, syncdag.StateCompleted)
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
 		expected = render.EraseNLines(4) + `{"id":"A","state":"completed"}
