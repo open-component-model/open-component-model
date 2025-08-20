@@ -11,9 +11,6 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/cli/cmd/setup/hooks"
-	"sigs.k8s.io/yaml"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -24,11 +21,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	ocmsync "ocm.software/open-component-model/cli/internal/sync"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -42,9 +41,9 @@ const (
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
-
-	componentConstructorKey = "componentConstructor"
 )
+
+var componentConstructorKey = struct{}{}
 
 type ComponentVersionConflictPolicy string
 

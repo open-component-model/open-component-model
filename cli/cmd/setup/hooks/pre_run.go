@@ -29,6 +29,7 @@ func loadFlagFromCommand(cmd *cobra.Command, flagName string) (string, error) {
 }
 
 type PreRunOptions any
+
 type FilesystemOptions func(cmd *cobra.Command, fsCfgOptions map[string]setup.SetupFilesystemConfigOption) error
 
 func WithWorkingDirectory(value string) FilesystemOptions {
