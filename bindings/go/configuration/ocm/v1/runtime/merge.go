@@ -9,7 +9,7 @@ package runtime
 // New concepts will likely be introduced in the future (contributions welcome!).
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
-		return nil
+		return &Config{}
 	}
 
 	merged := new(Config)
