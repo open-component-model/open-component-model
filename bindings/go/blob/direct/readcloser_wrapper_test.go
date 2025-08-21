@@ -113,7 +113,7 @@ func TestReadCloserWrapper_CloseWithoutRead(t *testing.T) {
 	buf := make([]byte, 5)
 	n, err := wrapper.Read(buf)
 	assert.Equal(t, 0, n)
-	assert.Equal(t, io.ErrClosedPipe, err)
+	assert.Equal(t, io.EOF, err)
 }
 
 func TestReadCloserWrapper_ReadAfterClose(t *testing.T) {
@@ -134,7 +134,7 @@ func TestReadCloserWrapper_ReadAfterClose(t *testing.T) {
 	// Reading after close should return error
 	n, err = wrapper.Read(buf)
 	assert.Equal(t, 0, n)
-	assert.Equal(t, io.ErrClosedPipe, err)
+	assert.Equal(t, io.EOF, err)
 }
 
 func TestReadCloserWrapper_MultipleClose(t *testing.T) {

@@ -3,6 +3,7 @@ package direct
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -35,6 +36,33 @@ func NewFromBuffer(buffer *bytes.Buffer, unsafe bool, opts ...DirectBlobOption) 
 func NewFromBytes(data []byte, opts ...DirectBlobOption) *Blob {
 	return New(bytes.NewReader(data),
 		append([]DirectBlobOption{WithSize(int64(len(data)))}, opts...)...)
+}
+
+// NewFromBlob creates a direct Blob from a ReadOnlyBlob, preserving its attributes
+// like Size, MediaType.
+func NewFromBlob(src blob.ReadOnlyBlob) (*Blob, error) {
+	var defaultOpts []DirectBlobOption
+
+	// Extract size if available
+	if sizeAware, ok := src.(blob.SizeAware); ok {
+		if size := sizeAware.Size(); size != blob.SizeUnknown {
+			defaultOpts = append(defaultOpts, WithSize(size))
+		}
+	}
+
+	// Extract media type if available
+	if mediaTypeAware, ok := src.(blob.MediaTypeAware); ok {
+		if mediaType, known := mediaTypeAware.MediaType(); known && mediaType != "" {
+			defaultOpts = append(defaultOpts, WithMediaType(mediaType))
+		}
+	}
+
+	reader, err := src.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("unable to open blob: %w", err)
+	}
+
+	return New(reader, defaultOpts...), nil
 }
 
 // New constructs a Blob from a [io.Reader] source, applying any DirectBlobOption values.

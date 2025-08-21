@@ -33,7 +33,7 @@ func (w *readCloserWrapper) Read(p []byte) (int, error) {
 	defer w.mu.Unlock()
 
 	if w.closed {
-		return 0, io.ErrClosedPipe
+		return 0, io.EOF
 	}
 
 	// Open the blob reader on the first read
