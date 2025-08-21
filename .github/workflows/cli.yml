@@ -41,7 +41,8 @@ jobs:
       - name: Verify
         run: task cli:verify/ctf
 
-      - name: Upload build artifacts
+      - name: Upload build artifacts (for release)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: cli-build-${{ github.run_id }}
