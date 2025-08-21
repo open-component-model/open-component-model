@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestDAGTraverse(t *testing.T) {
@@ -38,7 +39,15 @@ func TestDAGTraverse(t *testing.T) {
 			}
 			return neighbors, nil
 		}
-		r.NoError(dag.Traverse(ctx, NewVertex("A"), traverseFunc))
+		// Perform concurrent traversal to check for data races
+		eg := errgroup.Group{}
+		for _, id := range []string{"A", "A"} {
+			// Add vertices to the DAG
+			eg.Go(func() error {
+				return dag.Traverse(ctx, NewVertex(id), DiscoverNeighborsFunc[string](traverseFunc))
+			})
+		}
+		r.NoError(eg.Wait())
 
 		// Check if the graph structure is as expected
 		r.ElementsMatchf(dag.MustGetVertex("A").EdgeKeys(), []string{"B", "C"}, "expected edges from A to B and C, but got %v", dag.MustGetVertex("A").EdgeKeys())

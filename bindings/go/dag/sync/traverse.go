@@ -79,12 +79,6 @@ func (d *DirectedAcyclicGraph[T]) Traverse(
 	traversalFunc func(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error),
 	options ...TraverseOption,
 ) error {
-	// Protect graph from concurrent execution of graph operations. Since
-	// traverse is called recursively, this will lock until the entire traversal
-	// is complete.
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
 	opts := &TraverseOptions{}
 	for _, opt := range options {
 		opt(opts)
