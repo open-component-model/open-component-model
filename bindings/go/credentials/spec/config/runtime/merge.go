@@ -3,7 +3,7 @@ package runtime
 // Merge merges the provided configs into a single config.
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
-		return nil
+		return &Config{}
 	}
 
 	merged := new(Config)
