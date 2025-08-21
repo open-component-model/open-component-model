@@ -5,30 +5,13 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
+	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/cli/cmd/global"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
-
-func loadFlagFromCommand(cmd *cobra.Command, flagName string) (string, error) {
-	var (
-		value string
-		err   error
-	)
-	if flag := cmd.Flags().Lookup(flagName); flag != nil && flag.Changed {
-		value, err = cmd.Flags().GetString(flagName)
-		if err != nil {
-			slog.DebugContext(cmd.Context(), "could not read flag value",
-				slog.String("flag", flagName),
-				slog.String("error", err.Error()))
-		}
-	}
-
-	return value, err
-}
 
 func overrideTempFolder(cmd *cobra.Command, fsCfg *filesystemv1alpha1.Config, value string) {
 	if value != "" {
@@ -92,11 +75,11 @@ func SetupFilesystemConfig(cmd *cobra.Command, opts ...SetupFilesystemConfigOpti
 	}
 
 	// CLI flag takes precedence over the config file
-	if tempFolderValue, _ := loadFlagFromCommand(cmd, global.TempFolderFlag); tempFolderValue != "" {
+	if tempFolderValue, _ := ocmcmd.LoadFlagFromCommand(cmd, ocmcmd.TempFolderFlag); tempFolderValue != "" {
 		overrideTempFolder(cmd, fsCfg, tempFolderValue)
 	}
 
-	if workingDirectoryValue, _ := loadFlagFromCommand(cmd, global.WorkingDirectoryFlag); workingDirectoryValue != "" {
+	if workingDirectoryValue, _ := ocmcmd.LoadFlagFromCommand(cmd, ocmcmd.WorkingDirectoryFlag); workingDirectoryValue != "" {
 		overrideWorkingDirectory(cmd, fsCfg, workingDirectoryValue)
 	}
 

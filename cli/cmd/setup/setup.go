@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/configuration"
-	"ocm.software/open-component-model/cli/cmd/global"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
@@ -42,7 +42,7 @@ func SetupPluginManager(cmd *cobra.Command) error {
 			return fmt.Errorf("could not get plugin configuration: %w", err)
 		}
 
-		if defaultDir, err := cmd.PersistentFlags().GetString(global.PluginDirectoryFlag); err == nil {
+		if defaultDir, err := cmd.PersistentFlags().GetString(ocmcmd.PluginDirectoryFlag); err == nil {
 			expanded := os.ExpandEnv(defaultDir)
 			pluginCfg.Locations = []string{expanded}
 		}

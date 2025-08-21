@@ -5,29 +5,12 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
+	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 
-	"ocm.software/open-component-model/cli/cmd/global"
 	"ocm.software/open-component-model/cli/cmd/setup"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )
-
-func loadFlagFromCommand(cmd *cobra.Command, flagName string) (string, error) {
-	var (
-		value string
-		err   error
-	)
-	if flag := cmd.Flags().Lookup(flagName); flag != nil && flag.Changed {
-		value, err = cmd.Flags().GetString(flagName)
-		if err != nil {
-			slog.DebugContext(cmd.Context(), "could not read flag value",
-				slog.String("flag", flagName),
-				slog.String("error", err.Error()))
-		}
-	}
-
-	return value, err
-}
 
 type PreRunOptions any
 
@@ -35,14 +18,14 @@ type FilesystemOptions func(cmd *cobra.Command, fsCfgOptions map[string]setup.Se
 
 func WithWorkingDirectory(value string) FilesystemOptions {
 	return func(cmd *cobra.Command, fsCfgOptions map[string]setup.SetupFilesystemConfigOption) error {
-		fsCfgOptions[global.WorkingDirectoryFlag] = setup.WithWorkingDirectory(value)
+		fsCfgOptions[ocmcmd.WorkingDirectoryFlag] = setup.WithWorkingDirectory(value)
 		return nil
 	}
 }
 
 func WithTempFolder(value string) FilesystemOptions {
 	return func(cmd *cobra.Command, fsCfgOptions map[string]setup.SetupFilesystemConfigOption) error {
-		fsCfgOptions[global.TempFolderFlag] = setup.WithTempFolder(value)
+		fsCfgOptions[ocmcmd.TempFolderFlag] = setup.WithTempFolder(value)
 		return nil
 	}
 }
@@ -65,8 +48,8 @@ func PreRunEWithOptions(cmd *cobra.Command, _ []string, opts ...PreRunOptions) e
 
 	// CLI flag takes precedence over the config file
 	fsCfgOptionsMap := make(map[string]setup.SetupFilesystemConfigOption)
-	tempFolderValue, _ := loadFlagFromCommand(cmd, global.TempFolderFlag)
-	workingDirectoryValue, _ := loadFlagFromCommand(cmd, global.WorkingDirectoryFlag)
+	tempFolderValue, _ := ocmcmd.LoadFlagFromCommand(cmd, ocmcmd.TempFolderFlag)
+	workingDirectoryValue, _ := ocmcmd.LoadFlagFromCommand(cmd, ocmcmd.WorkingDirectoryFlag)
 
 	// Initialize filesystem configuration options
 	for _, opt := range opts {
@@ -79,10 +62,10 @@ func PreRunEWithOptions(cmd *cobra.Command, _ []string, opts ...PreRunOptions) e
 
 	// cli flags take precedence over the config file
 	if tempFolderValue != "" {
-		fsCfgOptionsMap[global.TempFolderFlag] = setup.WithTempFolder(tempFolderValue)
+		fsCfgOptionsMap[ocmcmd.TempFolderFlag] = setup.WithTempFolder(tempFolderValue)
 	}
 	if workingDirectoryValue != "" {
-		fsCfgOptionsMap[global.WorkingDirectoryFlag] = setup.WithWorkingDirectory(workingDirectoryValue)
+		fsCfgOptionsMap[ocmcmd.WorkingDirectoryFlag] = setup.WithWorkingDirectory(workingDirectoryValue)
 	}
 
 	// fsCfgOptionsMap to slice

@@ -12,7 +12,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/cli/cmd/global"
+	"ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
@@ -91,9 +91,9 @@ func TestSetupTempFolderFilesystemConfig(t *testing.T) {
 			cmd := &cobra.Command{
 				Use: "test",
 			}
-			cmd.Flags().String(global.TempFolderFlag, "", "test flag")
+			cmd.Flags().String(cmd.TempFolderFlag, "", "test flag")
 			if tt.cliFlag != "" {
-				err := cmd.Flags().Set(global.TempFolderFlag, tt.cliFlag)
+				err := cmd.Flags().Set(cmd.TempFolderFlag, tt.cliFlag)
 				r.NoError(err, "failed to set CLI flag")
 			}
 
@@ -215,9 +215,9 @@ func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
 			cmd := &cobra.Command{
 				Use: "test",
 			}
-			cmd.Flags().String(global.WorkingDirectoryFlag, "", "test flag")
+			cmd.Flags().String(cmd.WorkingDirectoryFlag, "", "test flag")
 			if tt.cliFlag != "" {
-				err := cmd.Flags().Set(global.WorkingDirectoryFlag, tt.cliFlag)
+				err := cmd.Flags().Set(cmd.WorkingDirectoryFlag, tt.cliFlag)
 				r.NoError(err, "failed to set CLI flag")
 			}
 
@@ -527,8 +527,8 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 	}
 
 	// Add the temp-folder flag like the real command does
-	cmd.PersistentFlags().String(global.TempFolderFlag, "", "test flag")
-	cmd.PersistentFlags().String(global.WorkingDirectoryFlag, "", "working directory flag")
+	cmd.PersistentFlags().String(cmd.TempFolderFlag, "", "test flag")
+	cmd.PersistentFlags().String(cmd.WorkingDirectoryFlag, "", "working directory flag")
 
 	// Set up the command with arguments
 	cmd.SetArgs([]string{"--temp-folder", customTempDir, "--working-directory", workingDir})

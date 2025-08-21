@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 
 	"ocm.software/open-component-model/cli/cmd/add"
 	"ocm.software/open-component-model/cli/cmd/configuration"
 	"ocm.software/open-component-model/cli/cmd/download"
 	"ocm.software/open-component-model/cli/cmd/generate"
 	"ocm.software/open-component-model/cli/cmd/get"
-	"ocm.software/open-component-model/cli/cmd/global"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	"ocm.software/open-component-model/cli/cmd/version"
 	"ocm.software/open-component-model/cli/internal/flags/log"
@@ -45,11 +45,11 @@ func New() *cobra.Command {
 
 	configuration.RegisterConfigFlag(cmd)
 
-	cmd.PersistentFlags().String(global.TempFolderFlag, "", `Specify a custom temporary folder path for filesystem operations.`)
-	cmd.PersistentFlags().Duration(global.PluginShutdownTimeoutFlag, global.PluginShutdownTimeoutDefault,
+	cmd.PersistentFlags().String(ocmcmd.TempFolderFlag, "", `Specify a custom temporary folder path for filesystem operations.`)
+	cmd.PersistentFlags().Duration(ocmcmd.PluginShutdownTimeoutFlag, ocmcmd.PluginShutdownTimeoutDefault,
 		`Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed`)
-	cmd.PersistentFlags().String(global.PluginDirectoryFlag, pluginDirectoryDefault, `default directory path for ocm plugins.`)
-	cmd.PersistentFlags().String(global.WorkingDirectoryFlag, "", `Specify a custom working directory path to load resources from.`)
+	cmd.PersistentFlags().String(ocmcmd.PluginDirectoryFlag, pluginDirectoryDefault, `default directory path for ocm plugins.`)
+	cmd.PersistentFlags().String(ocmcmd.WorkingDirectoryFlag, "", `Specify a custom working directory path to load resources from.`)
 	log.RegisterLoggingFlags(cmd.PersistentFlags())
 	cmd.AddCommand(generate.New())
 	cmd.AddCommand(get.New())
