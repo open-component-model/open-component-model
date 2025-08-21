@@ -1,247 +1,215 @@
-# Next Generation Component Constructor Support
+# ADR-0009: Signing & Pinning of Component Descriptors
 
-* **Status**: proposed
-* **Deciders**: OCM Technical Steering Committee
-* **Date**: 2025.08.13
-
-**Technical Story**:
-Provide a consistent, pluggable way to sign and verify component descriptors based on a normalized representation.
-
----
-
-## Context and Problem Statement
-
-To verify the integrity of a component version, users run:
-
-```shell
-ocm verify componentversion --signature mysig --verifier mypublickey ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
-```
-
-This does:
-
-1. Download the component version descriptor from the repository.
-2. Inspect the [`signatures`](https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#signatures) field:
-
-   ```yaml
-   signatures:
-     - name: mysig
-       digest:
-         hashAlgorithm: sha256
-         normalisationAlgorithm: jsonNormalisation/v1
-         value: cf08abae08bb874597630bc0573d941b1becc92b4916cbe3bef9aa0e89aec3f6
-       signature:
-         algorithm: RSASSA-PKCS1-V1_5
-         mediaType: application/vnd.ocm.signature.rsa
-         value: 390157b7...75ab2705d6
-   ```
-3. Verify the signature using the configured verifier from `.ocmconfig`.
-
-Signing uses the analogous command:
-
-```shell
-ocm sign componentversion --signature mysig --signer myprivatekey ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
-```
-
-This downloads, normalizes, signs, and re-uploads the descriptor. Signing and verification configs live in `.ocmconfig`.
+* **Status**: Proposed
+* **Deciders**: OCM Maintainers
+* **Date**: 2025-08-21
+* **Supersedes**: parts of ADR-0008 (Signing & Verification Handler)
+* **Related**: ADR-0010 (Digest Calculation), Issue #579, PR #547
 
 ---
 
-## Decision Drivers
+## Context
 
-* **Simplicity**: Keep signing and verification decoupled from normalization internals.
-* **Extensibility**: Support new algorithms and key types via plugins.
-* **Maintainability**: Clear contracts and separation of concerns to enable testing.
+Recent discussions clarified that **signing must not modify a Component Descriptor (CD)** by calculating or mutating digest fields during the signing operation. We also want to avoid a costly double roundtrip (re-downloading artifacts) at sign time merely to re-validate that previously embedded digests are correct.
 
----
+Therefore we split responsibilities into two steps:
 
-## Outcome
+1. **Digest calculation** is an explicit, separate operation that computes all required digests and embeds them into the descriptor.
+2. **Signing** operates on a descriptor that already contains digests and **optionally pins** the expected **component-version digest** to avoid re-fetching artifacts.
 
-Implement a plugin-driven signing/verification system based on a **ComponentSignatureHandler** contract to compute normalized digests and sign/verify them.
-
----
-
-## Contract Structure
-
-**Module**
-
-```text
-bindings/go/descriptor/signature
-```
-
-**Responsibilities**
-
-* Working with `ComponentSignatureHandler` implementations defined by an interface.
-* Config parsing and resolution.
-* Orchestration of normalization, digest calculation, signing, and verification.
-
-### Adding new Signing / Verification Handlers
-
-**Module**
-
-```text
-bindings/go/<technology>/go.mod
-```
-
-**Package**
-
-```text
-bindings/go/<technology>/signing/method
-```
-
-Example for `RSA-PSS` signing:
-
-```text
-bindings/go/rsa/go.mod
-bindings/go/rsa/signing/pss
-```
+This ADR focuses on **signing & pinning**. Digest calculation is defined in a companion ADR (ADR-0010) and referenced here.
 
 ---
 
-## `ComponentSignatureHandler` Contract
+## Decision
 
-> Contract name used in code: `ComponentSignatureHandler`.
+### 1) Signing operates on pre-digested descriptors
 
-```go
-package handler
+* `ocm sign componentversion` **MUST NOT** compute or mutate digests of resources, component references, or the CD itself.
+* The descriptor **must already contain** the digests (inserted via `ocm add digests` or equivalent tooling).
+* Signing merely:
+1. Reads the descriptor (by reference or file),
+2. Normalizes it,
+3. Computes the **component-version digest** from normalized bytes (without fetching artifacts),
+4. (Optionally) checks that digest against a **pin** provided by the user,
+5. Creates and attaches the cryptographic signature envelope under `.signatures`.
 
-import (
-    "context"
+### 2) Optional digest pinning to avoid double roundtrip
 
-    "ocm.software/open-component-model/bindings/go/blob"
-    descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-    "ocm.software/open-component-model/bindings/go/runtime"
-)
+* Add `--pin <digest>` to `ocm sign componentversion`.
+    * If set, the CLI compares the locally computed **component-version digest** to the given pin **before signing** and **fails** on mismatch.
+    * Pinning is **optional** and intended for cross-environment use (e.g., signing a descriptor produced elsewhere). In a single CI pipeline where `ocm add digests` precedes `ocm sign`, the pin can be omitted.
 
-// ComponentSignatureHandler groups signing and verification.
-// Implementations MUST be able to verify descriptors they produce via Sign.
-type ComponentSignatureHandler interface {
-    ComponentSignatureSigner
-    ComponentSignatureVerifier
-}
+### 3) UX/CLI shape (focus: sign)
 
-// ComponentSignatureSigner signs a normalized Component Descriptor.
-//
-// Implementations MUST:
-// - Expect that ALL contained digests were already precomputed from scratch for artifacts and component references BEFORE calling Sign.
-// - Compute the component-version digest over the normalized descriptor.
-// - Use a registered normalization algorithm and artifact digesting per configuration.
-// - Produce a signature envelope that records: algorithm, media type, value, optional issuer, and name.
-// See: https://ocm.software/docs/getting-started/sign-component-versions/
-type ComponentSignatureSigner interface {
-    // Sign signs the descriptor using the provided config.
-    // An extensible config SHOULD support:
-    //   - signature name(s) and normalization algorithm id,
-    //   - key material (private keys), issuer information,
-    //   - media type and algorithm selection.
-    Sign(ctx context.Context, descriptor descruntime.Descriptor, config runtime.Typed) (signed descruntime.Signature, err error)
-}
+```bash
+# recommended two-step flow
+ocm add digests componentversion <ref> [--recurse] [--normalization <id>] [--force]
 
-// ComponentSignatureVerifier validates signatures and digests for a Component Descriptor.
-//
-// Implementations MUST:
-// - Expect that ALL contained digests were already precomputed from scratch for artifacts and component references BEFORE calling Verify.
-// - Normalize the descriptor with the configured algorithm, then recompute the component-version digest.
-// - Select signatures by name if provided; otherwise verify all present signatures.
-// - Verify the cryptographic signature over the normalized digest using the provided configuration.
-// - Return an error if any selected signature or required digest check fails.
-// See: https://ocm.software/docs/reference/ocm-cli/verify/componentversions/
-type ComponentSignatureVerifier interface {
-    // Verify performs signature and digest checks using the provided config.
-    // An extensible config SHOULD support:
-    //   - signature name filters, normalization algorithm id,
-    //   - key material (public keys, certificates, roots), issuer constraints,
-    //   - verification time for certificate validity checks.
-    Verify(ctx context.Context, descriptor descruntime.Descriptor, config runtime.Typed) error
-}
+# sign without re-downloading artifacts; optionally pin the expected component digest
+ocm sign componentversion <ref> \
+    --sig <name> \
+        [--signer <id-or-config>] \
+            [--pin <sha256:...>] \
+                [--normalization <id>]  # must match the normalization used to compute the digest
+```
+
+* `--normalization` is required when ambiguity exists; otherwise default per config/spec.
+* Signature material is resolved from `.ocmconfig` by `--signer` (private key, algorithm, media type, etc.).
+
+---
+
+## Rationale
+
+* **No mutation at sign time** keeps responsibilities clear and prevents hidden network work.
+* **Pinning** gives integrity assurances without forcing the signer to re-fetch artifacts to re-validate embedded digests.
+* **Determinism**: The digest used for the signature is derived solely from the descriptor bytes and chosen normalization, enabling reproducible signatures.
+
+---
+
+## Consequences
+
+* **Pros**
+* Clear separation of concerns (digest vs. sign).
+* Faster signing (no artifact downloads at sign time).
+* Better CI ergonomics; pinning protects against TOCTOU/"descriptor drift" across environments.
+
+* **Cons**
+* Requires an explicit digesting step in pipelines.
+* If descriptors are tampered with between `add digests` and `sign`, signing fails only when `--pin` is used. Without `--pin`, the signer still signs but verification may fail later.
+
+* **Mitigations**
+* Recommend `--pin` for cross-env signing.
+* Store and transport the digest alongside the CD (artifact metadata, CI outputs, SBOM annotations, etc.).
+
+---
+
+## Open Questions / Follow-ups
+
+* **Spec evolution**: Consider separating digest and signature fields in a future spec release (target: 2026.2), to make the two-phase nature explicit and reduce ambiguity.
+* **Policy**: Whether to make `--pin` mandatory when signing remote descriptors (policy-level decision, not CLI default).
+* **Multiple normalizations**: Guidance for workflows that pre-compute digests with different normalization algorithms.
+
+---
+
+## Two-step Flow — Sequence Diagrams
+
+### A) `ocm add digests` (produces a pre-digested descriptor)
+
+```mermaid
+sequenceDiagram
+autonumber
+actor U as User/CI
+participant C as ocm CLI
+participant R as OCM Repository
+participant A as Artifact Stores
+
+U->>C: ocm add digests componentversion <ref>
+    C->>R: Pull Component Descriptor (CD)
+    loop For each resource/ref needing a digest
+    C->>A: Fetch artifact / referenced descriptor
+    A-->>C: Bytes / Descriptor
+    C->>C: Compute artifact/ref digest
+    end
+    C->>C: Normalize CD and compute component-version digest
+    C->>R: Push updated CD (with digests embedded)
+    R-->>U: Digested CD reference
+```
+
+### B) `ocm sign componentversion` (no digest mutation; optional pin)
+
+```mermaid
+sequenceDiagram
+autonumber
+actor U as User/CI
+participant C as ocm CLI
+participant R as OCM Repository
+
+U->>C: ocm sign componentversion <ref> --sig <name> [--pin <digest>]
+            C->>R: Pull CD (already contains digests)
+            C->>C: Normalize CD → compute component-version digest
+            alt Pin provided
+            C->>C: Compare computed digest with --pin
+            note over C: Fail if mismatch (no signing)
+            end
+            C->>C: Create signature envelope (algo, mediaType, value)
+            C->>R: Push CD with appended signature
+            R-->>U: Signed CD reference
 ```
 
 ---
 
-## Example Configuration
+## Migration & Rollout
 
-### Signing
+1. Introduce `ocm add digests` with clear defaults and documentation.
+2. Add `--pin` to `ocm sign componentversion`.
+3. Update docs, examples, and CI templates to recommend the two-step flow.
 
-```yaml
-signers:
-  - name: myprivatekey
-    type: OCMRSASignatureSigner/v1alpha1
-    spec:
-      normalization:
-        algorithm: jsonNormalisation/v4alpha1
-        hashAlgorithm: sha256
-      algorithm: RSASSA-PKCS1-V1_5
-      mediaType: application/vnd.ocm.signature.rsa
-      privateKey:
-        PEMFile: /path/to/myprivatekey.pem
+---
+
+## Alternatives Considered
+
+* **Compute digests during signing** (previous behavior): rejected to avoid hidden network I/O, mutation during signing, and poor separation of concerns.
+
+---
+
+## Reference
+
+* PR #547 — original ADR draft for signing/verification handlers.
+* Issue #579 — tracking signing/verification ADR work.
+
+---
+
+# ADR-0010: Digest Calculation (Companion)
+
+* **Status**: Proposed
+* **Deciders**: OCM Maintainers
+* **Date**: 2025-08-21
+* **Related**: ADR-0009 (Signing & Pinning)
+
+---
+
+## Summary
+
+Provide an explicit command `ocm add digests` that:
+
+* Computes and embeds digests for:
+* all **resources** (artifact digests),
+* **component references** (referenced CD digests),
+* the **component-version digest** over the normalized CD.
+* Writes the updated descriptor back to the repository (or file) without adding signatures.
+
+### CLI (digest phase)
+
+```bash
+ocm add digests componentversion <ref> \
+    [--recurse]               # compute digests for referenced components
+    [--normalization <id>]    # normalization used for CD digest
+        [--force]                 # overwrite existing digest fields
+        [--dry-run]               # compute and print, do not persist
 ```
 
-### Verification
+### Guarantees
 
-```yaml
-verifiers:
-  - name: mypublickey
-    type: OCMRSASignatureVerifier/v1alpha1
-    spec:
-      normalization:
-        algorithm: jsonNormalisation/v4alpha1
-        hashAlgorithm: sha256
-      publicKey:
-        PEMFile: /path/to/mypublickey.pem
-```
+* All digest values are computed from the actual content at the time of execution.
+* Normalization used is recorded such that `ocm sign` can reproduce the same component-version digest without re-downloading artifacts.
+
+### Non-goals
+
+* No signature creation or verification.
+* No policy decisions about which digests are mandatory — that remains in spec/docs.
 
 ---
 
-## Processing Architecture
+## Interplay with Signing
 
-1. **Input**
-
-    * Descriptor reference or JSON/YAML.
-    * Operation mode: sign or verify.
-    * Resolved config from `.ocmconfig` or CLI flags.
-
-2. **Normalization**
-
-    * Apply configured normalization algorithm to the descriptor.
-    * Recompute all artifact and reference digests.
-
-3. **Digest Computation**
-
-    * Compute the component-version digest over normalized bytes.
-
-4. **Signing** *(sign mode)*
-
-    * Produce signature envelope using selected algorithm and key.
-    * Attach envelope to descriptor `signatures`.
-
-5. **Verification** *(verify mode)*
-
-    * Filter candidate signatures by name if provided.
-    * Verify signature(s) against recomputed digest and trust material.
-
-6. **Output**
-
-    * Sign: descriptor with appended signature.
-    * Verify: success or detailed error per failing signature.
+* `ocm sign` consumes the descriptor produced here.
+* When `--pin` is used, the value should be the **component-version digest** produced by this step.
 
 ---
 
-## Pros and Cons
+## Notes for Implementers
 
-### Pros
-
-* Consistent user experience for signing and verification.
-* Pluggable algorithms and key formats.
-* Decoupled from normalization internals.
-* Testable contracts and clear error surfaces.
-
-### Cons
-
-* Requires plugin registry management.
-* Implementors must understand normalization and digest rules.
-* Risk of duplicated helpers if plugins ignore shared utilities.
-
----
-
-## Conclusion
-
-Adopt a unified, pluggable signing/verification contract around normalized component descriptors. This enforces spec compliance, preserves interoperability, and enables new cryptographic algorithms and trust models without changes to core CLI logic.
+* Reuse existing normalization and hashing utilities.
+* Minimize repository roundtrips via batching and streaming where possible.
+* Ensure deterministic ordering and serialization to keep digests stable across environments.
