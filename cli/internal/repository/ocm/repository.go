@@ -10,6 +10,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
+	resolverruntimev1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
+	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -27,42 +29,31 @@ type ComponentRepository struct {
 	ref  *compref.Ref                          // Component reference containing repository and component information
 	spec runtime.Typed                         // Repository specification
 	base repository.ComponentVersionRepository // Base repository plugin contract
-
-	credentials map[string]string // Credentials for repository access
 }
 
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
+func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string, resolvers []*resolverruntimev1.Resolver) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
 
 	repositorySpec := ref.Repository
-	plugin, err := manager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, repositorySpec)
+	repositoryProvider, err := manager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, repositorySpec)
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", repositorySpec, err)
 	}
 
-	var creds map[string]string
-	identity, err := plugin.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repositorySpec)
-	if err == nil {
-		if creds, err = graph.Resolve(ctx, identity); err != nil {
-			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", repositorySpec, err)
-		}
-	}
-
-	provider, err := plugin.GetComponentVersionRepository(ctx, repositorySpec, creds)
+	repo, err := fallback.NewFallbackRepository(ctx, repositoryProvider, graph, resolvers)
 	if err != nil {
-		return nil, fmt.Errorf("getting repository %q failed: %w", repositorySpec, err)
+		return nil, fmt.Errorf("creating fallback repository for %q failed: %w", repositorySpec, err)
 	}
 
 	return &ComponentRepository{
-		ref:         ref,
-		spec:        repositorySpec,
-		base:        provider,
-		credentials: creds,
+		ref:  ref,
+		spec: repositorySpec,
+		base: repo,
 	}, nil
 }
 

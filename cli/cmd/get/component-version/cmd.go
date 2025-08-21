@@ -6,6 +6,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
+	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -20,6 +23,7 @@ const (
 	FlagOutput           = "output"
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagLatest           = "latest"
+	FlagRecursive        = "recursive"
 )
 
 func New() *cobra.Command {
@@ -71,6 +75,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
+	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))\"")
 
 	return cmd
 }
@@ -112,9 +117,22 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting latest flag failed: %w", err)
 	}
+	recursive, err := cmd.Flags().GetInt(FlagRecursive)
+	if err != nil {
+		return fmt.Errorf("getting recursive flag failed: %w", err)
+	}
+	_ = recursive // TODO: implement recursive resolution
+
+	config := ocmctx.FromContext(cmd.Context()).Configuration()
+
+	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
+	if err != nil {
+		return fmt.Errorf("filtering configuration for resolver config failed: %w", err)
+	}
+	resolvers := resolverv1.Merge(filtered...)
 
 	reference := args[0]
-	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
+	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference, resolvers)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
