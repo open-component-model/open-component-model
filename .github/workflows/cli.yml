@@ -81,7 +81,11 @@ jobs:
         id: git-cliff
         with:
           args: |
-            --include-path "cli/**" --exclude-path "bindings/**/*" --tag-pattern "cli/**" -o cli/tmp/CHANGELOG.md
+            --include-path "cli/**" \
+            --exclude-path "bindings/**/*" \
+            --tag-pattern "cli/**" \
+            -o cli/tmp/CHANGELOG.md \
+            --github-token ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate Draft Release Notes
         working-directory: cli/tmp
@@ -89,7 +93,7 @@ jobs:
           cat <<EOF > release-notes.md
           # $(cat component-descriptor-version.txt)
           
-          This is a draft release of the next generation Open Component Model CLI, generated from the latest commit on the \`main\` branch.
+          This is a draft release of the next generation Open Component Model CLI, generated from the [latest commit at \`main\`](https://github.com/open-component-model/open-component-model/tree/main/cli).
           
           > ⚠️ **Disclaimer:** This build is **unstable** and not intended for production use.  
           > It is unsigned, unverified, and the component descriptor is **not yet published** as a Component Transport Format (CTF). CTF support will be added in a future release.
