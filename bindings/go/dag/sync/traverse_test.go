@@ -41,7 +41,7 @@ func TestDAGTraverse(t *testing.T) {
 		}
 		// Perform concurrent traversal to check for data races
 		eg := errgroup.Group{}
-		for _, id := range []string{"A", "A"} {
+		for _, id := range []string{"A", "B", "C", "D"} {
 			// Add vertices to the DAG
 			eg.Go(func() error {
 				return dag.Traverse(ctx, NewVertex(id), DiscoverNeighborsFunc[string](traverseFunc))
