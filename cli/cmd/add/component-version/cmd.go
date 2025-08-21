@@ -32,7 +32,8 @@ import (
 	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
-type ctxKey string
+// ctxKey is a type used to define a command specific context keys to be used in the context.Context.
+type ctxKey struct{}
 
 const (
 	FlagConcurrencyLimit               = "concurrency-limit"
@@ -45,8 +46,11 @@ const (
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
+)
 
-	ComponentConstructorKey ctxKey = "componentConstructor"
+var (
+	// ComponentConstructorKey is the context key used to store the component constructor in the command context.
+	ComponentConstructorKey ctxKey = struct{}{}
 )
 
 type ComponentVersionConflictPolicy string
@@ -105,39 +109,8 @@ Adding component versions to a non-default CTF named %[2]q based on a non-defaul
 
 add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 `, FlagRepositoryRef, LegacyDefaultArchiveName, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
-		RunE: AddComponentVersion,
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			var opts []hooks.Option
-
-			constructorPath, err := getComponentConstructorPath(cmd)
-			if err != nil {
-				return fmt.Errorf("getting component constructor path failed: %w", err)
-			}
-
-			constructorSpec, err := GetComponentConstructor(cmd.Context(), constructorPath)
-			if err != nil {
-				return fmt.Errorf("getting component constructor failed: %w", err)
-			}
-
-			// If the working directory isn't set yet, default to the constructor file's dir.
-			ctx := cmd.Context()
-			if fsCfg := ocmctx.FromContext(ctx).FilesystemConfig(); fsCfg == nil || fsCfg.WorkingDirectory == "" {
-				dir := filepath.Dir(constructorPath)
-				opts = append(opts, hooks.WithWorkingDirectory(dir))
-				slog.DebugContext(ctx, "setting working directory from constructor path",
-					slog.String("working-directory", dir))
-			}
-
-			if err := hooks.PreRunEWithOptions(cmd, nil, opts...); err != nil {
-				return fmt.Errorf("pre-run setup failed: %w", err)
-			}
-
-			ctx = context.WithValue(cmd.Context(), ComponentConstructorKey, constructorSpec)
-			cmd.SetContext(ctx)
-			ocmctx.Register(cmd)
-
-			return nil
-		},
+		RunE:              AddComponentVersion,
+		PersistentPreRunE: persistentPreRunE,
 		DisableAutoGenTag: true,
 	}
 
@@ -149,6 +122,38 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
 
 	return cmd
+}
+
+func persistentPreRunE(cmd *cobra.Command, _ []string) error {
+	constructorPath, err := getComponentConstructorPath(cmd)
+	if err != nil {
+		return fmt.Errorf("getting component constructor path failed: %w", err)
+	}
+
+	constructorSpec, err := GetComponentConstructor(cmd.Context(), constructorPath)
+	if err != nil {
+		return fmt.Errorf("getting component constructor failed: %w", err)
+	}
+
+	// If the working directory isn't set yet, default to the constructor file's dir.
+	var opts []hooks.Option
+	ctx := cmd.Context()
+	if fsCfg := ocmctx.FromContext(ctx).FilesystemConfig(); fsCfg == nil || fsCfg.WorkingDirectory == "" {
+		dir := filepath.Dir(constructorPath)
+		opts = append(opts, hooks.WithWorkingDirectory(dir))
+		slog.DebugContext(ctx, "setting working directory from constructor path",
+			slog.String("working-directory", dir))
+	}
+
+	if err := hooks.PreRunEWithOptions(cmd, nil, opts...); err != nil {
+		return fmt.Errorf("pre-run setup failed: %w", err)
+	}
+
+	ctx = context.WithValue(cmd.Context(), ComponentConstructorKey, constructorSpec)
+	cmd.SetContext(ctx)
+	ocmctx.Register(cmd)
+
+	return nil
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {

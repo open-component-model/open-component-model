@@ -5,9 +5,14 @@ import (
 )
 
 const (
-	TempFolderFlag               = "temp-folder"
-	WorkingDirectoryFlag         = "working-directory"
-	PluginShutdownTimeoutFlag    = "plugin-shutdown-timeout"
+	// TempFolderFlag Flag to specify a custom temporary folder path for filesystem operations.
+	TempFolderFlag = "temp-folder"
+	// WorkingDirectoryFlag Flag to specify a custom working directory path to load resources from. All referenced resources must be located in this directory or its subdirectories.
+	WorkingDirectoryFlag = "working-directory"
+	// PluginShutdownTimeoutFlag Flag to specify the timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed.
+	PluginShutdownTimeoutFlag = "plugin-shutdown-timeout"
+	// PluginShutdownTimeoutDefault Default timeout for plugin shutdown.
 	PluginShutdownTimeoutDefault = 10 * time.Second
-	PluginDirectoryFlag          = "plugin-directory"
+	// PluginDirectoryFlag Flag to specify the default directory path for OCM plugins.
+	PluginDirectoryFlag = "plugin-directory"
 )

@@ -3,6 +3,8 @@ package hooks
 import (
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -53,15 +55,6 @@ func (b *Builder) setFS(key string, opt setup.SetupFilesystemConfigOption) {
 	b.fsOpts[key] = opt
 }
 
-// export for setup
-func (b *Builder) fsAsSlice() []setup.SetupFilesystemConfigOption {
-	out := make([]setup.SetupFilesystemConfigOption, 0, len(b.fsOpts))
-	for _, v := range b.fsOpts {
-		out = append(out, v)
-	}
-	return out
-}
-
 /*
    ──────────────────────────
    Option constructors
@@ -97,17 +90,14 @@ func PreRunE(cmd *cobra.Command, _ []string) error {
 
 // PreRunEWithOptions applies options, then overrides with CLI flags.
 func PreRunEWithOptions(cmd *cobra.Command, _ []string, opts ...Option) error {
-	// logger
 	logger, err := log.GetBaseLogger(cmd)
 	if err != nil {
 		return fmt.Errorf("could not retrieve logger: %w", err)
 	}
 	slog.SetDefault(logger)
 
-	// base OCM config
 	setup.SetupOCMConfig(cmd)
 
-	// build initial config from options
 	b := newBuilder(cmd)
 	for _, opt := range opts {
 		if err := opt.Apply(b); err != nil {
@@ -133,7 +123,7 @@ func PreRunEWithOptions(cmd *cobra.Command, _ []string, opts ...Option) error {
 	}
 
 	// finalize: apply to the underlying systems
-	setup.SetupFilesystemConfig(cmd, b.fsAsSlice()...)
+	setup.SetupFilesystemConfig(cmd, slices.Collect(maps.Values(b.fsOpts))...)
 
 	if err := setup.SetupPluginManager(cmd); err != nil {
 		return fmt.Errorf("could not setup plugin manager: %w", err)
