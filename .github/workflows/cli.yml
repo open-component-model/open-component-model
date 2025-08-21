@@ -50,7 +50,7 @@ jobs:
         id: git-cliff
         with:
           args: |
-            --exclude-path ** --include-path cli/**
+            --include-path "cli/**" --exclude-path "bindings/**/*" --tag-pattern cli/**
         env:
           OUTPUT: CHANGELOG.md
       - name: Generate Draft Release Notes
