@@ -16,6 +16,11 @@ import (
 // plugins which can be resolved at runtime.
 var ErrNoDirectCredentials = errors.New("no direct credentials found in graph")
 
+// ErrNoIndirectCredentials is returned when no indirect credentials are found in the graph.
+// This can happen if no repository plugin is configured or if no repository plugin can resolve
+// credentials for the given identity.
+var ErrNoIndirectCredentials = errors.New("no indirect credentials found in graph")
+
 var scheme = runtime.NewScheme()
 
 func init() {
@@ -29,10 +34,17 @@ type Options struct {
 	CredentialRepositoryTypeScheme *runtime.Scheme
 }
 
+type GraphResolver interface {
+	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
+}
+
 // ToGraph creates a new credential graph from the provided configuration and options.
 // It initializes the graph structure and ingests the configuration into the graph.
 // Returns an error if the configuration cannot be properly ingested.
-func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (*Graph, error) {
+func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (GraphResolver, error) {
+	if config == nil {
+		config = &cfgRuntime.Config{}
+	}
 	g := &Graph{
 		syncedDag:                newSyncedDag(),
 		credentialPluginProvider: opts.CredentialPluginProvider,
@@ -72,14 +84,17 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 
 	switch {
 	case errors.Is(err, ErrNoDirectCredentials):
-		// fall back to indirect resolution
-		return g.resolveFromRepository(ctx, identity)
+		// fall back to indirect resolution if we have a repository plugin provider
+		// otherwise leave error as is
+		if g.repositoryPluginProvider != nil {
+			creds, err = g.resolveFromRepository(ctx, identity)
+		}
 	case err != nil:
 		return nil, err
 	}
 
-	if len(creds) > 0 {
-		return creds, nil
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 	}
-	return nil, fmt.Errorf("failed to resolve credentials for identity %v", identity)
+	return creds, nil
 }
