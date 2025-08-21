@@ -31,4 +31,48 @@ jobs:
         run: task cli:generate/ctf
       - name: Verify
         run: task cli:verify/ctf
+      - name: Extract Component Descriptor
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: cli/tmp
+        run: |
+          ./bin/ocm get cv \
+            ./transport-archive//ocm.software/cli \
+            --logoutput stderr \
+            -oyaml > descriptor.yaml
+      - name: Generate Draft Release Notes
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: cli/tmp
+        run: |
+          cat <<EOF > release-notes.md
+          # Open Component Model CLI – Latest (Unstable) Release
           
+          This is a draft release of the Open Component Model CLI, generated from the latest commit on the \`main\` branch.
+          
+          **Note:** The component descriptor included here is not yet published as a Component Transport Format (CTF). This will be supported in future releases.
+          
+          <details>
+          <summary>component-descriptor.yaml</summary>
+          
+          \`\`\`yaml
+          $(cat descriptor.yaml)
+          \`\`\`
+          
+          </details>
+          EOF
+      - name: Create draft release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cli/latest
+          name: "Latest CLI (draft)"
+          draft: true
+          body_path: cli/tmp/release-notes.md
+          fail_on_unmatched_files: true
+          preserve_order: true
+          files: |
+            cli/tmp/descriptor.yaml
+            cli/tmp/bin/ocm-linux-*
+            cli/tmp/bin/ocm-darwin-*
+            cli/tmp/bin/ocm-windows-*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
