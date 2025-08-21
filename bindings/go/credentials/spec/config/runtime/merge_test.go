@@ -15,7 +15,7 @@ func TestMerge(t *testing.T) {
 		{
 			name:     "empty configs",
 			configs:  []*Config{},
-			expected: nil,
+			expected: &Config{},
 		},
 		{
 			name: "single config",
