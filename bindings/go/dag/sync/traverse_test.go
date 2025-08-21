@@ -70,7 +70,7 @@ func TestDAGTraverse(t *testing.T) {
 			return nil, fmt.Errorf("we should never reach this point due to context cancellation")
 		}
 
-		err := dag.Traverse(ctx, NewVertex("A"), traverseFunc)
+		err := dag.Traverse(ctx, NewVertex("A"), DiscoverNeighborsFunc[string](traverseFunc))
 		r.ErrorIsf(err, context.Canceled, "expected error due to context cancellation, but got nil")
 	})
 
@@ -98,7 +98,7 @@ func TestDAGTraverse(t *testing.T) {
 			return neighbors, nil
 		}
 
-		err := dag.Traverse(ctx, NewVertex("A"), traverseFunc, WithGoRoutineLimit(1))
+		err := dag.Traverse(ctx, NewVertex("A"), DiscoverNeighborsFunc[string](traverseFunc), WithGoRoutineLimit(1))
 		r.Error(err, "expected error due to missing node in the external graph, but got nil")
 
 		r.Equal(dag.MustGetVertex("A").MustGetAttribute(AttributeTraversalState), StateError, "expected vertex A to be in error state, but got %s", dag.MustGetVertex("A").MustGetAttribute(AttributeTraversalState))

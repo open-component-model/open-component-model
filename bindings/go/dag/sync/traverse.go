@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -61,6 +62,22 @@ func WithGoRoutineLimit(numGoRoutines int) TraverseOption {
 	}
 }
 
+// NeighborDiscoverer is an interface for a function that discovers neighbor
+// vertices for a given vertex.
+// It MUST treat v as read-only and return its neighbors (created via NewVertex)
+// or an error.
+type NeighborDiscoverer[T cmp.Ordered] interface {
+	DiscoverNeighbors(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error)
+}
+
+// DiscoverNeighborsFunc is a function type that implements the NeighborDiscoverer
+// interface. It is used to discover neighbors for a given vertex.
+type DiscoverNeighborsFunc[T cmp.Ordered] func(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error)
+
+func (f DiscoverNeighborsFunc[T]) DiscoverNeighbors(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error) {
+	return f(ctx, v)
+}
+
 // Traverse performs a concurrent depth-first traversal from the given root vertex.
 // For each vertex v, it calls traversalFunc(v), which MUST treat v as read-only
 // and return its neighbors (created via NewVertex) or an error. The new vertices
@@ -76,7 +93,7 @@ func WithGoRoutineLimit(numGoRoutines int) TraverseOption {
 func (d *DirectedAcyclicGraph[T]) Traverse(
 	ctx context.Context,
 	root *Vertex[T],
-	traversalFunc func(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error),
+	discoverer NeighborDiscoverer[T],
 	options ...TraverseOption,
 ) error {
 	opts := &TraverseOptions{}
@@ -92,13 +109,13 @@ func (d *DirectedAcyclicGraph[T]) Traverse(
 	}); err != nil && !errors.Is(err, ErrAlreadyExists) {
 		return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
 	}
-	return d.traverse(ctx, root.ID, traversalFunc, &sync.Map{}, opts)
+	return d.traverse(ctx, root.ID, discoverer, &sync.Map{}, opts)
 }
 
 func (d *DirectedAcyclicGraph[T]) traverse(
 	ctx context.Context,
 	id T,
-	traversalFunc func(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error),
+	discoverer NeighborDiscoverer[T],
 	doneMap *sync.Map,
 	opts *TraverseOptions,
 ) error {
@@ -134,10 +151,10 @@ func (d *DirectedAcyclicGraph[T]) traverse(
 		return fmt.Errorf("vertex %v not found in the graph", id)
 	}
 
-	neighbors, err := traversalFunc(ctx, vertex)
+	neighbors, err := discoverer.DiscoverNeighbors(ctx, vertex)
 	if err != nil {
 		vertex.Attributes.Store(AttributeTraversalState, StateError)
-		return fmt.Errorf("failed to traversalFunc id %v: %w", id, err)
+		return fmt.Errorf("failed to discoverer id %v: %w", id, err)
 	}
 	vertex.Attributes.Store(AttributeTraversalState, StateDiscovered)
 
@@ -161,7 +178,7 @@ func (d *DirectedAcyclicGraph[T]) traverse(
 		}
 		refID := ref.ID
 		errGroup.Go(func() error {
-			if err := d.traverse(ctx, refID, traversalFunc, doneMap, opts); err != nil {
+			if err := d.traverse(ctx, refID, discoverer, doneMap, opts); err != nil {
 				return fmt.Errorf("failed to traverse reference %v: %w", id, err)
 			}
 			return nil
