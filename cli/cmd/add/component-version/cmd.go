@@ -48,10 +48,8 @@ const (
 	LegacyDefaultArchiveName            = "transport-archive"
 )
 
-var (
-	// ComponentConstructorKey is the context key used to store the component constructor in the command context.
-	ComponentConstructorKey ctxKey = struct{}{}
-)
+// ComponentConstructorKey is the context key used to store the component constructor in the command context.
+var ComponentConstructorKey ctxKey = struct{}{}
 
 type ComponentVersionConflictPolicy string
 
