@@ -1,33 +1,32 @@
-package direct
+package blob
 
 import (
 	"io"
 	"sync"
-
-	"ocm.software/open-component-model/bindings/go/blob"
 )
 
 // readCloserWrapper wraps a ReadOnlyBlob to provide an io.ReadCloser that
 // opens the underlying blob on the first read and automatically closes it.
 type readCloserWrapper struct {
-	blob   blob.ReadOnlyBlob
+	blob   ReadOnlyBlob
 	reader io.ReadCloser
 	mu     sync.Mutex
 	opened bool
 	closed bool
 }
 
-// NewReadCloserWrapper creates an io.ReadCloser wrapper around a ReadOnlyBlob.
+// ToReadCloser creates an io.ReadCloser wrapper around a ReadOnlyBlob.
 // The wrapper will open the underlying blob on the first read operation and
-// close it when Close() is called.
-func NewReadCloserWrapper(b blob.ReadOnlyBlob) io.ReadCloser {
+// close it when Close() is called. It can be used to immediately get a reader
+// for a blob without having to open it explicitly and check the returned error.
+func ToReadCloser(b ReadOnlyBlob) io.ReadCloser {
 	return &readCloserWrapper{
 		blob: b,
 	}
 }
 
 // Read implements io.Reader. It opens the underlying blob on the first call
-// and delegates all subsequent reads to the opened reader.
+// and delegates all later reads to the opened reader.
 func (w *readCloserWrapper) Read(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()

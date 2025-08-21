@@ -1,4 +1,4 @@
-package direct
+package blob
 
 import (
 	"errors"
@@ -39,7 +39,7 @@ func (m *mockBlob) getReadCloserCalls() int {
 
 func TestNewReadCloserWrapper(t *testing.T) {
 	blob := &mockBlob{data: "hello world"}
-	wrapper := NewReadCloserWrapper(blob)
+	wrapper := ToReadCloser(blob)
 
 	assert.NotNil(t, wrapper)
 	assert.IsType(t, &readCloserWrapper{}, wrapper)
@@ -47,7 +47,7 @@ func TestNewReadCloserWrapper(t *testing.T) {
 
 func TestReadCloserWrapper_LazyOpening(t *testing.T) {
 	blob := &mockBlob{data: "hello world"}
-	wrapper := NewReadCloserWrapper(blob)
+	wrapper := ToReadCloser(blob)
 
 	// Verify blob.ReadCloser() hasn't been called yet
 	assert.Equal(t, 0, blob.getReadCloserCalls())
@@ -71,7 +71,7 @@ func TestReadCloserWrapper_LazyOpening(t *testing.T) {
 func TestReadCloserWrapper_FullRead(t *testing.T) {
 	testData := "hello world test data"
 	blob := &mockBlob{data: testData}
-	wrapper := NewReadCloserWrapper(blob)
+	wrapper := ToReadCloser(blob)
 
 	// Read all data
 	data, err := io.ReadAll(wrapper)
@@ -90,7 +90,7 @@ func TestReadCloserWrapper_ErrorOnBlobOpen(t *testing.T) {
 		data:          "hello world",
 		readCloserErr: expectedErr,
 	}
-	wrapper := NewReadCloserWrapper(blob)
+	wrapper := ToReadCloser(blob)
 
 	buf := make([]byte, 5)
 	n, err := wrapper.Read(buf)
@@ -102,7 +102,7 @@ func TestReadCloserWrapper_ErrorOnBlobOpen(t *testing.T) {
 
 func TestReadCloserWrapper_CloseWithoutRead(t *testing.T) {
 	blob := &mockBlob{data: "hello world"}
-	wrapper := NewReadCloserWrapper(blob)
+	wrapper := ToReadCloser(blob)
 
 	// Close without reading should not error
 	err := wrapper.Close()
@@ -118,7 +118,7 @@ func TestReadCloserWrapper_CloseWithoutRead(t *testing.T) {
 
 func TestReadCloserWrapper_ReadAfterClose(t *testing.T) {
 	blob := &mockBlob{data: "hello world"}
-	wrapper := NewReadCloserWrapper(blob)
+	wrapper := ToReadCloser(blob)
 
 	// First read to open the blob
 	buf := make([]byte, 5)
@@ -139,7 +139,7 @@ func TestReadCloserWrapper_ReadAfterClose(t *testing.T) {
 
 func TestReadCloserWrapper_MultipleClose(t *testing.T) {
 	blob := &mockBlob{data: "hello world"}
-	wrapper := NewReadCloserWrapper(blob)
+	wrapper := ToReadCloser(blob)
 
 	// First read to open the blob
 	buf := make([]byte, 5)
@@ -159,7 +159,7 @@ func TestReadCloserWrapper_MultipleClose(t *testing.T) {
 
 func TestReadCloserWrapper_ConcurrentAccess(t *testing.T) {
 	blob := &mockBlob{data: strings.Repeat("hello world ", 100)}
-	wrapper := NewReadCloserWrapper(blob)
+	wrapper := ToReadCloser(blob)
 
 	var wg sync.WaitGroup
 	errors := make(chan error, 10)
@@ -192,18 +192,5 @@ func TestReadCloserWrapper_ConcurrentAccess(t *testing.T) {
 	assert.Equal(t, 1, blob.getReadCloserCalls())
 
 	err := wrapper.Close()
-	assert.NoError(t, err)
-}
-
-func TestReadCloserWrapper_WithDirectBlob(t *testing.T) {
-	testData := "hello world from direct blob"
-	directBlob := NewFromBytes([]byte(testData))
-	wrapper := NewReadCloserWrapper(directBlob)
-
-	data, err := io.ReadAll(wrapper)
-	require.NoError(t, err)
-	assert.Equal(t, testData, string(data))
-
-	err = wrapper.Close()
 	assert.NoError(t, err)
 }
