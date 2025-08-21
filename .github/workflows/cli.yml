@@ -65,6 +65,7 @@ jobs:
       - name: Extract Component Descriptor
         working-directory: cli/tmp
         run: |
+          chmod +x ./bin/ocm
           ./bin/ocm get cv \
             ./transport-archive//ocm.software/cli \
             --logoutput stderr \
