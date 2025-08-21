@@ -107,7 +107,7 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 `, FlagRepositoryRef, LegacyDefaultArchiveName, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
 		RunE: AddComponentVersion,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			var preRunOptions []hooks.PreRunOptions
+			var opts []hooks.Option
 
 			constructorPath, err := getComponentConstructorPath(cmd)
 			if err != nil {
@@ -117,24 +117,21 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 			constructorSpec, err := GetComponentConstructor(cmd.Context(), constructorPath)
 			if err != nil {
 				return fmt.Errorf("getting component constructor failed: %w", err)
-			} else {
-				ctx := cmd.Context()
-				fsCfg := ocmctx.FromContext(ctx).FilesystemConfig()
-
-				if fsCfg == nil || fsCfg.WorkingDirectory == "" {
-					// If the working directory is not set, we use the directory of the constructor file as the working directory.
-					dir := filepath.Dir(constructorPath)
-					preRunOptions = append(preRunOptions, hooks.WithWorkingDirectory(dir))
-
-					slog.DebugContext(cmd.Context(), "setting working directory from constructor path", slog.String("working-directory", dir))
-				}
 			}
 
-			if err := hooks.PreRunEWithOptions(cmd, nil, preRunOptions...); err != nil {
+			// If the working directory isn't set yet, default to the constructor file's dir.
+			ctx := cmd.Context()
+			if fsCfg := ocmctx.FromContext(ctx).FilesystemConfig(); fsCfg == nil || fsCfg.WorkingDirectory == "" {
+				dir := filepath.Dir(constructorPath)
+				opts = append(opts, hooks.WithWorkingDirectory(dir))
+				slog.DebugContext(ctx, "setting working directory from constructor path",
+					slog.String("working-directory", dir))
+			}
+
+			if err := hooks.PreRunEWithOptions(cmd, nil, opts...); err != nil {
 				return fmt.Errorf("pre-run setup failed: %w", err)
 			}
 
-			ctx := cmd.Context()
 			ctx = context.WithValue(ctx, ComponentConstructorKey, constructorSpec)
 			cmd.SetContext(ctx)
 

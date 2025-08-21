@@ -6,99 +6,144 @@ import (
 
 	"github.com/spf13/cobra"
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
-
 	"ocm.software/open-component-model/cli/cmd/setup"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )
 
-type PreRunOptions any
+/*
+   ──────────────────────────
+   Option interface + builder
+   ──────────────────────────
+*/
 
-type FilesystemOptions func(cmd *cobra.Command, fsCfgOptions map[string]setup.SetupFilesystemConfigOption) error
+// Option is the single interface all options implement.
+type Option interface {
+	Apply(b *Builder) error
+}
 
-func WithWorkingDirectory(value string) FilesystemOptions {
-	return func(cmd *cobra.Command, fsCfgOptions map[string]setup.SetupFilesystemConfigOption) error {
-		fsCfgOptions[ocmcmd.WorkingDirectoryFlag] = setup.WithWorkingDirectory(value)
-		return nil
+// optionFunc lets simple functions satisfy Option.
+type optionFunc func(*Builder) error
+
+func (f optionFunc) Apply(b *Builder) error { return f(b) }
+
+/*
+   ──────────────────────────
+   Builder (accumulates state)
+   ──────────────────────────
+*/
+
+type Builder struct {
+	cmd *cobra.Command
+
+	// buckets of config the setup layer expects
+	fsOpts map[string]setup.SetupFilesystemConfigOption
+}
+
+func newBuilder(cmd *cobra.Command) *Builder {
+	return &Builder{
+		cmd:    cmd,
+		fsOpts: make(map[string]setup.SetupFilesystemConfigOption),
 	}
 }
 
-func WithTempFolder(value string) FilesystemOptions {
-	return func(cmd *cobra.Command, fsCfgOptions map[string]setup.SetupFilesystemConfigOption) error {
-		fsCfgOptions[ocmcmd.TempFolderFlag] = setup.WithTempFolder(value)
-		return nil
-	}
+// helpers for options to set values
+func (b *Builder) setFS(key string, opt setup.SetupFilesystemConfigOption) {
+	b.fsOpts[key] = opt
 }
 
-// PreRunE sets up the Cmd command with the necessary setup for all cli commands.
+// export for setup
+func (b *Builder) fsAsSlice() []setup.SetupFilesystemConfigOption {
+	out := make([]setup.SetupFilesystemConfigOption, 0, len(b.fsOpts))
+	for _, v := range b.fsOpts {
+		out = append(out, v)
+	}
+	return out
+}
+
+/*
+   ──────────────────────────
+   Option constructors
+   ──────────────────────────
+*/
+
+// WithWorkingDirectory configures the working directory for filesystem setup.
+func WithWorkingDirectory(value string) Option {
+	return optionFunc(func(b *Builder) error {
+		b.setFS(ocmcmd.WorkingDirectoryFlag, setup.WithWorkingDirectory(value))
+		return nil
+	})
+}
+
+// WithTempFolder configures the temp folder for filesystem setup.
+func WithTempFolder(value string) Option {
+	return optionFunc(func(b *Builder) error {
+		b.setFS(ocmcmd.TempFolderFlag, setup.WithTempFolder(value))
+		return nil
+	})
+}
+
+/*
+   ──────────────────────────
+   PreRun entry points
+   ──────────────────────────
+*/
+
+// PreRunE sets up the command with defaults (no extra options).
 func PreRunE(cmd *cobra.Command, _ []string) error {
 	return PreRunEWithOptions(cmd, nil)
 }
 
-// PreRunEWithOptions sets up the Cmd command with the necessary setup for all cli commands.
-// It allows passing additional options to customize the setup process.
-func PreRunEWithOptions(cmd *cobra.Command, _ []string, opts ...PreRunOptions) error {
+// PreRunEWithOptions applies options, then overrides with CLI flags.
+func PreRunEWithOptions(cmd *cobra.Command, _ []string, opts ...Option) error {
+	// logger
 	logger, err := log.GetBaseLogger(cmd)
 	if err != nil {
 		return fmt.Errorf("could not retrieve logger: %w", err)
 	}
 	slog.SetDefault(logger)
 
+	// base OCM config
 	setup.SetupOCMConfig(cmd)
 
-	// CLI flag takes precedence over the config file
-	fsCfgOptionsMap := make(map[string]setup.SetupFilesystemConfigOption)
+	// build initial config from options
+	b := newBuilder(cmd)
+	for _, opt := range opts {
+		if err := opt.Apply(b); err != nil {
+			return fmt.Errorf("apply option: %w", err)
+		}
+	}
 
-	var tempFolderValue string
+	// read CLI flags (CLI takes precedence)
+	// NOTE: if a flag is present & changed, it overrides builder state.
 	if flag := cmd.Flags().Lookup(ocmcmd.TempFolderFlag); flag != nil && flag.Changed {
-		tempFolderValue, err = cmd.Flags().GetString(ocmcmd.TempFolderFlag)
-		if err != nil {
+		if v, err := cmd.Flags().GetString(ocmcmd.TempFolderFlag); err == nil && v != "" {
+			b.setFS(ocmcmd.TempFolderFlag, setup.WithTempFolder(v))
+		} else if err != nil {
 			slog.DebugContext(cmd.Context(), "could not read temp folder flag value", slog.String("error", err.Error()))
 		}
 	}
-	var workingDirectoryValue string
 	if flag := cmd.Flags().Lookup(ocmcmd.WorkingDirectoryFlag); flag != nil && flag.Changed {
-		workingDirectoryValue, err = cmd.Flags().GetString(ocmcmd.WorkingDirectoryFlag)
-		if err != nil {
+		if v, err := cmd.Flags().GetString(ocmcmd.WorkingDirectoryFlag); err == nil && v != "" {
+			b.setFS(ocmcmd.WorkingDirectoryFlag, setup.WithWorkingDirectory(v))
+		} else if err != nil {
 			slog.DebugContext(cmd.Context(), "could not read working directory flag value", slog.String("error", err.Error()))
 		}
 	}
 
-	// Initialize filesystem configuration options
-	for _, opt := range opts {
-		if filesystemOpt, ok := opt.(FilesystemOptions); ok {
-			if err := filesystemOpt(cmd, fsCfgOptionsMap); err != nil {
-				return fmt.Errorf("could not apply filesystem option: %w", err)
-			}
-		}
-	}
-
-	// cli flags take precedence over the config file
-	if tempFolderValue != "" {
-		fsCfgOptionsMap[ocmcmd.TempFolderFlag] = setup.WithTempFolder(tempFolderValue)
-	}
-	if workingDirectoryValue != "" {
-		fsCfgOptionsMap[ocmcmd.WorkingDirectoryFlag] = setup.WithWorkingDirectory(workingDirectoryValue)
-	}
-
-	// fsCfgOptionsMap to slice
-	fsCfgOption := make([]setup.SetupFilesystemConfigOption, 0, len(fsCfgOptionsMap))
-	for _, opt := range fsCfgOptionsMap {
-		fsCfgOption = append(fsCfgOption, opt)
-	}
-
-	setup.SetupFilesystemConfig(cmd, fsCfgOption...)
+	// finalize: apply to the underlying systems
+	setup.SetupFilesystemConfig(cmd, b.fsAsSlice()...)
 
 	if err := setup.SetupPluginManager(cmd); err != nil {
 		return fmt.Errorf("could not setup plugin manager: %w", err)
 	}
-
 	if err := setup.SetupCredentialGraph(cmd); err != nil {
 		return fmt.Errorf("could not setup credential graph: %w", err)
 	}
 
 	ocmctx.Register(cmd)
 
+	// inherit IO from parent if exists
 	if parent := cmd.Parent(); parent != nil {
 		cmd.SetOut(parent.OutOrStdout())
 		cmd.SetErr(parent.ErrOrStderr())
