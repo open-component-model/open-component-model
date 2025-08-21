@@ -132,8 +132,9 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 				return fmt.Errorf("pre-run setup failed: %w", err)
 			}
 
-			ctx = context.WithValue(ctx, ComponentConstructorKey, constructorSpec)
+			ctx = context.WithValue(cmd.Context(), ComponentConstructorKey, constructorSpec)
 			cmd.SetContext(ctx)
+			ocmctx.Register(cmd)
 
 			return nil
 		},
