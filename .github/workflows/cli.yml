@@ -76,9 +76,7 @@ jobs:
         id: git-cliff
         with:
           args: |
-            --include-path "cli/**" --exclude-path "bindings/**/*" --tag-pattern cli/**
-        env:
-          OUTPUT: CHANGELOG.md
+            --include-path "cli/**" --exclude-path "bindings/**/*" --tag-pattern cli/** -o cli/tmp/CHANGELOG.md
 
       - name: Generate Draft Release Notes
         working-directory: cli/tmp
