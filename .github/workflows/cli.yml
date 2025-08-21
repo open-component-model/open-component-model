@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
       - name: Setup Go (required for CLI build)
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
         with:
@@ -38,23 +40,58 @@ jobs:
           ./bin/ocm get cv \
             ./transport-archive//ocm.software/cli \
             --logoutput stderr \
-            -oyaml > descriptor.yaml
+            -oyaml > component-descriptor.yaml
+          
+          yq .component.version component-descriptor.yaml > component-descriptor-version.txt
+
+      - name: changelog with git-cliff
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          args: |
+            --exclude-path ** --include-path cli/**
+        env:
+          OUTPUT: CHANGELOG.md
       - name: Generate Draft Release Notes
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: cli/tmp
         run: |
           cat <<EOF > release-notes.md
-          # Open Component Model CLI – Latest (Unstable) Release
+          # $(cat component-descriptor-version.txt)
           
-          This is a draft release of the Open Component Model CLI, generated from the latest commit on the \`main\` branch.
+          This is a draft release of the next generation Open Component Model CLI, generated from the latest commit on the \`main\` branch.
           
           **Note:** The component descriptor included here is not yet published as a Component Transport Format (CTF). This will be supported in future releases.
+          
+          **Disclaimer:** This is an unstable release and should not be used in production. It has not been signed and is not verified.
+          
+          ## Getting Started
+
+          1. Download the latest CLI build from the release assets of this draft for your architecture.
+          2. Verify it works (you may need to add ocm to your PATH or make it executable):
+             \`\`\`sh
+             ocm version
+             \`\`\`
+          3. Explore the available commands in this build:
+             \`\`\`sh
+             ocm --help
+             \`\`\`
+          
+          For more usage examples, see the current [OCM Development Documentation](https://ocm.software/dev/).
+          
+          <details>
+          <summary>CHANGELOG.md</summary>
+          
+          $(cat CHANGELOG.md)
+          
+          </details>
           
           <details>
           <summary>component-descriptor.yaml</summary>
           
           \`\`\`yaml
-          $(cat descriptor.yaml)
+          $(cat component-descriptor.yaml)
           \`\`\`
           
           </details>
@@ -63,14 +100,13 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: cli/latest
-          name: "Latest CLI (draft)"
+          name: "OCM CLI – Latest (Unstable) Release"
           draft: true
           body_path: cli/tmp/release-notes.md
           fail_on_unmatched_files: true
           preserve_order: true
           files: |
-            cli/tmp/descriptor.yaml
+            cli/tmp/component-descriptor.yaml
             cli/tmp/bin/ocm-linux-*
             cli/tmp/bin/ocm-darwin-*
             cli/tmp/bin/ocm-windows-*
