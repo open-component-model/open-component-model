@@ -18,10 +18,10 @@ const (
 	DefaultLookupPriority = 10
 )
 
-var scheme = runtime.NewScheme()
+var Scheme = runtime.NewScheme()
 
 func init() {
-	scheme.MustRegisterWithAlias(&Config{},
+	Scheme.MustRegisterWithAlias(&Config{},
 		runtime.NewVersionedType(ConfigType, Version),
 		runtime.NewUnversionedType(ConfigType),
 	)
@@ -122,7 +122,7 @@ func Lookup(cfg *genericv1.Config) (*Config, error) {
 	cfgs := make([]*Config, 0, len(cfg.Configurations))
 	for _, entry := range cfg.Configurations {
 		var config Config
-		if err := scheme.Convert(entry, &config); err != nil {
+		if err := Scheme.Convert(entry, &config); err != nil {
 			return nil, fmt.Errorf("failed to decode credential config: %w", err)
 		}
 		cfgs = append(cfgs, &config)
