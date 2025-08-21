@@ -13,6 +13,8 @@ type RendererOptions[T cmp.Ordered] struct {
 	// be a serializable type (e.g., a struct or map). The VertexMarshaller MUST
 	// perform READ-ONLY access to the vertex and its attributes.
 	VertexMarshaller VertexMarshaller[T]
+	// Roots are the root vertices of the list to render.
+	Roots []T
 	// OutputFormat specifies the format in which the output should be rendered.
 	OutputFormat render.OutputFormat
 }
@@ -38,5 +40,12 @@ func WithVertexMarshallerFunc[T cmp.Ordered](marshallerFunc func(*syncdag.Vertex
 func WithOutputFormat[T cmp.Ordered](format render.OutputFormat) RendererOption[T] {
 	return func(opts *RendererOptions[T]) {
 		opts.OutputFormat = format
+	}
+}
+
+// WithRoots sets the roots for the Renderer.
+func WithRoots[T cmp.Ordered](roots ...T) RendererOption[T] {
+	return func(opts *RendererOptions[T]) {
+		opts.Roots = roots
 	}
 }

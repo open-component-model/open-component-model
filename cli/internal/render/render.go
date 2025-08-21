@@ -117,6 +117,9 @@ func renderLoop(ctx context.Context, renderer Renderer, renderState *renderLoopS
 	for {
 		select {
 		case <-ctx.Done():
+			if err := refreshOutput(context.Background(), renderer, renderState); err != nil {
+				return err
+			}
 			return ctx.Err()
 		case <-ticker.C:
 			if err := refreshOutput(ctx, renderer, renderState); err != nil {

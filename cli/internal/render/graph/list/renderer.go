@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
+	"slices"
 
 	"sigs.k8s.io/yaml"
 
@@ -45,11 +47,13 @@ type Renderer[T cmp.Ordered] struct {
 	// The outputFormat specifies the format in which the output should be
 	// rendered.
 	outputFormat render.OutputFormat
-	// The root ID of the tree to render.
-	// The root ID is part of the Renderer instead of being passed to the
+	// The roots of the tree to render.
+	// The roots are part of the Renderer instead of being passed to the
 	// Render method to keep renderer.Renderer decoupled of specific data
 	// structures.
-	root T
+	// The roots are optional. If not provided, the Renderer will
+	// dynamically determine the roots from the DirectedAcyclicGraph.
+	roots []T
 	// The dag from which the tree is rendered.
 	dag *syncdag.DirectedAcyclicGraph[T]
 }
@@ -70,7 +74,7 @@ func (f VertexMarshallerFunc[T]) Marshal(v *syncdag.Vertex[T]) (any, error) {
 }
 
 // New creates a new Renderer for the given DirectedAcyclicGraph.
-func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...RendererOption[T]) *Renderer[T] {
+func New[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], opts ...RendererOption[T]) *Renderer[T] {
 	options := &RendererOptions[T]{}
 	for _, opt := range opts {
 		opt(options)
@@ -85,6 +89,10 @@ func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...Re
 		})
 	}
 
+	if len(options.Roots) == 0 {
+		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from dag")
+	}
+
 	if options.OutputFormat == 0 {
 		options.OutputFormat = render.OutputFormatJSON
 	}
@@ -93,7 +101,7 @@ func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...Re
 		objects:          make([]any, 0),
 		outputFormat:     options.OutputFormat,
 		vertexMarshaller: options.VertexMarshaller,
-		root:             root,
+		roots:            options.Roots,
 		dag:              dag,
 	}
 }
@@ -104,18 +112,28 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	defer func() {
 		t.objects = t.objects[:0]
 	}()
-	var zero T
-	if t.root == zero {
-		return fmt.Errorf("root ID is not set")
+
+	roots := t.roots
+	if len(roots) == 0 {
+		roots = t.dag.Roots()
+	} else {
+		for index, root := range roots {
+			if _, exists := t.dag.GetVertex(root); !exists {
+				// If root does not exist in the dag yet, we exclude it from the
+				// current rendering run.
+				// The root might be added to the graph, after the rendering
+				// has started, so we do not want to fail the rendering.
+				roots = append(roots[:index], roots[index+1:]...)
+			}
+		}
 	}
 
-	_, exists := t.dag.GetVertex(t.root)
-	if !exists {
-		return fmt.Errorf("vertex for rootID %v does not exist", t.root)
-	}
+	slices.Sort(roots)
 
-	if err := t.traverseGraph(ctx, t.root); err != nil {
-		return fmt.Errorf("failed to traverse graph: %w", err)
+	for _, root := range roots {
+		if err := t.traverseGraph(ctx, root); err != nil {
+			return fmt.Errorf("failed to traverse graph: %w", err)
+		}
 	}
 	if err := t.renderObjects(writer); err != nil {
 		return err

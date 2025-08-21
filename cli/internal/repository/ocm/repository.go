@@ -11,12 +11,12 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 	resolverruntimev1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
@@ -27,7 +27,6 @@ import (
 // It manages component references, repository specifications, and credentials for OCM operations.
 type ComponentRepository struct {
 	ref  *compref.Ref                          // Component reference containing repository and component information
-	spec runtime.Typed                         // Repository specification
 	base repository.ComponentVersionRepository // Base repository plugin contract
 }
 
@@ -52,7 +51,15 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *cred
 
 	return &ComponentRepository{
 		ref:  ref,
-		spec: repositorySpec,
+		base: repo,
+	}, nil
+}
+
+// NewFromRef creates a new ComponentRepository instance for the given component reference.
+// It resolves the appropriate plugin and credentials for the repository.
+func NewFromRef2(ctx context.Context, ref *compref.Ref, repo *fallback.FallbackRepository) (*ComponentRepository, error) {
+	return &ComponentRepository{
+		ref:  ref,
 		base: repo,
 	}, nil
 }
