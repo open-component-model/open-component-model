@@ -61,7 +61,7 @@ require (
 	k8s.io/apimachinery v0.33.4 // indirect
 	k8s.io/client-go v0.33.4 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
-	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect
+	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250816122110-cde8f3437bb7 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250816122110-cde8f3437bb7 // indirect
