@@ -32,9 +32,6 @@ import (
 	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
-// ctxKey is a type used to define a command specific context keys to be used in the context.Context.
-type ctxKey struct{}
-
 const (
 	FlagConcurrencyLimit               = "concurrency-limit"
 	FlagRepositoryRef                  = "repository"
@@ -47,9 +44,6 @@ const (
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
 )
-
-// ComponentConstructorKey is the context key used to store the component constructor in the command context.
-var ComponentConstructorKey ctxKey = struct{}{}
 
 type ComponentVersionConflictPolicy string
 
