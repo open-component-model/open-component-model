@@ -48,8 +48,21 @@ func PreRunEWithOptions(cmd *cobra.Command, _ []string, opts ...PreRunOptions) e
 
 	// CLI flag takes precedence over the config file
 	fsCfgOptionsMap := make(map[string]setup.SetupFilesystemConfigOption)
-	tempFolderValue, _ := ocmcmd.LoadFlagFromCommand(cmd, ocmcmd.TempFolderFlag)
-	workingDirectoryValue, _ := ocmcmd.LoadFlagFromCommand(cmd, ocmcmd.WorkingDirectoryFlag)
+
+	var tempFolderValue string
+	if flag := cmd.Flags().Lookup(ocmcmd.TempFolderFlag); flag != nil && flag.Changed {
+		tempFolderValue, err = cmd.Flags().GetString(ocmcmd.TempFolderFlag)
+		if err != nil {
+			slog.DebugContext(cmd.Context(), "could not read temp folder flag value", slog.String("error", err.Error()))
+		}
+	}
+	var workingDirectoryValue string
+	if flag := cmd.Flags().Lookup(ocmcmd.WorkingDirectoryFlag); flag != nil && flag.Changed {
+		workingDirectoryValue, err = cmd.Flags().GetString(ocmcmd.WorkingDirectoryFlag)
+		if err != nil {
+			slog.DebugContext(cmd.Context(), "could not read working directory flag value", slog.String("error", err.Error()))
+		}
+	}
 
 	// Initialize filesystem configuration options
 	for _, opt := range opts {

@@ -59,6 +59,8 @@ func WithTempFolder(tempFolder string) SetupFilesystemConfigOption {
 
 // SetupFilesystemConfig sets up file system configuration entity.
 func SetupFilesystemConfig(cmd *cobra.Command, opts ...SetupFilesystemConfigOption) {
+	var err error
+
 	ocmCtx := ocmctx.FromContext(cmd.Context())
 	cfg := ocmCtx.Configuration()
 	var fsCfg *filesystemv1alpha1.Config
@@ -74,17 +76,30 @@ func SetupFilesystemConfig(cmd *cobra.Command, opts ...SetupFilesystemConfigOpti
 		}
 	}
 
-	// CLI flag takes precedence over the config file
-	if tempFolderValue, _ := ocmcmd.LoadFlagFromCommand(cmd, ocmcmd.TempFolderFlag); tempFolderValue != "" {
-		overrideTempFolder(cmd, fsCfg, tempFolderValue)
-	}
-
-	if workingDirectoryValue, _ := ocmcmd.LoadFlagFromCommand(cmd, ocmcmd.WorkingDirectoryFlag); workingDirectoryValue != "" {
-		overrideWorkingDirectory(cmd, fsCfg, workingDirectoryValue)
-	}
-
 	for _, opt := range opts {
 		opt(fsCfg)
+	}
+
+	// CLI flag takes precedence over the config file
+	var tempFolderValue string
+	if flag := cmd.Flags().Lookup(ocmcmd.TempFolderFlag); flag != nil && flag.Changed {
+		tempFolderValue, err = cmd.Flags().GetString(ocmcmd.TempFolderFlag)
+		if err != nil {
+			slog.DebugContext(cmd.Context(), "could not read temp folder flag value", slog.String("error", err.Error()))
+		}
+	}
+	var workingDirectoryValue string
+	if flag := cmd.Flags().Lookup(ocmcmd.WorkingDirectoryFlag); flag != nil && flag.Changed {
+		workingDirectoryValue, err = cmd.Flags().GetString(ocmcmd.WorkingDirectoryFlag)
+		if err != nil {
+			slog.DebugContext(cmd.Context(), "could not read working directory flag value", slog.String("error", err.Error()))
+		}
+	}
+	if tempFolderValue != "" {
+		overrideTempFolder(cmd, fsCfg, tempFolderValue)
+	}
+	if workingDirectoryValue != "" {
+		overrideWorkingDirectory(cmd, fsCfg, workingDirectoryValue)
 	}
 
 	ensureFilesystemConfig(cmd, cfg, fsCfg)
