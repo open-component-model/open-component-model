@@ -2,41 +2,66 @@ name: CLI
 on:
   push:
     branches:
-    - main
+      - main
     paths:
       - .github/workflows/cli.yml
       - cli/**
   pull_request:
     branches:
-    - main
+      - main
     paths:
       - .github/workflows/cli.yml
       - cli/**
+
 jobs:
-  CTF:
-    name: CTF
+  build:
+    name: Build and Verify
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
+
       - name: Setup Go (required for CLI build)
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
+
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Generate
         run: task cli:generate/ctf
+
       - name: Verify
         run: task cli:verify/ctf
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-build-${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            cli/tmp/**
+
+  release:
+    name: Draft Release
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-build
+          path: cli/tmp
+
       - name: Extract Component Descriptor
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: cli/tmp
         run: |
           ./bin/ocm get cv \
@@ -47,7 +72,6 @@ jobs:
           yq .component.version component-descriptor.yaml > component-descriptor-version.txt
 
       - name: changelog with git-cliff
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: orhun/git-cliff-action@v4
         id: git-cliff
         with:
@@ -55,8 +79,8 @@ jobs:
             --include-path "cli/**" --exclude-path "bindings/**/*" --tag-pattern cli/**
         env:
           OUTPUT: CHANGELOG.md
+
       - name: Generate Draft Release Notes
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: cli/tmp
         run: |
           cat <<EOF > release-notes.md
@@ -98,8 +122,8 @@ jobs:
           
           </details>
           EOF
+
       - name: Create draft release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           name: "OCM CLI – Latest (Unstable) Release"
@@ -114,3 +138,9 @@ jobs:
             cli/tmp/bin/ocm-windows-*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete artifact
+        if: always()
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: cli-build-${{ github.run_id }}
