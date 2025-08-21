@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/opencontainers/go-digest"
 
@@ -15,18 +16,22 @@ import (
 )
 
 // Blob is a blob.Blob that is stored in a fs.FS.
-// It delegates all meta operations to the underlying filesystem.
+// It delegates all meta-operations to the underlying filesystem.
 type Blob struct {
 	// fileSystem is the underlying filesystem.
 	fileSystem fs.FS
 	// path is the original path to the blob.
 	path string
+	// mediaType is the media type of the blob.
+	mediaType atomic.Pointer[string]
 }
 
 var (
-	_ blob.Blob        = (*Blob)(nil)
-	_ blob.SizeAware   = (*Blob)(nil)
-	_ blob.DigestAware = (*Blob)(nil)
+	_ blob.Blob                  = (*Blob)(nil)
+	_ blob.SizeAware             = (*Blob)(nil)
+	_ blob.DigestAware           = (*Blob)(nil)
+	_ blob.MediaTypeAware        = (*Blob)(nil)
+	_ blob.MediaTypeOverrideable = (*Blob)(nil)
 )
 
 func NewFileBlobFromPathWithFlag(path string, flag int) (*Blob, error) {
@@ -110,4 +115,18 @@ func (f *Blob) Digest() (string, bool) {
 		return "", false
 	}
 	return d.String(), true
+}
+
+// MediaType returns the media type of the blob if known.
+func (f *Blob) MediaType() (string, bool) {
+	mt := f.mediaType.Load()
+	if mt == nil {
+		return "", false
+	}
+	return *mt, true
+}
+
+// SetMediaType overrides the media type of the blob.
+func (f *Blob) SetMediaType(mediaType string) {
+	f.mediaType.Store(&mediaType)
 }

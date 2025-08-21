@@ -121,6 +121,37 @@ func TestBlob_FS_Compat(t *testing.T) {
 	r.Equal(b.Size(), int64(len(td)))
 }
 
+func TestBlob_MediaType(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	fsys, err := filesystem.NewFS(tempDir, os.O_RDWR)
+	r.NoError(err)
+
+	filePath := "testfile.txt"
+	b := filesystem.NewFileBlob(fsys, filePath)
+
+	// Initially no media type
+	mediaType, ok := b.MediaType()
+	r.False(ok)
+	r.Equal("", mediaType)
+
+	// Set media type
+	expectedMediaType := "text/plain"
+	b.SetMediaType(expectedMediaType)
+
+	// Verify media type is set
+	mediaType, ok = b.MediaType()
+	r.True(ok)
+	r.Equal(expectedMediaType, mediaType)
+
+	// Override with different media type
+	newMediaType := "application/json"
+	b.SetMediaType(newMediaType)
+	mediaType, ok = b.MediaType()
+	r.True(ok)
+	r.Equal(newMediaType, mediaType)
+}
+
 func TestBlob_FromPath(t *testing.T) {
 	t.Run("base is read only", func(t *testing.T) {
 		td := []byte("bar")
