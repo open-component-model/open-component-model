@@ -5,11 +5,11 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
-	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 )
 
