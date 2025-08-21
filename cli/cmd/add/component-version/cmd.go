@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -45,7 +46,7 @@ const (
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
 
-	componentConstructorKey ctxKey = "componentConstructor"
+	ComponentConstructorKey ctxKey = "componentConstructor"
 )
 
 type ComponentVersionConflictPolicy string
@@ -103,7 +104,13 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 		RunE: AddComponentVersion,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			var preRunOptions []hooks.PreRunOptions
-			constructorSpec, constructorPath, err := GetComponentConstructor(cmd)
+
+			constructorPath, err := getComponentConstructorPath(cmd)
+			if err != nil {
+				return fmt.Errorf("getting component constructor path failed: %w", err)
+			}
+
+			constructorSpec, err := GetComponentConstructor(cmd.Context(), constructorPath)
 			if err != nil {
 				return fmt.Errorf("getting component constructor failed: %w", err)
 			} else {
@@ -124,7 +131,7 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 			}
 
 			ctx := cmd.Context()
-			ctx = context.WithValue(ctx, componentConstructorKey, constructorSpec)
+			ctx = context.WithValue(ctx, ComponentConstructorKey, constructorSpec)
 			cmd.SetContext(ctx)
 
 			return nil
@@ -143,7 +150,10 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {
-	constructorSpec := cmd.Context().Value(componentConstructorKey).(*constructorruntime.ComponentConstructor)
+	constructorSpec, ok := cmd.Context().Value(ComponentConstructorKey).(*constructorruntime.ComponentConstructor)
+	if !ok || constructorSpec == nil {
+		return fmt.Errorf("could not retrieve component constructor from command context. Store the constructor in the command context using the PersistentPreRunE hook or by setting it in the context with %v", ComponentConstructorKey)
+	}
 
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
@@ -227,42 +237,41 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	return &repoSpec, nil
 }
 
-func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentConstructor, string, error) {
-	constructorFlag, err := file.Get(cmd.Flags(), FlagComponentConstructorPath)
+func GetComponentConstructor(ctx context.Context, path string) (*constructorruntime.ComponentConstructor, error) {
+	constructorStream, err := os.Open(path)
 	if err != nil {
-		return nil, "", fmt.Errorf("getting component constructor path flag failed: %w", err)
-	}
-	if !constructorFlag.Exists() {
-		return nil, "", fmt.Errorf("component constructor %q does not exist", constructorFlag.String())
-	} else if constructorFlag.IsDir() {
-		return nil, "", fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
+		return nil, fmt.Errorf("opening component constructor %q failed: %w", path, err)
 	}
 
-	constructorStream, err := constructorFlag.Open()
-	if err != nil {
-		return nil, "", fmt.Errorf("opening component constructor %q failed: %w", constructorFlag.String(), err)
-	}
 	defer func() {
 		if err := constructorStream.Close(); err != nil {
-			slog.WarnContext(cmd.Context(), "error closing component constructor file data stream", "error", err)
+			slog.WarnContext(ctx, "error closing component constructor file data stream", "error", err)
 		}
 	}()
 	constructorData, err := io.ReadAll(constructorStream)
 	if err != nil {
-		return nil, "", fmt.Errorf("reading component constructor %q failed: %w", constructorFlag.String(), err)
+		return nil, fmt.Errorf("reading component constructor %q failed: %w", path, err)
 	}
 
 	data := constructorv1.ComponentConstructor{}
 	if err := yaml.Unmarshal(constructorData, &data); err != nil {
-		return nil, "", fmt.Errorf("unmarshalling component constructor %q failed: %w", constructorFlag.String(), err)
+		return nil, fmt.Errorf("unmarshalling component constructor %q failed: %w", path, err)
 	}
 
-	absPath, err := filepath.Abs(constructorFlag.String())
+	return constructorruntime.ConvertToRuntimeConstructor(&data), nil
+}
+
+func getComponentConstructorPath(cmd *cobra.Command) (string, error) {
+	constructorFlag, err := file.Get(cmd.Flags(), FlagComponentConstructorPath)
 	if err != nil {
-		return nil, "", fmt.Errorf("getting absolute path for component constructor %q failed: %w", constructorFlag.String(), err)
+		return "", fmt.Errorf("getting component constructor path flag failed: %w", err)
 	}
-
-	return constructorruntime.ConvertToRuntimeConstructor(&data), absPath, nil
+	if !constructorFlag.Exists() {
+		return "", fmt.Errorf("component constructor %q does not exist", constructorFlag.String())
+	} else if constructorFlag.IsDir() {
+		return "", fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
+	}
+	return constructorFlag.String(), nil
 }
 
 var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
