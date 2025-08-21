@@ -130,11 +130,6 @@ func persistentPreRunE(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor path failed: %w", err)
 	}
 
-	constructorSpec, err := GetComponentConstructor(cmd.Context(), constructorPath)
-	if err != nil {
-		return fmt.Errorf("getting component constructor failed: %w", err)
-	}
-
 	// If the working directory isn't set yet, default to the constructor file's dir.
 	var opts []hooks.Option
 	ctx := cmd.Context()
@@ -149,19 +144,10 @@ func persistentPreRunE(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("pre-run setup failed: %w", err)
 	}
 
-	ctx = context.WithValue(cmd.Context(), ComponentConstructorKey, constructorSpec)
-	cmd.SetContext(ctx)
-	ocmctx.Register(cmd)
-
 	return nil
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {
-	constructorSpec, ok := cmd.Context().Value(ComponentConstructorKey).(*constructorruntime.ComponentConstructor)
-	if !ok || constructorSpec == nil {
-		return fmt.Errorf("could not retrieve component constructor from command context. Store the constructor in the command context using the PersistentPreRunE hook or by setting it in the context with %v", ComponentConstructorKey)
-	}
-
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not retrieve plugin manager from context")
@@ -195,6 +181,16 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	cacheDir, err := cmd.Flags().GetString(FlagBlobCacheDirectory)
 	if err != nil {
 		return fmt.Errorf("getting blob cache directory flag failed: %w", err)
+	}
+
+	path, err := getComponentConstructorPath(cmd)
+	if err != nil {
+		return fmt.Errorf("getting component constructor path failed: %w", err)
+	}
+
+	constructorSpec, err := GetComponentConstructor(cmd.Context(), path)
+	if err != nil {
+		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
 	instance := &constructorProvider{
