@@ -58,7 +58,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: cli-build
+          name: cli-build-${{ github.run_id }}
           path: cli/tmp
 
       - name: Extract Component Descriptor
@@ -86,9 +86,8 @@ jobs:
           
           This is a draft release of the next generation Open Component Model CLI, generated from the latest commit on the \`main\` branch.
           
-          **Note:** The component descriptor included here is not yet published as a Component Transport Format (CTF). This will be supported in future releases.
-          
-          **Disclaimer:** This is an unstable release and should not be used in production. It has not been signed and is not verified.
+          > ⚠️ **Disclaimer:** This build is **unstable** and not intended for production use.  
+          > It is unsigned, unverified, and the component descriptor is **not yet published** as a Component Transport Format (CTF). CTF support will be added in a future release.
           
           ## Getting Started
 
@@ -103,6 +102,9 @@ jobs:
              \`\`\`
           
           For more usage examples, see the current [OCM Development Documentation](https://ocm.software/dev/).
+          To engage with us, visit the [OCM Community](https://ocm.software/dev/community/engagement/).
+          
+          ## Additional Information
           
           <details>
           <summary>CHANGELOG.md</summary>
