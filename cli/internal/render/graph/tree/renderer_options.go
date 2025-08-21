@@ -10,6 +10,8 @@ import (
 type RendererOptions[T cmp.Ordered] struct {
 	// VertexSerializer serializes a vertex to a string.
 	VertexSerializer VertexSerializer[T]
+	// Roots are the root vertices of the tree to render.
+	Roots []T
 }
 
 // RendererOption is a function that modifies the RendererOptions.
@@ -26,5 +28,12 @@ func WithVertexSerializer[T cmp.Ordered](serializer VertexSerializer[T]) Rendere
 func WithVertexSerializerFunc[T cmp.Ordered](serializerFunc func(*syncdag.Vertex[T]) (string, error)) RendererOption[T] {
 	return func(opts *RendererOptions[T]) {
 		opts.VertexSerializer = VertexSerializerFunc[T](serializerFunc)
+	}
+}
+
+// WithRoots sets the roots for the Renderer.
+func WithRoots[T cmp.Ordered](roots ...T) RendererOption[T] {
+	return func(opts *RendererOptions[T]) {
+		opts.Roots = roots
 	}
 }

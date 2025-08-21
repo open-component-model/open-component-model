@@ -27,7 +27,6 @@ func TestRunRenderLoopYAML(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 
-		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 		marshaller := VertexMarshallerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
 			state, ok := v.GetAttribute(syncdag.AttributeTraversalState)
 			if !ok {
@@ -42,10 +41,12 @@ func TestRunRenderLoopYAML(t *testing.T) {
 				"state": traversalState.String(),
 			}, nil
 		})
-		renderer := New(d, "A", WithOutputFormat[string](render.OutputFormatYAML), WithVertexMarshaller(marshaller))
+		renderer := New(ctx, d, WithOutputFormat[string](render.OutputFormatYAML), WithVertexMarshaller(marshaller))
 
 		refreshRate := 10 * time.Millisecond
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(refreshRate), render.WithRenderOptions(render.WithWriter(writer)))
+
+		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 
 		// sleep to allow ticker based render loop to start
 		time.Sleep(refreshRate)
@@ -207,7 +208,7 @@ func TestRenderOnceYAML(t *testing.T) {
 
 	ctx := t.Context()
 
-	renderer := New(d, "A", WithOutputFormat[string](render.OutputFormatYAML))
+	renderer := New(ctx, d, WithOutputFormat[string](render.OutputFormatYAML))
 
 	// Add A
 	r.NoError(d.AddVertex("A"))
@@ -221,6 +222,7 @@ func TestRenderOnceYAML(t *testing.T) {
 	// Add B
 	r.NoError(d.AddVertex("B"))
 	expected = `- A
+- B
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
