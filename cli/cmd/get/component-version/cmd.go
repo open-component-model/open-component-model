@@ -218,7 +218,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 			eg := errgroup.Group{}
 			for _, desc := range descs {
 				eg.Go(func() error {
-					return dag.Traverse(cmd.Context(), syncdag.NewVertex(desc.Component.ToIdentity().String()), traverseFunc)
+					return dag.Traverse(cmd.Context(), syncdag.NewVertex(desc.Component.ToIdentity().String()), syncdag.DiscoverNeighborsFunc[string](traverseFunc))
 				})
 			}
 			if err := eg.Wait(); err != nil {
