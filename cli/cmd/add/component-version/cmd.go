@@ -91,6 +91,10 @@ By default, the command will look for a file named "%[1]s.yaml" or "%[1]s.yml" i
 If given a path to a directory, the command will look for a file named "%[1]s.yaml" or "%[1]s.yml" in that directory.
 If given a path to a file, the command will attempt to use that file as the %[1]q file.
 
+If you provide a working directory, all paths in the %[1]q file will be resolved relative to that directory.
+Otherwise the path to the %[1]q file will be used as the working directory.
+You are only allowed to reference files within the working directory or subdirectories of the working directory.
+
 In case the component archive does not exist, it will be created by default.
 If not specified, it will be created with the name "transport-archive".
 `,
