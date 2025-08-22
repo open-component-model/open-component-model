@@ -118,9 +118,7 @@ func (d *DirectedAcyclicGraph[T]) Traverse(
 	rootIDs := make([]T, 0, len(options.Roots))
 	if len(options.Roots) > 0 {
 		for _, root := range options.Roots {
-			if err := d.addRawVertex(root, map[string]any{
-				AttributeTraversalState: StateDiscovering,
-			}); err != nil && !errors.Is(err, ErrAlreadyExists) {
+			if err := d.addRawVertex(root); err != nil && !errors.Is(err, ErrAlreadyExists) {
 				return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
 			}
 			rootIDs = append(rootIDs, root.ID)
@@ -137,6 +135,9 @@ func (d *DirectedAcyclicGraph[T]) Traverse(
 	errGroup := errgroup.Group{}
 
 	for _, rootID := range rootIDs {
+		// We ensured that the rootID vertex exists in the graph
+		v, _ := d.GetVertex(rootID)
+		v.Attributes.Store(AttributeTraversalState, StateDiscovering)
 		// Traverse the graph from each rootID vertex concurrently.
 		// This is fine as:
 		// - the doneMap ensures that each vertex is only processed once.
