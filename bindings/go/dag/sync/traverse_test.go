@@ -38,7 +38,8 @@ func TestDAGTraverse(t *testing.T) {
 			}
 			return neighbors, nil
 		}
-		r.NoError(dag.Traverse(ctx, NewVertex("A"), traverseFunc))
+		// Start the traversal from multiple roots
+		r.NoError(dag.Traverse(ctx, DiscoverNeighborsFunc[string](traverseFunc), WithRoots[string](NewVertex("A"), NewVertex("B"), NewVertex("C"), NewVertex("D"))))
 
 		// Check if the graph structure is as expected
 		r.ElementsMatchf(dag.MustGetVertex("A").EdgeKeys(), []string{"B", "C"}, "expected edges from A to B and C, but got %v", dag.MustGetVertex("A").EdgeKeys())
@@ -61,7 +62,7 @@ func TestDAGTraverse(t *testing.T) {
 			return nil, fmt.Errorf("we should never reach this point due to context cancellation")
 		}
 
-		err := dag.Traverse(ctx, NewVertex("A"), traverseFunc)
+		err := dag.Traverse(ctx, DiscoverNeighborsFunc[string](traverseFunc), WithRoots(NewVertex("A")))
 		r.ErrorIsf(err, context.Canceled, "expected error due to context cancellation, but got nil")
 	})
 
@@ -89,7 +90,7 @@ func TestDAGTraverse(t *testing.T) {
 			return neighbors, nil
 		}
 
-		err := dag.Traverse(ctx, NewVertex("A"), traverseFunc, WithGoRoutineLimit(1))
+		err := dag.Traverse(ctx, DiscoverNeighborsFunc[string](traverseFunc), WithRoots(NewVertex("A")), WithGoRoutineLimit[string](1))
 		r.Error(err, "expected error due to missing node in the external graph, but got nil")
 
 		r.Equal(dag.MustGetVertex("A").MustGetAttribute(AttributeTraversalState), StateError, "expected vertex A to be in error state, but got %s", dag.MustGetVertex("A").MustGetAttribute(AttributeTraversalState))
