@@ -7,10 +7,8 @@ import (
 	"io"
 	"math"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
@@ -161,7 +159,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 	resolvers = append(resolvers, resolver)
 	res := make([]*resolverruntime.Resolver, 0, len(resolvers))
-	for _, r := range resolverConfig.Resolvers {
+	for _, r := range resolvers {
 		res = append(res, &r)
 	}
 	fallbackRepo, err := fallback.NewFallbackRepository(cmd.Context(), provider.NewComponentVersionRepositoryProvider(), credentialGraph, res)
@@ -185,16 +183,17 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
 	if recursive >= 0 {
+		const identityAttribute = "identity"
 		dag := syncdag.NewDirectedAcyclicGraph[string]()
-		renderer := tree.New(cmd.Context(), dag)
+		renderer := tree.New(cmd.Context(), dag, tree.WithVertexSerializerFunc(func(v *syncdag.Vertex[string]) (string, error) {
+			id, _ := v.MustGetAttribute(identityAttribute).(runtime.Identity)
+			return fmt.Sprintf("%s:%s", id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]), nil
+		}))
 		renderCtx, cancel := context.WithCancel(cmd.Context())
 		wait := render.RunRenderLoop(renderCtx, renderer)
 
-		traverseFunc := func(ctx context.Context, v *syncdag.Vertex[string]) (neighbors []*syncdag.Vertex[string], err error) {
-			id, err := runtime.ParseIdentity(v.ID)
-			if err != nil {
-				return nil, fmt.Errorf("parsing identity %q failed: %w", v.ID, err)
-			}
+		discoverNeighborsFunc := func(ctx context.Context, v *syncdag.Vertex[string]) (neighbors []*syncdag.Vertex[string], err error) {
+			id, _ := v.MustGetAttribute(identityAttribute).(runtime.Identity)
 			desc, err := fallbackRepo.GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
 			if err != nil {
 				return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
@@ -204,29 +203,22 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 				refID[descruntime.IdentityAttributeName] = reference.Component
 				refID[descruntime.IdentityAttributeVersion] = reference.Version
 				// Create a new vertex for the referenced component version
-				neighbor := syncdag.NewVertex(refID.String())
-
+				neighbor := syncdag.NewVertex(refID.String(), map[string]any{
+					identityAttribute: refID,
+				})
 				neighbors = append(neighbors, neighbor)
 			}
-			time.Sleep(1 * time.Second) // Simulate some processing time
 			return neighbors, nil
 		}
+		roots := make([]*syncdag.Vertex[string], 0, len(descs))
+		for _, desc := range descs {
+			roots = append(roots, syncdag.NewVertex(desc.Component.ToIdentity().String(), map[string]any{
+				identityAttribute: desc.Component.ToIdentity(),
+			}))
+		}
 
-		err := func() error {
-			defer cancel()
-
-			eg := errgroup.Group{}
-			for _, desc := range descs {
-				eg.Go(func() error {
-					return dag.Traverse(cmd.Context(), syncdag.NewVertex(desc.Component.ToIdentity().String()), syncdag.DiscoverNeighborsFunc[string](traverseFunc))
-				})
-			}
-			if err := eg.Wait(); err != nil {
-				return fmt.Errorf("traversing component version graph failed: %w", err)
-			}
-
-			return nil
-		}()
+		err = dag.Traverse(cmd.Context(), syncdag.DiscoverNeighborsFunc[string](discoverNeighborsFunc), syncdag.WithRoots(roots...))
+		cancel()
 		if err != nil {
 			return fmt.Errorf("traversing component version graph failed: %w", err)
 		}
