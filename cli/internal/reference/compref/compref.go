@@ -264,7 +264,7 @@ func GuessType(repository string) (string, error) {
 	}
 
 	// Contains domain-looking part (e.g., github.com, ghcr.io) → assume OCI
-	// Note: Avoids whitelisted "special" suffixes like ".tar"
+	// Note: Avoids allow-listed "special" suffixes like ".tar"
 	if looksLikeDomain(cleaned) {
 		return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
 	}
@@ -297,7 +297,7 @@ func looksLikeDomain(s string) bool {
 
 var allowListArchiveFilePathExtensions = []string{".tar", ".tgz", ".tar.gz"}
 
-// looksLikeArchive checks if the string ends with a whitelisted file extension
+// looksLikeArchive checks if the string ends with an allow-listed file extension
 // this makes it so that a path like "my.path.tar" is always considered an archive, and if it should
 // be interpreted as path, it needs to be passed explicitly
 func looksLikeArchive(s string) bool {
