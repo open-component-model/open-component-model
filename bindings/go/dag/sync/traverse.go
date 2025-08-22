@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"sync"
 
@@ -35,30 +36,40 @@ const (
 	AttributeOrderIndex     = "dag/order-index"
 
 	// StateDiscovering indicates the vertex has been added to the graph, but it
-	// has not yet been processed by the traversalFunc (direct neighbors are not known yet).
+	// has not yet been processed by DiscoverNeighbors (direct neighbors are not
+	// known yet).
 	StateDiscovering TraversalState = iota
-	// StateDiscovered indicates the vertex has been processed by the traversalFunc,
-	// but its neighbors or transitive neighbors have not all been processed by the
-	// traversalFunc yet.
+	// StateDiscovered indicates the vertex has been processed by the
+	// DiscoverNeighbors, but its neighbors or transitive neighbors have not all
+	// been processed by DiscoverNeighbors yet.
 	StateDiscovered
 	// StateCompleted indicates the vertex and all its neighbors have been
-	// processed by the traversalFunc (sub-graph up to this vertex is fully completed).
+	// processed by the DiscoverNeighbors (sub-graph up to this vertex is fully
+	// completed).
 	StateCompleted
-	// StateError indicates the traversalFunc returned an error for this vertex
+	// StateError indicates DiscoverNeighbors returned an error for this vertex
 	// or a neighbor.
 	StateError
 )
 
 // TODO(fabianburth): Add a recursion depth limit
-type TraverseOptions struct {
+type TraverseOptions[T cmp.Ordered] struct {
+	// Roots to start the traversal from
+	Roots          []*Vertex[T]
 	GoRoutineLimit int
 }
 
-type TraverseOption func(*TraverseOptions)
+type TraverseOption[T cmp.Ordered] func(*TraverseOptions[T])
 
-func WithGoRoutineLimit(numGoRoutines int) TraverseOption {
-	return func(options *TraverseOptions) {
+func WithGoRoutineLimit[T cmp.Ordered](numGoRoutines int) TraverseOption[T] {
+	return func(options *TraverseOptions[T]) {
 		options.GoRoutineLimit = numGoRoutines
+	}
+}
+
+func WithRoots[T cmp.Ordered](roots ...*Vertex[T]) TraverseOption[T] {
+	return func(options *TraverseOptions[T]) {
+		options.Roots = roots
 	}
 }
 
@@ -79,10 +90,11 @@ func (f DiscoverNeighborsFunc[T]) DiscoverNeighbors(ctx context.Context, v *Vert
 }
 
 // Traverse performs a concurrent depth-first traversal from the given root vertex.
-// For each vertex v, it calls traversalFunc(v), which MUST treat v as read-only
-// and return its neighbors (created via NewVertex) or an error. The new vertices
-// returned MUST not contain any edges, as traversalFunc will be called for them
-// individually.
+// For each vertex v, it calls discoverer.DiscoverNeighbors(v), which MUST treat
+// v as read-only and return its neighbors (created via NewVertex) or an error.
+// The new vertices returned MUST not contain any edges, as DiscoverNeighbors
+// will be called for them individually.
+// DiscoverNeighbors is guaranteed to be called for each vertex only once.
 //
 // Returned neighbors need no pre-set edges but may include an
 // AttributeOrderIndex and other business logic related attributes which can be
@@ -92,24 +104,50 @@ func (f DiscoverNeighborsFunc[T]) DiscoverNeighbors(ctx context.Context, v *Vert
 // See TraversalState for more details.
 func (d *DirectedAcyclicGraph[T]) Traverse(
 	ctx context.Context,
-	root *Vertex[T],
 	discoverer NeighborDiscoverer[T],
-	options ...TraverseOption,
+	opts ...TraverseOption[T],
 ) error {
-	opts := &TraverseOptions{}
-	for _, opt := range options {
-		opt(opts)
+	options := &TraverseOptions[T]{}
+	for _, opt := range opts {
+		opt(options)
 	}
 
-	if opts.GoRoutineLimit <= 0 {
-		opts.GoRoutineLimit = runtime.NumCPU()
+	if options.GoRoutineLimit <= 0 {
+		options.GoRoutineLimit = runtime.NumCPU()
 	}
-	if err := d.addRawVertex(root, map[string]any{
-		AttributeTraversalState: StateDiscovering,
-	}); err != nil && !errors.Is(err, ErrAlreadyExists) {
-		return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
+	rootIDs := make([]T, 0, len(options.Roots))
+	if len(options.Roots) > 0 {
+		for _, root := range options.Roots {
+			if err := d.addRawVertex(root, map[string]any{
+				AttributeTraversalState: StateDiscovering,
+			}); err != nil && !errors.Is(err, ErrAlreadyExists) {
+				return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
+			}
+			rootIDs = append(rootIDs, root.ID)
+		}
+	} else {
+		slog.DebugContext(ctx, "no roots provided for traversal, using dag roots")
+
+		rootIDs = d.Roots()
+		if len(rootIDs) == 0 {
+			return fmt.Errorf("no roots provided and no roots found in the dag, cannot traverse")
+		}
 	}
-	return d.traverse(ctx, root.ID, discoverer, &sync.Map{}, opts)
+	doneMap := &sync.Map{}
+	errGroup := errgroup.Group{}
+
+	for _, rootID := range rootIDs {
+		// Traverse the graph from each rootID vertex concurrently.
+		// This is fine as:
+		// - the doneMap ensures that each vertex is only processed once.
+		errGroup.Go(func() error {
+			return d.traverse(ctx, rootID, discoverer, doneMap, options)
+		})
+	}
+	if err := errGroup.Wait(); err != nil {
+		return fmt.Errorf("failed to traverse graph: %w", err)
+	}
+	return nil
 }
 
 func (d *DirectedAcyclicGraph[T]) traverse(
@@ -117,7 +155,7 @@ func (d *DirectedAcyclicGraph[T]) traverse(
 	id T,
 	discoverer NeighborDiscoverer[T],
 	doneMap *sync.Map,
-	opts *TraverseOptions,
+	opts *TraverseOptions[T],
 ) error {
 	// Check if the context is done before proceeding the traversal.
 	// Without this check, there is no way to cancel the recursive traversal.
