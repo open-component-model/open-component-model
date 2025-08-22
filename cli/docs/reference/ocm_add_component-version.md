@@ -21,6 +21,11 @@ By default, the command will look for a file named "component-constructor.yaml" 
 If given a path to a directory, the command will look for a file named "component-constructor.yaml" or "component-constructor.yml" in that directory.
 If given a path to a file, the command will attempt to use that file as the "component-constructor" file.
 
+If you provide a working directory, all paths in the "component-constructor" file will be resolved relative to that
+directory.
+Otherwise the path to the "component-constructor" file will be used as the working directory.
+You are only allowed to reference files within the working directory or sub-directories of the working directory.
+
 In case the component archive does not exist, it will be created by default.
 If not specified, it will be created with the name "transport-archive".
 
@@ -87,6 +92,7 @@ add component-version  --repository ./path/to/transport-archive --constructor ./
       --plugin-directory string            default directory path for ocm plugins. (default "$HOME/.config/ocm/plugins")
       --plugin-shutdown-timeout duration   Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
       --temp-folder string                 Specify a custom temporary folder path for filesystem operations.
+      --working-directory string           Specify a custom working directory path to load resources from.
 ```
 
 ### SEE ALSO
