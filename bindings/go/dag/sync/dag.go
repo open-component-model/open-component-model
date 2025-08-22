@@ -37,7 +37,6 @@ var (
 // It uses a sync.Map for concurrent access. Still, it generally CANNOT be
 // assumed to be thread-safe for operations that modify the graph structure.
 type DirectedAcyclicGraph[T cmp.Ordered] struct {
-	mu sync.RWMutex // Mutex to protect concurrent access to the graph
 	// Vertices stores the nodes in the graph
 	Vertices *sync.Map // map[T]*Vertex[T]
 	// OutDegree of each vertex (number of outgoing edges)
