@@ -70,17 +70,17 @@ ocm sign componentversion <ref> \
 ## Consequences
 
 * **Pros**
-* Clear separation of concerns (digest vs. sign).
-* Faster signing (no artifact downloads at sign time).
-* Better CI ergonomics; pinning protects against TOCTOU/"descriptor drift" across environments.
+    * Clear separation of concerns (digest vs. sign).
+    * Faster signing (no artifact downloads at sign time).
+    * Better CI ergonomics; pinning protects against TOCTOU/"descriptor drift" across environments.
 
 * **Cons**
-* Requires an explicit digesting step in pipelines.
-* If descriptors are tampered with between `add digests` and `sign`, signing fails only when `--pin` is used. Without `--pin`, the signer still signs but verification may fail later.
+    * Requires an explicit digesting step in pipelines.
+    * If descriptors are tampered with between `add digests` and `sign`, signing fails only when `--pin` is used. Without `--pin`, the signer still signs but verification may fail later.
 
 * **Mitigations**
-* Recommend `--pin` for cross-env signing.
-* Store and transport the digest alongside the CD (artifact metadata, CI outputs, SBOM annotations, etc.).
+    * Recommend `--pin` for cross-env signing.
+    * Store and transport the digest alongside the CD (artifact metadata, CI outputs, SBOM annotations, etc.).
 
 ---
 
