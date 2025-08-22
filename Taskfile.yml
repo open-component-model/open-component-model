@@ -89,6 +89,10 @@ includes:
     optional: true
     taskfile: ./cli/cmd/download/plugin/integration/Taskfile.yml
     dir: ./cli/cmd/download/plugin/integration
+  cli/cmd/download/resource/integration:
+    optional: true
+    taskfile: ./cli/cmd/download/resource/integration/Taskfile.yml
+    dir: ./cli/cmd/download/resource/integration
 
 vars:
   GO_MODULES:

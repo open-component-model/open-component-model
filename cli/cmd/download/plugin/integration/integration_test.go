@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,7 +58,7 @@ func setupTestCommand(t *testing.T, resourceName, resourceVersion, output string
 	filesystemConfig := &filesystemv1alpha1.Config{}
 
 	// Register built-in plugins
-	if err := builtin.Register(pluginManager, filesystemConfig); err != nil {
+	if err := builtin.Register(pluginManager, filesystemConfig, slog.Default()); err != nil {
 		panic("failed to register builtin plugins: " + err.Error())
 	}
 
