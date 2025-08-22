@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
@@ -85,6 +87,10 @@ By default, the command will look for a file named "%[1]s.yaml" or "%[1]s.yml" i
 If given a path to a directory, the command will look for a file named "%[1]s.yaml" or "%[1]s.yml" in that directory.
 If given a path to a file, the command will attempt to use that file as the %[1]q file.
 
+If you provide a working directory, all paths in the %[1]q file will be resolved relative to that directory.
+Otherwise the path to the %[1]q file will be used as the working directory.
+You are only allowed to reference files within the working directory or sub-directories of the working directory.
+
 In case the component archive does not exist, it will be created by default.
 If not specified, it will be created with the name "transport-archive".
 `,
@@ -96,6 +102,7 @@ Adding component versions to a non-default CTF named %[2]q based on a non-defaul
 add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 `, FlagRepositoryRef, LegacyDefaultArchiveName, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
 		RunE:              AddComponentVersion,
+		PersistentPreRunE: persistentPreRunE,
 		DisableAutoGenTag: true,
 	}
 
@@ -107,6 +114,29 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
 
 	return cmd
+}
+
+func persistentPreRunE(cmd *cobra.Command, _ []string) error {
+	constructorPath, err := getComponentConstructorPath(cmd)
+	if err != nil {
+		return fmt.Errorf("getting component constructor path failed: %w", err)
+	}
+
+	// If the working directory isn't set yet, default to the constructor file's dir.
+	var opts []hooks.Option
+	ctx := cmd.Context()
+	if fsCfg := ocmctx.FromContext(ctx).FilesystemConfig(); fsCfg == nil || fsCfg.WorkingDirectory == "" {
+		dir := filepath.Dir(constructorPath)
+		opts = append(opts, hooks.WithWorkingDirectory(dir))
+		slog.DebugContext(ctx, "setting working directory from constructor path",
+			slog.String("working-directory", dir))
+	}
+
+	if err := hooks.PreRunEWithOptions(cmd, nil, opts...); err != nil {
+		return fmt.Errorf("pre-run setup failed: %w", err)
+	}
+
+	return nil
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {
@@ -145,7 +175,12 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting blob cache directory flag failed: %w", err)
 	}
 
-	constructorSpec, err := GetComponentConstructor(cmd)
+	path, err := getComponentConstructorPath(cmd)
+	if err != nil {
+		return fmt.Errorf("getting component constructor path failed: %w", err)
+	}
+
+	constructorSpec, err := GetComponentConstructor(cmd.Context(), path)
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
@@ -197,36 +232,41 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	return &repoSpec, nil
 }
 
-func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentConstructor, error) {
-	constructorFlag, err := file.Get(cmd.Flags(), FlagComponentConstructorPath)
+func GetComponentConstructor(ctx context.Context, path string) (*constructorruntime.ComponentConstructor, error) {
+	constructorStream, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("getting component constructor path flag failed: %w", err)
+		return nil, fmt.Errorf("opening component constructor %q failed: %w", path, err)
 	}
-	if !constructorFlag.Exists() {
-		return nil, fmt.Errorf("component constructor %q does not exist", constructorFlag.String())
-	} else if constructorFlag.IsDir() {
-		return nil, fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
-	}
-	constructorStream, err := constructorFlag.Open()
-	if err != nil {
-		return nil, fmt.Errorf("opening component constructor %q failed: %w", constructorFlag.String(), err)
-	}
+
 	defer func() {
 		if err := constructorStream.Close(); err != nil {
-			slog.WarnContext(cmd.Context(), "error closing component constructor file data stream", "error", err)
+			slog.WarnContext(ctx, "error closing component constructor file data stream", "error", err)
 		}
 	}()
 	constructorData, err := io.ReadAll(constructorStream)
 	if err != nil {
-		return nil, fmt.Errorf("reading component constructor %q failed: %w", constructorFlag.String(), err)
+		return nil, fmt.Errorf("reading component constructor %q failed: %w", path, err)
 	}
 
 	data := constructorv1.ComponentConstructor{}
 	if err := yaml.Unmarshal(constructorData, &data); err != nil {
-		return nil, fmt.Errorf("unmarshalling component constructor %q failed: %w", constructorFlag.String(), err)
+		return nil, fmt.Errorf("unmarshalling component constructor %q failed: %w", path, err)
 	}
 
 	return constructorruntime.ConvertToRuntimeConstructor(&data), nil
+}
+
+func getComponentConstructorPath(cmd *cobra.Command) (string, error) {
+	constructorFlag, err := file.Get(cmd.Flags(), FlagComponentConstructorPath)
+	if err != nil {
+		return "", fmt.Errorf("getting component constructor path flag failed: %w", err)
+	}
+	if !constructorFlag.Exists() {
+		return "", fmt.Errorf("component constructor %q does not exist", constructorFlag.String())
+	} else if constructorFlag.IsDir() {
+		return "", fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
+	}
+	return constructorFlag.String(), nil
 }
 
 var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
