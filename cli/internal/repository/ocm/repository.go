@@ -10,7 +10,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
-	resolverruntimev1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
@@ -26,38 +25,52 @@ import (
 // useful CLI relevant helper functions that make high level operations easier.
 // It manages component references, repository specifications, and credentials for OCM operations.
 type ComponentRepository struct {
-	ref  *compref.Ref                          // Component reference containing repository and component information
-	base repository.ComponentVersionRepository // Base repository plugin contract
+	ref         *compref.Ref // Component reference containing repository and component information
+	spec        runtime.Typed
+	base        repository.ComponentVersionRepository // Base repository plugin contract
+	credentials map[string]string                     // Credentials for repository access
 }
 
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string, resolvers []*resolverruntimev1.Resolver) (*ComponentRepository, error) {
+// NewFromRef creates a new ComponentRepository instance for the given component reference.
+// It resolves the appropriate plugin and credentials for the repository.
+func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
 
 	repositorySpec := ref.Repository
-	repositoryProvider, err := manager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, repositorySpec)
+	plugin, err := manager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, repositorySpec)
 	if err != nil {
 		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", repositorySpec, err)
 	}
 
-	repo, err := fallback.NewFallbackRepository(ctx, repositoryProvider, graph, resolvers)
+	var creds map[string]string
+	identity, err := plugin.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repositorySpec)
+	if err == nil {
+		if creds, err = graph.Resolve(ctx, identity); err != nil {
+			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", repositorySpec, err)
+		}
+	}
+
+	provider, err := plugin.GetComponentVersionRepository(ctx, repositorySpec, creds)
 	if err != nil {
-		return nil, fmt.Errorf("creating fallback repository for %q failed: %w", repositorySpec, err)
+		return nil, fmt.Errorf("getting repository %q failed: %w", repositorySpec, err)
 	}
 
 	return &ComponentRepository{
-		ref:  ref,
-		base: repo,
+		ref:         ref,
+		spec:        repositorySpec,
+		base:        provider,
+		credentials: creds,
 	}, nil
 }
 
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func NewFromRef2(ctx context.Context, ref *compref.Ref, repo *fallback.FallbackRepository) (*ComponentRepository, error) {
+func NewFromRefWithFallbackRepo(ctx context.Context, ref *compref.Ref, repo *fallback.FallbackRepository) (*ComponentRepository, error) {
 	return &ComponentRepository{
 		ref:  ref,
 		base: repo,
