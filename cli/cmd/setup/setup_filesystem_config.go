@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/bindings/go/configuration"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -44,15 +45,6 @@ type FilesystemConfigOptions struct {
 	TempFolder       string
 }
 
-var scheme = runtime.NewScheme()
-
-func init() {
-	scheme.MustRegisterWithAlias(&filesystemv1alpha1.Config{},
-		runtime.NewVersionedType(filesystemv1alpha1.ConfigType, filesystemv1alpha1.Version))
-	scheme.MustRegisterWithAlias(&filesystemv1alpha1.Config{},
-		runtime.NewUnversionedType(filesystemv1alpha1.ConfigType))
-}
-
 // FilesystemConfig sets up file system configuration entity.
 func FilesystemConfig(cmd *cobra.Command, opts FilesystemConfigOptions) {
 	ocmCtx := ocmctx.FromContext(cmd.Context())
@@ -69,7 +61,7 @@ func FilesystemConfig(cmd *cobra.Command, opts FilesystemConfigOptions) {
 			fsCfg = _fsCfg
 		}
 	}
-	_, _ = scheme.DefaultType(fsCfg)
+	_, _ = configuration.Scheme.DefaultType(fsCfg)
 
 	// Manually set CLI flags takes precedence over the config file or over any passed options
 	// (i.e. from child commands)
@@ -121,7 +113,7 @@ func addFilesystemConfigToCentralConfig(cmd *cobra.Command, fsCfg *filesystemv1a
 		return fmt.Errorf("no central configuration available")
 	}
 	raw := &runtime.Raw{}
-	if err := scheme.Convert(fsCfg, raw); err != nil {
+	if err := configuration.Scheme.Convert(fsCfg, raw); err != nil {
 		return fmt.Errorf("failed to convert filesystem config to raw: %w", err)
 	}
 	cfg.Configurations = append(cfg.Configurations, raw)
