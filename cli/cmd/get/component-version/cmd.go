@@ -14,6 +14,7 @@ import (
 	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -24,6 +25,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/render"
+	"ocm.software/open-component-model/cli/internal/render/graph/list"
 	"ocm.software/open-component-model/cli/internal/render/graph/tree"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
@@ -183,8 +185,38 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
 	if recursive >= 0 {
-		const identityAttribute = "identity"
 		dag := syncdag.NewDirectedAcyclicGraph[string]()
+
+		var renderer render.Renderer
+		const identityAttribute = "identity"
+		const descriptorAttribute = "descriptor"
+		descriptorVertexSerializer := list.VertexSerializerFunc[string](func(vertex *syncdag.Vertex[string]) (any, error) {
+			descriptor, _ := vertex.MustGetAttribute(descriptorAttribute).(*descruntime.Descriptor)
+			descriptorV2, err := descruntime.ConvertToV2(descriptorv2.Scheme, descriptor)
+			if err != nil {
+				return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
+			}
+			return descriptorV2, nil
+		})
+		treeNodeVertexSerializer := tree.VertexSerializerFunc[string](func(vertex *syncdag.Vertex[string]) (string, error) {
+			id, _ := vertex.MustGetAttribute(identityAttribute).(runtime.Identity)
+			return fmt.Sprintf("%s:%s", id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]), nil
+		})
+
+		switch output {
+		case render.OutputFormatJSON.String():
+			serializer := list.NewSerializer(list.WithVertexSerializer(descriptorVertexSerializer), list.WithOutputFormat[string](render.OutputFormatJSON))
+			renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
+		case render.OutputFormatYAML.String():
+			serializer := list.NewSerializer(list.WithVertexSerializer(descriptorVertexSerializer), list.WithOutputFormat[string](render.OutputFormatYAML))
+			renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
+		case render.OutputFormatNDJSON.String():
+			serializer := list.NewSerializer(list.WithVertexSerializer(descriptorVertexSerializer), list.WithOutputFormat[string](render.OutputFormatNDJSON))
+			renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
+		case render.OutputFormatTree.String():
+			serializer := treeNodeVertexSerializer
+			renderer = tree.New(cmd.Context(), dag, tree.WithVertexSerializer(serializer))
+		}
 		renderer := tree.New(cmd.Context(), dag, tree.WithVertexSerializerFunc(func(v *syncdag.Vertex[string]) (string, error) {
 			id, _ := v.MustGetAttribute(identityAttribute).(runtime.Identity)
 			return fmt.Sprintf("%s:%s", id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]), nil
