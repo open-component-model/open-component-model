@@ -27,21 +27,21 @@ func TestRunRenderLoopYAML(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 
-		marshaller := VertexMarshallerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
-			state, ok := v.GetAttribute(syncdag.AttributeTraversalState)
+		serializer := func(vertex *syncdag.Vertex[string]) (any, error) {
+			state, ok := vertex.GetAttribute(syncdag.AttributeTraversalState)
 			if !ok {
-				return nil, fmt.Errorf("attribute %s not found for vertex %s", syncdag.AttributeTraversalState, v.ID)
+				return nil, fmt.Errorf("attribute %s not found for vertex %s", syncdag.AttributeTraversalState, vertex.ID)
 			}
 			traversalState, ok := state.(syncdag.TraversalState)
 			if !ok {
-				return nil, fmt.Errorf("attribute %s for vertex %s is not of type %T", syncdag.AttributeTraversalState, v.ID, syncdag.TraversalState(0))
+				return nil, fmt.Errorf("attribute %s for vertex %s is not of type %T", syncdag.AttributeTraversalState, vertex.ID, syncdag.TraversalState(0))
 			}
 			return map[string]any{
-				"id":    v.ID,
+				"id":    vertex.ID,
 				"state": traversalState.String(),
 			}, nil
-		})
-		renderer := New(ctx, d, WithOutputFormat[string](render.OutputFormatYAML), WithVertexMarshaller(marshaller))
+		}
+		renderer := New(ctx, d, WithListSerializer(NewSerializer(WithVertexSerializerFunc(serializer), WithOutputFormat[string](render.OutputFormatYAML))))
 
 		refreshRate := 10 * time.Millisecond
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(refreshRate), render.WithRenderOptions(render.WithWriter(writer)))
@@ -208,7 +208,7 @@ func TestRenderOnceYAML(t *testing.T) {
 
 	ctx := t.Context()
 
-	renderer := New(ctx, d, WithOutputFormat[string](render.OutputFormatYAML))
+	renderer := New(ctx, d, WithListSerializer(NewSerializer(WithOutputFormat[string](render.OutputFormatYAML))))
 
 	// Add A
 	r.NoError(d.AddVertex("A"))
