@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
@@ -83,7 +84,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 		DisableAutoGenTag: true,
 	}
 
-	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{"table", "yaml", "json"}, "output format of the component descriptors")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{"table", "yaml", "json", "tree"}, "output format of the component descriptors")
 	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
@@ -133,7 +134,6 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
-	_ = recursive // TODO: implement recursive resolution
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
@@ -169,7 +169,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating fallback repository failed: %w", err)
 	}
 
-	repo, err := ocm.NewFromRef2(cmd.Context(), ref, fallbackRepo)
+	repo, err := ocm.NewFromRefWithFallbackRepo(cmd.Context(), ref, fallbackRepo)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
@@ -198,9 +198,27 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 			}
 			return descriptorV2, nil
 		})
-		treeNodeVertexSerializer := tree.VertexSerializerFunc[string](func(vertex *syncdag.Vertex[string]) (string, error) {
+		treeVertexSerializer := tree.VertexSerializerFunc[string](func(vertex *syncdag.Vertex[string]) (string, error) {
 			id, _ := vertex.MustGetAttribute(identityAttribute).(runtime.Identity)
 			return fmt.Sprintf("%s:%s", id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]), nil
+		})
+		tableListSerializer := list.ListSerializerFunc[string](func(writer io.Writer, vertices []*syncdag.Vertex[string]) error {
+			t := table.NewWriter()
+			t.SetOutputMirror(writer)
+			t.AppendHeader(table.Row{"Component", "Version", "Provider"})
+			for _, vertex := range vertices {
+				descriptor, _ := vertex.MustGetAttribute(descriptorAttribute).(*descruntime.Descriptor)
+				t.AppendRow(table.Row{descriptor.Component.Name, descriptor.Component.Version, descriptor.Component.Provider.Name})
+			}
+			t.SetColumnConfigs([]table.ColumnConfig{
+				{Number: 1, AutoMerge: true},
+				{Number: 3, AutoMerge: true},
+			})
+			style := table.StyleLight
+			style.Options.DrawBorder = false
+			t.SetStyle(style)
+			t.Render()
+			return nil
 		})
 
 		switch output {
@@ -214,13 +232,15 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 			serializer := list.NewSerializer(list.WithVertexSerializer(descriptorVertexSerializer), list.WithOutputFormat[string](render.OutputFormatNDJSON))
 			renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
 		case render.OutputFormatTree.String():
-			serializer := treeNodeVertexSerializer
+			serializer := treeVertexSerializer
 			renderer = tree.New(cmd.Context(), dag, tree.WithVertexSerializer(serializer))
+		case render.OutputFormatTable.String():
+			serializer := tableListSerializer
+			renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
+		default:
+			return fmt.Errorf("invalid output format %q", output)
 		}
-		renderer := tree.New(cmd.Context(), dag, tree.WithVertexSerializerFunc(func(v *syncdag.Vertex[string]) (string, error) {
-			id, _ := v.MustGetAttribute(identityAttribute).(runtime.Identity)
-			return fmt.Sprintf("%s:%s", id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]), nil
-		}))
+
 		renderCtx, cancel := context.WithCancel(cmd.Context())
 		wait := render.RunRenderLoop(renderCtx, renderer)
 
@@ -230,6 +250,8 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
 			}
+			v.Attributes.Store(descriptorAttribute, desc)
+
 			for _, reference := range desc.Component.References {
 				refID := make(runtime.Identity, 2)
 				refID[descruntime.IdentityAttributeName] = reference.Component
