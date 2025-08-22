@@ -21,8 +21,7 @@ By default, the command will look for a file named "component-constructor.yaml" 
 If given a path to a directory, the command will look for a file named "component-constructor.yaml" or "component-constructor.yml" in that directory.
 If given a path to a file, the command will attempt to use that file as the "component-constructor" file.
 
-If you provide a working directory, all paths in the "component-constructor" file will be resolved relative to that
-directory.
+If you provide a working directory, all paths in the "component-constructor" file will be resolved relative to that directory.
 Otherwise the path to the "component-constructor" file will be used as the working directory.
 You are only allowed to reference files within the working directory or sub-directories of the working directory.
 
