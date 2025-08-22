@@ -469,6 +469,42 @@ resources:
 			r.NoError(err, "could not construct component version with working directory")
 		})
 	})
+
+	t.Run("archives", func(t *testing.T) {
+		tcs := []string{
+			".tar",
+			".tar.gz",
+		}
+		for _, tc := range tcs {
+			t.Run(tc, func(t *testing.T) {
+				tmp := t.TempDir()
+				constructorYAML = fmt.Sprintf(`
+name: ocm.software/examples-01
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file-replaced
+    type: blob
+    input:
+      type: utf8/v1
+      text: foobar
+`)
+
+				// Create a replacement test file to be added to the component version
+				constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+				r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+				_, err := test.OCM(t, test.WithArgs("add", "cv",
+					"--constructor", constructorYAMLFilePath,
+					"--repository", filepath.Join("transport-archive", tc),
+					"--working-directory", tmp,
+				), test.WithOutput(logs))
+
+				r.NoError(err, "could not construct component version with working directory")
+			})
+		}
+	})
 }
 
 func Test_Version(t *testing.T) {
