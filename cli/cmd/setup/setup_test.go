@@ -110,8 +110,7 @@ func TestSetupTempFolderFilesystemConfig(t *testing.T) {
 				configsBefore = len(tt.existingConfig.Configurations)
 			}
 
-			// Call SetupFilesystemConfig
-			SetupFilesystemConfig(cmd)
+			FilesystemConfig(cmd, FilesystemConfigOptions{})
 
 			// Verify the filesystem config in context
 			ocmContext := ocmctx.FromContext(cmd.Context())
@@ -234,8 +233,8 @@ func TestSetupWorkingDirFilesystemConfig(t *testing.T) {
 				configsBefore = len(tt.existingConfig.Configurations)
 			}
 
-			// Call SetupFilesystemConfig
-			SetupFilesystemConfig(cmd)
+			// Call FilesystemConfig
+			FilesystemConfig(cmd, FilesystemConfigOptions{})
 
 			// Verify the filesystem config in context
 			ocmContext := ocmctx.FromContext(cmd.Context())
@@ -510,7 +509,7 @@ func TestFilesystemConfigIntegration(t *testing.T) {
 	cmd := &cobra.Command{
 		Use: "test",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			SetupFilesystemConfig(cmd)
+			FilesystemConfig(cmd, FilesystemConfigOptions{})
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

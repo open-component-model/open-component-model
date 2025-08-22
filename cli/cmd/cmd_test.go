@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -459,12 +460,14 @@ resources:
 			constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-replace-wd.yaml")
 			r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
 
-			_, err := test.OCM(t, test.WithArgs("add", "cv",
+			cmd, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
 				"--working-directory", tmp,
 				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithOutput(logs))
+
+			r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
 
 			r.NoError(err, "could not construct component version with working directory")
 		})
