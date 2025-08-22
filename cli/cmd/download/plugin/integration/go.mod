@@ -48,8 +48,8 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.2 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250816122110-cde8f3437bb7 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/input/dir v0.0.0-20250816122110-cde8f3437bb7 // indirect
-	ocm.software/open-component-model/bindings/go/input/file v0.0.0-20250816122110-cde8f3437bb7 // indirect
+	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
+	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250816122110-cde8f3437bb7 // indirect
 	ocm.software/open-component-model/bindings/go/oci v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250816122110-cde8f3437bb7 // indirect
