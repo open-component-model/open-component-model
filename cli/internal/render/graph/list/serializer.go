@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"io"
 
+	"sigs.k8s.io/yaml"
+
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/cli/internal/render"
-	"sigs.k8s.io/yaml"
 )
 
 // Serializer implements the ListSerializer interface for serializing
@@ -36,22 +37,11 @@ func (f VertexSerializerFunc[T]) Serialize(vertex *syncdag.Vertex[T]) (any, erro
 }
 
 func NewSerializer[T cmp.Ordered](opts ...SerializerOption[T]) Serializer[T] {
-	options := SerializerOptions[T]{}
+	serializer := Serializer[T]{}
 	for _, opt := range opts {
-		opt(&options)
+		opt(&serializer)
 	}
-	if options.VertexSerializer == nil {
-		options.VertexSerializer = VertexSerializerFunc[T](func(vertex *syncdag.Vertex[T]) (any, error) {
-			return fmt.Sprintf("%v", vertex.ID), nil
-		})
-	}
-	if options.OutputFormat == 0 {
-		options.OutputFormat = render.OutputFormatJSON
-	}
-	return Serializer[T]{
-		VertexSerializer: options.VertexSerializer,
-		OutputFormat:     options.OutputFormat,
-	}
+	return serializer
 }
 
 func (s Serializer[T]) Serialize(writer io.Writer, vertices []*syncdag.Vertex[T]) error {

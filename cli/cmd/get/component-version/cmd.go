@@ -9,6 +9,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
+
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
@@ -166,6 +167,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+//nolint:staticcheck // no replacement for resolvers available yet
 func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime.Resolver, error) {
 	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
 	if err != nil {
@@ -251,7 +253,7 @@ func renderComponentsRecursive(cmd *cobra.Command, repo *ocm.ComponentRepository
 		serializer := tableListSerializer
 		renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
 	default:
-		return fmt.Errorf("invalid format format %q", format)
+		return fmt.Errorf("invalid output format %q", format)
 	}
 
 	// Start the render loop.
