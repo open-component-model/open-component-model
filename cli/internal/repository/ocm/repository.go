@@ -6,17 +6,19 @@ package ocm
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
-	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
-
 	"ocm.software/open-component-model/bindings/go/blob"
+	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
+	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
@@ -70,10 +72,29 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *cred
 
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func NewFromRefWithFallbackRepo(ctx context.Context, ref *compref.Ref, repo *fallback.FallbackRepository) (*ComponentRepository, error) {
+func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, resolvers []resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
+	ref, err := compref.Parse(componentReference)
+	if err != nil {
+		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
+	}
+
+	resolver := resolverruntime.Resolver{
+		Repository: ref.Repository,
+		Prefix:     ref.Component,
+		Priority:   math.MaxInt,
+	}
+	resolvers = append(resolvers, resolver)
+	res := make([]*resolverruntime.Resolver, 0, len(resolvers))
+	for _, r := range resolvers {
+		res = append(res, &r)
+	}
+	fallbackRepo, err := fallback.NewFallbackRepository(ctx, provider.NewComponentVersionRepositoryProvider(), graph, res)
+	if err != nil {
+		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
+	}
 	return &ComponentRepository{
 		ref:  ref,
-		base: repo,
+		base: fallbackRepo,
 	}, nil
 }
 
