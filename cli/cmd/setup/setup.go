@@ -109,9 +109,12 @@ func SetupCredentialGraph(cmd *cobra.Command) error {
 	var err error
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize credential graph")
-		credCfg = &credentialsRuntime.Config{}
 	} else if credCfg, err = credentialsConfig.LookupCredentialConfiguration(cfg); err != nil {
 		return fmt.Errorf("could not get credential configuration: %w", err)
+	}
+
+	if credCfg == nil {
+		credCfg = &credentialsRuntime.Config{}
 	}
 
 	graph, err := credentials.ToGraph(cmd.Context(), credCfg, opts)
