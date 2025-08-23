@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -13,15 +12,12 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -137,7 +133,12 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
+	config := ocmctx.FromContext(cmd.Context()).Configuration()
+	resolvers, err := resolversFromConfig(config, err)
+	if err != nil {
+		return fmt.Errorf("getting resolvers from configuration failed: %w", err)
+	}
+	repo, err := ocm.NewFromRefWithFallbackRepo(cmd.Context(), pluginManager, credentialGraph, resolvers, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
@@ -154,12 +155,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	if recursive >= 0 {
-		fallbackRepo, err := newFallbackRepo(cmd, repo, credentialGraph)
-		if err != nil {
-			return fmt.Errorf("failed to create fallback repo: %w", err)
-		}
-
-		if err := renderComponentsRecursive(cmd, fallbackRepo, descs, output); err != nil {
+		if err := renderComponentsRecursive(cmd, repo, descs, output); err != nil {
 			return fmt.Errorf("failed to render components recursively: %w", err)
 		}
 		return nil
@@ -170,9 +166,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func newFallbackRepo(cmd *cobra.Command, repo *ocm.ComponentRepository, credentialGraph *credentials.Graph) (*fallback.FallbackRepository, error) {
-	config := ocmctx.FromContext(cmd.Context()).Configuration()
-
+func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime.Resolver, error) {
 	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
 	if err != nil {
 		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
@@ -184,22 +178,7 @@ func newFallbackRepo(cmd *cobra.Command, repo *ocm.ComponentRepository, credenti
 		return nil, fmt.Errorf("converting resolver configuration from v1 to runtime failed: %w", err)
 	}
 	resolvers := resolverConfig.Resolvers
-
-	resolver := resolverruntime.Resolver{
-		Repository: repo.ComponentReference().Repository,
-		Prefix:     repo.ComponentReference().Component,
-		Priority:   math.MaxInt,
-	}
-	resolvers = append(resolvers, resolver)
-	res := make([]*resolverruntime.Resolver, 0, len(resolvers))
-	for _, r := range resolvers {
-		res = append(res, &r)
-	}
-	fallbackRepo, err := fallback.NewFallbackRepository(cmd.Context(), provider.NewComponentVersionRepositoryProvider(), credentialGraph, res)
-	if err != nil {
-		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
-	}
-	return fallbackRepo, nil
+	return resolvers, nil
 }
 
 func renderComponents(cmd *cobra.Command, descs []*descruntime.Descriptor, format string) error {
@@ -214,7 +193,7 @@ func renderComponents(cmd *cobra.Command, descs []*descruntime.Descriptor, forma
 	return nil
 }
 
-func renderComponentsRecursive(cmd *cobra.Command, fallbackRepo *fallback.FallbackRepository, descs []*descruntime.Descriptor, format string) error {
+func renderComponentsRecursive(cmd *cobra.Command, repo *ocm.ComponentRepository, descs []*descruntime.Descriptor, format string) error {
 	dag := syncdag.NewDirectedAcyclicGraph[string]()
 
 	var renderer render.Renderer
@@ -283,7 +262,7 @@ func renderComponentsRecursive(cmd *cobra.Command, fallbackRepo *fallback.Fallba
 	// a vertex (component version).
 	discoverNeighborsFunc := func(ctx context.Context, v *syncdag.Vertex[string]) (neighbors []*syncdag.Vertex[string], err error) {
 		id, _ := v.MustGetAttribute(identityAttribute).(runtime.Identity)
-		desc, err := fallbackRepo.GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
+		desc, err := repo.ComponentVersionRepository().GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
 		if err != nil {
 			return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
 		}
