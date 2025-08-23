@@ -70,20 +70,25 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *cred
 	}, nil
 }
 
-// NewFromRef creates a new ComponentRepository instance for the given component reference.
+// NewFromRefWithFallbackRepo creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
 func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, resolvers []resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
-
-	resolver := resolverruntime.Resolver{
-		Repository: ref.Repository,
-		Prefix:     ref.Component,
-		Priority:   math.MaxInt,
+	if len(resolvers) == 0 {
+		resolvers = make([]resolverruntime.Resolver, 0)
 	}
-	resolvers = append(resolvers, resolver)
+
+	if ref.Repository != nil {
+		resolvers = append(resolvers, resolverruntime.Resolver{
+			Repository: ref.Repository,
+			// Add the current repository as a resolver with the highest possible
+			// priority.
+			Priority: math.MaxInt,
+		})
+	}
 	res := make([]*resolverruntime.Resolver, 0, len(resolvers))
 	for _, r := range resolvers {
 		res = append(res, &r)
@@ -137,6 +142,10 @@ func (repo *ComponentRepository) GetLocalResource(ctx context.Context, identity 
 	}
 
 	return repo.base.GetLocalResource(ctx, repo.ref.Component, version, identity)
+}
+
+func (repo *ComponentRepository) ComponentVersionRepository() repository.ComponentVersionRepository {
+	return repo.base
 }
 
 // ComponentReference returns the component reference associated with this repository.
