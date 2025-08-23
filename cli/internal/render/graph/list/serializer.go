@@ -41,6 +41,14 @@ func NewSerializer[T cmp.Ordered](opts ...SerializerOption[T]) Serializer[T] {
 	for _, opt := range opts {
 		opt(&serializer)
 	}
+	if serializer.VertexSerializer == nil {
+		serializer.VertexSerializer = VertexSerializerFunc[T](func(vertex *syncdag.Vertex[T]) (any, error) {
+			return fmt.Sprintf("%v", vertex.ID), nil
+		})
+	}
+	if serializer.OutputFormat == 0 {
+		serializer.OutputFormat = render.OutputFormatJSON
+	}
 	return serializer
 }
 
@@ -79,6 +87,8 @@ func (s Serializer[T]) Serialize(writer io.Writer, vertices []*syncdag.Vertex[T]
 		if _, err = writer.Write(data); err != nil {
 			return fmt.Errorf("writing YAML data to writer failed: %w", err)
 		}
+	default:
+		return fmt.Errorf("unknown output format: %q", s.OutputFormat)
 	}
 	return nil
 }
