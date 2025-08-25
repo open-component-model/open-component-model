@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
@@ -217,6 +218,20 @@ func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptio
 	if err != nil {
 		return nil, fmt.Errorf("listing component versions failed: %w", err)
 	}
+
+	// Ensure correct order.
+	// We sort here, so we do not have to import semver into each repository
+	// implementation.
+	semverVersions := make([]*semver.Version, len(versions))
+	for index, version := range versions {
+		semverVersion, err := semver.NewVersion(version)
+		if err != nil {
+			return nil, fmt.Errorf("failed parsing version: %s", err)
+		}
+
+		semverVersions[index] = semverVersion
+	}
+	sort.Sort(semver.Collection(semverVersions))
 
 	if opts.SemverConstraint != "" {
 		if versions, err = filterBySemver(versions, opts.SemverConstraint); err != nil {
