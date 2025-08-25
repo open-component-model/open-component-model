@@ -22,7 +22,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 )
 
-func SetupOCMConfig(cmd *cobra.Command) {
+func OCMConfig(cmd *cobra.Command) {
 	if cfg, err := configuration.GetFlattenedOCMConfigForCommand(cmd); err != nil {
 		slog.DebugContext(cmd.Context(), "could not get configuration", slog.String("error", err.Error()))
 	} else {
@@ -31,7 +31,7 @@ func SetupOCMConfig(cmd *cobra.Command) {
 	}
 }
 
-func SetupPluginManager(cmd *cobra.Command) error {
+func PluginManager(cmd *cobra.Command) error {
 	pluginManager := manager.NewPluginManager(cmd.Context())
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
@@ -88,7 +88,7 @@ func SetupPluginManager(cmd *cobra.Command) error {
 	return nil
 }
 
-func SetupCredentialGraph(cmd *cobra.Command) error {
+func CredentialGraph(cmd *cobra.Command) error {
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not get plugin manager to initialize credential graph")

@@ -11,7 +11,7 @@ require (
 	golang.org/x/sync v0.16.0
 	golang.org/x/sys v0.35.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.8
-	ocm.software/open-component-model/bindings/go/configuration v0.0.6
+	ocm.software/open-component-model/bindings/go/configuration v0.0.7
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250816122110-cde8f3437bb7
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0

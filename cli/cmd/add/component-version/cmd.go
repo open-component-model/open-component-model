@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -117,23 +116,27 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 }
 
 func persistentPreRunE(cmd *cobra.Command, _ []string) error {
-	constructorPath, err := getComponentConstructorPath(cmd)
+	constructorFile, err := getComponentConstructorFile(cmd)
 	if err != nil {
-		return fmt.Errorf("getting component constructor path failed: %w", err)
+		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
-	// If the working directory isn't set yet, default to the constructor file's dir.
-	var opts []hooks.Option
+	// If the working directory isn't set yet, default to the constructorFile file's dir.
+	cfg := hooks.Config{}
 	ctx := cmd.Context()
 	if fsCfg := ocmctx.FromContext(ctx).FilesystemConfig(); fsCfg == nil || fsCfg.WorkingDirectory == "" {
-		dir := filepath.Dir(constructorPath)
-		opts = append(opts, hooks.WithWorkingDirectory(dir))
-		slog.DebugContext(ctx, "setting working directory from constructor path",
-			slog.String("working-directory", dir))
+		path := constructorFile.String()
+		// if our flag is not absolute, make it absolute to pass into potential plugins
+		if path, err = filepath.Abs(path); err != nil {
+			return err
+		}
+		cfg.WorkingDirectory = filepath.Dir(path)
+		slog.DebugContext(ctx, "setting working directory from constructorFile path",
+			slog.String("working-directory", cfg.WorkingDirectory))
 	}
 
-	if err := hooks.PreRunEWithOptions(cmd, nil, opts...); err != nil {
-		return fmt.Errorf("pre-run setup failed: %w", err)
+	if err := hooks.PreRunEWithConfig(cmd, cfg); err != nil {
+		return fmt.Errorf("pre-run configuration for component constructors failed: %w", err)
 	}
 
 	return nil
@@ -175,12 +178,12 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting blob cache directory flag failed: %w", err)
 	}
 
-	path, err := getComponentConstructorPath(cmd)
+	constructorFile, err := getComponentConstructorFile(cmd)
 	if err != nil {
 		return fmt.Errorf("getting component constructor path failed: %w", err)
 	}
 
-	constructorSpec, err := GetComponentConstructor(cmd.Context(), path)
+	constructorSpec, err := GetComponentConstructor(constructorFile)
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
@@ -232,17 +235,12 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	return &repoSpec, nil
 }
 
-func GetComponentConstructor(ctx context.Context, path string) (*constructorruntime.ComponentConstructor, error) {
-	constructorStream, err := os.Open(path)
+func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentConstructor, error) {
+	path := file.String()
+	constructorStream, err := file.Open()
 	if err != nil {
 		return nil, fmt.Errorf("opening component constructor %q failed: %w", path, err)
 	}
-
-	defer func() {
-		if err := constructorStream.Close(); err != nil {
-			slog.WarnContext(ctx, "error closing component constructor file data stream", "error", err)
-		}
-	}()
 	constructorData, err := io.ReadAll(constructorStream)
 	if err != nil {
 		return nil, fmt.Errorf("reading component constructor %q failed: %w", path, err)
@@ -256,17 +254,17 @@ func GetComponentConstructor(ctx context.Context, path string) (*constructorrunt
 	return constructorruntime.ConvertToRuntimeConstructor(&data), nil
 }
 
-func getComponentConstructorPath(cmd *cobra.Command) (string, error) {
+func getComponentConstructorFile(cmd *cobra.Command) (*file.Flag, error) {
 	constructorFlag, err := file.Get(cmd.Flags(), FlagComponentConstructorPath)
 	if err != nil {
-		return "", fmt.Errorf("getting component constructor path flag failed: %w", err)
+		return nil, fmt.Errorf("getting component constructor path flag failed: %w", err)
 	}
 	if !constructorFlag.Exists() {
-		return "", fmt.Errorf("component constructor %q does not exist", constructorFlag.String())
+		return nil, fmt.Errorf("component constructor %q does not exist", constructorFlag.String())
 	} else if constructorFlag.IsDir() {
-		return "", fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
+		return nil, fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
 	}
-	return constructorFlag.String(), nil
+	return constructorFlag, nil
 }
 
 var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
