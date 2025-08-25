@@ -247,6 +247,18 @@ func Test_ComponentReference(t *testing.T) {
 			},
 			err: assert.NoError,
 		},
+		{
+			input: "my/path/to/archive.tar.gz//ocm.software/ocmcli:0.23.0",
+			expected: &Ref{
+				Type: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(),
+				Repository: &ctfv1.Repository{
+					Path: "my/path/to/archive.tar.gz",
+				},
+				Component: "ocm.software/ocmcli",
+				Version:   "0.23.0",
+			},
+			err: assert.NoError,
+		},
 	}
 
 	for i, tc := range cases {
