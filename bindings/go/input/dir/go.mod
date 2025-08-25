@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250816122110-cde8f3437bb7
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250825195414-27a3687cb9bc
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
@@ -24,8 +24,8 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250816122110-cde8f3437bb7 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825195414-27a3687cb9bc // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250816122110-cde8f3437bb7 // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250825195414-27a3687cb9bc // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

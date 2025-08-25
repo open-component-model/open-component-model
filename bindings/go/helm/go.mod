@@ -8,9 +8,9 @@ require (
 	github.com/stretchr/testify v1.10.0
 	helm.sh/helm/v3 v3.18.6
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
-	ocm.software/open-component-model/bindings/go/configuration v0.0.6
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250816122110-cde8f3437bb7
-	ocm.software/open-component-model/bindings/go/oci v0.0.5
+	ocm.software/open-component-model/bindings/go/configuration v0.0.7
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250825195414-27a3687cb9bc
+	ocm.software/open-component-model/bindings/go/oci v0.0.6
 	ocm.software/open-component-model/bindings/go/plugin v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
@@ -62,9 +62,9 @@ require (
 	k8s.io/client-go v0.33.4 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250816122110-cde8f3437bb7 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825195414-27a3687cb9bc // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250816122110-cde8f3437bb7 // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250825195414-27a3687cb9bc // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect

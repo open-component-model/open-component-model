@@ -9,9 +9,9 @@ require (
 	github.com/stretchr/testify v1.10.0
 	ocm.software/open-component-model/bindings/go/configuration v0.0.7
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/plugin v0.0.2
+	ocm.software/open-component-model/bindings/go/plugin v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
-	ocm.software/open-component-model/cli v0.0.0-00010101000000-000000000000
+	ocm.software/open-component-model/cli v0.0.0-20250825195414-27a3687cb9bc
 )
 
 require (
@@ -42,17 +42,17 @@ require (
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/blob v0.0.8 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250816122110-cde8f3437bb7 // indirect
+	ocm.software/open-component-model/bindings/go/blob v0.0.9 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250825195414-27a3687cb9bc // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.2 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250816122110-cde8f3437bb7 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825195414-27a3687cb9bc // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250816122110-cde8f3437bb7 // indirect
-	ocm.software/open-component-model/bindings/go/oci v0.0.5 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250816122110-cde8f3437bb7 // indirect
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250825195414-27a3687cb9bc // indirect
+	ocm.software/open-component-model/bindings/go/oci v0.0.6 // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250825195414-27a3687cb9bc // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
