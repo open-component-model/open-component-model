@@ -1,156 +1,88 @@
-# ADR-0008: Digest Calculation, Signing & Pinning (Unified, Simplified CLI)
+# ADR-0008: Digest Calculation & Signing/Pinning (Unified, Two-Command Flow, Long Options Only, `ocm cv ...`)
 
 - **Status:** Proposed  
 - **Deciders:** OCM Maintainers  
 - **Date:** 2025‑08‑25  
-- **Relates to:** Issue #579, PR #547 (successor of earlier draft)  
-- **Supersedes:** previous ADR‑0008 semantics where `sign` mutated digests
+- **Relates to:** Issue #579, PR #547  
+- **Supersedes:** prior ADR‑0008 semantics where `sign` performed digest work
 
-> **Meeting outcomes integrated**
-> - **Do not modify** the Component Descriptor (CD) during **signing**.  
-> - **Digesting** and **signing** are **two distinct steps**.  
-> - Add **optional pinning** of the *component‑version digest*.  
-> - Consider separating digest/signature fields in a future spec (target **2026.2**).
-
----
-
-## 1) Summary
-
-We keep digesting and signing as two runtime steps, but we **simplify the CLI** so common cases need **one or two short flags**. Advanced behavior is handled by **profiles** in config, not via long flag lists.
+> **Key decisions**
+> - **Two explicit steps**: digesting and signing are separate commands.  
+> - **No mutation during signing**: `cv sign` MUST NOT compute or embed digests.  
+> - **Optional pinning** of the *component‑version digest* on `cv sign`.  
+> - Future spec may separate digest vs. signature fields (target 2026.2).  
+> - **Consistent CLI order**: **noun‑first** — `ocm cv <verb>`, not mixed with `ocm <verb> cv`.
 
 ---
 
-## 2) CLI (final shape)
+## 1) Commands (noun‑first style)
 
-### 2.1 Digest Calculation
+### 1.1 Digest Calculation — **mutates descriptor (digests only)**
 
 ```bash
-# Mutates the descriptor to embed resource/ref/CD digests
-ocm add digests cv <ref> [-R] [-N <id>] [-f]
-# stdin supported:
-cat cd.yaml | ocm add digests cv - -N ocm/v1
+ocm cv add digests <ref> [--recurse] [--normalization <id>] [--force]
+# stdin:
+cat cd.yaml | ocm cv add digests - --normalization ocm/v1
 ```
 
-- `-R/--recurse`: compute digests for referenced components
-- `-N/--normalization <id>`: normalization to use for component-version digest
-- `-f/--force`: overwrite existing digests
+- `--recurse` — compute digests for referenced components (optional).  
+- `--normalization <id>` — normalization used for the **component‑version** digest.  
+- `--force` — overwrite existing digests.
 
-### 2.2 Signing & Pinning (minimal UX)
+### 1.2 Signing & Pinning — **no digest mutation**
 
 ```bash
-# Minimal forms (pick ONE of -sig or -cert or -profile)
-ocm sign cv <ref> -sig <slot>            # uses default signer profile from config
-ocm sign cv <ref> -cert <cert.pem>       # x509 cert + key resolved by profile or defaults
-ocm sign cv <ref> -profile <name>        # preconfigured signer (gpg, keychain, pkcs11, kms)
-
-# Optional extras when needed:
-ocm sign cv <ref> [-P <sha256:...>] [-N <id>]
+ocm cv sign <ref> --sig <slot> [--pin <sha256:...>] [--normalization <id>] [--cert <path>] [--password <pw>] [--password-prompt]
 ```
 
-- `-sig/--sig <slot>`: logical signature slot/name, e.g. `mysig@1234`
-- `-cert/--cert <path>`: x509 certificate file (private key resolved via profile/defaults)
-- `-profile/--profile <name>`: use a named signer profile from config (gpg, keychain, KMS/HSM, etc.)
-- `-P/--pin <digest>`: expected **component-version digest** (fail if mismatch)
-- `-N/--normalization <id>`: override normalization (defaults from config)
+- `--sig <slot>` — logical signature slot/name (e.g., `mysig@1234`).  
+- `--pin <digest>` — expected component‑version digest; **fail** if mismatch (no signature written).  
+- `--normalization <id>` — override normalization if needed (must match the one used to compute the digest).  
+- `--cert <path>` — use the given **x509** certificate + matching private key (PEM/PKCS#8/P12; see implementation notes).  
+- `--password <pw>` — password for encrypted key/cert (prefer CI secrets or `--password-prompt`).  
+- `--password-prompt` — interactively prompt for a password (TTY).
 
-**Stdin:** `ocm sign cv - -sig release@main` signs a descriptor from stdin.
-
-> Rationale: Common cases become `sign cv <ref> -sig <slot>` or `sign cv <ref> -cert cert.pem`. Everything else is discovered from **profiles** in config (see §4).
-
----
-
-## 3) Behavior
-
-- **No digest mutation during `sign`**.  
-- `sign cv` normalizes the descriptor, computes the **component-version digest** locally, compares with `-P` if provided, then appends a **signature envelope** under `.signatures[]`.
-- `add digests cv` may fetch artifacts/refs and **mutates only digest fields**.
+> There is **no profile/provider flag** in this ADR. Implementations MAY resolve a **default signer** when `--cert` is absent, but that selection is outside the CLI scope here.
 
 ---
 
-## 4) Configuration: Profiles & Credential Resolution
+## 2) Behavior
 
-All advanced signer details live in config (e.g., `~/.ocmconfig`), keeping the CLI clean.
-
-### 4.1 Config Schema (excerpt; YAML)
-
-```yaml
-signing:
-  default_profile: "local-ed25519"
-  normalization: "ocm/v1"
-
-  profiles:
-    # File-based ED25519 example
-    local-ed25519:
-      type: "ed25519-file"
-      key_path: "~/.keys/ed25519.key"
-
-    # x509 PEM pair example
-    release-x509:
-      type: "x509-pem"
-      cert_path: "~/.keys/release.crt"
-      key_path: "~/.keys/release.key"
-      key_pass_env: "X509_KEY_PASS"   # optional
-
-    # GPG example (hardened key via gpg-agent)
-    maint-gpg:
-      type: "gpg"
-      fingerprint: "ABCD1234EF56..."
-      require_agent: true
-
-    # macOS Keychain (or OS key store)
-    mac-keychain:
-      type: "keychain"
-      label: "OCM Release Key"
-      key_id: "OCM_RELEASE_2025"
-
-    # PKCS#11 / HSM
-    hsm-slot1:
-      type: "pkcs11"
-      module_path: "/usr/local/lib/softhsm/libsofthsm2.so"
-      token_label: "OCM-HSM"
-      key_label: "release-key"
-      pin_env: "PKCS11_PIN"
-
-    # Cloud KMS (examples)
-    gcp-kms:
-      type: "kms-gcp"
-      resource: "projects/p/locations/l/keyRings/r/cryptoKeys/k/cryptoKeyVersions/1"
-    aws-kms:
-      type: "kms-aws"
-      key_arn: "arn:aws:kms:region:acct:key/uuid"
-```
-
-### 4.2 Resolution Order
-
-1. **Flags** (`-profile`, `-cert`, `-sig`, `-P`, `-N`)  
-2. **Profile** (`signing.profiles[<name>]`)  
-3. **Defaults** (`signing.default_profile`, `signing.normalization`)  
-4. **Environment** (e.g., `X509_KEY_PASS`, `PKCS11_PIN`)  
-
-This keeps the CLI short while still supporting advanced setups.
+- `ocm cv add digests` may download artifacts/refs and **embeds** resource/ref/CD digests into the descriptor.  
+- `ocm cv sign` **does not** fetch artifacts or modify digests. It:
+  1. Loads the descriptor (from `<ref>` or stdin).
+  2. Normalizes it to deterministic bytes.
+  3. Computes the **component‑version digest** locally.
+  4. If `--pin` is present, compares and **fails** on mismatch (no signature written).
+  5. Creates a signature **envelope** and appends it under `.signatures[]`.
 
 ---
 
-## 5) Code Design (interfaces)
+## 3) Code Design (interfaces — adapted from original ADR)
 
-### 5.1 Normalization & Digest
+### 3.1 Normalization & Digest
 
 ```go
 package normalization
+
 type ID string
+
 type Normalizer interface {
     ID() ID
     Normalize(cd *ComponentDescriptor) ([]byte, error)
 }
-
+```
+```go
 package digest
-type Algorithm string // "sha256"
+
+type Algorithm string // e.g., "sha256"
+
 type ComponentDigester interface {
-    Digest(normalized []byte, algo Algorithm) (string, error) // "sha256:..."
+    Digest(normalized []byte, algo Algorithm) (string /*"sha256:..."*/, error)
 }
 ```
 
-### 5.2 Signing
+### 3.2 Signing
 
 ```go
 package signing
@@ -177,42 +109,50 @@ type Verifier interface {
 }
 ```
 
-### 5.3 Credential Providers & Profiles
+### 3.3 Descriptor Access & Signature Store
 
 ```go
-// Pluggable key material resolution underlying profiles.
-type CredentialProvider interface {
-    ID() string // "x509-pem", "gpg", "keychain", "pkcs11", "kms-gcp", "kms-aws", ...
-    Load(ctx context.Context, cfg any) (Signer, error)
+type DescriptorAccess interface {
+    Load(ctx context.Context, ref string) (*ComponentDescriptor, error)
+    Save(ctx context.Context, ref string, cd *ComponentDescriptor) error
 }
 
-// Profile binds a provider type + its config (from ~/.ocmconfig).
-type SignerProfile struct {
-    Name     string
-    Type     string      // maps to a CredentialProvider
-    Config   interface{} // provider-specific fields (e.g., cert_path, key_path, fingerprint, ...)
+type SignatureStore interface {
+    List(ctx context.Context, ref string) ([]signing.SignatureEnvelope, error)
+    Put(ctx context.Context, ref string, env signing.SignatureEnvelope) error // append/upsert
 }
 ```
 
-### 5.4 Orchestration (CLI pseudocode)
+### 3.4 Orchestration (cv sign) — Pseudocode
 
 ```go
-func SignCV(ctx, ref string, slot, pin string, profileName string, certPath string,
-    reg Registry, io DescriptorAccess, store SignatureStore,
-    normID normalization.ID, algo digest.Algorithm) error {
+func CVSign(ctx context.Context, ref string, slot string,
+    pin string, certPath string, password string, promptPw bool,
+    io DescriptorAccess, store SignatureStore,
+    normalizer normalization.Normalizer,
+    digester digest.ComponentDigester,
+    buildDefaultSigner func() (signing.Signer, error),
+    buildCertSigner func(path, pw string) (signing.Signer, error)) error {
 
     cd := must(io.Load(ctx, ref))
-    norm := must(reg.Normalizer(normID))
-    bytes := must(norm.Normalize(cd))
-    comp := must(digest.SHA256.Digest(bytes, "sha256"))
+    bytes := must(normalizer.Normalize(cd))
+    comp := must(digester.Digest(bytes, "sha256"))
 
     if pin != "" && pin != comp { return ErrPinMismatch }
 
-    signer := resolveSigner(profileName, certPath /* may be empty -> default profile */)
-    env := must(signer.Sign(ctx, bytes))
+    var signer signing.Signer
+    if certPath != "" {
+        if password == "" && promptPw {
+            password = promptPassword("Certificate password: ")
+        }
+        signer = must(buildCertSigner(certPath, password))
+    } else {
+        signer = must(buildDefaultSigner())
+    }
 
+    env := must(signer.Sign(ctx, bytes))
     env.Name = slot
-    env.NormalizationID = string(normID)
+    env.NormalizationID = string(normalizer.ID())
     env.ComponentDigest = comp
 
     return store.Put(ctx, ref, env)
@@ -221,7 +161,31 @@ func SignCV(ctx, ref string, slot, pin string, profileName string, certPath stri
 
 ---
 
-## 6) Sequence (unchanged)
+## 4) Sequence Diagrams
+
+### 4.1 `ocm cv add digests`
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as User/CI
+  participant C as ocm CLI
+  participant R as OCM Repository
+  participant A as Artifact Stores
+
+  U->>C: ocm cv add digests <ref> [--recurse] [--normalization <id>]
+  C->>R: Pull Component Descriptor (CD)
+  loop For each resource/ref
+    C->>A: Fetch artifact / referenced CD
+    A-->>C: Bytes / Descriptor
+    C->>C: Compute & embed digest
+  end
+  C->>C: Normalize CD & compute component-version digest
+  C->>R: Push updated CD with digests
+  R-->>U: Digested CD ref (+ component-version digest)
+```
+
+### 4.2 `ocm cv sign`
 
 ```mermaid
 sequenceDiagram
@@ -230,49 +194,49 @@ sequenceDiagram
   participant C as ocm CLI
   participant R as OCM Repository
 
-  U->>C: ocm sign cv <ref> -sig mysig@1234 [-P <digest>]
+  U->>C: ocm cv sign <ref> --sig <slot> [--pin <digest>] [--cert <path>] [--password|--password-prompt]
   C->>R: Pull CD (already digested)
   C->>C: Normalize → compute component-version digest
   alt Pin provided
-    C->>C: Compare with -P
-    note over C: Fail if mismatch
+    C->>C: Compare with --pin
+    note over C: Fail if mismatch (no signing)
   end
-  C->>C: Create signature envelope (via resolved profile)
+  alt --cert path provided
+    C->>C: Load x509 cert + key (decrypt with password/prompt if needed)
+  else default signer
+    C->>C: Resolve default signer (implementation-defined)
+  end
+  C->>C: Create signature envelope
   C->>R: Append signature to CD
   R-->>U: Signed CD ref
 ```
 
 ---
 
-## 7) Examples
+## 5) Examples
 
 ```bash
-# simplest: default profile + slot
-ocm sign cv ghcr.io/org/app:1.2.3 -sig ci@20250825
+# Step 1: embed digests
+ocm cv add digests ghcr.io/org/app:1.2.3 --normalization ocm/v1
 
-# from stdin (cd.yaml produced earlier)
-cat cd.yaml | ocm sign cv - -sig release@main
+# Step 2a: sign with default signer (no cert flag)
+ocm cv sign ghcr.io/org/app:1.2.3 --sig release@2025-08-25
 
-# x509 pem cert (key resolved by profile/defaults or sibling key)
-ocm sign cv ghcr.io/org/app:1.2.3 -cert ~/.keys/release.crt -sig rel@1
+# Step 2b: sign with explicit certificate (prompt for password)
+ocm cv sign ghcr.io/org/app:1.2.3 --sig rel@1 --cert ~/.keys/release.p12 --password-prompt
 
-# hardened GPG key (via profile)
-ocm sign cv ghcr.io/org/app:1.2.3 -profile maint-gpg -sig maint@2025 -P "$(cat comp.digest)"
-
-# macOS keychain / HSM / KMS profile
-ocm sign cv ghcr.io/org/app:1.2.3 -profile mac-keychain -sig rel@kc
-ocm sign cv ghcr.io/org/app:1.2.3 -profile hsm-slot1 -sig rel@hsm
-ocm sign cv ghcr.io/org/app:1.2.3 -profile gcp-kms -sig rel@gcp
+# Step 2c: sign with explicit certificate (CI: password via env substitution)
+ocm cv sign ghcr.io/org/app:1.2.3 --sig rel@1 --cert ~/.keys/release.pem --password "$X509_PASS" --pin "$(cat comp.digest)"
 ```
 
 ---
 
-## 8) Security & Policy
+## 6) Security Notes
 
-- **Pinning** recommended for cross‑environment signing.  
-- **Profiles** centralize sensitive configuration and enable hardened backends (GPG with agent, HSM/PKCS#11, KMS).  
-- Enforce policy (e.g., *require pin for remote refs*) at CLI or admission layers.
+- Prefer `--password-prompt` or CI secret envs over inline `--password` values.  
+- Use `--pin` across environments to prevent signing drifted descriptors.  
+- Changing normalization alters the signed bytes; the envelope stores `NormalizationID` and `ComponentDigest` for reproducibility.
 
 ---
 
-**End of ADR‑0008 (Unified, Simplified CLI)**
+**End of ADR‑0008 (Unified, Two‑Command, Long Options Only, noun‑first `ocm cv ...`)**
