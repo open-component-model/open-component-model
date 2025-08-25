@@ -9,11 +9,11 @@ require (
 	golang.org/x/sync v0.16.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.7
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250825195414-27a3687cb9bc
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250825200618-6840c8ce6b49
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825195414-27a3687cb9bc
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825200618-6840c8ce6b49
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250825195414-27a3687cb9bc
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250825200618-6840c8ce6b49
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
