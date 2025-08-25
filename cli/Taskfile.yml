@@ -76,8 +76,8 @@ tasks:
       - tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml
     cmds:
       - cmd: |
-          GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
-            -ldflags "-X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" \
+          CGO_ENABLED=0 GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
+            -ldflags "-extldflags=-static -w -s -X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" \
             -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/resources

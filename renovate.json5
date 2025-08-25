@@ -6,7 +6,8 @@
     'security:openssf-scorecard',
     'helpers:pinGitHubActionDigests',
     ':rebaseStalePrs',
-    ':gitSignOff'
+    ':gitSignOff',
+    ':semanticCommitTypeAll(chore)'
   ],
   'git-submodules': {
     enabled: true
