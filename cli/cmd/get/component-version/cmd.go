@@ -180,6 +180,9 @@ func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime
 		return nil, fmt.Errorf("converting resolver configuration from v1 to runtime failed: %w", err)
 	}
 	resolvers := resolverConfig.Resolvers
+	if resolvers == nil {
+		resolvers = []resolverruntime.Resolver{}
+	}
 	return resolvers, nil
 }
 
