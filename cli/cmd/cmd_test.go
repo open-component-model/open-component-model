@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -424,7 +425,51 @@ resources:
 			var buf bytes.Buffer
 			r.NoError(blob.Copy(&buf, blb))
 			r.Equal("replaced", buf.String(), "expected resource content to match test file content")
+		})
 
+		t.Run("expect failure with working-directory if resources are not in working-directory", func(t *testing.T) {
+			workingDir := filepath.Join(tmp, "working-dir")
+			r.NoError(os.Mkdir(workingDir, 0o700), "could not create working directory")
+
+			_, err := test.OCM(t, test.WithArgs("add", "cv",
+				"--constructor", constructorYAMLFilePath,
+				"--repository", archiveFilePath,
+				"--working-directory", workingDir,
+			), test.WithOutput(logs))
+
+			r.Error(err, "expected error on adding component version with working directory")
+		})
+
+		t.Run("base construction with working-directory should not fail if resources are in working-directory", func(t *testing.T) {
+			constructorYAML = fmt.Sprintf(`
+name: ocm.software/examples-01
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file-replaced
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+			// Create a replacement test file to be added to the component version
+			testFilePath := filepath.Join(tmp, "test-file-2.txt")
+			r.NoError(os.WriteFile(testFilePath, []byte("replaced"), 0o600), "could not create test file")
+			constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-replace-wd.yaml")
+			r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+			cmd, err := test.OCM(t, test.WithArgs("add", "cv",
+				"--constructor", constructorYAMLFilePath,
+				"--repository", archiveFilePath,
+				"--working-directory", tmp,
+				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
+			), test.WithOutput(logs))
+
+			r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
+
+			r.NoError(err, "could not construct component version with working directory")
 		})
 	})
 }

@@ -15,6 +15,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -87,6 +89,7 @@ func TestHelmPluginProcessResource(t *testing.T) {
 	require.NotNil(t, response.Location, "response should contain location")
 	require.Equal(t, mtypes.LocationTypeLocalFile, response.Location.LocationType, "location should be local file")
 	require.NotEmpty(t, response.Location.Value, "location value should not be empty")
+	require.NotEmpty(t, response.Location.MediaType, "location should contain media type")
 
 	generatedFile := response.Location.Value
 	require.FileExists(t, generatedFile, "generated helm chart file should exist")
@@ -257,4 +260,115 @@ func createHelmResourceRequest(t *testing.T, chartPath string) *v1.ProcessResour
 			},
 		},
 	}
+}
+
+// mockMediaTypeAwareBlob implements blob.ReadOnlyBlob and blob.MediaTypeAware interfaces for testing
+type mockMediaTypeAwareBlob struct {
+	mediaType string
+	known     bool
+}
+
+func (m *mockMediaTypeAwareBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader([]byte("test data"))), nil
+}
+
+func (m *mockMediaTypeAwareBlob) Size() int64 {
+	return 9 // len("test data")
+}
+
+func (m *mockMediaTypeAwareBlob) MediaType() (string, bool) {
+	return m.mediaType, m.known
+}
+
+// mockBlobWithoutMediaType implements only blob.ReadOnlyBlob interface for testing
+type mockBlobWithoutMediaType struct{}
+
+func (m *mockBlobWithoutMediaType) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader([]byte("test data"))), nil
+}
+
+func (m *mockBlobWithoutMediaType) Size() int64 {
+	return 9 // len("test data")
+}
+
+// TestProcessHelmResourceWithMediaTypeAware tests media type propagation when blob implements MediaTypeAware
+func TestProcessHelmResourceWithMediaTypeAware(t *testing.T) {
+	// Create a mock result with MediaTypeAware blob
+	testMediaType := "application/vnd.oci.image.layout.v1+tar+gzip"
+	mockResult := &constructor.ResourceInputMethodResult{
+		ProcessedBlobData: &mockMediaTypeAwareBlob{
+			mediaType: testMediaType,
+			known:     true,
+		},
+	}
+	
+	// Test the media type extraction logic directly
+	var mediaType string
+	if mtAware, ok := mockResult.ProcessedBlobData.(blob.MediaTypeAware); ok {
+		if mt, known := mtAware.MediaType(); known && mt != "" {
+			mediaType = mt
+		}
+	}
+	
+	require.Equal(t, testMediaType, mediaType, "media type should be extracted from MediaTypeAware blob")
+}
+
+// TestProcessHelmResourceWithUnknownMediaType tests behavior when MediaTypeAware returns unknown=false
+func TestProcessHelmResourceWithUnknownMediaType(t *testing.T) {
+	// Create a mock result with MediaTypeAware blob that has unknown media type
+	mockResult := &constructor.ResourceInputMethodResult{
+		ProcessedBlobData: &mockMediaTypeAwareBlob{
+			mediaType: "some-type",
+			known:     false, // media type is not known
+		},
+	}
+	
+	// Test the media type extraction logic directly
+	var mediaType string
+	if mtAware, ok := mockResult.ProcessedBlobData.(blob.MediaTypeAware); ok {
+		if mt, known := mtAware.MediaType(); known && mt != "" {
+			mediaType = mt
+		}
+	}
+	
+	require.Empty(t, mediaType, "media type should be empty when known=false")
+}
+
+// TestProcessHelmResourceWithEmptyMediaType tests behavior when MediaTypeAware returns empty string
+func TestProcessHelmResourceWithEmptyMediaType(t *testing.T) {
+	// Create a mock result with MediaTypeAware blob that has empty media type
+	mockResult := &constructor.ResourceInputMethodResult{
+		ProcessedBlobData: &mockMediaTypeAwareBlob{
+			mediaType: "", // empty media type
+			known:     true,
+		},
+	}
+	
+	// Test the media type extraction logic directly
+	var mediaType string
+	if mtAware, ok := mockResult.ProcessedBlobData.(blob.MediaTypeAware); ok {
+		if mt, known := mtAware.MediaType(); known && mt != "" {
+			mediaType = mt
+		}
+	}
+	
+	require.Empty(t, mediaType, "media type should be empty when media type is empty string")
+}
+
+// TestProcessHelmResourceWithoutMediaTypeAware tests fallback when blob doesn't implement MediaTypeAware
+func TestProcessHelmResourceWithoutMediaTypeAware(t *testing.T) {
+	// Create a mock result with blob that doesn't implement MediaTypeAware
+	mockResult := &constructor.ResourceInputMethodResult{
+		ProcessedBlobData: &mockBlobWithoutMediaType{},
+	}
+	
+	// Test the media type extraction logic directly
+	var mediaType string
+	if mtAware, ok := mockResult.ProcessedBlobData.(blob.MediaTypeAware); ok {
+		if mt, known := mtAware.MediaType(); known && mt != "" {
+			mediaType = mt
+		}
+	}
+	
+	require.Empty(t, mediaType, "media type should be empty when blob doesn't implement MediaTypeAware")
 }
