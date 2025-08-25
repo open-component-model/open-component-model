@@ -142,7 +142,6 @@ func refreshOutput(ctx context.Context, renderer Renderer, renderState *renderLo
 		if _, err := fmt.Fprint(renderState.writer, EraseNLines(renderState.outputState.displayedLines)); err != nil {
 			return fmt.Errorf("error clearing previous output: %w", err)
 		}
-
 		if _, err := fmt.Fprint(renderState.writer, output); err != nil {
 			return fmt.Errorf("error writing live rendering output to tree display manager writer: %w", err)
 		}
