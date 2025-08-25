@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
@@ -231,8 +231,14 @@ func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptio
 
 		semverVersions[index] = semverVersion
 	}
-	sort.Sort(semver.Collection(semverVersions))
+	// Sort semverVersions descending (newest version first).
+	slices.SortFunc(semverVersions, func(a, b *semver.Version) int {
+		return b.Compare(a)
+	})
 
+	for index, semverVersion := range semverVersions {
+		versions[index] = semverVersion.Original()
+	}
 	if opts.SemverConstraint != "" {
 		if versions, err = filterBySemver(versions, opts.SemverConstraint); err != nil {
 			return nil, fmt.Errorf("filtering component versions failed: %w", err)
