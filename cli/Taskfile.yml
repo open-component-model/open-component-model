@@ -25,10 +25,6 @@ tasks:
     status:
       - test -d tmp
   test:
-    sources:
-      - ./**/*.go
-      - ./go.mod
-      - ./go.sum
     cmds:
       - go test -skip "{{ .INTEGRATION_TEST_IDENTIFIER }}" -v -coverprofile=tmp/coverage.out ./...
     deps:
