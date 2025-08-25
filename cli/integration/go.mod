@@ -6,7 +6,7 @@ replace ocm.software/open-component-model/cli => ../
 
 require (
 	github.com/spf13/cobra v1.9.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	ocm.software/open-component-model/bindings/go/configuration v0.0.7
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/plugin v0.0.2
