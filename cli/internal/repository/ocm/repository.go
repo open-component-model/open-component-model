@@ -226,7 +226,7 @@ func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptio
 	for index, version := range versions {
 		semverVersion, err := semver.NewVersion(version)
 		if err != nil {
-			return nil, fmt.Errorf("failed parsing version: %s", err)
+			return nil, fmt.Errorf("failed parsing version: %w", err)
 		}
 
 		semverVersions[index] = semverVersion
