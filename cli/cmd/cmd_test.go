@@ -142,6 +142,8 @@ meta:
 				return
 			}
 
+			// change
+
 			r.NoError(err, "failed to run command")
 			entries, err := logs.List()
 			r.NoError(err, "failed to list log entries")
