@@ -179,9 +179,9 @@ func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime
 	if err != nil {
 		return nil, fmt.Errorf("converting resolver configuration from v1 to runtime failed: %w", err)
 	}
-	resolvers := resolverConfig.Resolvers
-	if resolvers == nil {
-		resolvers = []resolverruntime.Resolver{}
+	var resolvers []resolverruntime.Resolver
+	if resolverConfig != nil && len(resolverConfig.Resolvers) > 0 {
+		resolvers = resolverConfig.Resolvers
 	}
 	return resolvers, nil
 }
