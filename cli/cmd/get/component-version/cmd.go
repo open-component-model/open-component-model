@@ -155,7 +155,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
 
-	if recursive >= 0 {
+	if recursive != 0 {
 		if err := renderComponentsRecursive(cmd, repo, descs, output); err != nil {
 			return fmt.Errorf("failed to render components recursively: %w", err)
 		}
@@ -261,7 +261,7 @@ func renderComponentsRecursive(cmd *cobra.Command, repo *ocm.ComponentRepository
 
 	// Start the render loop.
 	renderCtx, cancel := context.WithCancel(cmd.Context())
-	wait := render.RunRenderLoop(renderCtx, renderer)
+	wait := render.RunRenderLoop(renderCtx, renderer, render.WithRenderOptions(render.WithWriter(cmd.OutOrStdout())))
 
 	// Prepare function to discover neighbors (referenced component versions) of
 	// a vertex (component version).
