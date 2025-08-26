@@ -7,7 +7,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	"ocm.software/open-component-model/kubernetes/controller/test/utils"
 )
 
@@ -34,8 +33,7 @@ var _ = Describe("Replication Controller", func() {
 		)
 
 		BeforeEach(func(ctx SpecContext) {
-			err := utils.CreateNamespace(ctx, testNamespace)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			Expect(utils.CreateNamespace(ctx, testNamespace))
 			DeferCleanup(func(ctx SpecContext) error {
 				return utils.DeleteNamespace(ctx, testNamespace)
 			})
