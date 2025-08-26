@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -37,7 +37,6 @@ const (
 	FlagConcurrencyLimit               = "concurrency-limit"
 	FlagRepositoryRef                  = "repository"
 	FlagComponentConstructorPath       = "constructor"
-	FlagCopyResources                  = "copy-resources"
 	FlagBlobCacheDirectory             = "blob-cache-directory"
 	FlagComponentVersionConflictPolicy = "component-version-conflict-policy"
 	FlagSkipReferenceDigestProcessing  = "skip-reference-digest-processing"
@@ -108,7 +107,7 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of component versions that can be constructed concurrently.")
-	file.VarP(cmd.Flags(), FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "path to the repository")
+	cmd.Flags().StringP(FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "repository specification")
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the component constructor file")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
@@ -222,40 +221,24 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 }
 
 func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
-	repoRef, err := file.Get(cmd.Flags(), FlagRepositoryRef)
+	repositorySpec, err := cmd.Flags().GetString(FlagRepositoryRef)
 	if err != nil {
 		return nil, fmt.Errorf("getting repository reference flag failed: %w", err)
 	}
 
-	// Get the repository type.
-	repoTypeString, err := compref.GuessType(repoRef.String())
+	typed, err := compref.ParseRepository(repositorySpec)
 	if err != nil {
-		return nil, fmt.Errorf("failed to guess repository type: %w", err)
+		return nil, fmt.Errorf("failed to parse repository: %w", err)
 	}
 
-	rtyp, err := runtime.TypeFromString(repoTypeString)
-	if err != nil {
-		return nil, fmt.Errorf("unknown type %q: %w", repoTypeString, err)
-	}
-
-	// create the type of the detected type.
-	typed, err := compref.RepositoryScheme.NewObject(rtyp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repository of type %q: %w", repoTypeString, err)
-	}
-
-	switch t := typed.(type) {
-	case *ociv1.Repository:
-		t.BaseUrl = repoRef.String()
-	case *ctfv1.Repository:
-		t.Path = repoRef.String()
+	// Handle CTF-specific access mode configuration
+	if ctfRepo, ok := typed.(*ctfv1.Repository); ok {
 		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
-		if !repoRef.Exists() {
+		// For CTF repositories, check if path exists to determine access mode
+		if _, err := os.Stat(ctfRepo.Path); os.IsNotExist(err) {
 			accessMode += "|" + ctfv1.AccessModeCreate
 		}
-		t.AccessMode = accessMode
-	default:
-		return nil, fmt.Errorf("unsupported repository type: %T", t)
+		ctfRepo.AccessMode = accessMode
 	}
 
 	return typed, nil

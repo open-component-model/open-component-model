@@ -185,25 +185,70 @@ func Parse(input string) (*Ref, error) {
 		return nil, fmt.Errorf("invalid component name %q in %q, must match %q", ref.Component, originalInput, ComponentRegex)
 	}
 
-	// Step 6: Resolve type if not explicitly given
+	// Step 6: Build repository object using ParseRepository
+	var repositorySpec string
+	if ref.Type != "" {
+		repositorySpec = ref.Type + "::" + input
+	} else {
+		repositorySpec = input
+	}
+
+	repository, err := ParseRepository(repositorySpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse repository: %w", err)
+	}
+
+	ref.Repository = repository
+
+	// Extract the type from the parsed repository for consistency
 	if ref.Type == "" {
-		t, err := GuessType(input)
+		switch repository.(type) {
+		case *ociv1.Repository:
+			ref.Type = runtime.NewVersionedType(ociv1.Type, ociv1.Version).String()
+		case *ctfv1.Repository:
+			ref.Type = runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String()
+		}
+	}
+
+	return ref, nil
+}
+
+// ParseRepository parses a repository specification string and returns a typed repository object.
+// It accepts repository strings in the format:
+//   - [<type>::]<repository-spec>
+//
+// Where type can be "ctf" or "oci", and repository-spec is the actual repository location.
+// If no type is specified, it will be guessed using heuristics.
+func ParseRepository(repositorySpec string) (runtime.Typed, error) {
+	originalInput := repositorySpec
+	input := repositorySpec
+
+	// Extract optional type
+	var repoType string
+	if idx := strings.Index(input, "::"); idx != -1 {
+		repoType = input[:idx]
+		input = input[idx+2:]
+	}
+
+	// Resolve type if isn't explicitly given
+	if repoType == "" {
+		t, err := guessType(input)
 		if err != nil {
 			return nil, fmt.Errorf("failed to detect repository type from %q: %w", input, err)
 		}
 		Base.Debug("ocm had to guess your repository type", "type", t, "input", input)
-		ref.Type = t
+		repoType = t
 	}
 
-	// Step 7: Build repository object
-	rtyp, err := runtime.TypeFromString(ref.Type)
+	// Build repository object
+	rtyp, err := runtime.TypeFromString(repoType)
 	if err != nil {
-		return nil, fmt.Errorf("unknown type %q in %q: %w", ref.Type, originalInput, err)
+		return nil, fmt.Errorf("unknown type %q in %q: %w", repoType, originalInput, err)
 	}
 
 	typed, err := RepositoryScheme.NewObject(rtyp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create repository of type %q: %w", ref.Type, err)
+		return nil, fmt.Errorf("failed to create repository of type %q: %w", repoType, err)
 	}
 
 	switch t := typed.(type) {
@@ -216,15 +261,13 @@ func Parse(input string) (*Ref, error) {
 	case *ctfv1.Repository:
 		t.Path = input
 	default:
-		return nil, fmt.Errorf("unsupported repository type: %q", ref.Type)
+		return nil, fmt.Errorf("unsupported repository type: %q", repoType)
 	}
 
-	ref.Repository = typed
-
-	return ref, nil
+	return typed, nil
 }
 
-// GuessType tries to guess the repository type ("ctf" or "oci")
+// guessType tries to guess the repository type ("ctf" or "oci")
 // from an untyped repository specification string.
 //
 // You may ask yourself why this is needed.
@@ -239,7 +282,7 @@ func Parse(input string) (*Ref, error) {
 //   - If it looks like a domain (contains dots like ".com", ".io", etc.), assume OCI
 //   - If it contains a colon (e.g., "localhost:5000"), assume OCI
 //   - Otherwise fallback to CTF
-func GuessType(repository string) (string, error) {
+func guessType(repository string) (string, error) {
 	// Try parsing as URL first
 	if u, err := url.Parse(repository); err == nil {
 		if u.Scheme == "file" {
