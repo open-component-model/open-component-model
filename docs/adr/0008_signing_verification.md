@@ -179,6 +179,3 @@ sequenceDiagram
 
 - OCM spec: **Signing examples – Component-Version with Reference**  
   https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/04-signing-examples.md#component-version-with-reference
-
-- Docs: **Sign Component Versions**  
-  https://ocm.software/docs/getting-started/sign-component-versions/
