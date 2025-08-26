@@ -144,6 +144,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	reference := args[0]
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
+	//nolint:staticcheck // no replacement for resolvers available yet
 	var resolvers []resolverruntime.Resolver
 	if config != nil {
 		resolvers, err = resolversFromConfig(config, err)
