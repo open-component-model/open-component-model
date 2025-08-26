@@ -2100,8 +2100,11 @@ go.augendre.info/arangolint v0.2.0 h1:2NP/XudpPmfBhQKX4rMk+zDYIj//qbt4hfZmSSTcpj
 go.augendre.info/arangolint v0.2.0/go.mod h1:Vx4KSJwu48tkE+8uxuf0cbBnAPgnt8O1KWiT7bljq7w=
 go.augendre.info/fatcontext v0.8.0 h1:2dfk6CQbDGeu1YocF59Za5Pia7ULeAM6friJ3LP7lmk=
 go.augendre.info/fatcontext v0.8.0/go.mod h1:oVJfMgwngMsHO+KB2MdgzcO+RvtNdiCEOlWvSFtax/s=
+go.mongodb.org/mongo-driver v1.17.1 h1:Wic5cJIwJgSpBhe3lx3+/RybR5PiYRMpVFgO7cOHyIM=
+go.mongodb.org/mongo-driver v1.17.1/go.mod h1:wwWm/+BuOddhcq3n68LKRmgk2wXzmF6s0SFOa0GINL4=
 go.mongodb.org/mongo-driver v1.17.4 h1:jUorfmVzljjr0FLzYQsGP8cgN/qzzxlY9Vh0C9KFXVw=
 go.mongodb.org/mongo-driver v1.17.4/go.mod h1:Hy04i7O2kC4RS06ZrhPRqj/u4DTYkFDAAccj+rVKqgQ=
+go.mongodb.org/mongo-driver/v2 v2.3.0/go.mod h1:jHeEDJHJq7tm6ZF45Issun9dbogjfnPySb1vXA7EeAI=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 go.opencensus.io v0.22.0/go.mod h1:+kGneAE2xo2IficOXnaByMWTGM9T73dGwxeWcUqIpI8=
 go.opencensus.io v0.22.2/go.mod h1:yxeiOL68Rb0Xd1ddK5vPZ/oVn4vY4Ynel7k9FzqtOIw=
