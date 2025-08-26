@@ -82,23 +82,23 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		var projectimage = strings.TrimLeft(imageRegistry, "http://") + "/ocm.software/ocm-controller:v0.0.1"
 
 		By("Building the manager(Operator) image")
-		cmd := exec.Command("make", "docker-build")
+		cmd := exec.Command("task", "docker-build")
 		cmd.Env = []string{"IMG=" + projectimage}
 		_, err := utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-		cmd = exec.Command("make", "docker-push")
+		cmd = exec.Command("task", "docker-push")
 		cmd.Env = []string{"IMG=" + projectimage}
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 		By("Installing CRDs")
-		cmd = exec.Command("make", "install")
+		cmd = exec.Command("task", "install")
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		DeferCleanup(func() error {
 			By("uninstalling CRDs")
-			cmd = exec.Command("make", "uninstall")
+			cmd = exec.Command("task", "uninstall")
 			// In case ´make undeploy` already uninstalled the CRDs
 			cmd.Env = append(os.Environ(), "IGNORE_NOT_FOUND=true")
 			_, err = utils.Run(cmd)
@@ -107,13 +107,13 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		})
 
 		By("Deploying the controller-manager")
-		cmd = exec.Command("make", "deploy")
+		cmd = exec.Command("task", "deploy")
 		cmd.Env = []string{"IMG=" + projectimage}
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		DeferCleanup(func() error {
 			By("Un-deploying the controller-manager")
-			cmd = exec.Command("make", "undeploy")
+			cmd = exec.Command("task", "undeploy")
 			cmd.Env = []string{"IMG=" + projectimage}
 			_, err = utils.Run(cmd)
 

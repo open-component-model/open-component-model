@@ -47,6 +47,9 @@ tasks:
         go test $(go list ./... | grep -v /e2e) -coverprofile cover.out
 
 
+  test/e2e/setup/local:
+    dotenv: [ '{{.TASKFILE_DIR}}/test/e2e/hacks/.env' ]
+    cmd: 'bash test/e2e/hacks/setup.sh'
   test/e2e:
     dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
     cmds:
