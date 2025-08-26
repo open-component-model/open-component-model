@@ -23,7 +23,7 @@ jobs:
   E2E:
     name: E2E
     runs-on: large_runner
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
         uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
