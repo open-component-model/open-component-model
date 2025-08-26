@@ -1,177 +1,132 @@
-# ADR-0008: Digest Calculation & Signing/Pinning (Unified, Two-Command, Long Options, Fixed JCS Normalization, No stdin)
+# ADR-0008: Digest Calculation & Signing/Pinning
 
-- **Status:** Proposed  
-- **Deciders:** OCM Maintainers  
-- **Date:** 2025‑08‑25  
-- **Relates to:** Issue #579, PR #547  
-- **Supersedes:** earlier ADR‑0008 semantics where `sign` performed digest work or allowed normalization selection
-
-> **Key decisions**
-> - **Two explicit steps**: digesting and signing are separate commands (`ocm cv add digests` and `ocm cv sign`).  
-> - **No mutation during signing**: `ocm cv sign` MUST NOT compute or embed digests.  
-> - **Optional pinning** of the *component‑version digest* on `ocm cv sign`.  
-> - **Normalization is fixed to JCS (RFC 8785)** via existing `jcs` package — **no CLI flag** to change it.  
-> - **Noun‑first CLI** (`ocm cv <verb>`) and **long options only**.  
-> - **No stdin**: `<ref>` must be an addressable descriptor reference (file or repo ref).
+- **Status:** Proposed
+- **Deciders:** OCM Maintainers
+- **Date:** 2025-08-26
+- **Related:** ocm-spec “Signing” and examples, incl. *Component-Version With Reference*; CLI signing docs
 
 ---
 
-## 1) Commands
+## Context
 
-### 1.1 Digest Calculation — **mutates descriptor (digests only)**
+Component Descriptors (CDs) must be signed without altering digest fields during signing. Digests for resources, component references, and the component version are produced in a dedicated step and embedded into the descriptor. Signing uses a fixed canonicalization (JCS, RFC 8785) over the descriptor to compute the component-version digest and create a signature envelope. When a component version references another component version, the digest of the referenced descriptor is embedded in the parent’s `references[]` entry and contributes to the parent’s component-version digest.
+
+---
+
+## Decision
+
+### Two-step flow
+
+1. **Digest calculation** mutates the descriptor to embed required digests (resources, component references, component-version).
+2. **Signing** appends a signature envelope without computing or embedding digests.
+
+### Commands (verb–noun, long options only)
 
 ```bash
-ocm cv add digests <ref> [--recurse] [--force]
+# Step 1 — Digest calculation (mutates descriptor: digests only)
+ocm add digests cv <ref> --recurse --force
+
+# Step 2 — Signing (no digest mutation)
+ocm sign cv <ref> --sig <slot> --pin <sha256:...> --cert <path> --password <pw> --password-prompt
 ```
 
-- `--recurse` — compute digests for referenced components (optional).  
-- `--force` — overwrite existing digests.
+- `<ref>`: addressable descriptor reference (file path or repository reference).
+- `--recurse`: calculate digests for referenced component versions.
+- `--force`: overwrite existing digest fields.
+- `--sig <slot>`: logical signature slot/name, e.g., `mysig@1234`.
+- `--pin <sha256:...>`: expected component-version digest; fail on mismatch.
+- `--cert <path>`: X.509 certificate (private key resolved by implementation; encrypted keys may require a password).
+- `--password <pw>` / `--password-prompt`: key decryption options.
 
-### 1.2 Signing & Pinning — **no digest mutation**
+### Normalization
 
-```bash
-ocm cv sign <ref> --sig <slot> [--pin <sha256:...>] [--cert <path>] [--password <pw>] [--password-prompt]
-```
-
-- `--sig <slot>` — logical signature slot/name (e.g., `mysig@1234`).  
-- `--pin <digest>` — expected **component‑version digest**; **fail** if mismatch (no signature written).  
-- `--cert <path>` — use the given **x509** certificate + matching private key (PEM/PKCS#8/P12; exact formats per implementation).  
-- `--password <pw>` — password for encrypted key/cert (prefer CI secrets or prompt).  
-- `--password-prompt` — interactively prompt for a password (TTY).
-
-> There is **no profile/provider flag** in this ADR. Implementations MAY resolve a **default signer** when `--cert` is absent, but selection is not exposed via CLI flags here.
+- Canonicalization for component-version digest and signature payload is **JCS (RFC 8785)** via the existing `jcs` package.
+- No CLI flag to select a different normalization.
 
 ---
 
-## 2) Behavior
+## Behavior
 
-- `ocm cv add digests` may download artifacts/refs and **embeds** resource/ref/CD digests into the descriptor.  
-- `ocm cv sign` **does not** fetch artifacts or modify digests. It:
-  1. Loads the descriptor from `<ref>`.
-  2. Canonicalizes it using **JCS (RFC 8785)** via the existing `jcs` package.
-  3. Computes the **component‑version digest** as `sha256(JCS(cvd-bytes))`.
-  4. If `--pin` is present, compares and **fails** on mismatch (no signature written).
-  5. Creates a signature **envelope** and appends it under `.signatures[]`.
+### Digest calculation (`ocm add digests cv`)
+
+- Computes and **embeds** digests:
+  - **Resources**: content digests.
+  - **Component references**: digest of the referenced component descriptor.
+  - **Component-version**: digest over the canonicalized descriptor.
+- May download artifacts and referenced descriptors as needed.
+- Writes the updated descriptor back to `<ref>`.
+
+### Signing (`ocm sign cv`)
+
+- Loads the descriptor from `<ref>`.
+- Canonicalizes the descriptor using JCS.
+- Computes the component-version digest from those canonical bytes.
+- If `--pin` is provided, compares and fails on mismatch (no signature written).
+- Creates a signature envelope and appends it under `.signatures[]`.
+- Does not compute or embed any digests.
+
+### References
+
+- For each entry in `references[]`, embed the digest of the referenced component descriptor.
+- The embedded reference digests are part of the canonicalized parent descriptor and therefore influence the parent’s component-version digest and signature.
 
 ---
 
-## 3) Code Design (aligned to existing `jcs` package)
+## Code Design
 
-### 3.1 Normalization (fixed JCS)
-
-Normalization is **not configurable** at runtime. We use the already implemented JCS normalizer:
+### Normalization (fixed JCS)
 
 ```go
-// Using your existing package:
-import "your/module/path/jcs"
-
-// compute canonical bytes (optionally with OCM-specific transformation rules)
-normalized, err := jcs.Normalise(componentDescriptor, rules) // RFC 8785 canonical JSON
+// Using existing package jcs (RFC 8785 canonical JSON)
+canon, err := jcs.Normalise(componentDescriptor, nil)
 if err != nil { /* handle */ }
 ```
 
-### 3.2 Component-Version Digest
+### Component-version digest
 
 ```go
-import "crypto/sha256"
-import "encoding/hex"
-
-func ComponentVersionDigest(canon []byte) string {
-    sum := sha256.Sum256(canon)
-    return "sha256:" + hex.EncodeToString(sum[:])
-}
+sum := sha256.Sum256(canon)
+componentDigest := "sha256:" + hex.EncodeToString(sum[:])
 ```
 
-### 3.3 Signature Envelope & Interfaces
+### Signature envelope
 
 ```go
-package signing
-
 type SignatureEnvelope struct {
     Name            string
     MediaType       string // application/vnd.ocm.signature.v1+json
     Algorithm       string // rsa-pss-sha256, ecdsa-p256-sha256, ed25519, ...
-    Value           []byte
+    Value           []byte // signature over canonical bytes
     CertChainPEM    []byte
     KeyID           string
-
-    // For reproducibility and verification:
-    NormalizationID string // always "jcs/rfc8785"
+    NormalizationID string // "jcs/rfc8785"
     ComponentDigest string // e.g., "sha256:..."
 }
-
-type Signer interface {
-    ID() string
-    Sign(ctx context.Context, payload []byte) (SignatureEnvelope, error)
-}
-
-type Verifier interface {
-    ID() string
-    Verify(ctx context.Context, payload []byte, env SignatureEnvelope) error
-}
 ```
 
-### 3.4 Descriptor Access & Signature Store
+### Signing orchestration (sketch)
 
 ```go
-type DescriptorAccess interface {
-    Load(ctx context.Context, ref string) (*ComponentDescriptor, error)
-    Save(ctx context.Context, ref string, cd *ComponentDescriptor) error
-}
+cd := must(loadDescriptor(ref))
+canon := must(jcs.Normalise(cd, nil))
+comp := sha256sum(canon)
 
-type SignatureStore interface {
-    List(ctx context.Context, ref string) ([]signing.SignatureEnvelope, error)
-    Put(ctx context.Context, ref string, env signing.SignatureEnvelope) error // append/upsert
-}
-```
+if pin != "" && pin != comp { return ErrPinMismatch }
 
-### 3.5 Orchestration (cv sign) — Pseudocode
+signer := resolveSigner(certPath, password, passwordPrompt) // default or cert-based
+env := must(signer.Sign(canon))
+env.Name = slot
+env.NormalizationID = "jcs/rfc8785"
+env.ComponentDigest = comp
 
-```go
-func CVSign(ctx context.Context, ref string, slot string,
-    pin string, certPath string, password string, promptPw bool,
-    io DescriptorAccess, store SignatureStore,
-    buildDefaultSigner func() (signing.Signer, error),
-    buildCertSigner func(path, pw string) (signing.Signer, error)) error {
-
-    cd := must(io.Load(ctx, ref))
-
-    // 1) Fixed normalization: JCS
-    canon := must(jcs.Normalise(cd, /* OCM rules */ nil))
-
-    // 2) Compute component-version digest
-    comp := ComponentVersionDigest(canon)
-
-    // 3) Optional pin check
-    if pin != "" && pin != comp { return ErrPinMismatch }
-
-    // 4) Resolve signer
-    var signer signing.Signer
-    if certPath != "" {
-        if password == "" && promptPw {
-            password = promptPassword("Certificate password: ")
-        }
-        signer = must(buildCertSigner(certPath, password))
-    } else {
-        signer = must(buildDefaultSigner())
-    }
-
-    // 5) Create envelope
-    env := must(signer.Sign(ctx, canon))
-    env.Name = slot
-    env.NormalizationID = "jcs/rfc8785"
-    env.ComponentDigest = comp
-
-    // 6) Persist signature
-    return store.Put(ctx, ref, env)
-}
+must(storeSignature(ref, env))
 ```
 
 ---
 
-## 4) Sequence Diagrams (no stdin)
+## Sequence Diagrams
 
-### 4.1 `ocm cv add digests`
+### Digest calculation
 
 ```mermaid
 sequenceDiagram
@@ -181,18 +136,19 @@ sequenceDiagram
   participant R as OCM Repository
   participant A as Artifact Stores
 
-  U->>C: ocm cv add digests <ref> [--recurse] [--force]
+  U->>C: ocm add digests cv <ref> --recurse --force
   C->>R: Pull Component Descriptor (CD)
-  loop For each resource/ref
-    C->>A: Fetch artifact / referenced CD
+  loop For resources and references
+    C->>A: Fetch artifact or referenced descriptor
     A-->>C: Bytes / Descriptor
-    C->>C: Compute & embed digest
+    C->>C: Compute and embed digest
   end
-  C->>R: Push updated CD with digests
-  R-->>U: Digested CD ref (+ component-version digest)
+  C->>C: Compute component-version digest over JCS(canonical CD)
+  C->>R: Push updated descriptor
+  R-->>U: Reference to digested descriptor
 ```
 
-### 4.2 `ocm cv sign`
+### Signing
 
 ```mermaid
 sequenceDiagram
@@ -201,50 +157,33 @@ sequenceDiagram
   participant C as ocm CLI
   participant R as OCM Repository
 
-  U->>C: ocm cv sign <ref> --sig <slot> [--pin <digest>] [--cert <path>] [--password|--password-prompt]
-  C->>R: Pull CD (already digested)
-  C->>C: JCS canonicalize descriptor
-  C->>C: sha256 over canonical bytes → component-version digest
+  U->>C: ocm sign cv <ref> --sig <slot> [--pin <digest>] [--cert <path>] [--password|--password-prompt]
+  C->>R: Pull descriptor
+  C->>C: JCS canonicalization → component-version digest
   alt Pin provided
-    C->>C: Compare with --pin
-    note over C: Fail if mismatch (no signing)
+    C->>C: Compare digest with --pin
+    note over C: Fail on mismatch (no signature)
   end
-  alt --cert path provided
-    C->>C: Load x509 cert + key (decrypt with password/prompt if needed)
-  else default signer
-    C->>C: Resolve default signer (implementation-defined)
+  alt Certificate provided
+    C->>C: Load cert/key (prompt if requested)
+  else Default signer
+    C->>C: Resolve default signer
   end
-  C->>C: Create signature envelope (NormalizationID="jcs/rfc8785")
-  C->>R: Append signature to CD
-  R-->>U: Signed CD ref
+  C->>C: Create signature envelope
+  C->>R: Append signature to descriptor
+  R-->>U: Reference to signed descriptor
 ```
 
 ---
 
-## 5) Examples (no stdin)
+## Examples Alignment
 
-```bash
-# Step 1: embed digests
-ocm cv add digests ghcr.io/org/app:1.2.3 --recurse --force
-
-# Step 2a: sign with default signer (no cert flag)
-ocm cv sign ghcr.io/org/app:1.2.3 --sig release@2025-08-25
-
-# Step 2b: sign with explicit certificate (prompt for password)
-ocm cv sign ghcr.io/org/app:1.2.3 --sig rel@1 --cert ~/.keys/release.p12 --password-prompt
-
-# Step 2c: sign with explicit certificate (CI: password via env substitution + pin)
-ocm cv sign ghcr.io/org/app:1.2.3 --sig rel@1 --cert ~/.keys/release.pem --password "$X509_PASS" --pin "$(cat comp.digest)"
-```
+- **Signing with certificates** and CA-backed chains is supported by passing `--cert` and optional password flags. The signature name is set via `--sig`. The flow conforms to the published signing walkthroughs and examples. [Ref] citeturn6search0
+- **Component-Version With Reference**: the parent embeds the digest of referenced component versions and signs the canonicalized descriptor that includes those digests. [Ref] citeturn1view1
 
 ---
 
-## 6) Security Notes
+## Security
 
-- Prefer `--password-prompt` or CI secret envs over inline `--password` values.  
-- Use `--pin` across environments to prevent signing drifted descriptors.  
-- Envelope includes `NormalizationID="jcs/rfc8785"` and the `ComponentDigest` to support reproducibility.
-
----
-
-**End of ADR‑0008 (Unified, JCS, No stdin)**
+- Use `--pin` to ensure the descriptor being signed matches the expected component-version digest in cross-environment workflows.
+- Prefer `--password-prompt` or secret management over inline `--password`.
