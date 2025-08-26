@@ -8,7 +8,6 @@ import (
 
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	"ocm.software/open-component-model/cli/internal/flags/file"
 )
 
 func TestGetRepositorySpec(t *testing.T) {
@@ -88,7 +87,7 @@ func TestGetRepositorySpec(t *testing.T) {
 			r := require.New(t)
 
 			cmd := &cobra.Command{Use: "test"}
-			file.VarP(cmd.Flags(), FlagRepositoryRef, "r", "default", "repository path")
+			cmd.Flags().StringP(FlagRepositoryRef, "r", "default", "repository specification")
 			r.NoError(cmd.Flags().Set(FlagRepositoryRef, tt.repoPath))
 
 			result, err := GetRepositorySpec(cmd)
