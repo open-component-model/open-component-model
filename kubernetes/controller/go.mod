@@ -193,6 +193,7 @@ require (
 	github.com/drone/envsubst v1.0.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
+	github.com/elliotchance/orderedmap/v3 v3.1.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
