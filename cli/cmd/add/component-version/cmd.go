@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -28,6 +29,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
@@ -224,15 +226,39 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	if err != nil {
 		return nil, fmt.Errorf("getting repository reference flag failed: %w", err)
 	}
-	var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
-	if !repoRef.Exists() {
-		accessMode += "|" + ctfv1.AccessModeCreate
+
+	// Use GuessType to determine repository type
+	repoTypeString, err := compref.GuessType(repoRef.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to guess repository type: %w", err)
 	}
-	repoSpec := ctfv1.Repository{
-		Path:       repoRef.String(),
-		AccessMode: accessMode,
+
+	// Parse the type string into a runtime.Type
+	repoType, err := runtime.TypeFromString(repoTypeString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse repository type %q: %w", repoTypeString, err)
 	}
-	return &repoSpec, nil
+
+	// Create repository spec based on parsed type
+	switch repoType {
+	case runtime.NewVersionedType(ociv1.Type, ociv1.Version):
+		repoSpec := ociv1.Repository{
+			BaseUrl: repoRef.String(),
+		}
+		return &repoSpec, nil
+	case runtime.NewVersionedType(ctfv1.Type, ctfv1.Version):
+		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
+		if !repoRef.Exists() {
+			accessMode += "|" + ctfv1.AccessModeCreate
+		}
+		repoSpec := ctfv1.Repository{
+			Path:       repoRef.String(),
+			AccessMode: accessMode,
+		}
+		return &repoSpec, nil
+	default:
+		return nil, fmt.Errorf("unsupported repository type: %s", repoType)
+	}
 }
 
 func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentConstructor, error) {
