@@ -5,7 +5,7 @@ env:
   KUSTOMIZE_VERSION: v5.4.1
   CONTROLLER_TOOLS_VERSION: v0.17.1
   ENVTEST_VERSION: release-0.21
-  CONTROLLER_IMG: '{{ env "CONTROLLER_IMG" | default "ghcr.io/open-component-model/ocm-k8s-toolkit:latest" }}'
+  CONTROLLER_IMG: '{{ env "CONTROLLER_IMG" | default "ghcr.io/open-component-model/kubernetes/controller:latest" }}'
 
 vars:
   GOBIN:
