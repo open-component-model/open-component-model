@@ -137,6 +137,8 @@ tasks:
       
       # move binary if names differ
       if [ "$name" != "$(basename {{.TOOL_PATH}})" ]; then
+        # make sure target dir exists
+        mkdir -p "$(dirname {{.TOOL_PATH}})"
         mv "$tmp/$name" {{.TOOL_PATH}}
       fi
     generates:
