@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -81,16 +82,16 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		var projectimage = strings.TrimLeft(imageRegistry, "http://") + "/ocm.software/ocm-controller:v0.0.1"
 
 		By("Building the manager(Operator) image " + projectimage)
-		cmd := exec.Command("task", "docker-build", "CONTROLLER_IMG="+projectimage)
+		cmd := exec.CommandContext(ctx, "task", "docker-build", "CONTROLLER_IMG="+projectimage)
 		_, err := utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-		cmd = exec.Command("task", "docker-push", "CONTROLLER_IMG="+projectimage)
+		cmd = exec.CommandContext(ctx, "task", "docker-push", "CONTROLLER_IMG="+projectimage)
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 		By("Installing CRDs")
-		cmd = exec.Command("task", "install")
+		cmd = exec.CommandContext(ctx, "task", "install")
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		DeferCleanup(func() error {
@@ -104,22 +105,22 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		})
 
 		By("Deploying the controller-manager")
-		cmd = exec.Command("task", "deploy", "CONTROLLER_IMG="+projectimage)
+		cmd = exec.CommandContext(ctx, "task", "deploy", "CONTROLLER_IMG="+projectimage)
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
-		DeferCleanup(func() error {
+		DeferCleanup(func(ctx SpecContext) error {
 			By("Un-deploying the controller-manager")
-			cmd = exec.Command("task", "undeploy", "CONTROLLER_IMG="+projectimage)
+			cmd = exec.CommandContext(ctx, "task", "undeploy", "CONTROLLER_IMG="+projectimage)
 			_, err = utils.Run(cmd)
 
 			return err
 		})
 
 		By("Validating that the controller-manager pod is running as expected")
-		verifyControllerUp := func() error {
+		verifyControllerUp := func(ctx context.Context) error {
 			// Get pod name
 
-			cmd = exec.Command("kubectl", "get",
+			cmd = exec.CommandContext(ctx, "kubectl", "get",
 				"pods", "-l", "control-plane=controller-manager",
 				"-o", "go-template={{ range .items }}"+
 					"{{ if not .metadata.deletionTimestamp }}"+
@@ -145,7 +146,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 			ExpectWithOffset(2, controllerPodName).Should(ContainSubstring("controller-manager"))
 
 			// Validate pod status
-			cmd = exec.Command("kubectl", "get",
+			cmd = exec.CommandContext(ctx, "kubectl", "get",
 				"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
 				"-n", namespace,
 			)
@@ -173,7 +174,7 @@ var _ = AfterSuite(func(ctx SpecContext) {
 				"--log-path",
 				os.Getenv("CONTROLLER_LOG_PATH"),
 			}
-			cmd := exec.Command("kubectl", cmdArgs...)
+			cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
 			_, err := utils.Run(cmd)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		})
