@@ -158,7 +158,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 			return nil
 		}
 
-		EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).Should(Succeed())
+		EventuallyWithOffset(1, verifyControllerUp, time.Minute, time.Second).WithContext(ctx).Should(Succeed())
 	})
 })
 
