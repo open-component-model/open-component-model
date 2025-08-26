@@ -73,8 +73,10 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 	cmd.Flags().String(FlagOutput, "", "output location to download to. If no transformer is specified, and no "+
 		"format was discovered that can be written to a directory, the resource will be written to a file.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
-	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable}, "policy to apply when extracting a resource. If set to 'disable', the resource will not be extracted, even if they could be."+
-		"If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.")
+	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
+		"policy to apply when extracting a resource. "+
+			"If set to 'disable', the resource will not be extracted, even if they could be. "+
+			"If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.")
 
 	return cmd
 }

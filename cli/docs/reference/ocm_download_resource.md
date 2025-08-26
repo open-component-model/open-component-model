@@ -43,7 +43,7 @@ ocm download resource [flags]
 ### Options
 
 ```
-      --extraction-policy enum   policy to apply when extracting a resource. If set to 'disable', the resource will not be extracted, even if they could be.If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.
+      --extraction-policy enum   policy to apply when extracting a resource. If set to 'disable', the resource will not be extracted, even if they could be. If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.
                                  (must be one of [auto disable]) (default auto)
   -h, --help                     help for resource
       --identity string          resource identity to download

@@ -54,5 +54,5 @@ var HELMTransformerConfig = extractspecv1alpha1.Config{
 }
 
 func init() {
-	DefaultTransformers[HELMTransformer] = &HELMTransformerConfig
+	defaultTransformers[HELMTransformer] = &HELMTransformerConfig
 }
