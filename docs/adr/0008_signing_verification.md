@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Deciders:** OCM Maintainers
 - **Date:** 2025-08-26
-- **Related:** ocm-spec “Signing” and examples, incl. *Component-Version With Reference*; CLI signing docs
+- **Related:** OCM spec signing examples; CLI signing docs
 
 ---
 
@@ -143,7 +143,6 @@ sequenceDiagram
     A-->>C: Bytes / Descriptor
     C->>C: Compute and embed digest
   end
-  C->>C: Compute component-version digest over JCS(canonical CD)
   C->>R: Push updated descriptor
   R-->>U: Reference to digested descriptor
 ```
@@ -176,14 +175,10 @@ sequenceDiagram
 
 ---
 
-## Examples Alignment
+## References
 
-- **Signing with certificates** and CA-backed chains is supported by passing `--cert` and optional password flags. The signature name is set via `--sig`. The flow conforms to the published signing walkthroughs and examples. [Ref] citeturn6search0
-- **Component-Version With Reference**: the parent embeds the digest of referenced component versions and signs the canonicalized descriptor that includes those digests. [Ref] citeturn1view1
+- OCM spec: **Signing examples – Component-Version with Reference**  
+  https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/04-signing-examples.md#component-version-with-reference
 
----
-
-## Security
-
-- Use `--pin` to ensure the descriptor being signed matches the expected component-version digest in cross-environment workflows.
-- Prefer `--password-prompt` or secret management over inline `--password`.
+- Docs: **Sign Component Versions**  
+  https://ocm.software/docs/getting-started/sign-component-versions/
