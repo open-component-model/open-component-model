@@ -1,9 +1,0 @@
-version: '3'
-
-vars:
-  INTEGRATION_TEST_IDENTIFIER: 'Integration'
-
-tasks:
-  test/integration:
-    cmds:
-      - 'go test -run "{{ .INTEGRATION_TEST_IDENTIFIER }}" -v ./...'

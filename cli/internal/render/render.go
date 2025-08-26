@@ -1,4 +1,4 @@
-package renderer
+package render
 
 import (
 	"bytes"
@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jedib0t/go-pretty/v6/text"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -137,11 +136,7 @@ func refreshOutput(ctx context.Context, renderer Renderer, renderState *renderLo
 	// only update if the output has changed
 	if output != renderState.outputState.lastOutput {
 		// clear previous output
-		var buf bytes.Buffer
-		for range renderState.outputState.displayedLines {
-			buf.WriteString(fmt.Sprint(text.CursorUp.Sprint(), text.EraseLine.Sprint()))
-		}
-		if _, err := fmt.Fprint(renderState.writer, buf.String()); err != nil {
+		if _, err := fmt.Fprint(renderState.writer, EraseNLines(renderState.outputState.displayedLines)); err != nil {
 			return fmt.Errorf("error clearing previous output: %w", err)
 		}
 

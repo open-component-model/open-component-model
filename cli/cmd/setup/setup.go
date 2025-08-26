@@ -1,4 +1,4 @@
-package cmd
+package setup
 
 import (
 	"context"
@@ -16,13 +16,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/configuration"
+	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	credentialsConfig "ocm.software/open-component-model/cli/internal/credentials"
 	"ocm.software/open-component-model/cli/internal/plugin/builtin"
 	"ocm.software/open-component-model/cli/internal/plugin/spec/config/v2alpha1"
 )
 
-func setupOCMConfig(cmd *cobra.Command) {
+func OCMConfig(cmd *cobra.Command) {
 	cfg, err := configuration.GetFlattenedOCMConfigForCommand(cmd)
 	if err != nil {
 		slog.DebugContext(cmd.Context(), "could not get configuration", slog.String("error", err.Error()))
@@ -33,7 +34,7 @@ func setupOCMConfig(cmd *cobra.Command) {
 	cmd.SetContext(ctx)
 }
 
-func setupPluginManager(cmd *cobra.Command) error {
+func PluginManager(cmd *cobra.Command) error {
 	pluginManager := manager.NewPluginManager(cmd.Context())
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
@@ -44,7 +45,7 @@ func setupPluginManager(cmd *cobra.Command) error {
 			return fmt.Errorf("could not get plugin configuration: %w", err)
 		}
 
-		if defaultDir, err := cmd.Flags().GetString(pluginDirectoryFlag); err == nil {
+		if defaultDir, err := cmd.Flags().GetString(ocmcmd.PluginDirectoryFlag); err == nil {
 			expanded := os.ExpandEnv(defaultDir)
 			pluginCfg.Locations = []string{expanded}
 		}
@@ -90,7 +91,7 @@ func setupPluginManager(cmd *cobra.Command) error {
 	return nil
 }
 
-func setupCredentialGraph(cmd *cobra.Command) error {
+func CredentialGraph(cmd *cobra.Command) error {
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not get plugin manager to initialize credential graph")

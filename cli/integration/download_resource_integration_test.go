@@ -29,7 +29,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/cli/cmd"
 	resourceCMD "ocm.software/open-component-model/cli/cmd/download/resource"
-	"ocm.software/open-component-model/cli/cmd/download/resource/integration/internal"
+	"ocm.software/open-component-model/cli/integration/internal"
 )
 
 func Test_Integration_OCIRepository(t *testing.T) {

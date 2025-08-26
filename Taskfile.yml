@@ -85,14 +85,10 @@ includes:
     optional: true
     taskfile: ./cli/Taskfile.yml
     dir: ./cli
-  cli/cmd/download/plugin/integration:
+  cli/integration:
     optional: true
-    taskfile: ./cli/cmd/download/plugin/integration/Taskfile.yml
-    dir: ./cli/cmd/download/plugin/integration
-  cli/cmd/download/resource/integration:
-    optional: true
-    taskfile: ./cli/cmd/download/resource/integration/Taskfile.yml
-    dir: ./cli/cmd/download/resource/integration
+    taskfile: ./cli/integration/Taskfile.yml
+    dir: ./cli/integration
 
 vars:
   GO_MODULES:

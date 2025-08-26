@@ -99,6 +99,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
       --plugin-directory string            default directory path for ocm plugins. (default "$HOME/.config/ocm/plugins")
       --plugin-shutdown-timeout duration   Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
       --temp-folder string                 Specify a custom temporary folder path for filesystem operations.
+      --working-directory string           Specify a custom working directory path to load resources from.
 ```
 
 ### SEE ALSO
