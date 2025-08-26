@@ -177,4 +177,4 @@ for more information on how to contribute to OCM.
 
 OCM K8s Toolkit follows the [CNCF Code of Conduct](https://github.com/cncf/foundation/blob/main/code-of-conduct.md).
 
-[controller-image]: https://ocm.software/open-component-model/kubernetes/controller/pkgs/container/ocm-k8s-toolkit
+[controller-image]: https://github.com/open-component-model/ocm-k8s-toolkit/pkgs/container/ocm-k8s-toolkit

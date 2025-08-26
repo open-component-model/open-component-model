@@ -173,7 +173,7 @@ Multiple different solutions have been suggested.
 
 The current localization controllers impose deep knowledge of the underlying replacement frameworks in OCM.
 In the
-official [Example](https://ocm.software/docs/tutorials/structuring-and-deploying-software-products-with-ocm/#localization),
+official [Example](https://ocm.software/docs/tutorials),
 we propose a system that is based on file based replacements due to reliance on the [OCM Localization Tooling](https://github.com/open-component-model/ocm/blob/main/api/ocm/ocmutils/localize/README.md).
 
 This tooling forces one to adopt:

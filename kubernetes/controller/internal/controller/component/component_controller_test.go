@@ -570,6 +570,7 @@ var _ = Describe("Component Controller", func() {
 
 			By("delete resources manually")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			test.DeleteObject(ctx, k8sClient, resource)
 			test.DeleteObject(ctx, k8sClient, component)
 		})
 

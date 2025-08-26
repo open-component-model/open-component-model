@@ -2,7 +2,7 @@
 
 *
 
-Status: [proposed | rejected | accepted | deprecated | … | superseded by [ADR-0005](0005-example.md)] <!-- optional -->
+Status: [proposed | rejected | accepted | deprecated | … | superseded by [ADR-0005](template.md)] <!-- optional -->
 
 * Deciders: [list everyone involved in the decision] <!-- optional -->
 * Approvers: [list everyone that approved the decision] <!-- optional -->
