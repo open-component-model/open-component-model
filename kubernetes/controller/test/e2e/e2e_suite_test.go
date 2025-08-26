@@ -80,14 +80,12 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		// projectimage stores the name of the image used in the example
 		var projectimage = strings.TrimLeft(imageRegistry, "http://") + "/ocm.software/ocm-controller:v0.0.1"
 
-		By("Building the manager(Operator) image")
-		cmd := exec.Command("task", "docker-build")
-		cmd.Env = []string{"CONTROLLER_IMG=" + projectimage}
+		By("Building the manager(Operator) image " + projectimage)
+		cmd := exec.Command("task", "docker-build", "CONTROLLER_IMG="+projectimage)
 		_, err := utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
-		cmd = exec.Command("task", "docker-push")
-		cmd.Env = []string{"CONTROLLER_IMG=" + projectimage}
+		cmd = exec.Command("task", "docker-push", "CONTROLLER_IMG="+projectimage)
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
@@ -106,14 +104,12 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		})
 
 		By("Deploying the controller-manager")
-		cmd = exec.Command("task", "deploy")
-		cmd.Env = []string{"CONTROLLER_IMG=" + projectimage}
+		cmd = exec.Command("task", "deploy", "CONTROLLER_IMG="+projectimage)
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		DeferCleanup(func() error {
 			By("Un-deploying the controller-manager")
-			cmd = exec.Command("task", "undeploy")
-			cmd.Env = []string{"CONTROLLER_IMG=" + projectimage}
+			cmd = exec.Command("task", "undeploy", "CONTROLLER_IMG="+projectimage)
 			_, err = utils.Run(cmd)
 
 			return err
