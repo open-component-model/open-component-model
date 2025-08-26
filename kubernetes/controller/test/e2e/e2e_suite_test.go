@@ -82,12 +82,12 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 
 		By("Building the manager(Operator) image")
 		cmd := exec.Command("task", "docker-build")
-		cmd.Env = []string{"IMG=" + projectimage}
+		cmd.Env = []string{"CONTROLLER_IMG=" + projectimage}
 		_, err := utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
 		cmd = exec.Command("task", "docker-push")
-		cmd.Env = []string{"IMG=" + projectimage}
+		cmd.Env = []string{"CONTROLLER_IMG=" + projectimage}
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 
@@ -107,13 +107,13 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 
 		By("Deploying the controller-manager")
 		cmd = exec.Command("task", "deploy")
-		cmd.Env = []string{"IMG=" + projectimage}
+		cmd.Env = []string{"CONTROLLER_IMG=" + projectimage}
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
 		DeferCleanup(func() error {
 			By("Un-deploying the controller-manager")
 			cmd = exec.Command("task", "undeploy")
-			cmd.Env = []string{"IMG=" + projectimage}
+			cmd.Env = []string{"CONTROLLER_IMG=" + projectimage}
 			_, err = utils.Run(cmd)
 
 			return err
