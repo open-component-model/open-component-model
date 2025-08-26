@@ -77,7 +77,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/OpenPeeDeeP/depguard/v2 v2.2.1 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
-	github.com/ThalesIgnite/crypto11 v1.2.5 // indirect
+	github.com/ThalesIgnite/crypto11 v1.4.1 // indirect
 	github.com/a8m/envsubst v1.4.3 // indirect
 	github.com/alecthomas/chroma/v2 v2.19.0 // indirect
 	github.com/alecthomas/go-check-sumtype v0.3.1 // indirect
