@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "ocm.software/ocm/api/helper/builder"
+	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -34,19 +35,14 @@ const (
 
 var _ = Describe("Repository Controller", func() {
 	var (
-		ctx       context.Context
-		cancel    context.CancelFunc
 		namespace *corev1.Namespace
 		ocmRepo   *v1alpha1.Repository
 		env       *Builder
 	)
 
-	BeforeEach(func() {
+	BeforeEach(func(ctx SpecContext) {
 		env = NewBuilder(environment.FileSystem(osfs.OsFs))
 		DeferCleanup(env.Cleanup)
-
-		ctx, cancel = context.WithCancel(context.Background())
-		DeferCleanup(cancel)
 
 		if namespace == nil {
 			namespace = &corev1.Namespace{
@@ -58,20 +54,14 @@ var _ = Describe("Repository Controller", func() {
 		}
 	})
 
-	AfterEach(func() {
-		Eventually(func() error {
-			err := k8sClient.Delete(ctx, ocmRepo)
-			if errors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}).WithTimeout(10 * time.Second).Should(Succeed())
+	AfterEach(func(ctx SpecContext) {
+		test.DeleteObject(ctx, k8sClient, ocmRepo)
 	})
 
 	Describe("Reconciling with different RepositorySpec specifications", func() {
 
 		Context("When correct RepositorySpec is provided", func() {
-			It("Repository can be reconciled", func() {
+			It("Repository can be reconciled", func(ctx SpecContext) {
 
 				By("creating a OCI repository with existing host")
 				spec := ocireg.NewRepositorySpec("ghcr.io/open-component-model")
@@ -90,7 +80,7 @@ var _ = Describe("Repository Controller", func() {
 		})
 
 		Context("When incorrect RepositorySpec is provided", func() {
-			It("Validation must fail", func() {
+			It("Validation must fail", func(ctx SpecContext) {
 
 				By("creating a OCI repository with non-existing host")
 				spec := ocireg.NewRepositorySpec("https://doesnotexist")
@@ -109,7 +99,7 @@ var _ = Describe("Repository Controller", func() {
 		})
 
 		Context("When incorrect RepositorySpec is provided", func() {
-			It("Validation must fail", func() {
+			It("Validation must fail", func(ctx SpecContext) {
 
 				By("creating a OCI repository from invalid json")
 				specdata := []byte("not a json")
@@ -120,7 +110,7 @@ var _ = Describe("Repository Controller", func() {
 		})
 
 		Context("When incorrect RepositorySpec is provided", func() {
-			It("Validation must fail", func() {
+			It("Validation must fail", func(ctx SpecContext) {
 
 				By("creating a OCI repository from a valid json but invalid RepositorySpec")
 				specdata := []byte(`{"json":"not a valid RepositorySpec"}`)
@@ -141,7 +131,7 @@ var _ = Describe("Repository Controller", func() {
 	Describe("Reconciling a valid Repository", func() {
 
 		Context("When ConfigRefs properly set", func() {
-			It("Repository can be reconciled", func() {
+			It("Repository can be reconciled", func(ctx SpecContext) {
 
 				By("creating secret and config objects")
 				configs, secrets := createTestConfigsAndSecrets(ctx)
@@ -276,7 +266,7 @@ var _ = Describe("Repository Controller", func() {
 		})
 
 		Context("repository controller", func() {
-			It("reconciles a repository", func() {
+			It("reconciles a repository", func(ctx SpecContext) {
 				By("creating a repository object")
 				ctfpath := GinkgoT().TempDir()
 				componentName := "ocm.software/test-component"

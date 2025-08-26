@@ -94,9 +94,9 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		cmd = exec.CommandContext(ctx, "task", "install")
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
-		DeferCleanup(func() error {
+		DeferCleanup(func(ctx SpecContext) error {
 			By("uninstalling CRDs")
-			cmd = exec.Command("task", "uninstall")
+			cmd = exec.CommandContext(ctx, "task", "uninstall")
 			// In case ´make undeploy` already uninstalled the CRDs
 			cmd.Env = append(os.Environ(), "IGNORE_NOT_FOUND=true")
 			_, err = utils.Run(cmd)

@@ -36,7 +36,7 @@ var _ = Describe("Replication Controller", func() {
 		BeforeEach(func(ctx SpecContext) {
 			err := utils.CreateNamespace(ctx, testNamespace)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
-			DeferCleanup(func() error {
+			DeferCleanup(func(ctx SpecContext) error {
 				return utils.DeleteNamespace(ctx, testNamespace)
 			})
 		})
