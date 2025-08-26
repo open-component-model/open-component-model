@@ -60,7 +60,7 @@ func WaitForReadyObject(ctx context.Context, k8sClient client.Client, obj util.G
 func DeleteObject(ctx context.Context, k8sClient client.Client, obj client.Object) {
 	GinkgoHelper()
 
-	Expect(k8sClient.Delete(ctx, obj)).To(Or(Succeed(), MatchError(errors.IsNotFound)))
+	Expect(k8sClient.Delete(ctx, obj)).To(Or(Succeed(), MatchError(errors.IsNotFound, "object should already be gone")))
 
 	Eventually(func(ctx context.Context) error {
 		err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj)
