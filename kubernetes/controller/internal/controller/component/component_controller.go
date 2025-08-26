@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	"ocm.software/ocm/api/ocm/compdesc"
+	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -22,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	mandelerrors "github.com/mandelsoft/goutils/errors"
 	ocmctx "ocm.software/ocm/api/ocm"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -146,7 +148,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
-//nolint:funlen // we do not want to cut the function at arbitrary points
+//nolint:funlen,cyclop // we do not want to cut the function at arbitrary points
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 	logger.Info("starting reconciliation")
@@ -277,6 +279,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.V(1).Info("finished comparing cached and live hashes", "component", component.Spec.Component, "version", version, "duration", time.Since(compareStart))
 
 	switch {
+	case errors.Is(err, ocm.ErrUnstableHash):
+		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
+		err = nil
 	case errors.Is(err, ocm.ErrComponentVersionHashMismatch):
 		// If we are here, then the component version was found in the cache, but under a different hash.
 		// In this case we know the session is outdated, so forcefully close it and re-open it on the next reconcile.

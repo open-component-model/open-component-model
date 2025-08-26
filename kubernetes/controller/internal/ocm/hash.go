@@ -18,6 +18,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	ErrUnstableHash                       = errors.New("unstable hash detected")
+	ErrComponentVersionIsNotNormalizeable = errors.New("component version is not normalizeable (possibly due to missing digests on component references or resources")
+)
+
 var ErrComponentVersionHashMismatch = errors.New("component version hash mismatch")
 
 // CompareCachedAndLiveHashes compares the normalized hashes of a cached component version
@@ -28,7 +33,8 @@ var ErrComponentVersionHashMismatch = errors.New("component version hash mismatc
 //  2. Computes a normalized hash for both the cached descriptor and the live descriptor
 //     using the specified normalization algorithm and hash function.
 //  3. Compares the two hashes. If they differ, returns ErrComponentVersionHashMismatch.
-//  4. If they match, returns a DigestSpec with the hash metadata.
+//  4. If the component versions are not normalizeable, it collects errors and returns them wrapped in ErrUnstableHash.
+//  5. If they match, returns a DigestSpec with the hash metadata.
 func CompareCachedAndLiveHashes(
 	currentComponentVersion ocmctx.ComponentVersionAccess,
 	liveRepo ocmctx.Repository,
@@ -44,10 +50,12 @@ func CompareCachedAndLiveHashes(
 		err = errors.Join(err, liveCV.Close())
 	}()
 
+	var unstableError error
+
 	// cached version from session
 	cachedDesc := currentComponentVersion.GetDescriptor()
 	if err := cachedDesc.IsNormalizeable(); err != nil {
-		return nil, fmt.Errorf("cached component version is not normalizeable: %w", err)
+		unstableError = errors.Join(unstableError, fmt.Errorf("cached %w: %w", ErrComponentVersionIsNotNormalizeable, err))
 	}
 	cachedHash, err := compdesc.Hash(cachedDesc, normAlgo, hash.New())
 	if err != nil {
@@ -56,7 +64,7 @@ func CompareCachedAndLiveHashes(
 
 	liveDesc := liveCV.GetDescriptor()
 	if err := liveDesc.IsNormalizeable(); err != nil {
-		return nil, fmt.Errorf("live component version is not normalizeable: %w", err)
+		unstableError = errors.Join(unstableError, fmt.Errorf("live %w: %w", ErrComponentVersionIsNotNormalizeable, err))
 	}
 	liveHash, err := compdesc.Hash(liveDesc, normAlgo, hash.New())
 	if err != nil {
@@ -67,11 +75,15 @@ func CompareCachedAndLiveHashes(
 		return nil, fmt.Errorf("%w: %s != %s", ErrComponentVersionHashMismatch, hash, liveHash)
 	}
 
+	if unstableError != nil {
+		err = fmt.Errorf("%w: %w", ErrUnstableHash, unstableError)
+	}
+
 	return &ocmv1.DigestSpec{
 		HashAlgorithm:          hash.String(),
 		NormalisationAlgorithm: normAlgo,
 		Value:                  cachedHash,
-	}, nil
+	}, err
 }
 
 // GetObjectDataHash returns a stable 64-hex digest for a set of objects.
