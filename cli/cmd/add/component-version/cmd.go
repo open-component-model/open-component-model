@@ -227,38 +227,38 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 		return nil, fmt.Errorf("getting repository reference flag failed: %w", err)
 	}
 
-	// Use GuessType to determine repository type
+	// Get the repository type.
 	repoTypeString, err := compref.GuessType(repoRef.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to guess repository type: %w", err)
 	}
 
-	// Parse the type string into a runtime.Type
-	repoType, err := runtime.TypeFromString(repoTypeString)
+	rtyp, err := runtime.TypeFromString(repoTypeString)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse repository type %q: %w", repoTypeString, err)
+		return nil, fmt.Errorf("unknown type %q: %w", repoTypeString, err)
 	}
 
-	// Create repository spec based on parsed type
-	switch repoType {
-	case runtime.NewVersionedType(ociv1.Type, ociv1.Version):
-		repoSpec := ociv1.Repository{
-			BaseUrl: repoRef.String(),
-		}
-		return &repoSpec, nil
-	case runtime.NewVersionedType(ctfv1.Type, ctfv1.Version):
+	// create the type of the detected type.
+	typed, err := compref.RepositoryScheme.NewObject(rtyp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create repository of type %q: %w", repoTypeString, err)
+	}
+
+	switch t := typed.(type) {
+	case *ociv1.Repository:
+		t.BaseUrl = repoRef.String()
+	case *ctfv1.Repository:
+		t.Path = repoRef.String()
 		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
 		if !repoRef.Exists() {
 			accessMode += "|" + ctfv1.AccessModeCreate
 		}
-		repoSpec := ctfv1.Repository{
-			Path:       repoRef.String(),
-			AccessMode: accessMode,
-		}
-		return &repoSpec, nil
+		t.AccessMode = accessMode
 	default:
-		return nil, fmt.Errorf("unsupported repository type: %s", repoType)
+		return nil, fmt.Errorf("unsupported repository type: %T", t)
 	}
+
+	return typed, nil
 }
 
 func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentConstructor, error) {
