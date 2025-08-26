@@ -6,6 +6,7 @@ package ocm
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"slices"
 	"sync"
@@ -198,6 +199,21 @@ func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts 
 		return nil, fmt.Errorf("getting component versions failed: %w", err)
 	}
 
+	// Sort semverVersions descending (newest version first).
+	slices.SortFunc(descs, func(a, b *descriptor.Descriptor) int {
+		semverVersionA, err := semver.NewVersion(a.Component.Version)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", a.Component.Version, "error", err)
+			return 0
+		}
+		semverVersionB, err := semver.NewVersion(b.Component.Version)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b.Component.Version, "error", err)
+			return 0
+		}
+		return semverVersionB.Compare(semverVersionA)
+	})
+
 	return descs, nil
 }
 
@@ -222,23 +238,20 @@ func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptio
 	// Ensure correct order.
 	// We sort here, so we do not have to import semver into each repository
 	// implementation.
-	semverVersions := make([]*semver.Version, len(versions))
-	for index, version := range versions {
-		semverVersion, err := semver.NewVersion(version)
+	slices.SortFunc(versions, func(a, b string) int {
+		semverA, err := semver.NewVersion(a)
 		if err != nil {
-			return nil, fmt.Errorf("failed parsing version: %w", err)
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", a, "error", err)
+			return 0
 		}
-
-		semverVersions[index] = semverVersion
-	}
-	// Sort semverVersions descending (newest version first).
-	slices.SortFunc(semverVersions, func(a, b *semver.Version) int {
-		return b.Compare(a)
+		semverB, err := semver.NewVersion(b)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b, "error", err)
+			return 0
+		}
+		return semverB.Compare(semverA)
 	})
 
-	for index, semverVersion := range semverVersions {
-		versions[index] = semverVersion.Original()
-	}
 	if opts.SemverConstraint != "" {
 		if versions, err = filterBySemver(versions, opts.SemverConstraint); err != nil {
 			return nil, fmt.Errorf("filtering component versions failed: %w", err)

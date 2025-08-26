@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"slices"
 
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/cli/internal/render/graph"
@@ -41,10 +40,9 @@ type Renderer[T cmp.Ordered] struct {
 	// or map). The ListSerializer MUST perform READ-ONLY access to the vertex and its
 	// attributes.
 	listSerializer ListSerializer[T]
-	// The outputFormat specifies the format in which the output should be
-	// rendered.
-	// outputFormat  render.OutputFormat
 	// The roots of the tree to render.
+	// The order of the roots determines the order of the root nodes in the
+	// rendered output.
 	// The roots are part of the Renderer instead of being passed to the
 	// Render method to keep renderer.Renderer decoupled of specific data
 	// structures.
@@ -131,8 +129,6 @@ func (r *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 			}
 		}
 	}
-
-	slices.Sort(roots)
 
 	for _, root := range roots {
 		if err := r.traverseGraph(ctx, root); err != nil {

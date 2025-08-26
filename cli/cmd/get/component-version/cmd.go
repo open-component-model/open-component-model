@@ -32,6 +32,7 @@ import (
 const (
 	FlagSemverConstraint = "semver-constraint"
 	FlagOutput           = "output"
+	FlagDisplayMode      = "display-mode"
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagLatest           = "latest"
 	FlagRecursive        = "recursive"
@@ -82,7 +83,10 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 		DisableAutoGenTag: true,
 	}
 
-	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{"table", "yaml", "json", "tree"}, "output format of the component descriptors")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{"table", "yaml", "json", "ndjson", "tree"}, "output format of the component descriptors")
+	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{"static", "live"}, `display mode (default static) can be used in combination with --recursive
+  static: print the output once the complete component graph is discovered
+  live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
 	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
@@ -116,6 +120,10 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
 	}
+	displayMode, err := enum.Get(cmd.Flags(), FlagDisplayMode)
+	if err != nil {
+		return fmt.Errorf("getting display-mode flag failed: %w", err)
+	}
 	constraint, err := cmd.Flags().GetString(FlagSemverConstraint)
 	if err != nil {
 		return fmt.Errorf("getting semver-constraint flag failed: %w", err)
@@ -135,9 +143,13 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 
 	reference := args[0]
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
-	resolvers, err := resolversFromConfig(config, err)
-	if err != nil {
-		return fmt.Errorf("getting resolvers from configuration failed: %w", err)
+
+	var resolvers []resolverruntime.Resolver
+	if config != nil {
+		resolvers, err = resolversFromConfig(config, err)
+		if err != nil {
+			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
+		}
 	}
 	repo, err := ocm.NewFromRefWithFallbackRepo(cmd.Context(), pluginManager, credentialGraph, resolvers, reference)
 	if err != nil {
@@ -155,23 +167,14 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
 
-	if recursive != 0 {
-		if err := renderComponentsRecursive(cmd, repo, descs, output); err != nil {
-			return fmt.Errorf("failed to render components recursively: %w", err)
-		}
-		return nil
-	}
-	if err = renderComponents(cmd, descs, output); err != nil {
-		return fmt.Errorf("failed to render components: %w", err)
+	if err := renderComponents(cmd, repo, descs, output, displayMode, recursive); err != nil {
+		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 	return nil
 }
 
 //nolint:staticcheck // no replacement for resolvers available yet
 func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime.Resolver, error) {
-	if config == nil {
-		return nil, nil
-	}
 	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
 	if err != nil {
 		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
@@ -189,24 +192,22 @@ func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime
 	return resolvers, nil
 }
 
-func renderComponents(cmd *cobra.Command, descs []*descruntime.Descriptor, format string) error {
-	reader, size, err := encodeDescriptors(format, descs)
-	if err != nil {
-		return fmt.Errorf("generating format failed: %w", err)
-	}
-
-	if _, err := io.CopyN(cmd.OutOrStdout(), reader, size); err != nil {
-		return fmt.Errorf("writing component version descriptor failed: %w", err)
-	}
-	return nil
-}
-
-func renderComponentsRecursive(cmd *cobra.Command, repo *ocm.ComponentRepository, descs []*descruntime.Descriptor, format string) error {
+func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, descs []*descruntime.Descriptor, format string, mode string, recursive int) error {
 	dag := syncdag.NewDirectedAcyclicGraph[string]()
 
 	var renderer render.Renderer
 	const identityAttribute = "identity"
 	const descriptorAttribute = "descriptor"
+
+	roots := make([]*syncdag.Vertex[string], 0, len(descs))
+	rootIDs := make([]string, 0, len(descs))
+	for _, desc := range descs {
+		roots = append(roots, syncdag.NewVertex(desc.Component.ToIdentity().String(), map[string]any{
+			identityAttribute:   desc.Component.ToIdentity(),
+			descriptorAttribute: desc,
+		}))
+		rootIDs = append(rootIDs, desc.Component.ToIdentity().String())
+	}
 
 	// Prepare serializers for output formats.
 	// Some output formats share the same serializer.
@@ -245,71 +246,91 @@ func renderComponentsRecursive(cmd *cobra.Command, repo *ocm.ComponentRepository
 	switch format {
 	case render.OutputFormatJSON.String():
 		serializer := list.NewSerializer(list.WithVertexSerializer(descriptorVertexSerializer), list.WithOutputFormat[string](render.OutputFormatJSON))
-		renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
+		renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer), list.WithRoots(rootIDs...))
 	case render.OutputFormatYAML.String():
 		serializer := list.NewSerializer(list.WithVertexSerializer(descriptorVertexSerializer), list.WithOutputFormat[string](render.OutputFormatYAML))
-		renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
+		renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer), list.WithRoots(rootIDs...))
 	case render.OutputFormatNDJSON.String():
 		serializer := list.NewSerializer(list.WithVertexSerializer(descriptorVertexSerializer), list.WithOutputFormat[string](render.OutputFormatNDJSON))
-		renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
+		renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer), list.WithRoots(rootIDs...))
 	case render.OutputFormatTree.String():
 		serializer := treeVertexSerializer
-		renderer = tree.New(cmd.Context(), dag, tree.WithVertexSerializer(serializer))
+		renderer = tree.New(cmd.Context(), dag, tree.WithVertexSerializer(serializer), tree.WithRoots(rootIDs...))
 	case render.OutputFormatTable.String():
 		serializer := tableListSerializer
-		renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer))
+		renderer = list.New(cmd.Context(), dag, list.WithListSerializer(serializer), list.WithRoots(rootIDs...))
 	default:
 		return fmt.Errorf("invalid output format %q", format)
 	}
 
-	// Start the render loop.
-	renderCtx, cancel := context.WithCancel(cmd.Context())
-	wait := render.RunRenderLoop(renderCtx, renderer, render.WithRenderOptions(render.WithWriter(cmd.OutOrStdout())))
+	var discoverNeighborsFunc syncdag.DiscoverNeighborsFunc[string]
+	if recursive != 0 {
+		// Prepare function to discover neighbors (referenced component versions) of
+		// a vertex (component version).
+		discoverNeighborsFunc = func(ctx context.Context, v *syncdag.Vertex[string]) (neighbors []*syncdag.Vertex[string], err error) {
+			id, _ := v.MustGetAttribute(identityAttribute).(runtime.Identity)
+			var desc *descruntime.Descriptor
+			// root descriptors are already known
+			if _, ok := v.GetAttribute(descriptorAttribute); !ok {
+				desc, err = repo.ComponentVersionRepository().GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
+				if err != nil {
+					return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
+				}
+				v.Attributes.Store(descriptorAttribute, desc)
+			} else {
+				desc, _ = v.MustGetAttribute(descriptorAttribute).(*descruntime.Descriptor)
+			}
+			// Store the component version descriptor with the vertex.
+			// It will be used by the serializers to generate the output.
 
-	// Prepare function to discover neighbors (referenced component versions) of
-	// a vertex (component version).
-	discoverNeighborsFunc := func(ctx context.Context, v *syncdag.Vertex[string]) (neighbors []*syncdag.Vertex[string], err error) {
-		id, _ := v.MustGetAttribute(identityAttribute).(runtime.Identity)
-		desc, err := repo.ComponentVersionRepository().GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
+			for _, reference := range desc.Component.References {
+				refID := make(runtime.Identity, 2)
+				refID[descruntime.IdentityAttributeName] = reference.Component
+				refID[descruntime.IdentityAttributeVersion] = reference.Version
+				// Create a new vertex for the referenced component version
+				neighbor := syncdag.NewVertex(refID.String(), map[string]any{
+					identityAttribute: refID,
+				})
+				neighbors = append(neighbors, neighbor)
+			}
+			return neighbors, nil
+		}
+	} else {
+		// Without this no-op discover neighbors, traverse simply adds the root
+		// vertices to the graph and returns.
+		discoverNeighborsFunc = func(ctx context.Context, v *syncdag.Vertex[string]) (neighbors []*syncdag.Vertex[string], err error) {
+			return nil, nil
+		}
+	}
+
+	switch mode {
+	case "static":
+		// Start traversing the graph from the root vertices (the initially resolved
+		// component versions).
+		err := dag.Traverse(cmd.Context(), discoverNeighborsFunc, syncdag.WithRoots(roots...))
 		if err != nil {
-			return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
+			return fmt.Errorf("traversing component version graph failed: %w", err)
 		}
-		// Store the component version descriptor with the vertex.
-		// It will be used by the serializers to generate the output.
-		v.Attributes.Store(descriptorAttribute, desc)
-
-		for _, reference := range desc.Component.References {
-			refID := make(runtime.Identity, 2)
-			refID[descruntime.IdentityAttributeName] = reference.Component
-			refID[descruntime.IdentityAttributeVersion] = reference.Version
-			// Create a new vertex for the referenced component version
-			neighbor := syncdag.NewVertex(refID.String(), map[string]any{
-				identityAttribute: refID,
-			})
-			neighbors = append(neighbors, neighbor)
+		if err := render.RenderOnce(cmd.Context(), renderer, render.WithWriter(cmd.OutOrStdout())); err != nil {
+			return err
 		}
-		return neighbors, nil
-	}
+	case "live":
+		// Start the render loop.
+		renderCtx, cancel := context.WithCancel(cmd.Context())
+		wait := render.RunRenderLoop(renderCtx, renderer, render.WithRenderOptions(render.WithWriter(cmd.OutOrStdout())))
+		// Start traversing the graph from the root vertices (the initially resolved
+		// component versions).
+		// The render loop is running concurrently and regularly displays the current
+		// state of the graph.
+		err := dag.Traverse(cmd.Context(), discoverNeighborsFunc, syncdag.WithRoots(roots...))
+		cancel()
+		if err != nil {
+			return fmt.Errorf("traversing component version graph failed: %w", err)
+		}
 
-	roots := make([]*syncdag.Vertex[string], 0, len(descs))
-	for _, desc := range descs {
-		roots = append(roots, syncdag.NewVertex(desc.Component.ToIdentity().String(), map[string]any{
-			identityAttribute: desc.Component.ToIdentity(),
-		}))
-	}
-
-	// Start traversing the graph from the root vertices (the initially resolved
-	// component versions).
-	// The render loop is running concurrently and regularly displays the current
-	// state of the graph.
-	err := dag.Traverse(cmd.Context(), syncdag.DiscoverNeighborsFunc[string](discoverNeighborsFunc), syncdag.WithRoots(roots...))
-	cancel()
-	if err != nil {
-		return fmt.Errorf("traversing component version graph failed: %w", err)
-	}
-
-	if err := wait(); !errors.Is(err, context.Canceled) {
-		return fmt.Errorf("rendering component version graph failed: %w", err)
+		if err := wait(); !errors.Is(err, context.Canceled) {
+			return fmt.Errorf("rendering component version graph failed: %w", err)
+		}
 	}
 	return nil
 }

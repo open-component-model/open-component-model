@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"slices"
 
 	"github.com/jedib0t/go-pretty/v6/list"
 
@@ -104,8 +103,6 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 			}
 		}
 	}
-
-	slices.Sort(roots)
 
 	for _, root := range roots {
 		if err := t.traverseGraph(ctx, root); err != nil {

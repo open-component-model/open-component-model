@@ -19,6 +19,8 @@ func encodeDescriptors(output string, descs []*descruntime.Descriptor) (io.Reade
 	var err error
 	switch output {
 	case "json":
+		data, err = encodeDescriptorsAsJSON(descs)
+	case "ndjson":
 		data, err = encodeDescriptorsAsNDJSON(descs)
 	case "yaml":
 		data, err = encodeDescriptorsAsYAML(descs)
@@ -31,6 +33,24 @@ func encodeDescriptors(output string, descs []*descruntime.Descriptor) (io.Reade
 		return nil, 0, fmt.Errorf("encoding component version descriptor as %q failed: %w", output, err)
 	}
 	return bytes.NewReader(data), int64(len(data)), nil
+}
+
+func encodeDescriptorsAsJSON(descriptor []*descruntime.Descriptor) ([]byte, error) {
+	// TODO(jakobmoellerdev): add formatting options for scheme version with v2 as only option
+	v2List := make([]*v2.Descriptor, len(descriptor))
+	for i, desc := range descriptor {
+		v2descriptor, err := descruntime.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
+		if err != nil {
+			return nil, fmt.Errorf("converting component version to v2 descriptor failed: %w", err)
+		}
+		v2List[i] = v2descriptor
+	}
+
+	if len(v2List) == 1 {
+		return json.MarshalIndent(v2List[0], "", "  ")
+	}
+
+	return json.MarshalIndent(v2List, "", "  ")
 }
 
 func encodeDescriptorsAsNDJSON(descs []*descruntime.Descriptor) ([]byte, error) {
