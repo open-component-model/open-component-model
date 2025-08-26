@@ -595,11 +595,11 @@ COMPONENT           │ VERSION │ PROVIDER
 		{
 			name: "tree output - all versions",
 			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
-			expectedOutput: `╭─ ocm.software/root:0.0.1
-│  ├─ ocm.software/leaf-a:0.0.1
-│  ╰─ ocm.software/leaf-b:0.0.1
-╰─ ocm.software/root:0.0.2
-   ╰─ ocm.software/leaf-a:0.0.1`,
+			expectedOutput: `╭─ ocm.software/root:0.0.2
+│  ╰─ ocm.software/leaf-a:0.0.1
+╰─ ocm.software/root:0.0.1
+   ├─ ocm.software/leaf-a:0.0.1
+   ╰─ ocm.software/leaf-b:0.0.1`,
 			expectedError: false,
 		},
 		{

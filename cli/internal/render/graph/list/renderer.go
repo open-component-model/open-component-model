@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/cli/internal/render/graph"
@@ -118,6 +119,9 @@ func (r *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	roots := r.roots
 	if len(roots) == 0 {
 		roots = r.dag.Roots()
+		// We only do this for auto-detected roots. If the roots are provided,
+		// we want to preserve the order.
+		slices.Sort(roots)
 	} else {
 		for index, root := range roots {
 			if _, exists := r.dag.GetVertex(root); !exists {

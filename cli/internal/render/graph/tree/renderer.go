@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 
 	"github.com/jedib0t/go-pretty/v6/list"
 
@@ -92,6 +93,9 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	roots := t.roots
 	if len(roots) == 0 {
 		roots = t.dag.Roots()
+		// We only do this for auto-detected roots. If the roots are provided,
+		// we want to preserve the order.
+		slices.Sort(roots)
 	} else {
 		for index, root := range roots {
 			if _, exists := t.dag.GetVertex(root); !exists {

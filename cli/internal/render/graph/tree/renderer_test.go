@@ -182,8 +182,8 @@ func TestRenderOnce(t *testing.T) {
 
 	// Add B
 	r.NoError(d.AddVertex("B"))
-	expected = `╭─ B
-╰─ A
+	expected = `╭─ A
+╰─ B
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
