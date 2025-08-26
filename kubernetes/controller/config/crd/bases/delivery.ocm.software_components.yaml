@@ -14,17 +14,17 @@ spec:
     singular: component
   scope: Namespaced
   versions:
-    - additionalPrinterColumns:
-        - description: Indicates if the Resource is Ready
-          jsonPath: .status.conditions[?(@.type=="Ready")].message
-          name: Ready
-          priority: 1
-          type: string
-        - description: Displays the Age of the Resource
-          jsonPath: .metadata.creationTimestamp
-          name: Age
-          type: date
-      name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Indicates if the Resource is Ready
+      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Ready
+      priority: 1
+      type: string
+    - description: Displays the Age of the Resource
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Component is the Schema for the components API.
@@ -213,9 +213,9 @@ spec:
                       value:
                         type: string
                     required:
-                      - hashAlgorithm
-                      - normalisationAlgorithm
-                      - value
+                    - hashAlgorithm
+                    - normalisationAlgorithm
+                    - value
                     type: object
                   repositorySpec:
                     x-kubernetes-preserve-unknown-fields: true

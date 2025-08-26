@@ -14,17 +14,17 @@ spec:
     singular: repository
   scope: Namespaced
   versions:
-    - additionalPrinterColumns:
-        - description: Indicates if the Resource is Ready
-          jsonPath: .status.conditions[?(@.type=="Ready")].message
-          name: Ready
-          priority: 1
-          type: string
-        - description: Displays the Age of the Resource
-          jsonPath: .metadata.creationTimestamp
-          name: Age
-          type: date
-      name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Indicates if the Resource is Ready
+      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Ready
+      priority: 1
+      type: string
+    - description: Displays the Age of the Resource
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Repository is the Schema for the repositories API.

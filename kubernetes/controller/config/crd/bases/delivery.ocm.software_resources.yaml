@@ -14,17 +14,17 @@ spec:
     singular: resource
   scope: Namespaced
   versions:
-    - additionalPrinterColumns:
-        - description: Indicates if the Resource is Ready
-          jsonPath: .status.conditions[?(@.type=="Ready")].message
-          name: Ready
-          priority: 1
-          type: string
-        - description: Displays the Age of the Resource
-          jsonPath: .metadata.creationTimestamp
-          name: Age
-          type: date
-      name: v1alpha1
+  - additionalPrinterColumns:
+    - description: Indicates if the Resource is Ready
+      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Ready
+      priority: 1
+      type: string
+    - description: Displays the Age of the Resource
+      jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Resource is the Schema for the resources API.
@@ -191,9 +191,9 @@ spec:
                       value:
                         type: string
                     required:
-                      - hashAlgorithm
-                      - normalisationAlgorithm
-                      - value
+                    - hashAlgorithm
+                    - normalisationAlgorithm
+                    - value
                     type: object
                   repositorySpec:
                     x-kubernetes-preserve-unknown-fields: true
@@ -345,7 +345,7 @@ spec:
                                 merge algorithm.
                               x-kubernetes-preserve-unknown-fields: true
                           required:
-                            - algorithm
+                          - algorithm
                           type: object
                         name:
                           description: Name is the unique name of the label.
@@ -362,8 +362,8 @@ spec:
                             of the attribute value
                           type: string
                       required:
-                        - name
-                        - value
+                      - name
+                      - value
                       type: object
                     type: array
                   name:
