@@ -60,6 +60,8 @@ tasks:
       - PROJECT_DIR={{.TASKFILE_DIR}} go test {{.TASKFILE_DIR}}/test/e2e/ -v -timeout 30m -ginkgo.v
       - task: undeploy
       - task: uninstall
+        vars:
+          IGNORE_NOT_FOUND: "true"
 
   # Build
   build:
