@@ -9,15 +9,9 @@ env:
 
 vars:
   GOBIN:
-    sh: |
-      if [ -z "$(go env GOBIN)" ]; then
-        echo "$(go env GOPATH)/bin"
-      else
-        echo "$(go env GOBIN)"
-      fi
+    sh: 'go env GOBIN || echo $(go env GOPATH)/bin'
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
-  BUILD_DIR: '{{.REPOSITORY_ROOT}}/build'
-  LOCALBIN: '{{ .TASKFILE_DIR }}/bin'
+  LOCALBIN: '{{.TASKFILE_DIR}}/bin'
   KUBECTL: '{{.KUBECTL | default "kubectl"}}'
   KUSTOMIZE: '{{.LOCALBIN}}/kustomize-{{.KUSTOMIZE_VERSION}}'
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}'
@@ -27,35 +21,24 @@ vars:
 
 tasks:
   default:
-    desc: "Default task - build the project"
-    cmds:
-      - task: build
+    cmds: [ task: build ]
 
-  # Development tasks
+  # Development
   manifests:
-    desc: "Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects"
     deps: [controller-gen]
-    cmds:
-      - '{{.CONTROLLER_GEN}} rbac:roleName=manager-role crd webhook paths="{{ .TASKFILE_DIR }}/..." output:crd:artifacts:config=config/crd/bases'
+    cmd: '{{.CONTROLLER_GEN}} rbac:roleName=manager-role crd webhook paths="{{ .TASKFILE_DIR }}/..." output:crd:artifacts:config=config/crd/bases'
 
   generate:
-    desc: "Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations"
     deps: [controller-gen]
-    cmds:
-      - '{{.CONTROLLER_GEN}} object paths="{{ .TASKFILE_DIR }}/..."'
+    cmd: '{{.CONTROLLER_GEN}} object paths="{{ .TASKFILE_DIR }}/..."'
 
   fmt:
-    desc: "Run go fmt against code"
-    cmds:
-      - go fmt {{ .TASKFILE_DIR }}/...
+    cmd: 'go fmt {{ .TASKFILE_DIR }}/...'
 
   vet:
-    desc: "Run go vet against code"
-    cmds:
-      - go vet {{ .TASKFILE_DIR }}/...
+    cmd: 'go vet {{ .TASKFILE_DIR }}/...'
 
   test:
-    desc: "Run tests"
     deps: [manifests, generate, envtest]
     cmds:
       - |
@@ -63,175 +46,100 @@ tasks:
         echo "Using KUBEBUILDER_ASSETS: $KUBEBUILDER_ASSETS"
         go test $(go list ./... | grep -v /e2e) -coverprofile cover.out
 
-  test/e2e/setup:
-    desc: "Prepare the environment for e2e tests"
-    dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
-    cmd: '{{.TASKFILE_DIR}}/test/e2e/hacks/setup.sh'
 
   test/e2e:
-    desc: "Run the e2e tests against a Kind k8s instance that is spun up"
     dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
     cmds:
       - PROJECT_DIR={{.TASKFILE_DIR}} go test {{.TASKFILE_DIR}}/test/e2e/ -v -timeout 30m -ginkgo.v
 
-  # Build tasks
+  # Build
   build:
-    desc: "Build manager binary"
     deps: [manifests, generate, fmt, vet]
-    cmds:
-      - go build -o bin/manager {{.TASKFILE_DIR}}/cmd/main.go
+    cmd: 'go build -o bin/manager {{.TASKFILE_DIR}}/cmd/main.go'
 
   run:
-    desc: "Run a controller from your host"
     deps: [manifests, generate, fmt, vet]
-    cmds:
-      - go run {{.TASKFILE_DIR}}/cmd/main.go
+    cmd: 'go run {{.TASKFILE_DIR}}/cmd/main.go'
 
   docker-build:
-    desc: "Build docker image with the manager"
-    requires:
-      vars:
-        - CONTROLLER_IMG
-    cmds:
-      - '{{.CONTAINER_TOOL}} build -t {{.CONTROLLER_IMG}} .'
+    cmd: '{{.CONTAINER_TOOL}} build -t {{.CONTROLLER_IMG}} .'
 
   docker-push:
-    desc: "Push docker image with the manager"
-    requires:
-      vars:
-      - CONTROLLER_IMG
-    cmds:
-      - '{{.CONTAINER_TOOL}} push {{.CONTROLLER_IMG}}'
+    cmd: '{{.CONTAINER_TOOL}} push {{.CONTROLLER_IMG}}'
 
   docker-buildx:
-    desc: "Build and push docker image for the manager for cross-platform support"
-    requires:
-      vars:
-      - CONTROLLER_IMG
-      - PLATFORMS
     cmds:
-      - |
-        # copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-        sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-      - '{{.CONTAINER_TOOL}} buildx create --name ocm-k8s-toolkit-builder || true'
-      - '{{.CONTAINER_TOOL}} buildx use ocm-k8s-toolkit-builder'
-      - '{{.CONTAINER_TOOL}} buildx build --push --platform={{.PLATFORMS}} --tag {{.CONTROLLER_IMG}} -f Dockerfile.cross .'
-      - '{{.CONTAINER_TOOL}} buildx rm ocm-k8s-toolkit-builder || true'
+      - sed '1s|^FROM|FROM --platform=${BUILDPLATFORM}|' Dockerfile > Dockerfile.cross
+      - '{{.CONTAINER_TOOL}} buildx build --push --platform={{.PLATFORMS}} -t {{.CONTROLLER_IMG}} -f Dockerfile.cross .'
       - rm Dockerfile.cross
 
   build-installer:
-    desc: "Generate a consolidated YAML with CRDs and deployment"
     deps: [manifests, generate, kustomize]
     cmds:
       - mkdir -p dist
       - task: set-images
       - '{{.KUSTOMIZE}} build config/default > dist/install.yaml'
 
-  # Deployment tasks
+  # Deployment
   install:
-    desc: "Install CRDs into the K8s cluster specified in ~/.kube/config"
     deps: [manifests, kustomize]
-    cmds:
-      - '{{.KUSTOMIZE}} build config/crd | {{.KUBECTL}} apply -f -'
+    cmd: '{{.KUSTOMIZE}} build config/crd | {{.KUBECTL}} apply -f -'
 
   uninstall:
-    desc: "Uninstall CRDs from the K8s cluster specified in ~/.kube/config"
     deps: [manifests, kustomize]
-    cmds:
-      - '{{.KUSTOMIZE}} build config/crd | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
+    cmd: '{{.KUSTOMIZE}} build config/crd | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
 
   deploy:
-    desc: "Deploy controller to the K8s cluster specified in ~/.kube/config"
     deps: [manifests, kustomize]
     cmds:
       - task: set-images
       - '{{.KUSTOMIZE}} build config/default | {{.KUBECTL}} apply -f -'
 
   undeploy:
-    desc: "Undeploy controller from the K8s cluster specified in ~/.kube/config"
     deps: [kustomize]
-    cmds:
-      - '{{.KUSTOMIZE}} build config/default | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
+    cmd: '{{.KUSTOMIZE}} build config/default | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
 
-  # Tool installation tasks
-  ensure-localbin:
-    desc: "Ensure local bin directory exists"
-    cmds:
-      - echo "Ensuring local bin directory exists at {{.LOCALBIN}}"
-      - mkdir -p {{ .LOCALBIN }}
-    status:
-      - test -d {{.LOCALBIN}}
-
+  # Tool installers (all via helper)
   kustomize:
-    desc: "Download kustomize locally if necessary"
-    deps: [ensure-localbin]
-    cmds:
+    deps:
       - task: go-install-tool
-        vars:
-          TOOL_PATH: '{{.KUSTOMIZE}}'
-          PACKAGE: sigs.k8s.io/kustomize/kustomize/v5
-          VERSION: '{{.KUSTOMIZE_VERSION}}'
-    generates:
-      - '{{.KUSTOMIZE}}'
+        vars: { TOOL_PATH: '{{.KUSTOMIZE}}', PACKAGE: sigs.k8s.io/kustomize/kustomize/v5, VERSION: '{{.KUSTOMIZE_VERSION}}' }
+    generates: [ '{{.KUSTOMIZE}}' ]
 
   controller-gen:
-    desc: "Download controller-gen locally if necessary"
-    deps: [ensure-localbin]
-    cmds:
+    deps:
       - task: go-install-tool
-        vars:
-          TOOL_PATH: '{{.CONTROLLER_GEN}}'
-          PACKAGE: sigs.k8s.io/controller-tools/cmd/controller-gen
-          VERSION: '{{.CONTROLLER_TOOLS_VERSION}}'
-    generates:
-      - '{{.CONTROLLER_GEN}}'
+        vars: { TOOL_PATH: '{{.CONTROLLER_GEN}}', PACKAGE: sigs.k8s.io/controller-tools/cmd/controller-gen, VERSION: '{{.CONTROLLER_TOOLS_VERSION}}' }
+    generates: [ '{{.CONTROLLER_GEN}}' ]
 
   envtest:
-    desc: "Download setup-envtest locally if necessary"
-    deps: [ensure-localbin]
-    cmds:
+    deps:
       - task: go-install-tool
-        vars:
-          TOOL_PATH: '{{.ENVTEST}}'
-          PACKAGE: sigs.k8s.io/controller-runtime/tools/setup-envtest
-          VERSION: '{{.ENVTEST_VERSION}}'
-    generates:
-      - '{{.ENVTEST}}'
+        vars: { TOOL_PATH: '{{.ENVTEST}}', PACKAGE: sigs.k8s.io/controller-runtime/tools/setup-envtest, VERSION: '{{.ENVTEST_VERSION}}' }
+    generates: [ '{{.ENVTEST}}' ]
 
-  # Helper tasks
   go-install-tool:
-    requires:
-      vars:
-      - TOOL_PATH
-      - PACKAGE
-      - VERSION
-    preconditions:
-      - test -n '{{.TOOL_PATH}}'
-    desc: "Install Go tool with custom target and name of binary"
     internal: true
-    vars:
-      TOOL_NAME:
-        sh: basename {{.TOOL_PATH}} | sed 's/-{{.VERSION}}$//'
-    cmds:
-      - |
-        set -e
-        package={{.PACKAGE}}@{{.VERSION}}
-        echo "Downloading ${package}"
-        tmp=$(mktemp -d)
-        trap 'rm -rf "$tmp"' EXIT
-        GOBIN=$tmp go install ${package}
-        if [ "{{.TOOL_NAME}}" != "$(basename {{.TOOL_PATH}})" ]; then
-          mv $tmp/{{.TOOL_NAME}} {{.TOOL_PATH}}
-        fi
+    desc: "Install a go tool to a specific path"
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      
+      # install into temp dir
+      GOBIN=$tmp go install {{.PACKAGE}}@{{.VERSION}}
+      
+      # figure out binary name (strip version suffix if present)
+      name=$(basename {{.TOOL_PATH}} | sed 's/-{{.VERSION}}$//')
+      
+      # move binary if names differ
+      if [ "$name" != "$(basename {{.TOOL_PATH}})" ]; then
+        mv "$tmp/$name" {{.TOOL_PATH}}
+      fi
     generates:
       - '{{.TOOL_PATH}}'
 
   set-images:
-    desc: "Set images using kustomize"
     internal: true
     dir: config/manager
-    requires:
-        vars:
-        - CONTROLLER_IMG
-    cmds:
-      - '{{.KUSTOMIZE}} edit set image ghcr.io/open-component-model/ocm-k8s-toolkit={{.CONTROLLER_IMG}}'
+    cmd: '{{.KUSTOMIZE}} edit set image ghcr.io/open-component-model/ocm-k8s-toolkit={{.CONTROLLER_IMG}}'

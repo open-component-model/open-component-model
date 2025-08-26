@@ -261,7 +261,7 @@ var _ = Describe("Resource Controller", func() {
 						env.Version(componentVersion, func() {
 							env.Resource(resourceName, "1.0.0", artifacttypes.DIRECTORY_TREE, ocmmetav1.ExternalRelation, func() {
 								env.Access(github.New(
-									"https://ocm.software/open-component-model/kubernetes/controller",
+									"https://github.com/open-component-model/ocm-k8s-toolkit",
 									"/repos/open-component-model/ocm-k8s-toolkit",
 									"8f7e04f4b58d2a9e22f88e79dddfc36183688f28",
 								))
@@ -272,7 +272,7 @@ var _ = Describe("Resource Controller", func() {
 				return filepath.Join(tempDir, ctfName)
 			},
 				&testCase{
-					GithubRepoURL: "https://ocm.software/open-component-model/kubernetes/controller",
+					GithubRepoURL: "https://github.com/open-component-model/ocm-k8s-toolkit",
 				},
 			),
 			Entry("git access", func() string {
@@ -282,7 +282,7 @@ var _ = Describe("Resource Controller", func() {
 						env.Version(componentVersion, func() {
 							env.Resource(resourceName, "1.0.0", artifacttypes.DIRECTORY_TREE, ocmmetav1.ExternalRelation, func() {
 								env.Access(git.New(
-									"https://ocm.software/open-component-model/kubernetes/controller",
+									"https://github.com/open-component-model/ocm-k8s-toolkit",
 									git.WithRef("refs/heads/main"),
 								))
 							})
@@ -292,7 +292,7 @@ var _ = Describe("Resource Controller", func() {
 				return filepath.Join(tempDir, ctfName)
 			},
 				&testCase{
-					GitRepository: "https://ocm.software/open-component-model/kubernetes/controller",
+					GitRepository: "https://github.com/open-component-model/ocm-k8s-toolkit",
 				},
 			),
 		)
