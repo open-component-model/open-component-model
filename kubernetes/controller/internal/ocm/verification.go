@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	"ocm.software/ocm/api/ocm"
 	"ocm.software/ocm/api/ocm/resolvers"
 	"ocm.software/ocm/api/ocm/tools/signing"
+	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	corev1 "k8s.io/api/core/v1"
-	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
@@ -79,7 +78,7 @@ func VerifyComponentVersion(ctx context.Context, cv ocm.ComponentVersionAccess, 
 	opts := signing.NewOptions(
 		signing.Resolver(resolver),
 		// TODO: Consider configurable options for digest verification (@frewilhelm @fabianburth)
-		//   https://ocm.software/open-component-model/kubernetes/controller/issues/208
+		//   https://github.com/open-component-model/ocm-k8s-toolkit/issues/208
 		// do we really want to verify the digests here? isn't it sufficient to verify the signatures since
 		// the digest verification can and has to be done anyways by the resource controller?
 		// signing.VerifyDigests(),

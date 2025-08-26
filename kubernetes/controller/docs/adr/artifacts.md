@@ -280,8 +280,8 @@ Cons:
 
 # Links
 
-* Epic [#75](https://ocm.software/open-component-model/kubernetes/controller/issues/75)
-* Issue [#90](https://ocm.software/open-component-model/kubernetes/controller/issues/90)
+* Epic [#75](https://github.com/open-component-model/ocm-k8s-toolkit/issues/75)
+* Issue [#90](https://github.com/open-component-model/ocm-k8s-toolkit/issues/90)
 
 [artifact-definition]: https://github.com/openfluxcd/artifact/blob/d9db932260eb5f847737bcae3589b653398780ae/api/v1alpha1/artifact_types.go#L30
 [fluxcd-rfc]: https://github.com/fluxcd/flux2/discussions/5058

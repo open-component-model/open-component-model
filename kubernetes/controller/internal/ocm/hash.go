@@ -10,10 +10,9 @@ import (
 	"maps"
 	"slices"
 
-	"ocm.software/ocm/api/ocm/compdesc"
-
 	v1 "k8s.io/api/core/v1"
 	ocmctx "ocm.software/ocm/api/ocm"
+	"ocm.software/ocm/api/ocm/compdesc"
 	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 )

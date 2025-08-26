@@ -8,10 +8,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )

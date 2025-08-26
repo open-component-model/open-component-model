@@ -119,7 +119,10 @@ func (repl *Replication) SetConditions(conditions []metav1.Condition) {
 
 // GetRequeueAfter returns the duration after which the ComponentVersion must be
 // reconciled again.
-func (repl Replication) GetRequeueAfter() time.Duration {
+func (repl *Replication) GetRequeueAfter() time.Duration {
+	if repl == nil {
+		return 0
+	}
 	return repl.Spec.Interval.Duration
 }
 

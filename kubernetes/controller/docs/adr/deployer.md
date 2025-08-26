@@ -522,8 +522,8 @@ This is why, we will not elaborate further on this approach.
 
 # Links
 
-* Epic [#404](https://ocm.software/open-component-model/kubernetes/controller/issues/147)
-* Issue [#90](https://ocm.software/open-component-model/kubernetes/controller/issues/136)
+* Epic [#404](https://github.com/open-component-model/ocm-k8s-toolkit/issues/147)
+* Issue [#90](https://github.com/open-component-model/ocm-k8s-toolkit/issues/136)
 
 [kro-github]: https://github.com/kro-run/kro
 

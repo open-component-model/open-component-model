@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,26 +36,26 @@ func Run(cmd *exec.Cmd) ([]byte, error) {
 // Example:
 //
 //	err := DeployAndWaitForResource("./pod.yaml", "condition=Ready")
-func DeployAndWaitForResource(manifestFilePath, waitingFor, timeout string) error {
-	err := DeployResource(manifestFilePath)
+func DeployAndWaitForResource(ctx context.Context, manifestFilePath, waitingFor, timeout string) error {
+	err := DeployResource(ctx, manifestFilePath)
 	if err != nil {
 		return err
 	}
 
-	return WaitForResource(waitingFor, timeout, "-f", manifestFilePath)
+	return WaitForResource(ctx, waitingFor, timeout, "-f", manifestFilePath)
 }
 
 // DeployResource takes a manifest file of a k8s resource and deploys it with "kubectl". Correspondingly,
 // a DeferCleanup-handler is created that will delete the resource, when the test-suite ends.
 // In contrast to "DeployAndWaitForResource", this function does not wait for a certain condition to be fulfilled.
-func DeployResource(manifestFilePath string) error {
-	cmd := exec.Command("kubectl", "apply", "-f", manifestFilePath)
+func DeployResource(ctx context.Context, manifestFilePath string) error {
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", manifestFilePath)
 	_, err := Run(cmd)
 	if err != nil {
 		return err
 	}
 	DeferCleanup(func() error {
-		cmd = exec.Command("kubectl", "delete", "-f", manifestFilePath)
+		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
 		_, err := Run(cmd)
 
 		return err
@@ -63,10 +64,10 @@ func DeployResource(manifestFilePath string) error {
 	return err
 }
 
-func WaitForResource(condition, timeout string, resource ...string) error {
+func WaitForResource(ctx context.Context, condition, timeout string, resource ...string) error {
 	cmdArgs := append([]string{"wait", "--for=" + condition}, resource...)
 	cmdArgs = append(cmdArgs, "--timeout="+timeout)
-	cmd := exec.Command("kubectl", cmdArgs...)
+	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
 	_, err := Run(cmd)
 
 	return err
@@ -74,7 +75,7 @@ func WaitForResource(condition, timeout string, resource ...string) error {
 
 // PrepareOCMComponent creates an OCM component from a component-constructor file.
 // After creating the OCM component, the component is transferred to imageRegistry.
-func PrepareOCMComponent(name, componentConstructorPath, imageRegistry, signingKey string) error {
+func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, imageRegistry, signingKey string) error {
 	By("creating ocm component for " + name)
 	tmpDir := GinkgoT().TempDir()
 
@@ -87,7 +88,7 @@ func PrepareOCMComponent(name, componentConstructorPath, imageRegistry, signingK
 		componentConstructorPath,
 	}
 
-	cmd := exec.Command("ocm", cmdArgs...)
+	cmd := exec.CommandContext(ctx, "ocm", cmdArgs...)
 	_, err := Run(cmd)
 	if err != nil {
 		return fmt.Errorf("could not create ocm component: %w", err)
@@ -95,7 +96,7 @@ func PrepareOCMComponent(name, componentConstructorPath, imageRegistry, signingK
 
 	if signingKey != "" {
 		By("signing ocm component for " + name)
-		cmd = exec.Command(
+		cmd = exec.CommandContext(ctx,
 			"ocm",
 			"sign",
 			"componentversions",
@@ -126,7 +127,7 @@ func PrepareOCMComponent(name, componentConstructorPath, imageRegistry, signingK
 		imageRegistry,
 	}
 
-	cmd = exec.Command("ocm", cmdArgs...)
+	cmd = exec.CommandContext(ctx, "ocm", cmdArgs...)
 	_, err = Run(cmd)
 	if err != nil {
 		return fmt.Errorf("could not transfer ocm component: %w", err)
@@ -139,7 +140,7 @@ func PrepareOCMComponent(name, componentConstructorPath, imageRegistry, signingK
 // If credentials are required, the path to the OCM configuration file can be supplied as the second parameter.
 // Options are optional. For possible values see:
 // https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_check_componentversions.md
-func CheckOCMComponent(componentReference, ocmConfigPath string, options ...string) error {
+func CheckOCMComponent(ctx context.Context, componentReference, ocmConfigPath string, options ...string) error {
 	c := []string{"ocm"}
 	if len(ocmConfigPath) > 0 {
 		c = append(c, "--config", ocmConfigPath)
@@ -150,7 +151,7 @@ func CheckOCMComponent(componentReference, ocmConfigPath string, options ...stri
 	}
 	c = append(c, componentReference)
 
-	cmd := exec.Command(c[0], c[1:]...) //nolint:gosec // The argument list is constructed right above.
+	cmd := exec.CommandContext(ctx, c[0], c[1:]...) //nolint:gosec // The argument list is constructed right above.
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
@@ -160,7 +161,7 @@ func CheckOCMComponent(componentReference, ocmConfigPath string, options ...stri
 
 // GetOCMResourceImageRef returns the image reference of a specified resource of a component version.
 // For the format of component reference see OCM CLI documentation.
-func GetOCMResourceImageRef(componentReference, resourceName, ocmConfigPath string) (string, error) {
+func GetOCMResourceImageRef(ctx context.Context, componentReference, resourceName, ocmConfigPath string) (string, error) {
 	// Construct the command 'ocm get resources', which is used here to get the image reference of a resource.
 	// See also: https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_get_resources.md
 	c := []string{"ocm", "--loglevel", "error"}
@@ -169,7 +170,7 @@ func GetOCMResourceImageRef(componentReference, resourceName, ocmConfigPath stri
 	}
 	c = append(c, "get", "resources", componentReference, resourceName, "-oJSON") // -oJSON is used to get the output in JSON format.
 
-	cmd := exec.Command(c[0], c[1:]...) //nolint:gosec // The argument list is constructed right above.
+	cmd := exec.CommandContext(ctx, c[0], c[1:]...) //nolint:gosec // The argument list is constructed right above.
 	output, err := Run(cmd)
 	if err != nil {
 		return "", err
@@ -200,16 +201,16 @@ func GetOCMResourceImageRef(componentReference, resourceName, ocmConfigPath stri
 }
 
 // Create Kubernetes namespace.
-func CreateNamespace(ns string) error {
-	cmd := exec.Command("kubectl", "create", "ns", ns)
+func CreateNamespace(ctx context.Context, ns string) error {
+	cmd := exec.CommandContext(ctx, "kubectl", "create", "ns", ns)
 	_, err := Run(cmd)
 
 	return err
 }
 
 // Delete Kubernetes namespace.
-func DeleteNamespace(ns string) error {
-	cmd := exec.Command("kubectl", "delete", "ns", ns)
+func DeleteNamespace(ctx context.Context, ns string) error {
+	cmd := exec.CommandContext(ctx, "kubectl", "delete", "ns", ns)
 	_, err := Run(cmd)
 
 	return err
@@ -225,11 +226,11 @@ func DeleteNamespace(ns string) error {
 //
 // Returns:
 // - An error if the field value does not match the expected value or if the command fails.
-func CompareResourceField(resource, fieldSelector, expected string) error {
+func CompareResourceField(ctx context.Context, resource, fieldSelector, expected string) error {
 	args := []string{"get"}
 	args = append(args, strings.Split(resource, " ")...)
 	args = append(args, "-o", "jsonpath="+fieldSelector)
-	cmd := exec.Command("kubectl", args...)
+	cmd := exec.CommandContext(ctx, "kubectl", args...)
 	output, err := Run(cmd)
 	if err != nil {
 		return err

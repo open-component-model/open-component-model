@@ -33,27 +33,27 @@ var _ = Describe("Replication Controller", func() {
 			envInternalProtectedRegistryURL2 = "INTERNAL_PROTECTED_REGISTRY_URL2"
 		)
 
-		BeforeEach(func() {
-			err := utils.CreateNamespace(testNamespace)
+		BeforeEach(func(ctx SpecContext) {
+			err := utils.CreateNamespace(ctx, testNamespace)
 			ExpectWithOffset(1, err).NotTo(HaveOccurred())
 			DeferCleanup(func() error {
-				return utils.DeleteNamespace(testNamespace)
+				return utils.DeleteNamespace(ctx, testNamespace)
 			})
 		})
 
 		// This test transfers the test component from a public registry to the one configured in the test environment.
 		// The test uses neither explicit transfer options nor credentials.
-		It("should be possible to transfer the test component from its external location to configured OCI registry", func() {
+		It("should be possible to transfer the test component from its external location to configured OCI registry", func(ctx SpecContext) {
 			By("Apply manifests to the cluster")
 			manifestDir := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata/replication-no-config")
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Repository-source.yaml"), "condition=Ready", timeout)).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Component.yaml"), "condition=Ready", timeout)).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Repository-target.yaml"), "condition=Ready", timeout)).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Replication.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-source.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Component.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-target.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Replication.yaml"), "condition=Ready", timeout)).To(Succeed())
 
 			By("Double-check that copied component version is present in the target repository")
 			// Use external registry URL, because the check connects from outside of the cluster.
-			Expect(utils.CheckOCMComponent(imageRegistry+"//"+ocmCompName+":"+ocmCompVersion, "")).To(Succeed())
+			Expect(utils.CheckOCMComponent(ctx, imageRegistry+"//"+ocmCompName+":"+ocmCompVersion, "")).To(Succeed())
 		})
 
 		// This test does two transfer operations:
@@ -61,7 +61,7 @@ var _ = Describe("Replication Controller", func() {
 		//   2. From intermediate registry above to a yet another protected registry.
 		// The protected registries are password-protected, thus respective ocmconfig are required to access them.
 		// Also transfer options are used in both transfer operations.
-		It("should be possible to transfer CVs between private OCI registries with transfer options", func() {
+		It("should be possible to transfer CVs between private OCI registries with transfer options", func(ctx SpecContext) {
 			var (
 				protectedRegistry          string
 				internalProtectedRegistry  string
@@ -82,39 +82,39 @@ var _ = Describe("Replication Controller", func() {
 
 			By("Apply manifests to the cluster, required for the first transfer operation")
 			manifestDir := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata/replication-with-config")
-			Expect(utils.DeployResource(filepath.Join(manifestDir, "ConfigMap-transfer-opt.yaml"))).To(Succeed())
-			Expect(utils.DeployResource(filepath.Join(manifestDir, "ConfigMap-creds1.yaml"))).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Repository-source.yaml"), "condition=Ready", timeout)).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Component-origin.yaml"), "condition=Ready", timeout)).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Repository-intermediate.yaml"), "condition=Ready", timeout)).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Replication-to-intermediate.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ConfigMap-transfer-opt.yaml"))).To(Succeed())
+			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ConfigMap-creds1.yaml"))).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-source.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Component-origin.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-intermediate.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Replication-to-intermediate.yaml"), "condition=Ready", timeout)).To(Succeed())
 
 			By("Double-check that copied component version is present in the intermediate registry")
 			// Credentials are required for the 'ocm check' command to access the protected registry.
 			ocmconfigFile := filepath.Join(manifestDir, "creds1.ocmconfig")
 			// Use external registry URL, because the check connects from outside.
 			componentReference := protectedRegistry + "//" + ocmCompName + ":" + ocmCompVersion
-			Expect(utils.CheckOCMComponent(componentReference, ocmconfigFile, ocmCheckOptFailOnError)).To(Succeed())
+			Expect(utils.CheckOCMComponent(ctx, componentReference, ocmconfigFile, ocmCheckOptFailOnError)).To(Succeed())
 
 			By("Apply manifests to the cluster, required for the second transfer operation")
 			// The intermediate repo is now the new source. Btw., the resource already exists in the cluster.
-			Expect(utils.DeployResource(filepath.Join(manifestDir, "ConfigMap-creds2.yaml"))).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Component-intermediate.yaml"), "condition=Ready", timeout)).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Repository-target.yaml"), "condition=Ready", timeout)).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(filepath.Join(manifestDir, "Replication-to-target.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ConfigMap-creds2.yaml"))).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Component-intermediate.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-target.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Replication-to-target.yaml"), "condition=Ready", timeout)).To(Succeed())
 
 			By("Double-check that copied component version is present in the target registry")
 			// Credentials are required for the 'ocm check' command to access the protected registry.
 			ocmconfigFile = filepath.Join(manifestDir, "creds2.ocmconfig")
 			// Use external registry URL, because the check connects from outside.
 			componentReference = protectedRegistry2 + "//" + ocmCompName + ":" + ocmCompVersion
-			Expect(utils.CheckOCMComponent(componentReference, ocmconfigFile, ocmCheckOptFailOnError)).To(Succeed())
+			Expect(utils.CheckOCMComponent(ctx, componentReference, ocmconfigFile, ocmCheckOptFailOnError)).To(Succeed())
 
 			By("Double-check that \"resourcesByValue\" transfer option has been applied")
 			// I.e. that the resource's imageReference points to the correct (target) registry .
 			// Example reference:
 			// "http://protected-registry2-internal.default.svc.cluster.local:5002/stefanprodan/podinfo:6.6.2@sha256:4aa3b819f4cafc97d03d902ed17cbec076e2beee02d53b67ff88527124086fd9"
-			imgRef, err := utils.GetOCMResourceImageRef(componentReference, podinfoImgResourceName, ocmconfigFile)
+			imgRef, err := utils.GetOCMResourceImageRef(ctx, componentReference, podinfoImgResourceName, ocmconfigFile)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(strings.HasPrefix(imgRef, internalProtectedRegistry2+"/"+podinfoImage)).Should(BeTrue())
 		})

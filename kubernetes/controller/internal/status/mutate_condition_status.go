@@ -1,10 +1,9 @@
 package status
 
 import (
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
-
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	kuberecorder "k8s.io/client-go/tools/record"
 
 	"ocm.software/open-component-model/kubernetes/controller/internal/event"

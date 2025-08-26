@@ -5,13 +5,12 @@ import (
 	"errors"
 	"fmt"
 
+	ocmctx "ocm.software/ocm/api/ocm"
 	"ocm.software/ocm/api/ocm/compdesc"
+	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"ocm.software/ocm/api/ocm/selectors"
 	"ocm.software/ocm/api/ocm/tools/signing"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	ocmctx "ocm.software/ocm/api/ocm"
-	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 )
 
 func GetResourceAccessForComponentVersion(

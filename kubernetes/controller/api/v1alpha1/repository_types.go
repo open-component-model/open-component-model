@@ -65,7 +65,10 @@ func (in *Repository) SetConditions(conditions []metav1.Condition) {
 
 // GetRequeueAfter returns the duration after which the ComponentVersion must be
 // reconciled again.
-func (in Repository) GetRequeueAfter() time.Duration {
+func (in *Repository) GetRequeueAfter() time.Duration {
+	if in == nil {
+		return 0
+	}
 	return in.Spec.Interval.Duration
 }
 

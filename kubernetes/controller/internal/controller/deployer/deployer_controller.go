@@ -9,17 +9,22 @@ import (
 	"runtime"
 	"slices"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"golang.org/x/sync/errgroup"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/ptr"
+	ocmctx "ocm.software/ocm/api/ocm"
 	"ocm.software/ocm/api/ocm/compdesc"
+	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"ocm.software/ocm/api/ocm/extensions/attrs/signingattr"
 	"ocm.software/ocm/api/ocm/resolvers"
 	"ocm.software/ocm/api/ocm/tools/signing"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -27,12 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ocmctx "ocm.software/ocm/api/ocm"
-	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
@@ -300,7 +299,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
 
 	// TODO: Status propagation of RGD status to deployer
-	//       (see https://ocm.software/open-component-model/kubernetes/controller/issues/192)
+	//       (see https://github.com/open-component-model/ocm-k8s-toolkit/issues/192)
 	status.MarkReady(r.EventRecorder, deployer, "Applied version %s", resource.Status.Resource.Version)
 
 	// we requeue the deployer after the requeue time specified in the resource.
@@ -498,7 +497,7 @@ func digestSpec(s string) (v1.DigestSpec, error) {
 // See Apply for more details on how the objects are applied.
 func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []client.Object) error {
 	if len(objs) > 1 {
-		// TODO(jakobmoellerdev): remove once https://ocm.software/open-component-model/kubernetes/controller/issues/273#issue-3201709052
+		// TODO(jakobmoellerdev): remove once https://github.com/open-component-model/ocm-k8s-toolkit/issues/273#issue-3201709052
 		//  is implemented in the deployer controller. We need proper apply detection so we can support pruning diffs.
 		//  Otherwise we can orphan resources.
 		msg := "multiple objects found in manifest," +
@@ -595,11 +594,7 @@ func updateDeployedObjectStatusReferences(objs []client.Object, deployer *delive
 			UID:        obj.GetUID(),
 		}
 		if idx := slices.IndexFunc(deployer.Status.Deployed, func(reference deliveryv1alpha1.DeployedObjectReference) bool {
-			if reference.UID == obj.GetUID() {
-				return true
-			}
-
-			return false
+			return reference.UID == obj.GetUID()
 		}); idx < 0 {
 			deployer.Status.Deployed = append(deployer.Status.Deployed, ref)
 		} else {

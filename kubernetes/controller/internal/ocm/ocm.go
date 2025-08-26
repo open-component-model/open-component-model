@@ -8,15 +8,14 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/mandelsoft/goutils/matcher"
+	corev1 "k8s.io/api/core/v1"
 	"ocm.software/ocm/api/credentials/extensions/repositories/dockerconfig"
 	"ocm.software/ocm/api/ocm"
 	"ocm.software/ocm/api/ocm/compdesc"
-	"ocm.software/ocm/api/utils/runtime"
-	"ocm.software/ocm/api/utils/semverutils"
-
-	corev1 "k8s.io/api/core/v1"
 	utils "ocm.software/ocm/api/ocm/ocmutils"
 	common "ocm.software/ocm/api/utils/misc"
+	"ocm.software/ocm/api/utils/runtime"
+	"ocm.software/ocm/api/utils/semverutils"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"

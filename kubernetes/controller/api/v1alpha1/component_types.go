@@ -143,7 +143,10 @@ func (in *Component) GetKind() string {
 
 // GetRequeueAfter returns the duration after which the ComponentVersion must be
 // reconciled again.
-func (in Component) GetRequeueAfter() time.Duration {
+func (in *Component) GetRequeueAfter() time.Duration {
+	if in == nil {
+		return 0
+	}
 	return in.Spec.Interval.Duration
 }
 
