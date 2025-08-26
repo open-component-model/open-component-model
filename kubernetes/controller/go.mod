@@ -69,7 +69,6 @@ require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/DataDog/gostackparse v0.7.0 // indirect
 	github.com/Djarvur/go-err113 v0.0.0-20210108212216-aea10b59be24 // indirect
-	github.com/GaijinEntertainment/go-exhaustruct/v3 v3.3.1 // indirect
 	github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.3 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.29.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.53.0 // indirect
@@ -544,12 +543,13 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/release-utils v0.12.1 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.2.0 // indirect
 )
 
 tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 
 // TODO: remove once structured merge diff v6 support lands in k8s upstream
-replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66d9911
+replace k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20250814151709-d7b6acb124c3
 
 // TODO: remove once mandelsoft utils no longer has an unreleased version of vfs as dep
 replace github.com/mandelsoft/vfs => github.com/mandelsoft/vfs v0.4.4
