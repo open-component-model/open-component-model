@@ -61,14 +61,6 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {
-	By("Creating manager namespace", func() {
-		err := utils.CreateNamespace(ctx, namespace)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred())
-		DeferCleanup(func(ctx SpecContext) error {
-			return utils.DeleteNamespace(ctx, namespace)
-		})
-	})
-
 	timeout = os.Getenv("RESOURCE_TIMEOUT")
 	if timeout == "" {
 		timeout = "10m"
