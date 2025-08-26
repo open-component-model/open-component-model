@@ -30,6 +30,7 @@ with the same OCM component. Additionally, it shows how to **localize** a Helm c
 > [!NOTE]
 > **Localization** describes the process of inserting a new image reference into the deployment instructions, e.g. a
 > Helm chart. It is a two-step process:
+>
 > 1. When an OCM component and its resources are transferred to another registry, **referential resources** can
 > potentially update their reference to the new location. For instance, a resource with an access type `ociArtifact`
 > will update its image reference in the component descriptor to the new registry location, if the OCM transfer is done
@@ -129,6 +130,7 @@ flowchart TB
 ```
 
 As the diagram shows, we will start by creating an OCM component that contains three resources:
+
 - An OCM Resource containing the "HelmChart" we want to deploy.
 - An OCM Resource containing an access specification to an "Image" we want to use for the deployment and localization.
 - An OCM Resource containing the `ResourceGraphDefinition` (RGD) that will deploy the Helm chart and configure the
@@ -142,6 +144,7 @@ aforementioned "Resource: RGD", download the `ResourceGraphDefinition`, and appl
 After applying the `ResourceGraphDefinition`, kro will reconcile it and create a Custom Resource Definition
 ("CRD: Bootstrap"). By creating an instance of that CRD, we will deploy the resources as defined in the
 `ResourceGraphDefinition`:
+
 - An OCM K8s Toolkit resource "HelmChart" of type `Resource` that contains the location of the Helm chart in its status.
 - An OCM K8s Toolkit resource "Image" of type `Resource` that contains the localized image reference in its status.
 - A FluxCD resource of type `OCIRepository` that points to the location of the Helm chart retrieved from the status of

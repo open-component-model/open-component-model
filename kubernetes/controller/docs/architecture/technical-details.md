@@ -38,4 +38,3 @@ exposed as *artifact* by the *component controller* to resolve the *relative
 resource reference*. In case the component specified signatures to be verified,
 the *component descriptors* exposed as *artifact* are already verified, and can
 therefore be used to compare and verify the digest of the resource.
-

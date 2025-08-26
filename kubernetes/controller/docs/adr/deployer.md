@@ -27,6 +27,7 @@ the resource that is deployed, while deploying it. For example, injecting cluste
 to-be-deployed resources.
 
 Essentially, the requirements can be breakdown to:
+
 * We need to dynamically create a deployer specific custom resource, e.g. FluxCDs `OCIRepository`, that is filled with
   information provided by the status of a Kubernetes resource OCM `Resource`.
 * Simplify the deployment of the building block custom resources (`Repository`, `Component`, `Resource`, ...)
@@ -53,6 +54,7 @@ Essentially, the requirements can be breakdown to:
 ## Decision Outcome
 
 Chosen option: [Kro](#kro), because
+
 * the `ResourceGraphDefinition` is an intuitive way to orchestrate the deployment of resources and map dependencies
   between them.
 * the `ResourceGraphDefinition` can be packed into the OCM component version itself.
@@ -104,6 +106,7 @@ deployment of that Helm chart can be orchestrated by creating an instance of the
 The manifests for such a use case could look like this:
 
 `component-constructor.yaml`
+
 ```yaml
 components:
   - name: ocm.software/ocm-k8s-toolkit/helm-simple
@@ -121,6 +124,7 @@ components:
 ```
 
 `resource-graph-definition.yaml`
+
 ```yaml
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
@@ -211,6 +215,7 @@ spec:
 ```
 
 `instance.yaml`
+
 ```yaml
 # The instance of the CRD created by the ResourceGraphDefinition
 apiVersion: kro.run/v1alpha1
@@ -243,6 +248,7 @@ the component constructor, and a `ResourceGraphDefinition`. In the example, all 
 component version and transferred to an OCM repository.
 
 To deploy the application into a Kubernetes cluster, it is required to bootstrap the `ResourceGraphDefinition` by
+
 * deploying an `Repository` that points to the OCM repository in which the OCM component version is stored,
 * deploying a `Component` that points to the OCM component version in that OCM repository,
 * deploying a `Resource` that points to the `ResourceGraphDefinition` in the component version, and
@@ -266,6 +272,7 @@ parse the access references. However, the Kro maintainers already mentioned that
 The following manifests show an example of such a setup:
 
 `component-constructor.yaml`
+
 ```yaml
 components:
   - name: ocm.software/ocm-k8s-toolkit/helm-bootstrap
@@ -296,6 +303,7 @@ components:
 ```
 
 `resource-graph-definition.yaml`
+
 ```yaml
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
@@ -377,6 +385,7 @@ spec:
 ```
 
 `bootstrap.yaml`
+
 ```yaml
 # Repository contains information about the location where the component version is stored
 apiVersion: delivery.ocm.software/v1alpha1
@@ -429,6 +438,7 @@ spec:
 ```
 
 `instance.yaml`
+
 ```yaml
 apiVersion: kro.run/v1alpha1
 kind: Bootstrap
@@ -512,8 +522,8 @@ This is why, we will not elaborate further on this approach.
 
 # Links
 
-- Epic [#404](https://ocm.software/open-component-model/kubernetes/controller/issues/147)
-- Issue [#90](https://ocm.software/open-component-model/kubernetes/controller/issues/136)
+* Epic [#404](https://ocm.software/open-component-model/kubernetes/controller/issues/147)
+* Issue [#90](https://ocm.software/open-component-model/kubernetes/controller/issues/136)
 
 [kro-github]: https://github.com/kro-run/kro
 
@@ -521,6 +531,3 @@ This is why, we will not elaborate further on this approach.
 
 [kro-alpha-stage]: https://github.com/kro-run/kro/blob/965cb76668433742033c0e413e3cc756ef86d89a/website/docs/docs/getting-started/01-Installation.md?plain=1#L21
 
-[fluxcd-helmrelease-values]: https://fluxcd.io/flux/components/helm/helmreleases/#values
-
-[fluxcd-kustomization-patches]: https://fluxcd.io/flux/components/kustomize/kustomizations/#patches

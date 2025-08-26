@@ -177,6 +177,7 @@ official [Example](https://ocm.software/docs/tutorials/structuring-and-deploying
 we propose a system that is based on file based replacements due to reliance on the [OCM Localization Tooling](https://github.com/open-component-model/ocm/blob/main/api/ocm/ocmutils/localize/README.md).
 
 This tooling forces one to adopt:
+
 1. Localization and Substitution Rules that need to be learned from scratch by platform engineers trying to adopt the tooling.
 2. It is incredibly hard to understand based on these Rules which actual substitutions are being done,
    as its a description framework with many layers of abstraction before the actual modification of the manifest:
@@ -208,7 +209,7 @@ spec:
     namespace: kubeseal
 ```
 
-It is important to note that these tools can afford this because they rely on _existing_ templating capabilities of Helm
+It is important to note that these tools can afford this because they rely on *existing* templating capabilities of Helm
 or Kustomize.
 Since they can operate on already rendered versions, they are free to template as they wish or introduce simple substitutions.
 
@@ -292,7 +293,6 @@ spec:
         newName: myprivateregistry.com/open-component-model/myimage
 ```
 
-
 **Option 2 - Literal Substitution Rules**
 
 Generate literal substitution rules as manifest for the localization controller
@@ -304,6 +304,7 @@ we can resolve them with a templating language of our choice (e.g. Go templates 
 This would allow us to generate a literal substitution rule manifest that can be used by the localization controller.
 
 Consider the following example manifest:
+
 ```yaml
 apiVersion: v1
 kind: Pod
@@ -367,7 +368,7 @@ spec:
 
 **Option 3 - Component-Based Subsitution Rules (previous solution)**
 
-https://github.com/open-component-model/ocm-controller/blob/main/docs/architecture.md#localization-controller
+<https://github.com/open-component-model/ocm-controller/blob/main/docs/architecture.md#localization-controller>
 
 Example:
 
@@ -473,7 +474,6 @@ spec:
 #          - spec.containers[0].image 
 ```
 
-
 ## Decision Outcome
 
 In the end we decided to form a hybrid that is mainly based on Option 3, but also allows for templating via Option 1.
@@ -498,6 +498,7 @@ spec:
 ```
 
 This LocalizationConfig can be applied via 2 ways:
+
 1. It is added as a Resource together with the Component to allow for a self-contained delivery.
 2. It is referenced in the Cluster where the Controllers are deployed, to allow for easy migration of workloads.
 
@@ -550,7 +551,7 @@ component descriptor.
 
 ### Examples
 
-#### Example 1 (Main Use Case):
+#### Example 1 (Main Use Case)
 
 ```yaml
 apiVersion: delivery.ocm.software/v1alpha1
@@ -660,7 +661,7 @@ spec:
         value: deploy.image
 ```
 
-#### Minimal Example 2 (Cluster Reference):
+#### Minimal Example 2 (Cluster Reference)
 
 ```yaml
 apiVersion: delivery.ocm.software/v1alpha1
@@ -685,7 +686,7 @@ However, it is much easier to test and to run with existing Helm Charts without 
 or Charts, and so should provide a better transition point. It also allows testing Localizations without the need to constantly
 repackage the Components.
 
-#### Complex Configuration Example with Templating:
+#### Complex Configuration Example with Templating
 
 A typical use case for Localization might be to work within structures or files that do not conform to YAML or JSON.
 Even within Kubernetes, one does not need to look far to spot an example case through the use of ConfigMaps:
@@ -736,22 +737,22 @@ Chosen option: "[option 1]", because [justification. e.g., only option, which me
 
 ### Positive Consequences <!-- optional -->
 
-- We now have a localization ecosystem in place that we can plugin to the Substitution Engine via the
+* We now have a localization ecosystem in place that we can plugin to the Substitution Engine via the
   .transformation.type field in the LocalizationConfig CRD.
-- We can now localize all resources, irrespective of YAML/JSON structure, via GoTemplates.
-- We can now localize with a LocalizationConfig coming from both the ComponentVersion and the Cluster, to allow for
+* We can now localize all resources, irrespective of YAML/JSON structure, via GoTemplates.
+* We can now localize with a LocalizationConfig coming from both the ComponentVersion and the Cluster, to allow for
   flexible deployment patterns.
-- We now allow for contributions by introducing the option for custom TransformationTypes. Examples could include
+* We now allow for contributions by introducing the option for custom TransformationTypes. Examples could include
   kustomize Transformers or Heuristics based substitution.
 
 ### Negative Consequences <!-- optional -->
 
-- LocalizationConfig CRD needs to be understood
-- Most Substsitution References are file / path based because we do not want to make assumptions about the templating
+* LocalizationConfig CRD needs to be understood
+* Most Substsitution References are file / path based because we do not want to make assumptions about the templating
   language used.
-- The substitution logic can only really be tested from within a cluster, so we might want to expose the substitution
+* The substitution logic can only really be tested from within a cluster, so we might want to expose the substitution
   behavior in a test harness.
-- Using the GoTemplate substitution requires a good understanding of GoTemplates, as well as knowledge of our additional
+* Using the GoTemplate substitution requires a good understanding of GoTemplates, as well as knowledge of our additional
   templating functions,
   such as "OCMResourceReference".
 

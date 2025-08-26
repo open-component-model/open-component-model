@@ -304,6 +304,5 @@ failed to list versions: failed to list tags: GET "https://ghcr.io/v2...": respo
 You can resolve this issue by making the package public or by [providing credentials](credentials.md) to the
 respective resources.
 
-
 [ocm-doc]: https://ocm.software/docs/getting-started/create-component-version/
 [ocm-credentials]: https://ocm.software/docs/tutorials/creds-in-ocmconfig/

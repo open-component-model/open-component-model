@@ -4,7 +4,7 @@
 * Deciders: @frewilhelm @ikhandamirov
 * Approvers:
 
-Technical Story: https://github.com/open-component-model/ocm-project/issues/333
+Technical Story: <https://github.com/open-component-model/ocm-project/issues/333>
 
 ## Context and Problem Statement
 
@@ -27,22 +27,22 @@ the OCM controllers as single layer OCI artifacts.
 
 Arguments:
 
-- In comparison to the current plain http-server that requires an implementation of access, GC, ... the usage of an OCI
+* In comparison to the current plain http-server that requires an implementation of access, GC, ... the usage of an OCI
   registry
   could simplify the implementation (e.g. deleting dangling blobs after a manifest was deleted)
-- Stop support at the level of the distribution spec of OCI
-- We will need an abstraction that handles OCI registries anyway to convert resources into a flux consumable format
+* Stop support at the level of the distribution spec of OCI
+* We will need an abstraction that handles OCI registries anyway to convert resources into a flux consumable format
 (= single layer oci artifact)
 
 The following discussion concerns two major topics:
 
-- How to store and reference the single layer OCI artifacts.
-- How to setup the internal OCI registry and which one to use.
+* How to store and reference the single layer OCI artifacts.
+* How to setup the internal OCI registry and which one to use.
 
 ## Decision Drivers
 
-- Reduce maintenance effort
-- Fit into our use-cases (especially with FluxCD)
+* Reduce maintenance effort
+* Fit into our use-cases (especially with FluxCD)
 
 ## Artifact (How to store and reference the single layer OCI artifacts)
 
@@ -68,34 +68,34 @@ transformation, they also can be used as a caching mechanism to reduce unnecessa
 
 [`SnapshotSpec`][snapshot-spec]
 
-- Identity: OCM Identity (map[string]string) (Created by [constructIdentity()][snapshot-create-identity])
-- Digest: OCI Layer Digest (Based on [go-containerregistry OCI implementation][go-containerregistry-digest])
-- Tag: The version (e.g. `latest`, `v1.0.0`, ..., see [reference][snapshot-version-ref]
-- (Suspend)
+* Identity: OCM Identity (map[string]string) (Created by [constructIdentity()][snapshot-create-identity])
+* Digest: OCI Layer Digest (Based on [go-containerregistry OCI implementation][go-containerregistry-digest])
+* Tag: The version (e.g. `latest`, `v1.0.0`, ..., see [reference][snapshot-version-ref]
+* (Suspend)
 
 [`SnapshotStatus`][snapshot-status]
 
-- (Conditions)
-- LastReconciledDigest: determine, if reconciliation is necessary. Marks the last SUCCESSFULLY reconciled digest.
-- LastReconciledTag: determine, if reconciliation is necessary. Marks the last SUCCESSFULLY reconciled tag.
-- RepositoryURL: Concrete URL pointing to the local registry including the service name
-- (ObservedGeneration)
+* (Conditions)
+* LastReconciledDigest: determine, if reconciliation is necessary. Marks the last SUCCESSFULLY reconciled digest.
+* LastReconciledTag: determine, if reconciliation is necessary. Marks the last SUCCESSFULLY reconciled tag.
+* RepositoryURL: Concrete URL pointing to the local registry including the service name
+* (ObservedGeneration)
 
 #### Artifact
 
 [`ArtifactSpec`][artifact-spec]
 
-- URL: HTTP address of the artifact as exposed by the controller managing the source
-- Revision: "Human-readable" identifier traceable in the origin source system (commit SHA, tag, version, ...)
-- Digest: Digest of the file that is stored (algo:checksum)
-    - Used to verify the artifact (see [artifact-digest-verify-ref][artifact-digest-verify-ref])
-- LastUpdateTime: Timestamp of the last update of the artifact
-- Size: Number of bytes in the file (decide beforehand on how to download the files)
-- Metadata: Holds upstream information, e.g. OCI annotations (as map[string]string)
+* URL: HTTP address of the artifact as exposed by the controller managing the source
+* Revision: "Human-readable" identifier traceable in the origin source system (commit SHA, tag, version, ...)
+* Digest: Digest of the file that is stored (algo:checksum)
+    * Used to verify the artifact (see [artifact-digest-verify-ref][artifact-digest-verify-ref])
+* LastUpdateTime: Timestamp of the last update of the artifact
+* Size: Number of bytes in the file (decide beforehand on how to download the files)
+* Metadata: Holds upstream information, e.g. OCI annotations (as map[string]string)
 
 [`ArtifactStatus`][artifact-status]
 
-- No fields
+* No fields
 
 ### Considered Options
 
@@ -113,16 +113,15 @@ stored in the status of the source resource (`component`, `resource`, `configure
 
 #### Positive Consequences
 
-- Simpler implementation.
-- No intermediate Custom Resource necessary.
+* Simpler implementation.
+* No intermediate Custom Resource necessary.
 
 #### Negative Consequences
 
-- The final OCI artifact that should be used for the deployment needs to be consumable by a deployment-tool, e.g.
+* The final OCI artifact that should be used for the deployment needs to be consumable by a deployment-tool, e.g.
   FluxCDs `source-controller`.
   Thus, some kind of consumable Kubernetes resource must be created, e.g. FluxCDs `OCIRepository`.
   More details can be retrieved from the respective Deployment ADR.
-
 
 ### Pros and Cons of the Options
 
@@ -133,41 +132,41 @@ resource that is creating the blob could point to the location of that blob itse
 
 Pros:
 
-- No additional custom resource and reconciler needed.
+* No additional custom resource and reconciler needed.
 
 Cons:
 
-- Loss of extensibility of the architecture provided by a common interface.
+* Loss of extensibility of the architecture provided by a common interface.
 
 #### Option 2: Use the `snapshot` implementation
 
 Pros:
 
-- Already implemented (and probably tested).
-- Implemented for an OCI registry
+* Already implemented (and probably tested).
+* Implemented for an OCI registry
 
 Cons:
 
-- Requires a transformer to make the artifacts consumable by FluxCDs Helm- and Kustomize-Controller. E.g. by using
+* Requires a transformer to make the artifacts consumable by FluxCDs Helm- and Kustomize-Controller. E.g. by using
 FluxCDs `source-controller` and its CR `OCIRepository`.
-- Implemented in `open-component-model/ocm-controller` which will be archived, when the `ocm-controller` v2 go
+* Implemented in `open-component-model/ocm-controller` which will be archived, when the `ocm-controller` v2 go
 productive. Thus, the `snapshot` implementation must be copied in this repository.
 
 #### Option 3: Use the `artifact` implementation
 
 Pros:
 
-- Already implemented (and a bit tested)
-- Rather easy and simple
+* Already implemented (and a bit tested)
+* Rather easy and simple
 
 Cons:
 
-- Implemented for a plain http-server and not for OCI registry (check
+* Implemented for a plain http-server and not for OCI registry (check
   [storage implementation][controller-manager-storage]). Thus, missing dedicated control-loop.
-- The current setup (`OpenFluxCD`) requires the deployment of the customized FluxCD `helm-` and `kustomize-controller`.
+* The current setup (`OpenFluxCD`) requires the deployment of the customized FluxCD `helm-` and `kustomize-controller`.
 This wouldn't be required necessarily, but some form of transformation of the `artifact` resource to a consumable
 resource is necessary, e.g. by a transformer as in Option 2.
-- Maintenance of the storage server (which is copied and adjusted from flux).
+* Maintenance of the storage server (which is copied and adjusted from flux).
 
 Basically rejected because we could only use the `Artifact` type definition and not the implementation for the storage.
 
@@ -178,39 +177,37 @@ provides a control-loop for that resource.
 
 Pros:
 
-- No transformer needed for `FluxCD`s consumers Helm- and Kustomize-Controller
-- Control-loop for `OCIRepository` is already implemented
-- `OCIRepository` is an integration point with Flux and Argo
+* No transformer needed for `FluxCD`s consumers Helm- and Kustomize-Controller
+* Control-loop for `OCIRepository` is already implemented
+* `OCIRepository` is an integration point with Flux and Argo
 
 Cons:
 
-- Integrating FluxCDs `source-controller` would be a hard dependency on that repository. It would be mandatory
+* Integrating FluxCDs `source-controller` would be a hard dependency on that repository. It would be mandatory
 to deploy the `source-controller`
-- It is not possible to start the `source-controller` and only watch the `OCIRepository` type. It would
+* It is not possible to start the `source-controller` and only watch the `OCIRepository` type. It would
 start all other control-loops for `kustomize`, `helm`, `git`, and more objects. This seems a bit of an
 overkill.
-- Using the `OCIRepository` control-loop would basically "clone" every blob from the OCI registry in FluxCD
+* Using the `OCIRepository` control-loop would basically "clone" every blob from the OCI registry in FluxCD
   local storage (plain http server).
 
 #### Option 5: Create a new custom resource
 
 Pros:
 
-- Greenfield approach.
-- Orientation on `snapshot` and `artifact` ease the implementation.
+* Greenfield approach.
+* Orientation on `snapshot` and `artifact` ease the implementation.
 
 Cons:
 
-- Offers no benefit over the existing implementation.
+* Offers no benefit over the existing implementation.
 
 Creating a new custom resource seems like an overkill, considering that the `snapshot` implementation covers a lot of
 our use-cases. Thus, it seems more reasonable to go with the `snapshot` implementation and adjust/refactor that.
 
-
 ## (Internal) OCI Registry
 
 This in-cluster HTTPS-based registry is used by the OCM controllers to store resources locally. It should never be accessible from outside, thus it is transparent to the users of the OCM controller. At the same time the registry is accessible for Flux, running in the same cluster.
-
 
 ### Considered Options
 
@@ -219,17 +216,15 @@ This in-cluster HTTPS-based registry is used by the OCM controllers to store res
   * Option 2.1: Use implementation from ocm-controllers v1
   * Option 2.2: Use [`zot`](https://github.com/project-zot/zot)
 
-
 ### Decision Outcome
 
 Chosen option:
 
-- Option 2.2, i.e. the decision is to use `zot` as the in-cluster OCI registry for OCM controllers
-- Once there is an installer for OCM controller, it should provide the users with a possibility to configure an own
+* Option 2.2, i.e. the decision is to use `zot` as the in-cluster OCI registry for OCM controllers
+* Once there is an installer for OCM controller, it should provide the users with a possibility to configure an own
   registry instead of embedded `zot`, either an in-cluster or an external one
 
 To select the registry, no comprehensive benchmarking tests have been performed. Zot is vendor-neutral and fully supports OCI standard. The decision is based on the impression that `zot` is meanwhile being more actively maintained and will incorporate innovation faster. The registry comes with an [extensive feature set](https://zotregistry.dev/v2.1.2/general/features/), sufficient for the OCM controllers use case. The first tests have shown that OCM controllers are able to work with `zot`.
-
 
 ### Pros and Cons of the Options
 
@@ -237,56 +232,56 @@ To select the registry, no comprehensive benchmarking tests have been performed.
 
 Pros:
 
-- Operating a user-provided registry is not in our responsibility
-- Users can customize their OCI registry like they want
+* Operating a user-provided registry is not in our responsibility
+* Users can customize their OCI registry like they want
 
 Cons:
 
-- We develop and test the OCM Toolset in environments where `zot` registry is used. We assume that it'll work with any
+* We develop and test the OCM Toolset in environments where `zot` registry is used. We assume that it'll work with any
   other OCI-compliant registry, but other registries are not tested (yet).
-- Giving a possibility to the user to provide/configure an own registry does not eliminate the need to provide a default
+* Giving a possibility to the user to provide/configure an own registry does not eliminate the need to provide a default
   registry (option 2), especially to those users who do not want to customize an own registry.
 
 #### Option 2: Deploy an OCI image registry with our controllers
 
 Pros:
 
-- Simplifies deployment choices and stability guarantees for us.
+* Simplifies deployment choices and stability guarantees for us.
 
 ##### Option 2.1: Use implementation from ocm-controllers v1 ([distribution registry](https://github.com/distribution/distribution))
 
 Pros:
 
-- Faster implementation time, as deployment can be copied from v1 implementation
-- Mature technology (almost legacy)
+* Faster implementation time, as deployment can be copied from v1 implementation
+* Mature technology (almost legacy)
 
 Cons:
 
-- Seldom releases (latest stable from October 2, 2023)
+* Seldom releases (latest stable from October 2, 2023)
 
 ##### Option 2.2: Use [`zot`](https://github.com/project-zot/zot)
 
 Pros:
 
-- Supports OCI standard, i.e. does not depend on Docker image format
-- Newer technology, focusing on embedding into other products, inline garbage collection and storage deduplication
-- Nice documentation
-- FluxCD team mentioned (verbally) that they want to use a `zot` OCI registry in the future (though no 100% guarantee or
+* Supports OCI standard, i.e. does not depend on Docker image format
+* Newer technology, focusing on embedding into other products, inline garbage collection and storage deduplication
+* Nice documentation
+* FluxCD team mentioned (verbally) that they want to use a `zot` OCI registry in the future (though no 100% guarantee or
   any evidence that they started working on this so far)
-- Being actively maintained (several stable releases per year)
-- Vendor neutrality in our distribution that is backed by a project incorporated in a large foundation. Both projects
+* Being actively maintained (several stable releases per year)
+* Vendor neutrality in our distribution that is backed by a project incorporated in a large foundation. Both projects
   are part of CNCF, but docker registry is still mainly maintained by folks at docker
 
 Cons:
 
-- Potentially longer implementation time, as it involves learing how to deploy, configure and operate a new registry
-- To support Docker images, the registry must be run in compatibility mode, though our assumption is that our
+* Potentially longer implementation time, as it involves learing how to deploy, configure and operate a new registry
+* To support Docker images, the registry must be run in compatibility mode, though our assumption is that our
   stakeholders will work with standard OCI in most cases
 
 # Links
 
-- Epic [#75](https://ocm.software/open-component-model/kubernetes/controller/issues/75)
-- Issue [#90](https://ocm.software/open-component-model/kubernetes/controller/issues/90)
+* Epic [#75](https://ocm.software/open-component-model/kubernetes/controller/issues/75)
+* Issue [#90](https://ocm.software/open-component-model/kubernetes/controller/issues/90)
 
 [artifact-definition]: https://github.com/openfluxcd/artifact/blob/d9db932260eb5f847737bcae3589b653398780ae/api/v1alpha1/artifact_types.go#L30
 [fluxcd-rfc]: https://github.com/fluxcd/flux2/discussions/5058
@@ -305,4 +300,3 @@ Cons:
 [oci-repository-type]: https://github.com/fluxcd/source-controller/blob/529eee0ed1afc6063acd9750aa598d90ae3399ed/api/v1beta2/ocirepository_types.go#L296
 [controller-manager-storage]: https://github.com/openfluxcd/controller-manager/blob/d83030b764ab4f143d4b9a815227ad3cdfd9433f/storage/storage.go
 
-[watch-resource-controller]: https://ocm.software/open-component-model/kubernetes/controller/blob/108ac97815258cef41cf8f340c99b45f7bdd5023/internal/controller/resource/resource_controller.go#L86
