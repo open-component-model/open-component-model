@@ -54,7 +54,7 @@ func DeployResource(ctx context.Context, manifestFilePath string) error {
 	if err != nil {
 		return err
 	}
-	DeferCleanup(func() error {
+	DeferCleanup(func(ctx SpecContext) error {
 		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
 		_, err := Run(cmd)
 
