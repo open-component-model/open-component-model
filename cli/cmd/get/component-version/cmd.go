@@ -169,6 +169,9 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 
 //nolint:staticcheck // no replacement for resolvers available yet
 func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime.Resolver, error) {
+	if config == nil {
+		return nil, nil
+	}
 	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
 	if err != nil {
 		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
