@@ -11,13 +11,11 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/oci"
-	"ocm.software/open-component-model/bindings/go/runtime"
-
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
@@ -412,20 +410,53 @@ func TestResolveWithEmptyMediaType(t *testing.T) {
 	})
 }
 
-func TestMediaTypeDefaulting(t *testing.T) {
+func TestCompatibility(t *testing.T) {
 	r := require.New(t)
-	ctfPath := "testdata/compatibility/01/transport-archive"
-	scheme := runtime.NewScheme()
+	for _, tc := range []struct {
+		path string
+	}{
+		{
+			path: "testdata/compatibility/01/transport-archive",
+		},
+		{
+			path: "testdata/compatibility/01/transport-archive.tar",
+		},
+		{
+			path: "testdata/compatibility/01/transport-archive.tar.gz",
+		},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			archive, _, err := ctf.OpenCTFByFileExtension(t.Context(), ctf.OpenCTFOptions{
+				Path:    tc.path,
+				Flag:    ctf.O_RDONLY,
+				TempDir: t.TempDir(),
+			})
+			r.NoError(err)
+			repo, err := oci.NewRepository(
+				WithCTF(NewFromCTF(archive)),
+				oci.WithCreator("I am the Creator"),
+			)
+			r.NoError(err)
+			cv, err := repo.GetComponentVersion(t.Context(), "github.com/acme.org/helloworld", "1.0.0")
+			r.NoError(err)
+			r.Equal("github.com/acme.org/helloworld", cv.Component.Name)
 
-	archive, err := ctf.OpenCTFFromOSPath(ctfPath, ctf.O_RDONLY)
-	r.NoError(err)
-	repo, err := oci.NewRepository(
-		WithCTF(NewFromCTF(archive)),
-		oci.WithScheme(scheme),
-		oci.WithCreator("I am the Creator"),
-	)
-	r.NoError(err)
-	cv, err := repo.GetComponentVersion(t.Context(), "github.com/acme.org/helloworld", "1.0.0")
-	r.NoError(err)
-	r.Equal("github.com/acme.org/helloworld", cv.Component.Name)
+			r.Len(cv.Component.Resources, 1)
+
+			b, res, err := repo.GetLocalResource(t.Context(), cv.Component.Name, cv.Component.Version, cv.Component.Resources[0].ToIdentity())
+			r.NoError(err)
+			r.NotNil(b)
+			r.NotNil(res)
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() {
+				r.NoError(rc.Close())
+			})
+
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.Equal("test", string(data))
+		})
+	}
 }

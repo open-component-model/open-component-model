@@ -79,10 +79,10 @@ func RegisterLoggingFlags(flagset *pflag.FlagSet) {
    error: Show errors only`)
 
 	enum.Var(flagset, OutputFlagName, []string{
-		OutputStdout,
 		OutputStderr,
+		OutputStdout,
 	}, `set the log output destination
-   stdout: Write logs to standard output (default)
+   stdout: Write logs to standard output
    stderr: Write logs to standard error, useful for separating logs from normal output`)
 }
 

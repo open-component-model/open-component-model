@@ -12,10 +12,13 @@ const (
 	ConfigType = "extract.oci.artifact.ocm.software"
 )
 
-var scheme = runtime.NewScheme()
+var Scheme = runtime.NewScheme()
 
 func init() {
-	scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, Version))
+	Scheme.MustRegisterWithAlias(&Config{},
+		runtime.NewVersionedType(ConfigType, Version),
+		runtime.NewUnversionedType(ConfigType),
+	)
 }
 
 // Config represents the top-level configuration for the transformation.
@@ -25,8 +28,20 @@ func init() {
 // +ocm:typegen=true
 type Config struct {
 	Type runtime.Type `json:"type"`
-	// LayerSelector defines a selection criteria for layers.
-	LayerSelector *LayerSelector `json:"layerSelector,omitempty"`
+	// Rules defines rules for extracting layers to specific files.
+	Rules []Rule `json:"rules,omitempty"`
+}
+
+// Rule represents a rule for extracting selected layers to a target file.
+// Multiple layer selectors can be specified to select different layers that should
+// be merged into the same output file. For now, the first matching selector is used.
+// +k8s:deepcopy-gen=true
+type Rule struct {
+	// Filename is the target filename for the extracted layers.
+	Filename string `json:"filename,omitempty"`
+	// LayerSelectors defines multiple selection criteria for layers to include in this file.
+	// Layers matching any of these selectors will be included.
+	LayerSelectors []*LayerSelector `json:"layerSelectors,omitempty"`
 }
 
 // LookupConfig creates a new extract configuration from a central V1 config.
@@ -45,7 +60,7 @@ func LookupConfig(cfg *v1.Config) (*Config, error) {
 		cfgs := make([]*Config, 0, len(cfg.Configurations))
 		for _, entry := range cfg.Configurations {
 			var config Config
-			if err := scheme.Convert(entry, &config); err != nil {
+			if err := Scheme.Convert(entry, &config); err != nil {
 				return nil, fmt.Errorf("failed to decode credential config: %w", err)
 			}
 			cfgs = append(cfgs, &config)
@@ -70,7 +85,7 @@ func Merge(configs ...*Config) *Config {
 	}
 
 	merged := new(Config)
-	_, _ = scheme.DefaultType(merged)
+	_, _ = Scheme.DefaultType(merged)
 
 	return merged
 }

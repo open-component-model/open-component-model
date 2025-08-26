@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"os"
 
-	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
@@ -35,9 +35,9 @@ func (m *TestPlugin) ProcessResource(ctx context.Context, request *v1.ProcessRes
 	}
 	_ = tmp.Close()
 	return &v1.ProcessResourceInputResponse{
-		Resource: &constructorv1.Resource{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
+		Resource: &v2.Resource{
+			ElementMeta: v2.ElementMeta{
+				ObjectMeta: v2.ObjectMeta{
 					Name:    "test-resource",
 					Version: "v0.0.1",
 				},
@@ -59,9 +59,9 @@ func (m *TestPlugin) ProcessSource(ctx context.Context, request *v1.ProcessSourc
 	}
 	_ = tmp.Close()
 	return &v1.ProcessSourceInputResponse{
-		Source: &constructorv1.Source{
-			ElementMeta: constructorv1.ElementMeta{
-				ObjectMeta: constructorv1.ObjectMeta{
+		Source: &v2.Source{
+			ElementMeta: v2.ElementMeta{
+				ObjectMeta: v2.ObjectMeta{
 					Name:    "test-source",
 					Version: "v0.0.1",
 				},

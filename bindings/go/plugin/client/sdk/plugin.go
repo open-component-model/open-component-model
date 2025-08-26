@@ -105,19 +105,30 @@ func (p *Plugin) Start(ctx context.Context) error {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	go func(ctx context.Context) {
+	go func() {
 		sig := <-sigs
 
 		p.logger.InfoContext(ctx, "Received signal. Shutting down.", "signal", sig)
 
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		// wait for 5 seconds for the server to shutdown
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := p.GracefulShutdown(ctx); err != nil {
 			p.logger.ErrorContext(ctx, "Error shutting down plugin", "error", err)
 		}
-	}(ctx)
+		if err := p.server.Close(); err != nil {
+			p.logger.ErrorContext(ctx, "failed to close server", "error", err)
+		}
+		p.logger.InfoContext(ctx, "Plugin shutdown complete", "id", p.Config.ID)
+	}()
 
-	return p.listen(ctx)
+	err := p.listen(ctx)
+
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+
+	return err
 }
 
 func (p *Plugin) Healthz(w http.ResponseWriter, r *http.Request) {
@@ -138,13 +149,14 @@ func (p *Plugin) Healthz(w http.ResponseWriter, r *http.Request) {
 
 // listen starts listening for connections from the plugin manager.
 func (p *Plugin) listen(ctx context.Context) error {
-	loc, err := p.determineLocation()
+	loc, err := p.determineLocation(ctx)
 	if err != nil {
 		return fmt.Errorf("could not determine location: %w", err)
 	}
 	p.location = loc
 
-	conn, err := net.Listen(string(p.Config.Type), loc)
+	var lc net.ListenConfig
+	conn, err := lc.Listen(ctx, string(p.Config.Type), loc)
 	if err != nil {
 		return fmt.Errorf("failed to connect to socket from client: %w", err)
 	}
@@ -203,7 +215,7 @@ func (p *Plugin) panicRecovery(f func(w http.ResponseWriter, r *http.Request)) h
 	}
 }
 
-func (p *Plugin) determineLocation() (_ string, err error) {
+func (p *Plugin) determineLocation(ctx context.Context) (_ string, err error) {
 	switch p.Config.Type {
 	case types.Socket:
 		loc := "/tmp/" + p.Config.ID + "-plugin.socket"
@@ -222,7 +234,8 @@ func (p *Plugin) determineLocation() (_ string, err error) {
 		// Listen `:0` gives back a random _free_ port for the plugin to listen on.
 		// Once we have this port, this listener is immediately closed and a purpose listener
 		// will be opened with the specific port.
-		loc, err := net.Listen("tcp", ":0") //nolint: gosec // G102: only does it temporarily to find an empty address
+		var lc net.ListenConfig
+		loc, err := lc.Listen(ctx, "tcp", ":0")
 		if err != nil {
 			return "", fmt.Errorf("failed to start tcp listener: %w", err)
 		}
@@ -241,7 +254,7 @@ func (p *Plugin) determineLocation() (_ string, err error) {
 // GracefulShutdown will stop the server and do cleanup if necessary.
 // In the case of sockets, it will remove the created socket.
 func (p *Plugin) GracefulShutdown(ctx context.Context) error {
-	p.logger.InfoContext(ctx, "Gracefully shutting down plugin", "id", p.Config.ID)
+	p.logger.InfoContext(ctx, "gracefully shutting down plugin", "id", p.Config.ID)
 	// We ignore server closed errors because server closing might race with the listener.
 	if err := p.server.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("failed to shutdown server: %w", err)
@@ -261,6 +274,7 @@ func (p *Plugin) GracefulShutdown(ctx context.Context) error {
 		// empty case for now
 	}
 
+	p.logger.InfoContext(ctx, "plugin shutdown complete", "id", p.Config.ID)
 	return nil
 }
 

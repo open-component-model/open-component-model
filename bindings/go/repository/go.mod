@@ -1,13 +1,13 @@
 module ocm.software/open-component-model/bindings/go/repository
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.16.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.3
-	ocm.software/open-component-model/bindings/go/configuration v0.0.3
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250729203313-2064e6f8e710
+	ocm.software/open-component-model/bindings/go/blob v0.0.9
+	ocm.software/open-component-model/bindings/go/configuration v0.0.7
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825200618-6840c8ce6b49
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
@@ -23,7 +23,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect

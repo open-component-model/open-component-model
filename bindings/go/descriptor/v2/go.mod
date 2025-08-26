@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/descriptor/v2
 
-go 1.24.1
+go 1.25.0
 
 require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
@@ -21,6 +21,6 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

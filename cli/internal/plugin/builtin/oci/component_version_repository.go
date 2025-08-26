@@ -103,18 +103,25 @@ func (p *ComponentVersionRepositoryPlugin) createRepository(spec *ociv1.Reposito
 	}
 	urlString := url.Host + url.Path
 
-	urlResolver, err := urlresolver.New(urlresolver.WithBaseURL(urlString))
+	resolverOptions := []urlresolver.Option{
+		urlresolver.WithBaseURL(urlString),
+		urlresolver.WithBaseClient(&auth.Client{
+			Client: retry.DefaultClient,
+			Header: map[string][]string{
+				"User-Agent": {Creator},
+			},
+			Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
+		}),
+	}
+
+	if url.Scheme == "http" {
+		resolverOptions = append(resolverOptions, urlresolver.WithPlainHTTP(true))
+	}
+
+	urlResolver, err := urlresolver.New(resolverOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("error creating URL resolver: %w", err)
 	}
-
-	urlResolver.SetClient(&auth.Client{
-		Client: retry.DefaultClient,
-		Header: map[string][]string{
-			"User-Agent": {Creator},
-		},
-		Credential: auth.StaticCredential(url.Host, clientCredentials(credentials)),
-	})
 	tempDir := ""
 	if p.filesystemConfig != nil {
 		tempDir = p.filesystemConfig.TempFolder
