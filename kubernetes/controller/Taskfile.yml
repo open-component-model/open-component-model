@@ -48,12 +48,18 @@ tasks:
 
 
   test/e2e/setup/local:
-    dotenv: [ '{{.TASKFILE_DIR}}/test/e2e/hacks/.env' ]
-    cmd: 'bash test/e2e/hacks/setup.sh'
+    deps: [ docker-build ]
+    cmds:
+      - 'bash test/e2e/hacks/setup.sh'
+      - 'kind load docker-image {{.CONTROLLER_IMG}}'
   test/e2e:
     dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
     cmds:
+      - task: install
+      - task: deploy
       - PROJECT_DIR={{.TASKFILE_DIR}} go test {{.TASKFILE_DIR}}/test/e2e/ -v -timeout 30m -ginkgo.v
+      - task: undeploy
+      - task: uninstall
 
   # Build
   build:
@@ -65,7 +71,11 @@ tasks:
     cmd: 'go run {{.TASKFILE_DIR}}/cmd/main.go'
 
   docker-build:
-    cmd: '{{.CONTAINER_TOOL}} build -t {{.CONTROLLER_IMG}} .'
+    cmd:
+      task: docker-buildx
+      vars:
+        PLATFORMS:
+          sh: 'echo "linux/$(go env GOARCH)"'
 
   docker-push:
     cmd: '{{.CONTAINER_TOOL}} push {{.CONTROLLER_IMG}}'
@@ -73,7 +83,7 @@ tasks:
   docker-buildx:
     cmds:
       - sed '1s|^FROM|FROM --platform=${BUILDPLATFORM}|' Dockerfile > Dockerfile.cross
-      - '{{.CONTAINER_TOOL}} buildx build --push --platform={{.PLATFORMS}} -t {{.CONTROLLER_IMG}} -f Dockerfile.cross .'
+      - '{{.CONTAINER_TOOL}} buildx build --load --platform={{.PLATFORMS}} -t {{.CONTROLLER_IMG}} -f Dockerfile.cross .'
       - rm Dockerfile.cross
 
   build-installer:

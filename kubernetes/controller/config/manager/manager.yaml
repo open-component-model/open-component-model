@@ -39,7 +39,7 @@ spec:
         # TODO(jakobmoellerdev): migrate once we have the first build in the monorepo
         image: ghcr.io/open-component-model/ocm-k8s-toolkit:latest
         name: manager
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
           - containerPort: 9090
             name: http

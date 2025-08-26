@@ -210,7 +210,7 @@ func CreateNamespace(ctx context.Context, ns string) error {
 
 // Delete Kubernetes namespace.
 func DeleteNamespace(ctx context.Context, ns string) error {
-	cmd := exec.CommandContext(ctx, "kubectl", "delete", "ns", ns, "--ignore-not-found=true", "--cascade=background")
+	cmd := exec.CommandContext(ctx, "kubectl", "delete", "ns", ns, "--ignore-not-found=true", "--cascade=foreground")
 	_, err := Run(cmd)
 
 	return err
