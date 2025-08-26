@@ -90,7 +90,7 @@ jobs:
           registry: ghcr.io
           username: ocmbot[ocm]
           password: ${{ steps.generate_token.outputs.token }}
-      - name: Build
-        run: task docker-buildx
+      - name: Build and Push
+        run: task kubernetes/controller:docker-buildx
         env:
           IMG: ghcr.io/${{ github.repository }}/kubernetes/controller:latest
