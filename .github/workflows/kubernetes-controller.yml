@@ -5,25 +5,36 @@ on:
       - main
     paths:
       - kubernetes/controller/**/*
+      - .github/workflows/kubernetes-controller.yml
   pull_request:
     branches:
       - main
     paths:
       - kubernetes/controller/**/*
+      - .github/workflows/kubernetes-controller.yml
 
 permissions:
   contents: read # for actions/checkout to fetch code
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   E2E:
     name: E2E
     runs-on: large_runner
+    timeout-minutes: 60
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
         uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          sparse-checkout: |
+            kubernetes/controller
+            .github/workflows/kubernetes-controller.yml
+            Taskfile.yml
 
       - name: Setup Go (required for CLI build)
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
@@ -46,8 +57,37 @@ jobs:
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@6bf37f6a560fd84982d67f853162e4b3c2235edb # v2.6.4
 
-      - name: Setup
+      - name: Setup Local E2E Test Cluster
         run: task kubernetes/controller:test/e2e/setup/local
 
       - name: Run
         run: task kubernetes/controller:test/e2e
+  publish_latest:
+    name: "Publish Latest Image"
+    if: github.ref == 'refs/heads/main'
+    runs-on: large_runner
+    needs: E2E
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    steps:
+      - name: Self Hosted Runner Post Job Cleanup Action
+        uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          sparse-checkout: |
+            kubernetes/controller
+            .github/workflows/kubernetes-controller.yml
+            Taskfile.yml
+      - name: Docker Login
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build
+        run: task docker-buildx
+        env:
+          IMG: ghcr.io/${{ github.repository }}/kubernetes/controller:latest

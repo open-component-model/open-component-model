@@ -36,6 +36,7 @@ spec:
           # - --leader-elect We dont need it for testing
           - --health-probe-bind-address=:8081
           - --zap-log-level=4
+        # TODO(jakobmoellerdev): migrate once we have the first build in the monorepo
         image: ghcr.io/open-component-model/ocm-k8s-toolkit:latest
         name: manager
         imagePullPolicy: Always
