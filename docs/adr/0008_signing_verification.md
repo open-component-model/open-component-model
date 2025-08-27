@@ -158,9 +158,7 @@ componentDigest := "sha256:" + hex.EncodeToString(sum[:])
 ### Signature envelope
 
 ```go
-type CosignBundle struct {
-    MediaType   string          `json:"mediaType,omitempty"`  // e.g., application/vnd.dev.sigstore.bundle+json
-    Content     json.RawMessage `json:"content,omitempty"`    // Sigstore bundle JSON (signature, certs, tlog)
+    Content     json.RawMessage `json:"content,omitempty"`    // Sigstore bundle JSON (signature, certs, transparency log (Rekor))
     UploadedRef string          `json:"uploadedRef,omitempty"`// OCI subject ref if uploaded (e.g., name@digest)
 }
 
