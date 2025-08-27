@@ -13,7 +13,7 @@ import (
 )
 
 // Serializer implements the ListSerializer interface for serializing
-// vertices to JSON format.
+// a slice of vertices to a set of output formats.
 type Serializer[T cmp.Ordered] struct {
 	// VertexSerializer is a function that converts a vertex to an object
 	// that can be serialized to JSON.
