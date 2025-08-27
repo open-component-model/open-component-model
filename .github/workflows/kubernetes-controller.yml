@@ -66,7 +66,8 @@ jobs:
     name: "Publish Latest Image"
     if: github.ref == 'refs/heads/main'
     runs-on: large_runner
-    needs: E2E
+    # TODO: remove once push is fixed
+    #    needs: E2E
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
         uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
@@ -78,6 +79,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           permission-organization-packages: write # needed for docker push into org level packages
           permission-contents: read
+          repositories: ${{ github.event.repository.name }}
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
