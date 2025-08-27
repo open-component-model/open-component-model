@@ -14,6 +14,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	// StaticRenderMode corresponds to a one-time call to RenderOnce.
+	StaticRenderMode = "static"
+	// LiveRenderMode corresponds to RunRenderLoop.
+	LiveRenderMode = "live"
+)
+
 // Renderer defines an interface for rendering arbitrary data structures.
 type Renderer interface {
 	Render(ctx context.Context, writer io.Writer) error
