@@ -61,11 +61,10 @@ func RenderOnce(ctx context.Context, renderer Renderer, opts ...RenderOption) er
 // If no writer is provided, it defaults to os.Stdout.
 // If no refresh rate is provided, it defaults to DefaultRefreshRate.
 // TODO(fabianburth): Implement render loop in a TUI. Currently, the feature
-//
-//	is experimental, as the ASCI control sequences used to reset the output
-//	only work as long as the output fits into the terminal window (you may
-//	scroll very far out though ;) ).
-//	https://github.com/open-component-model/ocm-project/issues/608
+// is experimental, as the ASCI control sequences used to reset the output
+// only work as long as the output fits into the terminal window (you may
+// scroll very far out though ;) ).
+// https://github.com/open-component-model/ocm-project/issues/608
 func RunRenderLoop(ctx context.Context, renderer Renderer, opts ...RenderLoopOption) func() error {
 	options := &RenderLoopOptions{}
 
