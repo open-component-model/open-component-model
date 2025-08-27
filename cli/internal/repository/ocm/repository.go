@@ -235,6 +235,12 @@ func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptio
 		return nil, fmt.Errorf("listing component versions failed: %w", err)
 	}
 
+	if opts.SemverConstraint != "" {
+		if versions, err = filterBySemver(versions, opts.SemverConstraint); err != nil {
+			return nil, fmt.Errorf("filtering component versions failed: %w", err)
+		}
+	}
+
 	// Ensure correct order.
 	// We sort here, so we do not have to import semver into each repository
 	// implementation.
@@ -251,12 +257,6 @@ func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptio
 		}
 		return semverB.Compare(semverA)
 	})
-
-	if opts.SemverConstraint != "" {
-		if versions, err = filterBySemver(versions, opts.SemverConstraint); err != nil {
-			return nil, fmt.Errorf("filtering component versions failed: %w", err)
-		}
-	}
 
 	if opts.LatestOnly && len(versions) > 1 {
 		return versions[:1], nil
