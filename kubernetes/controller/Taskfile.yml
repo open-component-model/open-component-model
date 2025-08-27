@@ -185,4 +185,4 @@ tasks:
   set-images:
     internal: true
     dir: config/manager
-    cmd: '{{.KUSTOMIZE}} edit set image ghcr.io/open-component-model/ocm-k8s-toolkit={{.CONTROLLER_IMG}}'
+    cmd: '{{.KUSTOMIZE}} edit set image ghcr.io/open-component-model/kubernetes/controller={{.CONTROLLER_IMG}}'
