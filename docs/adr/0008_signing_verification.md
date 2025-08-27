@@ -20,7 +20,7 @@ and contributes to the parent’s component-version digest.
 
 ### Two-step flow
 
-1. **Digest calculation** mutates the descriptor to embed required digests (resources, component references, component-version).
+1. **Digest calculation** mutates the descriptor to embed required digests (resources, component references, component-version). The implementation of `add digest`is not part of this ADR. We assume the component-version digest is computed and available in the descriptor already.
 2. **Signing**
   a. **Certificate Signing**: A signature envelope is appended to the descriptor, containing a direct signature over the canonical bytes using provided certificate/key material.
   b. **Cosign Signature**: Instead of certificate signing, an OCI Cosign signature can be produced over the same canonical bytes.
@@ -28,15 +28,10 @@ and contributes to the parent’s component-version digest.
 ### Commands
 
 ```bash
-# Step 1 — Digest calculation (mutates descriptor: digests only)
-ocm add digests cv <ref> --recurse --force
-```
+# Step 1 — Digest calculation
+To be done prior to signing. Not part of this ADR.
 
-- `<ref>`: descriptor reference (file path or repository reference).
-- `--recurse`: calculate digests for referenced component versions.
-- `--force`: overwrite existing digest fields.
-
-# Step 2 — Signing (no digest mutation)
+# Step 2 — Signing
 ## Direct signing via a single --cert (+ optional password).
 
 ```bash
@@ -90,6 +85,7 @@ type Normalisation interface {
   - **Component-version**: digest over the canonicalized descriptor.
 - May download artifacts and referenced descriptors as needed.
 - Writes the updated descriptor back to `<ref>`.
+- Results in a new component-version.
 
 ### Signing (`ocm sign cv`)
 
@@ -97,16 +93,16 @@ type Normalisation interface {
 - Canonicalizes the descriptor.
 - Computes the component-version digest from canonical bytes.
 - If `--pin` is provided, compares and fails on mismatch.
-- Performs direct signing using `--cert` (or a default signer if available).
+- Performs direct signing using `--cert`.
 - If `--cosign` is set:
   - Obtain an OIDC ID token in this order:
     1. Use `--cosign-identity-token` if provided (token string or `@path` to file).
     2. Else use `SIGSTORE_ID_TOKEN` environment variable if present.
-    3. Else, if interactive TTY is available, run an **interactive loopback** browser flow to retrieve the token.
+    3. Else, if interactive TTY is available, run an **interactive loopback** browser flow to retrieve the token. (check CLI examples)
     4. Else, run the **device flow** to retrieve the token.
   - Produce a Cosign signature over the **same canonical bytes**.
   - When `--cosign-upload` is present and `<ref>` maps to an OCI subject (`<name>@<digest>`), attach the Cosign signature to the registry using Cosign conventions.
-  - Record the **Cosign bundle** (signature, certs, and optional Rekor inclusion) in the envelope for offline verification.
+  - Record the **Cosign bundle** (signature, certs, and optional Rekor inclusion) in the envelope.
 - Append the signature envelope under `.signatures[]`.
 - Do not compute or embed any digests during signing.
 
@@ -150,10 +146,7 @@ ocm sign cv ghcr.io/org/app:1.2.3 \
 
 ### Component-version digest
 
-```go
-sum := sha256.Sum256(canon)
-componentDigest := "sha256:" + hex.EncodeToString(sum[:])
-```
+See [ADR 03](https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/03-signing-process.md)
 
 ### Signature envelope
 
@@ -333,7 +326,7 @@ sequenceDiagram
 
   U->>C: ocm sign cv <ref> --sig <slot> [--pin] [--cert ...] [--cosign ...]
   C->>R: Pull descriptor
-  C->>C: JCS canonicalization → component-version digest
+  C->>C: Normalization → component-version digest
   alt Pin provided
     C->>C: Compare digest with --pin
     note over C: Fail on mismatch (no signature)
