@@ -129,8 +129,11 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 
 	require.NoError(t, pm.Shutdown(ctx))
 
-	content := writer.String()
-	require.Contains(t, content, `maximumNumberOfPotatoes=100`)
+	// we need some time for the logs to be streamed back
+	require.Eventually(t, func() bool {
+		content := writer.String()
+		return strings.Contains(content, `maximumNumberOfPotatoes=100`)
+	}, 1*time.Second, 100*time.Millisecond)
 }
 
 func TestConfigurationPassedToPluginNotFound(t *testing.T) {
@@ -302,9 +305,14 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 		return err == nil
 	}, 1*time.Second, 100*time.Millisecond)
 
-	content, err := io.ReadAll(writer)
-	require.NoError(t, err)
-	require.Contains(t, string(content), "gracefully shutting down plugin")
+	// we need some time for the logs to be streamed back
+	require.Eventually(t, func() bool {
+		content, err := io.ReadAll(writer)
+		if err != nil {
+			return false
+		}
+		return strings.Contains(string(content), "gracefully shutting down plugin")
+	}, 1*time.Second, 100*time.Millisecond)
 }
 
 func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
