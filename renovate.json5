@@ -27,13 +27,25 @@
       "enabled": true
     },
     {
-      matchManagers: [
-        'gomod'
+      "matchManagers": [
+        "gomod"
       ],
-      groupName: 'OCM Monorepo Go Module Dependencies',
-      groupSlug: 'ocm-monorepo',
-      matchPackageNames: [
-        'ocm.software/open-component-model/**'
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    },
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "groupName": "OCM Monorepo Go Module Dependencies",
+      "groupSlug": "ocm-monorepo",
+      "matchPackageNames": [
+        "ocm.software/open-component-model/**"
       ]
     }
   ],

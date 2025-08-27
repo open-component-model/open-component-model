@@ -85,10 +85,14 @@ includes:
     optional: true
     taskfile: ./cli/Taskfile.yml
     dir: ./cli
-  cli/cmd/download/plugin/integration:
+  cli/integration:
     optional: true
-    taskfile: ./cli/cmd/download/plugin/integration/Taskfile.yml
-    dir: ./cli/cmd/download/plugin/integration
+    taskfile: ./cli/integration/Taskfile.yml
+    dir: ./cli/integration
+  kubernetes/controller:
+    optional: true
+    taskfile: ./kubernetes/controller/Taskfile.yml
+    dir: ./kubernetes/controller
 
 vars:
   GO_MODULES:
@@ -97,7 +101,7 @@ vars:
 
 tasks:
   default:
-    deps: ["cli:build"]
+    deps: ["cli:build", "kubernetes/controller:build"]
 
   go_modules:
     desc: "List all Go Modules available in this project"
@@ -136,6 +140,8 @@ tasks:
     cmds:
       - task: 'bindings/go/generator:ocmtypegen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
+      - task: 'kubernetes/controller:manifests'
+      - task: 'kubernetes/controller:generate'
       - task: 'cli:generate/docs'
         vars:
           CLI_DOCUMENTATION_MODE: "hugo"

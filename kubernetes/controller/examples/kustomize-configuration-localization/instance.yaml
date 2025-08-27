@@ -1,0 +1,8 @@
+apiVersion: kro.run/v1alpha1
+kind: KustomizeConfigurationLocalization
+metadata:
+  name: kustomize-configuration-localization
+spec:
+  prefix: kustomize-configuration-localization
+  podinfo:
+    message: "kustomize-configuration-localization"
