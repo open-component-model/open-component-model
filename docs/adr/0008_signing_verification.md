@@ -1,15 +1,17 @@
-# ADR-0008: Digest Calculation & Signing/Pinning
+# ADR-0008: Digest Calculation & Signing/Pinning (OCI Cosign Support)
 
 - **Status:** Proposed
 - **Deciders:** OCM Maintainers
-- **Date:** 2025-08-26
-- **Related:** OCM spec signing examples; CLI signing docs
+- **Date:** 2025-08-27
+- **Related:** OCM signing specification and examples
 
 ---
 
 ## Context
 
-Component Descriptors (CDs) must be signed without altering digest fields during signing. Digests for resources, component references, and the component version are produced in a dedicated step and embedded into the descriptor. Signing uses a fixed canonicalization (JCS, RFC 8785) over the descriptor to compute the component-version digest and create a signature envelope. When a component version references another component version, the digest of the referenced descriptor is embedded in the parent’s `references[]` entry and contributes to the parent’s component-version digest.
+Component Descriptors (CDs) are signed without altering digest fields during signing. Digests for resources, component references, and the component version are produced in a dedicated step and embedded into the descriptor. Signing uses fixed canonicalization (JCS, RFC 8785) over the descriptor to compute the component-version digest and create a signature envelope. When a component version references another, the digest of the referenced descriptor is embedded in the parent’s `references[]` and contributes to the parent’s component-version digest.
+
+Some workflows require an additional **OCI Cosign** signature over the same canonical payload, optionally uploaded to an OCI registry and recorded in a transparency log (Rekor).
 
 ---
 
@@ -18,25 +20,43 @@ Component Descriptors (CDs) must be signed without altering digest fields during
 ### Two-step flow
 
 1. **Digest calculation** mutates the descriptor to embed required digests (resources, component references, component-version).
-2. **Signing** appends a signature envelope without computing or embedding digests.
+2. **Signing** appends a signature envelope without computing or embedding digests. Optionally, the same payload may be **cosigned**.
 
-### Commands (verb–noun, long options only)
+### Commands (verb–noun, long options only, no stdin)
 
 ```bash
 # Step 1 — Digest calculation (mutates descriptor: digests only)
 ocm add digests cv <ref> --recurse --force
 
 # Step 2 — Signing (no digest mutation)
-ocm sign cv <ref> --sig <slot> --pin <sha256:...> --cert <path> --password <pw> --password-prompt
+# Direct signing via a single --cert (+ optional password).
+# Optional OCI Cosign signing for the same canonical payload.
+ocm sign cv <ref> \
+  --sig <slot> \
+  --pin <sha256:...> \
+  --cert <path> \
+  --password <pw> \
+  --password-prompt \
+  --cosign \
+  --cosign-upload \
+  --cosign-skip-tlog \
+  --cosign-annotation <key=value> \
+  --cosign-annotation <key=value> \
+  --cosign-identity-token <token-or-path>
 ```
 
-- `<ref>`: addressable descriptor reference (file path or repository reference).
+- `<ref>`: descriptor reference (file path or repository reference).
 - `--recurse`: calculate digests for referenced component versions.
 - `--force`: overwrite existing digest fields.
-- `--sig <slot>`: logical signature slot/name, e.g., `mysig@1234`.
+- `--sig <slot>`: logical signature slot/name (e.g., `mysig@1234`).
 - `--pin <sha256:...>`: expected component-version digest; fail on mismatch.
-- `--cert <path>`: X.509 certificate (private key resolved by implementation; encrypted keys may require a password).
-- `--password <pw>` / `--password-prompt`: key decryption options.
+- `--cert <path>`: certificate/key material for direct signing (PEM/PKCS#8/PKCS#12).
+- `--password <pw>` / `--password-prompt`: decrypt key material if protected.
+- `--cosign`: also produce an OCI Cosign signature for the same canonical payload.
+- `--cosign-upload`: if `<ref>` resolves to an OCI subject, attach/upload the Cosign signature to the registry; otherwise, store the Cosign bundle only.
+- `--cosign-skip-tlog`: disable Rekor upload.
+- `--cosign-annotation`: repeatable `key=value` annotations for the Cosign signature.
+- `--cosign-identity-token <token-or-path>`: pass an OIDC ID token directly (alternatively, use `SIGSTORE_ID_TOKEN` env).
 
 ### Normalization
 
@@ -60,15 +80,54 @@ ocm sign cv <ref> --sig <slot> --pin <sha256:...> --cert <path> --password <pw> 
 
 - Loads the descriptor from `<ref>`.
 - Canonicalizes the descriptor using JCS.
-- Computes the component-version digest from those canonical bytes.
-- If `--pin` is provided, compares and fails on mismatch (no signature written).
-- Creates a signature envelope and appends it under `.signatures[]`.
-- Does not compute or embed any digests.
+- Computes the component-version digest from canonical bytes.
+- If `--pin` is provided, compares and fails on mismatch.
+- Performs direct signing using `--cert` (or a default signer if available).
+- If `--cosign` is set:
+  - Obtain an OIDC ID token in this order:
+    1. Use `--cosign-identity-token` if provided (token string or `@path` to file).
+    2. Else use `SIGSTORE_ID_TOKEN` environment variable if present.
+    3. Else, if interactive TTY is available, run an **interactive loopback** browser flow to retrieve the token.
+    4. Else, run the **device flow** to retrieve the token.
+  - Produce a Cosign signature over the **same canonical bytes**.
+  - When `--cosign-upload` is present and `<ref>` maps to an OCI subject (`<name>@<digest>`), attach the Cosign signature to the registry using Cosign conventions.
+  - Record the **Cosign bundle** (signature, certs, and optional Rekor inclusion) in the envelope for offline verification.
+- Append the signature envelope under `.signatures[]`.
+- Do not compute or embed any digests during signing.
 
-### References
+---
 
-- For each entry in `references[]`, embed the digest of the referenced component descriptor.
-- The embedded reference digests are part of the canonicalized parent descriptor and therefore influence the parent’s component-version digest and signature.
+## CLI Examples
+
+```bash
+# Digests
+ocm add digests cv ghcr.io/org/app:1.2.3 --recurse --force
+
+# Direct sign
+ocm sign cv ghcr.io/org/app:1.2.3 \
+  --sig release@2025-08-27 \
+  --cert ~/.keys/release.p12 \
+  --password-prompt
+
+# Direct sign + embed Cosign bundle (no upload)
+ocm sign cv ghcr.io/org/app:1.2.3 \
+  --sig release@2025-08-27 \
+  --cosign
+
+# Direct sign + Cosign upload to OCI and Rekor (keyless OIDC via browser/device)
+ocm sign cv ghcr.io/org/app:1.2.3 \
+  --sig release@2025-08-27 \
+  --cosign \
+  --cosign-upload \
+  --cosign-annotation git.sha=deadbeef
+
+# Cosign with pre-fetched ID token (no browser)
+ocm sign cv ghcr.io/org/app:1.2.3 \
+  --sig rel@2025 \
+  --cosign \
+  --cosign-identity-token @/run/secure/idtoken \
+  --cosign-skip-tlog
+```
 
 ---
 
@@ -92,34 +151,56 @@ componentDigest := "sha256:" + hex.EncodeToString(sum[:])
 ### Signature envelope
 
 ```go
+type CosignBundle struct {
+    MediaType   string          `json:"mediaType,omitempty"`  // e.g., application/vnd.dev.sigstore.bundle+json
+    Content     json.RawMessage `json:"content,omitempty"`    // Sigstore bundle JSON (signature, certs, tlog)
+    UploadedRef string          `json:"uploadedRef,omitempty"`// OCI subject ref if uploaded (e.g., name@digest)
+}
+
 type SignatureEnvelope struct {
-    Name            string
-    MediaType       string // application/vnd.ocm.signature.v1+json
-    Algorithm       string // rsa-pss-sha256, ecdsa-p256-sha256, ed25519, ...
-    Value           []byte // signature over canonical bytes
-    CertChainPEM    []byte
-    KeyID           string
-    NormalizationID string // "jcs/rfc8785"
-    ComponentDigest string // e.g., "sha256:..."
+    Name              string
+    MediaType         string // application/vnd.ocm.signature.v1+json
+    Algorithm         string // rsa-pss-sha256 | ecdsa-p256-sha256 | ed25519 | cosign
+    Value             []byte // direct signature over canonical bytes (when using --cert)
+
+    // X.509 chain for direct signing (optional)
+    CertChainPEM      []byte
+
+    // Optional Cosign bundle for the same payload
+    Cosign            *CosignBundle
+
+    KeyID             string // generic key identifier (optional)
+
+    // Reproducibility
+    NormalizationID   string // "jcs/rfc8785"
+    ComponentDigest   string // e.g., "sha256:..."
 }
 ```
 
-### Signing orchestration (sketch)
+### Cosign OIDC token capture (implementation sketch)
 
 ```go
-cd := must(loadDescriptor(ref))
-canon := must(jcs.Normalise(cd, nil))
-comp := sha256sum(canon)
+func resolveSigstoreIDToken(ctx context.Context, flagToken string) (string, error) {
+    // 1) explicit flag: --cosign-identity-token VALUE or "@/path/to/token"
+    if flagToken != "" {
+        if strings.HasPrefix(flagToken, "@") { return os.ReadFile(flagToken[1:]) }
+        return flagToken, nil
+    }
+    // 2) environment variable
+    if tok := os.Getenv("SIGSTORE_ID_TOKEN"); tok != "" {
+        return tok, nil
+    }
+    // 3) interactive loopback, then 4) device flow
+    if isInteractive() {
+        return runLoopbackBrowserFlow(ctx) // opens browser, listens on localhost, returns ID token
+    }
+    return runDeviceFlow(ctx) // prints URL+code, polls until token is issued
+}
+```
 
-if pin != "" && pin != comp { return ErrPinMismatch }
-
-signer := resolveSigner(certPath, password, passwordPrompt) // default or cert-based
-env := must(signer.Sign(canon))
-env.Name = slot
-env.NormalizationID = "jcs/rfc8785"
-env.ComponentDigest = comp
-
-must(storeSignature(ref, env))
+```go
+// The returned token is passed to Cosign when creating the signature:
+cosign.SignCanonicalBytes(ctx, canonicalBytes, cosign.WithIdentityToken(idToken), cosign.WithUpload(upload), ...)
 ```
 
 ---
@@ -141,13 +222,13 @@ sequenceDiagram
   loop For resources and references
     C->>A: Fetch artifact or referenced descriptor
     A-->>C: Bytes / Descriptor
-    C->>C: Compute and embed digest
+    C->>C: Compute & embed digest
   end
   C->>R: Push updated descriptor
   R-->>U: Reference to digested descriptor
 ```
 
-### Signing
+### Signing (+ optional OCI Cosign)
 
 ```mermaid
 sequenceDiagram
@@ -155,27 +236,34 @@ sequenceDiagram
   actor U as User/CI
   participant C as ocm CLI
   participant R as OCM Repository
+  participant O as OCI Registry
 
-  U->>C: ocm sign cv <ref> --sig <slot> [--pin <digest>] [--cert <path>] [--password|--password-prompt]
+  U->>C: ocm sign cv <ref> --sig <slot> [--pin] [--cert ...] [--cosign ...]
   C->>R: Pull descriptor
   C->>C: JCS canonicalization → component-version digest
   alt Pin provided
     C->>C: Compare digest with --pin
     note over C: Fail on mismatch (no signature)
   end
-  alt Certificate provided
-    C->>C: Load cert/key (prompt if requested)
-  else Default signer
-    C->>C: Resolve default signer
+  opt Direct signing (--cert or default signer)
+    C->>C: Create direct signature (X.509)
   end
-  C->>C: Create signature envelope
-  C->>R: Append signature to descriptor
+  opt Cosign (--cosign)
+    C->>C: Resolve OIDC ID token (flag/env/browser/device)
+    C->>C: Create Cosign signature over canonical bytes
+    alt --cosign-upload and <ref> maps to OCI subject
+      C->>O: Attach/Upload Cosign signature
+    end
+    C->>C: Capture Cosign bundle in envelope
+  end
+  C->>R: Append signature envelope to descriptor
   R-->>U: Reference to signed descriptor
 ```
 
 ---
 
-## References
+## Security
 
-- OCM spec: **Signing examples – Component-Version with Reference**  
-  https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/04-signing-examples.md#component-version-with-reference
+- Use `--pin` to ensure the descriptor being signed matches the expected component-version digest across environments.
+- Prefer `--password-prompt` or secret management over inline `--password` for direct signing.
+- Cosign keyless flows depend on OIDC identity; ensure correct OIDC configuration and registry permissions when uploading.
