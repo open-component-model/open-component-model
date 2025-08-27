@@ -31,10 +31,11 @@ import (
 // useful CLI relevant helper functions that make high level operations easier.
 // It manages component references, repository specifications, and credentials for OCM operations.
 type ComponentRepository struct {
-	ref         *compref.Ref // Component reference containing repository and component information
-	spec        runtime.Typed
-	base        repository.ComponentVersionRepository // Base repository plugin contract
-	credentials map[string]string                     // Credentials for repository access
+	ref  *compref.Ref                          // Component reference containing repository and component information
+	spec runtime.Typed                         // Repository specification
+	base repository.ComponentVersionRepository // Base repository plugin contract
+
+	credentials map[string]string // Credentials for repository access
 }
 
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
