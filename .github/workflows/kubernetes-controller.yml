@@ -65,37 +65,31 @@ jobs:
   publish_latest:
     name: "Publish Latest Image"
     if: github.ref == 'refs/heads/main'
-    runs-on: large_runner
-    needs: E2E
+    runs-on: ubuntu-latest
+    #    needs: E2E
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
         uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
-      - name: Generate token
-        id: generate_token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
-        with:
-          app_id: ${{ secrets.OCMBOT_APP_ID }}
-          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
           version: 3.x
-          repo-token: ${{ steps.generate_token.outputs.token }}
+          repo-token: ${{ github.token}}
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          token: ${{ steps.generate_token.outputs.token }}
+          token: ${{ github.token}}
           sparse-checkout: |
             kubernetes/controller
             .github/workflows/kubernetes-controller.yml
             Taskfile.yml
-      - name: Set up docker
-        uses: docker/setup-docker-action@b60f85385d03ac8acfca6d9996982511d8620a19 # v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       - name: Docker Login
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: ghcr.io
           username: ocmbot[ocm]
-          password: ${{ steps.generate_token.outputs.token }}
+          password: ${{ github.token}}
       - name: Build & Push
-        run: task kubernetes/controller:docker-build/multi-arch PUSH=true
+        run: task kubernetes/controller:docker-build/multi-arch PUSH=false
