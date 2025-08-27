@@ -9,10 +9,11 @@
 
 ## Context
 
-Component Descriptors (CDs) are signed without altering digest fields during signing. Digests for resources, component references, and the component version are produced in a dedicated step and embedded into the descriptor. Signing uses fixed canonicalization (JCS, RFC 8785) over the descriptor to compute the component-version digest and create a signature envelope. When a component version references another, the digest of the referenced descriptor is embedded in the parent’s `references[]` and contributes to the parent’s component-version digest.
-
-Some workflows require an additional **OCI Cosign** signature over the same canonical payload, optionally uploaded to an OCI registry and recorded in a transparency log (Rekor).
-
+Component Descriptors (CDs) are signed without altering digest fields during signing. Digests for resources, component references,
+and the component version are produced in a dedicated step and embedded into the descriptor.
+Signing uses fixed canonicalization over the descriptor to compute the component-version digest and create a signature envelope.
+When a component version references another, the digest of the referenced descriptor is embedded in the parent’s `references[]`
+and contributes to the parent’s component-version digest.
 ---
 
 ## Decision
@@ -20,48 +21,62 @@ Some workflows require an additional **OCI Cosign** signature over the same cano
 ### Two-step flow
 
 1. **Digest calculation** mutates the descriptor to embed required digests (resources, component references, component-version).
-2. **Signing** appends a signature envelope without computing or embedding digests. Optionally, the same payload may be **cosigned**.
+2. **Signing**
+  a. **Certificate Signing**: A signature envelope is appended to the descriptor, containing a direct signature over the canonical bytes using provided certificate/key material.
+  b. **Cosign Signature**: Instead of certificate signing, an OCI Cosign signature can be produced over the same canonical bytes.
 
-### Commands (verb–noun, long options only, no stdin)
+### Commands
 
 ```bash
 # Step 1 — Digest calculation (mutates descriptor: digests only)
 ocm add digests cv <ref> --recurse --force
+```
+
+- `<ref>`: descriptor reference (file path or repository reference).
+- `--recurse`: calculate digests for referenced component versions.
+- `--force`: overwrite existing digest fields.
 
 # Step 2 — Signing (no digest mutation)
-# Direct signing via a single --cert (+ optional password).
-# Optional OCI Cosign signing for the same canonical payload.
+## Direct signing via a single --cert (+ optional password).
+
+```bash
+ocm sign cv <ref> \
+    --sig <slot> \
+    --pin <sha256:...> \
+    --cert <path> \
+    --password <pw> \
+    --password-prompt
+```
+
+## Alternatively OCI Cosign signing for the same canonical payload.
 ocm sign cv <ref> \
   --sig <slot> \
   --pin <sha256:...> \
-  --cert <path> \
-  --password <pw> \
-  --password-prompt \
   --cosign \
-  --cosign-upload \
-  --cosign-skip-tlog \
   --cosign-annotation <key=value> \
   --cosign-annotation <key=value> \
   --cosign-identity-token <token-or-path>
 ```
 
 - `<ref>`: descriptor reference (file path or repository reference).
-- `--recurse`: calculate digests for referenced component versions.
-- `--force`: overwrite existing digest fields.
 - `--sig <slot>`: logical signature slot/name (e.g., `mysig@1234`).
 - `--pin <sha256:...>`: expected component-version digest; fail on mismatch.
 - `--cert <path>`: certificate/key material for direct signing (PEM/PKCS#8/PKCS#12).
 - `--password <pw>` / `--password-prompt`: decrypt key material if protected.
 - `--cosign`: also produce an OCI Cosign signature for the same canonical payload.
-- `--cosign-upload`: if `<ref>` resolves to an OCI subject, attach/upload the Cosign signature to the registry; otherwise, store the Cosign bundle only.
-- `--cosign-skip-tlog`: disable Rekor upload.
 - `--cosign-annotation`: repeatable `key=value` annotations for the Cosign signature.
 - `--cosign-identity-token <token-or-path>`: pass an OIDC ID token directly (alternatively, use `SIGSTORE_ID_TOKEN` env).
 
 ### Normalization
 
-- Canonicalization for component-version digest and signature payload is **JCS (RFC 8785)** via the existing `jcs` package.
-- No CLI flag to select a different normalization.
+- Canonicalization for component-version digest and signature payload is done in
+[ocm Normalisation]("https://github.com/open-component-model/open-component-model/blob/main/bindings/go/descriptor/normalisation/normalisations.go")
+
+```go
+type Normalisation interface {
+    Normalise(cd *runtime.Descriptor) ([]byte, error)
+}
+``
 
 ---
 
@@ -79,7 +94,7 @@ ocm sign cv <ref> \
 ### Signing (`ocm sign cv`)
 
 - Loads the descriptor from `<ref>`.
-- Canonicalizes the descriptor using JCS.
+- Canonicalizes the descriptor.
 - Computes the component-version digest from canonical bytes.
 - If `--pin` is provided, compares and fails on mismatch.
 - Performs direct signing using `--cert` (or a default signer if available).
@@ -133,14 +148,6 @@ ocm sign cv ghcr.io/org/app:1.2.3 \
 
 ## Code Design
 
-### Normalization
-
-```go
-// Using existing package jcs (RFC 8785 canonical JSON)
-canon, err := jcs.Normalise(componentDescriptor, nil)
-if err != nil { /* handle */ }
-```
-
 ### Component-version digest
 
 ```go
@@ -166,13 +173,12 @@ type SignatureEnvelope struct {
     // X.509 chain for direct signing (optional)
     CertChainPEM      []byte
 
-    // Optional Cosign bundle for the same payload
+    // Cosign bundle as alternative to CertChainPEM
     Cosign            *CosignBundle
 
     KeyID             string // generic key identifier (optional)
 
-    // Reproducibility
-    NormalizationID   string // "jcs/rfc8785"
+    // Component-version digest at signing time
     ComponentDigest   string // e.g., "sha256:..."
 }
 ```
@@ -355,4 +361,4 @@ sequenceDiagram
 
 - Use `--pin` to ensure the descriptor being signed matches the expected component-version digest across environments.
 - Prefer `--password-prompt` or secret management over inline `--password` for direct signing.
-- Cosign keyless flows depend on OIDC identity; ensure correct OIDC configuration and registry permissions when uploading.
+- Cosign flows depend on OIDC identity; ensure correct OIDC configuration and registry permissions when uploading.
