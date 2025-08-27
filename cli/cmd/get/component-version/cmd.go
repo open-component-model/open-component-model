@@ -84,7 +84,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 	}
 
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{"table", "yaml", "json", "ndjson", "tree"}, "output format of the component descriptors")
-	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{"static", "live"}, `display mode (default static) can be used in combination with --recursive
+	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{"static", "live"}, `display mode can be used in combination with --recursive
   static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
 	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
