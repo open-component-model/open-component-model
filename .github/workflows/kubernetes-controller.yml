@@ -77,7 +77,7 @@ jobs:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
           owner: ${{ github.repository_owner }}
-          permission-organization-packages: write # needed for docker push into org level packages
+          permission-packages: write # needed for docker push into org level packages
           permission-contents: read
           repositories: ${{ github.event.repository.name }}
       - name: Install Task
