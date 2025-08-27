@@ -62,15 +62,18 @@ jobs:
 
       - name: Run
         run: task kubernetes/controller:test/e2e
+
   publish_latest:
     name: "Publish Latest Image"
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: large_runner
     permissions:
+      # Needed to push the image to GitHub Packages.
+      # this token is the repo token, not the user token
+      # even though we impersonate the actor
       packages: write
       contents: read
-    # TODO: remove once push is fixed
-    #    needs: E2E
+    needs: E2E
     steps:
       - name: Self Hosted Runner Post Job Cleanup Action
         uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
