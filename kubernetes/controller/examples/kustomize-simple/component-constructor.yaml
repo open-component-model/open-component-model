@@ -1,0 +1,19 @@
+components:
+  - name: ocm.software/ocm-k8s-toolkit/examples/kustomize-simple
+    version: "1.0.0"
+    provider:
+      name: ocm.software
+    resources:
+      - name: kustomize-resource
+        type: kustomization
+        version: "1.0.0"
+        access:
+          type: gitHub
+          repoUrl: https://github.com/stefanprodan/podinfo
+          commit: cdd09cdd3daacc3082d5a78062ac493806f7abd0
+      - name: kro-rgd
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./rgd.yaml
