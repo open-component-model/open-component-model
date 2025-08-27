@@ -30,7 +30,7 @@ jobs:
           status: in_progress
           sha: ${{ github.event.workflow_run.head_sha }}
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           sparse-checkout: |
