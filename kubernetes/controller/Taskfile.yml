@@ -17,7 +17,7 @@ vars:
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}'
   ENVTEST: '{{.LOCALBIN}}/setup-envtest-{{.ENVTEST_VERSION}}'
   IGNORE_NOT_FOUND: '{{.IGNORE_NOT_FOUND | default "false"}}'
-  PLATFORMS: '{{.PLATFORMS | default "linux/arm64,linux/amd64"}}'
+  PLATFORMS: '{{.PLATFORMS | default "linux/arm64,linux/amd64,linux/s390x,linux/ppc64le"}}'
 
 tasks:
   default:
