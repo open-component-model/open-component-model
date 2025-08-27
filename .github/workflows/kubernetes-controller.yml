@@ -97,7 +97,5 @@ jobs:
           registry: ghcr.io
           username: ocmbot[ocm]
           password: ${{ steps.generate_token.outputs.token }}
-      - name: Build
-        run: task kubernetes/controller:docker-buildx
-      - name: Push
-        run: task kubernetes/controller:docker-push
+      - name: Build & Push
+        run: task kubernetes/controller:docker-build/multi-arch PUSH=true

@@ -48,7 +48,11 @@ tasks:
 
 
   test/e2e/setup/local:
-    deps: [ docker-build ]
+    deps:
+      # We depend on a locally built image, so we need to load that into the local machine.
+      - task: docker-build
+        vars:
+          LOAD: "true"
     cmds:
       - 'bash test/e2e/hacks/setup.sh'
       - 'kind load docker-image {{.CONTROLLER_IMG}}'
@@ -72,21 +76,43 @@ tasks:
     deps: [manifests, generate, fmt, vet]
     cmd: 'go run {{.TASKFILE_DIR}}/cmd/main.go'
 
+
+  # Always build only for the host architecture.
+  # We force "linux" OS because all Docker base images are Linux,
+  # and derive the arch dynamically from the host Go toolchain.
   docker-build:
     cmd:
-      task: docker-buildx
+      task: docker-build/multi-arch
       vars:
         PLATFORMS:
           sh: 'echo "linux/$(go env GOARCH)"'
 
-  docker-push:
-    cmd: '{{.CONTAINER_TOOL}} push {{.CONTROLLER_IMG}}'
 
-  docker-buildx:
-    cmds:
-      - sed '1s|^FROM|FROM --platform=${BUILDPLATFORM}|' Dockerfile > Dockerfile.cross
-      - '{{.CONTAINER_TOOL}} buildx build --load --platform={{.PLATFORMS}} -t {{.CONTROLLER_IMG}} -f Dockerfile.cross .'
-      - rm Dockerfile.cross
+  # Multi-arch capable build task.
+  # In this setup it is used only with a single platform (the local arch),
+  # but it still supports --push / --load flags if desired.
+  docker-build/multi-arch:
+    requires:
+      vars: [ PLATFORMS, CONTROLLER_IMG ]
+    cmd: |
+      args=(
+        --platform={{.PLATFORMS}}
+        -t {{.CONTROLLER_IMG}}
+        -f {{.TASKFILE_DIR}}/Dockerfile {{.TASKFILE_DIR}}
+      )
+      
+      # If LOAD is set, load single-arch image into local daemon
+      if [ "{{.LOAD | default ""}}" = "true" ]; then
+        args+=(--load)
+      fi
+      
+      # If PUSH is set, push image (or manifest) to registry
+      if [ "{{.PUSH | default ""}}" = "true" ]; then
+        args+=(--push)
+      fi
+
+      # Run docker (or podman) buildx with the constructed args
+      {{.CONTAINER_TOOL}} buildx build "${args[@]}"
 
   build-installer:
     deps: [manifests, generate, kustomize]
