@@ -6,11 +6,6 @@ on:
     types:
       - completed
 
-
-concurrency:
-  group: publish-latest-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
@@ -23,9 +18,17 @@ jobs:
       github.event.workflow.name == 'Kubernetes Controller' }}
     runs-on: large_runner
     permissions:
+      checks: write
       contents: read
       packages: write
     steps:
+      - uses: LouisBrunner/checks-action@v2.0.0
+        if: always()
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: "Publish Latest Controller Image"
+          status: in_progress
+          sha: ${{ github.event.workflow_run.head_sha }}
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -53,4 +56,16 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & Push Multi-Arch
+        id: build_push
         run: task kubernetes/controller:docker-build/multi-arch PUSH=true
+
+      - uses: LouisBrunner/checks-action@v2.0.0
+        if: always()
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: "Publish Latest Controller Image"
+          conclusion: ${{ job.status }}
+          status: 'completed'
+          output: |
+            {"summary":"${{ steps.build_push.outputs.summary }}"}
+          sha: ${{ github.event.workflow_run.head_sha }}
