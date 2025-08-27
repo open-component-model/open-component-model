@@ -1,0 +1,31 @@
+version: '3'
+
+
+vars:
+  DEFAULT_CLI_PLUGIN_LOCATION:
+    sh: 'echo {{env "HOME"}}/.config/ocm/plugins'
+
+tasks:
+  tmp:
+    cmds:
+      - mkdir -p tmp
+    status:
+      - test -d tmp
+  build:
+    cmds:
+      - go build -o tmp/testdata/test-input-plugin cmd/main.go
+  test:
+    sources:
+      - ./**/*.go
+      - ./go.mod
+      - ./go.sum
+    cmds:
+      - go test -v -coverprofile=tmp/coverage.out ./...
+    deps:
+      - tmp
+      - build
+  install/local:
+    desc: 'Installs the plugin locally to the default location'
+    deps:
+      - build
+    cmd: 'install $(pwd)/tmp/testdata/test-input-plugin {{.DEFAULT_CLI_PLUGIN_LOCATION}}/helm'

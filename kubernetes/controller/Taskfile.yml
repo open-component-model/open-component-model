@@ -1,0 +1,188 @@
+version: '3'
+
+env:
+  ENVTEST_K8S_VERSION: 1.33.x
+  KUSTOMIZE_VERSION: v5.4.1
+  CONTROLLER_TOOLS_VERSION: v0.17.1
+  ENVTEST_VERSION: release-0.21
+  CONTROLLER_IMG: '{{ env "CONTROLLER_IMG" | default "ghcr.io/open-component-model/kubernetes/controller:latest" }}'
+
+vars:
+  GOBIN:
+    sh: 'go env GOBIN || echo $(go env GOPATH)/bin'
+  CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
+  LOCALBIN: '{{.TASKFILE_DIR}}/bin'
+  KUBECTL: '{{.KUBECTL | default "kubectl"}}'
+  KUSTOMIZE: '{{.LOCALBIN}}/kustomize-{{.KUSTOMIZE_VERSION}}'
+  CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}'
+  ENVTEST: '{{.LOCALBIN}}/setup-envtest-{{.ENVTEST_VERSION}}'
+  IGNORE_NOT_FOUND: '{{.IGNORE_NOT_FOUND | default "false"}}'
+  PLATFORMS: '{{.PLATFORMS | default "linux/arm64,linux/amd64,linux/s390x,linux/ppc64le"}}'
+
+tasks:
+  default:
+    cmds: [ task: build ]
+
+  # Development
+  manifests:
+    deps: [controller-gen]
+    cmd: '{{.CONTROLLER_GEN}} rbac:roleName=manager-role crd webhook paths="{{ .TASKFILE_DIR }}/..." output:crd:artifacts:config=config/crd/bases'
+
+  generate:
+    deps: [controller-gen]
+    cmd: '{{.CONTROLLER_GEN}} object paths="{{ .TASKFILE_DIR }}/..."'
+
+  fmt:
+    cmd: 'go fmt {{ .TASKFILE_DIR }}/...'
+
+  vet:
+    cmd: 'go vet {{ .TASKFILE_DIR }}/...'
+
+  test:
+    deps: [manifests, generate, envtest]
+    cmds:
+      - |
+        KUBEBUILDER_ASSETS=$({{ .ENVTEST }} use {{ .ENVTEST_K8S_VERSION }} --bin-dir {{.LOCALBIN}} -p path)
+        echo "Using KUBEBUILDER_ASSETS: $KUBEBUILDER_ASSETS"
+        go test $(go list ./... | grep -v /e2e) -coverprofile cover.out
+
+
+  test/e2e/setup/local:
+    deps:
+      # We depend on a locally built image, so we need to load that into the local machine.
+      - task: docker-build
+        vars:
+          LOAD: "true"
+    cmds:
+      - 'bash test/e2e/hacks/setup.sh'
+      - 'kind load docker-image {{.CONTROLLER_IMG}}'
+  test/e2e:
+    dotenv: ['{{.TASKFILE_DIR}}/test/e2e/hacks/.env']
+    cmds:
+      - task: install
+      - task: deploy
+      - PROJECT_DIR={{.TASKFILE_DIR}} go test {{.TASKFILE_DIR}}/test/e2e/ -v -timeout 30m -ginkgo.v
+      - task: undeploy
+      - task: uninstall
+        vars:
+          IGNORE_NOT_FOUND: "true"
+
+  # Build
+  build:
+    deps: [manifests, generate, fmt, vet]
+    cmd: 'go build -o bin/manager {{.TASKFILE_DIR}}/cmd/main.go'
+
+  run:
+    deps: [manifests, generate, fmt, vet]
+    cmd: 'go run {{.TASKFILE_DIR}}/cmd/main.go'
+
+
+  # Always build only for the host architecture.
+  # We force "linux" OS because all Docker base images are Linux,
+  # and derive the arch dynamically from the host Go toolchain.
+  docker-build:
+    cmd:
+      task: docker-build/multi-arch
+      vars:
+        PLATFORMS:
+          sh: 'echo "linux/$(go env GOARCH)"'
+
+
+  # Multi-arch capable build task.
+  # In this setup it is used only with a single platform (the local arch),
+  # but it still supports --push / --load flags if desired.
+  docker-build/multi-arch:
+    requires:
+      vars: [ PLATFORMS, CONTROLLER_IMG ]
+    cmd: |
+      args=(
+        --platform={{.PLATFORMS}}
+        -t {{.CONTROLLER_IMG}}
+        -f {{.TASKFILE_DIR}}/Dockerfile {{.TASKFILE_DIR}}
+      )
+      
+      # If LOAD is set, load single-arch image into local daemon
+      if [ "{{.LOAD | default ""}}" = "true" ]; then
+        args+=(--load)
+      fi
+      
+      # If PUSH is set, push image (or manifest) to registry
+      if [ "{{.PUSH | default ""}}" = "true" ]; then
+        args+=(--push)
+      fi
+
+      # Run docker (or podman) buildx with the constructed args
+      {{.CONTAINER_TOOL}} buildx build "${args[@]}"
+
+  build-installer:
+    deps: [manifests, generate, kustomize]
+    cmds:
+      - mkdir -p dist
+      - task: set-images
+      - '{{.KUSTOMIZE}} build config/default > dist/install.yaml'
+
+  # Deployment
+  install:
+    deps: [manifests, kustomize]
+    cmd: '{{.KUSTOMIZE}} build config/crd | {{.KUBECTL}} apply -f -'
+
+  uninstall:
+    deps: [manifests, kustomize]
+    cmd: '{{.KUSTOMIZE}} build config/crd | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
+
+  deploy:
+    deps: [manifests, kustomize]
+    cmds:
+      - task: set-images
+      - '{{.KUSTOMIZE}} build config/default | {{.KUBECTL}} apply -f -'
+
+  undeploy:
+    deps: [kustomize]
+    cmd: '{{.KUSTOMIZE}} build config/default | {{.KUBECTL}} delete --ignore-not-found={{.IGNORE_NOT_FOUND}} -f -'
+
+  # Tool installers (all via helper)
+  kustomize:
+    deps:
+      - task: go-install-tool
+        vars: { TOOL_PATH: '{{.KUSTOMIZE}}', PACKAGE: sigs.k8s.io/kustomize/kustomize/v5, VERSION: '{{.KUSTOMIZE_VERSION}}' }
+    generates: [ '{{.KUSTOMIZE}}' ]
+
+  controller-gen:
+    deps:
+      - task: go-install-tool
+        vars: { TOOL_PATH: '{{.CONTROLLER_GEN}}', PACKAGE: sigs.k8s.io/controller-tools/cmd/controller-gen, VERSION: '{{.CONTROLLER_TOOLS_VERSION}}' }
+    generates: [ '{{.CONTROLLER_GEN}}' ]
+
+  envtest:
+    deps:
+      - task: go-install-tool
+        vars: { TOOL_PATH: '{{.ENVTEST}}', PACKAGE: sigs.k8s.io/controller-runtime/tools/setup-envtest, VERSION: '{{.ENVTEST_VERSION}}' }
+    generates: [ '{{.ENVTEST}}' ]
+
+  go-install-tool:
+    internal: true
+    desc: "Install a go tool to a specific path"
+    cmd: |
+      set -e
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      
+      # install into temp dir
+      GOBIN=$tmp go install {{.PACKAGE}}@{{.VERSION}}
+      
+      # figure out binary name (strip version suffix if present)
+      name=$(basename {{.TOOL_PATH}} | sed 's/-{{.VERSION}}$//')
+      
+      # move binary if names differ
+      if [ "$name" != "$(basename {{.TOOL_PATH}})" ]; then
+        # make sure target dir exists
+        mkdir -p "$(dirname {{.TOOL_PATH}})"
+        mv "$tmp/$name" {{.TOOL_PATH}}
+      fi
+    generates:
+      - '{{.TOOL_PATH}}'
+
+  set-images:
+    internal: true
+    dir: config/manager
+    cmd: '{{.KUSTOMIZE}} edit set image ghcr.io/open-component-model/ocm-k8s-toolkit={{.CONTROLLER_IMG}}'

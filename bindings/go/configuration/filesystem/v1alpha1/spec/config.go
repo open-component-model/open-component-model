@@ -15,10 +15,10 @@ const (
 	ConfigType = "filesystem.config.ocm.software"
 )
 
-var scheme = runtime.NewScheme()
+var Scheme = runtime.NewScheme()
 
 func init() {
-	scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, Version))
+	Scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, Version))
 }
 
 // Config represents the top-level configuration for the plugin manager.
@@ -28,9 +28,16 @@ func init() {
 // +ocm:typegen=true
 type Config struct {
 	Type runtime.Type `json:"type"`
+
 	// TempFolder defines places where plugins and other functionalities can put ephemeral files under.
 	// If not defined, os.TempDir is used as a default.
 	TempFolder string `json:"tempFolder,omitempty"`
+
+	// WorkingDirectory defines the working directory for the filesystem operations.
+	// This is typically the directory where the plugin operates, and it can be used
+	// to resolve relative paths for file operations.
+	// If not defined, the current working directory is used as a default for file operations.
+	WorkingDirectory string `json:"workingDirectory,omitempty"`
 }
 
 type Duration time.Duration
@@ -61,7 +68,7 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 		cfgs := make([]*Config, 0, len(cfg.Configurations))
 		for _, entry := range cfg.Configurations {
 			var config Config
-			if err := scheme.Convert(entry, &config); err != nil {
+			if err := Scheme.Convert(entry, &config); err != nil {
 				return nil, fmt.Errorf("failed to decode credential config: %w", err)
 			}
 			cfgs = append(cfgs, &config)
@@ -88,11 +95,14 @@ func Merge(configs ...*Config) *Config {
 	}
 
 	merged := new(Config)
-	_, _ = scheme.DefaultType(merged)
+	_, _ = Scheme.DefaultType(merged)
 
 	for _, config := range configs {
 		if config.TempFolder != merged.TempFolder {
 			merged.TempFolder = config.TempFolder
+		}
+		if config.WorkingDirectory != merged.WorkingDirectory {
+			merged.WorkingDirectory = config.WorkingDirectory
 		}
 	}
 

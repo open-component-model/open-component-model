@@ -1,6 +1,7 @@
 package v1
 
 import (
+	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -19,7 +20,7 @@ type GetIdentityResponse struct {
 // ProcessResourceInputRequest contains the resource to process an input for. This resource is of a specific version
 // because we need to be able to serialize it.
 type ProcessResourceInputRequest struct {
-	Resource *descriptorv2.Resource `json:"resource"`
+	Resource *constructorv1.Resource `json:"resource"`
 }
 
 // ProcessResourceInputResponse contains the resource for which an input was processed. This resource is of a specific version
@@ -32,7 +33,7 @@ type ProcessResourceInputResponse struct {
 // ProcessSourceInputRequest contains the source to process an input for. This source is of a specific version
 // because we need to be able to serialize it.
 type ProcessSourceInputRequest struct {
-	Source *descriptorv2.Source `json:"source"`
+	Source *constructorv1.Source `json:"source"`
 }
 
 // ProcessSourceInputResponse contains the source that was an input was processed. This source is of a specific version

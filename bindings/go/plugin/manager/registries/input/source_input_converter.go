@@ -35,18 +35,12 @@ func (r *sourceInputPluginConverter) GetSourceCredentialConsumerIdentity(ctx con
 }
 
 func (r *sourceInputPluginConverter) ProcessSource(ctx context.Context, source *constructorruntime.Source, credentials map[string]string) (*constructor.SourceInputMethodResult, error) {
-	// Convert constructor runtime source to descriptor source
-	descriptorSource := constructorruntime.ConvertToDescriptorSource(source)
-	// Convert descriptor source to v2 source using the conversion logic
-	convert, err := descriptorruntime.ConvertToV2Sources(r.scheme, []descriptorruntime.Source{*descriptorSource})
+	convert, err := constructorruntime.ConvertToV1Source(source)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert source: %w", err)
 	}
-	if len(convert) == 0 {
-		return nil, fmt.Errorf("conversion resulted in empty source list")
-	}
 	request := &v1.ProcessSourceInputRequest{
-		Source: &convert[0],
+		Source: convert,
 	}
 	result, err := r.externalPlugin.ProcessSource(ctx, request, credentials)
 	if err != nil {

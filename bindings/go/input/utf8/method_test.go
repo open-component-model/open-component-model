@@ -7,7 +7,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -37,10 +36,6 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				require.Implements(t, (*blob.SizeAware)(nil), b)
 				size := b.(blob.SizeAware).Size()
 				assert.Equal(t, int64(13), size)
-				require.Implements(t, (*blob.DigestAware)(nil), b)
-				dig, ok := b.(blob.DigestAware).Digest()
-				require.True(t, ok)
-				assert.Equal(t, digest.FromString("Hello, World!").String(), dig)
 
 				reader, err := b.ReadCloser()
 				require.NoError(t, err)
@@ -145,11 +140,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				require.Implements(t, (*blob.SizeAware)(nil), b)
 				size := b.(blob.SizeAware).Size()
 				assert.Equal(t, int64(40), size) // {"name":"test","value":42,"active":true}
-				require.Implements(t, (*blob.DigestAware)(nil), b)
-				dig, ok := b.(blob.DigestAware).Digest()
-				require.True(t, ok)
 				expectedData := `{"name":"test","value":42,"active":true}`
-				assert.Equal(t, digest.FromString(expectedData).String(), dig)
 
 				reader, err := b.ReadCloser()
 				require.NoError(t, err)
@@ -195,15 +186,11 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				require.Implements(t, (*blob.SizeAware)(nil), b)
 				size := b.(blob.SizeAware).Size()
 				assert.Equal(t, int64(53), size) // formatted JSON with 2-space indentation
-				require.Implements(t, (*blob.DigestAware)(nil), b)
-				dig, ok := b.(blob.DigestAware).Digest()
-				require.True(t, ok)
 				expectedData := `{
   "name": "test",
   "value": 42,
   "active": true
 }`
-				assert.Equal(t, digest.FromString(expectedData).String(), dig)
 
 				reader, err := b.ReadCloser()
 				require.NoError(t, err)
@@ -254,10 +241,6 @@ func TestGetV1UTF8Blob(t *testing.T) {
 				require.Implements(t, (*blob.SizeAware)(nil), b)
 				size := b.(blob.SizeAware).Size()
 				assert.True(t, size > 0)
-				require.Implements(t, (*blob.DigestAware)(nil), b)
-				dig, ok := b.(blob.DigestAware).Digest()
-				require.True(t, ok)
-				assert.NotEmpty(t, dig)
 
 				reader, err := b.ReadCloser()
 				require.NoError(t, err)

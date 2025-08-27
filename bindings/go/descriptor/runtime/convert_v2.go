@@ -164,6 +164,9 @@ func ConvertFromV2Resources(resources []v2.Resource) []Resource {
 
 // ConvertFromV2Resource converts v2 resources to internal representation.
 func ConvertFromV2Resource(res *v2.Resource) *Resource {
+	if res == nil {
+		return nil
+	}
 	var resource Resource
 	resource.Name = res.Name
 	resource.Version = res.Version
@@ -348,6 +351,9 @@ func ConvertToV2Resources(scheme *runtime.Scheme, resources []Resource) ([]v2.Re
 
 // ConvertToV2Resource converts an internal resource to a v2 resource.
 func ConvertToV2Resource(scheme *runtime.Scheme, res *Resource) (*v2.Resource, error) {
+	if res == nil {
+		return nil, nil
+	}
 	var resource v2.Resource
 	resource.Name = res.Name
 	resource.Version = res.Version

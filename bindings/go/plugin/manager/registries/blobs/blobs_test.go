@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -80,4 +82,59 @@ func TestCreateBlobDataUnsupportedLocationTypeUnixNamedPipe(t *testing.T) {
 	r.Error(err)
 	r.Nil(blob)
 	r.Equal("unsupported location type: unixNamedPipe", err.Error())
+}
+
+func TestCreateBlobData_WithMediaType(t *testing.T) {
+	// Create a temporary file
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test.txt")
+	content := []byte("test content")
+	err := os.WriteFile(tmpFile, content, 0644)
+	require.NoError(t, err)
+
+	// Test with MediaType set
+	location := types.Location{
+		LocationType: types.LocationTypeLocalFile,
+		Value:        tmpFile,
+		MediaType:    "text/plain",
+	}
+
+	b, err := CreateBlobData(location)
+	require.NoError(t, err)
+	require.NotNil(t, b)
+
+	// Check if the blob is MediaTypeAware and has the correct media type
+	mtAware, ok := b.(blob.MediaTypeAware)
+	require.True(t, ok, "blob should implement MediaTypeAware")
+
+	mediaType, known := mtAware.MediaType()
+	assert.True(t, known, "media type should be known")
+	assert.Equal(t, "text/plain", mediaType, "media type should match")
+}
+
+func TestCreateBlobData_WithoutMediaType(t *testing.T) {
+	// Create a temporary file
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test.txt")
+	content := []byte("test content")
+	err := os.WriteFile(tmpFile, content, 0644)
+	require.NoError(t, err)
+
+	// Test without MediaType set
+	location := types.Location{
+		LocationType: types.LocationTypeLocalFile,
+		Value:        tmpFile,
+		// MediaType is empty
+	}
+
+	b, err := CreateBlobData(location)
+	require.NoError(t, err)
+	require.NotNil(t, b)
+
+	// Check if the blob is MediaTypeAware but has no media type set
+	mtAware, ok := b.(blob.MediaTypeAware)
+	require.True(t, ok, "blob should implement MediaTypeAware")
+
+	_, known := mtAware.MediaType()
+	assert.False(t, known, "media type should not be known when not set")
 }

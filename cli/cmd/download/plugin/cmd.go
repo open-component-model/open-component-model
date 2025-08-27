@@ -62,7 +62,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 	cmd.Flags().String(FlagResourceName, "", "name of the plugin resource to download (required)")
 	cmd.Flags().String(FlagResourceVersion, "", "version of the plugin resource to download (optional, defaults to component version)")
 	cmd.Flags().String(FlagOutput, ".", "output location to download the plugin binary to (required)")
-	enum.VarP(cmd.Flags(), FlagOutputFormat, "f", []string{"table", "yaml", "json"}, "output format of the plugin information")
+	enum.VarP(cmd.Flags(), FlagOutputFormat, "f", []string{"table", "yaml", "json"}, "output format of the plugin information, defaults to table")
 	cmd.Flags().StringSlice(FlagExtraIdentity, []string{}, "extra identity parameters for resource matching (e.g., os=linux,arch=amd64)")
 	cmd.Flags().Bool(SkipValidation, false, "skip validation of the downloaded plugin binary")
 
@@ -105,7 +105,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 
 	outputFormat, err := enum.Get(cmd.Flags(), FlagOutputFormat)
 	if err != nil {
-		return fmt.Errorf("getting output-format flag failed: %w", err)
+		outputFormat = "table"
 	}
 
 	extraIdentity, err := parseExtraIdentity(extraIdentitySlice)
