@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -117,18 +118,19 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 	})
 	proto, err := scheme.NewObject(typ)
 	require.NoError(t, err)
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
+	_, err = pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
-	require.NoError(t, pm.Shutdown(ctx))
+
 	// we need some time for the logs to be streamed back
 	require.Eventually(t, func() bool {
-		_, err := plugin.GetComponentVersionRepository(context.Background(), proto, nil)
-		return err == nil
+		content := writer.String()
+		return len(content) > 0 && strings.Contains(content, "maximumNumberOfPotatoes=100")
 	}, 1*time.Second, 100*time.Millisecond)
 
-	content, err := io.ReadAll(writer)
-	require.NoError(t, err)
-	require.Contains(t, string(content), `maximumNumberOfPotatoes=100`)
+	require.NoError(t, pm.Shutdown(ctx))
+
+	content := writer.String()
+	require.Contains(t, content, `maximumNumberOfPotatoes=100`)
 }
 
 func TestConfigurationPassedToPluginNotFound(t *testing.T) {
