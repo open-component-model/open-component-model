@@ -47,6 +47,9 @@ bräutigam
 buildDate
 buildx
 burth
+canonicalization
+canonicalized
+canonicalizes
 cas
 ccwienk
 cel
@@ -104,6 +107,7 @@ cvs
 cwienk
 dco
 debugability
+decrypt
 deduplication
 deepcopy
 deepdive
@@ -135,6 +139,7 @@ dups
 dynaml
 echoserver
 entrypoint
+env
 executables
 executoroptions
 executorspecification
@@ -269,6 +274,7 @@ localizedresource
 logconfig
 logrus
 lookups
+loopback
 lossy
 macos
 makefile
@@ -326,6 +332,7 @@ ocmresourcereference
 ocms
 odg
 offboarding
+oidc
 onboarded
 onboarding
 oncefunc
@@ -346,10 +353,12 @@ packagespec
 packageversion
 parameterization
 pcc
+pem
 pendingdeprecationwarning
 performant
 pflag
 philipp
+pkcs
 pkgs
 plugability
 pluggable
@@ -371,6 +380,7 @@ readonly
 reconciler
 refcount
 referrs
+rekor
 relativeocireference
 releasenotes
 releaser
@@ -456,6 +466,7 @@ transformationtypes
 transformerplugin
 transportarchive
 tsc
+tty
 typehandler
 typename
 uncommenting
