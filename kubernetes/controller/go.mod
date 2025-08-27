@@ -455,7 +455,7 @@ require (
 	github.com/tonglil/buflogr v1.1.1 // indirect
 	github.com/transparency-dev/formats v0.0.0-20250825093915-4fde0c3c9ab1 // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
-	github.com/transparency-dev/tessera v1.0.0-rc1.0.20250826132506-9634dd4e1f87 // indirect
+	github.com/transparency-dev/tessera v1.0.0-rc1.0.20250827100754-2c3a6dc8a5eb // indirect
 	github.com/ulikunitz/xz v0.5.13 // indirect
 	github.com/ultraware/funlen v0.2.0 // indirect
 	github.com/ultraware/whitespace v0.2.0 // indirect
