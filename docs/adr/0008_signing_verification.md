@@ -238,7 +238,7 @@ func runLoopbackBrowserFlow(ctx context.Context) (string, error) {
     )
 
     // 4) Open browser (best-effort), also print URL for manual copy
-    _ = openBrowser(authURL) // xdg-open/open/rundll32; ignore error
+    _ = openBrowser(authURL) 
     fmt.Fprintf(os.Stderr, "If the browser did not open, navigate to:\n%s\n", authURL)
 
     // 5) Minimal HTTP handler to capture the callback
