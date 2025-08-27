@@ -21,7 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
-	//nolint:staticcheck // no replacement for fallback available yet
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
@@ -76,19 +76,19 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *cred
 // NewFromRefWithFallbackRepo creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
 //
-//nolint:staticcheck // no replacement for resolvers available yet
+//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
 func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, resolvers []resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
 	if len(resolvers) == 0 {
-		//nolint:staticcheck // no replacement for resolvers available yet
+		//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
 		resolvers = make([]resolverruntime.Resolver, 0)
 	}
 
 	if ref.Repository != nil {
-		//nolint:staticcheck // no replacement for resolvers available yet
+		//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
 		resolvers = append(resolvers, resolverruntime.Resolver{
 			Repository: ref.Repository,
 			// Add the current repository as a resolver with the highest possible
@@ -96,12 +96,12 @@ func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginMana
 			Priority: math.MaxInt,
 		})
 	}
-	//nolint:staticcheck // no replacement for resolvers available yet
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
 	res := make([]*resolverruntime.Resolver, 0, len(resolvers))
 	for _, r := range resolvers {
 		res = append(res, &r)
 	}
-	//nolint:staticcheck // no replacement for resolvers available yet
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
 	fallbackRepo, err := fallback.NewFallbackRepository(ctx, provider.NewComponentVersionRepositoryProvider(), graph, res)
 	if err != nil {
 		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
