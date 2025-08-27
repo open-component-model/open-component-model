@@ -133,7 +133,7 @@ ocm sign cv ghcr.io/org/app:1.2.3 \
 
 ## Code Design
 
-### Normalization (fixed JCS)
+### Normalization
 
 ```go
 // Using existing package jcs (RFC 8785 canonical JSON)
@@ -183,7 +183,11 @@ type SignatureEnvelope struct {
 func resolveSigstoreIDToken(ctx context.Context, flagToken string) (string, error) {
     // 1) explicit flag: --cosign-identity-token VALUE or "@/path/to/token"
     if flagToken != "" {
-        if strings.HasPrefix(flagToken, "@") { return os.ReadFile(flagToken[1:]) }
+        if strings.HasPrefix(flagToken, "@") {
+            b, err := os.ReadFile(flagToken[1:])
+            if err != nil { return "", err }
+            return strings.TrimSpace(string(b)), nil
+        }
         return flagToken, nil
     }
     // 2) environment variable
@@ -192,15 +196,100 @@ func resolveSigstoreIDToken(ctx context.Context, flagToken string) (string, erro
     }
     // 3) interactive loopback, then 4) device flow
     if isInteractive() {
-        return runLoopbackBrowserFlow(ctx) // opens browser, listens on localhost, returns ID token
+        return runLoopbackBrowserFlow(ctx)
     }
-    return runDeviceFlow(ctx) // prints URL+code, polls until token is issued
+    return runDeviceFlow(ctx)
 }
 ```
 
+### Loopback browser flow (pseudo‑code)
+
 ```go
-// The returned token is passed to Cosign when creating the signature:
-cosign.SignCanonicalBytes(ctx, canonicalBytes, cosign.WithIdentityToken(idToken), cosign.WithUpload(upload), ...)
+// Opens the user's browser for OIDC auth and captures the redirect locally.
+// Returns a Sigstore-compatible OIDC ID token string.
+func runLoopbackBrowserFlow(ctx context.Context) (string, error) {
+    const issuer   = "https://oauth2.sigstore.dev/auth" // or from config
+    const clientID = "sigstore"                         // or configured client
+
+    // 1) Listen on an ephemeral loopback port
+    ln, err := net.Listen("tcp", "127.0.0.1:0")
+    if err != nil { return "", err }
+    defer ln.Close()
+    redirectURL := fmt.Sprintf("http://%s/callback", ln.Addr().String())
+
+    // 2) OIDC discovery and PKCE setup
+    prov, err := oidc.NewProvider(ctx, issuer)
+    if err != nil { return "", err }
+    cfg := oauth2.Config{
+        ClientID:    clientID,
+        Endpoint:    prov.Endpoint(),
+        RedirectURL: redirectURL,
+        Scopes:      []string{"openid", "email", "profile"},
+    }
+    codeVerifier, codeChallenge := genPKCE()      // S256
+    state := randHex(32)                          // CSRF
+    nonce := randHex(32)                          // replay
+
+    // 3) Authorization URL
+    authURL := cfg.AuthCodeURL(state,
+        oauth2.SetAuthURLParam("code_challenge", codeChallenge),
+        oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+        oauth2.SetAuthURLParam("nonce", nonce),
+    )
+
+    // 4) Open browser (best-effort), also print URL for manual copy
+    _ = openBrowser(authURL) // xdg-open/open/rundll32; ignore error
+    fmt.Fprintf(os.Stderr, "If the browser did not open, navigate to:\n%s\n", authURL)
+
+    // 5) Minimal HTTP handler to capture the callback
+    codeCh := make(chan string, 1)
+    srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.URL.Path != "/callback" { http.NotFound(w, r); return }
+        if r.Method != "GET" { http.Error(w, "method", http.StatusMethodNotAllowed); return }
+        if r.Host != ln.Addr().String() { http.Error(w, "host", http.StatusBadRequest); return }
+        if r.URL.Query().Get("state") != state { http.Error(w, "state", http.StatusBadRequest); return }
+        if errParam := r.URL.Query().Get("error"); errParam != "" {
+            http.Error(w, errParam, http.StatusBadRequest); return
+        }
+        code := r.URL.Query().Get("code")
+        if code == "" { http.Error(w, "missing code", http.StatusBadRequest); return }
+        // friendly UX page
+        _, _ = w.Write([]byte("<html><body>Authentication complete. You may close this window.</body></html>"))
+        codeCh <- code
+    })}
+    go func() { _ = srv.Serve(ln) }()
+    defer srv.Shutdown(context.Background())
+
+    // 6) Wait for code with timeout
+    var code string
+    select {
+    case <-time.After(5 * time.Minute):
+        return "", context.DeadlineExceeded
+    case code = <-codeCh:
+    case <-ctx.Done():
+        return "", ctx.Err()
+    }
+
+    // 7) Exchange code for tokens (with PKCE)
+    tok, err := cfg.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", codeVerifier))
+    if err != nil { return "", err }
+    rawID, _ := tok.Extra("id_token").(string)
+    if rawID == "" { return "", fmt.Errorf("no id_token in response") }
+
+    // 8) Validate ID token (issuer, audience, nonce)
+    v := oidc.NewVerifier(issuer, prov.Verifier(&oidc.Config{ClientID: clientID}), &oidc.Config{ClientID: clientID})
+    idt, err := v.Verify(ctx, rawID)
+    if err != nil { return "", err }
+    var claims struct{ Nonce string `json:"nonce"` }
+    _ = idt.Claims(&claims)
+    if claims.Nonce != nonce { return "", fmt.Errorf("nonce mismatch") }
+
+    // Optional: enforce audience policy (e.g., contains "sigstore")
+    if !audContains(idt, "sigstore") {
+        return "", fmt.Errorf("unexpected audience")
+    }
+    return rawID, nil
+}
 ```
 
 ---
