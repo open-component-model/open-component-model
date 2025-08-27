@@ -90,7 +90,7 @@ jobs:
             .github/workflows/kubernetes-controller.yml
             Taskfile.yml
       - name: Set up docker
-        uses: docker/setup-docker-action@v4
+        uses: docker/setup-docker-action@b60f85385d03ac8acfca6d9996982511d8620a19 # v4
       - name: Docker Login
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
