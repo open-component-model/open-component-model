@@ -94,7 +94,7 @@ components:
 		addCMD.SetArgs([]string{
 			"add",
 			"component-version",
-			"--repository", registryAddress,
+			"--repository", fmt.Sprintf("http://%s", registryAddress),
 			"--constructor", constructorPath,
 			"--config", cfgPath,
 		})
@@ -142,7 +142,7 @@ components:
 		addCMD.SetArgs([]string{
 			"add",
 			"component-version",
-			"--repository", fmt.Sprintf("oci::%s", registryAddress),
+			"--repository", fmt.Sprintf("oci::http://%s", registryAddress),
 			"--constructor", constructorPath,
 			"--config", cfgPath,
 		})
