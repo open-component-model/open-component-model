@@ -144,14 +144,15 @@ Currently, the OCM K8s Toolkit is available as [image][controller-image] and
 To install the OCM K8s Toolkit into your running Kubernetes cluster, you can use the following commands:
 
 ```console
-# In the ocm-k8s-toolkit/ repository
+# In the ocm mono-repo root directory
+cd kubernetes/controller
 make deploy
 ```
 
 or
 
 ```console
-kubectl apply -k https://ocm.software/open-component-model/kubernetes/controller/config/default?ref=main
+kubectl apply -k https://github.com/open-component-model/open-component-model/kubernetes/controller/config/default?ref=main
 ```
 
 > [!IMPORTANT]
