@@ -12,7 +12,7 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.18.0
 	github.com/fluxcd/pkg/runtime v0.80.0
 	github.com/go-logr/logr v1.4.3
-	github.com/google/cel-go v0.26.0
+	github.com/google/cel-go v0.26.1
 	github.com/mandelsoft/goutils v0.0.0-20250821215621-af06c70600cf
 	github.com/mandelsoft/vfs v0.4.5-0.20250514111339-d7b067920e91
 	github.com/onsi/ginkgo/v2 v2.25.1
