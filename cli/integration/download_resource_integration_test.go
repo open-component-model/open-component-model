@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,8 +22,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci"
-	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/cli/cmd"
@@ -33,51 +30,7 @@ import (
 )
 
 func Test_Integration_OCIRepository(t *testing.T) {
-	r := require.New(t)
-	t.Parallel()
-
-	t.Logf("Starting OCI based integration test")
-	user := "ocm"
-
-	// Setup credentials and htpasswd
-	password := internal.GenerateRandomPassword(t, 20)
-	htpasswd := internal.GenerateHtpasswd(t, user, password)
-
-	// Start containerized registry
-	registryAddress := internal.StartDockerContainerRegistry(t, htpasswd)
-	host, port, err := net.SplitHostPort(registryAddress)
-	r.NoError(err)
-
-	cfg := fmt.Sprintf(`
-type: generic.config.ocm.software/v1
-configurations:
-- type: credentials.config.ocm.software
-  consumers:
-  - identity:
-      type: OCIRepository/v1
-      hostname: %[1]q
-      port: %[2]q
-      scheme: http
-    credentials:
-    - type: Credentials/v1
-      properties:
-        username: %[3]q
-        password: %[4]q
-`, host, port, user, password)
-	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
-	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
-
-	client := internal.CreateAuthClient(registryAddress, user, password)
-
-	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(registryAddress),
-		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(client),
-	)
-	r.NoError(err)
-
-	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
-	r.NoError(err)
+	suite := SetupTestSuite(t)
 
 	t.Run("download resource with arbitrary byte stream data", func(t *testing.T) {
 		r := require.New(t)
@@ -99,7 +52,7 @@ configurations:
 
 		name, version := "ocm.software/test-component", "v1.0.0"
 
-		uploadComponentVersion(t, repo, name, version, localResource)
+		uploadComponentVersion(t, suite.Repository, name, version, localResource)
 
 		downloadCMD := cmd.New()
 
@@ -108,13 +61,13 @@ configurations:
 		downloadCMD.SetArgs([]string{
 			"download",
 			"resource",
-			fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+			fmt.Sprintf("%s//%s:%s", suite.GetRepositoryURL(), name, version),
 			"--identity",
 			fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
 			"--output",
 			output,
 			"--config",
-			cfgPath,
+			suite.ConfigPath,
 		})
 		r.NoError(downloadCMD.ExecuteContext(t.Context()))
 
@@ -153,9 +106,9 @@ configurations:
 				true),
 		}
 
-		name, version := "ocm.software/test-component", "v1.0.0"
+		name, version := "ocm.software/test-component-oci-layout", "v1.0.0"
 
-		uploadComponentVersion(t, repo, name, version, localResource)
+		uploadComponentVersion(t, suite.Repository, name, version, localResource)
 
 		t.Run("download with disabled extract", func(t *testing.T) {
 			r := require.New(t)
@@ -164,13 +117,13 @@ configurations:
 			downloadCMD.SetArgs([]string{
 				"download",
 				"resource",
-				fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+				fmt.Sprintf("%s//%s:%s", suite.GetRepositoryURL(), name, version),
 				"--identity",
 				fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
 				"--output",
 				output,
 				"--config",
-				cfgPath,
+				suite.ConfigPath,
 				"--extraction-policy",
 				resourceCMD.ExtractionPolicyDisable,
 			})
@@ -188,13 +141,13 @@ configurations:
 			downloadCMD.SetArgs([]string{
 				"download",
 				"resource",
-				fmt.Sprintf("http://%s//%s:%s", registryAddress, name, version),
+				fmt.Sprintf("%s//%s:%s", suite.GetRepositoryURL(), name, version),
 				"--identity",
 				fmt.Sprintf("name=%s,version=%s", localResource.Resource.Name, localResource.Resource.Version),
 				"--output",
 				output,
 				"--config",
-				cfgPath,
+				suite.ConfigPath,
 			})
 			r.NoError(downloadCMD.ExecuteContext(t.Context()))
 
