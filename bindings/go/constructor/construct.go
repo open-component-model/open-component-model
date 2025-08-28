@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"golang.org/x/sync/errgroup"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
@@ -26,6 +27,7 @@ type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in sequence.
 	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
+	GraphBasedConstruct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
 }
 
 // ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
@@ -35,6 +37,138 @@ func ConstructDefault(ctx context.Context, constructor *constructor.ComponentCon
 
 type DefaultConstructor struct {
 	opts Options
+}
+
+var _ Constructor = (*DefaultConstructor)(nil)
+
+const (
+	attributeComponentConstructor = "componentConstructor"
+	attributeComponentDescriptor  = "componentDescriptor"
+	attributeComponentIdentity    = "componentIdentity"
+	attributeComponentRepository  = "componentRepository"
+)
+
+func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
+	logger := log.Base().With("operation", "construct")
+
+	if c.opts.ResourceInputMethodProvider == nil {
+		logger.Debug("using default resource input method provider")
+		c.opts.ResourceInputMethodProvider = DefaultInputMethodRegistry
+	}
+	if c.opts.SourceInputMethodProvider == nil {
+		logger.Debug("using default source input method provider")
+		c.opts.SourceInputMethodProvider = DefaultInputMethodRegistry
+	}
+
+	dag := syncdag.NewDirectedAcyclicGraph[string]()
+	if err := c.discoverGraph(ctx, dag, componentConstructor); err != nil {
+		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
+	}
+	mapdag := syncdag.ToMapBasedDAG(dag)
+	_ = mapdag
+
+	//eg, egctx := newConcurrencyGroup(ctx, c.opts.ConcurrencyLimit)
+	//logger.Debug("created concurrency group", "limit", c.opts.ConcurrencyLimit)
+	//
+	//for i, component := range constructor.Components {
+	//	componentLogger := logger.With("component", component.Name, "version", component.Version)
+	//	componentLogger.Debug("constructing component")
+	//
+	//	eg.Go(func() error {
+	//		if c.opts.OnStartComponentConstruct != nil {
+	//			if err := c.opts.OnStartComponentConstruct(egctx, &component); err != nil {
+	//				return fmt.Errorf("error starting component construction for %q: %w", component.ToIdentity(), err)
+	//			}
+	//		}
+	//		desc, err := c.construct(egctx, &component)
+	//		if c.opts.OnEndComponentConstruct != nil {
+	//			if err := c.opts.OnEndComponentConstruct(egctx, desc, err); err != nil {
+	//				return fmt.Errorf("error ending component construction for %q: %w", component.ToIdentity(), err)
+	//			}
+	//		}
+	//		if err != nil {
+	//			return err
+	//		}
+	//
+	//		descLock.Lock()
+	//		defer descLock.Unlock()
+	//		descriptors[i] = desc
+	//		componentLogger.Debug("component constructed successfully")
+	//
+	//		return nil
+	//	})
+	//}
+	//
+	//if err := eg.Wait(); err != nil {
+	//	return nil, fmt.Errorf("error constructing components: %w", err)
+	//}
+
+	//logger.Debug("component construction completed successfully", "num_components", len(descriptors))
+	//return descriptors, nil
+	return nil, nil
+}
+
+func (c *DefaultConstructor) discoverGraph(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
+	roots := make([]*syncdag.Vertex[string], len(componentConstructor.Components))
+	for index, component := range componentConstructor.Components {
+		roots[index] = syncdag.NewVertex(component.ToIdentity().String(), map[string]any{
+			attributeComponentIdentity:    component.ToIdentity(),
+			attributeComponentConstructor: &component,
+		})
+	}
+	neighbourDiscoverer := syncdag.DiscoverNeighborsFunc[string](func(ctx context.Context, v *syncdag.Vertex[string]) ([]*syncdag.Vertex[string], error) {
+		untypedComponent, ok := v.GetAttribute(attributeComponentConstructor)
+		if ok {
+			// this means we are on a constructor node and we want to find its
+			// neighbors
+			component := untypedComponent.(*constructor.Component)
+			repo, err := c.opts.GetTargetRepository(ctx, component)
+			if err != nil {
+				return nil, fmt.Errorf("error getting target repository for component %q: %w", component.Name, err)
+			}
+			neighbors := make([]*syncdag.Vertex[string], 0, len(component.References))
+			for _, ref := range component.References {
+				identity := ocmruntime.Identity{
+					descriptor.IdentityAttributeName:    ref.Component,
+					descriptor.IdentityAttributeVersion: ref.Version,
+				}
+				if _, exists := dag.GetVertex(identity.String()); exists {
+					// this is always the case for other components in the constructor
+					// this might also be the case for external components that are
+					// already discovered through other components
+					neighbors = append(neighbors, syncdag.NewVertex(identity.String()))
+				} else {
+					// this is only the case for external components
+					neighbors = append(neighbors, syncdag.NewVertex(identity.String(), map[string]any{
+						attributeComponentIdentity: identity,
+						// we need to pass the target repo as it depends on the
+						// parent component
+						// TODO(fabianburth): what if a component has 2 parents
+						//  with different target repositories? the latter would
+						//  be ignored now
+						attributeComponentRepository: repo,
+					}))
+				}
+			}
+			return neighbors, nil
+		}
+		// this means we are on a descriptor node
+		identity := v.MustGetAttribute(attributeComponentIdentity).(ocmruntime.Identity)
+		repo := v.MustGetAttribute(attributeComponentRepository).(TargetRepository)
+		desc, err := repo.GetComponentVersion(ctx, identity[descriptor.IdentityAttributeName], identity[descriptor.IdentityAttributeVersion])
+		if err != nil {
+			return nil, fmt.Errorf("error getting component version %q from repository: %w", identity.String(), err)
+		}
+		v.Attributes.Store(attributeComponentDescriptor, desc)
+
+		// TODO(fabianburth): once we support recursive, we need to discover the
+		//  neighbors here
+		return nil, nil
+	})
+	if err := dag.Traverse(ctx, neighbourDiscoverer, syncdag.WithRoots[string](roots...)); err != nil {
+		return fmt.Errorf("error traversing component graph: %w", err)
+	}
+	return nil
 }
 
 func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
