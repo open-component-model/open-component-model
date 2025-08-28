@@ -26,8 +26,8 @@ func Test_Integration_AddComponentVersion_OCIRepository(t *testing.T) {
 	password := internal.GenerateRandomPassword(t, 20)
 	htpasswd := internal.GenerateHtpasswd(t, user, password)
 
-	// Start containerized registry
-	registryAddress := internal.StartDockerContainerRegistry(t, htpasswd)
+	containerName := "add-component-version-oci-repository"
+	registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
 	host, port, err := net.SplitHostPort(registryAddress)
 	r.NoError(err)
 
@@ -49,7 +49,7 @@ configurations:
 `, host, port, user, password)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
-	
+
 	t.Logf("Generated config:\n%s", cfg)
 
 	client := internal.CreateAuthClient(registryAddress, user, password)
@@ -69,7 +69,7 @@ configurations:
 
 		componentName := "ocm.software/test-component"
 		componentVersion := "v1.0.0"
-		
+
 		// Create constructor file
 		constructorContent := fmt.Sprintf(`
 components:
@@ -85,7 +85,7 @@ components:
       type: utf8
       text: "Hello, World from OCI registry!"
 `, componentName, componentVersion)
-		
+
 		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 		r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
@@ -94,7 +94,7 @@ components:
 		addCMD.SetArgs([]string{
 			"add",
 			"component-version",
-			"--repository", registryAddress,
+			"--repository", fmt.Sprintf("http://%s", registryAddress),
 			"--constructor", constructorPath,
 			"--config", cfgPath,
 		})
@@ -117,7 +117,7 @@ components:
 
 		componentName := "ocm.software/explicit-oci-component"
 		componentVersion := "v2.0.0"
-		
+
 		// Create constructor file
 		constructorContent := fmt.Sprintf(`
 components:
@@ -133,7 +133,7 @@ components:
       type: utf8
       text: "Hello from explicit OCI type!"
 `, componentName, componentVersion)
-		
+
 		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 		r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
@@ -142,7 +142,7 @@ components:
 		addCMD.SetArgs([]string{
 			"add",
 			"component-version",
-			"--repository", fmt.Sprintf("oci::%s", registryAddress),
+			"--repository", fmt.Sprintf("oci::http://%s", registryAddress),
 			"--constructor", constructorPath,
 			"--config", cfgPath,
 		})
@@ -161,7 +161,7 @@ components:
 
 		componentName := "ocm.software/https-component"
 		componentVersion := "v3.0.0"
-		
+
 		// Create constructor file
 		constructorContent := fmt.Sprintf(`
 components:
@@ -177,7 +177,7 @@ components:
       type: utf8
       text: "Hello from HTTPS URL format!"
 `, componentName, componentVersion)
-		
+
 		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 		r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
@@ -209,7 +209,7 @@ func Test_Integration_AddComponentVersion_CTFRepository(t *testing.T) {
 
 		componentName := "ocm.software/ctf-component"
 		componentVersion := "v1.0.0"
-		
+
 		// Create constructor file
 		constructorContent := fmt.Sprintf(`
 components:
@@ -225,7 +225,7 @@ components:
       type: utf8
       text: "Hello from CTF archive!"
 `, componentName, componentVersion)
-		
+
 		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 		r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
@@ -251,7 +251,7 @@ components:
 
 		componentName := "ocm.software/explicit-ctf-component"
 		componentVersion := "v2.0.0"
-		
+
 		// Create constructor file
 		constructorContent := fmt.Sprintf(`
 components:
@@ -267,7 +267,7 @@ components:
       type: utf8
       text: "Hello from explicit CTF type!"
 `, componentName, componentVersion)
-		
+
 		constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 		r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
