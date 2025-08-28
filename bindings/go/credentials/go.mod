@@ -3,7 +3,7 @@ module ocm.software/open-component-model/bindings/go/credentials
 go 1.25.0
 
 require (
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/dag v0.0.3
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
