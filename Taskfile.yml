@@ -2,6 +2,8 @@ version: '3'
 
 dotenv: ['.env', '.env.local']
 
+output: prefixed
+
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
@@ -137,7 +139,7 @@ tasks:
 
   generate:
     desc: "Run all Code Generators in the project"
-    cmds:
+    deps:
       - task: 'bindings/go/generator:ocmtypegen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
       - task: 'kubernetes/controller:manifests'
