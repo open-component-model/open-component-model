@@ -1,11 +1,11 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,32 +25,75 @@ type TestSuite struct {
 	Password        string
 	ConfigPath      string
 	Repository      *oci.Repository
-	once            sync.Once
 }
 
-var testSuite TestSuite
+var (
+	globalTestSuite *TestSuite
+)
 
-// SetupTestSuite initializes the shared test infrastructure once
+// TestMain sets up and tears down the test suite
+func TestMain(m *testing.M) {
+	var exitCode int
+
+	// Setup
+	globalTestSuite = &TestSuite{}
+	err := globalTestSuite.setup()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to setup test suite: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Run tests
+	exitCode = m.Run()
+
+	// Teardown
+	globalTestSuite.teardown()
+
+	os.Exit(exitCode)
+}
+
+// SetupTestSuite returns the global test suite instance
 func SetupTestSuite(t *testing.T) *TestSuite {
-	testSuite.once.Do(func() {
-		setupRegistryWithoutCleanup(t)
-	})
-	return &testSuite
+	if globalTestSuite == nil {
+		t.Fatal("Test suite not initialized. TestMain should handle this.")
+	}
+	return globalTestSuite
 }
 
-// setupRegistryWithoutCleanup creates a containerized registry for OCI tests but doesn't tie cleanup to individual tests
-func setupRegistryWithoutCleanup(t *testing.T) {
-	r := require.New(t)
+// setup initializes the test suite
+func (ts *TestSuite) setup() error {
+	ctx := context.Background()
 
-	t.Logf("Setting up shared test registry (no individual cleanup)")
-	testSuite.Username = "ocm"
+	ts.Username = "ocm"
 
-	testSuite.Password = internal.GenerateRandomPassword(t, 20)
-	htpasswd := internal.GenerateHtpasswd(t, testSuite.Username, testSuite.Password)
-	testSuite.RegistryAddress = startRegistryForSharing(t, htpasswd)
-	host, port, err := net.SplitHostPort(testSuite.RegistryAddress)
-	r.NoError(err)
+	// Generate password and credentials
+	ts.Password = internal.GenerateRandomPassword(&testing.T{}, 20)
+	htpasswd := internal.GenerateHtpasswd(&testing.T{}, ts.Username, ts.Password)
 
+	// Start registry container
+	registryContainer, err := registry.Run(ctx, "registry:3.0.0",
+		registry.WithHtpasswd(htpasswd),
+		testcontainers.WithEnv(map[string]string{
+			"REGISTRY_VALIDATION_DISABLED": "true",
+			"REGISTRY_LOG_LEVEL":           "debug",
+		}),
+		testcontainers.WithLogger(log.Default()),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to start registry: %w", err)
+	}
+
+	ts.RegistryAddress, err = registryContainer.HostAddress(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get registry address: %w", err)
+	}
+
+	host, port, err := net.SplitHostPort(ts.RegistryAddress)
+	if err != nil {
+		return fmt.Errorf("failed to parse registry address: %w", err)
+	}
+
+	// Generate OCM config
 	cfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
 configurations:
@@ -66,27 +109,43 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, host, port, testSuite.Username, testSuite.Password)
+`, host, port, ts.Username, ts.Password)
 
 	globalTempDir := os.TempDir()
-	testSuite.ConfigPath = filepath.Join(globalTempDir, fmt.Sprintf("ocmconfig-shared-%d.yaml", os.Getpid()))
-	r.NoError(os.WriteFile(testSuite.ConfigPath, []byte(cfg), os.ModePerm))
+	ts.ConfigPath = filepath.Join(globalTempDir, fmt.Sprintf("ocmconfig-suite-%d.yaml", os.Getpid()))
+	if err := os.WriteFile(ts.ConfigPath, []byte(cfg), os.ModePerm); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
 
-	t.Logf("Generated shared config at: %s", testSuite.ConfigPath)
-
-	client := internal.CreateAuthClient(testSuite.RegistryAddress, testSuite.Username, testSuite.Password)
+	// Setup OCI client and repository
+	client := internal.CreateAuthClient(ts.RegistryAddress, ts.Username, ts.Password)
 
 	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(testSuite.RegistryAddress),
+		urlresolver.WithBaseURL(ts.RegistryAddress),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
 	)
-	r.NoError(err)
+	if err != nil {
+		return fmt.Errorf("failed to create resolver: %w", err)
+	}
 
-	testSuite.Repository, err = oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
-	r.NoError(err)
+	ts.Repository, err = oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(os.TempDir()))
+	if err != nil {
+		return fmt.Errorf("failed to create repository: %w", err)
+	}
 
-	t.Logf("Shared test registry setup complete: %s", testSuite.RegistryAddress)
+	fmt.Printf("Shared test registry setup complete: %s\n", ts.RegistryAddress)
+	return nil
+}
+
+// teardown cleans up the test suite
+func (ts *TestSuite) teardown() {
+	if ts.ConfigPath != "" {
+		if err := os.Remove(ts.ConfigPath); err != nil {
+			fmt.Printf("Warning: failed to cleanup config file %s: %v\n", ts.ConfigPath, err)
+		}
+	}
+	fmt.Println("Suite teardown complete")
 }
 
 // CreateComponentConstructor creates a component constructor file for testing
@@ -119,34 +178,4 @@ func (ts *TestSuite) GetRepositoryURL() string {
 // GetRepositoryURLWithPrefix returns the repository URL with the specified type prefix
 func (ts *TestSuite) GetRepositoryURLWithPrefix(prefix string) string {
 	return fmt.Sprintf("%s::%s", prefix, ts.GetRepositoryURL())
-}
-
-// startRegistryForSharing starts a registry container that will be cleaned up by testcontainers' ryuk, not individual tests
-func startRegistryForSharing(t *testing.T, htpasswd string) string {
-	const distributionRegistryImage = "registry:3.0.0"
-
-	t.Helper()
-	r := require.New(t)
-
-	t.Logf("Launching shared test registry (%s)...", distributionRegistryImage)
-	registryContainer, err := registry.Run(t.Context(), distributionRegistryImage,
-		registry.WithHtpasswd(htpasswd),
-		testcontainers.WithEnv(map[string]string{
-			"REGISTRY_VALIDATION_DISABLED": "true",
-			"REGISTRY_LOG_LEVEL":           "debug",
-		}),
-		testcontainers.WithLogger(log.TestLogger(t)),
-	)
-	r.NoError(err)
-
-	// NOTE: Intentionally NOT calling t.Cleanup() here
-	// The container will be cleaned up by testcontainer when the process ends
-	// This prevents individual tests from terminating the shared registry
-
-	t.Logf("Shared test registry started")
-
-	registryAddress, err := registryContainer.HostAddress(t.Context())
-	r.NoError(err)
-
-	return registryAddress
 }
