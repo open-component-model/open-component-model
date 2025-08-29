@@ -191,7 +191,7 @@ jobs:
       - name: golangci-lint ${{ matrix.modules }}
         uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         with:
-          version: v${{ steps.versions.outputs.golangci_lint }}
+          version: ${{ steps.versions.outputs.golangci_lint }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
           args: --timeout 10m --config=${{ github.workspace }}/.github/config/golangci.yml
 

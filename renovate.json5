@@ -1,12 +1,16 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   extends: [
-    'config:recommended',
-    'config:best-practices',
-    'security:openssf-scorecard',
-    'helpers:pinGitHubActionDigests',
-    ':rebaseStalePrs',
-    ':gitSignOff'
+    "config:recommended",
+    "config:best-practices",
+    "default:automergeDigest",
+    "docker:pinDigests",
+    "group:kubernetes",
+    "group:goOpenapi",
+    "helpers:pinGitHubActionDigests",
+    "security:openssf-scorecard",
+    ":dependencyDashboard",
+    ":rebaseStalePrs"
   ],
   'git-submodules': {
     enabled: true
@@ -48,11 +52,42 @@
       ]
     }
   ],
+  "customDatasources": {
+    "envtest": {
+      "defaultRegistryUrlTemplate": "https://raw.githubusercontent.com/kubernetes-sigs/controller-tools/master/envtest-releases.yaml",
+      "format": "yaml",
+      "transformTemplates": [
+        "{ \"releases\": $map($distinct($keys($.releases)), function($v){ {\"version\": $replace($v, /^v/, \"\")} }) }"
+      ]
+    }
+  },
+  "regexManagers": [
+    {
+      "fileMatch": [
+        "(^|/)\\.env(\\.local)?$"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=custom.envtest depName=envtest\\s+ENVTEST_K8S_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "custom.envtest",
+      "depNameTemplate": "envtest",
+      "versioningTemplate": "semver"
+    },
+    {
+      "fileMatch": [
+        "(^|/)\\.env(\\.local)?$"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "versioningTemplate": "semver"
+    }
+  ],
   "postUpgradeTasks": {
     "commands": [
       "command -v go >/dev/null 2>&1 || exit 0; find . -name \"go.mod\" -type f -path '*/integration/*' -exec dirname {} \\; | while read dir; do echo \"Running explicit go mod tidy for integration test in $dir\"; cd \"$dir\" && go mod tidy && cd - > /dev/null; done"
     ],
     "fileFilters": ["**/go.mod", "**/go.sum"],
     "executionMode": "branch"
-  },
+  }
 }

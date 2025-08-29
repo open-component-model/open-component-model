@@ -65,8 +65,8 @@ tasks:
     desc: "Install golangci-lint at {{ .GOLANGCI_LINT_TARGET_VERSION }} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
     vars:
       CURRENT_VERSION:
-        sh: '{{ .ROOT_DIR }}/tmp/bin/golangci-lint version --short || echo "0.0.0"'
+        sh: 'v$({{ .ROOT_DIR }}/tmp/bin/golangci-lint version --short || echo "0.0.0")'
     status:
       - '{{ contains .GOLANGCI_LINT_TARGET_VERSION .CURRENT_VERSION }}'
     cmds:
-      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/refs/tags/v{{ .GOLANGCI_LINT_TARGET_VERSION }}/install.sh | sh -s -- -b {{ .ROOT_DIR }}/tmp/bin v{{ .GOLANGCI_LINT_TARGET_VERSION }}
+      - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/refs/tags/{{ .GOLANGCI_LINT_TARGET_VERSION }}/install.sh | sh -s -- -b {{ .ROOT_DIR }}/tmp/bin {{ .GOLANGCI_LINT_TARGET_VERSION }}
