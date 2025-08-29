@@ -24,6 +24,7 @@ jobs:
         uses: renovatebot/github-action@13da59cf7cfbd3bfea72ce26752ed22edf747ce9 # v43.0.2
         env:
           RENOVATE_PLATFORM_COMMIT: 'true'
+          RENOVATE_REPOSITORIES: "${{ github.repository }}"
         with:
           configurationFile: .github/config/renovate.json5
           token: ${{ steps.generate_token.outputs.token }}
