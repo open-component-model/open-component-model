@@ -8,9 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/log"
-	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"golang.org/x/crypto/bcrypt"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
@@ -53,31 +50,4 @@ func CreateAuthClient(address, username, password string) *auth.Client {
 			Password: password,
 		}),
 	}
-}
-
-const distributionRegistryImage = "registry:3.0.0"
-
-func StartDockerContainerRegistry(t *testing.T, htpasswd string) string {
-	t.Helper()
-	// Start containerized registry
-	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
-	registryContainer, err := registry.Run(t.Context(), distributionRegistryImage,
-		registry.WithHtpasswd(htpasswd),
-		testcontainers.WithEnv(map[string]string{
-			"REGISTRY_VALIDATION_DISABLED": "true",
-			"REGISTRY_LOG_LEVEL":           "debug",
-		}),
-		testcontainers.WithLogger(log.TestLogger(t)),
-	)
-	r := require.New(t)
-	r.NoError(err)
-	t.Cleanup(func() {
-		r.NoError(testcontainers.TerminateContainer(registryContainer))
-	})
-	t.Logf("Test registry started")
-
-	registryAddress, err := registryContainer.HostAddress(t.Context())
-	r.NoError(err)
-
-	return registryAddress
 }

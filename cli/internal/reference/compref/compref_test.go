@@ -382,3 +382,148 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRepository(t *testing.T) {
+	tests := []struct {
+		name           string
+		repoSpec       string
+		expectedType   string
+		validateResult func(t *testing.T, result runtime.Typed, repoSpec string)
+	}{
+		{
+			name:         "OCI Registry - GitHub Container Registry",
+			repoSpec:     "ghcr.io/my-org/my-repo",
+			expectedType: "*oci.Repository",
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, repoSpec, repo.BaseUrl)
+			},
+		},
+		{
+			name:         "OCI Registry - localhost with port",
+			repoSpec:     "localhost:5000/my-repo",
+			expectedType: "*oci.Repository",
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, repoSpec, repo.BaseUrl)
+			},
+		},
+		{
+			name:         "OCI Registry - HTTPS URL",
+			repoSpec:     "https://registry.example.com/my-repo",
+			expectedType: "*oci.Repository",
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, repoSpec, repo.BaseUrl)
+			},
+		},
+		{
+			name:         "CTF Archive - relative path",
+			repoSpec:     "./non-existing-archive",
+			expectedType: "*ctf.Repository",
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.Path)
+			},
+		},
+		{
+			name:         "CTF Archive - absolute path",
+			repoSpec:     "/tmp/test-archive",
+			expectedType: "*ctf.Repository",
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.Path)
+			},
+		},
+		{
+			name:         "CTF Archive - file URL",
+			repoSpec:     "file://./local/transport-archive",
+			expectedType: "*ctf.Repository",
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoSpec, repo.Path)
+			},
+		},
+		{
+			name:         "OCI Registry with explicit type",
+			repoSpec:     "oci::ghcr.io/my-org/my-repo",
+			expectedType: "*oci.Repository",
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "ghcr.io/my-org/my-repo", repo.BaseUrl)
+			},
+		},
+		{
+			name:         "CTF Archive with explicit type",
+			repoSpec:     "ctf::./local/archive",
+			expectedType: "*ctf.Repository",
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, "./local/archive", repo.Path)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			result, err := ParseRepository(tt.repoSpec)
+			r.NoError(err, "unexpected error: %v", err)
+			r.NotNil(result, "expected non-nil result")
+
+			resultType := getRepositoryTypeName(result)
+			r.Equal(tt.expectedType, resultType, "unexpected repository type")
+			tt.validateResult(t, result, tt.repoSpec)
+		})
+	}
+}
+
+func TestParseRepositoryErrorCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		repoSpec      string
+		expectedError string
+	}{
+		{
+			name:          "unknown type",
+			repoSpec:      "unknown::some-repo",
+			expectedError: "unsupported repository type",
+		},
+		{
+			name:          "invalid type format",
+			repoSpec:      "invalid-type-format::some-repo",
+			expectedError: "unsupported repository type",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			result, err := ParseRepository(tt.repoSpec)
+			r.Error(err, "expected error but got none")
+			r.Nil(result, "expected nil result on error")
+			r.Contains(err.Error(), tt.expectedError, "unexpected error message")
+		})
+	}
+}
+
+func getRepositoryTypeName(v runtime.Typed) string {
+	switch v.(type) {
+	case *ociv1.Repository:
+		return "*oci.Repository"
+	case *ctfv1.Repository:
+		return "*ctf.Repository"
+	default:
+		return "unknown"
+	}
+}

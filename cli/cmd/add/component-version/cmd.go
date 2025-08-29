@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
@@ -35,7 +37,6 @@ const (
 	FlagConcurrencyLimit               = "concurrency-limit"
 	FlagRepositoryRef                  = "repository"
 	FlagComponentConstructorPath       = "constructor"
-	FlagCopyResources                  = "copy-resources"
 	FlagBlobCacheDirectory             = "blob-cache-directory"
 	FlagComponentVersionConflictPolicy = "component-version-conflict-policy"
 	FlagSkipReferenceDigestProcessing  = "skip-reference-digest-processing"
@@ -106,7 +107,7 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of component versions that can be constructed concurrently.")
-	file.VarP(cmd.Flags(), FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "path to the repository")
+	cmd.Flags().StringP(FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "repository specification")
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the component constructor file")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
@@ -220,19 +221,27 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 }
 
 func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
-	repoRef, err := file.Get(cmd.Flags(), FlagRepositoryRef)
+	repositorySpec, err := cmd.Flags().GetString(FlagRepositoryRef)
 	if err != nil {
 		return nil, fmt.Errorf("getting repository reference flag failed: %w", err)
 	}
-	var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
-	if !repoRef.Exists() {
-		accessMode += "|" + ctfv1.AccessModeCreate
+
+	typed, err := compref.ParseRepository(repositorySpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse repository: %w", err)
 	}
-	repoSpec := ctfv1.Repository{
-		Path:       repoRef.String(),
-		AccessMode: accessMode,
+
+	// Handle CTF-specific access mode configuration
+	if ctfRepo, ok := typed.(*ctfv1.Repository); ok {
+		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
+		// For CTF repositories, check if path exists to determine access mode
+		if _, err := os.Stat(ctfRepo.Path); os.IsNotExist(err) {
+			accessMode += "|" + ctfv1.AccessModeCreate
+		}
+		ctfRepo.AccessMode = accessMode
 	}
-	return &repoSpec, nil
+
+	return typed, nil
 }
 
 func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentConstructor, error) {
