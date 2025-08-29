@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -49,7 +50,9 @@ func TestPluginManager(t *testing.T) {
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
 		// make sure it's not there but during a proper shutdown now this is removed by the plugin
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 
 	proto, err := scheme.NewObject(typ)
@@ -114,7 +117,9 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		// make sure it's not there but during a proper shutdown now this is removed by the plugin
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 	proto, err := scheme.NewObject(typ)
 	require.NoError(t, err)
@@ -175,7 +180,10 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
-		require.NoError(t, os.Remove("/tmp/test-plugin-component-version-plugin.socket"))
+		// normally, this shouldn't exist because shutdown deletes now properly, but sometimes this deletes it earlier.
+		if err := os.Remove("/tmp/test-plugin-component-version-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 
 	proto := &dummyv1.Repository{
@@ -227,7 +235,9 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 
 	// start the plugin
@@ -278,7 +288,9 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 
 	// start the plugin
