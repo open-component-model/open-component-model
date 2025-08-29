@@ -1,197 +1,323 @@
-# ADR-0008: Digest Calculation & Signing/Pinning (OCI Cosign Support)
+# ADR-0008: Digest Calculation & Signing/Pinning (Signing-Only, Pluggable Signers incl. OCI Cosign)
 
 - **Status:** Proposed
 - **Deciders:** OCM Maintainers
 - **Date:** 2025-08-27
+- **Technical Story:** Provide a consistent, **pluggable** way to sign component descriptors (CD) over a normalized representation, while keeping digest calculation separate.
 - **Related:** OCM signing specification and examples
 
 ---
 
-## Context
+## Context and Problem Statement
 
-Component Descriptors (CDs) are signed without altering digest fields during signing. Digests for resources, component references,
-and the component version are produced in a dedicated step and embedded into the descriptor.
-Signing uses fixed canonicalization over the descriptor to compute the component-version digest and create a signature envelope.
-When a component version references another, the digest of the referenced descriptor is embedded in the parent’s `references[]`
-and contributes to the parent’s component-version digest.
+To sign a Component Version (CV), users need a stable canonicalization, precomputed digests inside the descriptor, and a way to attach one or more signatures. We must support multiple signing backends (X.509 certificate/private key, Sigstore/OCI Cosign, etc.) **without** changing core CLI logic whenever a new backend appears. Therefore the signing **CLI surface** must be clean and stable, while **signer plugins** supply backend-specific flags and behavior.
+
+> Scope: **signing and signature publishing**. Uploading/pushing OCI images or other artifacts is **out of scope** for this ADR.
+
 ---
 
-## Decision
+## Decision Drivers
 
-### Two-step flow
+- **Extensibility:** New key types and ecosystems should be added via plugins with minimal/no changes to the core.
+- **Simplicity:** Users see a single signing command; digesting remains a separate step.
+- **Determinism:** Fixed canonicalization (OCM normalization) and explicit pinning avoid ambiguity.
+- **Security:** Clear handling of key material, passphrases, and OIDC tokens (for Cosign).
 
-1. **Digest calculation** mutates the descriptor to embed required digests (resources, component references, component-version). The implementation of `add digest`is not part of this ADR. We assume the component-version digest is computed and available in the descriptor already.
-2. **Signing**
-  a. **Certificate Signing**: A signature envelope is appended to the descriptor, containing a direct signature over the canonical bytes using provided certificate/key material.
-  b. **Cosign Signature**: Instead of certificate signing, an OCI Cosign signature can be produced over the same canonical bytes.
+---
 
-### Commands
+## Outcome (High Level)
+
+- Keep a **two-step flow**:
+  1) **Digest calculation** (separate command; not defined here) embeds all required digests into the descriptor.
+  2) **Signing** computes the component-version digest over canonical bytes and appends a signature envelope.
+- Introduce a **Signer Plugin SPI** used by the CLI to execute one concrete signing backend per invocation.
+- Provide two initial signer plugins:
+  - **Certificate Signer** (X.509 + private key from file/bundle).
+  - **Cosign Signer** (Sigstore keyless via OIDC; stores **bundle** in the envelope and publishes signatures).
+
+---
+
+## Non‑Plugin CLI 
 
 ```bash
-# Step 1 — Digest calculation
-To be done prior to signing. Not part of this ADR.
+# Step 1 — Digest calculation (not part of this ADR)
+# Must be done prior to signing; ensures descriptor contains resource/reference digests.
 
-# Step 2 — Signing
-## Direct signing via a single --cert (+ optional password).
-
-```bash
-ocm sign cv <ref> \
-    --sig <slot> \
-    --pin <sha256:...> \
-    --cert <path> \
-    --password <pw> \
-    --password-prompt
-```
-
-## Alternatively OCI Cosign signing for the same canonical payload.
+# Step 2 — Signing (specification-based approach)
 ocm sign cv <ref> \
   --sig <slot> \
   --pin <sha256:...> \
-  --cosign \
-  --cosign-annotation <key=value> \
-  --cosign-annotation <key=value> \
-  --cosign-identity-token <token-or-path>
+  --kind <signing-algorithm-spec> \
+  [<signer‑specific flags>]
+
+# Alternative: Direct specification approach
+ocm sign cv <ref> \
+  --sig <slot> \
+  --pin <sha256:...> \
+  --sign-spec <path-to-spec-file>
 ```
 
 - `<ref>`: descriptor reference (file path or repository reference).
-- `--sig <slot>`: logical signature slot/name (e.g., `mysig@1234`).
-- `--pin <sha256:...>`: expected component-version digest; fail on mismatch.
-- `--cert <path>`: certificate/key material for direct signing (PEM/PKCS#8/PKCS#12).
-- `--password <pw>` / `--password-prompt`: decrypt key material if protected.
-- `--cosign`: also produce an OCI Cosign signature for the same canonical payload.
-- `--cosign-annotation`: repeatable `key=value` annotations for the Cosign signature.
-- `--cosign-identity-token <token-or-path>`: pass an OIDC ID token directly (alternatively, use `SIGSTORE_ID_TOKEN` env).
+- `--sig <slot>`: **named signature slot**, e.g., `release@2025-08-27`.
+- `--pin <sha256:...>`: expected **component-version** digest; fail on mismatch.
+- `--kind <signing-algorithm-spec>`: OCM signing algorithm specification (e.g., `signing/RSA-PSS/v1`, `signing/COSIGN/v1`, `signing/x509.acme.com/v1`).
+- `--sign-spec <path>`: path to a YAML specification file containing signer configuration.
+- `<signer‑specific flags>`: plugin-specific flags when using `--kind` approach.
 
-### Normalization
+### Signing Algorithm Specification Format
 
-- Canonicalization for component-version digest and signature payload is done in
-[ocm Normalisation]("https://github.com/open-component-model/open-component-model/blob/main/bindings/go/descriptor/normalisation/normalisations.go")
+The `--kind` parameter follows the OCM specification format for [Signing Algorithms](https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/07-extensions.md#signing-algorithms). The format consists of:
 
-```go
-type Normalisation interface {
-    Normalise(cd *runtime.Descriptor) ([]byte, error)
-}
-``
+- **Algorithm Name**: Following the pattern `[A-Z][A-Z0-9-_]*` for centrally defined algorithms
+- **Version**: Following the pattern `v[1-9][0-9]*` 
+- **Full Format**: `<algorithm-name>/<version>` or `<algorithm-name>` (defaults to `/v1`)
 
----
+**Centrally Defined Algorithms Examples:**
+- `signing/RSA-PSS/v1` - RSA-PSS signature with SHA-256
+- `signing/ECDSA-P256/v1` - ECDSA with P-256 curve and SHA-256
+- `signing/COSIGN/v1` - Sigstore/Cosign keyless signing
 
-## Behavior
-
-### Digest calculation (`ocm add digests cv`)
-
-- Computes and **embeds** digests:
-  - **Resources**: content digests.
-  - **Component references**: digest of the referenced component descriptor.
-  - **Component-version**: digest over the canonicalized descriptor.
-- May download artifacts and referenced descriptors as needed.
-- Writes the updated descriptor back to `<ref>`.
-- Results in a new component-version.
-
-### Signing (`ocm sign cv`)
-
-- Loads the descriptor from `<ref>`.
-- Canonicalizes the descriptor.
-- Computes the component-version digest from canonical bytes.
-- If `--pin` is provided, compares and fails on mismatch.
-- Performs direct signing using `--cert`.
-- If `--cosign` is set:
-  - Obtain an OIDC ID token in this order:
-    1. Use `--cosign-identity-token` if provided (token string or `@path` to file).
-    2. Else use `SIGSTORE_ID_TOKEN` environment variable if present.
-    3. Else, if interactive TTY is available, run an **interactive loopback** browser flow to retrieve the token. (check CLI examples)
-    4. Else, run the **device flow** to retrieve the token.
-  - Produce a Cosign signature over the **same canonical bytes**.
-  - When `--cosign-upload` is present and `<ref>` maps to an OCI subject (`<name>@<digest>`), attach the Cosign signature to the registry using Cosign conventions.
-  - Record the **Cosign bundle** (signature, certs, and optional Rekor inclusion) in the envelope.
-- Append the signature envelope under `.signatures[]`.
-- Do not compute or embed any digests during signing.
+**Vendor-Specific Algorithms:**
+- Must use DNS domain-based naming: `signing/<algorithm>.<domain>/<version>`
+- Example: `signing/ENTERPRISE-HSM.acme.com/v2`
 
 ---
 
-## CLI Examples
+## Signer Plugins (CLI Flags & Behavior)
+
+Exactly **one** signer plugin must be selected via `--kind` or `--sign-spec`:
+
+### 1) Certificate Signer (X.509) - `--kind signing/RSA-PSS/v1`
+
+**CLI flags** (plugin-specific):
 
 ```bash
-# Digests
-ocm add digests cv ghcr.io/org/app:1.2.3 --recurse --force
+--kind signing/RSA-PSS/v1 \
+--cert <path> \
+--password <pw> \
+--password-prompt
+```
 
-# Direct sign
+**Specification file format** (when using `--sign-spec`):
+
+```json
+{
+  "type": "signing/RSA-PSS/v1",
+  "certPath": "/path/to/cert.p12",
+  "passwordPrompt": true
+}
+```
+
+**Behavior**
+
+- Loads X.509 certificate & private key material from `<path>` (PEM/PKCS#8/PKCS#12).
+- If encrypted, uses `--password` or `--password-prompt`.
+- Signs the **canonical bytes** of the descriptor and emits a signature envelope compliant with OCM specification:
+  - `algorithm`: one of `rsa-pss-sha256`, `ecdsa-p256-sha256`, `ed25519` (implementation-defined detection).
+  - `mediaType`: `application/vnd.ocm.signature.x509+json`.
+  - `value`: base64-encoded signature bytes.
+  - `issuer`: certificate subject information.
+
+**CLI example**
+
+```bash
 ocm sign cv ghcr.io/org/app:1.2.3 \
   --sig release@2025-08-27 \
+  --kind signing/RSA-PSS/v1 \
   --cert ~/.keys/release.p12 \
   --password-prompt
-
-# Direct sign + embed Cosign bundle (no upload)
-ocm sign cv ghcr.io/org/app:1.2.3 \
-  --sig release@2025-08-27 \
-  --cosign
-
-# Direct sign + Cosign upload to OCI and Rekor (keyless OIDC via browser/device)
-ocm sign cv ghcr.io/org/app:1.2.3 \
-  --sig release@2025-08-27 \
-  --cosign \
-  --cosign-upload \
-  --cosign-annotation git.sha=deadbeef
-
-# Cosign with pre-fetched ID token (no browser)
-ocm sign cv ghcr.io/org/app:1.2.3 \
-  --sig rel@2025 \
-  --cosign \
-  --cosign-identity-token @/run/secure/idtoken \
-  --cosign-skip-tlog
 ```
 
 ---
 
-## Code Design
+### 2) Cosign Signer (OCI Cosign, keyless) - `--kind signing/COSIGN/v1`
 
-### Component-version digest
+**CLI flags** (plugin-specific, minimal set):
 
-See [ADR 03](https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/03-signing-process.md)
+```bash
+--kind signing/COSIGN/v1 \
+--cosign-identity-token <token-or-@path> \
+--cosign-annotation <key=value>   # repeatable
+```
 
-### Signature envelope
+**Specification file format** (when using `--sign-spec`):
 
-```go
-    Content     json.RawMessage `json:"content,omitempty"`    // Sigstore bundle JSON (signature, certs, transparency log (Rekor))
-    UploadedRef string          `json:"uploadedRef,omitempty"`// OCI subject ref if uploaded (e.g., name@digest)
-}
-
-type SignatureEnvelope struct {
-    Name              string
-    MediaType         string // application/vnd.ocm.signature.v1+json
-    Algorithm         string // rsa-pss-sha256 | ecdsa-p256-sha256 | ed25519 | cosign
-    Value             []byte // direct signature over canonical bytes (when using --cert)
-
-    // X.509 chain for direct signing (optional)
-    CertChainPEM      []byte
-
-    // Cosign bundle as alternative to CertChainPEM
-    Cosign            *CosignBundle
-
-    KeyID             string // generic key identifier (optional)
-
-    // Component-version digest at signing time
-    ComponentDigest   string // e.g., "sha256:..."
+```json
+{
+  "type": "signing/COSIGN/v1",
+  "identityToken": "@/path/to/token",
+  "annotations": {
+    "some": "thing"
+  }
 }
 ```
 
-### Cosign OIDC token capture (implementation sketch)
+**Behavior**
+
+- Resolves an **OIDC ID token** in this order:
+  1. `--cosign-identity-token` (string or `@/path/to/token`),
+  2. `SIGSTORE_ID_TOKEN` environment variable,
+  3. interactive **loopback browser** flow (if TTY),
+  4. **device flow** fallback.
+- Produces a Cosign signature and records a **bundle** (signature/certs/optional info) into the envelope compliant with OCM specification:
+  - `algorithm`: `cosign`.
+  - `mediaType`: `application/vnd.dev.sigstore.bundle+json`.
+  - `value`: base64-encoded Sigstore bundle JSON.
+- Publishes signatures to the component descriptor but does not upload OCI artifacts.
+
+**CLI examples**
+
+```bash
+# Interactive (browser/device) token
+ocm sign cv ghcr.io/org/app:1.2.3 \
+  --sig release@2025-08-27 \
+  --kind signing/COSIGN/v1
+
+# Using specification file
+ocm sign cv ghcr.io/org/app:1.2.3 \
+  --sig release@2025-08-27 \
+  --sign-spec cosign-config.json
+
+# Vendor-specific signing algorithm
+ocm sign cv ghcr.io/org/app:1.2.3 \
+  --sig release@2025-08-27 \
+  --kind signing/ENTERPRISE-HSM.acme.com/v2 \
+  --hsm-slot 1 \
+  --key-id production-key
+```
+
+---
+
+## Processing Architecture
+
+1. **Input**
+   - `<ref>`, base flags (`--sig`, `--pin`), plugin flags.
+2. **Load & Canonicalize**
+   - Load descriptor; canonicalize via **OCM normalization**.
+3. **Compute Digest**
+   - Compute component-version digest from canonical bytes.
+   - If `--pin` provided, fail when mismatch.
+4. **Select Signer Plugin**
+   - Exactly one plugin must be active based on `--kind` signing algorithm specification or `--sign-spec` file.
+5. **Sign**
+   - Delegate to the selected plugin to produce an envelope.
+6. **Append Envelope**
+   - Append to `.signatures[]` in the descriptor.
+7. **Output**
+   - Updated descriptor (signed).
+
+---
+
+## SPI: Signer Plugin Interface (Go, pseudo‑code)
+
+Following the plugin architecture established in [ADR-0001](0001_plugins.md), signer plugins are separate binaries that communicate via HTTP/Unix domain sockets:
+
+```go
+// Package: ocm.software/open-component-model/bindings/go/descriptor/signature
+
+// Plugin capabilities for signing
+const (
+    SignComponentVersionCapability = "sign.componentversion"
+    VerifyComponentVersionCapability = "verify.componentversion"
+)
+
+// SignerPlugin interface for direct library integration (when plugins are embedded)
+type SignerPlugin interface {
+    // Name of the plugin (e.g., "x509", "cosign").
+    Name() string
+
+    // Type returns the plugin type for --kind parameter
+    Type() string
+
+    // Sign receives the canonical bytes and returns an OCM-compliant signature envelope.
+    Sign(ctx context.Context, canonical []byte, slot string, spec *SignerSpec) (*SignatureInfo, error)
+    
+    // Verify checks a signature against canonical bytes
+    Verify(ctx context.Context, canonical []byte, signature *SignatureInfo) error
+}
+
+// SignerSpec represents the specification for a signer (from --sign-spec file or --kind flags)
+type SignerSpec struct {
+    Type    string                 `json:"type"`    // e.g., "signing/RSA-PSS/v1", "signing/COSIGN/v1", "signing/ENTERPRISE-HSM.acme.com/v2"
+    Config  map[string]interface{} `json:"config"`  // plugin-specific configuration
+}
+
+// Plugin binary contract (following ADR-0001)
+type PluginCapabilities struct {
+    Type map[string][]string `json:"type"`
+}
+
+// Example capabilities response for a signing plugin:
+// {
+//   "type": {
+//     "signing/RSA-PSS/v1": ["sign.componentversion", "verify.componentversion"],
+//     "signing/COSIGN/v1": ["sign.componentversion", "verify.componentversion"],
+//     "signing/ENTERPRISE-HSM.acme.com/v2": ["sign.componentversion", "verify.componentversion"]
+//   }
+// }
+```
+
+### Plugin Binary Interface
+
+Each signer plugin binary must implement:
+
+1. **`capabilities` command**: Returns supported types and capabilities
+2. **`server` command**: Starts HTTP/Unix socket server with endpoints:
+   - `POST /sign` - Sign canonical bytes
+   - `POST /verify` - Verify signature
+   - `GET /health` - Health check
+
+### Signature Envelope (OCM Specification Compliant)
+
+The signature envelope must comply with the OCM specification's [Signature Info](https://github.com/open-component-model/ocm-spec/blob/7bfbc171e814e73d6e95cfa07cc85813f89a1d44/doc/01-model/03-elements-sub.md#signature-info) structure:
+
+```go
+// OCM Specification compliant signature structure
+type SignatureInfo struct {
+    Algorithm string `json:"algorithm"`  // The used signing algorithm
+    MediaType string `json:"mediaType"`  // The media type of the technical representation
+    Value     string `json:"value"`      // The signature itself (base64 encoded)
+    Issuer    string `json:"issuer,omitempty"` // The description of the issuer
+}
+
+// Extended envelope for plugin-specific data (internal use)
+type SignatureEnvelope struct {
+    // OCM specification fields
+    Algorithm string `json:"algorithm"`              // e.g., rsa-pss-sha256 | ecdsa-p256-sha256 | ed25519 | cosign
+    MediaType string `json:"mediaType"`              // e.g., application/vnd.ocm.signature.x509+json
+    Value     string `json:"value"`                  // base64-encoded signature or bundle
+    Issuer    string `json:"issuer,omitempty"`       // certificate subject or OIDC issuer info
+    
+    // Internal fields for processing (not part of final signature)
+    ComponentDigest string `json:"componentDigest,omitempty"` // sha256:... (for validation)
+}
+```
+
+**Media Type Examples:**
+- X.509 Certificate: `application/vnd.ocm.signature.x509+json`
+- Cosign/Sigstore: `application/vnd.dev.sigstore.bundle+json`
+- Generic RSA: `application/vnd.ocm.signature.rsa+json`
+
+### Canonicalization (fixed)
+
+```go
+// Using OCM component descriptor normalization; not configurable here. #PSEUDOCODE
+canon, err := ocm.NormalizeComponentDescriptor(componentDescriptor)
+if err != nil { /* ... */ }
+```
+
+---
+
+## Cosign OIDC Token Resolution (pseudo‑code)
 
 ```go
 func resolveSigstoreIDToken(ctx context.Context, flagToken string) (string, error) {
-    // 1) explicit flag: --cosign-identity-token VALUE or "@/path/to/token"
     if flagToken != "" {
         if strings.HasPrefix(flagToken, "@") {
-            b, err := os.ReadFile(flagToken[1:])
-            if err != nil { return "", err }
-            return strings.TrimSpace(string(b)), nil
+            return readTokenFromFile(flagToken)
         }
         return flagToken, nil
     }
-    // 2) environment variable
-    if tok := os.Getenv("SIGSTORE_ID_TOKEN"); tok != "" {
-        return tok, nil
-    }
-    // 3) interactive loopback, then 4) device flow
     if isInteractive() {
         return runLoopbackBrowserFlow(ctx)
     }
@@ -202,90 +328,26 @@ func resolveSigstoreIDToken(ctx context.Context, flagToken string) (string, erro
 ### Loopback browser flow (pseudo‑code)
 
 ```go
-// Opens the user's browser for OIDC auth and captures the redirect locally.
-// Returns a Sigstore-compatible OIDC ID token string.
+// Opens the browser for OIDC auth and captures the redirect locally.
 func runLoopbackBrowserFlow(ctx context.Context) (string, error) {
-    const issuer   = "https://oauth2.sigstore.dev/auth" // or from config
-    const clientID = "sigstore"                         // or configured client
-
-    // 1) Listen on an ephemeral loopback port
-    ln, err := net.Listen("tcp", "127.0.0.1:0")
-    if err != nil { return "", err }
-    defer ln.Close()
-    redirectURL := fmt.Sprintf("http://%s/callback", ln.Addr().String())
-
-    // 2) OIDC discovery and PKCE setup
-    prov, err := oidc.NewProvider(ctx, issuer)
-    if err != nil { return "", err }
-    cfg := oauth2.Config{
-        ClientID:    clientID,
-        Endpoint:    prov.Endpoint(),
-        RedirectURL: redirectURL,
-        Scopes:      []string{"openid", "email", "profile"},
-    }
-    codeVerifier, codeChallenge := genPKCE()      // S256
-    state := randHex(32)                          // CSRF
-    nonce := randHex(32)                          // replay
-
-    // 3) Authorization URL
-    authURL := cfg.AuthCodeURL(state,
-        oauth2.SetAuthURLParam("code_challenge", codeChallenge),
-        oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-        oauth2.SetAuthURLParam("nonce", nonce),
-    )
-
-    // 4) Open browser (best-effort), also print URL for manual copy
-    _ = openBrowser(authURL) 
-    fmt.Fprintf(os.Stderr, "If the browser did not open, navigate to:\n%s\n", authURL)
-
-    // 5) Minimal HTTP handler to capture the callback
-    codeCh := make(chan string, 1)
-    srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        if r.URL.Path != "/callback" { http.NotFound(w, r); return }
-        if r.Method != "GET" { http.Error(w, "method", http.StatusMethodNotAllowed); return }
-        if r.Host != ln.Addr().String() { http.Error(w, "host", http.StatusBadRequest); return }
-        if r.URL.Query().Get("state") != state { http.Error(w, "state", http.StatusBadRequest); return }
-        if errParam := r.URL.Query().Get("error"); errParam != "" {
-            http.Error(w, errParam, http.StatusBadRequest); return
-        }
-        code := r.URL.Query().Get("code")
-        if code == "" { http.Error(w, "missing code", http.StatusBadRequest); return }
-        // friendly UX page
-        _, _ = w.Write([]byte("<html><body>Authentication complete. You may close this window.</body></html>"))
-        codeCh <- code
-    })}
-    go func() { _ = srv.Serve(ln) }()
-    defer srv.Shutdown(context.Background())
-
-    // 6) Wait for code with timeout
-    var code string
-    select {
-    case <-time.After(5 * time.Minute):
-        return "", context.DeadlineExceeded
-    case code = <-codeCh:
-    case <-ctx.Done():
-        return "", ctx.Err()
-    }
-
-    // 7) Exchange code for tokens (with PKCE)
-    tok, err := cfg.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", codeVerifier))
-    if err != nil { return "", err }
-    rawID, _ := tok.Extra("id_token").(string)
-    if rawID == "" { return "", fmt.Errorf("no id_token in response") }
-
-    // 8) Validate ID token (issuer, audience, nonce)
-    v := oidc.NewVerifier(issuer, prov.Verifier(&oidc.Config{ClientID: clientID}), &oidc.Config{ClientID: clientID})
-    idt, err := v.Verify(ctx, rawID)
-    if err != nil { return "", err }
-    var claims struct{ Nonce string `json:"nonce"` }
-    _ = idt.Claims(&claims)
-    if claims.Nonce != nonce { return "", fmt.Errorf("nonce mismatch") }
-
-    // Optional: enforce audience policy (e.g., contains "sigstore")
-    if !audContains(idt, "sigstore") {
-        return "", fmt.Errorf("unexpected audience")
-    }
-    return rawID, nil
+    // 1. Start local HTTP server on random port
+    server := startLocalServer("127.0.0.1:0")
+    redirectURL := server.URL + "/callback"
+    
+    // 2. Build OIDC authorization URL with PKCE
+    authURL := buildOIDCAuthURL(redirectURL, pkceChallenge, state, nonce)
+    
+    // 3. Open browser to authorization URL
+    openBrowser(authURL)
+    
+    // 4. Wait for callback with authorization code
+    code := waitForCallback(server, state)
+    
+    // 5. Exchange code for ID token
+    idToken := exchangeCodeForToken(code, pkceVerifier)
+    
+    // 6. Verify and return ID token
+    return verifyAndExtractIDToken(idToken, nonce)
 }
 ```
 
@@ -293,63 +355,76 @@ func runLoopbackBrowserFlow(ctx context.Context) (string, error) {
 
 ## Sequence Diagrams
 
-### Digest calculation
+### Signing with Certificate Plugin (--kind approach)
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor U as User/CI
   participant C as ocm CLI
-  participant R as OCM Repository
-  participant A as Artifact Stores
+  participant PM as Plugin Manager
+  participant P as X.509 Signer Plugin
 
-  U->>C: ocm add digests cv <ref> --recurse --force
-  C->>R: Pull Component Descriptor (CD)
-  loop For resources and references
-    C->>A: Fetch artifact or referenced descriptor
-    A-->>C: Bytes / Descriptor
-    C->>C: Compute & embed digest
-  end
-  C->>R: Push updated descriptor
-  R-->>U: Reference to digested descriptor
+  U->>C: ocm sign cv <ref> --sig <slot> --pin <digest> --kind signing/RSA-PSS/v1 --cert <path> [--password-prompt]
+  C->>C: Load & canonicalize descriptor (OCM normalization)
+  C->>C: Compute CV digest; check --pin
+  C->>PM: Get plugin for type "signing/RSA-PSS/v1"
+  PM->>P: Start plugin server (if not running)
+  PM-->>C: Plugin endpoint
+  C->>P: POST /sign {canonical, slot, spec}
+  P-->>C: SignatureInfo{algorithm, mediaType, value, issuer}
+  C->>C: Append signature to .signatures[]
+  C-->>U: Signed descriptor
 ```
 
-### Signing (+ optional OCI Cosign)
+### Signing with Specification File (--sign-spec approach)
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor U as User/CI
   participant C as ocm CLI
-  participant R as OCM Repository
-  participant O as OCI Registry
+  participant PM as Plugin Manager
+  participant P as Cosign Signer Plugin
 
-  U->>C: ocm sign cv <ref> --sig <slot> [--pin] [--cert ...] [--cosign ...]
-  C->>R: Pull descriptor
-  C->>C: Normalization → component-version digest
-  alt Pin provided
-    C->>C: Compare digest with --pin
-    note over C: Fail on mismatch (no signature)
-  end
-  opt Direct signing (--cert or default signer)
-    C->>C: Create direct signature (X.509)
-  end
-  opt Cosign (--cosign)
-    C->>C: Resolve OIDC ID token (flag/env/browser/device)
-    C->>C: Create Cosign signature over canonical bytes
-    alt --cosign-upload and <ref> maps to OCI subject
-      C->>O: Attach/Upload Cosign signature
-    end
-    C->>C: Capture Cosign bundle in envelope
-  end
-  C->>R: Append signature envelope to descriptor
-  R-->>U: Reference to signed descriptor
+  U->>C: ocm sign cv <ref> --sig <slot> --pin <digest> --sign-spec cosign-config.json
+  C->>C: Load & parse specification file
+  C->>C: Load & canonicalize descriptor (OCM normalization)
+  C->>C: Compute CV digest; check --pin
+  C->>PM: Get plugin for type from spec
+  PM->>P: Start plugin server (if not running)
+  PM-->>C: Plugin endpoint
+  C->>P: POST /sign {canonical, slot, spec}
+  P-->>C: SignatureInfo{algorithm, mediaType, value, issuer}
+  C->>C: Append signature to .signatures[]
+  C-->>U: Signed descriptor
 ```
 
 ---
 
-## Security
+## Pros and Cons
 
-- Use `--pin` to ensure the descriptor being signed matches the expected component-version digest across environments.
-- Prefer `--password-prompt` or secret management over inline `--password` for direct signing.
-- Cosign flows depend on OIDC identity; ensure correct OIDC configuration and registry permissions when uploading.
+**Pros**
+- Stable CLI with a clear split: base flags vs. plugin flags.
+- New signing schemes ship as plugins without core changes.
+- Deterministic normalization and pinning.
+- Works in CI (non-interactive) and locally (interactive).
+
+**Cons**
+- Plugin discovery/validation complexity.
+- Need strict rules to avoid multiple plugins being activated at once.
+- Responsibility to secure key/token handling lies partly with plugins.
+
+---
+
+## Security Considerations
+
+- Prefer `--password-prompt` over `--password` to avoid secrets in process lists.
+- Keep OIDC tokens short-lived; prefer passing by file descriptor or `@path` with restrictive permissions.
+- Record the `ComponentDigest` and a `NormalizationID` inside the envelope for reproducibility.
+
+---
+
+## Out of Scope
+
+- Digest calculation details (covered by separate command/implementation).
