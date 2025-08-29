@@ -3,7 +3,6 @@
   extends: [
     "config:recommended",
     "config:best-practices",
-    "default:automergeDigest",
     "docker:pinDigests",
     "group:kubernetes",
     "group:goOpenapi",
@@ -20,6 +19,20 @@
     GOPRIVATE: "ocm.software/open-component-model"
   },
   packageRules: [
+    {
+      "matchManagers": [
+        "gomod",
+        "regex"
+      ],
+      "matchPackageNames": [
+        "sigs.k8s.io/controller-runtime",
+        "sigs.k8s.io/controller-tools",
+        "k8s.io/*",
+        "envtest"
+      ],
+      "groupName": "Kubernetes dependencies",
+      "groupSlug": "kubernetes-deps"
+    },
     {
       "matchCategories": [
         "golang"

@@ -7,12 +7,14 @@ on:
     paths:
       - kubernetes/controller/**/*
       - .github/workflows/kubernetes-controller.yml
+      - .env
   pull_request:
     branches:
       - main
     paths:
       - kubernetes/controller/**/*
       - .github/workflows/kubernetes-controller.yml
+      - .env
 
 permissions:
   contents: read # for actions/checkout to fetch code
