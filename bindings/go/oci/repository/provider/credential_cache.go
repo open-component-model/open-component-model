@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"strings"
 	"sync"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
@@ -43,7 +44,7 @@ func (cache *credentialCache) get(_ context.Context, hostport string) (auth.Cred
 	host, port, err := net.SplitHostPort(hostport)
 	if err != nil {
 		var addrErr *net.AddrError
-		if errors.As(err, &addrErr) {
+		if errors.As(err, &addrErr) && strings.Contains(addrErr.Err, "missing port") {
 			slog.Info("no port specified in host, assuming default", slog.String("host", hostport), slog.String("defaultPort", defaultPort))
 			// If no port is specified, assume the defaultPort
 			host = hostport
@@ -52,7 +53,7 @@ func (cache *credentialCache) get(_ context.Context, hostport string) (auth.Cred
 			return auth.EmptyCredential, err
 		}
 	}
-	if host == "" {
+	if host == "" || port == "" {
 		return auth.EmptyCredential, err
 	}
 	identity := runtime.Identity{
