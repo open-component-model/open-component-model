@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/url"
@@ -12,6 +13,9 @@ import (
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// defaultPort is the default port used when SplitHostPort fails due to missing port information.
+const defaultPort = "443"
 
 // cachedCredential represents a single credential entry in the cache,
 // associating a runtime identity with its corresponding authentication credential.
@@ -38,6 +42,17 @@ func (cache *credentialCache) get(_ context.Context, hostport string) (auth.Cred
 
 	host, port, err := net.SplitHostPort(hostport)
 	if err != nil {
+		var addrErr *net.AddrError
+		if errors.As(err, &addrErr) {
+			slog.Info("no port specified in host, assuming default", slog.String("host", hostport), slog.String("defaultPort", defaultPort))
+			// If no port is specified, assume the defaultPort
+			host = hostport
+			port = defaultPort
+		} else {
+			return auth.EmptyCredential, err
+		}
+	}
+	if host == "" {
 		return auth.EmptyCredential, err
 	}
 	identity := runtime.Identity{
