@@ -5,11 +5,11 @@ go 1.25.0
 require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	helm.sh/helm/v3 v3.18.6
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.7
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250825200618-6840c8ce6b49
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250827153944-5f686b36157b
 	ocm.software/open-component-model/bindings/go/oci v0.0.6
 	ocm.software/open-component-model/bindings/go/plugin v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
@@ -37,7 +37,7 @@ require (
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/nlepage/go-tarfs v1.2.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -56,17 +56,18 @@ require (
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/api v0.33.4 // indirect
-	k8s.io/apiextensions-apiserver v0.33.4 // indirect
-	k8s.io/apimachinery v0.33.4 // indirect
-	k8s.io/client-go v0.33.4 // indirect
+	k8s.io/api v0.34.0 // indirect
+	k8s.io/apiextensions-apiserver v0.34.0 // indirect
+	k8s.io/apimachinery v0.34.0 // indirect
+	k8s.io/client-go v0.34.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825200618-6840c8ce6b49 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250827153944-5f686b36157b // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250825200618-6840c8ce6b49 // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250827153944-5f686b36157b // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

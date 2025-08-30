@@ -1,11 +1,22 @@
 name: Renovate OCM
 on:
-    schedule:
-        - cron: '0 0 * * 0' # Every Sunday at midnight UTC
-    workflow_dispatch:
-    push:
-        branches:
-        - main
+  schedule:
+    - cron: '0 0 * * 0' # Every Sunday at midnight UTC
+  workflow_dispatch:
+    inputs:
+      repoCache:
+        description: 'Reset or disable the cache?'
+        type: choice
+        default: enabled
+        options: [ enabled, disabled, reset ]
+  push:
+    branches:
+      - main
+
+env:
+  cache_archive: renovate_cache.tar.gz
+  cache_dir: /tmp/renovate/cache/renovate/repository
+  cache_key: renovate-cache
 
 jobs:
   renovate:
@@ -20,10 +31,50 @@ jobs:
         with:
           app_id: ${{ secrets.OCMBOT_APP_ID }}
           private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      # Restore previous cache artifact if enabled
+      - name: Restore renovate cache artifact
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
+        uses: dawidd6/action-download-artifact@ac66b43f0e6a346234dd65d4d0c8fbb31cb316e5 # v11
+        continue-on-error: true
+        with:
+          name: ${{ env.cache_key }}
+          path: cache-download
+
+      - name: Extract renovate cache
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
+        run: |
+          set -euxo pipefail
+          if [ ! -d cache-download ]; then
+            echo "No cache found."
+            exit 0
+          fi
+          mkdir -p "$cache_dir"
+          tar -xzf "cache-download/${cache_archive}" -C "$cache_dir"
+          sudo chown -R 12021:0 /tmp/renovate/
+          ls -R "$cache_dir" || true
+
       - name: Self-hosted Renovate
         uses: renovatebot/github-action@13da59cf7cfbd3bfea72ce26752ed22edf747ce9 # v43.0.2
-        env:
-          RENOVATE_PLATFORM_COMMIT: 'true'
         with:
           configurationFile: .github/config/renovate.json5
           token: ${{ steps.generate_token.outputs.token }}
+        env:
+          RENOVATE_PLATFORM_COMMIT: 'true'
+          RENOVATE_REPOSITORIES: "${{ github.repository }}"
+          RENOVATE_REPOSITORY_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.repoCache || 'enabled' }}
+
+      - name: Compress renovate cache
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
+        run: |
+          set -euxo pipefail
+          ls "$cache_dir" || true
+          tar -czvf "$cache_archive" -C "$cache_dir" .
+
+      - name: Upload renovate cache artifact
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ env.cache_key }}
+          path: ${{ env.cache_archive }}
+          retention-days: 1

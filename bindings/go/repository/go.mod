@@ -3,11 +3,11 @@ module ocm.software/open-component-model/bindings/go/repository
 go 1.25.0
 
 require (
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.16.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.7
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825200618-6840c8ce6b49
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250827153944-5f686b36157b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 

@@ -6,16 +6,23 @@ package ocm
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"math"
+	"slices"
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
@@ -66,6 +73,45 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *cred
 	}, nil
 }
 
+// NewFromRefWithFallbackRepo creates a new ComponentRepository instance for the given component reference.
+// It resolves the appropriate plugin and credentials for the repository.
+//
+//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, resolvers []resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
+	ref, err := compref.Parse(componentReference)
+	if err != nil {
+		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
+	}
+	if len(resolvers) == 0 {
+		//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+		resolvers = make([]resolverruntime.Resolver, 0)
+	}
+
+	if ref.Repository != nil {
+		//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+		resolvers = append(resolvers, resolverruntime.Resolver{
+			Repository: ref.Repository,
+			// Add the current repository as a resolver with the highest possible
+			// priority.
+			Priority: math.MaxInt,
+		})
+	}
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	res := make([]*resolverruntime.Resolver, 0, len(resolvers))
+	for _, r := range resolvers {
+		res = append(res, &r)
+	}
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	fallbackRepo, err := fallback.NewFallbackRepository(ctx, provider.NewComponentVersionRepositoryProvider(), graph, res)
+	if err != nil {
+		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
+	}
+	return &ComponentRepository{
+		ref:  ref,
+		base: fallbackRepo,
+	}, nil
+}
+
 func (repo *ComponentRepository) Version(ctx context.Context) (string, error) {
 	version := repo.ref.Version
 	if version == "" {
@@ -105,6 +151,10 @@ func (repo *ComponentRepository) GetLocalResource(ctx context.Context, identity 
 	}
 
 	return repo.base.GetLocalResource(ctx, repo.ref.Component, version, identity)
+}
+
+func (repo *ComponentRepository) ComponentVersionRepository() repository.ComponentVersionRepository {
+	return repo.base
 }
 
 // ComponentReference returns the component reference associated with this repository.
@@ -150,6 +200,21 @@ func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts 
 		return nil, fmt.Errorf("getting component versions failed: %w", err)
 	}
 
+	// Sort semverVersions descending (newest version first).
+	slices.SortFunc(descs, func(a, b *descriptor.Descriptor) int {
+		semverVersionA, err := semver.NewVersion(a.Component.Version)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", a.Component.Version, "error", err)
+			return 0
+		}
+		semverVersionB, err := semver.NewVersion(b.Component.Version)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b.Component.Version, "error", err)
+			return 0
+		}
+		return semverVersionB.Compare(semverVersionA)
+	})
+
 	return descs, nil
 }
 
@@ -176,6 +241,23 @@ func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptio
 			return nil, fmt.Errorf("filtering component versions failed: %w", err)
 		}
 	}
+
+	// Ensure correct order.
+	// We sort here, so we do not have to import semver into each repository
+	// implementation.
+	slices.SortFunc(versions, func(a, b string) int {
+		semverA, err := semver.NewVersion(a)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", a, "error", err)
+			return 0
+		}
+		semverB, err := semver.NewVersion(b)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b, "error", err)
+			return 0
+		}
+		return semverB.Compare(semverA)
+	})
 
 	if opts.LatestOnly && len(versions) > 1 {
 		return versions[:1], nil

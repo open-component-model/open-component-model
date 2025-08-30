@@ -8,7 +8,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/spf13/cobra v1.9.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.38.0
 	golang.org/x/crypto v0.41.0
@@ -16,13 +16,13 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.7
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825200618-6840c8ce6b49
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250827153944-5f686b36157b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.6
 	ocm.software/open-component-model/bindings/go/plugin v0.0.4
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250825200618-6840c8ce6b49
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250827153944-5f686b36157b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
-	ocm.software/open-component-model/cli v0.0.0-20250825200618-6840c8ce6b49
+	ocm.software/open-component-model/cli v0.0.0-20250827153944-5f686b36157b
 	oras.land/oras-go/v2 v2.6.0
 )
 
@@ -58,7 +58,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.6.8 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
-	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
+	github.com/lufia/plan9stats v0.0.0-20250827001030-24949be3fa54 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
@@ -96,11 +96,11 @@ require (
 	golang.org/x/term v0.34.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250825200618-6840c8ce6b49 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250827153944-5f686b36157b // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0 // indirect
-	ocm.software/open-component-model/bindings/go/dag v0.0.2 // indirect
+	ocm.software/open-component-model/bindings/go/dag v0.0.3 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250825200618-6840c8ce6b49 // indirect
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250827153944-5f686b36157b // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

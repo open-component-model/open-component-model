@@ -27,24 +27,25 @@ func TestRunRenderLoopNDJSON(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 
-		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
-		marshaller := VertexMarshallerFunc[string](func(v *syncdag.Vertex[string]) (any, error) {
-			state, ok := v.GetAttribute(syncdag.AttributeTraversalState)
+		serializer := func(vertex *syncdag.Vertex[string]) (any, error) {
+			state, ok := vertex.GetAttribute(syncdag.AttributeTraversalState)
 			if !ok {
-				return nil, fmt.Errorf("attribute %s not found for vertex %s", syncdag.AttributeTraversalState, v.ID)
+				return nil, fmt.Errorf("attribute %s not found for vertex %s", syncdag.AttributeTraversalState, vertex.ID)
 			}
 			traversalState, ok := state.(syncdag.TraversalState)
 			if !ok {
-				return nil, fmt.Errorf("attribute %s for vertex %s is not of type %T", syncdag.AttributeTraversalState, v.ID, syncdag.TraversalState(0))
+				return nil, fmt.Errorf("attribute %s for vertex %s is not of type %T", syncdag.AttributeTraversalState, vertex.ID, syncdag.TraversalState(0))
 			}
 			return map[string]any{
-				"id":    v.ID,
+				"id":    vertex.ID,
 				"state": traversalState.String(),
 			}, nil
-		})
-		renderer := New(d, "A", WithOutputFormat[string](render.OutputFormatNDJSON), WithVertexMarshaller(marshaller))
+		}
+		renderer := New(ctx, d, WithListSerializer(NewSerializer(WithVertexSerializerFunc(serializer), WithOutputFormat[string](render.OutputFormatNDJSON))))
 		refreshRate := 10 * time.Millisecond
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(refreshRate), render.WithRenderOptions(render.WithWriter(writer)))
+
+		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 
 		// Check that render loop does not print the output if it is equal to
 		// the last output.
@@ -180,7 +181,7 @@ func TestRenderOnceNDJSON(t *testing.T) {
 
 	ctx := t.Context()
 
-	renderer := New(d, "A", WithOutputFormat[string](render.OutputFormatNDJSON))
+	renderer := New(ctx, d, WithListSerializer(NewSerializer(WithOutputFormat[string](render.OutputFormatNDJSON))))
 
 	// Add A
 	r.NoError(d.AddVertex("A"))
@@ -194,6 +195,7 @@ func TestRenderOnceNDJSON(t *testing.T) {
 	// Add B
 	r.NoError(d.AddVertex("B"))
 	expected = `"A"
+"B"
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()

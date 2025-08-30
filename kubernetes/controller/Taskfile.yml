@@ -1,10 +1,6 @@
 version: '3'
 
 env:
-  ENVTEST_K8S_VERSION: 1.33.x
-  KUSTOMIZE_VERSION: v5.4.1
-  CONTROLLER_TOOLS_VERSION: v0.17.1
-  ENVTEST_VERSION: release-0.21
   CONTROLLER_IMG: '{{ env "CONTROLLER_IMG" | default "ghcr.io/open-component-model/kubernetes/controller:latest" }}'
 
 vars:
@@ -17,7 +13,7 @@ vars:
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}'
   ENVTEST: '{{.LOCALBIN}}/setup-envtest-{{.ENVTEST_VERSION}}'
   IGNORE_NOT_FOUND: '{{.IGNORE_NOT_FOUND | default "false"}}'
-  PLATFORMS: '{{.PLATFORMS | default "linux/arm64,linux/amd64,linux/s390x,linux/ppc64le"}}'
+  PLATFORMS: '{{.PLATFORMS | default "linux/arm64,linux/amd64"}}'
 
 tasks:
   default:
@@ -161,6 +157,7 @@ tasks:
 
   go-install-tool:
     internal: true
+    silent: true
     desc: "Install a go tool to a specific path"
     cmd: |
       set -e
@@ -185,4 +182,4 @@ tasks:
   set-images:
     internal: true
     dir: config/manager
-    cmd: '{{.KUSTOMIZE}} edit set image ghcr.io/open-component-model/ocm-k8s-toolkit={{.CONTROLLER_IMG}}'
+    cmd: '{{.KUSTOMIZE}} edit set image ghcr.io/open-component-model/kubernetes/controller={{.CONTROLLER_IMG}}'

@@ -119,6 +119,10 @@ func CredentialGraph(cmd *cobra.Command) error {
 		credCfg = &credentialsRuntime.Config{}
 	}
 
+	if credCfg == nil {
+		credCfg = &credentialsRuntime.Config{}
+	}
+
 	graph, err := credentials.ToGraph(cmd.Context(), credCfg, opts)
 	if err != nil {
 		return fmt.Errorf("could not create credential graph: %w", err)

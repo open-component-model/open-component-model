@@ -3,9 +3,9 @@ module ocm.software/open-component-model/bindings/go/input/utf8
 go 1.25.0
 
 require (
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250825200618-6840c8ce6b49
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250827153944-5f686b36157b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -25,7 +25,7 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250825200618-6840c8ce6b49 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250827153944-5f686b36157b // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250825200618-6840c8ce6b49 // indirect
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250827153944-5f686b36157b // indirect
 )
