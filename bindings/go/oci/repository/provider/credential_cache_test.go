@@ -57,6 +57,24 @@ func TestCredentialCache_Get(t *testing.T) {
 			want:     auth.EmptyCredential,
 			wantErr:  true,
 		},
+		{
+			name: "ghcr.io should fallback to port 443",
+			setup: func(c *credentialCache) {
+				spec := &ocirepospecv1.Repository{BaseUrl: "https://ghcr.io:443"}
+				creds := map[string]string{
+					"username": "testuser",
+					"password": "testpass",
+				}
+				err := c.add(spec, creds)
+				require.NoError(t, err)
+			},
+			hostport: "ghcr.io",
+			want: auth.Credential{
+				Username: "testuser",
+				Password: "testpass",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
