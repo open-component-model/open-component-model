@@ -1036,8 +1036,8 @@ github.com/fluxcd/cli-utils v0.36.0-flux.14 h1:I//AMVUXTc+M04UtIXArMXQZCazGMwfem
 github.com/fluxcd/cli-utils v0.36.0-flux.14/go.mod h1:uDo7BYOfbdmk/asnHuI0IQPl6u0FCgcN54AHDu3Y5As=
 github.com/fluxcd/pkg/apis/event v0.18.0 h1:PNbWk9gvX8gMIi6VsJapnuDO+giLEeY+6olLVXvXFkk=
 github.com/fluxcd/pkg/apis/event v0.18.0/go.mod h1:7S/DGboLolfbZ6stO6dcDhG1SfkPWQ9foCULvbiYpiA=
-github.com/fluxcd/pkg/apis/meta v1.18.0 h1:ACHrMIjlcioE9GKS7NGk62KX4NshqNewr8sBwMcXABs=
-github.com/fluxcd/pkg/apis/meta v1.18.0/go.mod h1:97l3hTwBpJbXBY+wetNbqrUsvES8B1jGioKcBUxmqd8=
+github.com/fluxcd/pkg/apis/meta v1.20.0 h1:l9h0kWoDZTcYV0WJkFMgDXq6Q4tSojrJ+bHpFJSsaW0=
+github.com/fluxcd/pkg/apis/meta v1.20.0/go.mod h1:XUAEUgT4gkWDAEN79E141tmL+v4SV50tVZ/Ojpc/ueg=
 github.com/fluxcd/pkg/runtime v0.80.0 h1:vknT2vdQSGTFnAhz4xGk2ZXUWCrXh3whsISStgA57Go=
 github.com/fluxcd/pkg/runtime v0.80.0/go.mod h1:iGhdaEq+lMJQTJNAFEPOU4gUJ7kt3yeDcJPZy7O9IUw=
 github.com/fluxcd/pkg/ssa v0.52.0 h1:CmznD3p0hp7wgtPMNGE4egyxeb+UOnMdrJ+bL+QnTDE=
