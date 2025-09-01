@@ -432,17 +432,32 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 
 	// Ensure all vertices exist in the new graph
 	d.Vertices.Range(func(key, value any) bool {
-		if err := reverse.AddVertex(key.(T)); err != nil {
+		origVertex := value.(*Vertex[T])
+		attrs := make(map[string]any)
+		origVertex.Attributes.Range(func(attrKey, attrValue any) bool {
+			attrs[attrKey.(string)] = attrValue
+			return true
+		})
+		if err := reverse.AddVertex(key.(T), attrs); err != nil {
 			return false
 		}
 		return true
 	})
 
-	// Reverse the edges: Child -> Parent instead of Parent -> Child
 	d.Vertices.Range(func(key, value any) bool {
 		parent := value.(*Vertex[T])
-		parent.Edges.Range(func(child any, _ any) bool {
-			if err := reverse.AddEdge(child.(T), parent.ID); err != nil {
+		parent.Edges.Range(func(child any, edgeAttrs any) bool {
+			// Copy edge attributes
+			attrMap := make(map[string]any)
+			if edgeAttrs != nil {
+				if smap, ok := edgeAttrs.(*sync.Map); ok {
+					smap.Range(func(k, v any) bool {
+						attrMap[k.(string)] = v
+						return true
+					})
+				}
+			}
+			if err := reverse.AddEdge(child.(T), parent.ID, attrMap); err != nil {
 				return false
 			}
 			return true
