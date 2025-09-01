@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net"
 	"net/url"
@@ -40,19 +39,22 @@ type credentialCache struct {
 func (cache *credentialCache) get(_ context.Context, hostport string) (auth.Credential, error) {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
-
-	host, port, err := net.SplitHostPort(hostport)
-	if err != nil {
-		var addrErr *net.AddrError
-		if errors.As(err, &addrErr) && strings.Contains(addrErr.Err, "missing port") {
-			slog.Info("no port specified in host, assuming default", slog.String("host", hostport), slog.String("defaultPort", defaultPort))
-			// If no port is specified, assume the defaultPort
-			host = hostport
-			port = defaultPort
-		} else {
+	var (
+		host string
+		port string
+		err  error
+	)
+	if strings.Contains(hostport, ":") {
+		host, port, err = net.SplitHostPort(hostport)
+		if err != nil {
+			slog.Error("failed to parse hostport", slog.String("hostport", hostport), slog.String("error", err.Error()))
 			return auth.EmptyCredential, err
 		}
+	} else {
+		host = hostport
+		port = defaultPort
 	}
+
 	if host == "" || port == "" {
 		return auth.EmptyCredential, err
 	}
