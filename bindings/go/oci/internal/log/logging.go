@@ -25,7 +25,7 @@ func Operation(ctx context.Context, operation string, fields ...slog.Attr) func(
 		var level slog.Level
 		var msg string
 		if err != nil {
-			level, msg = slog.LevelError, "operation failed"
+			level, msg = slog.LevelDebug, "operation failed"
 			fields = append(fields, slog.String("error", err.Error()))
 		} else {
 			level, msg = slog.LevelDebug, "operation completed"
