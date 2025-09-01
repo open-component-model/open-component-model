@@ -11,10 +11,12 @@ Provide a consistent, pluggable way to sign and verify component descriptors bas
 
 ## Context and Problem Statement
 
+### Basic Verification
+
 To verify the integrity of a component version, users run:
 
 ```shell
-ocm verify componentversion --signature mysig --verifier mypublickey ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+ocm verify componentversion --signature mysig --verifier rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
 This does:
@@ -36,13 +38,48 @@ This does:
    ```
 3. Verify the signature using the configured verifier from `.ocmconfig`.
 
+### Basic Signing
+
 Signing uses the analogous command:
 
 ```shell
-ocm sign componentversion --signature mysig --signer myprivatekey ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+ocm sign componentversion --signature mysig --signer rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
 This downloads, normalizes, signs, and re-uploads the descriptor. Signing and verification configs live in `.ocmconfig`.
+
+### Two-Stage Signing
+
+In most cases, normalizing/digesting and signing can be done in separate steps.
+This is useful for cases where the descriptor is generated and hashed in a CI, which has a separate step for building
+and signing.
+
+In these cases, users can choose to add a digest to the descriptor and sign it separately:
+
+```shell
+ocm add digest {--signature default} {--hash-algorithm=sha256} {--normalisation-agorithm=jsonNormalisation/v1} {--upload=true} ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+
+> name: default
+> digest:
+>   hashAlgorithm: sha256
+>   normalisationAlgorithm: jsonNormalisation/v1
+>   value: cf08abae08bb874597630bc0573d941b1becc92b4916cbe3bef9aa0e89aec3f6
+```
+
+After this, as long as `--upload` is set, the descriptor will be updated with this signature field, containing a digest,
+but no actual signature value.
+
+This can then be used to sign the descriptor against a pinned signature:
+
+```shell
+ocm sign componentversion ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0 --signature default@cf08abae08bb874597630bc0573d941b1becc92b4916cbe3bef9aa0e89aec3f6 --signer rsapss
+```
+
+This will cause the descriptor to be downloaded, and the digest will be searched by the matching signature hash
+algorithm and value.
+Because the descriptor is not yet signed, the signature will be submitted to the given signer and the descriptor will be
+updated with the signed digest afterwards, which will make the descriptor ready for verification. (The normalisation and
+hash algorithm are derived from the digest specification)
 
 ---
 
@@ -122,72 +159,224 @@ type ComponentSignatureHandler interface {
 // ComponentSignatureSigner signs a normalized Component Descriptor.
 //
 // Implementations MUST:
-// - Expect that ALL contained digests were already precomputed from scratch for artifacts and component references BEFORE calling Sign.
-// - Compute the component-version digest over the normalized descriptor.
-// - Use a registered normalization algorithm and artifact digesting per configuration.
-// - Produce a signature envelope that records: algorithm, media type, value, optional issuer, and name.
+// - Expect that ALL unsigned signature digests were already precomputed from scratch for artifacts and component references BEFORE calling Sign.
 // See: https://ocm.software/docs/getting-started/sign-component-versions/
+// - Reject signature specifications without a precalculated digest specification
+// - Not modify the given signature digest specification in any way when signing
+// 
+// Implementations SHOULD:
+// - Use a well-known registered default configuration and be modifiable in their behavior, assuming sane defaults.
+// - offer versioned, stable signature implementations differentiated by the config type.
+// - Reject signing specifications if there is no credential available that is required for the handler.
+//
+// The returned signature SHOULD be attached to the descriptor `signatures` field after a successful call to Sign.
 type ComponentSignatureSigner interface {
-    // Sign signs the descriptor using the provided config.
-    // An extensible config SHOULD support:
-    //   - signature name(s) and normalization algorithm id,
-    //   - key material (private keys), issuer information,
-    //   - media type and algorithm selection.
-    Sign(ctx context.Context, descriptor descruntime.Descriptor, config runtime.Typed) (signed descruntime.Signature, err error)
+	// GetSigningCredentialConsumerIdentity resolves the credential consumer identity of the given configuration to use for credential resolution
+	// when signing new signatures with the given configuration.
+	// If successful, the returned identity SHOULD be used for credential resolution. (i.e. against the OCM credential graph)
+	// If unsuccessful, an error MUST be returned, and Sign CAN be called without credentials.
+	GetSigningCredentialConsumerIdentity(ctx context.Context, config runtime.Typed) (identity runtime.Identity, err error)
+
+	// Sign signs the descriptor using the provided config.
+	// An extensible config SHOULD support media type and algorithm selection, if multiple are availalbe.
+	//
+	// Configurations MUST NOT contain any private key or otherwise sensitive material. This is a security risk.
+	// Instead, the signer MUST use the provided credentials and well-known attributes to sign the digest specification.
+	Sign(ctx context.Context, unsigned descruntime.Signature, config runtime.Typed, credentials map[string]string) (signed descruntime.Signature, err error)
 }
 
 // ComponentSignatureVerifier validates signatures and digests for a Component Descriptor.
 //
 // Implementations MUST:
-// - Expect that ALL contained digests were already precomputed from scratch for artifacts and component references BEFORE calling Verify.
-// - Normalize the descriptor with the configured algorithm, then recompute the component-version digest.
-// - Select signatures by name if provided; otherwise verify all present signatures.
 // - Verify the cryptographic signature over the normalized digest using the provided configuration.
 // - Return an error if any selected signature or required digest check fails.
+//
+// Implementations SHOULD:
+// - Use a well-known registered default configuration derived from configuration and specification and be modifiable in their behavior, assuming sane defaults.
+// - offer versioned, stable verification implementations differentiated by the config type.
+// - Reject verification specifications if there is no credential available that is required for the handler to verify the signature.
+//
 // See: https://ocm.software/docs/reference/ocm-cli/verify/componentversions/
 type ComponentSignatureVerifier interface {
+	// GetVerifyingCredentialConsumerIdentity resolves the credential consumer identity of the given configuration to use for credential resolution
+	// when verifying signatures with the given configuration.
+	// If successful, the returned identity SHOULD be used for credential resolution. (i.e. against the OCM credential graph)
+	// If unsuccessful, an error MUST be returned, and Sign CAN be called without credentials.
+	GetVerifyingCredentialConsumerIdentity(ctx context.Context, config runtime.Typed) (identity runtime.Identity, err error)
     // Verify performs signature and digest checks using the provided config.
-    // An extensible config SHOULD support:
-    //   - signature name filters, normalization algorithm id,
-    //   - key material (public keys, certificates, roots), issuer constraints,
-    //   - verification time for certificate validity checks.
-    Verify(ctx context.Context, descriptor descruntime.Descriptor, config runtime.Typed) error
+	//
+	// An extensible config SHOULD support timeout / limit configurations for signature validation
+	// Configurations MUST NOT contain any key or otherwise sensitive material. This is a security risk.
+	// Instead, the verifier MUST use the provided credentials and well-known attributes to verify the signature.
+	// If the media type cannot be verified, the signature verification MUST fail.
+	Verify(ctx context.Context, signed descruntime.Signature, config runtime.Typed, credentials map[string]string) error
 }
 ```
 
 ---
 
-## Example Configuration
+## Example Configuration (RSASSA-PKCS1-V1_5)
+
+```yaml .ocmconfig
+- type: signing.configuration.ocm.software/v1alpha1
+  signers:
+    - name: rsapss
+      config:
+        type: RSASSA-PKCS1-V1_5/v1alpha1
+  verifiers:
+    - name: rsapss
+      config:
+        type: RSASSA-PKCS1-V1_5/v1alpha1
+- type: credentials.config.ocm.software
+  consumers:
+    - identity:
+        type: RSASSA-PKCS1-V1_5/v1alpha1
+        name: "rsapss"
+      credentials:
+        - type: Credentials/v1
+          properties:
+            private_key_pem_file: "/path/to/myprivatekey.pem"
+            public_key_pem_file: "/path/to/mypublickey.pem"
+```
 
 ### Signing
 
-```yaml
-signers:
-  - name: myprivatekey
-    type: OCMRSASignatureSigner/v1alpha1
-    spec:
-      normalization:
-        algorithm: jsonNormalisation/v4alpha1
-        hashAlgorithm: sha256
-      algorithm: RSASSA-PKCS1-V1_5
-      mediaType: application/vnd.ocm.signature.rsa
-      privateKey:
-        PEMFile: /path/to/myprivatekey.pem
+#### Via `signing.configuration.ocm.software/v1alpha1` and `--signer`
+
+```shell
+ocm sign componentversion --signature mysig --signer rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+```
+
+#### Via `--signer-spec`
+
+```yaml ./rsapss.yaml
+type: RSASSA-PKCS1-V1_5/v1alpha1
+```
+
+```shell
+ocm sign componentversion --signature mysig --signer-spec ./rsapss.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
 ### Verification
 
-```yaml
-verifiers:
-  - name: mypublickey
-    type: OCMRSASignatureVerifier/v1alpha1
-    spec:
-      normalization:
-        algorithm: jsonNormalisation/v4alpha1
-        hashAlgorithm: sha256
-      publicKey:
-        PEMFile: /path/to/mypublickey.pem
+#### Via `signing.configuration.ocm.software/v1alpha1` and `--verifier`
+
+```shell
+ocm verify componentversion --signature mysig --verifier rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
+
+#### Via `--verifier-spec`
+
+```yaml ./rsapss.yaml
+type: RSASSA-PKCS1-V1_5/v1alpha1
+```
+
+```shell
+ocm verify componentversion --signature mysig --verifier-spec ./rsapss.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+```
+
+### Credentials
+
+Generated Credential Consumer Identity for `GetSigningCredentialConsumerIdentity` or
+`GetVerifyingCredentialConsumerIdentity`:
+
+```yaml
+type: RSASSA-PKCS1-V1_5/v1alpha1
+name: "rsapss"
+```
+
+Returned Credentials from `credentials.config.ocm.software`:
+
+```yaml
+private_key_pem_file: "/path/to/myprivatekey.pem"
+public_key_pem_file: "/path/to/mypublickey.pem"
+```
+
+These credentials can be used for both signing and verifying, and can also be separately referenced when only signing or
+verifying.
+
+## Example Configuration (Sigstore)
+
+```yaml .ocmconfig
+- type: signing.configuration.ocm.software/v1alpha1
+  signers:
+    - name: sigstore
+      config:
+        type: RSASSA-PKCS1-V1_5/v1alpha1
+  verifiers:
+    - name: sigstore
+      config:
+        type: RSASSA-PKCS1-V1_5/v1alpha1
+- type: credentials.config.ocm.software
+  consumers:
+    - identity:
+        type: RSASSA-PKCS1-V1_5/v1alpha1
+        name: "rsapss"
+      credentials:
+        - type: Credentials/v1
+          properties:
+            private_key_pem_file: "/path/to/myprivatekey.pem"
+            public_key_pem_file: "/path/to/mypublickey.pem"
+```
+
+### Signing
+
+#### Via `signing.configuration.ocm.software/v1alpha1` and `--signer`
+
+```shell
+ocm sign componentversion --signature mysig --signer rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+```
+
+#### Via `--signer-spec`
+
+```yaml ./rsapss.yaml
+type: RSASSA-PKCS1-V1_5/v1alpha1
+```
+
+```shell
+ocm sign componentversion --signature mysig --signer-spec ./rsapss.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+```
+
+### Verification
+
+#### Via `signing.configuration.ocm.software/v1alpha1` and `--verifier`
+
+```shell
+ocm verify componentversion --signature mysig --verifier rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+```
+
+#### Via `--verifier-spec`
+
+```yaml ./rsapss.yaml
+type: RSASSA-PKCS1-V1_5/v1alpha1
+```
+
+```shell
+ocm verify componentversion --signature mysig --verifier-spec ./rsapss.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+```
+
+### Credentials
+
+Generated Credential Consumer Identity for `GetSigningCredentialConsumerIdentity` or
+`GetVerifyingCredentialConsumerIdentity`:
+
+```yaml
+type: RSASSA-PKCS1-V1_5/v1alpha1
+name: "rsapss"
+```
+
+Returned Credentials from `credentials.config.ocm.software`:
+
+```yaml
+private_key_pem_file: "/path/to/myprivatekey.pem"
+public_key_pem_file: "/path/to/mypublickey.pem"
+```
+
+These credentials can be used for both signing and verifying, and can also be separately referenced when only signing or
+verifying.
+
+
+
 
 ---
 
