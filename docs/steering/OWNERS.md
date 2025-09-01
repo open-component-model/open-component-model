@@ -27,7 +27,11 @@ This page contains all active and inactive TSC members.
 | Gerald Morrison   | SAP SE       | [morri-son](https://github.com/morri-son)             |
 | Fabian Burth      | SAP SE       | [fabianburth](https://github.com/fabianburth)         |
 | Frederic Wilhelm  | SAP SE       | [frewilhelm](https://github.com/frewilhelm)           |
-| Christian Cwienk  | SAP SE       | [ccwienk](https://github.com/ccwienk)                 |
+| Philipp Heil      | SAP SE       | [zkdev](https://github.com/zkdev)                     |
 | Gergely Bräutigam | -            | [skarlso](https://github.com/skarlso)                 |
 
 ## Emeritus Members
+
+| Name             | Organization | Github Handle                         |
+|------------------|--------------|---------------------------------------|
+| Christian Cwienk | SAP SE       | [ccwienk](https://github.com/ccwienk) |
