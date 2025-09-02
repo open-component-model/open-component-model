@@ -5,6 +5,7 @@ import (
 
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository"
 )
 
 // Options are the options for construction based on a *constructor.Constructor.
@@ -13,6 +14,12 @@ type Options struct {
 	// to get the target repository for the component specification.
 	// The TargetRepositoryProvider is MANDATORY.
 	TargetRepositoryProvider
+
+	// While constructing a component version, the constructor library will use the given component version repository provider
+	// to get the repository to resolve referenced components that are not part of the construction specification.
+	// The ComponentVersionRepository is OPTIONAL, if no externally referenced components need to be resolved.
+	// TODO(fabianburth): change the interface to a constructor specific provider interface similar to target repository provider.
+	repository.ComponentVersionRepository
 
 	// While constructing a component version, the constructor library will use the given resource repository provider
 	// to get the resource repository for the component specification when processing resources by value.

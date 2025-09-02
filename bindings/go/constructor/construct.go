@@ -4,15 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"sync"
 
+	"github.com/opencontainers/go-digest"
 	"golang.org/x/sync/errgroup"
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/hashing"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -64,48 +69,73 @@ func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentC
 	if err := c.discoverGraph(ctx, dag, componentConstructor); err != nil {
 		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
-	mapdag := syncdag.ToMapBasedDAG(dag)
-	_ = mapdag
+	descriptors, err := c.graphBasedConstruct(ctx, dag)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct components from graph: %w", err)
+	}
+	return descriptors, nil
+}
 
-	//eg, egctx := newConcurrencyGroup(ctx, c.opts.ConcurrencyLimit)
-	//logger.Debug("created concurrency group", "limit", c.opts.ConcurrencyLimit)
-	//
-	//for i, component := range constructor.Components {
-	//	componentLogger := logger.With("component", component.Name, "version", component.Version)
-	//	componentLogger.Debug("constructing component")
-	//
-	//	eg.Go(func() error {
-	//		if c.opts.OnStartComponentConstruct != nil {
-	//			if err := c.opts.OnStartComponentConstruct(egctx, &component); err != nil {
-	//				return fmt.Errorf("error starting component construction for %q: %w", component.ToIdentity(), err)
-	//			}
-	//		}
-	//		desc, err := c.construct(egctx, &component)
-	//		if c.opts.OnEndComponentConstruct != nil {
-	//			if err := c.opts.OnEndComponentConstruct(egctx, desc, err); err != nil {
-	//				return fmt.Errorf("error ending component construction for %q: %w", component.ToIdentity(), err)
-	//			}
-	//		}
-	//		if err != nil {
-	//			return err
-	//		}
-	//
-	//		descLock.Lock()
-	//		defer descLock.Unlock()
-	//		descriptors[i] = desc
-	//		componentLogger.Debug("component constructed successfully")
-	//
-	//		return nil
-	//	})
-	//}
-	//
-	//if err := eg.Wait(); err != nil {
-	//	return nil, fmt.Errorf("error constructing components: %w", err)
-	//}
+func (c *DefaultConstructor) graphBasedConstruct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) ([]*descriptor.Descriptor, error) {
+	descriptors := make([]*descriptor.Descriptor, 0, dag.LengthVertices())
+	var descLock sync.Mutex
 
-	//logger.Debug("component construction completed successfully", "num_components", len(descriptors))
-	//return descriptors, nil
-	return nil, nil
+	processor := syncdag.VertexProcessorFunc[string](func(ctx context.Context, vertex *syncdag.Vertex[string]) error {
+		untypedComponent, ok := vertex.GetAttribute(attributeComponentConstructor)
+		if ok {
+			// this means we are on a constructor node and we want to find its
+			// neighbors
+			component := untypedComponent.(*constructor.Component)
+			desc, err := c.construct(ctx, component)
+			if err != nil {
+				return fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
+			}
+			for index := range desc.Component.References {
+				ref := &desc.Component.References[index]
+				identity := ocmruntime.Identity{
+					descriptor.IdentityAttributeName:    ref.Component,
+					descriptor.IdentityAttributeVersion: ref.Version,
+				}
+				refVertex, exists := dag.GetVertex(identity.String())
+				if !exists {
+					return fmt.Errorf("missing dependency %q for component %q", identity.String(), component.ToIdentity())
+				}
+				untypedRefDescriptor, ok := refVertex.GetAttribute(attributeComponentDescriptor)
+				if !ok {
+					return fmt.Errorf("missing descriptor for dependency %q of component %q", identity.String(), component.ToIdentity())
+				}
+				refDescriptor := untypedRefDescriptor.(*descriptor.Descriptor)
+
+				// constructor defaults to latest algorithm here
+				normalisedData, err := normalisation.Normalisations.Normalise(refDescriptor, v4alpha1.Algorithm)
+				if err != nil {
+					return fmt.Errorf("error normalising descriptor for dependency %q of component %q: %w", identity.String(), component.ToIdentity(), err)
+				}
+
+				referencedDigest := digest.SHA256.FromBytes(normalisedData)
+				// constructor defaults to sha256 here
+				ref.Digest = descriptor.Digest{
+					HashAlgorithm:          hashing.HashAlgorithmSHA256,
+					NormalisationAlgorithm: v4alpha1.Algorithm,
+					Value:                  referencedDigest.Encoded(),
+				}
+			}
+			vertex.Attributes.Store(attributeComponentDescriptor, desc)
+
+			descLock.Lock()
+			defer descLock.Unlock()
+			descriptors = append(descriptors, desc)
+			slog.DebugContext(ctx, "component constructed successfully")
+
+			return nil
+		}
+
+		return nil
+	})
+	if err := dag.ProcessReverseTopology(ctx, processor); err != nil {
+		return nil, fmt.Errorf("failed to process component constructor graph: %w", err)
+	}
+	return descriptors, nil
 }
 
 func (c *DefaultConstructor) discoverGraph(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
@@ -122,10 +152,10 @@ func (c *DefaultConstructor) discoverGraph(ctx context.Context, dag *syncdag.Dir
 			// this means we are on a constructor node and we want to find its
 			// neighbors
 			component := untypedComponent.(*constructor.Component)
-			repo, err := c.opts.GetTargetRepository(ctx, component)
-			if err != nil {
-				return nil, fmt.Errorf("error getting target repository for component %q: %w", component.Name, err)
-			}
+			// repo, err := c.opts.GetTargetRepository(ctx, component)
+			// if err != nil {
+			//	return nil, fmt.Errorf("error getting target repository for component %q: %w", component.Name, err)
+			// }
 			neighbors := make([]*syncdag.Vertex[string], 0, len(component.References))
 			for _, ref := range component.References {
 				identity := ocmruntime.Identity{
@@ -141,12 +171,13 @@ func (c *DefaultConstructor) discoverGraph(ctx context.Context, dag *syncdag.Dir
 					// this is only the case for external components
 					neighbors = append(neighbors, syncdag.NewVertex(identity.String(), map[string]any{
 						attributeComponentIdentity: identity,
-						// we need to pass the target repo as it depends on the
-						// parent component
+						// I think we should pass another repository provider (
+						// e.g. fallback repository) for resolving external
+						// components
 						// TODO(fabianburth): what if a component has 2 parents
 						//  with different target repositories? the latter would
 						//  be ignored now
-						attributeComponentRepository: repo,
+						// attributeComponentRepository: repo,
 					}))
 				}
 			}
@@ -154,7 +185,7 @@ func (c *DefaultConstructor) discoverGraph(ctx context.Context, dag *syncdag.Dir
 		}
 		// this means we are on a descriptor node
 		identity := v.MustGetAttribute(attributeComponentIdentity).(ocmruntime.Identity)
-		repo := v.MustGetAttribute(attributeComponentRepository).(TargetRepository)
+		repo := c.opts.ComponentVersionRepository
 		desc, err := repo.GetComponentVersion(ctx, identity[descriptor.IdentityAttributeName], identity[descriptor.IdentityAttributeVersion])
 		if err != nil {
 			return nil, fmt.Errorf("error getting component version %q from repository: %w", identity.String(), err)
