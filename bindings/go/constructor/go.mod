@@ -4,7 +4,7 @@ go 1.25.0
 
 replace (
 	ocm.software/open-component-model/bindings/go/dag => github.com/fabianburth/open-component-model/bindings/go/dag v0.0.0-20250901164340-8f8d8af75045
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation => github.com/fabianburth/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250901165342-668008ad36c2
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation => github.com/fabianburth/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250902141118-5baa7ffe9690
 )
 
 require (
