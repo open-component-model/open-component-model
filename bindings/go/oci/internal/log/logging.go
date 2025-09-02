@@ -22,13 +22,13 @@ func Operation(ctx context.Context, operation string, fields ...slog.Attr) func(
 	return func(err error) {
 		duration := slog.Duration("duration", time.Since(start))
 
-		var level slog.Level
 		var msg string
+		level := slog.LevelDebug
 		if err != nil {
-			level, msg = slog.LevelDebug, "operation failed"
+			msg = "operation failed"
 			fields = append(fields, slog.String("error", err.Error()))
 		} else {
-			level, msg = slog.LevelDebug, "operation completed"
+			msg = "operation completed"
 		}
 
 		logger.LogAttrs(ctx, level, msg, append([]slog.Attr{duration}, fields...)...)
