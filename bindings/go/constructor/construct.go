@@ -65,6 +65,8 @@ func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentC
 		c.opts.SourceInputMethodProvider = DefaultInputMethodRegistry
 	}
 
+	// We might want to allow the DAG to be passed in. This would allow to
+	// pre-populate it with known components to avoid re-resolving them.
 	dag := syncdag.NewDirectedAcyclicGraph[string]()
 	if err := c.discoverGraph(ctx, dag, componentConstructor); err != nil {
 		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
@@ -76,6 +78,69 @@ func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentC
 	return descriptors, nil
 }
 
+func (c *DefaultConstructor) discoverGraph(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
+	roots := make([]*syncdag.Vertex[string], len(componentConstructor.Components))
+	for index, component := range componentConstructor.Components {
+		roots[index] = syncdag.NewVertex(component.ToIdentity().String(), map[string]any{
+			attributeComponentIdentity:    component.ToIdentity(),
+			attributeComponentConstructor: &component,
+		})
+	}
+	neighbourDiscoverer := syncdag.DiscoverNeighborsFunc[string](func(ctx context.Context, v *syncdag.Vertex[string]) ([]*syncdag.Vertex[string], error) {
+		untypedComponent, ok := v.GetAttribute(attributeComponentConstructor)
+		if ok {
+			// This means we are on a constructor node.
+			// We want to discover its neighbors.
+			component := untypedComponent.(*constructor.Component)
+			neighbors := make([]*syncdag.Vertex[string], 0, len(component.References))
+			for _, ref := range component.References {
+				identity := ocmruntime.Identity{
+					descriptor.IdentityAttributeName:    ref.Component,
+					descriptor.IdentityAttributeVersion: ref.Version,
+				}
+				if _, exists := dag.GetVertex(identity.String()); exists {
+					// This **is always** the case for other components in the
+					// constructor since all of them are added to the traversal
+					// as roots.
+					// This **might** be the case for external components, if
+					// they are already discovered through other components.
+					//
+					// Either way, we want to add the node as a neighbor.
+					neighbors = append(neighbors, syncdag.NewVertex(identity.String()))
+				} else {
+					// This is only the case for external components since all
+					// components in the constructor are added to the traversal
+					// as roots.
+					neighbors = append(neighbors, syncdag.NewVertex(identity.String(), map[string]any{
+						attributeComponentIdentity: identity,
+					}))
+				}
+			}
+			return neighbors, nil
+		}
+
+		// This means we are on an external descriptor node.
+		// TODO(fabianburth): Once we support recursive, we need to discover
+		//  their neighbors too. Are there valid cases where an external
+		//  component might reference a component in the constructor?
+		identity := v.MustGetAttribute(attributeComponentIdentity).(ocmruntime.Identity)
+		repo := c.opts.ComponentVersionRepository
+		desc, err := repo.GetComponentVersion(ctx, identity[descriptor.IdentityAttributeName], identity[descriptor.IdentityAttributeVersion])
+		if err != nil {
+			return nil, fmt.Errorf("error getting component version %q from repository: %w", identity.String(), err)
+		}
+		v.Attributes.Store(attributeComponentDescriptor, desc)
+
+		// TODO(fabianburth): once we support recursive, we need to discover the
+		//  neighbors here
+		return nil, nil
+	})
+	if err := dag.Traverse(ctx, neighbourDiscoverer, syncdag.WithRoots[string](roots...)); err != nil {
+		return fmt.Errorf("error traversing component graph: %w", err)
+	}
+	return nil
+}
+
 func (c *DefaultConstructor) graphBasedConstruct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) ([]*descriptor.Descriptor, error) {
 	descriptors := make([]*descriptor.Descriptor, 0, dag.LengthVertices())
 	var descLock sync.Mutex
@@ -83,9 +148,9 @@ func (c *DefaultConstructor) graphBasedConstruct(ctx context.Context, dag *syncd
 	processor := syncdag.VertexProcessorFunc[string](func(ctx context.Context, vertex *syncdag.Vertex[string]) error {
 		untypedComponent, ok := vertex.GetAttribute(attributeComponentConstructor)
 		if ok {
-			// this means we are on a constructor node and we want to find its
-			// neighbors
+			// This means we are on a constructor node.
 			component := untypedComponent.(*constructor.Component)
+			// TODO(fabianburth): move the digest calculation into construct
 			desc, err := c.construct(ctx, component)
 			if err != nil {
 				return fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
@@ -136,70 +201,6 @@ func (c *DefaultConstructor) graphBasedConstruct(ctx context.Context, dag *syncd
 		return nil, fmt.Errorf("failed to process component constructor graph: %w", err)
 	}
 	return descriptors, nil
-}
-
-func (c *DefaultConstructor) discoverGraph(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
-	roots := make([]*syncdag.Vertex[string], len(componentConstructor.Components))
-	for index, component := range componentConstructor.Components {
-		roots[index] = syncdag.NewVertex(component.ToIdentity().String(), map[string]any{
-			attributeComponentIdentity:    component.ToIdentity(),
-			attributeComponentConstructor: &component,
-		})
-	}
-	neighbourDiscoverer := syncdag.DiscoverNeighborsFunc[string](func(ctx context.Context, v *syncdag.Vertex[string]) ([]*syncdag.Vertex[string], error) {
-		untypedComponent, ok := v.GetAttribute(attributeComponentConstructor)
-		if ok {
-			// this means we are on a constructor node and we want to find its
-			// neighbors
-			component := untypedComponent.(*constructor.Component)
-			// repo, err := c.opts.GetTargetRepository(ctx, component)
-			// if err != nil {
-			//	return nil, fmt.Errorf("error getting target repository for component %q: %w", component.Name, err)
-			// }
-			neighbors := make([]*syncdag.Vertex[string], 0, len(component.References))
-			for _, ref := range component.References {
-				identity := ocmruntime.Identity{
-					descriptor.IdentityAttributeName:    ref.Component,
-					descriptor.IdentityAttributeVersion: ref.Version,
-				}
-				if _, exists := dag.GetVertex(identity.String()); exists {
-					// this is always the case for other components in the constructor
-					// this might also be the case for external components that are
-					// already discovered through other components
-					neighbors = append(neighbors, syncdag.NewVertex(identity.String()))
-				} else {
-					// this is only the case for external components
-					neighbors = append(neighbors, syncdag.NewVertex(identity.String(), map[string]any{
-						attributeComponentIdentity: identity,
-						// I think we should pass another repository provider (
-						// e.g. fallback repository) for resolving external
-						// components
-						// TODO(fabianburth): what if a component has 2 parents
-						//  with different target repositories? the latter would
-						//  be ignored now
-						// attributeComponentRepository: repo,
-					}))
-				}
-			}
-			return neighbors, nil
-		}
-		// this means we are on a descriptor node
-		identity := v.MustGetAttribute(attributeComponentIdentity).(ocmruntime.Identity)
-		repo := c.opts.ComponentVersionRepository
-		desc, err := repo.GetComponentVersion(ctx, identity[descriptor.IdentityAttributeName], identity[descriptor.IdentityAttributeVersion])
-		if err != nil {
-			return nil, fmt.Errorf("error getting component version %q from repository: %w", identity.String(), err)
-		}
-		v.Attributes.Store(attributeComponentDescriptor, desc)
-
-		// TODO(fabianburth): once we support recursive, we need to discover the
-		//  neighbors here
-		return nil, nil
-	})
-	if err := dag.Traverse(ctx, neighbourDiscoverer, syncdag.WithRoots[string](roots...)); err != nil {
-		return fmt.Errorf("error traversing component graph: %w", err)
-	}
-	return nil
 }
 
 func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
