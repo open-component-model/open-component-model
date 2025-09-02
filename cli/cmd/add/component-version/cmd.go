@@ -107,7 +107,7 @@ add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of component versions that can be constructed concurrently.")
-	cmd.Flags().StringP(FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "repository specification")
+	cmd.Flags().StringP(FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "repository ref")
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the component constructor file")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
@@ -226,15 +226,13 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 		return nil, fmt.Errorf("getting repository reference flag failed: %w", err)
 	}
 
-	repositorySpec, err := compref.ParseRepositoryReference(repositoryRef)
+	typed, err := compref.ParseRepository(repositoryRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse repository: %w", err)
 	}
 
-	// Handle CTF-specific access mode configuration
 	if ctfRepo, ok := typed.(*ctfv1.Repository); ok {
 		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
-		// For CTF repositories, check if path exists to determine access mode
 		if _, err := os.Stat(ctfRepo.Path); os.IsNotExist(err) {
 			accessMode += "|" + ctfv1.AccessModeCreate
 		}
