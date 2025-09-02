@@ -79,6 +79,12 @@ type ComponentConstructionCallbacks struct {
 	// OnEndSourceConstruct is called after the construction of a source ends.
 	// If an error occurs during the construction, the error is passed as a parameter.
 	OnEndSourceConstruct func(ctx context.Context, source *descriptor.Source, err error) error
+
+	// OnStartReferenceConstruct is called before the construction of a component reference starts.
+	OnStartReferenceConstruct func(ctx context.Context, reference *constructor.Reference) error
+	// OnEndReferenceConstruct is called after the construction of a component reference ends.
+	// If an error occurs during the construction, the error is passed as a parameter.
+	OnEndReferenceConstruct func(ctx context.Context, reference *descriptor.Reference, err error) error
 }
 
 // ComponentVersionConflictPolicy defines the policy for handling component version conflicts

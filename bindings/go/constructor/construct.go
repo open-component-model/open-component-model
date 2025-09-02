@@ -15,7 +15,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/hashing"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -150,13 +149,8 @@ func (c *DefaultConstructor) graphBasedConstruct(ctx context.Context, dag *syncd
 		if ok {
 			// This means we are on a constructor node.
 			component := untypedComponent.(*constructor.Component)
-			// TODO(fabianburth): move the digest calculation into construct
-			desc, err := c.construct(ctx, component)
-			if err != nil {
-				return fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
-			}
-			for index := range desc.Component.References {
-				ref := &desc.Component.References[index]
+			referencedComponents := make(map[string]*descriptor.Descriptor, len(component.References))
+			for _, ref := range component.References {
 				identity := ocmruntime.Identity{
 					descriptor.IdentityAttributeName:    ref.Component,
 					descriptor.IdentityAttributeVersion: ref.Version,
@@ -170,20 +164,11 @@ func (c *DefaultConstructor) graphBasedConstruct(ctx context.Context, dag *syncd
 					return fmt.Errorf("missing descriptor for dependency %q of component %q", identity.String(), component.ToIdentity())
 				}
 				refDescriptor := untypedRefDescriptor.(*descriptor.Descriptor)
-
-				// constructor defaults to latest algorithm here
-				normalisedData, err := normalisation.Normalisations.Normalise(refDescriptor, v4alpha1.Algorithm)
-				if err != nil {
-					return fmt.Errorf("error normalising descriptor for dependency %q of component %q: %w", identity.String(), component.ToIdentity(), err)
-				}
-
-				referencedDigest := digest.SHA256.FromBytes(normalisedData)
-				// constructor defaults to sha256 here
-				ref.Digest = descriptor.Digest{
-					HashAlgorithm:          hashing.HashAlgorithmSHA256,
-					NormalisationAlgorithm: v4alpha1.Algorithm,
-					Value:                  referencedDigest.Encoded(),
-				}
+				referencedComponents[ref.ToIdentity().String()] = refDescriptor
+			}
+			desc, err := c.construct(ctx, component, referencedComponents)
+			if err != nil {
+				return fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
 			}
 			vertex.Attributes.Store(attributeComponentDescriptor, desc)
 
@@ -231,7 +216,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 					return fmt.Errorf("error starting component construction for %q: %w", component.ToIdentity(), err)
 				}
 			}
-			desc, err := c.construct(egctx, &component)
+			desc, err := c.construct(egctx, &component, nil)
 			if c.opts.OnEndComponentConstruct != nil {
 				if err := c.opts.OnEndComponentConstruct(egctx, desc, err); err != nil {
 					return fmt.Errorf("error ending component construction for %q: %w", component.ToIdentity(), err)
@@ -267,7 +252,7 @@ func NewDefaultConstructor(opts Options) Constructor {
 // construct creates a single component descriptor from a component specification.
 // It handles the creation of the base descriptor, processes all resources concurrently,
 // and adds the final component version to the target repository.
-func (c *DefaultConstructor) construct(ctx context.Context, component *constructor.Component) (*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) construct(ctx context.Context, component *constructor.Component, referencedComponents map[string]*descriptor.Descriptor) (*descriptor.Descriptor, error) {
 	logger := log.Base().With("component", component.Name, "version", component.Version)
 	desc := createBaseDescriptor(component)
 	logger.Debug("created base descriptor")
@@ -288,7 +273,7 @@ func (c *DefaultConstructor) construct(ctx context.Context, component *construct
 		return nil, err
 	}
 
-	if err := c.processDescriptor(ctx, repo, component, desc); err != nil {
+	if err := c.processDescriptor(ctx, repo, component, desc, referencedComponents); err != nil {
 		return nil, err
 	}
 
@@ -343,6 +328,7 @@ func (c *DefaultConstructor) processDescriptor(
 	targetRepo TargetRepository,
 	component *constructor.Component,
 	desc *descriptor.Descriptor,
+	referencedComponents map[string]*descriptor.Descriptor,
 ) error {
 	logger := log.Base().With("component", component.Name, "version", component.Version)
 	logger.Debug("processing descriptor",
@@ -402,6 +388,34 @@ func (c *DefaultConstructor) processDescriptor(
 			defer descLock.Unlock()
 			desc.Component.Sources[i] = *src
 			sourceLogger.Debug("source processed successfully")
+			return nil
+		})
+	}
+
+	for i, reference := range component.References {
+		referenceLogger := logger.With("reference", reference.ToIdentity())
+		referenceLogger.Debug("processing reference")
+
+		eg.Go(func() error {
+			if c.opts.OnStartReferenceConstruct != nil {
+				if err := c.opts.OnStartReferenceConstruct(egctx, &reference); err != nil {
+					return fmt.Errorf("error starting reference construction for %q: %w", reference.ToIdentity(), err)
+				}
+			}
+			referencedComponent := referencedComponents[reference.ToIdentity().String()]
+			ref, err := c.processReference(egctx, &reference, referencedComponent)
+			if c.opts.OnEndReferenceConstruct != nil {
+				if err := c.opts.OnEndReferenceConstruct(egctx, ref, err); err != nil {
+					return fmt.Errorf("error ending reference construction for %q: %w", ref.ToIdentity(), err)
+				}
+			}
+			if err != nil {
+				return fmt.Errorf("error processing reference %q at index %d: %w", ref.ToIdentity(), i, err)
+			}
+			descLock.Lock()
+			defer descLock.Unlock()
+			desc.Component.References[i] = *ref
+			referenceLogger.Debug("reference processed successfully")
 			return nil
 		})
 	}
@@ -624,6 +638,24 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	}
 
 	return processedResource, nil
+}
+
+// processReference processes a component reference by calculating its digest and converting it to a descriptor reference.
+func (c *DefaultConstructor) processReference(_ context.Context, reference *constructor.Reference, referencedComponent *descriptor.Descriptor) (*descriptor.Reference, error) {
+	logger := log.Base().With(
+		"ref", reference.ToIdentity(),
+	)
+	logger.Debug("processing reference")
+
+	referencedDigest, err := hashing.DigestNormalizedDescriptor(referencedComponent, digest.SHA256, v4alpha1.Algorithm)
+	if err != nil {
+		return nil, fmt.Errorf("error calculating digest for component reference %q: %w", reference.ToIdentity().String(), err)
+	}
+	ref := constructor.ConvertToDescriptorReference(reference)
+	ref.Digest = *referencedDigest
+
+	logger.Debug("reference processed successfully")
+	return ref, nil
 }
 
 // addColocatedResourceLocalBlob adds a local blob to the component version repository and defaults fields relevant
