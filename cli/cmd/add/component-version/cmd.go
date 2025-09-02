@@ -221,12 +221,12 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 }
 
 func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
-	repositorySpec, err := cmd.Flags().GetString(FlagRepositoryRef)
+	repositoryRef, err := cmd.Flags().GetString(FlagRepositoryRef)
 	if err != nil {
 		return nil, fmt.Errorf("getting repository reference flag failed: %w", err)
 	}
 
-	typed, err := compref.ParseRepository(repositorySpec)
+	repositorySpec, err := compref.ParseRepositoryReference(repositoryRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse repository: %w", err)
 	}
