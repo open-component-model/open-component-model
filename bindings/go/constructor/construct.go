@@ -4,14 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"sync"
 
+	"github.com/opencontainers/go-digest"
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/hashing"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -26,6 +31,7 @@ type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in sequence.
 	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
+	GraphBasedConstruct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
 }
 
 // ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
@@ -35,6 +41,151 @@ func ConstructDefault(ctx context.Context, constructor *constructor.ComponentCon
 
 type DefaultConstructor struct {
 	opts Options
+}
+
+var _ Constructor = (*DefaultConstructor)(nil)
+
+const (
+	attributeComponentConstructor = "componentConstructor"
+	attributeComponentDescriptor  = "componentDescriptor"
+	attributeComponentIdentity    = "componentIdentity"
+	attributeComponentRepository  = "componentRepository"
+)
+
+func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
+	logger := log.Base().With("operation", "construct")
+
+	if c.opts.ResourceInputMethodProvider == nil {
+		logger.Debug("using default resource input method provider")
+		c.opts.ResourceInputMethodProvider = DefaultInputMethodRegistry
+	}
+	if c.opts.SourceInputMethodProvider == nil {
+		logger.Debug("using default source input method provider")
+		c.opts.SourceInputMethodProvider = DefaultInputMethodRegistry
+	}
+
+	// We might want to allow the DAG to be passed in. This would allow to
+	// pre-populate it with known components to avoid re-resolving them.
+	dag := syncdag.NewDirectedAcyclicGraph[string]()
+	if err := c.discoverGraph(ctx, dag, componentConstructor); err != nil {
+		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
+	}
+	descriptors, err := c.graphBasedConstruct(ctx, dag)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct components from graph: %w", err)
+	}
+	return descriptors, nil
+}
+
+func (c *DefaultConstructor) discoverGraph(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
+	roots := make([]*syncdag.Vertex[string], len(componentConstructor.Components))
+	for index, component := range componentConstructor.Components {
+		roots[index] = syncdag.NewVertex(component.ToIdentity().String(), map[string]any{
+			attributeComponentIdentity:    component.ToIdentity(),
+			attributeComponentConstructor: &component,
+		})
+	}
+	neighbourDiscoverer := syncdag.DiscoverNeighborsFunc[string](func(ctx context.Context, v *syncdag.Vertex[string]) ([]*syncdag.Vertex[string], error) {
+		untypedComponent, ok := v.GetAttribute(attributeComponentConstructor)
+		if ok {
+			// This means we are on a constructor node.
+			// We want to discover its neighbors.
+			component := untypedComponent.(*constructor.Component)
+			neighbors := make([]*syncdag.Vertex[string], 0, len(component.References))
+			for _, ref := range component.References {
+				identity := ocmruntime.Identity{
+					descriptor.IdentityAttributeName:    ref.Component,
+					descriptor.IdentityAttributeVersion: ref.Version,
+				}
+				if _, exists := dag.GetVertex(identity.String()); exists {
+					// This **is always** the case for other components in the
+					// constructor since all of them are added to the traversal
+					// as roots.
+					// This **might** be the case for external components, if
+					// they are already discovered through other components.
+					//
+					// Either way, we want to add the node as a neighbor.
+					neighbors = append(neighbors, syncdag.NewVertex(identity.String()))
+				} else {
+					// This is only the case for external components since all
+					// components in the constructor are added to the traversal
+					// as roots.
+					neighbors = append(neighbors, syncdag.NewVertex(identity.String(), map[string]any{
+						attributeComponentIdentity: identity,
+					}))
+				}
+			}
+			return neighbors, nil
+		}
+
+		// This means we are on an external descriptor node.
+		// TODO(fabianburth): Once we support recursive, we need to discover
+		//  their neighbors too. Are there valid cases where an external
+		//  component might reference a component in the constructor?
+		identity := v.MustGetAttribute(attributeComponentIdentity).(ocmruntime.Identity)
+		repo := c.opts.ComponentVersionRepository
+		desc, err := repo.GetComponentVersion(ctx, identity[descriptor.IdentityAttributeName], identity[descriptor.IdentityAttributeVersion])
+		if err != nil {
+			return nil, fmt.Errorf("error getting component version %q from repository: %w", identity.String(), err)
+		}
+		v.Attributes.Store(attributeComponentDescriptor, desc)
+
+		// TODO(fabianburth): once we support recursive, we need to discover the
+		//  neighbors here
+		return nil, nil
+	})
+	if err := dag.Traverse(ctx, neighbourDiscoverer, syncdag.WithRoots[string](roots...)); err != nil {
+		return fmt.Errorf("error traversing component graph: %w", err)
+	}
+	return nil
+}
+
+func (c *DefaultConstructor) graphBasedConstruct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) ([]*descriptor.Descriptor, error) {
+	descriptors := make([]*descriptor.Descriptor, 0, dag.LengthVertices())
+	var descLock sync.Mutex
+
+	processor := syncdag.VertexProcessorFunc[string](func(ctx context.Context, vertex *syncdag.Vertex[string]) error {
+		untypedComponent, ok := vertex.GetAttribute(attributeComponentConstructor)
+		if ok {
+			// This means we are on a constructor node.
+			component := untypedComponent.(*constructor.Component)
+			referencedComponents := make(map[string]*descriptor.Descriptor, len(component.References))
+			for _, ref := range component.References {
+				identity := ocmruntime.Identity{
+					descriptor.IdentityAttributeName:    ref.Component,
+					descriptor.IdentityAttributeVersion: ref.Version,
+				}
+				refVertex, exists := dag.GetVertex(identity.String())
+				if !exists {
+					return fmt.Errorf("missing dependency %q for component %q", identity.String(), component.ToIdentity())
+				}
+				untypedRefDescriptor, ok := refVertex.GetAttribute(attributeComponentDescriptor)
+				if !ok {
+					return fmt.Errorf("missing descriptor for dependency %q of component %q", identity.String(), component.ToIdentity())
+				}
+				refDescriptor := untypedRefDescriptor.(*descriptor.Descriptor)
+				referencedComponents[ref.ToIdentity().String()] = refDescriptor
+			}
+			desc, err := c.construct(ctx, component, referencedComponents)
+			if err != nil {
+				return fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
+			}
+			vertex.Attributes.Store(attributeComponentDescriptor, desc)
+
+			descLock.Lock()
+			defer descLock.Unlock()
+			descriptors = append(descriptors, desc)
+			slog.DebugContext(ctx, "component constructed successfully")
+
+			return nil
+		}
+
+		return nil
+	})
+	if err := dag.ProcessReverseTopology(ctx, processor); err != nil {
+		return nil, fmt.Errorf("failed to process component constructor graph: %w", err)
+	}
+	return descriptors, nil
 }
 
 func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
@@ -65,7 +216,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constru
 					return fmt.Errorf("error starting component construction for %q: %w", component.ToIdentity(), err)
 				}
 			}
-			desc, err := c.construct(egctx, &component)
+			desc, err := c.construct(egctx, &component, nil)
 			if c.opts.OnEndComponentConstruct != nil {
 				if err := c.opts.OnEndComponentConstruct(egctx, desc, err); err != nil {
 					return fmt.Errorf("error ending component construction for %q: %w", component.ToIdentity(), err)
@@ -101,7 +252,7 @@ func NewDefaultConstructor(opts Options) Constructor {
 // construct creates a single component descriptor from a component specification.
 // It handles the creation of the base descriptor, processes all resources concurrently,
 // and adds the final component version to the target repository.
-func (c *DefaultConstructor) construct(ctx context.Context, component *constructor.Component) (*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) construct(ctx context.Context, component *constructor.Component, referencedComponents map[string]*descriptor.Descriptor) (*descriptor.Descriptor, error) {
 	logger := log.Base().With("component", component.Name, "version", component.Version)
 	desc := createBaseDescriptor(component)
 	logger.Debug("created base descriptor")
@@ -122,7 +273,7 @@ func (c *DefaultConstructor) construct(ctx context.Context, component *construct
 		return nil, err
 	}
 
-	if err := c.processDescriptor(ctx, repo, component, desc); err != nil {
+	if err := c.processDescriptor(ctx, repo, component, desc, referencedComponents); err != nil {
 		return nil, err
 	}
 
@@ -177,6 +328,7 @@ func (c *DefaultConstructor) processDescriptor(
 	targetRepo TargetRepository,
 	component *constructor.Component,
 	desc *descriptor.Descriptor,
+	referencedComponents map[string]*descriptor.Descriptor,
 ) error {
 	logger := log.Base().With("component", component.Name, "version", component.Version)
 	logger.Debug("processing descriptor",
@@ -236,6 +388,34 @@ func (c *DefaultConstructor) processDescriptor(
 			defer descLock.Unlock()
 			desc.Component.Sources[i] = *src
 			sourceLogger.Debug("source processed successfully")
+			return nil
+		})
+	}
+
+	for i, reference := range component.References {
+		referenceLogger := logger.With("reference", reference.ToIdentity())
+		referenceLogger.Debug("processing reference")
+
+		eg.Go(func() error {
+			if c.opts.OnStartReferenceConstruct != nil {
+				if err := c.opts.OnStartReferenceConstruct(egctx, &reference); err != nil {
+					return fmt.Errorf("error starting reference construction for %q: %w", reference.ToIdentity(), err)
+				}
+			}
+			referencedComponent := referencedComponents[reference.ToIdentity().String()]
+			ref, err := c.processReference(egctx, &reference, referencedComponent)
+			if c.opts.OnEndReferenceConstruct != nil {
+				if err := c.opts.OnEndReferenceConstruct(egctx, ref, err); err != nil {
+					return fmt.Errorf("error ending reference construction for %q: %w", ref.ToIdentity(), err)
+				}
+			}
+			if err != nil {
+				return fmt.Errorf("error processing reference %q at index %d: %w", ref.ToIdentity(), i, err)
+			}
+			descLock.Lock()
+			defer descLock.Unlock()
+			desc.Component.References[i] = *ref
+			referenceLogger.Debug("reference processed successfully")
 			return nil
 		})
 	}
@@ -458,6 +638,24 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	}
 
 	return processedResource, nil
+}
+
+// processReference processes a component reference by calculating its digest and converting it to a descriptor reference.
+func (c *DefaultConstructor) processReference(_ context.Context, reference *constructor.Reference, referencedComponent *descriptor.Descriptor) (*descriptor.Reference, error) {
+	logger := log.Base().With(
+		"ref", reference.ToIdentity(),
+	)
+	logger.Debug("processing reference")
+
+	referencedDigest, err := hashing.DigestNormalizedDescriptor(referencedComponent, digest.SHA256, v4alpha1.Algorithm)
+	if err != nil {
+		return nil, fmt.Errorf("error calculating digest for component reference %q: %w", reference.ToIdentity().String(), err)
+	}
+	ref := constructor.ConvertToDescriptorReference(reference)
+	ref.Digest = *referencedDigest
+
+	logger.Debug("reference processed successfully")
+	return ref, nil
 }
 
 // addColocatedResourceLocalBlob adds a local blob to the component version repository and defaults fields relevant
