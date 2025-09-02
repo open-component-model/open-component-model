@@ -1,46 +1,111 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: [
     'config:recommended',
     'config:best-practices',
-    'security:openssf-scorecard',
+    'docker:pinDigests',
+    'group:kubernetes',
+    'group:goOpenapi',
     'helpers:pinGitHubActionDigests',
+    'security:openssf-scorecard',
+    ':dependencyDashboard',
     ':rebaseStalePrs',
-    ':gitSignOff'
   ],
   'git-submodules': {
-    enabled: true
+    enabled: true,
   },
   env: {
-    GONOPROXY: "ocm.software/open-component-model",
-    GOPRIVATE: "ocm.software/open-component-model"
+    GONOPROXY: 'ocm.software/open-component-model',
+    GOPRIVATE: 'ocm.software/open-component-model',
   },
   packageRules: [
     {
-      "matchCategories": [
-        "golang"
+      matchManagers: [
+        'gomod',
+        'custom.regex',
       ],
-      "postUpdateOptions": [
-        "gomodTidy"
+      matchPackageNames: [
+        'sigs.k8s.io/controller-runtime',
+        'sigs.k8s.io/controller-tools',
+        'k8s.io/*',
+        'envtest',
       ],
-      "enabled": true
+      groupName: 'Kubernetes dependencies',
+      groupSlug: 'kubernetes-deps',
+    },
+    {
+      matchCategories: [
+        'golang',
+      ],
+      postUpdateOptions: [
+        'gomodTidy',
+      ],
+      enabled: true,
     },
     {
       matchManagers: [
-        'gomod'
+        'gomod',
+      ],
+      matchDepTypes: [
+        'indirect',
+      ],
+      matchUpdateTypes: [
+        'major',
+      ],
+      enabled: false,
+    },
+    {
+      matchManagers: [
+        'gomod',
       ],
       groupName: 'OCM Monorepo Go Module Dependencies',
       groupSlug: 'ocm-monorepo',
       matchPackageNames: [
-        'ocm.software/open-component-model/**'
-      ]
-    }
+        'ocm.software/open-component-model/**',
+      ],
+    },
   ],
-  "postUpgradeTasks": {
-    "commands": [
-      "command -v go >/dev/null 2>&1 || exit 0; find . -name \"go.mod\" -type f -path '*/integration/*' -exec dirname {} \\; | while read dir; do echo \"Running explicit go mod tidy for integration test in $dir\"; cd \"$dir\" && go mod tidy && cd - > /dev/null; done"
+  customDatasources: {
+    envtest: {
+      defaultRegistryUrlTemplate: 'https://raw.githubusercontent.com/kubernetes-sigs/controller-tools/master/envtest-releases.yaml',
+      format: 'yaml',
+      transformTemplates: [
+        '{ "releases": $map($distinct($keys($.releases)), function($v){ {"version": $replace($v, /^v/, "")} }) }',
+      ],
+    },
+  },
+  customManagers: [
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)\\.env(\\.local)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=custom.envtest depName=envtest\\s+ENVTEST_K8S_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
+      ],
+      datasourceTemplate: 'custom.envtest',
+      depNameTemplate: 'envtest',
+      versioningTemplate: 'semver',
+    },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)\\.env(\\.local)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
+      ],
+      versioningTemplate: 'semver',
+    },
+  ],
+  postUpgradeTasks: {
+    commands: [
+      'command -v go >/dev/null 2>&1 || exit 0; find . -name "go.mod" -type f -path \'*/integration/*\' -exec dirname {} \\; | while read dir; do echo "Running explicit go mod tidy for integration test in $dir"; cd "$dir" && go mod tidy && cd - > /dev/null; done',
     ],
-    "fileFilters": ["**/go.mod", "**/go.sum"],
-    "executionMode": "branch"
+    fileFilters: [
+      '**/go.mod',
+      '**/go.sum',
+    ],
+    executionMode: 'branch',
   },
 }

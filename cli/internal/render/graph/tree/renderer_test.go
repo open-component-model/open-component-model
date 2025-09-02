@@ -30,12 +30,12 @@ func TestRunRenderLoop(t *testing.T) {
 		}
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-
-		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
-		renderer := New[string](d, "A", WithVertexSerializerFunc(vertexSerializer))
+		renderer := New[string](ctx, d, WithVertexSerializerFunc(vertexSerializer))
 
 		refreshRate := 10 * time.Millisecond
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(refreshRate), render.WithRenderOptions(render.WithWriter(writer)))
+
+		r.NoError(d.AddVertex("A", map[string]any{syncdag.AttributeTraversalState: syncdag.StateDiscovering}))
 
 		// sleep to allow ticker based render loop to start
 		time.Sleep(refreshRate)
@@ -170,7 +170,7 @@ func TestRenderOnce(t *testing.T) {
 	logWriter := testLogWriter{t}
 	writer := io.MultiWriter(buf, logWriter)
 
-	renderer := New(d, "A")
+	renderer := New(ctx, d)
 
 	r.NoError(d.AddVertex("A"))
 	expected := `── A
@@ -182,7 +182,8 @@ func TestRenderOnce(t *testing.T) {
 
 	// Add B
 	r.NoError(d.AddVertex("B"))
-	expected = `── A
+	expected = `╭─ A
+╰─ B
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()

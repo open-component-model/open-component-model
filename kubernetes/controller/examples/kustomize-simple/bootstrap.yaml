@@ -1,0 +1,43 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: kustomize-simple-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: kustomize-simple-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/kustomize-simple
+  repositoryRef:
+    name: kustomize-simple-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: kustomize-simple-resource-rgd
+spec:
+  componentRef:
+    name: kustomize-simple-component
+  resource:
+    byReference:
+      resource:
+        name: kro-rgd
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: kustomize-simple-deployer
+spec:
+  resourceRef:
+    name: kustomize-simple-resource-rgd
+    namespace: default

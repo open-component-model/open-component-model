@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,16 +99,16 @@ COMPONENT                   │ VERSION │ PROVIDER
 			name: "YAML output",
 			args: []string{"get", "cv", path, "--output=yaml"},
 			expectedOutput: `
-component:
-  componentReferences: null
-  name: ocm.software/test-component
-  provider: ocm.software
-  repositoryContexts: null
-  resources: null
-  sources: null
-  version: 0.0.1
-meta:
-  schemaVersion: v2
+- component:
+    componentReferences: null
+    name: ocm.software/test-component
+    provider: ocm.software
+    repositoryContexts: null
+    resources: null
+    sources: null
+    version: 0.0.1
+  meta:
+    schemaVersion: v2
 `,
 			expectedError: false,
 		},
@@ -115,6 +116,18 @@ meta:
 			name:           "JSON output",
 			args:           []string{"get", "cv", path, "--output=json"},
 			expectedOutput: "", // JSON output is handled differently
+			expectedError:  false,
+		},
+		{
+			name:           "NDJSON output",
+			args:           []string{"get", "cv", path, "--output=ndjson"},
+			expectedOutput: "", // JSON output is handled differently
+			expectedError:  false,
+		},
+		{
+			name:           "tree output",
+			args:           []string{"get", "cv", path, "--output=tree"},
+			expectedOutput: "── ocm.software/test-component:0.0.1",
 			expectedError:  false,
 		},
 		{
@@ -135,7 +148,8 @@ meta:
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 			logs := test.NewJSONLogReader()
-			_, err = test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(logs))
+			result := new(bytes.Buffer)
+			_, err = test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(result), test.WithErrorOutput(logs))
 
 			if tt.expectedError {
 				r.Error(err, "expected error but got none")
@@ -143,12 +157,14 @@ meta:
 			}
 
 			r.NoError(err, "failed to run command")
-			entries, err := logs.List()
-			r.NoError(err, "failed to list log entries")
 
-			if tt.args[len(tt.args)-1] == "--output=json" {
+			if tt.args[len(tt.args)-1] == "--output=json" || tt.args[len(tt.args)-1] == "--output=ndjson" {
 				// Handle JSON output separately
-				r.EqualValues(map[string]any{
+				var resultJSON any
+				decoder := json.NewDecoder(result)
+				r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+
+				component := map[string]any{
 					"component": map[string]any{
 						"componentReferences": nil,
 						"name":                "ocm.software/test-component",
@@ -161,12 +177,255 @@ meta:
 					"meta": map[string]any{
 						"schemaVersion": "v2",
 					},
-				}, entries[len(entries)-1].Extras)
-			} else {
-				discarded := logs.GetDiscarded()
-				r.NotEmpty(discarded, "expected non json logs to contain output")
-				r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(discarded), "expected output")
+				}
+
+				switch {
+				case slices.Contains(tt.args, "--output=json"):
+					r.EqualValues([]any{component}, resultJSON)
+				case slices.Contains(tt.args, "--output=ndjson"):
+					r.EqualValues(component, resultJSON)
+				}
 			}
+
+			logEntries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(logEntries, "expected log entries to be present")
+
+			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+		})
+	}
+}
+
+// Test_Get_Component_Version_Formats_Recursive tests the different output formats for the get cv command
+func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
+	// Setup test repository
+	leafa := createTestDescriptor("ocm.software/leaf-a", "0.0.1")
+	leafb := createTestDescriptor("ocm.software/leaf-b", "0.0.1")
+	root := createTestDescriptor("ocm.software/root", "0.0.1")
+	root.Component.References = []descriptor.Reference{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "leaf-a",
+					Version: leafa.Component.Version,
+				},
+			},
+			Component: leafa.Component.Name,
+		},
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "leaf-b",
+					Version: leafb.Component.Version,
+				},
+			},
+			Component: leafb.Component.Name,
+		},
+	}
+
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, root, leafa, leafb)
+	require.NoError(t, err)
+
+	ref := compref.Ref{
+		Repository: &ctfv1.Repository{
+			Path: archivePath,
+		},
+		Component: root.Component.Name,
+		Version:   root.Component.Version,
+	}
+	path := ref.String()
+
+	tests := []struct {
+		name           string
+		args           []string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "Default Options (Table)",
+			args: []string{"get", "cv", path, "--recursive=-1"},
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root   │ 0.0.1   │ ocm.software 
+ ocm.software/leaf-a │ 0.0.1   │              
+ ocm.software/leaf-b │ 0.0.1   │
+`,
+			expectedError: false,
+		},
+		{
+			name: "YAML output",
+			args: []string{"get", "cv", path, "--output=yaml", "--recursive=-1"},
+			expectedOutput: `
+- component:
+    componentReferences:
+    - componentName: ocm.software/leaf-a
+      digest:
+        hashAlgorithm: ""
+        normalisationAlgorithm: ""
+        value: ""
+      name: leaf-a
+      version: 0.0.1
+    - componentName: ocm.software/leaf-b
+      digest:
+        hashAlgorithm: ""
+        normalisationAlgorithm: ""
+        value: ""
+      name: leaf-b
+      version: 0.0.1
+    name: ocm.software/root
+    provider: ocm.software
+    repositoryContexts: null
+    resources: null
+    sources: null
+    version: 0.0.1
+  meta:
+    schemaVersion: v2
+- component:
+    componentReferences: null
+    name: ocm.software/leaf-a
+    provider: ocm.software
+    repositoryContexts: null
+    resources: null
+    sources: null
+    version: 0.0.1
+  meta:
+    schemaVersion: v2
+- component:
+    componentReferences: null
+    name: ocm.software/leaf-b
+    provider: ocm.software
+    repositoryContexts: null
+    resources: null
+    sources: null
+    version: 0.0.1
+  meta:
+    schemaVersion: v2
+`,
+			expectedError: false,
+		},
+		{
+			name:           "JSON output",
+			args:           []string{"get", "cv", path, "--output=json", "--recursive=-1"},
+			expectedOutput: "", // JSON output is handled differently
+			expectedError:  false,
+		},
+		{
+			name:           "NDJSON output",
+			args:           []string{"get", "cv", path, "--output=ndjson", "--recursive=-1"},
+			expectedOutput: "", // JSON output is handled differently
+			expectedError:  false,
+		},
+		{
+			name: "tree output",
+			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
+			expectedOutput: `── ocm.software/root:0.0.1
+   ├─ ocm.software/leaf-a:0.0.1
+   ╰─ ocm.software/leaf-b:0.0.1`,
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err = test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(result), test.WithErrorOutput(logs))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+			r.NoError(err, "failed to run command")
+
+			if slices.Contains(tt.args, "--output=json") || slices.Contains(tt.args, "--output=ndjson") {
+				// Handle JSON output separately
+				expectedRoot := map[string]any{
+					"component": map[string]any{
+						"componentReferences": []any{
+							map[string]any{
+								"name":          "leaf-a",
+								"version":       "0.0.1",
+								"componentName": "ocm.software/leaf-a",
+								"digest": map[string]any{
+									"hashAlgorithm":          "",
+									"normalisationAlgorithm": "",
+									"value":                  "",
+								},
+							},
+							map[string]any{
+								"name":          "leaf-b",
+								"version":       "0.0.1",
+								"componentName": "ocm.software/leaf-b",
+								"digest": map[string]any{
+									"hashAlgorithm":          "",
+									"normalisationAlgorithm": "",
+									"value":                  "",
+								},
+							},
+						},
+						"name":               "ocm.software/root",
+						"provider":           "ocm.software",
+						"repositoryContexts": nil,
+						"resources":          nil,
+						"sources":            nil,
+						"version":            "0.0.1",
+					},
+					"meta": map[string]any{
+						"schemaVersion": "v2",
+					},
+				}
+				expectedLeafA := map[string]any{
+					"component": map[string]any{
+						"componentReferences": nil,
+						"name":                "ocm.software/leaf-a",
+						"provider":            "ocm.software",
+						"repositoryContexts":  nil,
+						"resources":           nil,
+						"sources":             nil,
+						"version":             "0.0.1",
+					},
+					"meta": map[string]any{
+						"schemaVersion": "v2",
+					},
+				}
+				expectedLeafB := map[string]any{
+					"component": map[string]any{
+						"componentReferences": nil,
+						"name":                "ocm.software/leaf-b",
+						"provider":            "ocm.software",
+						"repositoryContexts":  nil,
+						"resources":           nil,
+						"sources":             nil,
+						"version":             "0.0.1",
+					},
+					"meta": map[string]any{
+						"schemaVersion": "v2",
+					},
+				}
+
+				var resultJSON any
+				decoder := json.NewDecoder(result)
+				switch {
+				case slices.Contains(tt.args, "--output=json"):
+					r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+					r.EqualValues([]any{expectedRoot, expectedLeafA, expectedLeafB}, resultJSON)
+				case slices.Contains(tt.args, "--output=ndjson"):
+					r.NoError(decoder.Decode(&resultJSON))
+					r.EqualValues(expectedRoot, resultJSON)
+					r.NoError(decoder.Decode(&resultJSON))
+					r.EqualValues(expectedLeafA, resultJSON)
+					r.NoError(decoder.Decode(&resultJSON))
+					r.EqualValues(expectedLeafB, resultJSON)
+				}
+			}
+
+			logEntries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(logEntries, "expected log entries to be present")
+
+			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
 		})
 	}
 }
@@ -243,7 +502,8 @@ COMPONENT                   │ VERSION │ PROVIDER
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 			logs := test.NewJSONLogReader()
-			_, err = test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(logs))
+			result := new(bytes.Buffer)
+			_, err = test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(result), test.WithErrorOutput(logs))
 
 			if tt.expectedError {
 				r.Error(err, "expected error but got none")
@@ -251,12 +511,141 @@ COMPONENT                   │ VERSION │ PROVIDER
 			}
 
 			r.NoError(err, "failed to run command")
-			_, err := logs.List()
-			r.NoError(err, "failed to list log entries")
 
-			discarded := logs.GetDiscarded()
-			r.NotEmpty(discarded, "expected non json logs to contain table")
-			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(discarded), "expected table output")
+			logEntries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(logEntries, "expected log entries to be present")
+
+			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
+		})
+	}
+}
+
+// Test_List_Component_Version_Variations tests different variations of listing component versions
+func Test_List_Component_Version_Variations_Recursive(t *testing.T) {
+	// Setup test repository
+	leafa := createTestDescriptor("ocm.software/leaf-a", "0.0.1")
+	leafb := createTestDescriptor("ocm.software/leaf-b", "0.0.1")
+	desc1 := createTestDescriptor("ocm.software/root", "0.0.1")
+	desc2 := createTestDescriptor("ocm.software/root", "0.0.2")
+
+	desc1.Component.References = []descriptor.Reference{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "leaf-a",
+					Version: leafa.Component.Version,
+				},
+			},
+			Component: leafa.Component.Name,
+		},
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "leaf-b",
+					Version: leafb.Component.Version,
+				},
+			},
+			Component: leafb.Component.Name,
+		},
+	}
+	desc2.Component.References = []descriptor.Reference{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "leaf-a",
+					Version: leafa.Component.Version,
+				},
+			},
+			Component: leafa.Component.Name,
+		},
+	}
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, desc1, desc2, leafa, leafb)
+	require.NoError(t, err)
+
+	ref := compref.Ref{
+		Repository: &ctfv1.Repository{
+			Path: archivePath,
+		},
+		Component: desc1.Component.Name,
+	}
+
+	path := ref.String()
+
+	tests := []struct {
+		name           string
+		args           []string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "Default Options (Table) - all versions",
+			args: []string{"get", "cv", path, "--recursive=-1"},
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root   │ 0.0.2   │ ocm.software 
+ ocm.software/leaf-a │ 0.0.1   │              
+ ocm.software/root   │ 0.0.1   │              
+ ocm.software/leaf-a │ 0.0.1   │              
+ ocm.software/leaf-b │ 0.0.1   │
+`,
+			expectedError: false,
+		},
+		{
+			name: "tree output - all versions",
+			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
+			expectedOutput: `╭─ ocm.software/root:0.0.2
+│  ╰─ ocm.software/leaf-a:0.0.1
+╰─ ocm.software/root:0.0.1
+   ├─ ocm.software/leaf-a:0.0.1
+   ╰─ ocm.software/leaf-b:0.0.1`,
+			expectedError: false,
+		},
+		{
+			name: "Latest version only",
+			args: []string{"get", "cv", path, "--latest", "--recursive=-1"},
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root   │ 0.0.2   │ ocm.software 
+ ocm.software/leaf-a │ 0.0.1   │
+`,
+			expectedError: false,
+		},
+		{
+			name: "Semver constraint",
+			args: []string{"get", "cv", path, "--semver-constraint", "< 0.0.2", "--recursive=-1"},
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root   │ 0.0.1   │ ocm.software 
+ ocm.software/leaf-a │ 0.0.1   │              
+ ocm.software/leaf-b │ 0.0.1   │
+`,
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err = test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(result), test.WithErrorOutput(logs))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+
+			r.NoError(err, "failed to run command")
+
+			logEntries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(logEntries, "expected log entries to be present")
+
+			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
 		})
 	}
 }
@@ -292,7 +681,7 @@ resources:
 		_, err := test.OCM(t, test.WithArgs("add", "cv",
 			"--constructor", constructorYAMLFilePath,
 			"--repository", archiveFilePath,
-		), test.WithOutput(logs))
+		), test.WithErrorOutput(logs))
 
 		r.NoError(err, "could not construct component version")
 
@@ -312,7 +701,7 @@ resources:
 				})
 			}
 		}
-		r.Empty(expected, "expected logs should all have been matched matched within the CLI realm")
+		r.Empty(expected, "expected logs should all have been matched within the CLI realm")
 
 		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
 		r.NoError(err, "could not create test filesystem")
@@ -341,7 +730,7 @@ resources:
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
-			), test.WithOutput(logs))
+			), test.WithErrorOutput(logs))
 
 			r.Error(err, "expected error on adding existing component version")
 			r.Contains(err.Error(), "already exists in target repository", "expected error message about existing component version")
@@ -390,7 +779,7 @@ resources:
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
 				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
-			), test.WithOutput(logs))
+			), test.WithErrorOutput(logs))
 
 			r.NoError(err, "could not construct component version", "replace strategy should allow an existing component version to be replaced")
 
@@ -435,7 +824,7 @@ resources:
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
 				"--working-directory", workingDir,
-			), test.WithOutput(logs))
+			), test.WithErrorOutput(logs))
 
 			r.Error(err, "expected error on adding component version with working directory")
 		})
@@ -465,7 +854,7 @@ resources:
 				"--repository", archiveFilePath,
 				"--working-directory", tmp,
 				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
-			), test.WithOutput(logs))
+			), test.WithErrorOutput(logs))
 
 			r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
 

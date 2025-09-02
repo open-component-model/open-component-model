@@ -31,22 +31,24 @@ ocm download resource [flags]
 
 ```
  # Download a resource with identity 'name=example' and write to default output
-  ocm resource ghcr.io/org/component:v1 --identity name=example
+  ocm download resource ghcr.io/org/component:v1 --identity name=example
 
   # Download a resource and specify an output file
-  ocm resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer
 ```
 
 ### Options
 
 ```
-  -h, --help                 help for resource
-      --identity string      resource identity to download
-      --output string        output location to download to. If no transformer is specified, and no format was discovered that can be written to a directory, the resource will be written to a file.
-      --transformer string   transformer to use for the output. If not specified, the resource will be written as is. 
+      --extraction-policy enum   policy to apply when extracting a resource. If set to 'disable', the resource will not be extracted, even if they could be. If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.
+                                 (must be one of [auto disable]) (default auto)
+  -h, --help                     help for resource
+      --identity string          resource identity to download
+      --output string            output location to download to. If no transformer is specified, and no format was discovered that can be written to a directory, the resource will be written to a file.
+      --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 
 ### Options inherited from parent commands

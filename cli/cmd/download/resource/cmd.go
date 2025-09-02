@@ -3,24 +3,43 @@ package resource
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"maps"
 	"mime"
+	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
+	"github.com/nlepage/go-tarfs"
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
+	"ocm.software/open-component-model/cli/internal/transformers"
 )
 
 const (
 	FlagResourceIdentity = "identity"
 	FlagOutput           = "output"
 	FlagTransformer      = "transformer"
+	FlagExtractionPolicy = "extraction-policy"
+)
+
+const (
+	// ExtractionPolicyAuto is a policy that automatically extracts a resource if it is a recognized archive format.
+	// If the resource is not recognized as an archive format, it is downloaded as is.
+	ExtractionPolicyAuto = "auto"
+	// ExtractionPolicyDisable is a policy that disables extraction of a resource.
+	// The resource will not be extracted, even if it is a recognized archive format.
+	ExtractionPolicyDisable = "disable"
 )
 
 func New() *cobra.Command {
@@ -39,13 +58,13 @@ the appropriate file extension will be added to the output file name if no outpu
 
 Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.`,
 		Example: ` # Download a resource with identity 'name=example' and write to default output
-  ocm resource ghcr.io/org/component:v1 --identity name=example
+  ocm download resource ghcr.io/org/component:v1 --identity name=example
 
   # Download a resource and specify an output file
-  ocm resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --output ./my-resource.tar.gz
 
   # Download a resource and apply a transformer
-  ocm resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
+  ocm download resource ghcr.io/org/component:v1 --identity name=example --transformer my-transformer`,
 		RunE:              DownloadResource,
 		DisableAutoGenTag: true,
 	}
@@ -54,6 +73,10 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 	cmd.Flags().String(FlagOutput, "", "output location to download to. If no transformer is specified, and no "+
 		"format was discovered that can be written to a directory, the resource will be written to a file.")
 	cmd.Flags().String(FlagTransformer, "", "transformer to use for the output. If not specified, the resource will be written as is. ")
+	enum.Var(cmd.Flags(), FlagExtractionPolicy, []string{ExtractionPolicyAuto, ExtractionPolicyDisable},
+		"policy to apply when extracting a resource. "+
+			"If set to 'disable', the resource will not be extracted, even if they could be. "+
+			"If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.")
 
 	return cmd
 }
@@ -81,6 +104,11 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	output, err := cmd.Flags().GetString(FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
+	}
+
+	extractionPolicy, err := enum.Get(cmd.Flags(), FlagExtractionPolicy)
+	if err != nil {
+		return fmt.Errorf("getting extraction policy flag failed: %w", err)
 	}
 
 	transformer, err := cmd.Flags().GetString(FlagTransformer)
@@ -123,24 +151,89 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}
 
-	finalOutput, err := processResourceOutput(output, res, data, requestedIdentity.String(), logger)
+	finalOutputPath, err := processResourceOutput(output, res, data, requestedIdentity.String(), logger)
 	if err != nil {
 		return err
 	}
 
-	if transformer == "" {
-		if err := shared.SaveBlobToFile(data, finalOutput); err != nil {
-			return err
+	if transformer != "" {
+		availableTransformers := transformers.Transformers()
+		transformerConfig, ok := availableTransformers[transformer]
+		if !ok {
+			return fmt.Errorf("transformer %q not found, available transformers: %v", transformer, slices.Collect(maps.Keys(availableTransformers)))
 		}
-		logger.Info("resource downloaded successfully", slog.String("output", finalOutput))
-		return nil
+
+		plugin, err := pluginManager.BlobTransformerRegistry.GetPlugin(cmd.Context(), transformerConfig)
+		if err != nil {
+			return fmt.Errorf("getting transformer plugin registered with config under %q failed: %w", transformer, err)
+		}
+
+		logger.Info("transforming resource...")
+		if data, err = plugin.TransformBlob(cmd.Context(), data, transformerConfig, nil); err != nil {
+			return fmt.Errorf("transforming resource failed: %w", err)
+		}
+		logger.Info("resource transformed successfully")
 	}
 
-	// TODO(jakobmoellerdev): now lookup a transformer based on the transformer config
-	//  then use the transformer config to look for a transformer plugin
-	//  then call the transformer plugin to transform the res
-	//  write the transformed res to the output location
-	return fmt.Errorf("download based on transformer %q is not implemented", transformer)
+	logger.Info("resource downloaded successfully", slog.String("output", finalOutputPath))
+
+	switch extractionPolicy {
+	case ExtractionPolicyAuto:
+		extractedFS, err := extractFSFromBlob(data)
+		if errors.Is(err, ErrCannotExtractFS) {
+			return shared.SaveBlobToFile(data, finalOutputPath)
+		}
+		if err != nil {
+			return err
+		}
+		return os.CopyFS(finalOutputPath, extractedFS)
+	case ExtractionPolicyDisable:
+		fallthrough
+	default:
+		return shared.SaveBlobToFile(data, finalOutputPath)
+	}
+}
+
+var ErrCannotExtractFS = errors.New("cannot extract resource as filesystem")
+
+func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
+	decompressedOrOriginal, err := compression.Decompress(b)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decompress resource: %w", err)
+	}
+	mediaTypeAware, ok := decompressedOrOriginal.(blob.MediaTypeAware)
+	if !ok {
+		// if were not media type aware, its unsafe to try to extract it, avoid
+		return nil, ErrCannotExtractFS
+	}
+
+	mediaType, ok := mediaTypeAware.MediaType()
+	if !ok {
+		return nil, ErrCannotExtractFS
+	}
+
+	// TODO(jakobmoellerdev): once we add more compression algorithms, use blob media type for discovery.
+	//  For now we just support tar.
+	switch {
+	case isTar(mediaType):
+		data, err := decompressedOrOriginal.ReadCloser()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read resource: %w", err)
+		}
+		defer func() {
+			err = errors.Join(err, data.Close())
+		}()
+
+		return tarfs.New(data)
+	default:
+		return nil, ErrCannotExtractFS
+	}
+}
+
+func isTar(mediaType string) bool {
+	return slices.Contains([]string{
+		"application/tar", "application/x-tar",
+	}, mediaType) || strings.HasSuffix(mediaType, "+tar")
 }
 
 func processResourceOutput(output string, resource *descriptor.Resource, data blob.ReadOnlyBlob, identity string, logger *slog.Logger) (string, error) {

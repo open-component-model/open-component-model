@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,7 +50,9 @@ func TestPluginManager(t *testing.T) {
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
 		// make sure it's not there but during a proper shutdown now this is removed by the plugin
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 
 	proto, err := scheme.NewObject(typ)
@@ -113,22 +117,28 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		// make sure it's not there but during a proper shutdown now this is removed by the plugin
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 	proto, err := scheme.NewObject(typ)
 	require.NoError(t, err)
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
+	_, err = pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
 	require.NoError(t, err)
-	require.NoError(t, pm.Shutdown(ctx))
+
 	// we need some time for the logs to be streamed back
 	require.Eventually(t, func() bool {
-		_, err := plugin.GetComponentVersionRepository(context.Background(), proto, nil)
-		return err == nil
+		content := writer.String()
+		return len(content) > 0 && strings.Contains(content, "maximumNumberOfPotatoes=100")
 	}, 1*time.Second, 100*time.Millisecond)
 
-	content, err := io.ReadAll(writer)
-	require.NoError(t, err)
-	require.Contains(t, string(content), `maximumNumberOfPotatoes=100`)
+	require.NoError(t, pm.Shutdown(ctx))
+
+	// we need some time for the logs to be streamed back
+	require.Eventually(t, func() bool {
+		content := writer.String()
+		return strings.Contains(content, `maximumNumberOfPotatoes=100`)
+	}, 1*time.Second, 100*time.Millisecond)
 }
 
 func TestConfigurationPassedToPluginNotFound(t *testing.T) {
@@ -170,7 +180,10 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
-		require.NoError(t, os.Remove("/tmp/test-plugin-component-version-plugin.socket"))
+		// normally, this shouldn't exist because shutdown deletes now properly, but sometimes this deletes it earlier.
+		if err := os.Remove("/tmp/test-plugin-component-version-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 
 	proto := &dummyv1.Repository{
@@ -222,7 +235,9 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 
 	// start the plugin
@@ -273,7 +288,9 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
-		_ = os.Remove("/tmp/test-plugin-plugin.socket")
+		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
+		}
 	})
 
 	// start the plugin
@@ -300,9 +317,14 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 		return err == nil
 	}, 1*time.Second, 100*time.Millisecond)
 
-	content, err := io.ReadAll(writer)
-	require.NoError(t, err)
-	require.Contains(t, string(content), "gracefully shutting down plugin")
+	// we need some time for the logs to be streamed back
+	require.Eventually(t, func() bool {
+		content, err := io.ReadAll(writer)
+		if err != nil {
+			return false
+		}
+		return strings.Contains(string(content), "gracefully shutting down plugin")
+	}, 1*time.Second, 100*time.Millisecond)
 }
 
 func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {

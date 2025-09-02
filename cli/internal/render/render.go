@@ -14,6 +14,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	// StaticRenderMode corresponds to a one-time call to RenderOnce.
+	StaticRenderMode = "static"
+	// LiveRenderMode corresponds to RunRenderLoop.
+	LiveRenderMode = "live"
+)
+
 // Renderer defines an interface for rendering arbitrary data structures.
 type Renderer interface {
 	Render(ctx context.Context, writer io.Writer) error
@@ -53,6 +60,11 @@ func RenderOnce(ctx context.Context, renderer Renderer, opts ...RenderOption) er
 // occurs.
 // If no writer is provided, it defaults to os.Stdout.
 // If no refresh rate is provided, it defaults to DefaultRefreshRate.
+// TODO(fabianburth): Implement render loop in a TUI. Currently, the feature
+// is experimental, as the ASCI control sequences used to reset the output
+// only work as long as the output fits into the terminal window (you may
+// scroll very far out though ;) ).
+// https://github.com/open-component-model/ocm-project/issues/608
 func RunRenderLoop(ctx context.Context, renderer Renderer, opts ...RenderLoopOption) func() error {
 	options := &RenderLoopOptions{}
 
@@ -117,6 +129,9 @@ func renderLoop(ctx context.Context, renderer Renderer, renderState *renderLoopS
 	for {
 		select {
 		case <-ctx.Done():
+			if err := refreshOutput(context.Background(), renderer, renderState); err != nil {
+				return err
+			}
 			return ctx.Err()
 		case <-ticker.C:
 			if err := refreshOutput(ctx, renderer, renderState); err != nil {
@@ -139,7 +154,6 @@ func refreshOutput(ctx context.Context, renderer Renderer, renderState *renderLo
 		if _, err := fmt.Fprint(renderState.writer, EraseNLines(renderState.outputState.displayedLines)); err != nil {
 			return fmt.Errorf("error clearing previous output: %w", err)
 		}
-
 		if _, err := fmt.Fprint(renderState.writer, output); err != nil {
 			return fmt.Errorf("error writing live rendering output to tree display manager writer: %w", err)
 		}

@@ -6,11 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-
-	"sigs.k8s.io/yaml"
+	"log/slog"
+	"slices"
 
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/render/graph"
 )
 
@@ -33,178 +32,142 @@ import (
 //	   ╰─ D
 //
 // Each letter corresponds to a vertex in the DirectedAcyclicGraph. The concrete
-// representation of the vertex is defined by the VertexMarshaller.
+// representation of the vertex is defined by the ListSerializer.
 type Renderer[T cmp.Ordered] struct {
-	// The objects is a slice of objects that will be rendered.
-	objects []any
-	// The VertexMarshaller converts a vertex to an object that is added to objects.
+	// The vertices is a slice of vertices that will be rendered.
+	vertices []*syncdag.Vertex[T]
+	// The ListSerializer converts a vertex to an object that is added to vertices.
 	// The returned object is expected to be a serializable type (e.g., a struct
-	// or map). The VertexMarshaller MUST perform READ-ONLY access to the vertex and its
+	// or map). The ListSerializer MUST perform READ-ONLY access to the vertex and its
 	// attributes.
-	vertexMarshaller VertexMarshaller[T]
-	// The outputFormat specifies the format in which the output should be
-	// rendered.
-	outputFormat render.OutputFormat
-	// The root ID of the tree to render.
-	// The root ID is part of the Renderer instead of being passed to the
+	listSerializer ListSerializer[T]
+	// The roots of the tree to render.
+	// The order of the roots determines the order of the root nodes in the
+	// rendered output.
+	// The roots are part of the Renderer instead of being passed to the
 	// Render method to keep renderer.Renderer decoupled of specific data
 	// structures.
-	root T
+	// The roots are optional. If not provided, the Renderer will
+	// dynamically determine the roots from the DirectedAcyclicGraph.
+	roots []T
 	// The dag from which the tree is rendered.
 	dag *syncdag.DirectedAcyclicGraph[T]
 }
 
-// VertexMarshaller is an interface that defines a method to create a
+// ListSerializer is an interface that defines a method to create a
 // serializable object from a vertex.
-type VertexMarshaller[T cmp.Ordered] interface {
-	Marshal(*syncdag.Vertex[T]) (any, error)
+type ListSerializer[T cmp.Ordered] interface {
+	Serialize(writer io.Writer, vertices []*syncdag.Vertex[T]) error
 }
 
-// VertexMarshallerFunc is a function type that implements the VertexMarshaller
+// ListSerializerFunc is a function type that implements the ListSerializer
 // interface.
-type VertexMarshallerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) (any, error)
+type ListSerializerFunc[T cmp.Ordered] func(writer io.Writer, vertices []*syncdag.Vertex[T]) error
 
-// Marshal implements the VertexMarshaller interface for VertexMarshallerFunc.
-func (f VertexMarshallerFunc[T]) Marshal(v *syncdag.Vertex[T]) (any, error) {
-	return f(v)
+// Serialize implements the ListSerializer interface for ListSerializerFunc.
+func (f ListSerializerFunc[T]) Serialize(writer io.Writer, vertices []*syncdag.Vertex[T]) error {
+	return f(writer, vertices)
 }
 
 // New creates a new Renderer for the given DirectedAcyclicGraph.
-func New[T cmp.Ordered](dag *syncdag.DirectedAcyclicGraph[T], root T, opts ...RendererOption[T]) *Renderer[T] {
+func New[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], opts ...RendererOption[T]) *Renderer[T] {
 	options := &RendererOptions[T]{}
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	if options.VertexMarshaller == nil {
-		options.VertexMarshaller = VertexMarshallerFunc[T](func(v *syncdag.Vertex[T]) (any, error) {
+	if options.ListSerializer == nil {
+		options.ListSerializer = ListSerializerFunc[T](func(writer io.Writer, vertices []*syncdag.Vertex[T]) error {
 			// Default marshaller just returns the vertex ID.
 			// This is supposed to be overridden by the user to provide a
 			// meaningful representation.
-			return fmt.Sprintf("%v", v.ID), nil
+			var list []string
+			for _, vertex := range vertices {
+				list = append(list, fmt.Sprintf("%v", vertex.ID))
+			}
+			data, err := json.MarshalIndent(list, "", "  ")
+			if err != nil {
+				return fmt.Errorf("encoding vertices as JSON failed: %w", err)
+			}
+			data = append(data, '\n') // RunRenderLoop expects a newline at the end of the output.
+			if _, err = writer.Write(data); err != nil {
+				return err
+			}
+			return nil
 		})
 	}
 
-	if options.OutputFormat == 0 {
-		options.OutputFormat = render.OutputFormatJSON
+	if len(options.Roots) == 0 {
+		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from dag")
 	}
 
 	return &Renderer[T]{
-		objects:          make([]any, 0),
-		outputFormat:     options.OutputFormat,
-		vertexMarshaller: options.VertexMarshaller,
-		root:             root,
-		dag:              dag,
+		vertices:       make([]*syncdag.Vertex[T], 0),
+		listSerializer: options.ListSerializer,
+		roots:          options.Roots,
+		dag:            dag,
 	}
 }
 
 // Render renders the tree structure starting from the root ID.
 // It writes the output to the provided writer.
-func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
+func (r *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	defer func() {
-		t.objects = t.objects[:0]
+		r.vertices = r.vertices[:0]
 	}()
-	var zero T
-	if t.root == zero {
-		return fmt.Errorf("root ID is not set")
+
+	roots := r.roots
+	if len(roots) == 0 {
+		roots = r.dag.Roots()
+		// We only do this for auto-detected roots. If the roots are provided,
+		// we want to preserve the order.
+		slices.Sort(roots)
+	} else {
+		for index, root := range roots {
+			if _, exists := r.dag.GetVertex(root); !exists {
+				// If root does not exist in the dag yet, we exclude it from the
+				// current rendering run.
+				// The root might be added to the graph, after the rendering
+				// has started, so we do not want to fail the rendering.
+				roots = append(roots[:index], roots[index+1:]...)
+			}
+		}
 	}
 
-	_, exists := t.dag.GetVertex(t.root)
-	if !exists {
-		return fmt.Errorf("vertex for rootID %v does not exist", t.root)
+	for _, root := range roots {
+		if err := r.traverseGraph(ctx, root); err != nil {
+			return fmt.Errorf("failed to traverse graph: %w", err)
+		}
 	}
-
-	if err := t.traverseGraph(ctx, t.root); err != nil {
-		return fmt.Errorf("failed to traverse graph: %w", err)
-	}
-	if err := t.renderObjects(writer); err != nil {
+	if err := r.renderObjects(writer); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
-	vertex, ok := t.dag.GetVertex(nodeId)
+func (r *Renderer[T]) traverseGraph(ctx context.Context, nodeId T) error {
+	vertex, ok := r.dag.GetVertex(nodeId)
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
 	}
-	object, err := t.vertexMarshaller.Marshal(vertex)
-	if err != nil {
-		return fmt.Errorf("failed to marshal vertex %v: %w", nodeId, err)
-	}
-	t.objects = append(t.objects, object)
+	r.vertices = append(r.vertices, vertex)
 
 	// Get children and sort them for stable output
 	children := graph.GetNeighborsSorted(ctx, vertex)
 
 	for _, child := range children {
-		if err := t.traverseGraph(ctx, child); err != nil {
+		if err := r.traverseGraph(ctx, child); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// renderObjects renders the objects based on the specified output format.
-func (t *Renderer[T]) renderObjects(writer io.Writer) error {
-	var (
-		err  error
-		data []byte
-	)
-	switch t.outputFormat {
-	case render.OutputFormatJSON:
-		err = t.encodeObjectsAsJSON(writer)
-	case render.OutputFormatYAML:
-		err = t.encodeObjectsAsYAML(writer)
-	case render.OutputFormatNDJSON:
-		err = t.encodeObjectsAsNDJSON(writer)
-	default:
-		err = fmt.Errorf("unknown output format: %s", t.outputFormat.String())
-	}
-	if err != nil {
-		return fmt.Errorf("failed to encode objects: %w", err)
-	}
-	if _, err := writer.Write(data); err != nil {
-		return fmt.Errorf("failed to write encoded objects to writer: %w", err)
-	}
-	return err
-}
-
-func (t *Renderer[T]) encodeObjectsAsJSON(writer io.Writer) error {
-	data, err := json.MarshalIndent(t.objects, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encoding multiple objects as JSON failed: %w", err)
-	}
-
-	// RunRenderLoop expects a newline at the end of the output.
-	// Other formats - such as yaml - automatically add a newline at the end.
-	data = append(data, '\n')
-
-	if _, err = writer.Write(data); err != nil {
-		return fmt.Errorf("failed to write JSON encoded objects to writer: %w", err)
-	}
-	return nil
-}
-
-func (t *Renderer[T]) encodeObjectsAsYAML(writer io.Writer) error {
-	data, err := yaml.Marshal(t.objects)
-	if err != nil {
-		return fmt.Errorf("encoding objects as YAML failed: %w", err)
-	}
-	if _, err = writer.Write(data); err != nil {
-		return fmt.Errorf("failed to write YAML encoded objects to writer: %w", err)
-	}
-
-	return nil
-}
-
-func (t *Renderer[T]) encodeObjectsAsNDJSON(writer io.Writer) error {
-	encoder := json.NewEncoder(writer)
-	for _, obj := range t.objects {
-		if err := encoder.Encode(obj); err != nil {
-			return fmt.Errorf("encoding component version descriptor failed: %w", err)
-		}
+// renderObjects renders the vertices based on the specified output format.
+func (r *Renderer[T]) renderObjects(writer io.Writer) error {
+	if err := r.listSerializer.Serialize(writer, r.vertices); err != nil {
+		return fmt.Errorf("failed to encode vertices: %w", err)
 	}
 	return nil
 }

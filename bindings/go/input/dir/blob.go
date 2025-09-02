@@ -74,7 +74,7 @@ func packDirToTar(ctx context.Context, path string, opt *v1.Dir) (io.Reader, err
 
 	// Determine the base directory for relative paths in the tar archive.
 	baseDir := path
-	subDir := ""
+	subDir := "."
 	if opt.PreserveDir {
 		// PreserveDir defines that the directory specified in the path field should be included in the blob.
 		baseDir = filepath.Dir(path)

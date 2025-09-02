@@ -1,6 +1,9 @@
 package render
 
-import "strings"
+import (
+	"log/slog"
+	"strings"
+)
 
 const (
 	// The CursorUp ANSI escape code is not supported on all terminals.
@@ -21,5 +24,6 @@ func EraseNLines(n int) string {
 	for range n {
 		b.WriteString(CursorUp + EraseLine)
 	}
+	slog.Debug("erasing lines", slog.Int("count", n))
 	return b.String()
 }

@@ -1,0 +1,27 @@
+# permissions for end users to edit replications.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: ocm-k8s-toolkit
+    app.kubernetes.io/managed-by: kustomize
+  name: replication-editor-role
+rules:
+- apiGroups:
+  - delivery.ocm.software
+  resources:
+  - replications
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - delivery.ocm.software
+  resources:
+  - replications/status
+  verbs:
+  - get

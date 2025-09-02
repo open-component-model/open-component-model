@@ -1,0 +1,27 @@
+components:
+  - name: ocm.software/ocm-k8s-toolkit/examples/kustomize-configuration-localization
+    version: "1.0.0"
+    provider:
+      name: ocm.software
+    resources:
+      - name: kustomize-resource
+        type: kustomization
+        version: "1.0.0"
+        access:
+          type: gitHub
+          # TODO: Replace this with our own kustomization (Problem: Chicken-Egg problem for testing as the commit is
+          #       required).
+          repoUrl: https://github.com/stefanprodan/podinfo
+          commit: cdd09cdd3daacc3082d5a78062ac493806f7abd0
+      - name: image-resource
+        type: ociArtifact
+        version: "1.0.0"
+        access:
+          type: ociArtifact
+          imageReference: "ghcr.io/stefanprodan/podinfo:6.9.1@sha256:262578cde928d5c9eba3bce079976444f624c13ed0afb741d90d5423877496cb"
+      - name: kro-rgd
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./rgd.yaml

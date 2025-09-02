@@ -1,0 +1,14 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  namespace: default
+  name: ocm-repo
+spec:
+  repositorySpec:
+    baseUrl: ghcr.io/open-component-model
+    type: OCIRegistry
+  ocmConfig:
+    - kind: Secret
+      name: secret
+  interval: 10m
+  suspend: false

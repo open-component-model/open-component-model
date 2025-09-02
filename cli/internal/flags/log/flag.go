@@ -111,7 +111,7 @@ func GetBaseLogger(cmd *cobra.Command) (*slog.Logger, error) {
 	case OutputStdout:
 		outputWriter = cmd.OutOrStdout()
 	case OutputStderr:
-		outputWriter = cmd.OutOrStderr()
+		outputWriter = cmd.ErrOrStderr()
 	}
 
 	var handler slog.Handler

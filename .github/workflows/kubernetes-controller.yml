@@ -1,0 +1,106 @@
+name: Kubernetes Controller
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - kubernetes/controller/**/*
+      - .github/workflows/kubernetes-controller.yml
+      - .env
+  pull_request:
+    branches:
+      - main
+    paths:
+      - kubernetes/controller/**/*
+      - .github/workflows/kubernetes-controller.yml
+      - .env
+
+permissions:
+  contents: read # for actions/checkout to fetch code
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  E2E:
+    name: E2E
+    runs-on: large_runner
+    timeout-minutes: 20
+    steps:
+      - name: Self Hosted Runner Post Job Cleanup Action
+        uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
+
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          sparse-checkout: |
+            kubernetes/controller
+            .github/workflows/kubernetes-controller.yml
+            Taskfile.yml
+
+      - name: Setup Go (required for CLI build)
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version-file: kubernetes/controller/go.mod
+          cache-dependency-path: kubernetes/controller/go.sum
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up docker
+        uses: docker/setup-docker-action@b60f85385d03ac8acfca6d9996982511d8620a19 # v4
+
+      - name: Setup ocm
+        uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
+
+      - name: Setup Flux CLI
+        uses: fluxcd/flux2/action@6bf37f6a560fd84982d67f853162e4b3c2235edb # v2.6.4
+
+      - name: Setup Local E2E Test Cluster
+        run: task kubernetes/controller:test/e2e/setup/local
+
+      - name: Run
+        run: task kubernetes/controller:test/e2e
+
+  publish_latest:
+    name: "Publish Latest Image"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: large_runner
+    permissions:
+      # Needed to push the image to GitHub Packages.
+      # this token is the repo token, not the user token
+      # even though we impersonate the actor
+      packages: write
+      contents: read
+    needs: E2E
+    steps:
+      - name: Self Hosted Runner Post Job Cleanup Action
+        uses: TooMuch4U/actions-clean@9b358e33df99574ac0bdf2e92fa3db1ae1415563 # v2.2
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          sparse-checkout: |
+            kubernetes/controller
+            .github/workflows/kubernetes-controller.yml
+            Taskfile.yml
+          # Make sure the value of GITHUB_TOKEN will not be persisted in repo's config
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
+      - name: Docker Login
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & Push
+        run: task kubernetes/controller:docker-build/multi-arch PUSH=true

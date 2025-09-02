@@ -1,14 +1,17 @@
 package lister_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"testing"
 
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2/content"
 
 	. "ocm.software/open-component-model/bindings/go/oci/internal/lister"
@@ -252,5 +255,41 @@ func TestList(t *testing.T) {
 		versions, err := lister.List(t.Context(), opts)
 		assert.Error(t, err)
 		assert.Nil(t, versions)
+	})
+
+	t.Run("logs when tags are skipped", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		ctx := slogcontext.NewCtx(context.Background(), logger)
+
+		store := &mockTagStore{
+			tags: []string{"v1.0.0", "invalid-tag", "v2.0.0"},
+		}
+
+		lister, err := New(store)
+		require.NoError(t, err)
+
+		opts := Options{
+			LookupPolicy: LookupPolicyTagOnly,
+			SortPolicy:   SortPolicyLooseSemverDescending,
+			TagListerOptions: TagListerOptions{
+				VersionResolver: func(ctx context.Context, tag string) (string, error) {
+					if tag == "invalid-tag" {
+						return "", ErrSkip
+					}
+					return tag, nil
+				},
+			},
+		}
+
+		versions, err := lister.List(ctx, opts)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"v2.0.0", "v1.0.0"}, versions)
+
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "skipping tag")
+		assert.Contains(t, logOutput, "invalid-tag")
+		assert.Contains(t, logOutput, "realm")
+		assert.Contains(t, logOutput, "oci")
 	})
 }
