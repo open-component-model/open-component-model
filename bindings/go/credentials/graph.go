@@ -42,9 +42,6 @@ type GraphResolver interface {
 // It initializes the graph structure and ingests the configuration into the graph.
 // Returns an error if the configuration cannot be properly ingested.
 func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (GraphResolver, error) {
-	if config == nil {
-		config = &cfgRuntime.Config{}
-	}
 	g := &Graph{
 		syncedDag:                newSyncedDag(),
 		credentialPluginProvider: opts.CredentialPluginProvider,
