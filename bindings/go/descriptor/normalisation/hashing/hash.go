@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
