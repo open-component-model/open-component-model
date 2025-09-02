@@ -13,21 +13,20 @@ const (
 	HashAlgorithmSHA512Legacy = "SHA-512"
 )
 
-var (
-	HashAlgorithmSHA256 = digest.SHA256.String()
-	HashAlgorithmSHA512 = digest.SHA512.String()
-)
-
 var SHAMapping = map[string]digest.Algorithm{
-	HashAlgorithmSHA256:       digest.SHA256,
-	HashAlgorithmSHA512:       digest.SHA512,
 	HashAlgorithmSHA256Legacy: digest.SHA256,
 	HashAlgorithmSHA512Legacy: digest.SHA512,
+	digest.SHA256.String():    digest.SHA256,
+	digest.SHA512.String():    digest.SHA512,
 }
 
-var ReverseSHAMapping = reverseMap(SHAMapping)
+var ReverseSHAMapping = map[digest.Algorithm]string{
+	digest.SHA256: HashAlgorithmSHA256Legacy,
+	digest.SHA512: HashAlgorithmSHA512Legacy,
+}
 
-func Digest(desc *runtime.Descriptor, hashAlgo digest.Algorithm, normalisationAlgo normalisation.Algorithm) (*runtime.Digest, error) {
+// DigestNormalizedDescriptor normalises and digests the given descriptor.
+func DigestNormalizedDescriptor(desc *runtime.Descriptor, hashAlgo digest.Algorithm, normalisationAlgo normalisation.Algorithm) (*runtime.Digest, error) {
 	normalisedData, err := normalisation.Normalisations.Normalise(desc, normalisationAlgo)
 	if err != nil {
 		return nil, fmt.Errorf("error normalising descriptor %s: %w", desc.Component.ToIdentity().String(), err)
@@ -59,12 +58,4 @@ func Verify(target *runtime.Digest, digest digest.Digest) error {
 		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, ReverseSHAMapping[digest.Algorithm()])
 	}
 	return nil
-}
-
-func reverseMap[K, V comparable](m map[K]V) map[V]K {
-	reversed := make(map[V]K)
-	for k, v := range m {
-		reversed[v] = k
-	}
-	return reversed
 }
