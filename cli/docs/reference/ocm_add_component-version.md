@@ -50,7 +50,7 @@ add component-version  --repository ./path/to/transport-archive --constructor ./
       --concurrency-limit int                    maximum number of component versions that can be constructed concurrently. (default 4)
   -c, --constructor path                         path to the component constructor file (default component-constructor.yaml)
   -h, --help                                     help for component-version
-  -r, --repository string                        repository specification (default "transport-archive")
+  -r, --repository string                        repository ref (default "transport-archive")
       --skip-reference-digest-processing         skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.
 ```
 
