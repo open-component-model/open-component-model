@@ -79,19 +79,15 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 	// Attempt direct resolution via the DAG.
 	creds, err := g.resolveFromGraph(ctx, identity)
 
-	switch {
-	case errors.Is(err, ErrNoDirectCredentials):
-		// fall back to indirect resolution if we have a repository plugin provider
-		// otherwise leave error as is
-		if g.repositoryPluginProvider != nil {
-			creds, err = g.resolveFromRepository(ctx, identity)
-		}
-	case err != nil:
-		return nil, err
+	// fall back to indirect resolution if we have a repository plugin provider
+	// otherwise leave error as is
+	if g.repositoryPluginProvider != nil && errors.Is(err, ErrNoDirectCredentials) {
+		creds, err = g.resolveFromRepository(ctx, identity)
 	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 	}
+
 	return creds, nil
 }
