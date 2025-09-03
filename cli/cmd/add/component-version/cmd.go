@@ -232,6 +232,13 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	}
 
 	if ctfRepo, ok := typed.(*ctfv1.Repository); ok {
+		logger, err := log.GetBaseLogger(cmd)
+		if err != nil {
+			return nil, fmt.Errorf("getting base logger failed: %w", err)
+		}
+
+		logger.Debug("setting access mode for CTF repository", "path", ctfRepo.Path, "ref", repositoryRef)
+
 		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
 		if _, err := os.Stat(ctfRepo.Path); os.IsNotExist(err) {
 			accessMode += "|" + ctfv1.AccessModeCreate

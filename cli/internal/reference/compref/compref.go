@@ -186,14 +186,14 @@ func Parse(input string) (*Ref, error) {
 	}
 
 	// Step 6: Build repository object using ParseRepository
-	var repositorySpec string
+	var repositoryRef string
 	if ref.Type != "" {
-		repositorySpec = ref.Type + "::" + input
+		repositoryRef = ref.Type + "::" + input
 	} else {
-		repositorySpec = input
+		repositoryRef = input
 	}
 
-	repository, err := ParseRepository(repositorySpec)
+	repository, err := ParseRepository(repositoryRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse repository: %w", err)
 	}
@@ -213,15 +213,15 @@ func Parse(input string) (*Ref, error) {
 	return ref, nil
 }
 
-// ParseRepository parses a repository specification string and returns a typed repository object.
+// ParseRepository parses a repository reference string and returns a typed repository object.
 // It accepts repository strings in the format:
-//   - [<type>::]<repository-spec>
+//   - [<type>::]<repository-ref>
 //
-// Where type can be "ctf" or "oci", and repository-spec is the actual repository location.
+// Where type can be "ctf" or "oci", and repository reference is the actual repository location.
 // If no type is specified, it will be guessed using heuristics.
-func ParseRepository(repositorySpec string) (runtime.Typed, error) {
-	originalInput := repositorySpec
-	input := repositorySpec
+func ParseRepository(repoRef string) (runtime.Typed, error) {
+	originalInput := repoRef
+	input := repoRef
 
 	// Extract optional type
 	var repoType string
