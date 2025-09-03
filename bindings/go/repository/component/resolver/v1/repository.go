@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -25,7 +24,7 @@ import (
 const Realm = "repository/component/resolver"
 
 // ResolverRepository implements a resolver mechanism for component version repositories
-// using regex/glob patterns for component names and semantic version constraints.
+// using glob patterns for component names and semantic version constraints.
 // This is the modern replacement for the deprecated fallback resolvers.
 type ResolverRepository struct {
 	// GoRoutineLimit limits the number of active goroutines for concurrent
@@ -75,9 +74,7 @@ func NewResolverRepository(_ context.Context, repositoryProvider repository.Comp
 	}
 
 	resolvers := deepCopyResolvers(res)
-	slices.SortStableFunc(resolvers, func(a, b *resolverruntime.Resolver) int {
-		return cmp.Compare(b.Priority, a.Priority)
-	})
+	// Resolvers are processed in the order they are defined in the configuration
 
 	// Pre-create matchers for all resolvers
 	matchers := make([]*matcher.ResolverMatcher, len(resolvers))
@@ -272,6 +269,7 @@ func (r *ResolverRepository) RepositoriesForComponentIterator(ctx context.Contex
 				yield(nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err))
 				return
 			}
+
 			slog.DebugContext(ctx, "yielding repository for component", "realm", Realm, "component", component, "version", version, "repository", resolver.Repository)
 			if !yield(repo, nil) {
 				return
@@ -317,16 +315,15 @@ func (r *ResolverRepository) getRepositoryForSpecification(ctx context.Context, 
 }
 
 func (r *ResolverRepository) getRepositoryFromCache(ctx context.Context, index int, resolver *resolverruntime.Resolver) (repository.ComponentVersionRepository, error) {
-	var err error
-
 	r.repositoriesForResolverCacheMu.RLock()
 	repo := r.repositoriesForResolverCache[index]
 	r.repositoriesForResolverCacheMu.RUnlock()
 
 	if repo == nil {
+		var err error
 		repo, err = r.getRepositoryForSpecification(ctx, resolver.Repository)
 		if err != nil {
-			return nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err)
+			return nil, fmt.Errorf("getting repository for specification %v failed: %w", resolver.Repository, err)
 		}
 		r.repositoriesForResolverCacheMu.Lock()
 		r.repositoriesForResolverCache[index] = repo

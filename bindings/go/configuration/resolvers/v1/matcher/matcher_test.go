@@ -34,16 +34,16 @@ func TestComponentMatcher(t *testing.T) {
 			shouldMatch:   false,
 		},
 		{
-			name:          "regex pattern with anchors",
-			pattern:       "^ocm\\.software/.*$",
+			name:          "glob pattern with question mark",
+			pattern:       "ocm.software/core/?est",
 			componentName: "ocm.software/core/test",
 			shouldMatch:   true,
 		},
 		{
-			name:          "regex pattern no match",
-			pattern:       "ocm\\.software/core/.*",
-			componentName: "ocm.software/other/test",
-			shouldMatch:   false,
+			name:          "glob pattern with character class",
+			pattern:       "ocm.software/core/[tc]est",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
 		},
 		{
 			name:          "exact match",
@@ -58,9 +58,10 @@ func TestComponentMatcher(t *testing.T) {
 			shouldMatch:   false,
 		},
 		{
-			name:        "invalid regex",
-			pattern:     "[invalid",
-			expectError: true,
+			name:          "glob pattern with multiple wildcards",
+			pattern:       "*.software/*/test",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
 		},
 	}
 

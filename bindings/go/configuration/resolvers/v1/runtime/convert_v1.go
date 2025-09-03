@@ -7,8 +7,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ConvertFromV1 converts a spec.Config to a runtime.Config.
-func ConvertFromV1(scheme runtime.Scheme, specConfig *spec.Config) (*Config, error) {
+func ConvertFromV1(scheme *runtime.Scheme, specConfig *spec.Config) (*Config, error) {
 	if specConfig == nil {
 		return nil, nil
 	}
@@ -28,16 +27,10 @@ func ConvertFromV1(scheme runtime.Scheme, specConfig *spec.Config) (*Config, err
 			repository = specResolver.Repository.DeepCopy()
 		}
 
-		priority := spec.DefaultLookupPriority
-		if specResolver.Priority != nil {
-			priority = *specResolver.Priority
-		}
-
 		runtimeResolver := Resolver{
 			Repository:    repository,
 			ComponentName: specResolver.ComponentName,
 			SemVer:        specResolver.SemVer,
-			Priority:      priority,
 		}
 
 		runtimeConfig.Resolvers = append(runtimeConfig.Resolvers, runtimeResolver)
@@ -46,8 +39,7 @@ func ConvertFromV1(scheme runtime.Scheme, specConfig *spec.Config) (*Config, err
 	return runtimeConfig, nil
 }
 
-// ConvertToV1 converts a runtime.Config to a spec.Config.
-func ConvertToV1(scheme runtime.Scheme, runtimeConfig *Config) (*spec.Config, error) {
+func ConvertToV1(scheme *runtime.Scheme, runtimeConfig *Config) (*spec.Config, error) {
 	if runtimeConfig == nil {
 		return nil, nil
 	}
@@ -66,17 +58,10 @@ func ConvertToV1(scheme runtime.Scheme, runtimeConfig *Config) (*spec.Config, er
 			}
 		}
 
-		priority := runtimeResolver.Priority
-		var priorityPtr *int
-		if priority != spec.DefaultLookupPriority {
-			priorityPtr = &priority
-		}
-
 		specResolver := &spec.Resolver{
 			Repository:    repository,
 			ComponentName: runtimeResolver.ComponentName,
 			SemVer:        runtimeResolver.SemVer,
-			Priority:      priorityPtr,
 		}
 
 		specConfig.Resolvers = append(specConfig.Resolvers, specResolver)

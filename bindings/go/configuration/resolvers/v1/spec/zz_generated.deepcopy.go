@@ -60,9 +60,4 @@ func (in *Resolver) DeepCopyInto(out *Resolver) {
 		in, out := &in.Repository, &out.Repository
 		*out = (*in).DeepCopy()
 	}
-	if in.Priority != nil {
-		in, out := &in.Priority, &out.Priority
-		*out = new(int)
-		**out = **in
-	}
 }
