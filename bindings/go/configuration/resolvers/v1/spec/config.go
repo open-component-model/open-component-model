@@ -1,0 +1,157 @@
+package spec
+
+import (
+	"fmt"
+
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
+
+const (
+	ConfigType = "resolvers.config.ocm.software"
+	Version    = "v1"
+)
+
+const (
+	DefaultLookupPriority = 10
+)
+
+var Scheme = runtime.NewScheme()
+
+func init() {
+	Scheme.MustRegisterWithAlias(&Config{},
+		runtime.NewVersionedType(ConfigType, Version),
+		runtime.NewUnversionedType(ConfigType),
+	)
+}
+
+// Config is the new OCM configuration type for configuring regex/glob based
+// resolvers that replace the deprecated fallback resolvers.
+//
+//   - type: resolvers.config.ocm.software
+//     resolvers:
+//   - repository:
+//     type: CommonTransportFormat/v1
+//     filePath: ./ocm/primary-transport-archive
+//     componentName: ocm.software/core/*
+//     semver: >1.0.0
+//     priority: 100
+//   - repository:
+//     type: OCIRegistry/v1
+//     baseUrl: ghcr.io
+//     componentName: ocm.software/*
+//     semver: >1.0.0
+//     priority: 10
+//
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
+// +ocm:typegen=true
+type Config struct {
+	Type runtime.Type `json:"type"`
+
+	// Resolvers define a list of OCM repository specifications to be used to resolve
+	// dedicated component versions using regex/glob patterns.
+	// All matching entries are tried to lookup a component version in the following
+	//    order:
+	//    - highest priority first
+	//
+	// The default priority is spec.DefaultLookupPriority (10).
+	//
+	// Repositories with a specified componentName pattern are only tried if the pattern
+	// matches the component name using regex or glob syntax.
+	//
+	// If resolvers are defined, it is possible to use component version names on the
+	// command line without a repository. The names are resolved with the specified
+	// resolution rule.
+	//
+	// They are also used as default lookup repositories to lookup component references
+	// for recursive operations on component versions («--lookup» option).
+	Resolvers []*Resolver `json:"resolvers,omitempty"`
+}
+
+// GetType returns the type of the configuration.
+func (c *Config) GetType() runtime.Type {
+	return c.Type
+}
+
+// SetType sets the type of the configuration.
+func (c *Config) SetType(t runtime.Type) {
+	c.Type = t
+}
+
+// Resolver assigns a priority and a component name pattern to a single OCM repository specification
+// to allow defining a lookup order for component versions using regex/glob patterns.
+//
+// +k8s:deepcopy-gen=true
+type Resolver struct {
+	// Repository is the OCM repository specification to be used for resolving
+	// component versions.
+	Repository *runtime.Raw `json:"repository"`
+
+	// ComponentName specifies a regex or glob pattern for matching component names.
+	// It limits the usage of the repository to resolve only components with names
+	// that match the given pattern.
+	// Examples:
+	//   - "ocm.software/core/*" (glob pattern)
+	//   - "ocm\\.software/.*" (regex pattern)
+	//   - "ocm.software/core/.*" (regex pattern)
+	ComponentName string `json:"componentName,omitempty"`
+
+	// SemVer specifies a semantic version constraint for the component version.
+	// It limits the usage of the repository to resolve only component versions
+	// that satisfy the given version constraint.
+	// Examples:
+	//   - ">1.0.0"
+	//   - ">=1.0.0 <2.0.0"
+	//   - "~1.2.3"
+	//   - "^1.2.3"
+	SemVer string `json:"semver,omitempty"`
+
+	// An optional priority can be used to influence the lookup order. Larger value
+	// means higher priority (default DefaultLookupPriority).
+	// Pointer because this is optional. To default the priority, we need to be
+	// able to distinguish between "not set" and "set to zero".
+	Priority *int `json:"priority,omitempty"`
+}
+
+// Lookup creates a new Config from a central V1 config.
+func Lookup(cfg *genericv1.Config) (*Config, error) {
+	if cfg == nil {
+		return nil, nil
+	}
+	cfg, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
+		ConfigTypes: []runtime.Type{
+			runtime.NewVersionedType(ConfigType, Version),
+			runtime.NewUnversionedType(ConfigType),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter config: %w", err)
+	}
+	cfgs := make([]*Config, 0, len(cfg.Configurations))
+	for _, entry := range cfg.Configurations {
+		var config Config
+		if err := Scheme.Convert(entry, &config); err != nil {
+			return nil, fmt.Errorf("failed to decode resolver config: %w", err)
+		}
+		cfgs = append(cfgs, &config)
+	}
+	return Merge(cfgs...), nil
+}
+
+// Merge merges the provided configs into a single config.
+func Merge(configs ...*Config) *Config {
+	if len(configs) == 0 {
+		return nil
+	}
+
+	merged := new(Config)
+	merged.Type = configs[0].Type
+	merged.Resolvers = make([]*Resolver, 0)
+
+	for _, cfg := range configs {
+		merged.Resolvers = append(merged.Resolvers, cfg.Resolvers...)
+	}
+
+	return merged
+}
