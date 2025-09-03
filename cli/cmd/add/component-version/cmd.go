@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -77,11 +78,11 @@ func New() *cobra.Command {
 		Use:        "component-version",
 		Aliases:    []string{"cv", "componentversion", "component-versions", "cvs", "componentversions"},
 		SuggestFor: []string{"component", "components", "version", "versions"},
-		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository stored as Common Transport Format archive (CTF) based on a %[1]q file", DefaultComponentConstructorBaseName),
+		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository based on a %[1]q file", DefaultComponentConstructorBaseName),
 		Args:       cobra.NoArgs,
-		Long: fmt.Sprintf(`Add component version(s) to an OCM Common Transport Format archive (CTF) that can be reused for transfers.
+		Long: fmt.Sprintf(`Add component version(s) to an OCM repository that can be reused for transfers.
 
-A %[1]q file is used to specify the component version(s) to be added. It can contain both a single component or many components. The component reference is used to determine the repository to add the components to.
+A %[1]q file is used to specify the component version(s) to be added. It can contain both a single component or many components.
 
 By default, the command will look for a file named "%[1]s.yaml" or "%[1]s.yml" in the current directory.
 If given a path to a directory, the command will look for a file named "%[1]s.yaml" or "%[1]s.yml" in that directory.
@@ -91,16 +92,40 @@ If you provide a working directory, all paths in the %[1]q file will be resolved
 Otherwise the path to the %[1]q file will be used as the working directory.
 You are only allowed to reference files within the working directory or sub-directories of the working directory.
 
-In case the component archive does not exist, it will be created by default.
+Repository Reference Format:
+	[type::]{repository}
+
+For known types, currently only {%[2]s} are supported, which can be shortened to {%[3]s} respectively for convenience.
+
+If no type is given, the repository specification is interpreted based on introspection and heuristics:
+
+- URL schemes or domain patterns -> OCI registry
+- Local paths -> CTF archive
+
+In case the CTF archive does not exist, it will be created by default.
 If not specified, it will be created with the name "transport-archive".
 `,
 			DefaultComponentConstructorBaseName,
+			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
+			strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
 		),
 		Example: strings.TrimSpace(fmt.Sprintf(`
-Adding component versions to a non-default CTF named %[2]q based on a non-default default %[4]q file:
+Adding component versions to a CTF archive:
 
-add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
-`, FlagRepositoryRef, LegacyDefaultArchiveName, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
+add component-version --%[1]s ./path/to/transport-archive --%[2]s ./path/to/%[3]s.yaml
+add component-version --%[1]s /tmp/my-archive --%[2]s constructor.yaml
+
+Adding component versions to an OCI registry:
+
+add component-version --%[1]s ghcr.io/my-org/my-repo --%[2]s %[3]s.yaml
+add component-version --%[1]s https://my-registry.com/my-repo --%[2]s %[3]s.yaml
+add component-version --%[1]s localhost:5000/my-repo --%[2]s %[3]s.yaml
+
+Specifying repository types explicitly:
+
+add component-version --%[1]s ctf::./local/archive --%[2]s %[3]s.yaml
+add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.yaml
+`, FlagRepositoryRef, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
 		RunE:              AddComponentVersion,
 		PersistentPreRunE: persistentPreRunE,
 		DisableAutoGenTag: true,
