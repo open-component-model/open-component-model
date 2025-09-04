@@ -3,7 +3,6 @@ package credentials
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync"
 
@@ -79,8 +78,11 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	}
 
 	wg.Wait()
+
 	if resolved == nil {
-		return nil, fmt.Errorf("failed to resolve credentials for %q indirectly using repository plugins: %w", identity, errors.Join(errs...))
+		// If we get here, then all repository plugins failed to resolve credentials.
+		// This is not an error, but rather a signal that the identity could not be resolved indirectly.
+		return nil, errors.Join(ErrNoIndirectCredentials, errors.Join(errs...))
 	}
 
 	// Cache the resolved credentials for future use.
