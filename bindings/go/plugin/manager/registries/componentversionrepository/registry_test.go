@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -70,20 +70,17 @@ func TestPluginFlow(t *testing.T) {
 		Stderr: stderr,
 	}
 	require.NoError(t, registry.AddPlugin(plugin, typ))
-	p, err := scheme.NewObject(typ)
-	require.NoError(t, err)
-	retrievedPlugin, err := registry.GetPlugin(ctx, p)
-	require.NoError(t, err)
-	provider, err := retrievedPlugin.GetComponentVersionRepository(ctx, &dummyv1.Repository{
+	spec := &dummyv1.Repository{
 		Type:    typ,
 		BaseUrl: "ghcr.io/open-component/test-component-version-repository",
-	}, nil)
+	}
+	retrievedPlugin, err := registry.GetPlugin(ctx, spec, nil)
 	require.NoError(t, err)
-	desc, err := provider.GetComponentVersion(ctx, "test-component", "1.0.0")
+	desc, err := retrievedPlugin.GetComponentVersion(ctx, "test-component", "1.0.0")
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
 
-	err = provider.AddComponentVersion(ctx, &descriptor.Descriptor{
+	err = retrievedPlugin.AddComponentVersion(ctx, &descriptor.Descriptor{
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
@@ -108,7 +105,7 @@ func TestPluginNotFound(t *testing.T) {
 		},
 		BaseUrl: "",
 	}
-	_, err := registry.GetPlugin(ctx, proto)
+	_, err := registry.GetPlugin(ctx, proto, nil)
 	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
@@ -122,21 +119,38 @@ func TestSchemeDoesNotExist(t *testing.T) {
 		},
 		BaseUrl: "",
 	}
-	_, err := registry.GetPlugin(ctx, proto)
+	_, err := registry.GetPlugin(ctx, proto, nil)
 	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
-type mockPluginProvider struct {
-	// TODO: fill this.
-	mockPlugin repository.ComponentVersionRepository
+type mockRepository struct{}
+
+func (m *mockRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
+	return nil
 }
 
-func (m *mockPluginProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
+func (m *mockRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
 	return nil, nil
 }
 
-func (m *mockPluginProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
-	return m.mockPlugin, nil
+func (m *mockRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	return nil, nil
+}
+
+func (m *mockRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+	return nil, nil, nil
+}
+
+func (m *mockRepository) AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
+	return nil, nil
+}
+
+func (m *mockRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
+	return nil, nil, nil
 }
 
 func TestInternalPluginRegistry(t *testing.T) {
@@ -151,9 +165,9 @@ func TestInternalPluginRegistry(t *testing.T) {
 		},
 		BaseUrl: "",
 	}
-	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockPluginProvider{}, proto))
-	retrievedPluginProvider, err := registry.GetPlugin(ctx, proto)
+	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockRepository{}, proto))
+	retrievedPlugin, err := registry.GetPlugin(ctx, proto, nil)
 	require.NoError(t, err)
-	_, err = retrievedPluginProvider.GetComponentVersionRepository(ctx, proto, nil)
-	require.NoError(t, err)
+	// The retrieved plugin is now directly a ComponentVersionRepository
+	require.NotNil(t, retrievedPlugin)
 }
