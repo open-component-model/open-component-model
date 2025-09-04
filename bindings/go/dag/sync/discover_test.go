@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDAGTraverse(t *testing.T) {
+func TestDAGDiscovery(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
 
-	t.Run("graph traversal succeeds", func(t *testing.T) {
+	t.Run("graph discovery succeeds", func(t *testing.T) {
 		// Emulate external dependency graph.
 		// In real-world scenarios, this information would likely be retrieved from
 		// an API (such as an OCM Repository).
@@ -24,7 +24,7 @@ func TestDAGTraverse(t *testing.T) {
 		}
 
 		dag := NewDirectedAcyclicGraph[string]()
-		traverseFunc := func(ctx context.Context, v string) ([]string, error) {
+		discoverFunc := func(ctx context.Context, v string) ([]string, error) {
 			// Simulate fetching dependencies from an external graph.
 			// In a real-world scenario, this would likely be an API call (such
 			// as OCM GetComponentVersion)
@@ -38,8 +38,8 @@ func TestDAGTraverse(t *testing.T) {
 			}
 			return neighbors, nil
 		}
-		// Start the traversal from multiple roots
-		r.NoError(dag.Traverse(ctx, DiscoverNeighborsFunc[string](traverseFunc), WithRoots[string]("A", "B", "C", "D")))
+		// Start the discovery from multiple roots
+		r.NoError(dag.Discover(ctx, DiscoverNeighborsFunc[string](discoverFunc), WithRoots[string]("A", "B", "C", "D")))
 
 		// Check if the graph structure is as expected
 		r.ElementsMatchf(dag.MustGetVertex("A").EdgeKeys(), []string{"B", "C"}, "expected edges from A to B and C, but got %v", dag.MustGetVertex("A").EdgeKeys())
@@ -47,26 +47,26 @@ func TestDAGTraverse(t *testing.T) {
 		r.ElementsMatchf(dag.MustGetVertex("C").EdgeKeys(), []string{"D"}, "expected edge from C to D, but got %v", dag.MustGetVertex("C").EdgeKeys())
 		r.ElementsMatchf(dag.MustGetVertex("D").EdgeKeys(), []string{}, "expected no edges from D, but got %v", dag.MustGetVertex("D").EdgeKeys())
 
-		// As Traverse uses addRawVertex and AddEdge internally, which are unit tested
+		// As Discover uses addRawVertex and AddEdge internally, which are unit tested
 		// separately, we can assume out degree and in degree are correct if the
 		// graph structure is correct.
 	})
 
-	t.Run("graph traversal fails with canceled context", func(t *testing.T) {
+	t.Run("graph discovery fails with canceled context", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		// Simulate a context cancellation
 		cancel()
 
 		dag := NewDirectedAcyclicGraph[string]()
-		traverseFunc := func(ctx context.Context, v string) ([]string, error) {
+		discoveryFunc := func(ctx context.Context, v string) ([]string, error) {
 			return nil, fmt.Errorf("we should never reach this point due to context cancellation")
 		}
 
-		err := dag.Traverse(ctx, DiscoverNeighborsFunc[string](traverseFunc), WithRoots("A"))
+		err := dag.Discover(ctx, DiscoverNeighborsFunc[string](discoveryFunc), WithRoots("A"))
 		r.ErrorIsf(err, context.Canceled, "expected error due to context cancellation, but got nil")
 	})
 
-	t.Run("graph traversal fails in traversal function", func(t *testing.T) {
+	t.Run("graph discovery fails in discovery function", func(t *testing.T) {
 		// Emulate an invalid external dependency graph. Here, the edge C -> D
 		// exists, but D is not found in the graph.
 		graph := map[string][]string{
@@ -75,7 +75,7 @@ func TestDAGTraverse(t *testing.T) {
 			"C": {"D"},
 		}
 		dag := NewDirectedAcyclicGraph[string]()
-		traverseFunc := func(ctx context.Context, v string) ([]string, error) {
+		discoveryFunc := func(ctx context.Context, v string) ([]string, error) {
 			// Simulate fetching dependencies from an external graph.
 			// In a real-world scenario, this would likely be an API call (such
 			// as OCM GetComponentVersion)
@@ -90,11 +90,11 @@ func TestDAGTraverse(t *testing.T) {
 			return neighbors, nil
 		}
 
-		err := dag.Traverse(ctx, DiscoverNeighborsFunc[string](traverseFunc), WithRoots("A"), WithGoRoutineLimit[string](1))
+		err := dag.Discover(ctx, DiscoverNeighborsFunc[string](discoveryFunc), WithRoots("A"), WithGoRoutineLimit[string](1))
 		r.Error(err, "expected error due to missing node in the external graph, but got nil")
 
-		r.Equal(dag.MustGetVertex("A").MustGetAttribute(AttributeTraversalState), StateError, "expected vertex A to be in error state, but got %s", dag.MustGetVertex("A").MustGetAttribute(AttributeTraversalState))
-		r.Equal(dag.MustGetVertex("B").MustGetAttribute(AttributeTraversalState), StateCompleted, "expected vertex B to be in completed state, but got %s", dag.MustGetVertex("B").MustGetAttribute(AttributeTraversalState))
-		r.Equal(dag.MustGetVertex("C").MustGetAttribute(AttributeTraversalState), StateError, "expected vertex C to be in error state, but got %s", dag.MustGetVertex("C").MustGetAttribute(AttributeTraversalState))
+		r.Equal(dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState), StateError, "expected vertex A to be in error state, but got %s", dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState))
+		r.Equal(dag.MustGetVertex("B").MustGetAttribute(AttributeDiscoveryState), StateCompleted, "expected vertex B to be in completed state, but got %s", dag.MustGetVertex("B").MustGetAttribute(AttributeDiscoveryState))
+		r.Equal(dag.MustGetVertex("C").MustGetAttribute(AttributeDiscoveryState), StateError, "expected vertex C to be in error state, but got %s", dag.MustGetVertex("C").MustGetAttribute(AttributeDiscoveryState))
 	})
 }
