@@ -214,6 +214,8 @@ type ComponentSignatureSigner interface {
     //
     // Configurations MUST NOT contain any private key or otherwise sensitive material. This is a security risk.
     // Instead, the signer MUST use the provided credentials and well-known attributes to sign the digest specification.
+    // The signer SHOULD fallback to environment or implementation
+    // defaults based on its configuration when no credentials are provided.
     Sign(ctx context.Context, unsigned descruntime.Digest, config runtime.Typed, credentials map[string]string) (signed descruntime.SignatureInfo, err error)
 }
 
@@ -233,7 +235,7 @@ type ComponentSignatureVerifier interface {
     // GetVerifyingCredentialConsumerIdentity resolves the credential consumer identity of the given configuration to use for credential resolution
     // when verifying signatures with the given configuration.
     // If successful, the returned identity SHOULD be used for credential resolution (i.e. against the OCM credential graph)
-    // If unsuccessful, an error MUST be returned, and Sign CAN be called without credentials.
+    // If unsuccessful, an error MUST be returned, and Verify CAN be called without credentials.
     GetVerifyingCredentialConsumerIdentity(ctx context.Context, config runtime.Typed) (identity runtime.Identity, err error)
     
     // Verify performs signature and digest checks using the provided config.
@@ -242,6 +244,8 @@ type ComponentSignatureVerifier interface {
     // Configurations MUST NOT contain any key or otherwise sensitive material. This is a security risk.
     // Instead, the verifier MUST use the provided credentials and well-known attributes to verify the signature.
     // If the media type cannot be verified, the signature verification MUST fail.
+    // The verifier SHOULD fallback to environment or implementation
+    // defaults based on its configuration when no credentials are provided.
     Verify(ctx context.Context, signed descruntime.Signature, config runtime.Typed, credentials map[string]string) error
 }
 ```
