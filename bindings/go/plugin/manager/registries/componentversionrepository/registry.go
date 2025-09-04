@@ -26,7 +26,7 @@ type constructedPlugin struct {
 func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](
 	scheme *runtime.Scheme,
 	r *RepositoryRegistry,
-	p repository.ComponentVersionRepositoryProvider,
+	p repository.ComponentVersionRepository,
 	prototype T,
 ) error {
 	r.mu.Lock()
@@ -57,7 +57,7 @@ type RepositoryRegistry struct {
 	constructedPlugins map[string]*constructedPlugin  // running plugins
 
 	// internalComponentVersionRepositoryPlugins contains all plugins that have been registered using internally import statement.
-	internalComponentVersionRepositoryPlugins map[runtime.Type]repository.ComponentVersionRepositoryProvider
+	internalComponentVersionRepositoryPlugins map[runtime.Type]repository.ComponentVersionRepository
 	// scheme is the holder of schemes. This hold will contain the scheme required to
 	// construct and understand the passed in types and what / how they need to look like. The passed in scheme during
 	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
@@ -137,7 +137,7 @@ loop:
 // GetPlugin retrieves a plugin for the given specification type.
 // It first checks for internal plugins registered via RegisterInternalComponentVersionRepositoryPlugin,
 // then falls back to external plugins if no internal plugin is found.
-func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (repository.ComponentVersionRepositoryProvider, error) {
+func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -159,7 +159,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
 	}
 
-	return r.externalToComponentVersionRepositoryProviderConverter(plugin, r.scheme), nil
+	return r.externalToComponentVersionRepository(plugin, r.scheme, spec, credentials), nil
 }
 
 func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], error) {
@@ -182,6 +182,6 @@ func NewComponentVersionRepositoryRegistry(ctx context.Context) *RepositoryRegis
 		registry:           make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins: make(map[string]*constructedPlugin),
 		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),
-		internalComponentVersionRepositoryPlugins: make(map[runtime.Type]repository.ComponentVersionRepositoryProvider),
+		internalComponentVersionRepositoryPlugins: make(map[runtime.Type]repository.ComponentVersionRepository),
 	}
 }

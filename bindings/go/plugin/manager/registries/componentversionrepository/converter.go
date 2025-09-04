@@ -17,35 +17,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type componentVersionRepositoryProviderConverter struct {
-	externalPlugin ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed]
-	scheme         *runtime.Scheme
-}
-
-var _ repository.ComponentVersionRepositoryProvider = (*componentVersionRepositoryProviderConverter)(nil)
-
-func (c *componentVersionRepositoryProviderConverter) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	request := &ocmrepositoryv1.GetIdentityRequest[runtime.Typed]{
-		Typ: repositorySpecification,
-	}
-
-	result, err := c.externalPlugin.GetIdentity(ctx, request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get identity: %w", err)
-	}
-
-	return result.Identity, nil
-}
-
-func (c *componentVersionRepositoryProviderConverter) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
-	return &componentVersionRepositoryWrapper{
-		externalPlugin:          c.externalPlugin,
-		repositorySpecification: repositorySpecification,
-		credentials:             credentials,
-		scheme:                  c.scheme,
-	}, nil
-}
-
+// componentVersionRepositoryWrapper wraps external plugins to implement ComponentVersionRepository interface
+// It handles the translation between the repository interface and the plugin contract
 type componentVersionRepositoryWrapper struct {
 	externalPlugin          ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed]
 	repositorySpecification runtime.Typed
@@ -199,9 +172,11 @@ func (c *componentVersionRepositoryWrapper) GetLocalSource(ctx context.Context, 
 	return rBlob, &convert[0], nil
 }
 
-func (r *RepositoryRegistry) externalToComponentVersionRepositoryProviderConverter(plugin ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], scheme *runtime.Scheme) *componentVersionRepositoryProviderConverter {
-	return &componentVersionRepositoryProviderConverter{
-		externalPlugin: plugin,
-		scheme:         scheme,
+func (r *RepositoryRegistry) externalToComponentVersionRepository(plugin ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], scheme *runtime.Scheme, repositorySpecification runtime.Typed, credentials map[string]string) *componentVersionRepositoryWrapper {
+	return &componentVersionRepositoryWrapper{
+		externalPlugin:          plugin,
+		repositorySpecification: repositorySpecification,
+		credentials:             credentials,
+		scheme:                  scheme,
 	}
 }
