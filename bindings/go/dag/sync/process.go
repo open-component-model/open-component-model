@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -78,7 +79,19 @@ func (d *DirectedAcyclicGraph[T]) ProcessTopology(ctx context.Context, processor
 // have been processed.
 //
 // For a more thorough explanation of topological order, see ProcessTopology.
-func (d *DirectedAcyclicGraph[T]) ProcessReverseTopology(ctx context.Context, processor VertexProcessor[T]) error {
+func (d *DirectedAcyclicGraph[T]) ProcessReverseTopology(
+	ctx context.Context,
+	processor VertexProcessor[T],
+	opts ...ProcessTopologyOption,
+) error {
+	options := &ProcessTopologyOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.GoRoutineLimit <= 0 {
+		options.GoRoutineLimit = runtime.NumCPU()
+	}
+
 	if d.LengthVertices() == 0 {
 		return nil
 	}
