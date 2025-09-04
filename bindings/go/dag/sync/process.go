@@ -47,7 +47,19 @@ func WithProcessGoRoutineLimit(limit int) ProcessTopologyOption {
 // processed, both B and C are processed concurrently. D and E will
 // be processed only after both B and C have been processed - even though E is
 // independent of B.
-func (d *DirectedAcyclicGraph[T]) ProcessTopology(ctx context.Context, processor VertexProcessor[T]) error {
+func (d *DirectedAcyclicGraph[T]) ProcessTopology(
+	ctx context.Context,
+	processor VertexProcessor[T],
+	opts ...ProcessTopologyOption,
+) error {
+	options := &ProcessTopologyOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	if options.GoRoutineLimit <= 0 {
+		options.GoRoutineLimit = runtime.NumCPU()
+	}
+
 	if d.LengthVertices() == 0 {
 		return nil
 	}
@@ -60,7 +72,7 @@ func (d *DirectedAcyclicGraph[T]) ProcessTopology(ctx context.Context, processor
 	doneMap := &sync.Map{}
 
 	// Process nodes concurrently
-	if err := topology.processTopology(ctx, roots, processor, doneMap); err != nil {
+	if err := topology.processTopology(ctx, roots, processor, doneMap, options); err != nil {
 		return err
 	}
 
@@ -108,7 +120,7 @@ func (d *DirectedAcyclicGraph[T]) ProcessReverseTopology(
 	doneMap := &sync.Map{}
 
 	// Process nodes concurrently
-	if err := topology.processTopology(ctx, roots, processor, doneMap); err != nil {
+	if err := topology.processTopology(ctx, roots, processor, doneMap, options); err != nil {
 		return err
 	}
 
@@ -134,9 +146,10 @@ func (d *DirectedAcyclicGraph[T]) processTopology(
 	ids []T, // a list of root nodes to start processing with
 	processor VertexProcessor[T], // the processing function
 	doneMap *sync.Map, // a map to track loaded nodes
+	opts *ProcessTopologyOptions,
 ) error {
 	errGroup, ctx := errgroup.WithContext(ctx)
-
+	errGroup.SetLimit(opts.GoRoutineLimit)
 	// Calculate the upper bound for the next queue channel
 	// this determines how many ids can be processed concurrently in the next phase
 	upperBound := 0
@@ -189,7 +202,7 @@ func (d *DirectedAcyclicGraph[T]) processTopology(
 
 	// Recursively process the next batch if available.
 	if len(next) > 0 {
-		if err := d.processTopology(ctx, next, processor, doneMap); err != nil {
+		if err := d.processTopology(ctx, next, processor, doneMap, opts); err != nil {
 			return err
 		}
 	}
