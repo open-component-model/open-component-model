@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,17 +58,18 @@ func CreateAuthClient(address, username, password string) *auth.Client {
 
 const distributionRegistryImage = "registry:3.0.0"
 
-func StartDockerContainerRegistry(t *testing.T, htpasswd string) string {
+func StartDockerContainerRegistry(t *testing.T, container, htpasswd string) string {
 	t.Helper()
 	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
 	registryContainer, err := registry.Run(t.Context(), distributionRegistryImage,
-		registry.WithHtpasswd(htpasswd),
+		WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{
 			"REGISTRY_VALIDATION_DISABLED": "true",
 			"REGISTRY_LOG_LEVEL":           "debug",
 		}),
 		testcontainers.WithLogger(log.TestLogger(t)),
+		testcontainers.WithName(container),
 	)
 	r := require.New(t)
 	r.NoError(err)
@@ -80,4 +82,24 @@ func StartDockerContainerRegistry(t *testing.T, htpasswd string) string {
 	r.NoError(err)
 
 	return registryAddress
+}
+
+func WithHtpasswd(credentials string) testcontainers.CustomizeRequestOption {
+	return func(req *testcontainers.GenericContainerRequest) error {
+		tmpFile, err := os.CreateTemp("", "htpasswd")
+		if err != nil {
+			tmpFile, err = os.Create(".")
+			if err != nil {
+				return fmt.Errorf("cannot create the file in the temp dir or in the current dir: %w", err)
+			}
+		}
+		defer tmpFile.Close()
+
+		_, err = tmpFile.WriteString(credentials)
+		if err != nil {
+			return fmt.Errorf("cannot write the credentials to the file: %w", err)
+		}
+
+		return registry.WithHtpasswdFile(tmpFile.Name())(req)
+	}
 }
