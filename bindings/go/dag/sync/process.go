@@ -9,7 +9,43 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// ProcessTopology performs topological sorting and transfers objects in order
+type ProcessTopologyOptions struct {
+	// MaxGoroutines limits the number of concurrent goroutines processing
+	// vertices. If 0, it defaults to the number of CPUs.
+	GoRoutineLimit int
+}
+
+type ProcessTopologyOption func(*ProcessTopologyOptions)
+
+func WithProcessGoRoutineLimit(limit int) ProcessTopologyOption {
+	return func(o *ProcessTopologyOptions) {
+		o.GoRoutineLimit = limit
+	}
+}
+
+// ProcessTopology performs a traversal in topological order.
+//
+// Effectively, that means that a vertex is only processed when all its parents
+// have been processed.
+//
+//	  A
+//	 / \
+//	B   C
+//	 \ / \
+//	  D   E
+//
+// In the above graph, A is a parent of B and C, and B and C are parents of D.
+// The valid processing orders are for example:
+// - A, B, C, D, E
+// - A, C, B, D, E
+// But not:
+// - B, A, C, D, E (B before its parent A)
+// - D, B, C, A, E (D before its parents B and C)
+//
+// The processing is done concurrently. In the above example, after A is
+// processed, both B and C are processed concurrently. D and E will
+// be processed only after both B and C have been processed - even though E is
+// independent of B.
 func (d *DirectedAcyclicGraph[T]) ProcessTopology(ctx context.Context, processor VertexProcessor[T]) error {
 	if d.LengthVertices() == 0 {
 		return nil
@@ -23,7 +59,7 @@ func (d *DirectedAcyclicGraph[T]) ProcessTopology(ctx context.Context, processor
 	doneMap := &sync.Map{}
 
 	// Process nodes concurrently
-	if err := topology.processObjectsByTopology(ctx, d, roots, processor, doneMap); err != nil {
+	if err := topology.processTopology(ctx, roots, processor, doneMap); err != nil {
 		return err
 	}
 
@@ -34,7 +70,14 @@ func (d *DirectedAcyclicGraph[T]) ProcessTopology(ctx context.Context, processor
 	return nil
 }
 
-// ProcessTopology performs topological sorting and transfers objects in order
+// ProcessReverseTopology reverses the graph (so, it inverts the direction of
+// edges). Then it performs a traversal in topological order on the reversed
+// graph.
+//
+// Effectively, that means that a vertex is only processed when all its children
+// have been processed.
+//
+// For a more thorough explanation of topological order, see ProcessTopology.
 func (d *DirectedAcyclicGraph[T]) ProcessReverseTopology(ctx context.Context, processor VertexProcessor[T]) error {
 	if d.LengthVertices() == 0 {
 		return nil
@@ -52,7 +95,7 @@ func (d *DirectedAcyclicGraph[T]) ProcessReverseTopology(ctx context.Context, pr
 	doneMap := &sync.Map{}
 
 	// Process nodes concurrently
-	if err := topology.processObjectsByTopology(ctx, d, roots, processor, doneMap); err != nil {
+	if err := topology.processTopology(ctx, roots, processor, doneMap); err != nil {
 		return err
 	}
 
@@ -64,20 +107,17 @@ func (d *DirectedAcyclicGraph[T]) ProcessReverseTopology(ctx context.Context, pr
 }
 
 type VertexProcessor[T cmp.Ordered] interface {
-	ProcessVertex(ctx context.Context, vertex *Vertex[T]) error
+	ProcessVertex(ctx context.Context, vertex T) error
 }
 
-type VertexProcessorFunc[T cmp.Ordered] func(ctx context.Context, vertex *Vertex[T]) error
+type VertexProcessorFunc[T cmp.Ordered] func(ctx context.Context, vertex T) error
 
-func (f VertexProcessorFunc[T]) ProcessVertex(ctx context.Context, vertex *Vertex[T]) error {
+func (f VertexProcessorFunc[T]) ProcessVertex(ctx context.Context, vertex T) error {
 	return f(ctx, vertex)
 }
 
-// processObjectsByTopology processes nodes in any topological order defined by the topology given through the graph.
-// and handles dependencies
-func (d *DirectedAcyclicGraph[T]) processObjectsByTopology(
+func (d *DirectedAcyclicGraph[T]) processTopology(
 	ctx context.Context,
-	dag *DirectedAcyclicGraph[T],
 	ids []T, // a list of root nodes to start processing with
 	processor VertexProcessor[T], // the processing function
 	doneMap *sync.Map, // a map to track loaded nodes
@@ -101,16 +141,11 @@ func (d *DirectedAcyclicGraph[T]) processObjectsByTopology(
 				return nil
 			}
 
-			// While the traversal logic should operate on a copy of the graph
-			// with a processing order specific topology, the processing of the
-			// vertex should be done on the original graph.
-			vertex := dag.MustGetVertex(id)
-
-			if err := processor.ProcessVertex(ctx, vertex); err != nil {
-				return fmt.Errorf("failed to process vertex with id %v: %w", vertex.ID, err)
+			if err := processor.ProcessVertex(ctx, id); err != nil {
+				return fmt.Errorf("failed to process vertex with id %v: %w", id, err)
 			}
 
-			vertex = d.MustGetVertex(id)
+			vertex := d.MustGetVertex(id)
 			for _, parent := range vertex.EdgeKeys() {
 				inDegree := d.MustGetInDegree(parent)
 				d.InDegree.Store(parent, inDegree-1)
@@ -141,7 +176,7 @@ func (d *DirectedAcyclicGraph[T]) processObjectsByTopology(
 
 	// Recursively process the next batch if available.
 	if len(next) > 0 {
-		if err := d.processObjectsByTopology(ctx, dag, next, processor, doneMap); err != nil {
+		if err := d.processTopology(ctx, next, processor, doneMap); err != nil {
 			return err
 		}
 	}

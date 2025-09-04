@@ -61,7 +61,7 @@ type DiscoverOptions[T cmp.Ordered] struct {
 
 type DiscoverOption[T cmp.Ordered] func(*DiscoverOptions[T])
 
-func WithGoRoutineLimit[T cmp.Ordered](numGoRoutines int) DiscoverOption[T] {
+func WithDiscoveryGoRoutineLimit[T cmp.Ordered](numGoRoutines int) DiscoverOption[T] {
 	return func(options *DiscoverOptions[T]) {
 		options.GoRoutineLimit = numGoRoutines
 	}

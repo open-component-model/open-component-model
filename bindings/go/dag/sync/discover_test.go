@@ -90,7 +90,7 @@ func TestDAGDiscovery(t *testing.T) {
 			return neighbors, nil
 		}
 
-		err := dag.Discover(ctx, DiscoverNeighborsFunc[string](discoveryFunc), WithRoots("A"), WithGoRoutineLimit[string](1))
+		err := dag.Discover(ctx, DiscoverNeighborsFunc[string](discoveryFunc), WithRoots("A"), WithDiscoveryGoRoutineLimit[string](1))
 		r.Error(err, "expected error due to missing node in the external graph, but got nil")
 
 		r.Equal(dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState), StateError, "expected vertex A to be in error state, but got %s", dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState))
