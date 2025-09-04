@@ -93,8 +93,8 @@ func TestDAGDiscovery(t *testing.T) {
 		err := dag.Discover(ctx, DiscoverNeighborsFunc[string](discoveryFunc), WithRoots("A"), WithDiscoveryGoRoutineLimit[string](1))
 		r.Error(err, "expected error due to missing node in the external graph, but got nil")
 
-		r.Equal(dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState), StateError, "expected vertex A to be in error state, but got %s", dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState))
-		r.Equal(dag.MustGetVertex("B").MustGetAttribute(AttributeDiscoveryState), StateCompleted, "expected vertex B to be in completed state, but got %s", dag.MustGetVertex("B").MustGetAttribute(AttributeDiscoveryState))
-		r.Equal(dag.MustGetVertex("C").MustGetAttribute(AttributeDiscoveryState), StateError, "expected vertex C to be in error state, but got %s", dag.MustGetVertex("C").MustGetAttribute(AttributeDiscoveryState))
+		r.Equal(dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState), DiscoveryStateError, "expected vertex A to be in error state, but got %s", dag.MustGetVertex("A").MustGetAttribute(AttributeDiscoveryState))
+		r.Equal(dag.MustGetVertex("B").MustGetAttribute(AttributeDiscoveryState), DiscoveryStateCompleted, "expected vertex B to be in completed state, but got %s", dag.MustGetVertex("B").MustGetAttribute(AttributeDiscoveryState))
+		r.Equal(dag.MustGetVertex("C").MustGetAttribute(AttributeDiscoveryState), DiscoveryStateError, "expected vertex C to be in error state, but got %s", dag.MustGetVertex("C").MustGetAttribute(AttributeDiscoveryState))
 	})
 }

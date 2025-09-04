@@ -10,6 +10,39 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// ProcessingState is an attribute set during ProcessTopology and
+// ProcessReverseTopology on each vertex to indicate its processing state
+type ProcessingState int
+
+func (s ProcessingState) String() string {
+	switch s {
+	case ProcessingStateQueued:
+		return "queued"
+	case ProcessingStateProcessing:
+		return "processing"
+	case ProcessingStateCompleted:
+		return "completed"
+	case ProcessingStateError:
+		return "error"
+	default:
+		return fmt.Sprintf("unknown(%d)", s)
+	}
+}
+
+const (
+	AttributeProcessingState = "dag/processing-state"
+
+	// ProcessingStateQueued indicates the vertex has been queued for processing.
+	// So, all its parents have been processed.
+	ProcessingStateQueued = iota
+	// ProcessingStateProcessing indicates the vertex is currently being processed.
+	ProcessingStateProcessing
+	// ProcessingStateCompleted indicates the vertex has been processed.
+	ProcessingStateCompleted
+	// ProcessingStateError indicates processing the vertex returned an error.
+	ProcessingStateError
+)
+
 type ProcessTopologyOptions struct {
 	// MaxGoroutines limits the number of concurrent goroutines processing
 	// vertices. If 0, it defaults to the number of CPUs.
@@ -47,6 +80,8 @@ func WithProcessGoRoutineLimit(limit int) ProcessTopologyOption {
 // processed, both B and C are processed concurrently. D and E will
 // be processed only after both B and C have been processed - even though E is
 // independent of B.
+//
+// ProcessVertex is guaranteed to be called for each vertex only once.
 func (d *DirectedAcyclicGraph[T]) ProcessTopology(
 	ctx context.Context,
 	processor VertexProcessor[T],
@@ -67,12 +102,15 @@ func (d *DirectedAcyclicGraph[T]) ProcessTopology(
 
 	// Collect all Children nodes that are end leafs
 	roots := topology.Roots()
+	for _, r := range roots {
+		d.MustGetVertex(r).Attributes.Store(AttributeProcessingState, ProcessingStateQueued)
+	}
 
 	// A map to track doneMap nodes
 	doneMap := &sync.Map{}
 
 	// Process nodes concurrently
-	if err := topology.processTopology(ctx, roots, processor, doneMap, options); err != nil {
+	if err := topology.processTopology(ctx, d, roots, processor, doneMap, options); err != nil {
 		return err
 	}
 
@@ -89,6 +127,8 @@ func (d *DirectedAcyclicGraph[T]) ProcessTopology(
 //
 // Effectively, that means that a vertex is only processed when all its children
 // have been processed.
+//
+// ProcessVertex is guaranteed to be called for each vertex only once.
 //
 // For a more thorough explanation of topological order, see ProcessTopology.
 func (d *DirectedAcyclicGraph[T]) ProcessReverseTopology(
@@ -115,12 +155,15 @@ func (d *DirectedAcyclicGraph[T]) ProcessReverseTopology(
 
 	// Collect all Children nodes that are end leafs
 	roots := topology.Roots()
+	for _, r := range roots {
+		d.MustGetVertex(r).Attributes.Store(AttributeProcessingState, ProcessingStateQueued)
+	}
 
 	// A map to track doneMap nodes
 	doneMap := &sync.Map{}
 
 	// Process nodes concurrently
-	if err := topology.processTopology(ctx, roots, processor, doneMap, options); err != nil {
+	if err := topology.processTopology(ctx, d, roots, processor, doneMap, options); err != nil {
 		return err
 	}
 
@@ -143,6 +186,7 @@ func (f VertexProcessorFunc[T]) ProcessVertex(ctx context.Context, vertex T) err
 
 func (d *DirectedAcyclicGraph[T]) processTopology(
 	ctx context.Context,
+	dag *DirectedAcyclicGraph[T],
 	ids []T, // a list of root nodes to start processing with
 	processor VertexProcessor[T], // the processing function
 	doneMap *sync.Map, // a map to track loaded nodes
@@ -151,7 +195,8 @@ func (d *DirectedAcyclicGraph[T]) processTopology(
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.SetLimit(opts.GoRoutineLimit)
 	// Calculate the upper bound for the next queue channel
-	// this determines how many ids can be processed concurrently in the next phase
+	// this determines how many ids can be processed concurrently in the next
+	// phase
 	upperBound := 0
 	for _, id := range ids {
 		upperBound += d.MustGetOutDegree(id)
@@ -161,15 +206,18 @@ func (d *DirectedAcyclicGraph[T]) processTopology(
 
 	for _, id := range ids {
 		errGroup.Go(func() error {
-			// Mark the id as processed or return if already processed
+			// Mark the id as processed or return if already processed.
 			_, loaded := doneMap.LoadOrStore(id, true)
 			if loaded {
 				return nil
 			}
 
+			dag.MustGetVertex(id).Attributes.Store(AttributeProcessingState, ProcessingStateProcessing)
 			if err := processor.ProcessVertex(ctx, id); err != nil {
+				dag.MustGetVertex(id).Attributes.Store(AttributeProcessingState, ProcessingStateError)
 				return fmt.Errorf("failed to process vertex with id %v: %w", id, err)
 			}
+			dag.MustGetVertex(id).Attributes.Store(AttributeProcessingState, ProcessingStateCompleted)
 
 			vertex := d.MustGetVertex(id)
 			for _, parent := range vertex.EdgeKeys() {
@@ -177,9 +225,11 @@ func (d *DirectedAcyclicGraph[T]) processTopology(
 				d.InDegree.Store(parent, inDegree-1)
 				parentVertex := d.MustGetVertex(parent)
 				parentVertex.Edges.Delete(id)
-				// If all prerequisites (children) of the parent have been processed and
-				// the parent has not been enqueued yet, add it to the next level.
+				// If all prerequisites (children) of the parent have been
+				// processed and the parent has not been enqueued yet, add it to
+				// the next level.
 				if d.MustGetInDegree(parent) == 0 {
+					dag.MustGetVertex(parent).Attributes.Store(AttributeProcessingState, ProcessingStateQueued)
 					nextQueueCh <- parent
 				}
 			}
@@ -202,7 +252,7 @@ func (d *DirectedAcyclicGraph[T]) processTopology(
 
 	// Recursively process the next batch if available.
 	if len(next) > 0 {
-		if err := d.processTopology(ctx, next, processor, doneMap, opts); err != nil {
+		if err := d.processTopology(ctx, dag, next, processor, doneMap, opts); err != nil {
 			return err
 		}
 	}
