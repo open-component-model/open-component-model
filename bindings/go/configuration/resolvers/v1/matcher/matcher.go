@@ -39,7 +39,7 @@ type ResolverMatcher struct {
 }
 
 // NewResolverMatcher creates a new ResolverMatcher with the given component name glob pattern and version constraint.
-func NewResolverMatcher(componentNamePattern, versionConstraint string) (*ResolverMatcher, error) {
+func NewResolverMatcher(componentNamePattern string) (*ResolverMatcher, error) {
 	componentMatcher, err := NewComponentMatcher(componentNamePattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create component matcher: %w", err)
