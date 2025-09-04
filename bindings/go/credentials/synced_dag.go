@@ -83,7 +83,7 @@ func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string]
 			return vertex, nil
 		}
 	}
-	return nil, fmt.Errorf("failed to resolve credentials for node %v: %w", node, ErrNoDirectCredentials)
+	return nil, fmt.Errorf("failed to match any node: %w", ErrNoDirectCredentials)
 }
 
 // addIdentity ensures that a given identity is represented as a vertex in the graph.

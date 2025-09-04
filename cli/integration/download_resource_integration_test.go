@@ -43,8 +43,8 @@ func Test_Integration_OCIRepository(t *testing.T) {
 	password := internal.GenerateRandomPassword(t, 20)
 	htpasswd := internal.GenerateHtpasswd(t, user, password)
 
-	// Start containerized registry
-	registryAddress := internal.StartDockerContainerRegistry(t, htpasswd)
+	containerName := "download-resource-oci-repository"
+	registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
 	host, port, err := net.SplitHostPort(registryAddress)
 	r.NoError(err)
 

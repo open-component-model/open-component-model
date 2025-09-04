@@ -6,25 +6,25 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/jedib0t/go-pretty/v6 v6.6.8
 	github.com/nlepage/go-tarfs v1.2.1
-	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.7
+	github.com/spf13/cobra v1.10.1
+	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.16.0
 	golang.org/x/sys v0.35.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.7
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250827153944-5f686b36157b
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250903091648-5c315c9cf5a2
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.3
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250827153944-5f686b36157b
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250903091648-5c315c9cf5a2
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250827153944-5f686b36157b
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250903091648-5c315c9cf5a2
 	ocm.software/open-component-model/bindings/go/oci v0.0.6
 	ocm.software/open-component-model/bindings/go/plugin v0.0.4
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250827153944-5f686b36157b
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250903091648-5c315c9cf5a2
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
