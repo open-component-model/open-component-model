@@ -35,7 +35,7 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 	for id := range vertex.Edges {
 		childID, ok := g.getIdentity(id)
 		if !ok {
-			return nil, fmt.Errorf("failed to resolve credentials for node %q: child node %q not found", vertex.ID, id)
+			return nil, fmt.Errorf("no credentials for node %q available: child node %q not found", vertex.ID, id)
 		}
 		childCredentials, err := g.resolveFromGraph(ctx, childID)
 		if err != nil {
@@ -43,13 +43,13 @@ func (g *Graph) resolveFromGraph(ctx context.Context, identity runtime.Identity)
 		}
 		plugin, err := g.credentialPluginProvider.GetCredentialPlugin(ctx, childID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve credentials for node %q: %w", childID, err)
+			return nil, fmt.Errorf("could not get credential plugin for node %q: %w", childID, err)
 		}
 
 		// Let the plugin resolve the child's credentials.
 		credentials, err := plugin.Resolve(ctx, childID, childCredentials)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve credentials for node %q: %w", childID, err)
+			return nil, fmt.Errorf("no credentials for node %q resolved from plugin: %w", childID, err)
 		}
 
 		// Merge the resolved credentials into the result
