@@ -125,17 +125,13 @@ func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
 
 // AddVertex adds a new node to the graph.
 func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) error {
+	if _, exists := d.Vertices.Load(id); exists {
+		return fmt.Errorf("node %v already exists: %w", id, ErrAlreadyExists)
+	}
 	vertex := &Vertex[T]{
 		ID:         id,
 		Attributes: &sync.Map{},
 		Edges:      &sync.Map{},
-	}
-	return d.addRawVertex(vertex, attributes...)
-}
-
-func (d *DirectedAcyclicGraph[T]) addRawVertex(vertex *Vertex[T], attributes ...map[string]any) error {
-	if _, exists := d.Vertices.Load(vertex.ID); exists {
-		return fmt.Errorf("node %v already exists: %w", vertex.ID, ErrAlreadyExists)
 	}
 	for _, attrs := range attributes {
 		for k, v := range attrs {
@@ -478,21 +474,6 @@ type Vertex[T cmp.Ordered] struct {
 	// Edges stores the IDs of the nodes that this node has an outgoing edge to,
 	// as well as any attributes associated with that edge.
 	Edges *sync.Map // map[T]*sync.Map with map[string]any (attributes)
-}
-
-// NewVertex creates a new vertex with the given ID and optional attributes.
-func NewVertex[T cmp.Ordered](id T, attributes ...map[string]any) *Vertex[T] {
-	v := &Vertex[T]{
-		ID:         id,
-		Attributes: &sync.Map{},
-		Edges:      &sync.Map{},
-	}
-	for _, attrs := range attributes {
-		for key, value := range attrs {
-			v.Attributes.Store(key, value)
-		}
-	}
-	return v
 }
 
 func (v *Vertex[T]) Clone() *Vertex[T] {

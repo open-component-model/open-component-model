@@ -55,7 +55,7 @@ const (
 // TODO(fabianburth): Add a recursion depth limit
 type TraverseOptions[T cmp.Ordered] struct {
 	// Roots to start the traversal from
-	Roots          []*Vertex[T]
+	Roots          []T
 	GoRoutineLimit int
 }
 
@@ -67,25 +67,34 @@ func WithGoRoutineLimit[T cmp.Ordered](numGoRoutines int) TraverseOption[T] {
 	}
 }
 
-func WithRoots[T cmp.Ordered](roots ...*Vertex[T]) TraverseOption[T] {
+func WithRoots[T cmp.Ordered](root ...T) TraverseOption[T] {
 	return func(options *TraverseOptions[T]) {
-		options.Roots = roots
+		options.Roots = root
 	}
 }
 
 // NeighborDiscoverer is an interface for a function that discovers neighbor
 // vertices for a given vertex.
-// It MUST treat v as read-only and return its neighbors (created via NewVertex)
+// It MUST treat v as read-only and return its neighbors id
 // or an error.
 type NeighborDiscoverer[T cmp.Ordered] interface {
-	DiscoverNeighbors(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error)
+	// DiscoverNeighbors is not allowed to set attributes on the neighbor
+	// vertices as this would lead to data races. Those data races would occur
+	// when multiple vertices have the same neighbor.
+	//    A
+	//   / \
+	//  B   C
+	//   \ /
+	//    D
+	// In this case, B and C could overwrite each others attributes on D.
+	DiscoverNeighbors(ctx context.Context, v T) (neighbors []T, err error)
 }
 
 // DiscoverNeighborsFunc is a function type that implements the NeighborDiscoverer
 // interface. It is used to discover neighbors for a given vertex.
-type DiscoverNeighborsFunc[T cmp.Ordered] func(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error)
+type DiscoverNeighborsFunc[T cmp.Ordered] func(ctx context.Context, v T) (neighbors []T, err error)
 
-func (f DiscoverNeighborsFunc[T]) DiscoverNeighbors(ctx context.Context, v *Vertex[T]) (neighbors []*Vertex[T], err error) {
+func (f DiscoverNeighborsFunc[T]) DiscoverNeighbors(ctx context.Context, v T) (neighbors []T, err error) {
 	return f(ctx, v)
 }
 
@@ -115,34 +124,32 @@ func (d *DirectedAcyclicGraph[T]) Traverse(
 	if options.GoRoutineLimit <= 0 {
 		options.GoRoutineLimit = runtime.NumCPU()
 	}
-	rootIDs := make([]T, 0, len(options.Roots))
 	if len(options.Roots) > 0 {
 		for _, root := range options.Roots {
-			if err := d.addRawVertex(root); err != nil && !errors.Is(err, ErrAlreadyExists) {
+			if err := d.AddVertex(root); err != nil && !errors.Is(err, ErrAlreadyExists) {
 				return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
 			}
-			rootIDs = append(rootIDs, root.ID)
 		}
 	} else {
 		slog.DebugContext(ctx, "no roots provided for traversal, using dag roots")
 
-		rootIDs = d.Roots()
-		if len(rootIDs) == 0 {
+		options.Roots = d.Roots()
+		if len(options.Roots) == 0 {
 			return fmt.Errorf("no roots provided and no roots found in the dag, cannot traverse")
 		}
 	}
 	doneMap := &sync.Map{}
 	errGroup := errgroup.Group{}
 
-	for _, rootID := range rootIDs {
+	for _, root := range options.Roots {
 		// We ensured that the rootID vertex exists in the graph
-		v, _ := d.GetVertex(rootID)
+		v, _ := d.GetVertex(root)
 		v.Attributes.Store(AttributeTraversalState, StateDiscovering)
 		// Traverse the graph from each rootID vertex concurrently.
 		// This is fine as:
 		// - the doneMap ensures that each vertex is only processed once.
 		errGroup.Go(func() error {
-			return d.traverse(ctx, rootID, discoverer, doneMap, options)
+			return d.traverse(ctx, root, discoverer, doneMap, options)
 		})
 	}
 	if err := errGroup.Wait(); err != nil {
@@ -190,7 +197,20 @@ func (d *DirectedAcyclicGraph[T]) traverse(
 		return fmt.Errorf("vertex %v not found in the graph", id)
 	}
 
-	neighbors, err := discoverer.DiscoverNeighbors(ctx, vertex)
+	// Discover neighbors is not allowed to set attributes on the neighbor
+	// vertices as this would lead to data races. Those data races would occur
+	// when multiple vertices have the same neighbor.
+	//    A
+	//   / \
+	//  B   C
+	//   \ /
+	//    D
+	// In this case, B and C could overwrite each others attributes on D.
+	//
+	// Instead, DiscoverNeighbors is only allowed to return the IDs of the
+	// If needed, we could introduce a capability to set attributes to the edges
+	// map[neighborId]edgeAttributes in the future.
+	neighbors, err := discoverer.DiscoverNeighbors(ctx, vertex.ID)
 	if err != nil {
 		vertex.Attributes.Store(AttributeTraversalState, StateError)
 		return fmt.Errorf("failed to discoverer id %v: %w", id, err)
@@ -204,20 +224,19 @@ func (d *DirectedAcyclicGraph[T]) traverse(
 	// limit the number of goroutines, as the traversal is recursive.
 	errGroup.SetLimit(opts.GoRoutineLimit)
 
-	for index, ref := range neighbors {
-		if err := d.addRawVertex(ref, map[string]any{
+	for index, neighborID := range neighbors {
+		if err := d.AddVertex(neighborID, map[string]any{
 			AttributeTraversalState: StateDiscovering,
 		}); err != nil && !errors.Is(err, ErrAlreadyExists) {
 			vertex.Attributes.Store(AttributeTraversalState, StateError)
-			return fmt.Errorf("failed to add vertex for reference %v: %w", ref, err)
+			return fmt.Errorf("failed to add vertex for reference %v: %w", neighborID, err)
 		}
-		if err := d.AddEdge(id, ref.ID, map[string]any{AttributeOrderIndex: index}); err != nil {
+		if err := d.AddEdge(id, neighborID, map[string]any{AttributeOrderIndex: index}); err != nil {
 			vertex.Attributes.Store(AttributeTraversalState, StateError)
 			return fmt.Errorf("failed to add edge %v: %w", id, err)
 		}
-		refID := ref.ID
 		errGroup.Go(func() error {
-			if err := d.traverse(ctx, refID, discoverer, doneMap, opts); err != nil {
+			if err := d.traverse(ctx, neighborID, discoverer, doneMap, opts); err != nil {
 				return fmt.Errorf("failed to traverse reference %v: %w", id, err)
 			}
 			return nil
