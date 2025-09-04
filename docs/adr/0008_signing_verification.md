@@ -46,7 +46,8 @@ Signing uses the analogous command:
 ocm sign componentversion --signature mysig --signer rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
-This downloads, normalizes, signs, and re-uploads the descriptor. Signing and verification configs live in `.ocmconfig`.
+This downloads, normalizes, signs, and re-uploads the descriptor. This ADR will only cover the signing part.
+Normalization and digest calculation are covered separately because they are technically not part of signature creation.
 
 #### Two-Stage Signing
 
@@ -57,7 +58,7 @@ and signing.
 In these cases, users can choose to add a digest to the descriptor and sign it separately:
 
 ```shell
-ocm add digest {--signature default} {--hash-algorithm=sha256} {--normalisation-agorithm=jsonNormalisation/v1} {--upload=true} ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
+ocm add digest {--signature default} {--hash-algorithm=sha256} {--normalisation-agorithm=jsonNormalisation/v1} {--dry-run=false} ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 
 > name: default
 > digest:
@@ -66,7 +67,7 @@ ocm add digest {--signature default} {--hash-algorithm=sha256} {--normalisation-
 >   value: cf08abae08bb874597630bc0573d941b1becc92b4916cbe3bef9aa0e89aec3f6
 ```
 
-After this, as long as `--upload` is set, the descriptor will be updated with this signature field, containing a digest,
+After this, as long as `--dry-run=false` is set (the default if not specified), the descriptor will be updated with this signature field, containing a digest,
 but no actual signature value.
 
 This can then be used to sign the descriptor against a pinned signature:
@@ -92,6 +93,7 @@ sequenceDiagram
     Note over U,CLI: Step 1: Add Digest
     U->>CLI: ocm add digest --signature default --upload
     CLI->>Repo: Download Component Descriptor
+    Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Compute Digest
     CLI->>Repo: Upload Descriptor with Digest only (no signature)
     CLI-->>U: Digest field added to descriptor
@@ -99,7 +101,8 @@ sequenceDiagram
     Note over U,CLI: Step 2: Sign Pinned Digest
     U->>CLI: ocm sign componentversion --signature default@<digest> --signer rsapss
     CLI->>Repo: Download Descriptor (with digest field)
-    CLI->>CLI: Locate matching digest by hash algorithm + value
+    Repo-->>CLI: Component Descriptor
+    CLI->>CLI: Locate matching digest by signature name
     CLI->>Handler: GetSigningCredentialConsumerIdentity(config)
     Handler-->>CLI: Credential Identity
     CLI->>Creds: Resolve credentials for identity
@@ -195,7 +198,7 @@ type ComponentSignatureHandler interface {
 // 
 // Implementations SHOULD:
 // - Use a well-known registered default configuration and be modifiable in their behavior, assuming sane defaults.
-// - offer versioned, stable signature implementations differentiated by the config type.
+// - Offer versioned, stable signature implementations differentiated by the config type.
 // - Reject signing specifications if there is no credential available that is required for the handler.
 //
 // The returned signature SHOULD be attached to the descriptor `signatures` field after a successful call to Sign.
@@ -203,7 +206,7 @@ type ComponentSignatureSigner interface {
     // GetSigningCredentialConsumerIdentity resolves the credential consumer identity of the given configuration to use for credential resolution
     // when signing new signatures with the given configuration.
     // If successful, the returned identity SHOULD be used for credential resolution. (i.e. against the OCM credential graph)
-    // If unsuccessful, an error MUST be returned, and Sign CAN be called without credentials.
+    // If unsuccessful, an error MUST be returned, and Sign MAY be called without credentials.
     GetSigningCredentialConsumerIdentity(ctx context.Context, config runtime.Typed) (identity runtime.Identity, err error)
 
     // Sign signs the descriptor using the provided config.
@@ -211,7 +214,7 @@ type ComponentSignatureSigner interface {
     //
     // Configurations MUST NOT contain any private key or otherwise sensitive material. This is a security risk.
     // Instead, the signer MUST use the provided credentials and well-known attributes to sign the digest specification.
-    Sign(ctx context.Context, unsigned descruntime.Signature, config runtime.Typed, credentials map[string]string) (signed descruntime.Signature, err error)
+    Sign(ctx context.Context, unsigned descruntime.Digest, config runtime.Typed, credentials map[string]string) (signed descruntime.SignatureInfo, err error)
 }
 
 // ComponentSignatureVerifier validates signatures and digests for a Component Descriptor.
@@ -222,20 +225,20 @@ type ComponentSignatureSigner interface {
 //
 // Implementations SHOULD:
 // - Use a well-known registered default configuration derived from configuration and specification and be modifiable in their behavior, assuming sane defaults.
-// - offer versioned, stable verification implementations differentiated by the config type.
+// - Offer versioned, stable verification implementations differentiated by the config type.
 // - Reject verification specifications if there is no credential available that is required for the handler to verify the signature.
 //
 // See: https://ocm.software/docs/reference/ocm-cli/verify/componentversions/
 type ComponentSignatureVerifier interface {
     // GetVerifyingCredentialConsumerIdentity resolves the credential consumer identity of the given configuration to use for credential resolution
     // when verifying signatures with the given configuration.
-    // If successful, the returned identity SHOULD be used for credential resolution. (i.e. against the OCM credential graph)
+    // If successful, the returned identity SHOULD be used for credential resolution (i.e. against the OCM credential graph)
     // If unsuccessful, an error MUST be returned, and Sign CAN be called without credentials.
     GetVerifyingCredentialConsumerIdentity(ctx context.Context, config runtime.Typed) (identity runtime.Identity, err error)
     
     // Verify performs signature and digest checks using the provided config.
     //
-    // An extensible config SHOULD support timeout / limit configurations for signature validation
+    // An extensible config SHOULD support timeout / limit configurations for signature validation.
     // Configurations MUST NOT contain any key or otherwise sensitive material. This is a security risk.
     // Instead, the verifier MUST use the provided credentials and well-known attributes to verify the signature.
     // If the media type cannot be verified, the signature verification MUST fail.
@@ -266,6 +269,7 @@ sequenceDiagram
     Note over U,CLI: Signing
     U->>CLI: ocm sign componentversion --signer rsapss
     CLI->>Repo: Download Component Descriptor
+    Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Compute Digest
     CLI->>Handler: GetSigningCredentialConsumerIdentity(config)
     Handler-->>CLI: Credential Identity
@@ -278,6 +282,7 @@ sequenceDiagram
     Note over U,CLI: Verification
     U->>CLI: ocm verify componentversion --verifier rsapss
     CLI->>Repo: Download Component Descriptor
+    Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Recompute Digest
     CLI->>Handler: GetVerifyingCredentialConsumerIdentity(config)
     Handler-->>CLI: Credential Identity
@@ -292,15 +297,6 @@ sequenceDiagram
 ### Config
 
 ```yaml .ocmconfig
-- type: signing.configuration.ocm.software/v1alpha1
-  signers:
-  - name: rsapss
-    config:
-      type: RSASSA-PKCS1-V1_5/v1alpha1
-  verifiers:
-  - name: rsapss
-    config:
-      type: RSASSA-PKCS1-V1_5/v1alpha1
 - type: credentials.config.ocm.software
   consumers:
   - identity:
@@ -313,15 +309,7 @@ sequenceDiagram
         public_key_pem_file: "/path/to/mypublickey.pem"
 ```
 
-### Signing
-
-#### Via `signing.configuration.ocm.software/v1alpha1` and `--signer`
-
-```shell
-ocm sign componentversion --signature mysig --signer rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
-```
-
-#### Via `--signer-spec`
+### Signing via `--signer-spec`
 
 ```yaml ./rsapss.yaml
 type: RSASSA-PKCS1-V1_5/v1alpha1
@@ -331,15 +319,7 @@ type: RSASSA-PKCS1-V1_5/v1alpha1
 ocm sign componentversion --signature mysig --signer-spec ./rsapss.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
-### Verification
-
-#### Via `signing.configuration.ocm.software/v1alpha1` and `--verifier`
-
-```shell
-ocm verify componentversion --signature mysig --verifier rsapss ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
-```
-
-#### Via `--verifier-spec`
+### Verification via `--verifier-spec`
 
 ```yaml ./rsapss.yaml
 type: RSASSA-PKCS1-V1_5/v1alpha1
@@ -397,6 +377,7 @@ sequenceDiagram
     Note over U,CLI: Signing
     U->>CLI: ocm sign componentversion --signer sigstore
     CLI->>Repo: Download Component Descriptor
+    Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Compute Digest
     CLI->>Plugin: GetSigningCredentialConsumerIdentity(config)
     Plugin-->>CLI: Credential Identity (OIDCIdentityToken/v1alpha1)
@@ -421,6 +402,7 @@ sequenceDiagram
     Note over U,CLI: Verification
     U->>CLI: ocm verify componentversion --verifier sigstore
     CLI->>Repo: Download Component Descriptor
+    Repo-->>CLI: Component Descriptor
     CLI->>CLI: Normalize + Recompute Digest
     CLI->>Plugin: GetVerifyingCredentialConsumerIdentity(config)
     Plugin-->>CLI: Credential Identity (PEM/v1alpha1)
@@ -437,33 +419,6 @@ sequenceDiagram
 ```
 
 ```yaml .ocmconfig
-- type: signing.configuration.ocm.software/v1alpha1
-  signers:
-    - name: sigstore
-      config:
-        type: sign.sigstore.dev/v1alpha1
-        # Imitate OCM v1 Behavior:
-        #
-        # use cosign CLI defaults for signing
-        #
-        # fulcioURL: https://fulcio.sigstore.dev
-        # rekorURL: https://rekor.sigstore.dev
-        # OIDCIssuerURL: https://oauth2.sigstore.dev/auth
-        # OIDCClientID: "sigstore"
-  verifiers:
-    - name: sigstore
-      config:
-        type: verify.sigstore.dev/v1alpha1
-        rekor:
-          # Imitate OCM v1 Behavior:
-          #
-          # lookup pubs via SIGSTORE_REKOR_PUBLIC_KEY, TUF_ROOT or fallback to remote tuf.
-          # additionally, look for any credentials in the form of
-          #   type: RSASSA-PKCS1-V1_5/v1alpha1
-          #   name: "sigstore"
-          #
-          # that contain the public_key_pem_file property.
-          publicKeyLookupPolicy: Default
 - type: credentials.config.ocm.software
   consumers:
     - identity:
@@ -484,15 +439,7 @@ sequenceDiagram
             public_key_pem_file: "/path/to/mypublickey.pem"
 ```
 
-### Signing
-
-#### Via `signing.configuration.ocm.software/v1alpha1` and `--signer`
-
-```shell
-ocm sign componentversion --signature mysig --signer sigstore ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
-```
-
-#### Via `--signer-spec`
+### Signing via `--signer-spec`
 
 ```yaml ./sigstore.yaml
 type: sign.sigstore.dev/v1alpha1
@@ -506,15 +453,7 @@ OIDCClientID: "sigstore"
 ocm sign componentversion --signature mysig --signer-spec ./sigstore.yaml ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
 ```
 
-### Verification
-
-#### Via `signing.configuration.ocm.software/v1alpha1` and `--verifier`
-
-```shell
-ocm verify componentversion --signature mysig --verifier sigstore ghcr.io/open-component-model/ocm//ocm.software/ocm:0.17.0
-```
-
-#### Via `--verifier-spec`
+### Verification via `--verifier-spec`
 
 ```yaml ./sigstore-verify.yaml
 type: verify.sigstore.dev/v1alpha1
@@ -595,7 +534,7 @@ These credentials can be used for offline verification in case the Rekor public 
 
 6. **Output**
 
-    * Sign: success with updated descriptor as long as `--update` is set. Always returns the signature specification, or an error.
+    * Sign: success with updated descriptor as long as `--dry-run=false` is set (default). Always returns the signature specification, or an error.
     * Verify: success or detailed error per failing signature.
 
 ---
