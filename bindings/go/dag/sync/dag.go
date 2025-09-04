@@ -427,6 +427,8 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 	reverse := NewDirectedAcyclicGraph[T]()
 
 	// Ensure all vertices exist in the new graph
+	// We cannot use vertex.Clone here. vertex.Clone also copies the edges.
+	// But for reversing the graph, the edges have to be inverted.
 	d.Vertices.Range(func(key, value any) bool {
 		origVertex := value.(*Vertex[T])
 		attrs := make(map[string]any)
