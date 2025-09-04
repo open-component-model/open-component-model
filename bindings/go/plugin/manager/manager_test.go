@@ -206,7 +206,7 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	baseCancel()
 	require.Eventually(t, func() bool {
 		_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
-		return err == nil
+		return err != nil
 	}, 1*time.Second, 100*time.Millisecond)
 	t.Log("plugin is stopped")
 }
@@ -255,7 +255,7 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 	require.NoError(t, pm.Shutdown(ctx))
 	require.Eventually(t, func() bool {
 		_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
-		return err == nil
+		return err != nil
 	}, 1*time.Second, 100*time.Millisecond)
 	_, err = os.Stat("/tmp/test-plugin-plugin.socket")
 	require.Error(t, err)
@@ -313,7 +313,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
-		return err == nil
+		return err != nil
 	}, 1*time.Second, 100*time.Millisecond)
 
 	// we need some time for the logs to be streamed back
