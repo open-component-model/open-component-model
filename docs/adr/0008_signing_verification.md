@@ -32,7 +32,7 @@ This does:
          normalisationAlgorithm: jsonNormalisation/v1
          value: cf08abae08bb874597630bc0573d941b1becc92b4916cbe3bef9aa0e89aec3f6
        signature:
-         algorithm: RSASSA-PKCS1-V1_5
+         algorithm: RSASSA-PSS
          mediaType: application/vnd.ocm.signature.rsa
          value: 390157b7...75ab2705d6
    ```
@@ -252,11 +252,11 @@ type ComponentSignatureVerifier interface {
 
 ---
 
-## Example Configuration (RSASSA-PKCS1-V1_5)
+## Example Configuration (RSASSA-PSS)
 
-RSASSA-PKCS1-V1_5 is our default handler that works as is:
+RSASSA-PSS is our default handler that works as is:
 
-- Signing/Verification Handler with `RSASSA-PKCS1-V1_5/v1alpha1`
+- Signing/Verification Handler with `RSASSA-PSS/v1alpha1`
   - This handler can request credentials of type `PEM/v1alpha1` to use for signing and/or for verification
 - This handler is configured by default
 
@@ -280,7 +280,7 @@ sequenceDiagram
     CLI->>Creds: Resolve credentials for identity
     Creds-->>CLI: private_key_pem_file
     CLI->>Handler: Sign(digest, config, credentials)
-    Handler-->>CLI: Signature (RSASSA-PKCS1-V1_5)
+    Handler-->>CLI: Signature (RSASSA-PSS)
     CLI->>Repo: Upload Descriptor with Signature
 
     Note over U,CLI: Verification
@@ -316,7 +316,7 @@ sequenceDiagram
 ### Signing via `--signer-spec`
 
 ```yaml ./rsapss.yaml
-type: RSASSA-PKCS1-V1_5/v1alpha1
+type: RSASSA-PSS/v1alpha1
 ```
 
 ```shell
@@ -326,7 +326,7 @@ ocm sign componentversion --signature mysig --signer-spec ./rsapss.yaml ghcr.io/
 ### Verification via `--verifier-spec`
 
 ```yaml ./rsapss.yaml
-type: RSASSA-PKCS1-V1_5/v1alpha1
+type: RSASSA-PSS/v1alpha1
 ```
 
 ```shell
@@ -339,7 +339,7 @@ Generated Credential Consumer Identity for `GetSigningCredentialConsumerIdentity
 `GetVerifyingCredentialConsumerIdentity`:
 
 ```yaml
-type: RSASSA-PKCS1-V1_5/v1alpha1
+type: RSASSA-PSS/v1alpha1
 name: "rsapss"
 ```
 
