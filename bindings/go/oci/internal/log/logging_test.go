@@ -35,7 +35,7 @@ func TestOperation(t *testing.T) {
 	assert.Contains(t, buf.String(), "level=DEBUG msg=\"operation completed\" realm=oci operation=test-operation")
 	buf.Reset()
 	done(assert.AnError) // With error
-	assert.Contains(t, buf.String(), "level=ERROR msg=\"operation failed\" realm=oci operation=test-operation")
+	assert.Contains(t, buf.String(), "level=DEBUG msg=\"operation failed\" realm=oci operation=test-operation")
 }
 
 func TestDescriptorLogAttr(t *testing.T) {
@@ -109,5 +109,26 @@ func TestLogDefer(t *testing.T) {
 	}
 	_ = test()
 
-	assert.Contains(t, buf.String(), "level=ERROR msg=\"operation failed\" realm=oci operation=test")
+	assert.Contains(t, buf.String(), "")
+}
+
+func TestLogDeferDebug(t *testing.T) {
+	var buf bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == "time" {
+			return slog.Attr{}
+		}
+		return a
+	}})))
+	test := func() (err error) {
+		done := Operation(t.Context(), "test")
+		defer func() {
+			done(err)
+		}()
+		return errors.New("operation failed")
+	}
+	_ = test()
+
+	assert.Contains(t, buf.String(), "level=DEBUG msg=\"operation starting\" realm=oci operation=test")
+	assert.Contains(t, buf.String(), "level=DEBUG msg=\"operation failed\" realm=oci operation=test duration=")
 }
