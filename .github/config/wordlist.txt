@@ -489,3 +489,13 @@ yml
 yyyy
 zot
 zsh
+zkdev
+orgs
+blackduck
+offboard
+bruns
+clyso
+agpl
+gpl
+postgres
+sme
