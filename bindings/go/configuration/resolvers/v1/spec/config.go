@@ -83,16 +83,6 @@ type Resolver struct {
 	//   - "*.software/*/test" (matches test components in any software namespace)
 	//   - "ocm.software/core/[tc]est" (matches "test" or "cest" in core namespace)
 	ComponentName string `json:"componentName,omitempty"`
-
-	// SemVer specifies a semantic version constraint for the component version.
-	// It limits the usage of the repository to resolve only component versions
-	// that satisfy the given version constraint.
-	// Examples:
-	//   - ">1.0.0"
-	//   - ">=1.0.0 <2.0.0"
-	//   - "~1.2.3"
-	//   - "^1.2.3"
-	SemVer string `json:"semver,omitempty"`
 }
 
 // Lookup creates a new Config from a central V1 config.
