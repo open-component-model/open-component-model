@@ -2,29 +2,26 @@ package matcher
 
 import (
 	"fmt"
-
-	"github.com/gobwas/glob"
+	"path"
 )
 
 type globComponentMatcher struct {
-	glob glob.Glob
+	pattern string
 }
 
-func newGlobComponentMatcher(pattern string) (*globComponentMatcher, error) {
-	g, err := glob.Compile(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compile glob pattern %q: %w", pattern, err)
-	}
-
+func newGlobComponentMatcher(pattern string) (ComponentMatcher, error) {
 	return &globComponentMatcher{
-		glob: g,
+		pattern: pattern,
 	}, nil
 }
 
 func (m *globComponentMatcher) Match(componentName string) bool {
-	if m.glob == nil {
-		return false
+	matched, err := path.Match(m.pattern, componentName)
+	if err != nil {
+		// According to the docs, the only possible error is ErrBadPattern,
+		// which we should have caught during creation.
+		// Therefore, we can treat this as a panic.
+		panic(fmt.Sprintf("unexpected error during path matching: %s", err))
 	}
-
-	return m.glob.Match(componentName)
+	return matched
 }

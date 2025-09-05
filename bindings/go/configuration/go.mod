@@ -3,7 +3,6 @@ module ocm.software/open-component-model/bindings/go/configuration
 go 1.25.0
 
 require (
-	github.com/gobwas/glob v0.2.3
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )

@@ -8,14 +8,6 @@ type ComponentMatcher interface {
 	Match(componentName string) bool
 }
 
-func NewGlobComponentMatcher(pattern string) (ComponentMatcher, error) {
-	return newGlobComponentMatcher(pattern)
-}
-
-func NewPathComponentMatcher(pattern string) (ComponentMatcher, error) {
-	return newPathComponentMatcher(pattern)
-}
-
 // ResolverMatcher combines component name and version matching for a resolver.
 type ResolverMatcher struct {
 	componentMatcher ComponentMatcher
@@ -39,14 +31,4 @@ func (m *ResolverMatcher) Match(componentName, version string) bool {
 
 func (m *ResolverMatcher) MatchComponent(componentName string) bool {
 	return m.componentMatcher.Match(componentName)
-}
-
-func NewResolverMatcherWithMatcher(matcher ComponentMatcher) (*ResolverMatcher, error) {
-	if matcher == nil {
-		return nil, fmt.Errorf("component matcher cannot be nil")
-	}
-
-	return &ResolverMatcher{
-		componentMatcher: matcher,
-	}, nil
 }

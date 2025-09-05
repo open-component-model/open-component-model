@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGlobComponentMatcher(t *testing.T) {
+func TestPathComponentMatcher(t *testing.T) {
 	tests := []struct {
 		name          string
 		pattern       string
@@ -16,25 +16,25 @@ func TestGlobComponentMatcher(t *testing.T) {
 		expectError   bool
 	}{
 		{
-			name:          "glob pattern with wildcard",
+			name:          "path pattern with wildcard",
 			pattern:       "ocm.software/core/*",
 			componentName: "ocm.software/core/test",
 			shouldMatch:   true,
 		},
 		{
-			name:          "glob pattern no match",
+			name:          "path pattern no match",
 			pattern:       "ocm.software/core/*",
 			componentName: "ocm.software/other/test",
 			shouldMatch:   false,
 		},
 		{
-			name:          "glob pattern with question mark",
+			name:          "path pattern with question mark",
 			pattern:       "ocm.software/core/?est",
 			componentName: "ocm.software/core/test",
 			shouldMatch:   true,
 		},
 		{
-			name:          "glob pattern with character class",
+			name:          "path pattern with character class",
 			pattern:       "ocm.software/core/[tc]est",
 			componentName: "ocm.software/core/test",
 			shouldMatch:   true,
@@ -52,10 +52,16 @@ func TestGlobComponentMatcher(t *testing.T) {
 			shouldMatch:   false,
 		},
 		{
-			name:          "glob pattern with multiple wildcards",
-			pattern:       "*.software/*/test",
-			componentName: "ocm.software/core/test",
+			name:          "path pattern with multiple wildcards",
+			pattern:       "*/software/*/test",
+			componentName: "ocm/software/core/test",
 			shouldMatch:   true,
+		},
+		{ // not supported right now from go
+			name:          "path pattern with double star wildcard",
+			pattern:       "ocm.software/**/test",
+			componentName: "ocm.software/core/sub/test",
+			shouldMatch:   false,
 		},
 	}
 

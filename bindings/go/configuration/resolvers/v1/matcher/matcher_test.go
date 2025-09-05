@@ -1,7 +1,6 @@
 package matcher
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -104,20 +103,11 @@ func TestResolverMatcher(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var matcher ComponentMatcher
-			var err error
-			if strings.Contains(tt.name, "path") {
-				matcher, err = NewPathComponentMatcher(tt.pattern)
-			} else {
-				matcher, err = NewGlobComponentMatcher(tt.pattern)
-			}
+			resolverMatcher, err := NewResolverMatcher(tt.pattern)
 			if tt.expectError {
 				assert.Error(t, err)
 				return
 			}
-			require.NoError(t, err)
-
-			resolverMatcher, err := NewResolverMatcherWithMatcher(matcher)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.shouldMatch, resolverMatcher.Match(tt.componentName, ""))
