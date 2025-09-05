@@ -31,7 +31,6 @@ func init() {
 //     baseUrl: ghcr.io
 //     subPath: open-component-model/components
 //     componentName: ocm.software/core/*
-//     semver: >1.0.0
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
