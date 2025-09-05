@@ -499,3 +499,14 @@ agpl
 gpl
 postgres
 sme
+componentsignaturehandler
+verifier
+pkcs
+rsassa
+oidc
+sigstores
+webserver
+rekor
+tuf
+implementors
+cryptographic
