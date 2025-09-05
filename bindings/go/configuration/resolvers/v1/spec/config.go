@@ -55,16 +55,6 @@ type Config struct {
 	Resolvers []*Resolver `json:"resolvers,omitempty"`
 }
 
-// GetType returns the type of the configuration.
-func (c *Config) GetType() runtime.Type {
-	return c.Type
-}
-
-// SetType sets the type of the configuration.
-func (c *Config) SetType(t runtime.Type) {
-	c.Type = t
-}
-
 // Resolver assigns a component name pattern to a single OCM repository specification
 // to allow defining component version resolution using glob patterns.
 //
