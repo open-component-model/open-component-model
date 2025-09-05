@@ -111,7 +111,13 @@ func (d *DirectedAcyclicGraph[T]) Discover(
 	ctx context.Context,
 	discoverer NeighborDiscoverer[T],
 	opts ...DiscoverOption[T],
-) error {
+) (retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("discovery panicked: %v", r))
+		}
+	}()
+
 	options := &DiscoverOptions[T]{}
 	for _, opt := range opts {
 		opt(options)
