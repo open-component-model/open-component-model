@@ -204,8 +204,7 @@ func (d *DirectedAcyclicGraph[T]) processLayer(
 		for _, id := range ids {
 			errGroup.Go(func() error {
 				// Mark the id as processed or return if already processed.
-				_, loaded := doneMap.LoadOrStore(id, true)
-				if loaded {
+				if _, loaded := doneMap.LoadOrStore(id, true); loaded {
 					return nil
 				}
 
@@ -220,8 +219,6 @@ func (d *DirectedAcyclicGraph[T]) processLayer(
 				d.MustGetVertex(id).Attributes.Store(AttributeProcessingState, ProcessingStateCompleted)
 
 				vertex := topology.MustGetVertex(id)
-				mapgraph := ToMapBasedDAG(topology)
-				_ = mapgraph
 				for _, child := range vertex.EdgeKeys() {
 					inDegree := topology.MustGetInDegree(child)
 					topology.InDegree.Store(child, inDegree-1)
@@ -233,8 +230,6 @@ func (d *DirectedAcyclicGraph[T]) processLayer(
 						nextQueueCh <- child
 					}
 				}
-				mapgraph = ToMapBasedDAG(topology)
-				_ = mapgraph
 				topology.Vertices.Delete(id)
 				return nil
 			})
