@@ -5,9 +5,8 @@
 //
 // The contracts are categorized based on their functionality:
 //
-//   - IdentityProvider: Provides a way to get the identity of a typed object.
-//   - SignerPluginContract: Defines methods for getting global resources.
-//   - VerifierPluginContract: Defines methods for adding global resources.
+//   - SignerPluginContract: Defines methods for signing digests
+//   - VerifierPluginContract: Defines methods for verifying signatures
 //
 // The types define the request and response structures used by these contracts.
 package v1

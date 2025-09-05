@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1/handler/internal/dn"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/dn"
 )
 
 func TestMatch_Complete(t *testing.T) {

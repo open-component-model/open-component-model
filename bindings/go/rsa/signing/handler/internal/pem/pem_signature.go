@@ -1,6 +1,6 @@
 // Package signature provides helpers to encode and decode RSA-PSS signatures
 // and optional certificate chains in PEM form.
-package internal
+package pem
 
 import (
 	"crypto/x509"

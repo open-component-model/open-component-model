@@ -21,10 +21,13 @@ type VerifyRequest[T runtime.Typed] struct {
 
 type VerifyResponse struct{}
 
-type GetIdentityRequest[T runtime.Typed] struct {
-	Typ T `json:"type"`
+type GetSignerIdentityRequest[T runtime.Typed] struct {
+	SignRequest[T]
+	Name string `json:"name"`
 }
 
-type GetIdentityResponse struct {
+type GetVerifierIdentityRequest[T runtime.Typed] VerifyRequest[T]
+
+type IdentityResponse struct {
 	Identity map[string]string `json:"identity"`
 }

@@ -60,13 +60,26 @@ func (p *SigningHandlerPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (p *SigningHandlerPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
-	if err := p.validateEndpoint(request.Typ, p.jsonSchema); err != nil {
+func (p *SigningHandlerPlugin) GetSignerIdentity(ctx context.Context, request *v1.GetSignerIdentityRequest[runtime.Typed]) (*v1.IdentityResponse, error) {
+	if err := p.validateEndpoint(request.Config, p.jsonSchema); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 
-	identity := v1.GetIdentityResponse{}
-	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, GetIdentity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
+	identity := v1.IdentityResponse{}
+	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, GetSignerIdentity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
+		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", p.ID, err)
+	}
+
+	return &identity, nil
+}
+
+func (p *SigningHandlerPlugin) GetVerifierIdentity(ctx context.Context, request *v1.GetVerifierIdentityRequest[runtime.Typed]) (*v1.IdentityResponse, error) {
+	if err := p.validateEndpoint(request.Config, p.jsonSchema); err != nil {
+		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
+	}
+
+	identity := v1.IdentityResponse{}
+	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, GetVerifierIdentity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", p.ID, err)
 	}
 

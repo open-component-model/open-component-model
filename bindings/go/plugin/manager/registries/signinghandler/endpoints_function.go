@@ -12,8 +12,10 @@ import (
 )
 
 const (
-	// GetIdentity provides the identity of a type supported by the plugin.
-	GetIdentity = "/identity"
+	// GetSignerIdentity provides the identity for a signer
+	GetSignerIdentity = "/sign/identity"
+	// GetVerifierIdentity provides the identity for a signer
+	GetVerifierIdentity = "/verify/identity"
 	// Sign defines the endpoint to sign content
 	Sign = "/sign"
 	// Verify defines the endpoint to verify content
@@ -33,16 +35,35 @@ func handleJSONResponse(w http.ResponseWriter, response interface{}) {
 	}
 }
 
-// handleGetIdentity handles the GetIdentity endpoint
-func handleGetIdentity[T runtime.Typed](plugin v1.IdentityProvider[T]) http.HandlerFunc {
+// handleGetSignerIdentity handles the GetSignerIdentity endpoint
+func handleGetSignerIdentity[T runtime.Typed](plugin v1.SignerPluginContract[T]) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var request v1.GetIdentityRequest[T]
+		var request v1.GetSignerIdentityRequest[T]
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}
 
-		response, err := plugin.GetIdentity(r.Context(), &request)
+		response, err := plugin.GetSignerIdentity(r.Context(), &request)
+		if err != nil {
+			handleError(w, err, http.StatusInternalServerError, "failed to get identity")
+			return
+		}
+
+		handleJSONResponse(w, response)
+	}
+}
+
+// handleGetVerifierIdentity handles the GetVerifierIdentity endpoint
+func handleGetVerifierIdentity[T runtime.Typed](plugin v1.VerifierPluginContract[T]) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var request v1.GetVerifierIdentityRequest[T]
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
+			return
+		}
+
+		response, err := plugin.GetVerifierIdentity(r.Context(), &request)
 		if err != nil {
 			handleError(w, err, http.StatusInternalServerError, "failed to get identity")
 			return
@@ -109,12 +130,16 @@ func RegisterPlugin[T runtime.Typed](
 	// Register endpoints
 	c.Handlers = append(c.Handlers,
 		endpoints.Handler{
-			Location: GetIdentity,
-			Handler:  handleGetIdentity(plugin),
+			Location: GetSignerIdentity,
+			Handler:  handleGetSignerIdentity(plugin),
 		},
 		endpoints.Handler{
 			Location: Sign,
 			Handler:  handleSign(plugin),
+		},
+		endpoints.Handler{
+			Location: GetVerifierIdentity,
+			Handler:  handleGetVerifierIdentity(plugin),
 		},
 		endpoints.Handler{
 			Location: Verify,

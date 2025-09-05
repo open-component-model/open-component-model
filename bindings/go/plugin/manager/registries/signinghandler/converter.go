@@ -15,12 +15,16 @@ type pluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
-func (r *pluginConverter) GetSigningCredentialConsumerIdentity(ctx context.Context, config runtime.Typed) (identity runtime.Identity, err error) {
-	request := &v1.GetIdentityRequest[runtime.Typed]{
-		Typ: config,
+func (r *pluginConverter) GetSigningCredentialConsumerIdentity(ctx context.Context, name string, unsigned descriptor.Digest, config runtime.Typed) (identity runtime.Identity, err error) {
+	request := &v1.GetSignerIdentityRequest[runtime.Typed]{
+		SignRequest: v1.SignRequest[runtime.Typed]{
+			Digest: descriptor.ConvertToV2Digest(&unsigned),
+			Config: config,
+		},
+		Name: name,
 	}
 
-	result, err := r.externalPlugin.GetIdentity(ctx, request)
+	result, err := r.externalPlugin.GetSignerIdentity(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get identity: %w", err)
 	}
@@ -44,12 +48,13 @@ func (r *pluginConverter) Sign(ctx context.Context, unsigned descriptor.Digest, 
 	return signatureInfo, nil
 }
 
-func (r *pluginConverter) GetVerifyingCredentialConsumerIdentity(ctx context.Context, config runtime.Typed) (identity runtime.Identity, err error) {
-	request := &v1.GetIdentityRequest[runtime.Typed]{
-		Typ: config,
+func (r *pluginConverter) GetVerifyingCredentialConsumerIdentity(ctx context.Context, signed descriptor.Signature, config runtime.Typed) (identity runtime.Identity, err error) {
+	request := &v1.GetVerifierIdentityRequest[runtime.Typed]{
+		Signature: descriptor.ConvertToV2Signature(&signed),
+		Config:    config,
 	}
 
-	result, err := r.externalPlugin.GetIdentity(ctx, request)
+	result, err := r.externalPlugin.GetVerifierIdentity(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get identity: %w", err)
 	}

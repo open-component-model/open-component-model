@@ -14,38 +14,31 @@ import (
 	"time"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	rsasignature "ocm.software/open-component-model/bindings/go/rsa/internal"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1"
-	rsacredentials "ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1/handler/internal/credentials"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1/handler/internal/dn"
+	rsacredentials "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/credentials"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/dn"
+	rsasignature "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Stable identifiers and media types.
 const (
-	Algorithm                  = v1alpha1.Type
-	MediaTypePlain             = "application/vnd.ocm.signature.rsa.pss" // hex string
-	MediaTypePEM               = "application/x-pem-file"                // SIGNATURE + CERTIFICATE blocks
+	AlgorithmPSS      = v1alpha1.PSSType
+	MediaTypePlainPSS = "application/vnd.ocm.signature.rsa.pss" // hex string
+	MediaTypePEM      = "application/x-pem-file"                // SIGNATURE + CERTIFICATE blocks
+
 	IdentityAttributeAlgorithm = "algorithm"
+	IdentityAttributeSignature = "signature"
 )
 
-var PSSCredentialConsumerIdentity runtime.Identity
-
-func init() {
-	PSSCredentialConsumerIdentity = runtime.Identity{
-		IdentityAttributeAlgorithm: Algorithm,
-	}
-	PSSCredentialConsumerIdentity.SetType(rsacredentials.IdentityTypeRSA)
-}
-
-// PSSHandler holds trust anchors for PEM chain validation.
-type PSSHandler struct {
+// Handler holds trust anchors for PEM chain validation.
+type Handler struct {
 	roots               *x509.CertPool
 	currentTimeFunction func() time.Time
 }
 
 // New returns a handler using system roots or an empty pool.
-func New(useSystemRoots bool) (*PSSHandler, error) {
+func New(useSystemRoots bool) (*Handler, error) {
 	var roots *x509.CertPool
 	var err error
 	if useSystemRoots {
@@ -56,13 +49,13 @@ func New(useSystemRoots bool) (*PSSHandler, error) {
 	} else {
 		roots = x509.NewCertPool()
 	}
-	return &PSSHandler{roots: roots, currentTimeFunction: time.Now}, nil
+	return &Handler{roots: roots, currentTimeFunction: time.Now}, nil
 }
 
 // ---- SPI ----
 
 // Sign signs the provided digest per config and returns SignatureInfo.
-func (*PSSHandler) Sign(
+func (*Handler) Sign(
 	_ context.Context,
 	unsigned descruntime.Digest,
 	rawCfg runtime.Typed,
@@ -91,8 +84,8 @@ func (*PSSHandler) Sign(
 	switch cfg.SignatureEncodingPolicy {
 	case v1alpha1.SignatureEncodingPolicyPlain:
 		return descruntime.SignatureInfo{
-			Algorithm: Algorithm,
-			MediaType: MediaTypePlain,
+			Algorithm: AlgorithmPSS,
+			MediaType: MediaTypePlainPSS,
 			Value:     hex.EncodeToString(sig),
 		}, nil
 
@@ -103,9 +96,9 @@ func (*PSSHandler) Sign(
 		if err != nil {
 			return descruntime.SignatureInfo{}, fmt.Errorf("read certificate chain: %w", err)
 		}
-		pem := rsasignature.SignatureBytesToPem(Algorithm, sig, chain...)
+		pem := rsasignature.SignatureBytesToPem(AlgorithmPSS, sig, chain...)
 		return descruntime.SignatureInfo{
-			Algorithm: Algorithm,
+			Algorithm: AlgorithmPSS,
 			MediaType: MediaTypePEM,
 			Value:     string(pem),
 		}, nil
@@ -113,7 +106,7 @@ func (*PSSHandler) Sign(
 }
 
 // Verify checks the signature against the digest and optional trust inputs.
-func (h *PSSHandler) Verify(
+func (h *Handler) Verify(
 	_ context.Context,
 	signed descruntime.Signature,
 	_ runtime.Typed,
@@ -126,9 +119,9 @@ func (h *PSSHandler) Verify(
 	}
 
 	switch signed.Signature.MediaType {
-	case MediaTypePlain:
+	case MediaTypePlainPSS:
 		if pubFromCreds == nil {
-			return fmt.Errorf("missing public key, required for signatures of type %q with media type %q", Algorithm, MediaTypePlain)
+			return fmt.Errorf("missing public key, required for signatures of type %q with media type %q", AlgorithmPSS, MediaTypePlainPSS)
 		}
 		sig, err := hex.DecodeString(signed.Signature.Value)
 		if err != nil {
@@ -141,7 +134,7 @@ func (h *PSSHandler) Verify(
 		if err != nil {
 			return fmt.Errorf("parse pem signature: %w", err)
 		}
-		if algo != "" && algo != Algorithm {
+		if algo != "" && algo != AlgorithmPSS {
 			return fmt.Errorf("unexpected signature algorithm %q", algo)
 		}
 		if len(chain) == 0 {
@@ -176,18 +169,30 @@ func (h *PSSHandler) Verify(
 	}
 }
 
-func (*PSSHandler) GetSigningCredentialConsumerIdentity(context.Context, runtime.Typed) (runtime.Identity, error) {
-	return PSSCredentialConsumerIdentity, nil
+func (*Handler) GetSigningCredentialConsumerIdentity(_ context.Context, name string, _ descruntime.Digest, _ runtime.Typed) (runtime.Identity, error) {
+	id := baseIdentity()
+	id[IdentityAttributeSignature] = name
+	return id, nil
 }
 
-func (*PSSHandler) GetVerifyingCredentialConsumerIdentity(context.Context, runtime.Typed) (runtime.Identity, error) {
-	return PSSCredentialConsumerIdentity, nil
+func (*Handler) GetVerifyingCredentialConsumerIdentity(_ context.Context, signature descruntime.Signature, _ runtime.Typed) (runtime.Identity, error) {
+	id := baseIdentity()
+	id[IdentityAttributeSignature] = signature.Name
+	return id, nil
 }
 
-func decodeConfig(raw runtime.Typed) (v1alpha1.Config, error) {
-	var cfg v1alpha1.Config
+func baseIdentity() runtime.Identity {
+	id := runtime.Identity{
+		IdentityAttributeAlgorithm: AlgorithmPSS,
+	}
+	id.SetType(rsacredentials.IdentityTypeRSA)
+	return id
+}
+
+func decodeConfig(raw runtime.Typed) (v1alpha1.PSSConfig, error) {
+	var cfg v1alpha1.PSSConfig
 	if err := v1alpha1.Scheme.Convert(raw, &cfg); err != nil {
-		return v1alpha1.Config{}, fmt.Errorf("convert config: %w", err)
+		return v1alpha1.PSSConfig{}, fmt.Errorf("convert config: %w", err)
 	}
 	return cfg, nil
 }

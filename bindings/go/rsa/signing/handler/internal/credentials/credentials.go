@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"os"
 
-	rsapem "ocm.software/open-component-model/bindings/go/rsa/internal"
+	rsapem "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 

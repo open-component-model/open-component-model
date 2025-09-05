@@ -5,8 +5,8 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1/handler"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -30,7 +30,7 @@ func Register(
 			scheme,
 			signingHandlerRegistry,
 			handler,
-			&v1alpha1.Config{},
+			&v1alpha1.PSSConfig{},
 		),
 	)
 }

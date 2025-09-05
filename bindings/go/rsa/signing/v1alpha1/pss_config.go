@@ -5,22 +5,22 @@ import (
 )
 
 const (
-	// Type defines the type identifier for credential configurations
-	Type = "RSASSA-PSS"
+	// PSSType defines the type identifier for credential configurations
+	PSSType = "RSASSA-PSS"
 )
 
 var Scheme = runtime.NewScheme()
 
 func init() {
-	Scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(Type, Version))
+	Scheme.MustRegisterWithAlias(&PSSConfig{}, runtime.NewVersionedType(PSSType, Version))
 }
 
-// Config represents the top-level configuration for the plugin manager.
+// PSSConfig represents the top-level configuration for the plugin manager.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
-type Config struct {
+type PSSConfig struct {
 	Type runtime.Type `json:"type"`
 
 	// SignatureEncodingPolicy defines the encoding policy to use for the signature once created.
@@ -38,7 +38,7 @@ const (
 	// SignatureEncodingPolicyPEM stores the signature as a single PEM-encoded byte slice.
 	//
 	// Encoding procedure:
-	//   1. Create a PEM block with Type "SIGNATURE".
+	//   1. Create a PEM block with PSSType "SIGNATURE".
 	//   2. Put the raw signature bytes in the block.
 	//   3. Add the signing algorithm (e.g., "RSASSA-PSS") as header "Signature Algorithm".
 	//   4. Encode the block to PEM.
