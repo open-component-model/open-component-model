@@ -197,18 +197,27 @@ func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime
 func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, descs []*descruntime.Descriptor, format string, mode string, recursive int) error {
 	dag := syncdag.NewDirectedAcyclicGraph[string]()
 
-	roots := buildRootVerticesFromDescriptors(descs)
+	roots := make([]string, len(descs))
+	for index, desc := range descs {
+		root := desc.Component.ToIdentity().String()
+		if err := dag.AddVertex(root, map[string]any{
+			descriptorAttribute: desc,
+		}); err != nil {
+			return fmt.Errorf("adding root vertex %q failed: %w", root, err)
+		}
+		roots[index] = root
+	}
 	renderer, err := buildRenderer(cmd.Context(), dag, roots, format)
 	if err != nil {
 		return fmt.Errorf("building renderer failed: %w", err)
 	}
-	neighbourDiscoverer := buildNeighbourDiscoverer(repo, recursive)
+	neighbourDiscoverer := buildNeighbourDiscoverer(dag, repo, recursive)
 
 	switch mode {
 	case render.StaticRenderMode:
 		// Start traversing the graph from the root vertices (the initially resolved
 		// component versions).
-		err := dag.Traverse(cmd.Context(), neighbourDiscoverer, syncdag.WithRoots(roots...))
+		err := dag.Discover(cmd.Context(), neighbourDiscoverer, syncdag.WithRoots(roots...))
 		if err != nil {
 			return fmt.Errorf("traversing component version graph failed: %w", err)
 		}
@@ -223,7 +232,7 @@ func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, descs [
 		// component versions).
 		// The render loop is running concurrently and regularly displays the current
 		// state of the graph.
-		err := dag.Traverse(cmd.Context(), neighbourDiscoverer, syncdag.WithRoots(roots...))
+		err := dag.Discover(cmd.Context(), neighbourDiscoverer, syncdag.WithRoots(roots...))
 		cancel()
 		if err != nil {
 			return fmt.Errorf("traversing component version graph failed: %w", err)
@@ -237,37 +246,21 @@ func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, descs [
 }
 
 const (
-	identityAttribute   = "identity"
 	descriptorAttribute = "descriptor"
 )
 
-func buildRootVerticesFromDescriptors(descs []*descruntime.Descriptor) (roots []*syncdag.Vertex[string]) {
-	roots = make([]*syncdag.Vertex[string], 0, len(descs))
-	for _, desc := range descs {
-		roots = append(roots, syncdag.NewVertex(desc.Component.ToIdentity().String(), map[string]any{
-			identityAttribute:   desc.Component.ToIdentity(),
-			descriptorAttribute: desc,
-		}))
-	}
-	return roots
-}
-
-func buildRenderer(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], roots []*syncdag.Vertex[string], format string) (render.Renderer, error) {
-	var rootIDs []string
-	for _, root := range roots {
-		rootIDs = append(rootIDs, root.ID)
-	}
+func buildRenderer(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
 	// Initialize renderer based on the requested output format.
 	switch format {
 	case render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatYAML.String():
 		serializer := buildMachineFormatSerializer(format)
-		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(rootIDs...)), nil
+		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTree.String():
 		serializer := buildTreeFormatSerializer()
-		return tree.New(ctx, dag, tree.WithVertexSerializer(serializer), tree.WithRoots(rootIDs...)), nil
+		return tree.New(ctx, dag, tree.WithVertexSerializer(serializer), tree.WithRoots(roots...)), nil
 	case render.OutputFormatTable.String():
 		serializer := buildTableFormatSerializer()
-		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(rootIDs...)), nil
+		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	default:
 		return nil, fmt.Errorf("invalid output format %q", format)
 	}
@@ -297,7 +290,7 @@ func buildMachineFormatSerializer(format string) list.ListSerializer[string] {
 
 func buildTreeFormatSerializer() tree.VertexSerializer[string] {
 	return tree.VertexSerializerFunc[string](func(vertex *syncdag.Vertex[string]) (string, error) {
-		id, _ := vertex.MustGetAttribute(identityAttribute).(runtime.Identity)
+		id, _ := runtime.ParseIdentity(vertex.ID)
 		return fmt.Sprintf("%s:%s", id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]), nil
 	})
 }
@@ -323,39 +316,38 @@ func buildTableFormatSerializer() list.ListSerializer[string] {
 	})
 }
 
-func buildNeighbourDiscoverer(repo *ocm.ComponentRepository, recursive int) syncdag.DiscoverNeighborsFunc[string] {
+func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repo *ocm.ComponentRepository, recursive int) syncdag.DiscoverNeighborsFunc[string] {
 	switch {
 	case recursive != 0:
-		return func(ctx context.Context, v *syncdag.Vertex[string]) (neighbors []*syncdag.Vertex[string], err error) {
-			id, _ := v.MustGetAttribute(identityAttribute).(runtime.Identity)
+		return func(ctx context.Context, v string) ([]string, error) {
 			var desc *descruntime.Descriptor
+			var err error
+
+			vertex := dag.MustGetVertex(v)
+			id, _ := runtime.ParseIdentity(v)
 			// root descriptors are already known
-			if _, ok := v.GetAttribute(descriptorAttribute); !ok {
+			if untypedDesc, ok := vertex.GetAttribute(descriptorAttribute); !ok {
 				desc, err = repo.ComponentVersionRepository().GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
 				if err != nil {
 					return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
 				}
-				v.Attributes.Store(descriptorAttribute, desc)
+				vertex.Attributes.Store(descriptorAttribute, desc)
 			} else {
-				desc, _ = v.MustGetAttribute(descriptorAttribute).(*descruntime.Descriptor)
+				desc, _ = untypedDesc.(*descruntime.Descriptor)
 			}
 			// Store the component version descriptor with the vertex.
 			// It will be used by the serializers to generate the output.
-
-			for _, reference := range desc.Component.References {
+			neighbors := make([]string, len(desc.Component.References))
+			for index, reference := range desc.Component.References {
 				refID := make(runtime.Identity, 2)
 				refID[descruntime.IdentityAttributeName] = reference.Component
 				refID[descruntime.IdentityAttributeVersion] = reference.Version
-				// Create a new vertex for the referenced component version
-				neighbor := syncdag.NewVertex(refID.String(), map[string]any{
-					identityAttribute: refID,
-				})
-				neighbors = append(neighbors, neighbor)
+				neighbors[index] = refID.String()
 			}
 			return neighbors, nil
 		}
 	default:
-		return func(ctx context.Context, v *syncdag.Vertex[string]) (neighbors []*syncdag.Vertex[string], err error) {
+		return func(ctx context.Context, v string) (neighbors []string, err error) {
 			return nil, nil
 		}
 	}
