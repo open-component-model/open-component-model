@@ -312,7 +312,7 @@ type constructorProvider struct {
 	cache          string
 	targetRepoSpec runtime.Typed
 	pluginManager  *manager.PluginManager
-	graph          *credentials.Graph
+	graph          credentials.GraphResolver
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {

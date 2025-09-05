@@ -2,13 +2,20 @@ package cmd_test
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -934,4 +941,135 @@ resources:
 	downloaded, err := os.ReadFile(downloadTarget)
 	r.NoError(err, "failed to read downloaded resource file")
 	r.Equal("foobar", string(downloaded), "expected downloaded resource content to match test file content")
+}
+
+func Test_Sign_And_Verify_Component_Version(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	name, version := "ocm.software/examples-01", "1.0.0"
+	// Create a test file to be added to the component version
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	r.NoError(os.WriteFile(testFilePath, []byte("foobar"), 0o600), "could not create test file")
+
+	constructorYAML := fmt.Sprintf(`
+name: %[1]s
+version: %[2]s
+provider:
+  name: ocm.software
+resources:
+  - name: my-secure-resource
+    type: blob
+    input:
+      type: utf8/v1
+      text: "I want to be signed"
+`, name, version, testFilePath)
+
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	))
+
+	r.NoError(err, "could not construct component version")
+
+	logs := test.NewJSONLogReader()
+
+	signatureName := "test-signature"
+	aKey := mustKey(t)
+	cert := mustSelfSigned(t, "CN=signer", aKey)
+	privateKeyPath, publicKeyChainPath := writeKeyAndChain(t, t.TempDir(), aKey, cert)
+
+	ocmConfigYAML := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: %[1]s
+    credentials:
+    - type: Credentials/v1
+      properties:
+        public_key_pem_file: %[2]s
+        private_key_pem_file: %[3]s
+`, signatureName, publicKeyChainPath, privateKeyPath)
+
+	ocmConfigFilePath := filepath.Join(tmp, "ocm-config.yaml")
+	r.NoError(os.WriteFile(ocmConfigFilePath, []byte(ocmConfigYAML), 0o600))
+
+	reference := archiveFilePath + "//" + name + ":" + version
+
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--config", ocmConfigFilePath),
+		test.WithOutput(logs),
+	)
+	r.NoError(err, "failed to sign component version")
+
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--config", ocmConfigFilePath),
+		test.WithOutput(logs),
+	)
+	r.NoError(err, "failed to verify component version")
+
+}
+
+func mustKey(t *testing.T) *rsa.PrivateKey {
+	t.Helper()
+	k, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	return k
+}
+
+func mustSelfSigned(t *testing.T, cn string, key *rsa.PrivateKey) *x509.Certificate {
+	t.Helper()
+	n, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber:          n,
+		Subject:               pkix.Name{CommonName: cn},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return cert
+}
+
+func writeKeyAndChain(t *testing.T, dir string, priv *rsa.PrivateKey, chain ...*x509.Certificate) (privPath, chainPath string) {
+	t.Helper()
+	privPath = filepath.Join(dir, "key.pem")
+	writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(priv))
+	chainPath = writeCertsPEM(t, dir, "chain.pem", chain...)
+	return
+}
+
+func writePEMFile(t *testing.T, path, typ string, der []byte) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}), 0o600))
+}
+
+func writeCertsPEM(t *testing.T, dir, name string, certs ...*x509.Certificate) string {
+	t.Helper()
+	var b []byte
+	for _, c := range certs {
+		b = append(b, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.Raw})...)
+	}
+	p := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(p, b, 0o600))
+	return p
 }

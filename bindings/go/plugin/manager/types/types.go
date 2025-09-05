@@ -14,6 +14,7 @@ var (
 	DigestProcessorPluginType            PluginType = "digestProcessorRepository"
 	ResourceRepositoryPluginType         PluginType = "resourceRepository"
 	BlobTransformerPluginType            PluginType = "blobTransformer"
+	SigningHandlerPluginType             PluginType = "signingHandler"
 )
 
 type Location struct {
