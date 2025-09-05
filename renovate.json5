@@ -34,11 +34,11 @@
       groupSlug: 'kubernetes-deps',
     },
     {
-      matchPackagePrefixes: [
-        'github.com/docker/'
-      ],
       groupName: 'Docker dependencies',
       groupSlug: 'docker-deps',
+      matchPackageNames: [
+        'github.com/docker/{/,}**',
+      ],
     },
     {
       matchCategories: [
