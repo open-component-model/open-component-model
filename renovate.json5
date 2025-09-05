@@ -29,6 +29,7 @@
         'sigs.k8s.io/controller-tools',
         'k8s.io/*',
         'envtest',
+        'github.com/docker/*',
       ],
       groupName: 'Kubernetes dependencies',
       groupSlug: 'kubernetes-deps',
