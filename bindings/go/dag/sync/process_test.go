@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,8 +29,12 @@ func TestProcessTopology(t *testing.T) {
 		r.NoError(graph.AddEdge("B", "D", nil))
 		r.NoError(graph.AddEdge("C", "D", nil))
 
+		var orderMu sync.Mutex
 		var order []string
 		processor := VertexProcessorFunc[string](func(ctx context.Context, v string) error {
+			// prevent data race
+			orderMu.Lock()
+			defer orderMu.Unlock()
 			order = append(order, v)
 			return nil
 		})
@@ -84,8 +89,12 @@ func TestProcessReverseTopology(t *testing.T) {
 		r.NoError(graph.AddEdge("B", "D", nil))
 		r.NoError(graph.AddEdge("C", "D", nil))
 
+		var orderMu sync.Mutex
 		var order []string
 		processor := VertexProcessorFunc[string](func(ctx context.Context, v string) error {
+			// prevent data race
+			orderMu.Lock()
+			defer orderMu.Unlock()
 			order = append(order, v)
 			return nil
 		})
