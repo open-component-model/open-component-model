@@ -1,3 +1,5 @@
+// Note: This is the top-level config for Renovate.
+// For repository-specific configuration please use the renovate.json5 file at the root of the repository.
 {
   "branchPrefix": "renovate/",
   "username": "ocmbot[bot]",
