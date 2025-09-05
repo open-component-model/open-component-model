@@ -40,7 +40,7 @@ type ComponentRepository struct {
 
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
+func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
@@ -77,7 +77,7 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *cred
 // It resolves the appropriate plugin and credentials for the repository.
 //
 //nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, resolvers []resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
+func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)

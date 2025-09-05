@@ -1,4 +1,4 @@
-package spec
+package v1alpha1
 
 import (
 	"ocm.software/open-component-model/bindings/go/runtime"

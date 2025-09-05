@@ -6,52 +6,58 @@ import (
 	"os"
 
 	rsapem "ocm.software/open-component-model/bindings/go/rsa/internal"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// These constants describe credential keys for RSA-PSS signing.
+var IdentityTypeRSA = runtime.NewVersionedType("RSA", "v1alpha1")
+
+// Credential keys.
 const (
-	CredentialKeyPublicKeyPEMFile  = "public_key_pem_file"
-	CredentialKeyPrivateKeyPEMFile = "private_key_pem_file"
+	CredentialKeyPublicKeyPEM      = "public_key_pem" // inline PEM
+	CredentialKeyPublicKeyPEMFile  = CredentialKeyPublicKeyPEM + "_file"
+	CredentialKeyPrivateKeyPEM     = "private_key_pem" // inline PEM
+	CredentialKeyPrivateKeyPEMFile = CredentialKeyPrivateKeyPEM + "_file"
 )
 
 func PrivateKeyFromCredentials(credentials map[string]string) *rsa.PrivateKey {
-	path := credentials[CredentialKeyPrivateKeyPEMFile]
-	if path == "" {
-		return nil
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
+	val := credentials[CredentialKeyPrivateKeyPEM]
+	b, err := loadBytes(val, CredentialKeyPrivateKeyPEMFile, credentials)
+	if err != nil || len(b) == 0 {
 		return nil
 	}
 	return rsapem.ParseRSAPrivateKeyPEM(b)
 }
 
 func PublicKeyFromCredentials(credentials map[string]string) (*rsa.PublicKey, any) {
-	path := credentials[CredentialKeyPublicKeyPEMFile]
-	if path == "" {
-		// Fallback: derive public key from private key if only private is provided.
+	val := credentials[CredentialKeyPublicKeyPEM]
+	b, err := loadBytes(val, CredentialKeyPublicKeyPEMFile, credentials)
+	if err != nil || len(b) == 0 {
+		// fallback: derive from private
 		if pk := PrivateKeyFromCredentials(credentials); pk != nil {
 			return &pk.PublicKey, pk
 		}
 		return nil, nil
 	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, nil
-	}
-
 	return rsapem.ParseRSAPublicKeyPEM(b)
 }
 
 func CertificateChainFromCredentials(credentials map[string]string) ([]*x509.Certificate, error) {
-	path := credentials[CredentialKeyPublicKeyPEMFile]
-	if path == "" {
+	val := credentials[CredentialKeyPublicKeyPEM]
+	b, err := loadBytes(val, CredentialKeyPublicKeyPEMFile, credentials)
+	if err != nil || len(b) == 0 {
 		return nil, nil
 	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, nil
-	}
-
 	return rsapem.ParseCertificateChain(b)
+}
+
+// loadBytes loads from file or inline PEM
+func loadBytes(val string, fileKey string, credentials map[string]string) ([]byte, error) {
+	if val != "" {
+		// treat as literal bytes
+		return []byte(val), nil
+	}
+	if path := credentials[fileKey]; path != "" {
+		return os.ReadFile(path)
+	}
+	return nil, nil
 }

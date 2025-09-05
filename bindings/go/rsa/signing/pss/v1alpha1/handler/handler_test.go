@@ -1,4 +1,4 @@
-package rsapss
+package handler
 
 import (
 	"crypto/rand"
@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1"
 	rsacredentials "ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1/handler/internal/credentials"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1/spec"
 )
 
 func Test_RSASSA_PSS_Handler(t *testing.T) {
@@ -49,7 +49,7 @@ func Test_RSASSA_PSS_Handler(t *testing.T) {
 	}
 
 	signPlain := func(t *testing.T, privPath string) descruntime.Signature {
-		cfg := spec.Config{SignatureEncodingPolicy: spec.SignatureEncodingPolicyPlain}
+		cfg := v1alpha1.Config{SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain}
 		si, err := h.Sign(t.Context(), d, &cfg, map[string]string{
 			rsacredentials.CredentialKeyPrivateKeyPEMFile: privPath,
 		})
@@ -58,7 +58,7 @@ func Test_RSASSA_PSS_Handler(t *testing.T) {
 	}
 
 	signPEM := func(t *testing.T, privPath, pubPath string) descruntime.Signature {
-		cfg := spec.Config{SignatureEncodingPolicy: spec.SignatureEncodingPolicyPEM}
+		cfg := v1alpha1.Config{SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM}
 		si, err := h.Sign(t.Context(), d, &cfg, map[string]string{
 			rsacredentials.CredentialKeyPrivateKeyPEMFile: privPath,
 			rsacredentials.CredentialKeyPublicKeyPEMFile:  pubPath, // embeds chain
@@ -107,7 +107,7 @@ func Test_RSASSA_PSS_Handler(t *testing.T) {
 				dir := t.TempDir()
 				pkcs8Path := writePKCS8PrivateKeyPEM(t, dir, aKey)
 
-				cfg := spec.Config{SignatureEncodingPolicy: spec.SignatureEncodingPolicyPlain}
+				cfg := v1alpha1.Config{SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain}
 				si, err := h.Sign(t.Context(), d, &cfg, map[string]string{
 					rsacredentials.CredentialKeyPrivateKeyPEMFile: pkcs8Path,
 				})
@@ -164,7 +164,7 @@ func Test_RSASSA_PSS_Handler(t *testing.T) {
 				// embed leaf + intermediate
 				embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
 
-				cfg := spec.Config{SignatureEncodingPolicy: spec.SignatureEncodingPolicyPEM}
+				cfg := v1alpha1.Config{SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM}
 				si, err := h.Sign(t.Context(), d, &cfg, map[string]string{
 					rsacredentials.CredentialKeyPrivateKeyPEMFile: privPath,
 					rsacredentials.CredentialKeyPublicKeyPEMFile:  embedded,
@@ -240,7 +240,7 @@ func Test_RSASSA_PSS_Verify_ErrorPaths(t *testing.T) {
 	d := descruntime.Digest{HashAlgorithm: "sha-256", Value: hex.EncodeToString(sum[:])}
 
 	// Sign a PEM signature that embeds the cert.
-	cfg := spec.Config{SignatureEncodingPolicy: spec.SignatureEncodingPolicyPEM}
+	cfg := v1alpha1.Config{SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM}
 	si, err := h.Sign(t.Context(), d, &cfg, map[string]string{
 		rsacredentials.CredentialKeyPrivateKeyPEMFile: privPath,
 		rsacredentials.CredentialKeyPublicKeyPEMFile:  chainPath,
@@ -249,7 +249,7 @@ func Test_RSASSA_PSS_Verify_ErrorPaths(t *testing.T) {
 
 	t.Run("missing public key for plain media", func(t *testing.T) {
 		// Sign plain with no creds for verify.
-		cfg := spec.Config{SignatureEncodingPolicy: spec.SignatureEncodingPolicyPlain}
+		cfg := v1alpha1.Config{SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain}
 		plain, err := h.Sign(t.Context(), d, &cfg, map[string]string{
 			rsacredentials.CredentialKeyPrivateKeyPEMFile: privPath,
 		})

@@ -1,5 +1,5 @@
-// Package rsapss implements RSA-PSS signing and verification for OCM.
-package rsapss
+// Package handler implements RSA-PSS signing and verification for OCM.
+package handler
 
 import (
 	"context"
@@ -11,31 +11,37 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	rsasignature "ocm.software/open-component-model/bindings/go/rsa/internal"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1"
 	rsacredentials "ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1/handler/internal/credentials"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1/handler/internal/dn"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/pss/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Stable identifiers and media types.
 const (
-	Algorithm             = spec.Type
-	MediaTypePlain        = "application/vnd.ocm.signature.rsa.pss" // hex string
-	MediaTypePEM          = "application/x-pem-file"                // SIGNATURE + CERTIFICATE blocks
-	IdentityAttributeType = "PEM"
+	Algorithm                  = v1alpha1.Type
+	MediaTypePlain             = "application/vnd.ocm.signature.rsa.pss" // hex string
+	MediaTypePEM               = "application/x-pem-file"                // SIGNATURE + CERTIFICATE blocks
+	IdentityAttributeAlgorithm = "algorithm"
 )
 
-var PSSCredentialConsumerIdentity = runtime.Identity{
-	runtime.IdentityAttributeType:     IdentityAttributeType,
-	descruntime.IdentityAttributeName: Algorithm,
+var PSSCredentialConsumerIdentity runtime.Identity
+
+func init() {
+	PSSCredentialConsumerIdentity = runtime.Identity{
+		IdentityAttributeAlgorithm: Algorithm,
+	}
+	PSSCredentialConsumerIdentity.SetType(rsacredentials.IdentityTypeRSA)
 }
 
 // PSSHandler holds trust anchors for PEM chain validation.
 type PSSHandler struct {
-	roots *x509.CertPool
+	roots               *x509.CertPool
+	currentTimeFunction func() time.Time
 }
 
 // New returns a handler using system roots or an empty pool.
@@ -50,12 +56,10 @@ func New(useSystemRoots bool) (*PSSHandler, error) {
 	} else {
 		roots = x509.NewCertPool()
 	}
-	return &PSSHandler{roots: roots}, nil
+	return &PSSHandler{roots: roots, currentTimeFunction: time.Now}, nil
 }
 
 // ---- SPI ----
-
-func (*PSSHandler) Algorithm() string { return Algorithm }
 
 // Sign signs the provided digest per config and returns SignatureInfo.
 func (*PSSHandler) Sign(
@@ -85,14 +89,14 @@ func (*PSSHandler) Sign(
 	}
 
 	switch cfg.SignatureEncodingPolicy {
-	case spec.SignatureEncodingPolicyPlain:
+	case v1alpha1.SignatureEncodingPolicyPlain:
 		return descruntime.SignatureInfo{
 			Algorithm: Algorithm,
 			MediaType: MediaTypePlain,
 			Value:     hex.EncodeToString(sig),
 		}, nil
 
-	case spec.SignatureEncodingPolicyPEM:
+	case v1alpha1.SignatureEncodingPolicyPEM:
 		fallthrough
 	default:
 		chain, err := rsacredentials.CertificateChainFromCredentials(creds)
@@ -124,7 +128,7 @@ func (h *PSSHandler) Verify(
 	switch signed.Signature.MediaType {
 	case MediaTypePlain:
 		if pubFromCreds == nil {
-			return errors.New("public key required for plain media type")
+			return fmt.Errorf("missing public key, required for signatures of type %q with media type %q", Algorithm, MediaTypePlain)
 		}
 		sig, err := hex.DecodeString(signed.Signature.Value)
 		if err != nil {
@@ -147,10 +151,10 @@ func (h *PSSHandler) Verify(
 		leaf := chain[0]
 		rsaPub, ok := leaf.PublicKey.(*rsa.PublicKey)
 		if !ok {
-			return errors.New("leaf cert public key is not RSA")
+			return errors.New("leaf cert public key is not an RSA Public Key and cannot be verified")
 		}
 
-		if err := verifyChainWithOptionalAnchor(leaf, chain[1:], underlying, h.roots); err != nil {
+		if err := verifyChainWithOptionalAnchor(leaf, chain[1:], underlying, h.roots, h.currentTimeFunction); err != nil {
 			return fmt.Errorf("certificate verification failed: %w", err)
 		}
 
@@ -161,30 +165,29 @@ func (h *PSSHandler) Verify(
 			}
 			if uc, ok := underlying.(*x509.Certificate); ok {
 				if err := dn.Match(want, uc.Subject); err != nil {
-					return fmt.Errorf("issuer mismatch: %w", err)
+					return fmt.Errorf("issuer mismatch between expected issuer from signature and underlying trust: %w", err)
 				}
 			}
 		}
 
 		return rsa.VerifyPSS(rsaPub, hash, dig, sig, nil)
-
 	default:
 		return fmt.Errorf("unsupported media type %q", signed.Signature.MediaType)
 	}
 }
 
-// Identities consumed by Sign and Verify.
 func (*PSSHandler) GetSigningCredentialConsumerIdentity(context.Context, runtime.Typed) (runtime.Identity, error) {
 	return PSSCredentialConsumerIdentity, nil
 }
+
 func (*PSSHandler) GetVerifyingCredentialConsumerIdentity(context.Context, runtime.Typed) (runtime.Identity, error) {
 	return PSSCredentialConsumerIdentity, nil
 }
 
-func decodeConfig(raw runtime.Typed) (spec.Config, error) {
-	var cfg spec.Config
-	if err := spec.Scheme.Convert(raw, &cfg); err != nil {
-		return spec.Config{}, fmt.Errorf("convert config: %w", err)
+func decodeConfig(raw runtime.Typed) (v1alpha1.Config, error) {
+	var cfg v1alpha1.Config
+	if err := v1alpha1.Scheme.Convert(raw, &cfg); err != nil {
+		return v1alpha1.Config{}, fmt.Errorf("convert config: %w", err)
 	}
 	return cfg, nil
 }
@@ -230,11 +233,13 @@ func mapHash(a string) (crypto.Hash, error) {
 	return 0, fmt.Errorf("unsupported hash algorithm %q", a)
 }
 
+// verifyChainWithOptionalAnchor: use now, and add only certificate anchors
 func verifyChainWithOptionalAnchor(
 	leaf *x509.Certificate,
 	intermediates []*x509.Certificate,
-	anchor any, // *x509.Certificate or nil
+	anchor any, // expected *x509.Certificate or nil
 	roots *x509.CertPool,
+	currentTimeFunction func() time.Time,
 ) error {
 	if ac, ok := anchor.(*x509.Certificate); ok {
 		roots = roots.Clone()
@@ -248,9 +253,10 @@ func verifyChainWithOptionalAnchor(
 		}
 	}
 	_, err := leaf.Verify(x509.VerifyOptions{
-		Intermediates: ip, Roots: roots,
-		KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning},
-		CurrentTime: leaf.NotBefore,
+		Intermediates: ip,
+		Roots:         roots,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning}, // policy choice
+		CurrentTime:   currentTimeFunction(),
 	})
 	return err
 }
