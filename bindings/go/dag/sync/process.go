@@ -165,7 +165,7 @@ func (d *DirectedAcyclicGraph[T]) processTopology(
 	}
 
 	// Recursively process the next batch if available.
-	if len(next) <= 0 {
+	if len(next) == 0 {
 		return nil
 	}
 
