@@ -75,7 +75,7 @@ func WithRoots[T cmp.Ordered](root ...T) DiscoverOption[T] {
 
 // NeighborDiscoverer is an interface for a function that discovers neighbor
 // vertices for a given vertex.
-// It MUST treat v as read-only and return its neighbors id
+// It MUST treat v as read-only and returns its neighbors id
 // or an error.
 type NeighborDiscoverer[T cmp.Ordered] interface {
 	// DiscoverNeighbors is not allowed to set attributes on the neighbor
@@ -101,7 +101,9 @@ func (f DiscoverNeighborsFunc[T]) DiscoverNeighbors(ctx context.Context, v T) (n
 // Discover performs a concurrent depth-first discovery from the given root vertex.
 // For each vertex v, it calls discoverer.DiscoverNeighbors(v), which
 // return its neighbors in order or an error.
-// DiscoverNeighbors is guaranteed to be called for each vertex only once.
+// DiscoverNeighbors is guaranteed to be called at most once for each vertex. If
+// there is an error, the discovery stops - before having processed all vertices
+// - and the error is returned.
 //
 // Discover tracks each vertex’s DiscoveryState attribute and halts on error.
 // See DiscoveryState for more details.
@@ -118,32 +120,33 @@ func (d *DirectedAcyclicGraph[T]) Discover(
 	if options.GoRoutineLimit <= 0 {
 		options.GoRoutineLimit = runtime.NumCPU()
 	}
-	if len(options.Roots) > 0 {
-		for _, root := range options.Roots {
-			if err := d.AddVertex(root); err != nil && !errors.Is(err, ErrAlreadyExists) {
-				return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
-			}
-		}
-	} else {
-		slog.DebugContext(ctx, "no roots provided for discovery, using dag roots")
 
-		options.Roots = d.Roots()
-		if len(options.Roots) == 0 {
+	if len(options.Roots) == 0 {
+		slog.DebugContext(ctx, "no roots provided for discovery, using dag roots")
+		if options.Roots = d.Roots(); len(options.Roots) == 0 {
 			return fmt.Errorf("no roots provided and no roots found in the dag, cannot discover")
 		}
 	}
+
+	for _, root := range options.Roots {
+		if err := d.AddVertex(root); err != nil && !errors.Is(err, ErrAlreadyExists) {
+			return fmt.Errorf("failed to add vertex for rootID %v: %w", root, err)
+		}
+	}
+
 	doneMap := &sync.Map{}
-	errGroup := errgroup.Group{}
+	errGroup, errgroupCtx := errgroup.WithContext(ctx)
+	errGroup.SetLimit(options.GoRoutineLimit)
 
 	for _, root := range options.Roots {
 		// We ensured that the rootID vertex exists in the graph
-		v, _ := d.GetVertex(root)
+		v := d.MustGetVertex(root)
 		v.Attributes.Store(AttributeDiscoveryState, DiscoveryStateDiscovering)
 		// Discover the graph from each rootID vertex concurrently.
 		// This is fine as:
 		// - the doneMap ensures that each vertex is only processed once.
 		errGroup.Go(func() error {
-			return d.discover(ctx, root, discoverer, doneMap, options)
+			return d.discover(errgroupCtx, root, discoverer, doneMap, options)
 		})
 	}
 	if err := errGroup.Wait(); err != nil {
@@ -207,7 +210,7 @@ func (d *DirectedAcyclicGraph[T]) discover(
 	neighbors, err := discoverer.DiscoverNeighbors(ctx, vertex.ID)
 	if err != nil {
 		vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateError)
-		return fmt.Errorf("failed to discoverer id %v: %w", id, err)
+		return fmt.Errorf("failed to discover id %v: %w", id, err)
 	}
 	vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateDiscovered)
 
@@ -219,6 +222,13 @@ func (d *DirectedAcyclicGraph[T]) discover(
 	errGroup.SetLimit(opts.GoRoutineLimit)
 
 	for index, neighborID := range neighbors {
+		// Add the discovered neighbors as a vertex to the graph. As multiple
+		// vertices might have the same neighbor, ErrAlreadyExists is ignored.
+		// 	    A
+		//	   / \
+		//	  B   C
+		//	   \ /
+		//	    D
 		if err := d.AddVertex(neighborID, map[string]any{
 			AttributeDiscoveryState: DiscoveryStateDiscovering,
 		}); err != nil && !errors.Is(err, ErrAlreadyExists) {
@@ -227,11 +237,11 @@ func (d *DirectedAcyclicGraph[T]) discover(
 		}
 		if err := d.AddEdge(id, neighborID, map[string]any{AttributeOrderIndex: index}); err != nil {
 			vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateError)
-			return fmt.Errorf("failed to add edge %v: %w", id, err)
+			return fmt.Errorf("failed to add edge from %v to %v: %w", id, neighborID, err)
 		}
 		errGroup.Go(func() error {
 			if err := d.discover(ctx, neighborID, discoverer, doneMap, opts); err != nil {
-				return fmt.Errorf("failed to discover reference %v: %w", id, err)
+				return fmt.Errorf("failed to discover reference %v: %w", neighborID, err)
 			}
 			return nil
 		})

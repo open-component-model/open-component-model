@@ -90,7 +90,7 @@ func TestProcessReverseTopology(t *testing.T) {
 			return nil
 		})
 
-		r.NoError(graph.ProcessReverseTopology(ctx, processor))
+		r.NoError(graph.ProcessTopology(ctx, processor, WithReverseTopology()))
 		// A must be last, D must be first, B and C after D, before A
 		idxMap := make(map[string]int)
 		for i, v := range order {
@@ -115,7 +115,7 @@ func TestProcessReverseTopology(t *testing.T) {
 			}
 			return nil
 		})
-		err := graph.ProcessReverseTopology(ctx, processor)
+		err := graph.ProcessTopology(ctx, processor, WithReverseTopology())
 		r.ErrorContains(err, "fail on A")
 	})
 }
