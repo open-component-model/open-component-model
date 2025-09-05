@@ -5,14 +5,14 @@ import (
 )
 
 const (
-	// PSSType defines the type identifier for credential configurations
-	PSSType = "RSASSA-PSS"
+	// RSASSAPSSType defines the type identifier for credential configurations
+	RSASSAPSSType = "RSASSA-PSS"
 )
 
 var Scheme = runtime.NewScheme()
 
 func init() {
-	Scheme.MustRegisterWithAlias(&PSSConfig{}, runtime.NewVersionedType(PSSType, Version))
+	Scheme.MustRegisterWithAlias(&PSSConfig{}, runtime.NewVersionedType(RSASSAPSSType, Version))
 }
 
 // PSSConfig represents the top-level configuration for the plugin manager.
@@ -38,7 +38,7 @@ const (
 	// SignatureEncodingPolicyPEM stores the signature as a single PEM-encoded byte slice.
 	//
 	// Encoding procedure:
-	//   1. Create a PEM block with PSSType "SIGNATURE".
+	//   1. Create a PEM block with RSASSAPSSType "SIGNATURE".
 	//   2. Put the raw signature bytes in the block.
 	//   3. Add the signing algorithm (e.g., "RSASSA-PSS") as header "Signature Algorithm".
 	//   4. Encode the block to PEM.

@@ -23,9 +23,9 @@ import (
 
 // Stable identifiers and media types.
 const (
-	AlgorithmPSS      = v1alpha1.PSSType
-	MediaTypePlainPSS = "application/vnd.ocm.signature.rsa.pss" // hex string
-	MediaTypePEM      = "application/x-pem-file"                // SIGNATURE + CERTIFICATE blocks
+	AlgorithmRSASSAPSS      = v1alpha1.RSASSAPSSType
+	MediaTypePlainRSASSAPSS = "application/vnd.ocm.signature.rsa.pss" // hex string
+	MediaTypePEM            = "application/x-pem-file"                // SIGNATURE + CERTIFICATE blocks
 
 	IdentityAttributeAlgorithm = "algorithm"
 	IdentityAttributeSignature = "signature"
@@ -84,8 +84,8 @@ func (*Handler) Sign(
 	switch cfg.SignatureEncodingPolicy {
 	case v1alpha1.SignatureEncodingPolicyPlain:
 		return descruntime.SignatureInfo{
-			Algorithm: AlgorithmPSS,
-			MediaType: MediaTypePlainPSS,
+			Algorithm: AlgorithmRSASSAPSS,
+			MediaType: MediaTypePlainRSASSAPSS,
 			Value:     hex.EncodeToString(sig),
 		}, nil
 
@@ -96,9 +96,9 @@ func (*Handler) Sign(
 		if err != nil {
 			return descruntime.SignatureInfo{}, fmt.Errorf("read certificate chain: %w", err)
 		}
-		pem := rsasignature.SignatureBytesToPem(AlgorithmPSS, sig, chain...)
+		pem := rsasignature.SignatureBytesToPem(AlgorithmRSASSAPSS, sig, chain...)
 		return descruntime.SignatureInfo{
-			Algorithm: AlgorithmPSS,
+			Algorithm: AlgorithmRSASSAPSS,
 			MediaType: MediaTypePEM,
 			Value:     string(pem),
 		}, nil
@@ -119,9 +119,9 @@ func (h *Handler) Verify(
 	}
 
 	switch signed.Signature.MediaType {
-	case MediaTypePlainPSS:
+	case MediaTypePlainRSASSAPSS:
 		if pubFromCreds == nil {
-			return fmt.Errorf("missing public key, required for signatures of type %q with media type %q", AlgorithmPSS, MediaTypePlainPSS)
+			return fmt.Errorf("missing public key, required for signatures of type %q with media type %q", AlgorithmRSASSAPSS, MediaTypePlainRSASSAPSS)
 		}
 		sig, err := hex.DecodeString(signed.Signature.Value)
 		if err != nil {
@@ -134,7 +134,7 @@ func (h *Handler) Verify(
 		if err != nil {
 			return fmt.Errorf("parse pem signature: %w", err)
 		}
-		if algo != "" && algo != AlgorithmPSS {
+		if algo != "" && algo != AlgorithmRSASSAPSS {
 			return fmt.Errorf("unexpected signature algorithm %q", algo)
 		}
 		if len(chain) == 0 {
@@ -183,7 +183,7 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(_ context.Context, signat
 
 func baseIdentity() runtime.Identity {
 	id := runtime.Identity{
-		IdentityAttributeAlgorithm: AlgorithmPSS,
+		IdentityAttributeAlgorithm: AlgorithmRSASSAPSS,
 	}
 	id.SetType(rsacredentials.IdentityTypeRSA)
 	return id

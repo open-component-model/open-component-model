@@ -310,8 +310,8 @@ func Test_RSASSA_PSS_Verify_ErrorPaths(t *testing.T) {
 		require.Contains(t, err.Error(), "invalid certificate format (expected \"CERTIFICATE\" PEM block)")
 	})
 
-	t.Run("PEM with mismatched AlgorithmPSS header", func(t *testing.T) {
-		bad := strings.Replace(si.Value, "AlgorithmPSS: "+AlgorithmPSS, "AlgorithmPSS: ED25519", 1)
+	t.Run("PEM with mismatched AlgorithmRSASSAPSS header", func(t *testing.T) {
+		bad := strings.Replace(si.Value, "AlgorithmRSASSAPSS: "+AlgorithmRSASSAPSS, "AlgorithmRSASSAPSS: ED25519", 1)
 		err := h.Verify(t.Context(), descruntime.Signature{
 			Digest: d, Signature: descruntime.SignatureInfo{
 				Algorithm: si.Algorithm,
@@ -336,7 +336,7 @@ func Test_RSASSA_PSS_Verify_ErrorPaths(t *testing.T) {
 		s := descruntime.Signature{
 			Digest: d,
 			Signature: descruntime.SignatureInfo{
-				Algorithm: AlgorithmPSS,
+				Algorithm: AlgorithmRSASSAPSS,
 				MediaType: "application/unknown",
 				Value:     "deadbeef",
 			},
