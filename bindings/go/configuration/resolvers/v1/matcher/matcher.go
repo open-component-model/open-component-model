@@ -2,35 +2,18 @@ package matcher
 
 import (
 	"fmt"
-
-	"github.com/gobwas/glob"
+	"strings"
 )
 
 type ComponentMatcher interface {
 	Match(componentName string) bool
 }
 
-type globComponentMatcher struct {
-	glob glob.Glob
-}
-
 func NewComponentMatcher(pattern string) (ComponentMatcher, error) {
-	g, err := glob.Compile(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compile glob pattern %q: %w", pattern, err)
+	if strings.HasPrefix(pattern, "path:") {
+		return newPathComponentMatcher(strings.TrimPrefix(pattern, "path:"))
 	}
-
-	return &globComponentMatcher{
-		glob: g,
-	}, nil
-}
-
-func (m *globComponentMatcher) Match(componentName string) bool {
-	if m.glob == nil {
-		return false
-	}
-
-	return m.glob.Match(componentName)
+	return newGlobComponentMatcher(pattern)
 }
 
 // ResolverMatcher combines component name and version matching for a resolver.
