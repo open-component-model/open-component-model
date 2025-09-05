@@ -1,6 +1,7 @@
 package matcher
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,36 +10,118 @@ import (
 
 func TestResolverMatcher(t *testing.T) {
 	tests := []struct {
-		name                 string
-		componentNamePattern string
-		componentName        string
-		shouldMatch          bool
-		expectError          bool
+		name          string
+		pattern       string
+		componentName string
+		shouldMatch   bool
+		expectError   bool
 	}{
 		{
-			name:                 "component matches",
-			componentNamePattern: "ocm.software/*",
-			componentName:        "ocm.software/core",
-			shouldMatch:          true,
+			name:          "glob pattern with wildcard",
+			pattern:       "ocm.software/core/*",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
 		},
 		{
-			name:                 "component doesn't match",
-			componentNamePattern: "ocm.software/*",
-			componentName:        "other.software/core",
-			shouldMatch:          false,
+			name:          "glob pattern no match",
+			pattern:       "ocm.software/core/*",
+			componentName: "ocm.software/other/test",
+			shouldMatch:   false,
+		},
+		{
+			name:          "glob pattern with question mark",
+			pattern:       "ocm.software/core/?est",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
+		},
+		{
+			name:          "glob pattern with character class",
+			pattern:       "ocm.software/core/[tc]est",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
+		},
+		{
+			name:          "exact match",
+			pattern:       "ocm.software/core/test",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
+		},
+		{
+			name:          "exact no match",
+			pattern:       "ocm.software/core/test",
+			componentName: "ocm.software/core/other",
+			shouldMatch:   false,
+		},
+		{
+			name:          "glob pattern with multiple wildcards",
+			pattern:       "*.software/*/test",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
+		},
+		{
+			name:          "path pattern with wildcard",
+			pattern:       "ocm.software/core/*",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
+		},
+		{
+			name:          "path pattern no match",
+			pattern:       "ocm.software/core/*",
+			componentName: "ocm.software/other/test",
+			shouldMatch:   false,
+		},
+		{
+			name:          "path pattern with question mark",
+			pattern:       "ocm.software/core/?est",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
+		},
+		{
+			name:          "path pattern with character class",
+			pattern:       "ocm.software/core/[tc]est",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
+		},
+		{
+			name:          "path exact match",
+			pattern:       "ocm.software/core/test",
+			componentName: "ocm.software/core/test",
+			shouldMatch:   true,
+		},
+		{
+			name:          "path exact no match",
+			pattern:       "ocm.software/core/test",
+			componentName: "ocm.software/core/other",
+			shouldMatch:   false,
+		},
+		{
+			name:          "path pattern with multiple wildcards",
+			pattern:       "*/software/*/test",
+			componentName: "ocm/software/core/test",
+			shouldMatch:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matcher, err := NewResolverMatcher(tt.componentNamePattern)
+			var matcher ComponentMatcher
+			var err error
+			if strings.Contains(tt.name, "path") {
+				matcher, err = NewPathComponentMatcher(tt.pattern)
+			} else {
+				matcher, err = NewGlobComponentMatcher(tt.pattern)
+			}
 			if tt.expectError {
 				assert.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.shouldMatch, matcher.Match(tt.componentName, ""))
-			assert.Equal(t, tt.shouldMatch, matcher.MatchComponent(tt.componentName))
+
+			resolverMatcher, err := NewResolverMatcherWithMatcher(matcher)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.shouldMatch, resolverMatcher.Match(tt.componentName, ""))
+			assert.Equal(t, tt.shouldMatch, resolverMatcher.MatchComponent(tt.componentName))
 		})
 	}
 }
