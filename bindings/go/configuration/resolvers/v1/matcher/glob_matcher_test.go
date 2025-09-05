@@ -63,6 +63,12 @@ func TestPathComponentMatcher(t *testing.T) {
 			componentName: "ocm.software/core/sub/test",
 			shouldMatch:   false,
 		},
+		{
+			// test invalid pattern
+			name:        "invalid pattern",
+			pattern:     "ocm.software/core/[test",
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {

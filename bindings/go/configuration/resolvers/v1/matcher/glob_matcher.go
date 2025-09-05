@@ -10,6 +10,12 @@ type globComponentMatcher struct {
 }
 
 func newGlobComponentMatcher(pattern string) (ComponentMatcher, error) {
+	// Validate the pattern by attempting to match it against an empty string.
+	// If the pattern is invalid, path.Match will return an error.
+	if _, err := path.Match(pattern, ""); err != nil {
+		return nil, fmt.Errorf("invalid glob pattern '%s': %w", pattern, err)
+	}
+
 	return &globComponentMatcher{
 		pattern: pattern,
 	}, nil
