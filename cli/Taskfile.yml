@@ -1,6 +1,7 @@
 version: '3'
 
 vars:
+  INTEGRATION_TEST_IDENTIFIER: 'Integration'
   CLI_DOCUMENTATION_MODE: "markdown"
   CLI_DOCUMENTATION_DIRECTORY: tmp/docs
   PROVIDER: ocm.software
@@ -24,12 +25,8 @@ tasks:
     status:
       - test -d tmp
   test:
-    sources:
-      - ./**/*.go
-      - ./go.mod
-      - ./go.sum
     cmds:
-      - go test -v -coverprofile=tmp/coverage.out ./...
+      - go test -skip "{{ .INTEGRATION_TEST_IDENTIFIER }}" -v -coverprofile=tmp/coverage.out ./...
     deps:
       - tmp
 
@@ -116,7 +113,7 @@ tasks:
       REFERENCE: '{{ .CTF_LOCATION }}//{{ .PROVIDER }}/{{ .NAME }}'
     dir: '{{ .TASKFILE_DIR }}/tmp/verify-ctf'
     cmd: |
-      VERSION=$({{ .TASKFILE_DIR }}/tmp/bin/ocm get component-version {{ .REFERENCE }} -oyaml --loglevel=error | yq .component.version)
+      VERSION=$({{ .TASKFILE_DIR }}/tmp/bin/ocm get component-version {{ .REFERENCE }} -oyaml --loglevel=error | yq .[0].component.version)
       if [ -z "$VERSION" ]; then
         echo "Component version not found in CTF at {{ .REFERENCE }}"
         exit 1

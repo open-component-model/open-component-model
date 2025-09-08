@@ -3,8 +3,6 @@ package provider
 import (
 	"context"
 	"log/slog"
-	"net"
-	"net/url"
 	"sync"
 
 	"oras.land/oras-go/v2/registry/remote/auth"
@@ -32,17 +30,13 @@ type credentialCache struct {
 // get retrieves credentials for a given hostport string.
 // It performs a thread-safe lookup in the cache using the hostname and port
 // to match against stored identities.
-func (cache *credentialCache) get(_ context.Context, hostport string) (auth.Credential, error) {
+func (cache *credentialCache) get(_ context.Context, registry string) (auth.Credential, error) {
 	cache.mu.RLock()
 	defer cache.mu.RUnlock()
 
-	host, port, err := net.SplitHostPort(hostport)
+	identity, err := runtime.ParseURLToIdentity(registry)
 	if err != nil {
 		return auth.EmptyCredential, err
-	}
-	identity := runtime.Identity{
-		runtime.IdentityAttributeHostname: host,
-		runtime.IdentityAttributePort:     port,
 	}
 
 	for _, entry := range cache.credentials {
@@ -60,16 +54,9 @@ func (cache *credentialCache) add(spec *ocirepospecv1.Repository, credentials ma
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 
-	parsedBaseURL, err := url.Parse(spec.BaseUrl)
+	identity, err := runtime.ParseURLToIdentity(spec.BaseUrl)
 	if err != nil {
 		return err
-	}
-
-	hostname, port := parsedBaseURL.Hostname(), parsedBaseURL.Port()
-
-	identity := runtime.Identity{
-		runtime.IdentityAttributeHostname: hostname,
-		runtime.IdentityAttributePort:     port,
 	}
 
 	newCredentials := toCredential(credentials)

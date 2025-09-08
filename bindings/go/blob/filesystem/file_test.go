@@ -45,7 +45,9 @@ func TestGetLocalBlobFromLocation(t *testing.T) {
 
 	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() {
+		r.NoError(reader.Close())
+	}()
 
 	data, err := io.ReadAll(reader)
 	r.NoError(err)

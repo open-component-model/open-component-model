@@ -21,6 +21,7 @@ import (
 type Options struct {
 	args   []string  // Command line arguments to pass to the CLI
 	out    io.Writer // Output writer to capture command output
+	errout io.Writer // Error writer to capture command errors and logs
 	format string    // Log format to use (e.g., json, text)
 }
 
@@ -38,6 +39,12 @@ func WithArgs(args ...string) Option {
 func WithOutput(out io.Writer) Option {
 	return func(o *Options) {
 		o.out = out
+	}
+}
+
+func WithErrorOutput(errout io.Writer) Option {
+	return func(o *Options) {
+		o.errout = errout
 	}
 }
 
@@ -66,6 +73,9 @@ func OCM(tb testing.TB, opts ...Option) (*cobra.Command, error) {
 	// if and output is set, mirror it towards stdout (for logging) and the given output for testing
 	if opt.out != nil {
 		instance.SetOut(io.MultiWriter(os.Stdout, opt.out))
+	}
+	if opt.errout != nil {
+		instance.SetErr(io.MultiWriter(os.Stderr, opt.errout))
 	}
 
 	// by default lets test with the json format so its actually easier to read and test against

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,13 +21,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
@@ -34,7 +38,6 @@ const (
 	FlagConcurrencyLimit               = "concurrency-limit"
 	FlagRepositoryRef                  = "repository"
 	FlagComponentConstructorPath       = "constructor"
-	FlagCopyResources                  = "copy-resources"
 	FlagBlobCacheDirectory             = "blob-cache-directory"
 	FlagComponentVersionConflictPolicy = "component-version-conflict-policy"
 	FlagSkipReferenceDigestProcessing  = "skip-reference-digest-processing"
@@ -75,38 +78,94 @@ func New() *cobra.Command {
 		Use:        "component-version",
 		Aliases:    []string{"cv", "componentversion", "component-versions", "cvs", "componentversions"},
 		SuggestFor: []string{"component", "components", "version", "versions"},
-		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository stored as Common Transport Format archive (CTF) based on a %[1]q file", DefaultComponentConstructorBaseName),
+		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository based on a %[1]q file", DefaultComponentConstructorBaseName),
 		Args:       cobra.NoArgs,
-		Long: fmt.Sprintf(`Add component version(s) to an OCM Common Transport Format archive (CTF) that can be reused for transfers.
+		Long: fmt.Sprintf(`Add component version(s) to an OCM repository that can be reused for transfers.
 
-A %[1]q file is used to specify the component version(s) to be added. It can contain both a single component or many components. The component reference is used to determine the repository to add the components to.
+A %[1]q file is used to specify the component version(s) to be added. It can contain both a single component or many components.
 
 By default, the command will look for a file named "%[1]s.yaml" or "%[1]s.yml" in the current directory.
 If given a path to a directory, the command will look for a file named "%[1]s.yaml" or "%[1]s.yml" in that directory.
 If given a path to a file, the command will attempt to use that file as the %[1]q file.
 
-In case the component archive does not exist, it will be created by default.
+If you provide a working directory, all paths in the %[1]q file will be resolved relative to that directory.
+Otherwise the path to the %[1]q file will be used as the working directory.
+You are only allowed to reference files within the working directory or sub-directories of the working directory.
+
+Repository Reference Format:
+	[type::]{repository}
+
+For known types, currently only {%[2]s} are supported, which can be shortened to {%[3]s} respectively for convenience.
+
+If no type is given, the repository specification is interpreted based on introspection and heuristics:
+
+- URL schemes or domain patterns -> OCI registry
+- Local paths -> CTF archive
+
+In case the CTF archive does not exist, it will be created by default.
 If not specified, it will be created with the name "transport-archive".
 `,
 			DefaultComponentConstructorBaseName,
+			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
+			strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
 		),
 		Example: strings.TrimSpace(fmt.Sprintf(`
-Adding component versions to a non-default CTF named %[2]q based on a non-default default %[4]q file:
+Adding component versions to a CTF archive:
 
-add component-version  --%[1]s ./path/to/%[2]s --%[3]s ./path/to/%[4]s.yaml
-`, FlagRepositoryRef, LegacyDefaultArchiveName, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
+add component-version --%[1]s ./path/to/transport-archive --%[2]s ./path/to/%[3]s.yaml
+add component-version --%[1]s /tmp/my-archive --%[2]s constructor.yaml
+
+Adding component versions to an OCI registry:
+
+add component-version --%[1]s ghcr.io/my-org/my-repo --%[2]s %[3]s.yaml
+add component-version --%[1]s https://my-registry.com/my-repo --%[2]s %[3]s.yaml
+add component-version --%[1]s localhost:5000/my-repo --%[2]s %[3]s.yaml
+
+Specifying repository types explicitly:
+
+add component-version --%[1]s ctf::./local/archive --%[2]s %[3]s.yaml
+add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.yaml
+`, FlagRepositoryRef, FlagComponentConstructorPath, DefaultComponentConstructorBaseName)),
 		RunE:              AddComponentVersion,
+		PersistentPreRunE: persistentPreRunE,
 		DisableAutoGenTag: true,
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of component versions that can be constructed concurrently.")
-	file.VarP(cmd.Flags(), FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "path to the repository")
+	cmd.Flags().StringP(FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "repository ref")
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the component constructor file")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
 
 	return cmd
+}
+
+func persistentPreRunE(cmd *cobra.Command, _ []string) error {
+	constructorFile, err := getComponentConstructorFile(cmd)
+	if err != nil {
+		return fmt.Errorf("getting component constructor failed: %w", err)
+	}
+
+	// If the working directory isn't set yet, default to the constructorFile file's dir.
+	cfg := hooks.Config{}
+	ctx := cmd.Context()
+	if fsCfg := ocmctx.FromContext(ctx).FilesystemConfig(); fsCfg == nil || fsCfg.WorkingDirectory == "" {
+		path := constructorFile.String()
+		// if our flag is not absolute, make it absolute to pass into potential plugins
+		if path, err = filepath.Abs(path); err != nil {
+			return err
+		}
+		cfg.WorkingDirectory = filepath.Dir(path)
+		slog.DebugContext(ctx, "setting working directory from constructorFile path",
+			slog.String("working-directory", cfg.WorkingDirectory))
+	}
+
+	if err := hooks.PreRunEWithConfig(cmd, cfg); err != nil {
+		return fmt.Errorf("pre-run configuration for component constructors failed: %w", err)
+	}
+
+	return nil
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {
@@ -145,7 +204,12 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting blob cache directory flag failed: %w", err)
 	}
 
-	constructorSpec, err := GetComponentConstructor(cmd)
+	constructorFile, err := getComponentConstructorFile(cmd)
+	if err != nil {
+		return fmt.Errorf("getting component constructor path failed: %w", err)
+	}
+
+	constructorSpec, err := GetComponentConstructor(constructorFile)
 	if err != nil {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
@@ -182,22 +246,54 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 }
 
 func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
-	repoRef, err := file.Get(cmd.Flags(), FlagRepositoryRef)
+	repositoryRef, err := cmd.Flags().GetString(FlagRepositoryRef)
 	if err != nil {
 		return nil, fmt.Errorf("getting repository reference flag failed: %w", err)
 	}
-	var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
-	if !repoRef.Exists() {
-		accessMode += "|" + ctfv1.AccessModeCreate
+
+	typed, err := compref.ParseRepository(repositoryRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse repository: %w", err)
 	}
-	repoSpec := ctfv1.Repository{
-		Path:       repoRef.String(),
-		AccessMode: accessMode,
+
+	if ctfRepo, ok := typed.(*ctfv1.Repository); ok {
+		logger, err := log.GetBaseLogger(cmd)
+		if err != nil {
+			return nil, fmt.Errorf("getting base logger failed: %w", err)
+		}
+
+		logger.Debug("setting access mode for CTF repository", "path", ctfRepo.Path, "ref", repositoryRef)
+
+		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
+		if _, err := os.Stat(ctfRepo.Path); os.IsNotExist(err) {
+			accessMode += "|" + ctfv1.AccessModeCreate
+		}
+		ctfRepo.AccessMode = accessMode
 	}
-	return &repoSpec, nil
+
+	return typed, nil
 }
 
-func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentConstructor, error) {
+func GetComponentConstructor(file *file.Flag) (*constructorruntime.ComponentConstructor, error) {
+	path := file.String()
+	constructorStream, err := file.Open()
+	if err != nil {
+		return nil, fmt.Errorf("opening component constructor %q failed: %w", path, err)
+	}
+	constructorData, err := io.ReadAll(constructorStream)
+	if err != nil {
+		return nil, fmt.Errorf("reading component constructor %q failed: %w", path, err)
+	}
+
+	data := constructorv1.ComponentConstructor{}
+	if err := yaml.Unmarshal(constructorData, &data); err != nil {
+		return nil, fmt.Errorf("unmarshalling component constructor %q failed: %w", path, err)
+	}
+
+	return constructorruntime.ConvertToRuntimeConstructor(&data), nil
+}
+
+func getComponentConstructorFile(cmd *cobra.Command) (*file.Flag, error) {
 	constructorFlag, err := file.Get(cmd.Flags(), FlagComponentConstructorPath)
 	if err != nil {
 		return nil, fmt.Errorf("getting component constructor path flag failed: %w", err)
@@ -207,26 +303,7 @@ func GetComponentConstructor(cmd *cobra.Command) (*constructorruntime.ComponentC
 	} else if constructorFlag.IsDir() {
 		return nil, fmt.Errorf("path %q is a directory but must point to a component constructor", constructorFlag.String())
 	}
-	constructorStream, err := constructorFlag.Open()
-	if err != nil {
-		return nil, fmt.Errorf("opening component constructor %q failed: %w", constructorFlag.String(), err)
-	}
-	defer func() {
-		if err := constructorStream.Close(); err != nil {
-			slog.WarnContext(cmd.Context(), "error closing component constructor file data stream", "error", err)
-		}
-	}()
-	constructorData, err := io.ReadAll(constructorStream)
-	if err != nil {
-		return nil, fmt.Errorf("reading component constructor %q failed: %w", constructorFlag.String(), err)
-	}
-
-	data := constructorv1.ComponentConstructor{}
-	if err := yaml.Unmarshal(constructorData, &data); err != nil {
-		return nil, fmt.Errorf("unmarshalling component constructor %q failed: %w", constructorFlag.String(), err)
-	}
-
-	return constructorruntime.ConvertToRuntimeConstructor(&data), nil
+	return constructorFlag, nil
 }
 
 var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)

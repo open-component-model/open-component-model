@@ -37,7 +37,6 @@ var (
 // It uses a sync.Map for concurrent access. Still, it generally CANNOT be
 // assumed to be thread-safe for operations that modify the graph structure.
 type DirectedAcyclicGraph[T cmp.Ordered] struct {
-	mu sync.RWMutex // Mutex to protect concurrent access to the graph
 	// Vertices stores the nodes in the graph
 	Vertices *sync.Map // map[T]*Vertex[T]
 	// OutDegree of each vertex (number of outgoing edges)
@@ -126,17 +125,13 @@ func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
 
 // AddVertex adds a new node to the graph.
 func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) error {
+	if _, exists := d.Vertices.Load(id); exists {
+		return fmt.Errorf("node %v already exists: %w", id, ErrAlreadyExists)
+	}
 	vertex := &Vertex[T]{
 		ID:         id,
 		Attributes: &sync.Map{},
 		Edges:      &sync.Map{},
-	}
-	return d.addRawVertex(vertex, attributes...)
-}
-
-func (d *DirectedAcyclicGraph[T]) addRawVertex(vertex *Vertex[T], attributes ...map[string]any) error {
-	if _, exists := d.Vertices.Load(vertex.ID); exists {
-		return fmt.Errorf("node %v already exists: %w", vertex.ID, ErrAlreadyExists)
 	}
 	for _, attrs := range attributes {
 		for k, v := range attrs {
@@ -432,18 +427,35 @@ func (d *DirectedAcyclicGraph[T]) Reverse() (*DirectedAcyclicGraph[T], error) {
 	reverse := NewDirectedAcyclicGraph[T]()
 
 	// Ensure all vertices exist in the new graph
+	// We cannot use vertex.Clone here. vertex.Clone also copies the edges.
+	// But for reversing the graph, the edges have to be inverted.
 	d.Vertices.Range(func(key, value any) bool {
-		if err := reverse.AddVertex(key.(T)); err != nil {
+		origVertex := value.(*Vertex[T])
+		attrs := make(map[string]any)
+		origVertex.Attributes.Range(func(attrKey, attrValue any) bool {
+			attrs[attrKey.(string)] = attrValue
+			return true
+		})
+		if err := reverse.AddVertex(key.(T), attrs); err != nil {
 			return false
 		}
 		return true
 	})
 
-	// Reverse the edges: Child -> Parent instead of Parent -> Child
 	d.Vertices.Range(func(key, value any) bool {
 		parent := value.(*Vertex[T])
-		parent.Edges.Range(func(child any, _ any) bool {
-			if err := reverse.AddEdge(child.(T), parent.ID); err != nil {
+		parent.Edges.Range(func(child any, edgeAttrs any) bool {
+			// Copy edge attributes
+			attrMap := make(map[string]any)
+			if edgeAttrs != nil {
+				if smap, ok := edgeAttrs.(*sync.Map); ok {
+					smap.Range(func(k, v any) bool {
+						attrMap[k.(string)] = v
+						return true
+					})
+				}
+			}
+			if err := reverse.AddEdge(child.(T), parent.ID, attrMap); err != nil {
 				return false
 			}
 			return true
@@ -464,21 +476,6 @@ type Vertex[T cmp.Ordered] struct {
 	// Edges stores the IDs of the nodes that this node has an outgoing edge to,
 	// as well as any attributes associated with that edge.
 	Edges *sync.Map // map[T]*sync.Map with map[string]any (attributes)
-}
-
-// NewVertex creates a new vertex with the given ID and optional attributes.
-func NewVertex[T cmp.Ordered](id T, attributes ...map[string]any) *Vertex[T] {
-	v := &Vertex[T]{
-		ID:         id,
-		Attributes: &sync.Map{},
-		Edges:      &sync.Map{},
-	}
-	for _, attrs := range attributes {
-		for key, value := range attrs {
-			v.Attributes.Store(key, value)
-		}
-	}
-	return v
 }
 
 func (v *Vertex[T]) Clone() *Vertex[T] {

@@ -1,3 +1,5 @@
+// Note: This is the top-level config for Renovate.
+// For repository-specific configuration please use the renovate.json5 file at the root of the repository.
 {
   "branchPrefix": "renovate/",
   "username": "ocmbot[bot]",
@@ -10,39 +12,12 @@
     "GONOPROXY",
     "GOPRIVATE"
   ],
-  "repositories": [
-    "open-component-model/open-component-model",
-  ],
   "gitIgnoredAuthors": [
     "125909804+ocmbot[bot]@users.noreply.github.com"
   ],
   extends: [
     'config:recommended',
     'config:best-practices',
-    'security:openssf-scorecard',
-    'helpers:pinGitHubActionDigests',
-    ':rebaseStalePrs',
-  ],
-  packageRules: [
-    {
-      "matchCategories": [
-        "golang"
-      ],
-      "postUpdateOptions": [
-        "gomodTidy"
-      ],
-      "enabled": true
-    },
-    {
-      matchManagers: [
-        'gomod',
-      ],
-      groupName: 'OCM Monorepo Go Module Dependencies',
-      groupSlug: 'ocm-monorepo',
-      matchPackageNames: [
-        'ocm.software/open-component-model/**',
-      ],
-    },
   ],
   "allowedCommands": [
     "^(command -v go >/dev/null 2>&1 \\|\\| exit 0;\\s*)?find\\s+\\.\\s+-name\\s+\\\"go\\.mod\\\".*-path\\s+'\\*/integration/\\*'.*go\\s+mod\\s+tidy"

@@ -79,10 +79,10 @@ func RegisterLoggingFlags(flagset *pflag.FlagSet) {
    error: Show errors only`)
 
 	enum.Var(flagset, OutputFlagName, []string{
-		OutputStdout,
 		OutputStderr,
+		OutputStdout,
 	}, `set the log output destination
-   stdout: Write logs to standard output (default)
+   stdout: Write logs to standard output
    stderr: Write logs to standard error, useful for separating logs from normal output`)
 }
 
@@ -111,7 +111,7 @@ func GetBaseLogger(cmd *cobra.Command) (*slog.Logger, error) {
 	case OutputStdout:
 		outputWriter = cmd.OutOrStdout()
 	case OutputStderr:
-		outputWriter = cmd.OutOrStderr()
+		outputWriter = cmd.ErrOrStderr()
 	}
 
 	var handler slog.Handler

@@ -679,7 +679,7 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed) (dat
 // getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.
 // It handles both OCI image indexes and OCI image manifests.
 func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, reference string) (manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
-	slogcontext.Log(ctx, slog.LevelInfo, "resolving descriptor", slog.String("reference", reference))
+	slogcontext.Log(ctx, slog.LevelDebug, "resolving descriptor", slog.String("reference", reference))
 	base, err := store.Resolve(ctx, reference)
 	if err != nil {
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)

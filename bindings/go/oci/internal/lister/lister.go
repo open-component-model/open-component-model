@@ -250,6 +250,7 @@ func listViaTags(ctx context.Context, lister registry.TagLister, opts TagListerO
 			wg.Go(func() error {
 				ver, err := opts.VersionResolver(ctx, tag)
 				if errors.Is(err, ErrSkip) {
+					slogcontext.FromCtx(ctx).With(slog.String("realm", "oci")).Log(ctx, slog.LevelDebug, "skipping tag", slog.String("tag", tag), slog.String("error", err.Error()))
 					return nil
 				}
 				if err != nil {
