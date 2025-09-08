@@ -74,7 +74,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:    typ,
 		BaseUrl: "ghcr.io/open-component/test-component-version-repository",
 	}
-	retrievedPlugin, err := registry.GetPlugin(ctx, spec, nil)
+	retrievedPlugin, err := registry.GetComponentVersionRepository(ctx, spec, nil)
 	require.NoError(t, err)
 	desc, err := retrievedPlugin.GetComponentVersion(ctx, "test-component", "1.0.0")
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestPluginNotFound(t *testing.T) {
 		},
 		BaseUrl: "",
 	}
-	_, err := registry.GetPlugin(ctx, proto, nil)
+	_, err := registry.GetComponentVersionRepository(ctx, proto, nil)
 	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
@@ -119,7 +119,7 @@ func TestSchemeDoesNotExist(t *testing.T) {
 		},
 		BaseUrl: "",
 	}
-	_, err := registry.GetPlugin(ctx, proto, nil)
+	_, err := registry.GetComponentVersionRepository(ctx, proto, nil)
 	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
@@ -166,7 +166,7 @@ func TestInternalPluginRegistry(t *testing.T) {
 		BaseUrl: "",
 	}
 	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockRepository{}, proto))
-	retrievedPlugin, err := registry.GetPlugin(ctx, proto, nil)
+	retrievedPlugin, err := registry.GetComponentVersionRepository(ctx, proto, nil)
 	require.NoError(t, err)
 	// The retrieved plugin is now directly a ComponentVersionRepository
 	require.NotNil(t, retrievedPlugin)

@@ -59,7 +59,7 @@ func TestPluginManager(t *testing.T) {
 		Type:    typ,
 		BaseUrl: "https://ocm.software/test",
 	}
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, spec, nil)
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, spec, nil)
 	require.NoError(t, err)
 	desc, err := plugin.GetComponentVersion(ctx, "test-component", "1.0.0")
 	require.NoError(t, err)
@@ -122,7 +122,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 		Type: typ,
 		BaseUrl: "test",
 	}
-	_, err = pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, spec, nil)
+	_, err = pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, spec, nil)
 	require.NoError(t, err)
 
 	// we need some time for the logs to be streamed back
@@ -191,7 +191,7 @@ func TestPluginManagerCancelContext(t *testing.T) {
 			Version: "v1",
 		},
 	}
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto, nil)
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, proto, nil)
 	require.NoError(t, err)
 	_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
 	require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 			Version: "v1",
 		},
 	}
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto, nil)
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, proto, nil)
 	require.NoError(t, err)
 	_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
 	require.NoError(t, err)
@@ -299,7 +299,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 			Version: "v1",
 		},
 	}
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto, nil)
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, proto, nil)
 	//plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
 	require.NoError(t, err)
 	_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
