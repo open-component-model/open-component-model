@@ -263,10 +263,10 @@ components:
 
 	// Create the constructor with our mocks
 	opts := Options{
-		SourceInputMethodProvider:   sourceProvider,
-		ResourceInputMethodProvider: resourceProvider,
-		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		ComponentVersionRepository:  externalRepo,
+		SourceInputMethodProvider:           sourceProvider,
+		ResourceInputMethodProvider:         resourceProvider,
+		TargetRepositoryProvider:            &mockTargetRepositoryProvider{repo: mockRepo},
+		ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
 	}
 	constructorInstance := NewDefaultConstructor(opts)
 

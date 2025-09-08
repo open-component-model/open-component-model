@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"runtime"
 	"sync"
 
@@ -48,9 +47,21 @@ var _ Constructor = (*DefaultConstructor)(nil)
 const (
 	attributeComponentConstructor = "componentConstructor"
 	attributeComponentDescriptor  = "componentDescriptor"
-	attributeComponentIdentity    = "componentIdentity"
-	attributeComponentRepository  = "componentRepository"
 )
+
+type componentVersionRepositoryWrapper struct {
+	repository repository.ComponentVersionRepository
+}
+
+func (c componentVersionRepositoryWrapper) GetExternalRepository(ctx context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
+	return c.repository, nil
+}
+
+func RepositoryAsExternalComponentVersionRepositoryProvider(repo repository.ComponentVersionRepository) ExternalComponentRepositoryProvider {
+	return componentVersionRepositoryWrapper{repository: repo}
+}
+
+var _ ExternalComponentRepositoryProvider = (*componentVersionRepositoryWrapper)(nil)
 
 func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
 	logger := log.Base().With("operation", "construct")
@@ -67,7 +78,8 @@ func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentC
 	// We might want to allow the DAG to be passed in. This would allow to
 	// pre-populate it with known components to avoid re-resolving them.
 	dag := syncdag.NewDirectedAcyclicGraph[string]()
-	if err := c.discoverGraph(ctx, dag, componentConstructor); err != nil {
+	logger.Debug("starting component reference discovery")
+	if err := c.graphBasedDiscovery(ctx, dag, componentConstructor); err != nil {
 		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
 	descriptors, err := c.graphBasedConstruct(ctx, dag)
@@ -77,115 +89,25 @@ func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentC
 	return descriptors, nil
 }
 
-func (c *DefaultConstructor) discoverGraph(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
-	roots := make([]*syncdag.Vertex[string], len(componentConstructor.Components))
-	for index, component := range componentConstructor.Components {
-		roots[index] = syncdag.NewVertex(component.ToIdentity().String(), map[string]any{
-			attributeComponentIdentity:    component.ToIdentity(),
-			attributeComponentConstructor: &component,
-		})
+func (c *DefaultConstructor) graphBasedDiscovery(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
+	discoverer := newNeighborDiscoverer(c, dag)
+	roots, err := discoverer.initializeDAGWithConstructor(componentConstructor)
+	if err != nil {
+		return fmt.Errorf("failed to initialize component constructor graph: %w", err)
 	}
-	neighbourDiscoverer := syncdag.DiscoverNeighborsFunc[string](func(ctx context.Context, v *syncdag.Vertex[string]) ([]*syncdag.Vertex[string], error) {
-		untypedComponent, ok := v.GetAttribute(attributeComponentConstructor)
-		if ok {
-			// This means we are on a constructor node.
-			// We want to discover its neighbors.
-			component := untypedComponent.(*constructor.Component)
-			neighbors := make([]*syncdag.Vertex[string], 0, len(component.References))
-			for _, ref := range component.References {
-				identity := ocmruntime.Identity{
-					descriptor.IdentityAttributeName:    ref.Component,
-					descriptor.IdentityAttributeVersion: ref.Version,
-				}
-				if _, exists := dag.GetVertex(identity.String()); exists {
-					// This **is always** the case for other components in the
-					// constructor since all of them are added to the traversal
-					// as roots.
-					// This **might** be the case for external components, if
-					// they are already discovered through other components.
-					//
-					// Either way, we want to add the node as a neighbor.
-					neighbors = append(neighbors, syncdag.NewVertex(identity.String()))
-				} else {
-					// This is only the case for external components since all
-					// components in the constructor are added to the traversal
-					// as roots.
-					neighbors = append(neighbors, syncdag.NewVertex(identity.String(), map[string]any{
-						attributeComponentIdentity: identity,
-					}))
-				}
-			}
-			return neighbors, nil
-		}
-
-		// This means we are on an external descriptor node.
-		// TODO(fabianburth): Once we support recursive, we need to discover
-		//  their neighbors too. Are there valid cases where an external
-		//  component might reference a component in the constructor?
-		identity := v.MustGetAttribute(attributeComponentIdentity).(ocmruntime.Identity)
-		repo := c.opts.ComponentVersionRepository
-		desc, err := repo.GetComponentVersion(ctx, identity[descriptor.IdentityAttributeName], identity[descriptor.IdentityAttributeVersion])
-		if err != nil {
-			return nil, fmt.Errorf("error getting component version %q from repository: %w", identity.String(), err)
-		}
-		v.Attributes.Store(attributeComponentDescriptor, desc)
-
-		// TODO(fabianburth): once we support recursive, we need to discover the
-		//  neighbors here
-		return nil, nil
-	})
-	if err := dag.Traverse(ctx, neighbourDiscoverer, syncdag.WithRoots[string](roots...)); err != nil {
-		return fmt.Errorf("error traversing component graph: %w", err)
+	if err := dag.Discover(ctx, discoverer, syncdag.WithRoots[string](roots...)); err != nil {
+		return fmt.Errorf("failed to discover component references: %w", err)
 	}
 	return nil
 }
 
 func (c *DefaultConstructor) graphBasedConstruct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) ([]*descriptor.Descriptor, error) {
-	descriptors := make([]*descriptor.Descriptor, 0, dag.LengthVertices())
-	var descLock sync.Mutex
+	processor := newVertexProcessor(c, dag)
 
-	processor := syncdag.VertexProcessorFunc[string](func(ctx context.Context, vertex *syncdag.Vertex[string]) error {
-		untypedComponent, ok := vertex.GetAttribute(attributeComponentConstructor)
-		if ok {
-			// This means we are on a constructor node.
-			component := untypedComponent.(*constructor.Component)
-			referencedComponents := make(map[string]*descriptor.Descriptor, len(component.References))
-			for _, ref := range component.References {
-				identity := ocmruntime.Identity{
-					descriptor.IdentityAttributeName:    ref.Component,
-					descriptor.IdentityAttributeVersion: ref.Version,
-				}
-				refVertex, exists := dag.GetVertex(identity.String())
-				if !exists {
-					return fmt.Errorf("missing dependency %q for component %q", identity.String(), component.ToIdentity())
-				}
-				untypedRefDescriptor, ok := refVertex.GetAttribute(attributeComponentDescriptor)
-				if !ok {
-					return fmt.Errorf("missing descriptor for dependency %q of component %q", identity.String(), component.ToIdentity())
-				}
-				refDescriptor := untypedRefDescriptor.(*descriptor.Descriptor)
-				referencedComponents[ref.ToIdentity().String()] = refDescriptor
-			}
-			desc, err := c.construct(ctx, component, referencedComponents)
-			if err != nil {
-				return fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
-			}
-			vertex.Attributes.Store(attributeComponentDescriptor, desc)
-
-			descLock.Lock()
-			defer descLock.Unlock()
-			descriptors = append(descriptors, desc)
-			slog.DebugContext(ctx, "component constructed successfully")
-
-			return nil
-		}
-
-		return nil
-	})
-	if err := dag.ProcessReverseTopology(ctx, processor); err != nil {
+	if err := dag.ProcessTopology(ctx, processor, syncdag.WithReverseTopology()); err != nil {
 		return nil, fmt.Errorf("failed to process component constructor graph: %w", err)
 	}
-	return descriptors, nil
+	return processor.descriptors, nil
 }
 
 func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
