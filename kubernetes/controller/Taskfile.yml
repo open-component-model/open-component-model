@@ -1,5 +1,7 @@
 version: '3'
 
+dotenv: ['../../.env', '../../.env.local']
+
 env:
   CONTROLLER_IMG: '{{ env "CONTROLLER_IMG" | default "ghcr.io/open-component-model/kubernetes/controller:latest" }}'
 
@@ -9,13 +11,6 @@ vars:
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
   KUBECTL: '{{.KUBECTL | default "kubectl"}}'
-  
-  # Tool versions with defaults from central .env file
-  KUSTOMIZE_VERSION: '{{.KUSTOMIZE_VERSION | default "v5.4.1"}}'
-  CONTROLLER_TOOLS_VERSION: '{{.CONTROLLER_TOOLS_VERSION | default "v0.19.0"}}'
-  ENVTEST_VERSION: '{{.ENVTEST_VERSION | default "release-0.21"}}'
-  ENVTEST_K8S_VERSION: '{{.ENVTEST_K8S_VERSION | default "1.34.0"}}'
-  
   KUSTOMIZE: '{{.LOCALBIN}}/kustomize-{{.KUSTOMIZE_VERSION}}'
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}'
   ENVTEST: '{{.LOCALBIN}}/setup-envtest-{{.ENVTEST_VERSION}}'
