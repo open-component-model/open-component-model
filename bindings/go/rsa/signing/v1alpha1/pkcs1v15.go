@@ -1,9 +1,5 @@
 package v1alpha1
 
-import (
-	"ocm.software/open-component-model/bindings/go/runtime"
-)
-
 const (
 	// MediaTypePlainRSASSAPKCS1V15 is the media type for a plain signature based on AlgorithmRSASSAPKCS1V15 encoded as a hex string.
 	MediaTypePlainRSASSAPKCS1V15 = "application/vnd.ocm.signature.rsa"
@@ -35,23 +31,3 @@ const (
 	//   - For new signatures, RSASSA-PSS is recommended and is the default in the new OCM Signature Libraries.
 	AlgorithmRSASSAPKCS1V15 = "RSASSA-PKCS1-V1_5"
 )
-
-// PKCS1V15Config defines configuration for signing based on RSASSA-PKCS1 v1.5.
-//
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
-// +k8s:deepcopy-gen=true
-// +ocm:typegen=true
-type PKCS1V15Config struct {
-	// Type identifies this configuration object’s runtime type.
-	Type runtime.Type `json:"type"`
-
-	SignatureEncodingPolicy SignatureEncodingPolicy `json:"signatureEncodingPolicy,omitempty"`
-}
-
-func (*PKCS1V15Config) MediaType() string {
-	return MediaTypePlainRSASSAPKCS1V15
-}
-
-func (*PKCS1V15Config) Algorithm() string {
-	return AlgorithmRSASSAPKCS1V15
-}
