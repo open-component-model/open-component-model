@@ -18,7 +18,6 @@ vars:
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
   KUBECTL: '{{.KUBECTL | default "kubectl"}}'
-  v
   CONTROLLER_GEN: '{{.LOCALBIN}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}'
   ENVTEST: '{{.LOCALBIN}}/setup-envtest-{{.ENVTEST_VERSION}}'
   IGNORE_NOT_FOUND: '{{.IGNORE_NOT_FOUND | default "false"}}'
