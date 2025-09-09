@@ -48,6 +48,13 @@
       ]
     },
     {
+      groupName: 'Google Golang Repositories',
+      groupSlug: 'google-golang-repos',
+      matchPackageNames: [
+        'google.golang.org/{/,}**'
+      ]
+    },
+    {
       groupName: 'Sigstore Repositories',
       groupSlug: 'sigstore',
       matchPackageNames: [
