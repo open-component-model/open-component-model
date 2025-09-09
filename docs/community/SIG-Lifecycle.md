@@ -5,12 +5,34 @@ This guide describes the lifecycle management for Special Interest Groups (SIGs)
 ## 1. Creation
 
 - Read the SIG Governance Model and Lifecycle Guide to understand the process and requirements.
-- Draft your SIG charter (see example link in the Lifecycle Guide), outlining scope, responsibilities, leadership, meeting cadence, and processes.
+- Draft your SIG charter (see example [Kubernetes SIG Charter](https://github.com/kubernetes/community/blob/master/committee-steering/governance/README.md)), outlining:
+
+  - Scope and mission of the SIG
+  - Responsibilities and deliverables
+  - Leadership roles (Chair, Tech Lead, etc.)
+  - Membership criteria (if any)
+  - Decision-making and voting process
+  - Meeting cadence and communication channels
+  - Conflict resolution and escalation process
+  - How the SIG interacts with other groups and the community
+  - Any additional processes or policies relevant to the SIG
+  
 - Fill out the SIG Submission Template with all required info (purpose, scope, initial leadership, meeting cadence, communication channels, repository needs).
-- Submit your proposal and charter as a new issue in the OCM community repository ([create issue](https://github.com/open-component-model/open-component-model/issues)).
+- Submit your proposal and charter as a new issue in the OCM repository ([create issue](https://github.com/open-component-model/open-component-model/issues)).
 - The OCM Technical Steering Committee (TSC) reviews and approves proposals.
 - Once approved, announce your SIG in the community (mailing list, Slack, etc.) and update documentation.
 - Add your SIG to `sigs.yaml` and update documentation as needed.
+
+## SIG Charter Approval Process
+
+After submitting a SIG proposal and charter (as a GitHub issue), the following approval process applies:
+
+1. **Announcement & Public Review:** Announce the proposal and charter in the community (e.g., mailing list, Slack, repo) and invite feedback for a defined period (e.g., 2 weeks).
+2. **Feedback Collection:** Community members can provide comments and suggestions on the issue or via designated channels.
+3. **TSC Review & Discussion:** The OCM Technical Steering Committee (TSC) reviews all feedback, discusses the proposal, and may request changes or clarifications.
+4. **Formal Approval:** The TSC formally approves the charter, records the decision in meeting minutes, and links the approved charter in the community documentation.
+
+This process ensures transparency, community involvement, and clear documentation for all new SIGs.
 
 ## 2. Operation
 
