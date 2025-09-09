@@ -308,7 +308,7 @@ require (
 	github.com/sigstore/rekor-tiles v0.1.9 // indirect
 	github.com/sigstore/sigstore v1.9.5 // indirect
 	github.com/sigstore/sigstore-go v1.1.2-0.20250811211025-bac873564adb // indirect
-	github.com/sigstore/timestamp-authority v1.2.8 // indirect
+	github.com/sigstore/timestamp-authority v1.2.9 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
@@ -316,7 +316,7 @@ require (
 	github.com/spf13/afero v1.14.0 // indirect
 	github.com/spf13/cast v1.9.2 // indirect
 	github.com/spf13/cobra v1.10.1 // indirect
-	github.com/spf13/pflag v1.0.9 // indirect
+	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.20.1 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
