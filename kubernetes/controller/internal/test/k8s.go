@@ -4,18 +4,31 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 )
+
+const DefaultKubernetesOperationTimeout = 15 * time.Second
+
+func NamespaceForTest(ctx SpecContext) *corev1.Namespace {
+	return &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: SanitizeNameForK8s(ctx.SpecReport().LeafNodeText),
+		},
+	}
+}
 
 func SanitizeNameForK8s(name string) string {
 	replaced := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
@@ -54,12 +67,15 @@ func WaitForReadyObject(ctx context.Context, k8sClient client.Client, obj util.G
 		for field, value := range waitForField {
 			g.Expect(obj).Should(HaveField(field, value), "field %s of object %s (Kind: %s) does not match expected value %v", field, obj.GetName(), gvk, value)
 		}
-	}, "15s").WithContext(ctx).Should(Succeed())
+	}).WithTimeout(DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 }
 
 func DeleteObject(ctx context.Context, k8sClient client.Client, obj client.Object) {
 	GinkgoHelper()
 
+	gvk, _ := k8sClient.GroupVersionKindFor(obj)
+
+	By(fmt.Sprintf("deleting object %s (%s)", obj.GetName(), gvk))
 	Expect(k8sClient.Delete(ctx, obj)).To(Or(Succeed(), MatchError(errors.IsNotFound, "object should already be gone")))
 
 	Eventually(func(ctx context.Context) error {
@@ -68,12 +84,12 @@ func DeleteObject(ctx context.Context, k8sClient client.Client, obj client.Objec
 			if errors.IsNotFound(err) {
 				return nil
 			}
-
 			return err
 		}
 
 		return fmt.Errorf("resource %s (Kind: %s) still exists", obj.GetName(), obj.GetObjectKind())
-	}, "15s").WithContext(ctx).Should(Succeed())
+	}).WithTimeout(DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
+	GinkgoLogr.Info("object deleted", "name", obj.GetName(), "namespace", obj.GetNamespace(), "gvk", gvk.String())
 }
 
 func WaitForNotReadyObject(ctx context.Context, k8sClient client.Client, obj util.Getter, expectedReason string) {
@@ -95,5 +111,5 @@ func WaitForNotReadyObject(ctx context.Context, k8sClient client.Client, obj uti
 		}
 
 		return nil
-	}, "15s").WithContext(ctx).Should(Succeed())
+	}).WithTimeout(DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
 }
