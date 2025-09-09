@@ -38,6 +38,7 @@ var cancel context.CancelFunc
 var ocmContextCache *ocm.ContextCache
 
 func TestControllers(t *testing.T) {
+	t.Parallel()
 	RegisterFailHandler(Fail)
 
 	RunSpecs(t, "Controller Suite")
@@ -87,7 +88,7 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	ctx, cancel = context.WithCancel(context.Background())
+	ctx, cancel = context.WithCancel(GinkgoT().Context())
 	DeferCleanup(cancel)
 
 	events := make(chan string)
