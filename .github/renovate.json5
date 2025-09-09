@@ -9,36 +9,46 @@
     'helpers:pinGitHubActionDigests',
     'security:openssf-scorecard',
     ':dependencyDashboard',
-    ':rebaseStalePrs',
+    ':rebaseStalePrs'
   ],
   'git-submodules': {
-    enabled: true,
+    enabled: true
   },
-  env: {
-    GONOPROXY: 'ocm.software/open-component-model',
-    GOPRIVATE: 'ocm.software/open-component-model',
+  'minimumReleaseAge': '14 days',
+  'branchPrefix': 'renovate/',
+  'gitAuthor': 'ocmbot[bot] <125909804+ocmbot[bot]@users.noreply.github.com>',
+  'gitIgnoredAuthors': [
+    '125909804+ocmbot[bot]@users.noreply.github.com'
+  ],
+  prConcurrentLimit: 0,
+  prHourlyLimit: 0,
+  patch: {
+    automerge: true,
+    automergeType: "pr"
   },
+  separateMinorPatch: true,
+  separateMultipleMajor: true,
   packageRules: [
     {
       matchManagers: [
         'gomod',
-        'custom.regex',
+        'custom.regex'
       ],
       matchPackageNames: [
         'sigs.k8s.io/controller-runtime',
         'sigs.k8s.io/controller-tools',
         'k8s.io/*',
-        'envtest',
+        'envtest'
       ],
       groupName: 'Kubernetes dependencies',
-      groupSlug: 'kubernetes-deps',
+      groupSlug: 'kubernetes-deps'
     },
     {
       groupName: 'Docker dependencies',
       groupSlug: 'docker-deps',
       matchPackageNames: [
-        'github.com/docker/{/,}**',
-      ],
+        'github.com/docker/{/,}**'
+      ]
     },
     {
       groupName: 'Golang X Repositories',
@@ -70,77 +80,77 @@
     },
     {
       matchCategories: [
-        'golang',
+        'golang'
       ],
       postUpdateOptions: [
-        'gomodTidy',
+        'gomodTidy'
       ],
-      enabled: true,
+      enabled: true
     },
     {
       matchManagers: [
-        'gomod',
+        'gomod'
       ],
       matchDepTypes: [
-        'indirect',
+        'indirect'
       ],
       matchUpdateTypes: [
-        'major',
+        'major'
       ],
-      enabled: false,
+      enabled: false
     },
     {
       matchManagers: [
-        'gomod',
+        'gomod'
       ],
       groupName: 'OCM Monorepo Go Module Dependencies',
       groupSlug: 'ocm-monorepo',
       matchPackageNames: [
-        'ocm.software/open-component-model/**',
-      ],
-    },
+        'ocm.software/open-component-model/**'
+      ]
+    }
   ],
   customDatasources: {
     envtest: {
       defaultRegistryUrlTemplate: 'https://raw.githubusercontent.com/kubernetes-sigs/controller-tools/master/envtest-releases.yaml',
       format: 'yaml',
       transformTemplates: [
-        '{ "releases": $map($distinct($keys($.releases)), function($v){ {"version": $replace($v, /^v/, "")} }) }',
-      ],
-    },
+        '{ "releases": $map($distinct($keys($.releases)), function($v){ {"version": $replace($v, /^v/, "")} }) }'
+      ]
+    }
   },
   customManagers: [
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/(^|/)\\.env(\\.local)?$/',
+        '/(^|/)\\.env(\\.local)?$/'
       ],
       matchStrings: [
-        '# renovate: datasource=custom.envtest depName=envtest\\s+ENVTEST_K8S_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
+        '# renovate: datasource=custom.envtest depName=envtest\\s+ENVTEST_K8S_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)'
       ],
       datasourceTemplate: 'custom.envtest',
       depNameTemplate: 'envtest',
-      versioningTemplate: 'semver',
+      versioningTemplate: 'semver'
     },
     {
       customType: 'regex',
       managerFilePatterns: [
-        '/(^|/)\\.env(\\.local)?$/',
+        '/(^|/)\\.env(\\.local)?$/'
       ],
       matchStrings: [
-        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)'
       ],
-      versioningTemplate: 'semver',
-    },
+      versioningTemplate: 'semver'
+    }
   ],
   postUpgradeTasks: {
     commands: [
-      'command -v go >/dev/null 2>&1 || exit 0; find . -name "go.mod" -type f -path \'*/integration/*\' -exec dirname {} \\; | while read dir; do echo "Running explicit go mod tidy for integration test in $dir"; cd "$dir" && go mod tidy && cd - > /dev/null; done',
+      'command -v go >/dev/null 2>&1 || exit 0; find . -name "go.mod" -type f -path \'*/integration/*\' -exec dirname {} \\; | while read dir; do echo "Running explicit go mod tidy for integration test in $dir"; cd "$dir" && go mod tidy && cd - > /dev/null; done'
     ],
     fileFilters: [
       '**/go.mod',
-      '**/go.sum',
+      '**/go.sum'
     ],
-    executionMode: 'branch',
-  },
+    executionMode: 'branch'
+  }
 }
