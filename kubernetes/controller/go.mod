@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/kubernetes/controller
 
-go 1.25.0
+go 1.25.1
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
@@ -26,7 +26,7 @@ require (
 	k8s.io/apiserver v0.34.0
 	k8s.io/client-go v0.34.0
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
-	ocm.software/ocm v0.29.0
+	ocm.software/ocm v0.29.1
 	sigs.k8s.io/controller-runtime v0.22.0
 	sigs.k8s.io/yaml v1.6.0
 )
