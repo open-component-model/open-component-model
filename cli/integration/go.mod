@@ -11,7 +11,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/registry v0.38.0
-	golang.org/x/crypto v0.41.0
+	golang.org/x/crypto v0.42.0
 	helm.sh/helm/v3 v3.18.6
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.8
