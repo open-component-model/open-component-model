@@ -1,10 +1,8 @@
 package resource
 
 import (
-	"context"
 	_ "embed"
 	"encoding/json"
-	"fmt"
 	"path/filepath"
 
 	"github.com/mandelsoft/vfs/pkg/osfs"
@@ -12,7 +10,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	k8smetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	. "ocm.software/ocm/api/helper/builder"
 	ocmmetav1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
@@ -46,14 +43,12 @@ var _ = Describe("Resource Controller", func() {
 		fs, err := projectionfs.New(osfs.OsFs, tempDir)
 		Expect(err).NotTo(HaveOccurred())
 		env = NewBuilder(environment.FileSystem(fs))
-	})
-	AfterEach(func() {
-		Expect(env.Cleanup()).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) {
+			Expect(env.Cleanup()).To(Succeed())
+		})
 	})
 
 	Context("resource controller", func() {
-		var componentObj *v1alpha1.Component
-		var namespace *corev1.Namespace
 		var componentName, componentObjName, resourceName string
 		var componentVersion string
 		repositoryName := "ocm.software/test-repository"
@@ -64,33 +59,15 @@ var _ = Describe("Resource Controller", func() {
 			resourceName = "test-resource-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			componentVersion = "v1.0.0"
 
-			namespaceName := test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
-			namespace = &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: namespaceName,
-				},
-			}
+			namespace := test.NamespaceForTest(ctx)
+
 			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
-		})
 
-		AfterEach(func(ctx SpecContext) {
-			By("deleting the component")
-			Expect(k8sClient.Delete(ctx, componentObj)).To(Succeed())
-			Eventually(func(ctx context.Context) error {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(componentObj), componentObj)
-				if err != nil {
-					if errors.IsNotFound(err) {
-						return nil
-					}
-					return err
-				}
-
-				return fmt.Errorf("resource %s still exists", componentObj.Name)
-			}).WithContext(ctx).Should(Succeed())
-
-			resources := &v1alpha1.ResourceList{}
-			Expect(k8sClient.List(ctx, resources, client.InNamespace(namespace.GetName()))).To(Succeed())
-			Expect(resources.Items).To(HaveLen(0))
+			DeferCleanup(func(ctx SpecContext) {
+				resources := &v1alpha1.ResourceList{}
+				Expect(k8sClient.List(ctx, resources, client.InNamespace(namespace.GetName()))).To(Succeed())
+				Expect(resources.Items).To(BeEmpty(), "make sure all resources are deleted and there are no leftovers from the test")
+			})
 		})
 
 		type testCase struct {
@@ -103,7 +80,7 @@ var _ = Describe("Resource Controller", func() {
 		}
 
 		DescribeTable("reconciles a created resource",
-			func(createCTF func() string, tc *testCase) {
+			func(ctx SpecContext, createCTF func() string, tc *testCase) {
 				By("creating a CTF")
 				ctfPath := createCTF()
 
@@ -113,7 +90,8 @@ var _ = Describe("Resource Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				By("mocking a component")
-				componentObj = test.MockComponent(
+				namespace := test.NamespaceForTest(ctx)
+				componentObj := test.MockComponent(
 					ctx,
 					componentObjName,
 					namespace.GetName(),
@@ -128,6 +106,9 @@ var _ = Describe("Resource Controller", func() {
 						Repository: repositoryName,
 					},
 				)
+				DeferCleanup(func(ctx SpecContext) {
+					test.DeleteObject(ctx, k8sClient, componentObj)
+				})
 
 				additionalStatusFields := map[string]string{}
 				if tc != nil {
@@ -170,6 +151,9 @@ var _ = Describe("Resource Controller", func() {
 					},
 				}
 				Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+				DeferCleanup(func(ctx SpecContext) {
+					test.DeleteObject(ctx, k8sClient, resourceObj)
+				})
 
 				By("checking that the resource has been reconciled successfully")
 
@@ -199,9 +183,6 @@ var _ = Describe("Resource Controller", func() {
 				}
 
 				test.WaitForReadyObject(ctx, k8sClient, resourceObj, fields)
-
-				By("deleting the resource")
-				test.DeleteObject(ctx, k8sClient, resourceObj)
 			},
 
 			Entry("plain text", func() string {
@@ -299,7 +280,8 @@ var _ = Describe("Resource Controller", func() {
 
 		It("should not reconcile when the component is not ready", func(ctx SpecContext) {
 			By("mocking a component")
-			componentObj = test.MockComponent(
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
 				ctx,
 				componentObjName,
 				namespace.GetName(),
@@ -314,6 +296,9 @@ var _ = Describe("Resource Controller", func() {
 					Repository: repositoryName,
 				},
 			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
 
 			By("marking the mocked component as not ready")
 			componentObjNotReady := &v1alpha1.Component{}
@@ -340,12 +325,12 @@ var _ = Describe("Resource Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
 
 			By("checking that the resource has not been reconciled successfully")
 			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.ResourceIsNotAvailable)
-
-			By("deleting the resource")
-			test.DeleteObject(ctx, k8sClient, resourceObj)
 		})
 
 		It("returns an appropriate error when the resource cannot be fetched", func(ctx SpecContext) {
@@ -368,7 +353,8 @@ var _ = Describe("Resource Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a component")
-			componentObj = test.MockComponent(
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
 				ctx,
 				componentObjName,
 				namespace.GetName(),
@@ -383,6 +369,9 @@ var _ = Describe("Resource Controller", func() {
 					Repository: repositoryName,
 				},
 			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
 
 			By("creating a resource")
 			resourceObj := &v1alpha1.Resource{
@@ -402,12 +391,12 @@ var _ = Describe("Resource Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
 
 			By("checking that the resource has not been reconciled successfully")
 			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.GetOCMResourceFailedReason)
-
-			By("deleting the resource")
-			test.DeleteObject(ctx, k8sClient, resourceObj)
 		})
 
 		// This test is checking that the resource is reconciled again when the status of the component changes.
@@ -431,7 +420,8 @@ var _ = Describe("Resource Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a component")
-			componentObj = test.MockComponent(
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
 				ctx,
 				componentObjName,
 				namespace.GetName(),
@@ -446,6 +436,9 @@ var _ = Describe("Resource Controller", func() {
 					Repository: repositoryName,
 				},
 			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
 
 			By("marking the mocked component as not ready")
 			componentObjNotReady := &v1alpha1.Component{}
@@ -477,6 +470,9 @@ var _ = Describe("Resource Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
 
 			By("checking that the resource has not been reconciled successfully")
 			test.WaitForNotReadyObject(ctx, k8sClient, resourceObj, v1alpha1.ResourceIsNotAvailable)
@@ -488,7 +484,7 @@ var _ = Describe("Resource Controller", func() {
 			status.MarkReady(recorder, componentObjReady, "mock component is ready")
 			Expect(k8sClient.Status().Update(ctx, componentObjReady)).To(Succeed())
 
-			By("checking that the resource has been reconciled successfully")
+			By("checking that the resource has updated its additional status to the new version")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
 				"Status.Additional": map[string]apiextensionsv1.JSON{
 					"registry":   mustToJSON("ghcr.io"),
@@ -496,9 +492,6 @@ var _ = Describe("Resource Controller", func() {
 					"reference":  mustToJSON("0.24.0"),
 				},
 			})
-
-			By("deleting the resource")
-			test.DeleteObject(ctx, k8sClient, resourceObj)
 		})
 
 		// This test checks if the resource is reconciled again, when the resource spec is updated.
@@ -526,7 +519,8 @@ var _ = Describe("Resource Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a component")
-			componentObj = test.MockComponent(
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
 				ctx,
 				componentObjName,
 				namespace.GetName(),
@@ -541,6 +535,9 @@ var _ = Describe("Resource Controller", func() {
 					Repository: repositoryName,
 				},
 			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
 
 			By("creating a resource")
 			resourceObj := &v1alpha1.Resource{
@@ -563,6 +560,9 @@ var _ = Describe("Resource Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
 
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
@@ -590,9 +590,6 @@ var _ = Describe("Resource Controller", func() {
 					"reference": mustToJSON("0.24.0"),
 				},
 			})
-
-			By("deleting the resource")
-			test.DeleteObject(ctx, k8sClient, resourceObj)
 		})
 
 		// In this test the component version is updated with a new resource. This should trigger the control-loop of
@@ -617,7 +614,8 @@ var _ = Describe("Resource Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a component")
-			componentObj = test.MockComponent(
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
 				ctx,
 				componentObjName,
 				namespace.GetName(),
@@ -632,6 +630,9 @@ var _ = Describe("Resource Controller", func() {
 					Repository: repositoryName,
 				},
 			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
 
 			By("creating a resource")
 			resourceObj := &v1alpha1.Resource{
@@ -654,6 +655,9 @@ var _ = Describe("Resource Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
 
 			By("checking that the resource has been reconciled successfully")
 			expected := &testCase{
@@ -727,8 +731,6 @@ var _ = Describe("Resource Controller", func() {
 				},
 			})
 
-			By("deleting the resource")
-			test.DeleteObject(ctx, k8sClient, resourceObj)
 		})
 
 		It("reconcile a nested component by reference path", func(ctx SpecContext) {
@@ -758,7 +760,8 @@ var _ = Describe("Resource Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a component")
-			componentObj = test.MockComponent(
+			namespace := test.NamespaceForTest(ctx)
+			componentObj := test.MockComponent(
 				ctx,
 				componentObjName,
 				namespace.GetName(),
@@ -773,6 +776,9 @@ var _ = Describe("Resource Controller", func() {
 					Repository: repositoryName,
 				},
 			)
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, componentObj)
+			})
 
 			By("creating a resource")
 			resourceObj := &v1alpha1.Resource{
@@ -796,6 +802,9 @@ var _ = Describe("Resource Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) {
+				test.DeleteObject(ctx, k8sClient, resourceObj)
+			})
 
 			By("checking that the resource has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, resourceObj, map[string]any{
@@ -805,9 +814,6 @@ var _ = Describe("Resource Controller", func() {
 				"Status.Component.Component": nestedComponentName,
 				"Status.Component.Version":   componentVersion,
 			})
-
-			By("deleting the resource")
-			test.DeleteObject(ctx, k8sClient, resourceObj)
 		})
 
 	})

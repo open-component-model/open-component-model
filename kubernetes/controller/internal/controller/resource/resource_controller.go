@@ -176,6 +176,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	if !resource.GetDeletionTimestamp().IsZero() {
+		logger.Info("resource is marked for deletion, attempting cleanup")
 		// The resource should only be deleted if no deployer exists that references that resource.
 		deployerList := &v1alpha1.DeployerList{}
 		if err := r.List(ctx, deployerList, &client.ListOptions{
