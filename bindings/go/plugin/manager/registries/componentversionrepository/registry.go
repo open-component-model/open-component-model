@@ -53,7 +53,7 @@ func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](
 // It implements the ComponentVersionRepositoryProvider interface.
 type RepositoryRegistry struct {
 	ctx                context.Context
-	mu                 sync.Mutex
+	mu                 sync.RWMutex
 	registry           map[runtime.Type]mtypes.Plugin // Have this as a single plugin for read/write
 	constructedPlugins map[string]*constructedPlugin  // running plugins
 
@@ -141,8 +141,8 @@ loop:
 // GetComponentVersionRepositoryCredentialConsumerIdentity retrieves the consumer identity
 // for a component version repository based on a given repository specification.
 func (r *RepositoryRegistry) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	// Check if this is an internal plugin first
 	typ := repositorySpecification.GetType()
@@ -175,8 +175,8 @@ func (r *RepositoryRegistry) GetComponentVersionRepositoryCredentialConsumerIden
 // It first checks for internal plugins registered via RegisterInternalComponentVersionRepositoryPlugin,
 // then falls back to external plugins if no internal plugin is found.
 func (r *RepositoryRegistry) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	// look for an internal implementation that actually implements the interface
 	_, _ = r.scheme.DefaultType(repositorySpecification)
