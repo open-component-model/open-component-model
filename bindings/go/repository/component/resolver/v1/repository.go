@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"golang.org/x/sync/errgroup"
+
 	"ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/matcher"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -147,6 +148,8 @@ func (r *ResolverRepository) ListComponentVersions(ctx context.Context, componen
 
 func (r *ResolverRepository) RepositoriesForComponentIterator(ctx context.Context, component string) iter.Seq2[repository.ComponentVersionRepository, error] {
 	return func(yield func(repository.ComponentVersionRepository, error) bool) {
+		r.matcherCacheMu.RLock()
+		defer r.matcherCacheMu.RUnlock()
 		for index, resolver := range r.resolvers {
 			if !r.matcherCache[index].Match(component, "") {
 				continue
@@ -171,6 +174,8 @@ func (r *ResolverRepository) GetResolvers() []*resolverspec.Resolver {
 }
 
 func (r *ResolverRepository) matchesAnyResolver(component string) bool {
+	r.matcherCacheMu.RLock()
+	defer r.matcherCacheMu.RUnlock()
 	for _, m := range r.matcherCache {
 		if m.Match(component, "") {
 			return true
