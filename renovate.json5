@@ -48,6 +48,20 @@
       ]
     },
     {
+      groupName: 'Sigstore Repositories',
+      groupSlug: 'sigstore',
+      matchPackageNames: [
+        'github.com/sigstore/{/,}**'
+      ]
+    },
+    {
+      groupName: 'spf13 repositories',
+      groupSlug: 'spf13',
+      matchPackageNames: [
+        'github.com/spf13/{/,}**'
+      ]
+    },
+    {
       matchCategories: [
         'golang',
       ],
