@@ -41,6 +41,34 @@
       ],
     },
     {
+      groupName: 'Golang X Repositories',
+      groupSlug: 'golang-x-repos',
+      matchPackageNames: [
+        'golang.org/x/{/,}**'
+      ]
+    },
+    {
+      groupName: 'Google Golang Repositories',
+      groupSlug: 'google-golang-repos',
+      matchPackageNames: [
+        'google.golang.org/{/,}**'
+      ]
+    },
+    {
+      groupName: 'Sigstore Repositories',
+      groupSlug: 'sigstore',
+      matchPackageNames: [
+        'github.com/sigstore/{/,}**'
+      ]
+    },
+    {
+      groupName: 'spf13 repositories',
+      groupSlug: 'spf13',
+      matchPackageNames: [
+        'github.com/spf13/{/,}**'
+      ]
+    },
+    {
       matchCategories: [
         'golang',
       ],
