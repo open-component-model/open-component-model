@@ -45,6 +45,17 @@ func TestInputMethod_GetResourceCredentialConsumerIdentity(t *testing.T) {
 			expectError:    false,
 			expectIdentity: true,
 		},
+		{
+			name: "remote helm repository with port and path - credentials may be needed",
+			helmSpec: v1.Helm{
+				Type: runtime.Type{
+					Name: v1.Type,
+				},
+				HelmRepository: "https://registry.example.com:8443/helm/charts/myapp-1.0.0.tgz",
+			},
+			expectError:    false,
+			expectIdentity: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -64,8 +75,20 @@ func TestInputMethod_GetResourceCredentialConsumerIdentity(t *testing.T) {
 				assert.NoError(t, err)
 				if tt.expectIdentity {
 					assert.NotNil(t, identity)
-					assert.Equal(t, "helm", identity["type"])
-					assert.Equal(t, tt.helmSpec.HelmRepository, identity["repository"])
+					assert.Equal(t, "helm/v1", identity["type"])
+					assert.Equal(t, "https", identity["scheme"])
+					
+					// Check hostname based on the specific test case
+					switch tt.helmSpec.HelmRepository {
+					case "https://charts.example.com":
+						assert.Equal(t, "charts.example.com", identity["hostname"])
+						assert.Equal(t, "", identity["port"])  // No port specified
+						assert.Equal(t, "", identity["path"])   // No path specified
+					case "https://registry.example.com:8443/helm/charts/myapp-1.0.0.tgz":
+						assert.Equal(t, "registry.example.com", identity["hostname"])
+						assert.Equal(t, "8443", identity["port"])
+						assert.Equal(t, "helm/charts/myapp-1.0.0.tgz", identity["path"])
+					}
 				}
 			}
 		})

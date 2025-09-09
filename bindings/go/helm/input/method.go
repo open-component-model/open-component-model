@@ -52,16 +52,18 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	// local charts don't require credentials
 	if helm.HelmRepository == "" {
 		return nil, ErrLocalHelmInputDoesNotRequireCredentials
 	}
 
-	// TODO: Need to use ParseURLTOIdentity to figure out credentials.
-	return runtime.Identity{
-		"type":       "helm",
-		"repository": helm.HelmRepository,
-	}, nil
+	identity, err = runtime.ParseURLToIdentity(helm.HelmRepository)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
+	}
+
+	identity.SetType(runtime.NewVersionedType(v1.Type, v1.Version))
+
+	return identity, nil
 }
 
 // ProcessResource processes a helm-based resource input by converting the input specification
