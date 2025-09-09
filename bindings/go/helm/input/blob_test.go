@@ -2,7 +2,6 @@ package input_test
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,52 +22,64 @@ func TestGetV1HelmBlob_ValidateFields(t *testing.T) {
 	ctx := t.Context()
 
 	tests := []struct {
-		name     string
-		helmSpec v1.Helm
+		name        string
+		helmSpec    v1.Helm
+		expectError bool
 	}{
 		{
-			name: "empty path",
+			name: "empty path and repository",
 			helmSpec: v1.Helm{
-				Path: "",
+				Path:           "",
+				HelmRepository: "",
 			},
+			expectError: true,
 		},
 		{
-			name: "version set",
+			name: "path set - should work",
 			helmSpec: v1.Helm{
-				Path:    "path/to/chart",
-				Version: "1.2.3",
+				Path: "path/to/chart",
 			},
+			expectError: false, // Will fail later due to missing file, but validation should pass
 		},
 		{
-			name: "caCert set",
+			name: "repository set - should work",
 			helmSpec: v1.Helm{
-				Path:   "path/to/chart",
-				CACert: "caCert",
+				HelmRepository: "https://charts.example.com",
 			},
+			expectError: false, // Will fail later due to network, but validation should pass
 		},
 		{
-			name: "caCertFile set",
+			name: "both path and repository set - should work",
 			helmSpec: v1.Helm{
-				Path:       "path/to/chart",
-				CACertFile: "caCertFile",
+				Path:           "path/to/chart",
+				HelmRepository: "https://charts.example.com",
 			},
+			expectError: false, // Path takes precedence
 		},
 		{
-			name: "Repository set",
+			name: "all remote fields set - should work",
 			helmSpec: v1.Helm{
-				Path:       "path/to/chart",
-				Repository: "repository",
+				HelmRepository: "https://charts.example.com",
+				Version:        "1.2.3",
+				CACert:         "caCert",
+				CACertFile:     "caCertFile",
+				Repository:     "oci://example.com/repo",
 			},
+			expectError: false, // All fields now supported
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b, err := input.GetV1HelmBlob(ctx, tt.helmSpec, "")
-			require.Error(t, err)
-			assert.True(t, func() bool {
-				return errors.Is(err, input.ErrEmptyPath) || errors.Is(err, input.ErrUnsupportedField)
-			}(), "Expected ErrEmptyPath or ErrUnsupportedField, got: %v", err)
-			assert.Nil(t, b, "expected nil blob for invalid helm spec")
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Nil(t, b, "expected nil blob for invalid helm spec")
+			} else {
+				// error is ok if it's not a validation error
+				if err != nil {
+					assert.NotContains(t, err.Error(), "either path or helmRepository must be specified")
+				}
+			}
 		})
 	}
 }
