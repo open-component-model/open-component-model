@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"sync"
 
@@ -39,6 +40,8 @@ func ConstructDefault(ctx context.Context, constructor *constructor.ComponentCon
 }
 
 type DefaultConstructor struct {
+	componentDigestCache map[string]*descriptor.Digest
+
 	opts Options
 }
 
@@ -563,16 +566,27 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 }
 
 // processReference processes a component reference by calculating its digest and converting it to a descriptor reference.
-func (c *DefaultConstructor) processReference(_ context.Context, reference *constructor.Reference, referencedComponent *descriptor.Descriptor) (*descriptor.Reference, error) {
+func (c *DefaultConstructor) processReference(ctx context.Context, reference *constructor.Reference, referencedComponent *descriptor.Descriptor) (*descriptor.Reference, error) {
 	logger := log.Base().With(
 		"ref", reference.ToIdentity(),
 	)
 	logger.Debug("processing reference")
+	var (
+		err              error
+		referencedDigest *descriptor.Digest
+	)
 
-	referencedDigest, err := hashing.DigestNormalizedDescriptor(referencedComponent, digest.SHA256, v4alpha1.Algorithm)
-	if err != nil {
-		return nil, fmt.Errorf("error calculating digest for component reference %q: %w", reference.ToIdentity().String(), err)
+	referencedDigest, cached := c.componentDigestCache[reference.ToComponentIdentity().String()]
+	if cached {
+		slog.DebugContext(ctx, "using cached digest for component reference", "component", reference.ToIdentity())
+	} else {
+		slog.DebugContext(ctx, "calculating digest for component reference", "component", reference.ToIdentity())
+		referencedDigest, err = hashing.DigestNormalizedDescriptor(referencedComponent, digest.SHA256, v4alpha1.Algorithm)
+		if err != nil {
+			return nil, fmt.Errorf("error calculating digest for component reference %q: %w", reference.ToIdentity().String(), err)
+		}
 	}
+
 	ref := constructor.ConvertToDescriptorReference(reference)
 	ref.Digest = *referencedDigest
 
