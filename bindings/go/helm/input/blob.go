@@ -3,8 +3,6 @@ package input
 import (
 	"compress/gzip"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -208,34 +206,6 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	}
 
 	return result, nil
-}
-
-// setupTLSConfig creates a TLS configuration based on the helm specification
-// TODO: Use this once TLS support is there.
-func setupTLSConfig(helmSpec v1.Helm) (*tls.Config, error) {
-	tlsConfig := &tls.Config{}
-
-	var caCertPEM []byte
-	var err error
-
-	if helmSpec.CACertFile != "" {
-		caCertPEM, err = os.ReadFile(helmSpec.CACertFile)
-		if err != nil {
-			return nil, fmt.Errorf("error reading CA certificate file %q: %w", helmSpec.CACertFile, err)
-		}
-	} else if helmSpec.CACert != "" {
-		caCertPEM = []byte(helmSpec.CACert)
-	}
-
-	if len(caCertPEM) > 0 {
-		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caCertPEM) {
-			return nil, fmt.Errorf("failed to parse CA certificate")
-		}
-		tlsConfig.RootCAs = caCertPool
-	}
-
-	return tlsConfig, nil
 }
 
 // copyChartToOCILayout takes a ReadOnlyChart helper object and creates an OCI layout from it.

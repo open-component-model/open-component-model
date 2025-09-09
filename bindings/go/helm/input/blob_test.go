@@ -49,12 +49,12 @@ func TestGetV1HelmBlob_ValidateFields(t *testing.T) {
 			expectError: false, // Will fail later due to network, but validation should pass
 		},
 		{
-			name: "both path and repository set - should work",
+			name: "both path and repository set - should fail",
 			helmSpec: v1.Helm{
 				Path:           "path/to/chart",
 				HelmRepository: "https://charts.example.com",
 			},
-			expectError: false, // Path takes precedence
+			expectError: true, // Both fields are mutually exclusive
 		},
 		{
 			name: "all remote fields set - should work",
