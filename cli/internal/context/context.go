@@ -46,7 +46,7 @@ type Context struct {
 	//
 	// Once resolved they are passed to the corresponding plugin call.
 	// Usually plugins can return correct consumer identities based on respective endpoints.
-	credentialGraph *credentials.Graph
+	credentialGraph credentials.GraphResolver
 
 	// filesystemConfig is the central filesystem configuration for OCM.
 	// It defines filesystem-related settings like temporary folder locations
@@ -57,7 +57,7 @@ type Context struct {
 // WithCredentialGraph creates a new context with the given credential graph.
 // After this function is called, the credential graph can be retrieved from the context
 // using [FromContext] and [Context.Configuration].
-func WithCredentialGraph(ctx context.Context, graph *credentials.Graph) context.Context {
+func WithCredentialGraph(ctx context.Context, graph credentials.GraphResolver) context.Context {
 	ctx, ocmctx := retrieveOrCreateOCMContext(ctx)
 	ocmctx.mu.Lock()
 	defer ocmctx.mu.Unlock()
@@ -118,7 +118,7 @@ func (ctx *Context) PluginManager() *manager.PluginManager {
 	return ctx.pluginManager
 }
 
-func (ctx *Context) CredentialGraph() *credentials.Graph {
+func (ctx *Context) CredentialGraph() credentials.GraphResolver {
 	if ctx == nil {
 		return nil
 	}

@@ -260,6 +260,8 @@ func ParseRepository(repoRef string) (runtime.Typed, error) {
 		t.BaseUrl = uri.String()
 	case *ctfv1.Repository:
 		t.Path = input
+		// TODO: Signing needs write access, unsure how to fix right now
+		t.AccessMode = ctfv1.AccessModeReadWrite
 	default:
 		return nil, fmt.Errorf("unsupported repository type: %q", repoType)
 	}
