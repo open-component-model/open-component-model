@@ -15,7 +15,6 @@ import (
 )
 
 func TestInputMethod_GetResourceCredentialConsumerIdentity(t *testing.T) {
-	ctx := context.Background()
 	inputMethod := &input.InputMethod{}
 
 	tests := []struct {
@@ -56,7 +55,7 @@ func TestInputMethod_GetResourceCredentialConsumerIdentity(t *testing.T) {
 				},
 			}
 
-			identity, err := inputMethod.GetResourceCredentialConsumerIdentity(ctx, resource)
+			identity, err := inputMethod.GetResourceCredentialConsumerIdentity(t.Context(), resource)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -74,11 +73,7 @@ func TestInputMethod_GetResourceCredentialConsumerIdentity(t *testing.T) {
 }
 
 func TestInputMethod_ProcessResource_LocalChart(t *testing.T) {
-	ctx := context.Background()
-
-	// Get test data directory
 	testDataDir := filepath.Join("testdata", "mychart")
-
 	helmSpec := v1.Helm{
 		Type: runtime.Type{
 			Name: v1.Type,
@@ -93,7 +88,7 @@ func TestInputMethod_ProcessResource_LocalChart(t *testing.T) {
 	}
 
 	inputMethod := &input.InputMethod{}
-	result, err := inputMethod.ProcessResource(ctx, resource, nil)
+	result, err := inputMethod.ProcessResource(t.Context(), resource, nil)
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -101,17 +96,21 @@ func TestInputMethod_ProcessResource_LocalChart(t *testing.T) {
 	assert.Nil(t, result.ProcessedResource, "should not have remote resource for local chart")
 }
 
-func TestInputMethod_ProcessResource_RemoteChart_Structure(t *testing.T) {
-	ctx := context.Background()
+func TestInputMethod_ProcessResource_RemoteChart_Podinfo_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 
-	// TODO: either figure something out or make this an integration test?
 	helmSpec := v1.Helm{
 		Type: runtime.Type{
 			Name: v1.Type,
 		},
-		HelmRepository: "https://charts.example.com",
-		Version:        "1.0.0",
-		Path:           "nginx",
+		// TODO: Only direct URLs to chart tgz files are supported currently.
+		// Need to add support for index.yaml based repositories maybe?
+		// "https://stefanprodan.github.io/podinfo/" is supposed to be the index URL or rather the repository.
+		// For now, using direct link to a specific chart version.
+		HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz",
+		Version:        "6.9.1",
 	}
 
 	resource := &constructorruntime.Resource{
@@ -122,14 +121,73 @@ func TestInputMethod_ProcessResource_RemoteChart_Structure(t *testing.T) {
 
 	inputMethod := &input.InputMethod{}
 
-	result, err := inputMethod.ProcessResource(ctx, resource, map[string]string{
-		"username": "testuser",
-		"password": "testpass",
-	})
+	result, err := inputMethod.ProcessResource(t.Context(), resource, nil)
 
-	// TODO: update this.
-	require.Error(t, err)
-	assert.Nil(t, result)
+	require.NoError(t, err, "should successfully download podinfo chart")
+	assert.NotNil(t, result, "result should not be nil")
+	assert.NotNil(t, result.ProcessedBlobData, "should have blob data for remote chart")
+	assert.NotNil(t, result.ProcessedResource, "should have remote resource access info")
+
+	// Verify the remote resource structure
+	assert.Equal(t, "podinfo-6.9.1.tgz", result.ProcessedResource.Name, "chart name should be extracted correctly")
+	assert.Equal(t, "6.9.1", result.ProcessedResource.Version, "version should match specification")
+	assert.Equal(t, input.HelmRepositoryType, result.ProcessedResource.Type, "resource type should be helmRepository")
+
+	// Verify blob data is not empty by reading some content
+	reader, err := result.ProcessedBlobData.ReadCloser()
+	require.NoError(t, err)
+	defer reader.Close()
+
+	// Read first few bytes to verify content exists
+	buffer := make([]byte, 100)
+	n, err := reader.Read(buffer)
+	require.NoError(t, err)
+	assert.Greater(t, n, 0, "blob should contain data")
+}
+
+func TestInputMethod_ProcessResource_RemoteChart_PodinfoLatest_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	// Test with latest version URL
+	helmSpec := v1.Helm{
+		Type: runtime.Type{
+			Name: v1.Type,
+		},
+		HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz", // Use latest available version
+		Version:        "6.9.1",
+	}
+
+	resource := &constructorruntime.Resource{
+		AccessOrInput: constructorruntime.AccessOrInput{
+			Input: &helmSpec,
+		},
+	}
+
+	inputMethod := &input.InputMethod{}
+
+	result, err := inputMethod.ProcessResource(t.Context(), resource, nil)
+
+	require.NoError(t, err, "should successfully download latest podinfo chart")
+	assert.NotNil(t, result, "result should not be nil")
+	assert.NotNil(t, result.ProcessedBlobData, "should have blob data for remote chart")
+	assert.NotNil(t, result.ProcessedResource, "should have remote resource access info")
+
+	// Verify the remote resource structure
+	assert.Equal(t, "podinfo-6.9.1.tgz", result.ProcessedResource.Name, "chart name should be extracted correctly")
+	assert.Equal(t, input.HelmRepositoryType, result.ProcessedResource.Type, "resource type should be helmRepository")
+
+	// Verify blob data is not empty by reading some content
+	reader, err := result.ProcessedBlobData.ReadCloser()
+	require.NoError(t, err)
+	defer reader.Close()
+
+	// Read first few bytes to verify content exists
+	buffer := make([]byte, 100)
+	n, err := reader.Read(buffer)
+	require.NoError(t, err)
+	assert.Greater(t, n, 0, "blob should contain data")
 }
 
 func TestInputMethod_ProcessResource_BothPathAndRepo(t *testing.T) {
@@ -137,13 +195,12 @@ func TestInputMethod_ProcessResource_BothPathAndRepo(t *testing.T) {
 
 	testDataDir := filepath.Join("testdata", "mychart")
 
-	// When both path and repository are provided, path should take precedence
 	helmSpec := v1.Helm{
 		Type: runtime.Type{
 			Name: v1.Type,
 		},
-		Path:           testDataDir,                  // Local path (should take precedence)
-		HelmRepository: "https://charts.example.com", // Remote repo (should be ignored)
+		Path:           testDataDir,
+		HelmRepository: "https://charts.example.com",
 	}
 
 	resource := &constructorruntime.Resource{
@@ -156,4 +213,5 @@ func TestInputMethod_ProcessResource_BothPathAndRepo(t *testing.T) {
 	_, err := inputMethod.ProcessResource(ctx, resource, nil)
 
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "only one of path or helmRepository can be specified")
 }
