@@ -9,13 +9,13 @@ vars:
   
   # Tool versions from central .env file using source method
   KUSTOMIZE_VERSION:
-    sh: 'source {{.ROOT_DIR}}/.env 2>/dev/null && echo $KUSTOMIZE_VERSION'
+    sh: 'source ../../.env && echo "$KUSTOMIZE_VERSION"'
   CONTROLLER_TOOLS_VERSION:
-    sh: 'source {{.ROOT_DIR}}/.env 2>/dev/null && echo $CONTROLLER_TOOLS_VERSION'
+    sh: 'source ../../.env && echo "$CONTROLLER_TOOLS_VERSION"'
   ENVTEST_VERSION:
-    sh: 'source {{.ROOT_DIR}}/.env 2>/dev/null && echo $ENVTEST_VERSION'
+    sh: 'source ../../.env && echo "$ENVTEST_VERSION"'
   ENVTEST_K8S_VERSION:
-    sh: 'source {{.ROOT_DIR}}/.env 2>/dev/null && echo $ENVTEST_K8S_VERSION'
+    sh: 'source ../../.env && echo "$ENVTEST_K8S_VERSION"'
   
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
