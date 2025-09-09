@@ -14,15 +14,15 @@ require (
 	golang.org/x/crypto v0.41.0
 	helm.sh/helm/v3 v3.18.6
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
-	ocm.software/open-component-model/bindings/go/configuration v0.0.7
+	ocm.software/open-component-model/bindings/go/configuration v0.0.8
 	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250903091648-5c315c9cf5a2
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250909064434-e1a06fe74668
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
 	ocm.software/open-component-model/bindings/go/plugin v0.0.4
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250903091648-5c315c9cf5a2
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250909064434-e1a06fe74668
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
-	ocm.software/open-component-model/cli v0.0.0-20250903091648-5c315c9cf5a2
+	ocm.software/open-component-model/cli v0.0.0-20250909064434-e1a06fe74668
 	oras.land/oras-go/v2 v2.6.0
 )
 
@@ -95,11 +95,11 @@ require (
 	golang.org/x/term v0.35.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250903091648-5c315c9cf5a2 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250909064434-e1a06fe74668 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250903091648-5c315c9cf5a2 // indirect
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250909064434-e1a06fe74668 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
