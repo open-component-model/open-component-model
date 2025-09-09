@@ -7,15 +7,15 @@ vars:
   GOBIN:
     sh: 'go env GOBIN || echo $(go env GOPATH)/bin'
   
-  # Tool versions from central .env file
+  # Tool versions from central .env file using source method
   KUSTOMIZE_VERSION:
-    sh: 'grep "^KUSTOMIZE_VERSION=" ../../.env | cut -d= -f2 | tr -d "\""'
+    sh: 'source {{.ROOT_DIR}}/.env 2>/dev/null && echo $KUSTOMIZE_VERSION'
   CONTROLLER_TOOLS_VERSION:
-    sh: 'grep "^CONTROLLER_TOOLS_VERSION=" ../../.env | cut -d= -f2 | tr -d "\""'
+    sh: 'source {{.ROOT_DIR}}/.env 2>/dev/null && echo $CONTROLLER_TOOLS_VERSION'
   ENVTEST_VERSION:
-    sh: 'grep "^ENVTEST_VERSION=" ../../.env | cut -d= -f2 | tr -d "\""'
+    sh: 'source {{.ROOT_DIR}}/.env 2>/dev/null && echo $ENVTEST_VERSION'
   ENVTEST_K8S_VERSION:
-    sh: 'grep "^ENVTEST_K8S_VERSION=" ../../.env | cut -d= -f2 | tr -d "\""'
+    sh: 'source {{.ROOT_DIR}}/.env 2>/dev/null && echo $ENVTEST_K8S_VERSION'
   
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
