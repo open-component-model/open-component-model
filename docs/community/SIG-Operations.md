@@ -17,7 +17,7 @@ This guide provides best practices for operating a Special Interest Group (SIG) 
 
 - Maintain up-to-date documentation and a simple roadmap for SIG activities and enhancements.
 - Provide clear contributing instructions (CONTRIBUTING.md) if SIG contributor steps differ from the general OCM guide.
-- For standard contribution processes, see the main [OCM Contributing Guide](../../CONTRIBUTING.md).
+- For standard contribution processes, see the main [OCM Contributing Guide](https://github.com/open-component-model/.github/blob/main/CONTRIBUTING.md).
 
 ## Code & Issue Ownership
 
