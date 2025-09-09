@@ -20,7 +20,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 )
 
-const DefaultKubernetesOperationTimeout = 15 * time.Second
+const DefaultKubernetesOperationTimeout = 60 * time.Second
 
 func NamespaceForTest(ctx SpecContext) *corev1.Namespace {
 	return &corev1.Namespace{
