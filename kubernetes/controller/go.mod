@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/kubernetes/controller
 
-go 1.25.0
+go 1.25.1
 
 // Replace digest lib to master to gather access to BLAKE3.
 // xref: https://github.com/opencontainers/go-digest/pull/66
@@ -26,7 +26,7 @@ require (
 	k8s.io/apiserver v0.34.0
 	k8s.io/client-go v0.34.0
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
-	ocm.software/ocm v0.29.0
+	ocm.software/ocm v0.29.1
 	sigs.k8s.io/controller-runtime v0.22.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -375,10 +375,10 @@ require (
 	golang.org/x/time v0.13.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
-	google.golang.org/api v0.248.0 // indirect
-	google.golang.org/genproto v0.0.0-20250826171959-ef028d996bc1 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250826171959-ef028d996bc1 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250826171959-ef028d996bc1 // indirect
+	google.golang.org/api v0.249.0 // indirect
+	google.golang.org/genproto v0.0.0-20250908214217-97024824d090 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250908214217-97024824d090 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250908214217-97024824d090 // indirect
 	google.golang.org/grpc v1.75.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
