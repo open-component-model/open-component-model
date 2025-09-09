@@ -141,7 +141,7 @@ tasks:
     deps: [manifests, kustomize]
     cmds:
       - task: set-images
-      - '{{.KUSTOMIZE}} build config/default | {{.KUBECTL}} apply --validate=false -f -'
+      - '{{.KUSTOMIZE}} build config/default | {{.KUBECTL}} apply -f -'
 
   undeploy:
     deps: [kustomize]
