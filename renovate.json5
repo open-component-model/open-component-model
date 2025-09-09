@@ -41,6 +41,13 @@
       ],
     },
     {
+      groupName: 'Golang X Repositories',
+      groupSlug: 'golang-x-repos',
+      matchPackageNames: [
+        'golang.org/x/{/,}**'
+      ]
+    },
+    {
       matchCategories: [
         'golang',
       ],
