@@ -1,4 +1,4 @@
-package v1_test
+package v1alpha1_test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
-	resolver "ocm.software/open-component-model/bindings/go/repository/component/resolver/v1"
+	resolver "ocm.software/open-component-model/bindings/go/repository/component/resolver/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 

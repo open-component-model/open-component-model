@@ -1,4 +1,4 @@
-package v1
+package v1alpha1
 
 import (
 	"context"
@@ -62,13 +62,19 @@ func NewResolverRepository(_ context.Context, repositoryProvider repository.Comp
 
 	resolvers := deepCopyResolvers(res)
 
-	matchers := make([]*matcher.ResolverMatcher, len(resolvers))
+	matchers := make([]*matcher.ResolverMatcher, 0, len(resolvers))
+	var resolverErrs []error
 	for i, resolver := range resolvers {
 		m, err := matcher.NewResolverMatcher(resolver.ComponentName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create matcher for resolver %d: %w", i, err)
+			resolverErrs = append(resolverErrs, fmt.Errorf("failed to create matcher for resolver %d: %w", i, err))
+			continue
 		}
-		matchers[i] = m
+		matchers = append(matchers, m)
+	}
+
+	if len(resolverErrs) > 0 {
+		return nil, fmt.Errorf("one or more resolvers are invalid: %v", errors.Join(resolverErrs...))
 	}
 
 	return &ResolverRepository{
@@ -78,7 +84,7 @@ func NewResolverRepository(_ context.Context, repositoryProvider repository.Comp
 		credentialProvider: credentialProvider,
 
 		resolvers:                    resolvers,
-		repositoriesForResolverCache: make([]repository.ComponentVersionRepository, len(resolvers)),
+		repositoriesForResolverCache: make([]repository.ComponentVersionRepository, 0, len(resolvers)),
 		matcherCache:                 matchers,
 	}, nil
 }
@@ -227,9 +233,9 @@ func deepCopyResolvers(resolvers []*resolverspec.Resolver) []*resolverspec.Resol
 	if resolvers == nil {
 		return nil
 	}
-	copied := make([]*resolverspec.Resolver, len(resolvers))
-	for i, resolver := range resolvers {
-		copied[i] = resolver.DeepCopy()
+	copied := make([]*resolverspec.Resolver, 0, len(resolvers))
+	for _, resolver := range resolvers {
+		copied = append(copied, resolver.DeepCopy())
 	}
 	return copied
 }
