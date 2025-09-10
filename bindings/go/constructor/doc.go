@@ -8,7 +8,7 @@
 // The package is organized into several key components:
 //
 //  1. Core Constructor Implementation
-//     The main construct.go file implements the core constructor functionality:
+//     The main constructComponent.go file implements the core constructor functionality:
 //     - Component descriptor creation and validation
 //     - Source and source processing
 //     - Concurrent processing of components

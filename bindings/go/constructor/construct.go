@@ -30,8 +30,8 @@ var ErrShouldSkipConstruction = errors.New("should skip construction")
 type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in sequence.
+	//Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
 	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
-	GraphBasedConstruct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
 }
 
 // ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
@@ -66,8 +66,8 @@ func RepositoryAsExternalComponentVersionRepositoryProvider(repo repository.Comp
 
 var _ ExternalComponentRepositoryProvider = (*componentVersionRepositoryWrapper)(nil)
 
-func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
-	logger := log.Base().With("operation", "construct")
+func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
+	logger := log.Base().With("operation", "constructComponent")
 
 	if c.opts.ResourceInputMethodProvider == nil {
 		logger.Debug("using default resource input method provider")
@@ -81,91 +81,39 @@ func (c *DefaultConstructor) GraphBasedConstruct(ctx context.Context, componentC
 	// We might want to allow the DAG to be passed in. This would allow to
 	// pre-populate it with known components to avoid re-resolving them.
 	dag := syncdag.NewDirectedAcyclicGraph[string]()
-	logger.Debug("starting component reference discovery")
-	if err := c.graphBasedDiscovery(ctx, dag, componentConstructor); err != nil {
+	if err := c.discovery(ctx, dag, componentConstructor); err != nil {
 		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
-	descriptors, err := c.graphBasedConstruct(ctx, dag)
+	descriptors, err := c.construct(ctx, dag)
 	if err != nil {
-		return nil, fmt.Errorf("failed to construct components from graph: %w", err)
+		return nil, fmt.Errorf("failed to constructComponent components from graph: %w", err)
 	}
 	return descriptors, nil
 }
 
-func (c *DefaultConstructor) graphBasedDiscovery(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
+func (c *DefaultConstructor) discovery(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
 	discoverer := newNeighborDiscoverer(c, dag)
 	roots, err := discoverer.initializeDAGWithConstructor(componentConstructor)
 	if err != nil {
 		return fmt.Errorf("failed to initialize component constructor graph: %w", err)
 	}
-	if err := dag.Discover(ctx, discoverer, syncdag.WithRoots[string](roots...)); err != nil {
+	slog.DebugContext(ctx, "starting discovery based on components in constructor", "num_components", len(roots), "components", roots)
+	if err := dag.Discover(ctx, discoverer, syncdag.WithRoots[string](roots...), syncdag.WithDiscoveryGoRoutineLimit[string](c.opts.ConcurrencyLimit)); err != nil {
 		return fmt.Errorf("failed to discover component references: %w", err)
 	}
+	slog.DebugContext(ctx, "component reference discovery completed successfully", "num_components", dag.LengthVertices())
 	return nil
 }
 
-func (c *DefaultConstructor) graphBasedConstruct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) ([]*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) construct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) ([]*descriptor.Descriptor, error) {
 	processor := newVertexProcessor(c, dag)
 
-	if err := dag.ProcessTopology(ctx, processor, syncdag.WithReverseTopology()); err != nil {
+	slog.DebugContext(ctx, "starting processing of discovered component graph", "num_components", dag.LengthVertices())
+	if err := dag.ProcessTopology(ctx, processor, syncdag.WithReverseTopology(), syncdag.WithProcessGoRoutineLimit(c.opts.ConcurrencyLimit)); err != nil {
 		return nil, fmt.Errorf("failed to process component constructor graph: %w", err)
 	}
+	slog.DebugContext(ctx, "component construction completed successfully", "num_components", len(processor.descriptors))
 	return processor.descriptors, nil
-}
-
-func (c *DefaultConstructor) Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
-	logger := log.Base().With("operation", "construct")
-
-	if c.opts.ResourceInputMethodProvider == nil {
-		logger.Debug("using default resource input method provider")
-		c.opts.ResourceInputMethodProvider = DefaultInputMethodRegistry
-	}
-	if c.opts.SourceInputMethodProvider == nil {
-		logger.Debug("using default source input method provider")
-		c.opts.SourceInputMethodProvider = DefaultInputMethodRegistry
-	}
-
-	descriptors := make([]*descriptor.Descriptor, len(constructor.Components))
-	var descLock sync.Mutex
-
-	eg, egctx := newConcurrencyGroup(ctx, c.opts.ConcurrencyLimit)
-	logger.Debug("created concurrency group", "limit", c.opts.ConcurrencyLimit)
-
-	for i, component := range constructor.Components {
-		componentLogger := logger.With("component", component.Name, "version", component.Version)
-		componentLogger.Debug("constructing component")
-
-		eg.Go(func() error {
-			if c.opts.OnStartComponentConstruct != nil {
-				if err := c.opts.OnStartComponentConstruct(egctx, &component); err != nil {
-					return fmt.Errorf("error starting component construction for %q: %w", component.ToIdentity(), err)
-				}
-			}
-			desc, err := c.construct(egctx, &component, nil)
-			if c.opts.OnEndComponentConstruct != nil {
-				if err := c.opts.OnEndComponentConstruct(egctx, desc, err); err != nil {
-					return fmt.Errorf("error ending component construction for %q: %w", component.ToIdentity(), err)
-				}
-			}
-			if err != nil {
-				return err
-			}
-
-			descLock.Lock()
-			defer descLock.Unlock()
-			descriptors[i] = desc
-			componentLogger.Debug("component constructed successfully")
-
-			return nil
-		})
-	}
-
-	if err := eg.Wait(); err != nil {
-		return nil, fmt.Errorf("error constructing components: %w", err)
-	}
-
-	logger.Debug("component construction completed successfully", "num_components", len(descriptors))
-	return descriptors, nil
 }
 
 func NewDefaultConstructor(opts Options) Constructor {
@@ -174,10 +122,10 @@ func NewDefaultConstructor(opts Options) Constructor {
 	}
 }
 
-// construct creates a single component descriptor from a component specification.
+// constructComponent creates a single component descriptor from a component specification.
 // It handles the creation of the base descriptor, processes all resources concurrently,
 // and adds the final component version to the target repository.
-func (c *DefaultConstructor) construct(ctx context.Context, component *constructor.Component, referencedComponents map[string]*descriptor.Descriptor) (*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) constructComponent(ctx context.Context, component *constructor.Component, referencedComponents map[string]*descriptor.Descriptor) (*descriptor.Descriptor, error) {
 	logger := log.Base().With("component", component.Name, "version", component.Version)
 	desc := createBaseDescriptor(component)
 	logger.Debug("created base descriptor")

@@ -271,7 +271,7 @@ components:
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.GraphBasedConstruct(t.Context(), converted)
+	descriptors, err := constructorInstance.Construct(t.Context(), converted)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 3)
 

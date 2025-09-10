@@ -91,7 +91,7 @@ func (p *vertexProcessor) processInternalComponent(ctx context.Context, vertex *
 		refDescriptor := untypedRefDescriptor.(*descriptor.Descriptor)
 		referencedComponents[ref.ToIdentity().String()] = refDescriptor
 	}
-	desc, err := p.constructor.construct(ctx, component, referencedComponents)
+	desc, err := p.constructor.constructComponent(ctx, component, referencedComponents)
 	if err != nil {
 		return nil, fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
 	}
