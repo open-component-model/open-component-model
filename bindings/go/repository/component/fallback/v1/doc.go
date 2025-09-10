@@ -12,5 +12,5 @@
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
-// New concepts will likely be introduced in the future (contributions welcome!).
+// An alternative concept is to use the ResolverRepository.
 package v1

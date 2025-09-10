@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"golang.org/x/sync/errgroup"
+	"ocm.software/open-component-model/bindings/go/blob"
 
 	"ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/matcher"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/spec"
@@ -231,4 +232,75 @@ func deepCopyResolvers(resolvers []*resolverspec.Resolver) []*resolverspec.Resol
 		copied[i] = resolver.DeepCopy()
 	}
 	return copied
+}
+
+func (r *ResolverRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
+	repos := r.RepositoriesForComponentIterator(ctx, descriptor.Component.Name)
+	for repo, err := range repos {
+		if err != nil {
+			return fmt.Errorf("getting repository for component %s failed: %w", descriptor.Component.Name, err)
+		}
+		return repo.AddComponentVersion(ctx, descriptor)
+	}
+	return fmt.Errorf("no repository found for component %s to add version", descriptor.Component.Name)
+}
+
+func (r *ResolverRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	repos := r.RepositoriesForComponentIterator(ctx, component)
+	for repo, err := range repos {
+		if err != nil {
+			return nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
+		}
+		return repo.AddLocalResource(ctx, component, version, res, content)
+	}
+	return nil, fmt.Errorf("no repository found for component %s to add local resource", component)
+}
+
+func (r *ResolverRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+	repos := r.RepositoriesForComponentIterator(ctx, component)
+	for repo, err := range repos {
+		if err != nil {
+			return nil, nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
+		}
+		data, res, err := repo.GetLocalResource(ctx, component, version, identity)
+		if errors.Is(err, repository.ErrNotFound) {
+			slog.DebugContext(ctx, "local resource not found in repository", "realm", Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
+			continue // try the next repository
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("getting local resource with identity %v in component version %s/%s from repository %v failed: %w", identity, component, version, repo, err)
+		}
+		return data, res, nil
+	}
+	return nil, nil, fmt.Errorf("local resource with identity %v in component version %s/%s not found in any repository", identity, component, version)
+}
+
+func (r *ResolverRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
+	repos := r.RepositoriesForComponentIterator(ctx, component)
+	for repo, err := range repos {
+		if err != nil {
+			return nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
+		}
+		return repo.AddLocalSource(ctx, component, version, source, content)
+	}
+	return nil, fmt.Errorf("no repository found for component %s to add local source", component)
+}
+
+func (r *ResolverRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
+	repos := r.RepositoriesForComponentIterator(ctx, component)
+	for repo, err := range repos {
+		if err != nil {
+			return nil, nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
+		}
+		data, source, err := repo.GetLocalSource(ctx, component, version, identity)
+		if errors.Is(err, repository.ErrNotFound) {
+			slog.DebugContext(ctx, "local source not found in repository", "realm", Realm, "repository", repo, "component", component, "version", version, "resource identity", identity)
+			continue // try the next repository
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("getting local source with identity %v in component version %s/%s from repository %v failed: %w", identity, component, version, repo, err)
+		}
+		return data, source, nil
+	}
+	return nil, nil, fmt.Errorf("local source with identity %v in component version %s/%s not found in any repository", identity, component, version)
 }
