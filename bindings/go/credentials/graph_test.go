@@ -19,7 +19,7 @@ import (
 
 type CredentialPlugin struct {
 	ConsumerIdentityTypeAttributes map[runtime.Type]map[string]func(v any) (string, string)
-	CredentialFunc                 func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error)
+	CredentialFunc                 func(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (resolved runtime.Typed, err error)
 }
 
 func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.Typed) (runtime.Identity, error) {
@@ -50,7 +50,7 @@ func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.T
 	return identity, nil
 }
 
-func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	if p.CredentialFunc == nil {
 		return nil, fmt.Errorf("no credential function for %v", identity)
 	}
@@ -59,14 +59,14 @@ func (p CredentialPlugin) Resolve(ctx context.Context, identity runtime.Identity
 
 type RepositoryPlugin struct {
 	RepositoryIdentityFunc func(config runtime.Typed) (runtime.Identity, error)
-	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
+	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error)
 }
 
 func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config runtime.Typed) (runtime.Identity, error) {
 	return s.RepositoryIdentityFunc(config)
 }
 
-func (s RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+func (s RepositoryPlugin) Resolve(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
 	return s.ResolveFunc(ctx, config, identity, credentials)
 }
 
@@ -180,13 +180,13 @@ func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
 						"dockerConfigFile":            file.(string),
 					}, nil
 				},
-				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
+				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (resolved runtime.Typed, err error) {
 					switch identity["hostname"] {
 					case "quay.io":
-						return map[string]string{
+						return v1.CredentialsFromMap(map[string]string{
 							"username": "test1",
 							"password": "bar",
-						}, nil
+						}), nil
 					default:
 						return nil, fmt.Errorf("failed access")
 					}
@@ -212,20 +212,25 @@ func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
 						runtime.IdentityAttributeHostname: purl.Hostname(),
 					}, nil
 				},
-				ResolveFunc: func(_ context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
+				ResolveFunc: func(_ context.Context, config runtime.Typed, identity runtime.Identity, credentials runtime.Typed) (resolved runtime.Typed, err error) {
+					typed, ok := credentials.(*v1.DirectCredentials)
+					if !ok {
+						return nil, fmt.Errorf("failed access")
+					}
+
 					var mm map[string]interface{}
 					_ = json.Unmarshal(config.(*runtime.Raw).Data, &mm)
 
-					if credentials["role_id"] != "repository.vault.com-role" || credentials["secret_id"] != "repository.vault.com-secret" {
+					if typed.Properties["role_id"] != "repository.vault.com-role" || typed.Properties["secret_id"] != "repository.vault.com-secret" {
 						return nil, fmt.Errorf("failed access")
 					}
 					if identity["hostname"] != "some-hostname.com" {
 						return nil, fmt.Errorf("failed access")
 					}
 
-					return map[string]string{
+					return v1.CredentialsFromMap(map[string]string{
 						"something-from-vault-repo": "some-value-from-vault",
-					}, nil
+					}), nil
 				},
 			}, nil
 		default:
@@ -254,17 +259,22 @@ func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
 						},
 					},
 				},
-				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+					typed, ok := credentials.(*v1.DirectCredentials)
+					if !ok {
+						return nil, fmt.Errorf("failed access")
+					}
+
 					if identity["secretId"] != "vault-access-creds" {
 						return nil, fmt.Errorf("failed access")
 					}
-					if credentials["roleid"] != "my-role-id" {
+					if typed.Properties["roleid"] != "my-role-id" {
 						return nil, fmt.Errorf("failed access")
 					}
-					return map[string]string{
+					return v1.CredentialsFromMap(map[string]string{
 						"role_id":   "myvault.example.com-role",
 						"secret_id": "myvault.example.com-secret",
-					}, nil
+					}), nil
 				},
 			}, nil
 		case runtime.NewUnversionedType("HashiCorpVault"):
@@ -277,31 +287,36 @@ func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
 						},
 					},
 				},
-				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials map[string]string) (map[string]string, error) {
+				CredentialFunc: func(ctx context.Context, identity runtime.Identity, credentials runtime.Typed) (runtime.Typed, error) {
+					typed, ok := credentials.(*v1.DirectCredentials)
+					if !ok {
+						return nil, fmt.Errorf("failed access")
+					}
+
 					switch identity["hostname"] {
 					case "myvault.example.com":
-						roleid, secret := credentials["role_id"], credentials["secret_id"]
+						roleid, secret := typed.Properties["role_id"], typed.Properties["secret_id"]
 						if roleid != "myvault.example.com-role" || secret != "myvault.example.com-secret" {
 							return nil, fmt.Errorf("failed access")
 						}
-						return map[string]string{
+						return v1.CredentialsFromMap(map[string]string{
 							"role_id":   "other.vault.com-role",
 							"secret_id": "other.vault.com-secret",
-						}, nil
+						}), nil
 					case "other.vault.com":
-						roleid, secret := credentials["role_id"], credentials["secret_id"]
+						roleid, secret := typed.Properties["role_id"], typed.Properties["secret_id"]
 						if roleid != "other.vault.com-role" || secret != "other.vault.com-secret" {
 							return nil, fmt.Errorf("failed access")
 						}
-						return map[string]string{
+						return v1.CredentialsFromMap(map[string]string{
 							"username": "foo",
 							"password": "bar",
-						}, nil
+						}), nil
 					}
 
-					return map[string]string{
+					return v1.CredentialsFromMap(map[string]string{
 						"vaultSecret": "vault-secret-for-https://" + identity["hostname"] + "/",
-					}, nil
+					}), nil
 				},
 			}, nil
 		}
@@ -383,7 +398,7 @@ func TestResolveCredentials(t *testing.T) {
 			r.NoError(err)
 			credsByIdentity, err := graph.Resolve(t.Context(), tc.identity)
 			r.NoError(err, "Failed to resolveFromGraph credentials")
-			r.Equal(tc.expected, credsByIdentity)
+			r.Equal(v1.CredentialsFromMap(tc.expected), credsByIdentity)
 		})
 	}
 }

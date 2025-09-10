@@ -80,7 +80,7 @@ func processDirectCredentials(g *Graph, config *cfgRuntime.Config) ([]cfgRuntime
 	}
 
 	for node, credentials := range directPerIdentity {
-		g.setCredentials(node, credentials)
+		g.setCredentials(node, v1.CredentialsFromMap(credentials))
 	}
 
 	return consumers, nil
