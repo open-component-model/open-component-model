@@ -91,9 +91,19 @@ func (p *vertexProcessor) processInternalComponent(ctx context.Context, vertex *
 		refDescriptor := untypedRefDescriptor.(*descriptor.Descriptor)
 		referencedComponents[ref.ToIdentity().String()] = refDescriptor
 	}
+	if p.constructor.opts.OnStartComponentConstruct != nil {
+		if err := p.constructor.opts.OnStartComponentConstruct(ctx, component); err != nil {
+			return nil, fmt.Errorf("error starting component construction for %q: %w", component.ToIdentity(), err)
+		}
+	}
 	desc, err := p.constructor.constructComponent(ctx, component, referencedComponents)
 	if err != nil {
 		return nil, fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
+	}
+	if p.constructor.opts.OnEndComponentConstruct != nil {
+		if err := p.constructor.opts.OnEndComponentConstruct(ctx, desc, err); err != nil {
+			return nil, fmt.Errorf("error ending component construction for %q: %w", component.ToIdentity(), err)
+		}
 	}
 	vertex.Attributes.Store(attributeComponentDescriptor, desc)
 	return desc, nil

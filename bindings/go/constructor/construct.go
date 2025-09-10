@@ -78,6 +78,10 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 		c.opts.SourceInputMethodProvider = DefaultInputMethodRegistry
 	}
 
+	if len(componentConstructor.Components) == 0 {
+		return nil, nil
+	}
+
 	// We might want to allow the DAG to be passed in. This would allow to
 	// pre-populate it with known components to avoid re-resolving them.
 	dag := syncdag.NewDirectedAcyclicGraph[string]()
