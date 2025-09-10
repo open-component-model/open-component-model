@@ -12,8 +12,8 @@ import (
 	"sync"
 
 	"golang.org/x/sync/errgroup"
-	"ocm.software/open-component-model/bindings/go/blob"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/matcher"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
