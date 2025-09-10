@@ -1,0 +1,24 @@
+# List of OCM Special Interest Groups (SIGs)
+# This file is machine-readable and can be used for automation, dashboards, or website integration.
+# The 
+
+sigs:
+  - name: SIG Placeholder
+    purpose: Act as placeholder for new SIGs. Update this file when creating a new SIG.
+    leads:
+      - name: Jane Doe
+        role: Chair
+        github: janedoe
+      - name: John Smith
+        role: Tech Lead
+        github: johnsmith
+    meeting:
+      cadence: Every 8 weeks
+      url: https://zoom-lfx.platform.linuxfoundation.org/meeting/123456789
+      notes: https://github.com/open-component-model/open-component-model/tree/main/community/SIGs/meeting-notes/sig-placeholder
+    communication:
+      mailing_list: sig-runtime@lists.linuxfoundation.org
+      slack: ocm-placeholder
+    repositories:
+      - https://github.com/open-component-model/ocm-placeholder
+    status: active

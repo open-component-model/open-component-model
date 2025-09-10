@@ -8,15 +8,18 @@ SIGs are groups of contributors focused on specific technical or community topic
 
 ## 2. Roles & Responsibilities
 
-- **Chair**: Facilitates meetings, represents the SIG, ensures process adherence. (At least one Chair is required.)
-- **Tech Lead**: Guides technical direction, reviews contributions, supports the Chair. (At least one Tech Lead is required.)
+- **Chair**: Facilitates meetings, represents the SIG, ensures process adherence.
+- **Tech Lead**: Guides technical direction, reviews contributions, supports the Chair.
 - **Members**: Regular contributors with voting rights.
+
+At least one Chair and one Tech Lead is required. Due to the small size of the project, these roles can be held by the same person. Chairs and Tech Leads are appointed by consensus among Members and approved by the OCM Technical Steering Committee (TSC).
 
 ## 3. Decision-Making
 
 - Prefer consensus; if consensus cannot be reached, a simple majority vote among Members decides.
 - Major decisions (scope, leadership changes) require approval by the OCM Technical Steering Committee (TSC).
-- All decisions must be documented in meeting notes or SIG repository. Decisions requiring TSC approval are recorded in the OCM repository and meeting minutes.
+- All decisions must be documented in meeting notes in the `SIGs` folder of the open-component-model repository.
+- Decisions requiring TSC approval need to be communicated to the TSC Chair for inclusion in the next TSC meeting agenda.
 
 ## 4. Conflict Resolution
 
