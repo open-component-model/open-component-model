@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"strings"
 
@@ -159,12 +158,24 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		}
 	}()
 
+	var opts []getter.Option
+	if helmSpec.CACert != "" || helmSpec.CACertFile != "" {
+		caFilePath, err := setupTLSFiles(helmSpec, tmpDir)
+		if err != nil {
+			return nil, fmt.Errorf("error setting up TLS files: %w", err)
+		}
+
+		// certFile and keyFile are empty strings since we don't have client certificates
+		opts = append(opts, getter.WithTLSClientConfig("", "", caFilePath))
+	}
+
 	dl := &downloader.ChartDownloader{
 		Out:              os.Stderr,
 		Verify:           downloader.VerifyNever, // TODO: Support signature verification
 		Getters:          getter.All(settings),
 		RepositoryConfig: settings.RepositoryConfig,
 		RepositoryCache:  settings.RepositoryCache,
+		Options:          opts,
 	}
 
 	// TODO: Hack.
@@ -172,12 +183,6 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		if password, ok := credentials["password"]; ok {
 			dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 		}
-	}
-
-	if helmSpec.CACert != "" || helmSpec.CACertFile != "" {
-		// TODO: Supporting CACert is difficult process since it could require a password.
-		// Also, incidentally, the helm SDK doesn't support it properly yet either. Figure out what to do about this.
-		slog.WarnContext(ctx, "Warning: Custom CA certificates not yet supported in this implementation")
 	}
 
 	savedPath, _, err := dl.DownloadTo(helmSpec.HelmRepository, helmSpec.Version, tmpDir)
@@ -206,6 +211,34 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	}
 
 	return result, nil
+}
+
+// setupTLSFiles sets up the TLS configuration files based on the helm specification
+func setupTLSFiles(helmSpec v1.Helm, tmpDir string) (caFilePath string, err error) {
+	var caFile *os.File
+
+	if helmSpec.CACertFile != "" {
+		caFile, err = os.Open(helmSpec.CACertFile)
+		if err != nil {
+			return "", fmt.Errorf("error opening CA certificate file %q: %w", helmSpec.CACertFile, err)
+		}
+	} else if helmSpec.CACert != "" {
+		caFile, err = os.CreateTemp(tmpDir, "caCert-*.pem")
+		if err != nil {
+			return "", fmt.Errorf("error creating temporary CA certificate file: %w", err)
+		}
+		defer func() {
+			if err2 := os.Remove(caFile.Name()); err2 != nil {
+				err = errors.Join(err, fmt.Errorf("failed to remove temp CA cert file: %w", err2))
+			}
+		}()
+
+		if _, err = caFile.WriteString(helmSpec.CACert); err != nil {
+			return "", fmt.Errorf("error writing CA certificate to temp file: %w", err)
+		}
+	}
+
+	return caFile.Name(), nil
 }
 
 // copyChartToOCILayout takes a ReadOnlyChart helper object and creates an OCI layout from it.

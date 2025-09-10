@@ -104,14 +104,14 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 func (i *InputMethod) createRemoteResourceAccess(helm v1.Helm) (*descriptorruntime.Resource, error) {
 	ociAccess := &ocispec.OCIImage{
 		Type: runtime.Type{
-			Name: ocispec.LegacyType3, // TODO: is this correct?
+			Name: ocispec.LegacyType3, // TODO: is this correct? `helmResource` ?
 		},
 		ImageReference: helm.HelmRepository,
 	}
 
 	// TODO: Support version hints? Maybe the helmRepository should be a URL with version?
 	if helm.Version != "" {
-		ociAccess.ImageReference = helm.HelmRepository + ":" + helm.Version
+		ociAccess.ImageReference = helm.HelmRepository + ":" + helm.Version // https://repo/chart.6.3.1.tgz
 	}
 
 	// TODO: Very dumb override if repository hint is set. Is this enough?

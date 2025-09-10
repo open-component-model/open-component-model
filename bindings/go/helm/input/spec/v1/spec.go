@@ -23,20 +23,19 @@ type Helm struct {
 	Repository string `json:"repository,omitempty"`
 
 	// Version field is included for compatibility with previous OCM version.
-	// Support for this option is not implemented yet. The Version of the resource is taken from the Chart.yaml file.
+	// The Version of the resource is taken from the Chart.yaml file.
 	Version string `json:"version,omitempty"`
 
 	// HelmRepository was used in previous OCM versions specify, to if the helm chart should be loaded from
-	// a helm repository instead of the local filesystem. Support for this option is not implemented yet.
+	// a helm repository instead of the local filesystem.
 	HelmRepository string `json:"helmRepository,omitempty"`
 
 	// CACert was used in previous OCM versions in combination with HelmRepository to specify a TLS root certificate
-	// used to access the source helm repository. Support for this option is not implemented yet.
+	// used to access the source helm repository.
 	CACert string `json:"caCert,omitempty"`
 
 	// CACertFile was used in previous OCM versions in combination with HelmRepository to specify a relative filename
 	// for TLS root certificate, used to access the source helm repository.
-	// Support for this option is not implemented yet.
 	CACertFile string `json:"caCertFile,omitempty"`
 }
 

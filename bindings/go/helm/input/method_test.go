@@ -77,13 +77,13 @@ func TestInputMethod_GetResourceCredentialConsumerIdentity(t *testing.T) {
 					assert.NotNil(t, identity)
 					assert.Equal(t, "helm/v1", identity["type"])
 					assert.Equal(t, "https", identity["scheme"])
-					
+
 					// Check hostname based on the specific test case
 					switch tt.helmSpec.HelmRepository {
 					case "https://charts.example.com":
 						assert.Equal(t, "charts.example.com", identity["hostname"])
-						assert.Equal(t, "", identity["port"])  // No port specified
-						assert.Equal(t, "", identity["path"])   // No path specified
+						assert.Equal(t, "", identity["port"]) // No port specified
+						assert.Equal(t, "", identity["path"]) // No path specified
 					case "https://registry.example.com:8443/helm/charts/myapp-1.0.0.tgz":
 						assert.Equal(t, "registry.example.com", identity["hostname"])
 						assert.Equal(t, "8443", identity["port"])
@@ -132,6 +132,7 @@ func TestInputMethod_ProcessResource_RemoteChart_Podinfo_Integration(t *testing.
 		// Need to add support for index.yaml based repositories maybe?
 		// "https://stefanprodan.github.io/podinfo/" is supposed to be the index URL or rather the repository.
 		// For now, using direct link to a specific chart version.
+		// oci://ghcr.io/stefanprodan/podinfo/podinfo:6.9.1
 		HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz",
 		Version:        "6.9.1",
 	}
@@ -154,51 +155,6 @@ func TestInputMethod_ProcessResource_RemoteChart_Podinfo_Integration(t *testing.
 	// Verify the remote resource structure
 	assert.Equal(t, "podinfo-6.9.1.tgz", result.ProcessedResource.Name, "chart name should be extracted correctly")
 	assert.Equal(t, "6.9.1", result.ProcessedResource.Version, "version should match specification")
-	assert.Equal(t, input.HelmRepositoryType, result.ProcessedResource.Type, "resource type should be helmRepository")
-
-	// Verify blob data is not empty by reading some content
-	reader, err := result.ProcessedBlobData.ReadCloser()
-	require.NoError(t, err)
-	defer reader.Close()
-
-	// Read first few bytes to verify content exists
-	buffer := make([]byte, 100)
-	n, err := reader.Read(buffer)
-	require.NoError(t, err)
-	assert.Greater(t, n, 0, "blob should contain data")
-}
-
-func TestInputMethod_ProcessResource_RemoteChart_PodinfoLatest_Integration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	// Test with latest version URL
-	helmSpec := v1.Helm{
-		Type: runtime.Type{
-			Name: v1.Type,
-		},
-		HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz", // Use latest available version
-		Version:        "6.9.1",
-	}
-
-	resource := &constructorruntime.Resource{
-		AccessOrInput: constructorruntime.AccessOrInput{
-			Input: &helmSpec,
-		},
-	}
-
-	inputMethod := &input.InputMethod{}
-
-	result, err := inputMethod.ProcessResource(t.Context(), resource, nil)
-
-	require.NoError(t, err, "should successfully download latest podinfo chart")
-	assert.NotNil(t, result, "result should not be nil")
-	assert.NotNil(t, result.ProcessedBlobData, "should have blob data for remote chart")
-	assert.NotNil(t, result.ProcessedResource, "should have remote resource access info")
-
-	// Verify the remote resource structure
-	assert.Equal(t, "podinfo-6.9.1.tgz", result.ProcessedResource.Name, "chart name should be extracted correctly")
 	assert.Equal(t, input.HelmRepositoryType, result.ProcessedResource.Type, "resource type should be helmRepository")
 
 	// Verify blob data is not empty by reading some content
