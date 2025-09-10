@@ -24,7 +24,6 @@ env:
   cache_dir: /tmp/renovate/cache/renovate/repository
   cache_key: renovate-cache
   RENOVATE_CONFIG_FILE: .github/renovate.json5
-  RENOVATE_DRY_RUN: ${{ github.event_name == 'pull_request' && 'extract' || 'none' }}
 
 jobs:
   renovate:
@@ -64,6 +63,11 @@ jobs:
         with:
           app-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Ensure Dry-Run on Pull Requests
+        if: ${{ github.event_name == 'pull_request' }}
+        run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
+
       - name: Run
         uses: renovatebot/github-action@13da59cf7cfbd3bfea72ce26752ed22edf747ce9 # v43.0.2
         with:
