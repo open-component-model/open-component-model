@@ -71,7 +71,7 @@ func NewResolverRepository(_ context.Context, repositoryProvider repository.Comp
 	}
 
 	if len(resolverErrs) > 0 {
-		return nil, fmt.Errorf("one or more resolvers are invalid: %v", errors.Join(resolverErrs...))
+		return nil, fmt.Errorf("one or more resolvers are invalid: %w", errors.Join(resolverErrs...))
 	}
 
 	return &ResolverRepository{
