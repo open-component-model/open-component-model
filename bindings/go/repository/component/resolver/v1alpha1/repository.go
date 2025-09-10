@@ -31,11 +31,8 @@ type ResolverRepository struct {
 
 	resolvers []*resolverspec.Resolver
 
-	repositoriesForResolverCacheMu sync.RWMutex
-	repositoriesForResolverCache   []repository.ComponentVersionRepository
-
-	matcherCacheMu sync.RWMutex
-	matcherCache   []*matcher.ResolverMatcher
+	matchersMu sync.RWMutex
+	matchers   []*matcher.ResolverMatcher
 }
 
 type ResolverRepositoryOption func(*ResolverRepositoryOptions)
@@ -83,9 +80,8 @@ func NewResolverRepository(_ context.Context, repositoryProvider repository.Comp
 		repositoryProvider: repositoryProvider,
 		credentialProvider: credentialProvider,
 
-		resolvers:                    resolvers,
-		repositoriesForResolverCache: make([]repository.ComponentVersionRepository, 0, len(resolvers)),
-		matcherCache:                 matchers,
+		resolvers: resolvers,
+		matchers:  matchers,
 	}, nil
 }
 
@@ -155,14 +151,14 @@ func (r *ResolverRepository) ListComponentVersions(ctx context.Context, componen
 
 func (r *ResolverRepository) RepositoriesForComponentIterator(ctx context.Context, component string) iter.Seq2[repository.ComponentVersionRepository, error] {
 	return func(yield func(repository.ComponentVersionRepository, error) bool) {
-		r.matcherCacheMu.RLock()
-		defer r.matcherCacheMu.RUnlock()
+		r.matchersMu.RLock()
+		defer r.matchersMu.RUnlock()
 		for index, resolver := range r.resolvers {
-			if !r.matcherCache[index].Match(component, "") {
+			if !r.matchers[index].Match(component, "") {
 				continue
 			}
 
-			repo, err := r.getRepositoryFromCache(ctx, index, resolver)
+			repo, err := r.getRepositoryForSpecification(ctx, resolver.Repository)
 			if err != nil {
 				yield(nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err))
 				return
@@ -181,9 +177,9 @@ func (r *ResolverRepository) GetResolvers() []*resolverspec.Resolver {
 }
 
 func (r *ResolverRepository) matchesAnyResolver(component string) bool {
-	r.matcherCacheMu.RLock()
-	defer r.matcherCacheMu.RUnlock()
-	for _, m := range r.matcherCache {
+	r.matchersMu.RLock()
+	defer r.matchersMu.RUnlock()
+	for _, m := range r.matchers {
 		if m.Match(component, "") {
 			return true
 		}
@@ -207,24 +203,6 @@ func (r *ResolverRepository) getRepositoryForSpecification(ctx context.Context, 
 	repo, err := r.repositoryProvider.GetComponentVersionRepository(ctx, specification, credentials)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", specification, err)
-	}
-	return repo, nil
-}
-
-func (r *ResolverRepository) getRepositoryFromCache(ctx context.Context, index int, resolver *resolverspec.Resolver) (repository.ComponentVersionRepository, error) {
-	r.repositoriesForResolverCacheMu.RLock()
-	repo := r.repositoriesForResolverCache[index]
-	r.repositoriesForResolverCacheMu.RUnlock()
-
-	if repo == nil {
-		var err error
-		repo, err = r.getRepositoryForSpecification(ctx, resolver.Repository)
-		if err != nil {
-			return nil, fmt.Errorf("getting repository for specification %v failed: %w", resolver.Repository, err)
-		}
-		r.repositoriesForResolverCacheMu.Lock()
-		r.repositoriesForResolverCache[index] = repo
-		r.repositoriesForResolverCacheMu.Unlock()
 	}
 	return repo, nil
 }
