@@ -20,7 +20,7 @@ Special Interest Groups (SIGs) are groups of contributors focused on specific te
 
 ### 2.2 Code of Conduct
 
-All SIG members and activities are subject to the OCM Code of Conduct. See [CODE_OF_CONDUCT.md](../../CODE_OF_CONDUCT.md).
+All SIG members and activities are subject to the OCM Code of Conduct. See [CODE_OF_CONDUCT.md](https://github.com/open-component-model/.github/blob/main/CODE_OF_CONDUCT.md).
 
 ### 2.3 SIG Creation & Charter Requirements
 
@@ -36,7 +36,7 @@ To create a SIG, draft a charter outlining:
 
 Decision-making and conflict resolution processes are defined in this handbook and do not need to be included in the charter.
 
-Fill out the [SIG Submission Template](./SIG-Submission-Template.md) with all required info (purpose, scope, initial leadership, initial voting members, meeting cadence, communication channels, repository needs, and code/test ownership statement).
+Fill out the [SIG Submission Template](SIG-Submission-Template.md) with all required info (purpose, scope, initial leadership, initial voting members, meeting cadence, communication channels, repository needs, and code/test ownership statement).
 
 Submit your proposal and charter as a new issue in the OCM repository ([create issue](https://github.com/open-component-model/open-component-model/issues)). The OCM Technical Steering Committee (TSC) reviews and approves proposals through a formal vote. The proposal must be added to the TSC meeting agenda. Chair and Tech Lead must be proposed by the SIG and approved by the TSC.
 

@@ -8,7 +8,7 @@ Use this template to propose a new Special Interest Group (SIG) for the OCM proj
 
 ## SIG Charter
 
-Please provide a SIG charter covering the following topics (see [SIG Handbook](./SIG-Handbook.md) for details):
+Please provide a SIG charter covering the following topics (see [SIG Handbook](SIG-Handbook.md) for details):
 
 - Scope and mission of the SIG
 - Responsibilities and deliverables
@@ -18,7 +18,7 @@ Please provide a SIG charter covering the following topics (see [SIG Handbook](.
 - How the SIG interacts with other groups and the community
 - Repository needs and code/test ownership statement
 
-Refer to the [SIG Handbook](./SIG-Handbook.md) for governance, decision-making, voting member process, and other operational details. These do not need to be repeated in the charter.
+Refer to the [SIG Handbook](SIG-Handbook.md) for governance, decision-making, voting member process, and other operational details. These do not need to be repeated in the charter.
 
 ---
 
@@ -44,4 +44,4 @@ Refer to the [SIG Handbook](./SIG-Handbook.md) for governance, decision-making, 
 
 ---
 
-Submit this proposal to the OCM Technical Steering Committee (TSC) for review and approval. The TSC will vote on acceptance and leadership. See [SIG Handbook](./SIG-Handbook.md) for full process.
+Submit this proposal to the OCM Technical Steering Committee (TSC) for review and approval. The TSC will vote on acceptance and leadership. See [SIG Handbook](SIG-Handbook.md) for full process.
