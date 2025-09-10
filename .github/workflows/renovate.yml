@@ -24,7 +24,7 @@ env:
   cache_dir: /tmp/renovate/cache/renovate/repository
   cache_key: renovate-cache
   RENOVATE_CONFIG_FILE: .github/renovate.json5
-  RENOVATE_DRY_RUN: ${{ github.repository_owner == 'open-component-model' && '' || 'extract' }}
+  RENOVATE_DRY_RUN: ${{ github.event_name == 'pull_request' && 'extract' || 'none' }}
 
 jobs:
   renovate:
