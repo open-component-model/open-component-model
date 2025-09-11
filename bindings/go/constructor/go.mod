@@ -5,6 +5,7 @@ go 1.25.0
 replace ocm.software/open-component-model/bindings/go/descriptor/normalisation => github.com/fabianburth/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250902141118-5baa7ffe9690
 
 require (
+	github.com/opencontainers/go-digest v1.0.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.17.0
@@ -13,8 +14,8 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-00010101000000-000000000000
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250903091648-5c315c9cf5a2
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250909064434-e1a06fe74668
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250909064434-e1a06fe74668
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	sigs.k8s.io/yaml v1.6.0
 )
