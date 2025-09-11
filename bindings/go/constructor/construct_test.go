@@ -147,7 +147,13 @@ func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 		},
 	}
 
-	// Create a component with both source and resource
+	// Create a component with source and resource and references
+	// The references form a diamond shaped directed acyclic graph (DAG).
+	//    A
+	//   / \
+	//  B   C
+	//   \ /
+	//    D
 	yamlData := `
 components:
   - name: ocm.software/test-component

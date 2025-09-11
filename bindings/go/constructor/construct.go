@@ -29,8 +29,7 @@ var ErrShouldSkipConstruction = errors.New("should skip construction")
 
 type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
-	// It validates the constructor specification and processes each component in sequence.
-	//Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
+	// It validates the constructor specification and processes each component in topological order.
 	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
 }
 
