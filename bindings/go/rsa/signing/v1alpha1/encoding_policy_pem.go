@@ -29,5 +29,7 @@ const (
 	// Notes:
 	//   - This is the default signature encoding policy.
 	//   - Background: https://github.com/open-component-model/ocm/issues/584
+	//
+	// Experimental: This encoding policy is experimental and may change or be deprecated in the future.
 	SignatureEncodingPolicyPEM SignatureEncodingPolicy = "PEM"
 )

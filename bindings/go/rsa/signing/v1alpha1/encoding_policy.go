@@ -6,8 +6,7 @@ type SignatureEncodingPolicy string
 
 const (
 	// SignatureEncodingPolicyDefault points to the default encoding policy.
-	// At present, this is SignatureEncodingPolicyPEM.
-	SignatureEncodingPolicyDefault = SignatureEncodingPolicyPEM
+	SignatureEncodingPolicyDefault = SignatureEncodingPolicyPlain
 
 	// SignatureEncodingPolicyPlain encodes the signature as a plain hex string.
 	//

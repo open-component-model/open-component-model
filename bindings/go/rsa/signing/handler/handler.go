@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -69,7 +70,7 @@ func New(useSystemRoots bool) (*Handler, error) {
 // algorithm and encoding policy. For PEM encoding, the certificate chain is
 // read from credentials and embedded into the SIGNATURE block.
 func (*Handler) Sign(
-	_ context.Context,
+	ctx context.Context,
 	unsigned descruntime.Digest,
 	rawCfg runtime.Typed,
 	creds map[string]string,
@@ -96,16 +97,8 @@ func (*Handler) Sign(
 	}
 
 	switch supported.GetSignatureEncodingPolicy() {
-	case v1alpha1.SignatureEncodingPolicyPlain:
-		return descruntime.SignatureInfo{
-			Algorithm: algorithm,
-			MediaType: supported.GetDefaultMediaType(),
-			Value:     hex.EncodeToString(rawSig),
-		}, nil
-
 	case v1alpha1.SignatureEncodingPolicyPEM:
-		fallthrough
-	default:
+		slog.WarnContext(ctx, "signing with PEM encoding is experimental")
 		chain, err := rsacredentials.CertificateChainFromCredentials(creds)
 		if err != nil {
 			return descruntime.SignatureInfo{}, fmt.Errorf("read certificate chain: %w", err)
@@ -116,6 +109,14 @@ func (*Handler) Sign(
 			MediaType: v1alpha1.MediaTypePEM,
 			Value:     string(pem),
 		}, nil
+	case v1alpha1.SignatureEncodingPolicyPlain:
+		fallthrough
+	default:
+		return descruntime.SignatureInfo{
+			Algorithm: algorithm,
+			MediaType: supported.GetDefaultMediaType(),
+			Value:     hex.EncodeToString(rawSig),
+		}, nil
 	}
 }
 
@@ -123,7 +124,7 @@ func (*Handler) Sign(
 // present in credentials. For PEM signatures, the embedded chain must be valid
 // against system roots and/or the optional trust anchor in credentials.
 func (h *Handler) Verify(
-	_ context.Context,
+	ctx context.Context,
 	signed descruntime.Signature,
 	// we use hints from the signature to determine the correct settings, so no additional config is needed
 	_ runtime.Typed,
@@ -152,6 +153,7 @@ func (h *Handler) Verify(
 		return verifyRSA(alg, pubFromCreds.PublicKey, hash, dig, sig)
 
 	case v1alpha1.MediaTypePEM:
+		slog.WarnContext(ctx, "verifying signatures with PEM encoding is experimental")
 		sig, algFromPEM, chain, err := rsasignature.GetSignatureFromPem([]byte(signed.Signature.Value))
 		if err != nil {
 			return fmt.Errorf("parse pem signature: %w", err)
