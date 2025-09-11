@@ -15,7 +15,7 @@ sigs:
     meeting:
       cadence: Every 8 weeks
       url: https://zoom-lfx.platform.linuxfoundation.org/meeting/123456789
-      notes: https://github.com/open-component-model/open-component-model/tree/main/community/SIGs/meeting-notes/sig-placeholder
+      notes: https://github.com/open-component-model/open-component-model/tree/main/community/docs/SIGs/meeting-notes/sig-placeholder
     communication:
       mailing_list: sig-runtime@lists.linuxfoundation.org
       slack: ocm-placeholder
