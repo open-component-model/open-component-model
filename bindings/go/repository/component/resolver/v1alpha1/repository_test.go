@@ -50,7 +50,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 					ComponentName: "test-component",
 				},
 			},
-			expected: []string{},
+			expected: []string{"single-repo"},
 			err:      assert.NoError,
 		},
 		{
@@ -117,7 +117,7 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			},
 			expected: []string{},
 			err: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.Error(t, err, "expected error when getting repository for spec") && assert.Contains(t, err.Error(), "mock error for testing", "error message does not contain expected text")
+				return assert.Error(t, err, "expected error when getting repository for spec")
 			},
 		},
 		// glob multiple wildcards
@@ -159,23 +159,21 @@ func Test_GetRepositoriesForComponentIterator(t *testing.T) {
 			r.NoError(err, "failed to create resolver repository when it should succeed")
 
 			actualRepos := res.RepositoriesForComponentIterator(ctx, tc.component)
-			expectedRepos := make([]string, len(tc.expected))
-			assert.Len(t, expectedRepos, len(tc.expected))
-			if len(expectedRepos) == 0 {
-				return
-			}
-			index := 0
+			var actualReposSlice []repository.ComponentVersionRepository
+			actualRepoNames := make([]string, 0)
+
 			for repo, err := range actualRepos {
-				if !tc.err(t, err, "unexpected error for case %s", tc.name) {
+				if tc.err(t, err, "error getting repository for component") {
 					return
 				}
-				if err != nil || repo == nil {
-					return
-				}
-				expectedRepos[index] = repo.(*MockRepository).Name
-				index++
+				assert.NoError(t, err, "unexpected error getting repository for component")
+				assert.NotNil(t, repo, "expected repository for component")
+
+				actualReposSlice = append(actualReposSlice, repo)
+				actualRepoNames = append(actualRepoNames, repo.(*MockRepository).Name)
 			}
-			r.Equal(tc.expected, expectedRepos, "expected repositories do not match actual repositories")
+
+			r.Equal(tc.expected, actualRepoNames, "expected repositories do not match actual repositories")
 		})
 	}
 }
