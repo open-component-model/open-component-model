@@ -44,6 +44,21 @@ func ParseRSAPrivateKeyPEM(pemBytes []byte) *rsa.PrivateKey {
 	return nil
 }
 
+// RSAPublicKeyPEM holds a parsed RSA public key and optionally the original
+// X.509 certificate it came from or the private key that it was derived from.
+type RSAPublicKeyPEM struct {
+	PublicKey            *rsa.PublicKey
+	UnderlyingCert       *x509.Certificate
+	UnderlyingPrivateKey *rsa.PrivateKey
+}
+
+func (pem *RSAPublicKeyPEM) GetOptionalUnderlyingCert() *x509.Certificate {
+	if pem == nil {
+		return nil
+	}
+	return pem.UnderlyingCert
+}
+
 // ParseRSAPublicKeyPEM scans concatenated PEM data and returns the first RSA
 // public key found plus the original parsed object it came from:
 //   - For "PUBLIC KEY": returns (*rsa.PublicKey, crypto.PublicKey)
@@ -51,7 +66,7 @@ func ParseRSAPrivateKeyPEM(pemBytes []byte) *rsa.PrivateKey {
 //   - For "CERTIFICATE": returns (*rsa.PublicKey, *x509.Certificate)
 //
 // If none can be parsed it returns (nil, nil).
-func ParseRSAPublicKeyPEM(pemBytes []byte) (*rsa.PublicKey, any) {
+func ParseRSAPublicKeyPEM(pemBytes []byte) *RSAPublicKeyPEM {
 	for len(pemBytes) > 0 {
 		block, rest := pem.Decode(pemBytes)
 		if block == nil {
@@ -61,23 +76,30 @@ func ParseRSAPublicKeyPEM(pemBytes []byte) (*rsa.PublicKey, any) {
 		case pemPKIXPublicKey:
 			if k, err := x509.ParsePKIXPublicKey(block.Bytes); err == nil {
 				if pk, ok := k.(*rsa.PublicKey); ok {
-					return pk, k
+					return &RSAPublicKeyPEM{
+						PublicKey: pk,
+					}
 				}
 			}
 		case pemPKCS1PublicKey:
 			if pk, err := x509.ParsePKCS1PublicKey(block.Bytes); err == nil {
-				return pk, pk
+				return &RSAPublicKeyPEM{
+					PublicKey: pk,
+				}
 			}
 		case CertificatePEMBlockType:
 			if cert, err := x509.ParseCertificate(block.Bytes); err == nil {
 				if pk, ok := cert.PublicKey.(*rsa.PublicKey); ok {
-					return pk, cert
+					return &RSAPublicKeyPEM{
+						PublicKey:      pk,
+						UnderlyingCert: cert,
+					}
 				}
 			}
 		}
 		pemBytes = rest
 	}
-	return nil, nil
+	return nil
 }
 
 // ParseCertificateChain parses one or more consecutive CERTIFICATE PEM blocks

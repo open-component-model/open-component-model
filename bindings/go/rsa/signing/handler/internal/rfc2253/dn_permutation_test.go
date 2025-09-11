@@ -1,11 +1,11 @@
-package dn_test
+package rfc2253_test
 
 import (
 	"crypto/x509/pkix"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/dn"
+	dn "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/rfc2253"
 )
 
 func perms(ss []string) [][]string {

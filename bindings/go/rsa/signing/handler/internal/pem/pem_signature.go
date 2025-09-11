@@ -54,13 +54,13 @@ var ErrNoPEM = errors.New("pem: no data")
 // blocks as a chain.
 //
 // Returns:
-//   - signature: the bytes from the first SIGNATURE block if present, otherwise nil
+//   - sig: the bytes from the first SIGNATURE block if present, otherwise nil
 //   - algo: the value of SignaturePEMBlockAlgorithmHeader if present
-//   - chain: parsed certificates that follow (or are present in the input)
+//   - appendedCertificates: parsed certificates that follow (or are present in the input)
 //   - err: parsing errors (including malformed PEM or certificates)
 //
 // Empty pemData returns all-zero values and no error.
-func GetSignatureFromPem(pemData []byte) ([]byte, string, []*x509.Certificate, error) {
+func GetSignatureFromPem(pemData []byte) (sig []byte, algo string, appendedCertificates []*x509.Certificate, err error) {
 	if len(pemData) == 0 {
 		return nil, "", nil, nil
 	}
@@ -72,8 +72,6 @@ func GetSignatureFromPem(pemData []byte) ([]byte, string, []*x509.Certificate, e
 		return nil, "", nil, ErrNoPEM
 	}
 
-	var sig []byte
-	var algo string
 	var chainSrc []byte
 
 	if first.Type == SignaturePEMBlockType {
@@ -85,9 +83,9 @@ func GetSignatureFromPem(pemData []byte) ([]byte, string, []*x509.Certificate, e
 		chainSrc = pemData
 	}
 
-	certs, err := ParseCertificateChain(chainSrc)
-	if err != nil {
+	if appendedCertificates, err = ParseCertificateChain(chainSrc); err != nil {
 		return nil, "", nil, fmt.Errorf("parse certificate chain: %w", err)
 	}
-	return sig, algo, certs, nil
+
+	return sig, algo, appendedCertificates, nil
 }

@@ -20,8 +20,8 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	rsacredentials "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/credentials"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/dn"
 	rsasignature "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/rfc2253"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -56,8 +56,6 @@ func New(useSystemRoots bool) (*Handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("load system roots: %w", err)
 		}
-	} else {
-		roots = x509.NewCertPool()
 	}
 	return &Handler{
 		roots: roots,
@@ -131,7 +129,7 @@ func (h *Handler) Verify(
 	_ runtime.Typed,
 	creds map[string]string,
 ) error {
-	pubFromCreds, underlying := rsacredentials.PublicKeyFromCredentials(creds)
+	pubFromCreds := rsacredentials.PublicKeyFromCredentials(creds)
 
 	hash, dig, err := parseDigest(signed.Digest)
 	if err != nil {
@@ -151,7 +149,7 @@ func (h *Handler) Verify(
 		if err != nil {
 			return err
 		}
-		return verifyRSA(alg, pubFromCreds, hash, dig, sig)
+		return verifyRSA(alg, pubFromCreds.PublicKey, hash, dig, sig)
 
 	case v1alpha1.MediaTypePEM:
 		sig, algFromPEM, chain, err := rsasignature.GetSignatureFromPem([]byte(signed.Signature.Value))
@@ -166,21 +164,18 @@ func (h *Handler) Verify(
 		if !ok {
 			return errors.New("leaf cert public key is not RSA")
 		}
-		if err := verifyChainWithOptionalAnchor(leaf, chain[1:], underlying, h.roots, h.now); err != nil {
+
+		underlyingCert := pubFromCreds.GetOptionalUnderlyingCert()
+
+		if err := verifyChainWithOptionalAnchor(leaf, chain[1:], underlyingCert, h.roots, h.now); err != nil {
 			return fmt.Errorf("certificate verification failed: %w", err)
 		}
+
 		// Optional issuer constraint check against the underlying certificate subject.
-		if iss := strings.TrimSpace(signed.Signature.Issuer); iss != "" && underlying != nil {
-			want, err := dn.Parse(iss)
-			if err != nil {
-				return fmt.Errorf("parse issuer %q: %w", iss, err)
-			}
-			if uc, ok := underlying.(*x509.Certificate); ok {
-				if err := dn.Match(want, uc.Subject); err != nil {
-					return fmt.Errorf("issuer mismatch: %w", err)
-				}
-			}
+		if err := verifyIssuerForUnderlyingCert(signed, underlyingCert); err != nil {
+			return fmt.Errorf("issuer verification based on underlying certificate failed: %w", err)
 		}
+
 		return verifyRSA(algFromPEM, rsaPub, hash, dig, sig)
 
 	default:
@@ -257,10 +252,14 @@ func algorithmFromPlainMedia(mt string) (string, error) {
 func verifyChainWithOptionalAnchor(
 	leaf *x509.Certificate,
 	intermediates []*x509.Certificate,
-	anchor any,
+	anchor *x509.Certificate,
 	roots *x509.CertPool,
 	now func() time.Time,
 ) error {
+	// Build empty root pool if not provided.
+	if roots == nil {
+		roots = x509.NewCertPool()
+	}
 	// Build intermediates pool if present.
 	var ip *x509.CertPool
 	if len(intermediates) > 0 {
@@ -270,11 +269,12 @@ func verifyChainWithOptionalAnchor(
 		}
 	}
 	// Add anchor into a cloned root pool if provided.
-	if ac, ok := anchor.(*x509.Certificate); ok {
+	if anchor != nil {
 		cloned := roots.Clone()
-		cloned.AddCert(ac)
+		cloned.AddCert(anchor)
 		roots = cloned
 	}
+
 	_, err := leaf.Verify(x509.VerifyOptions{
 		Intermediates: ip,
 		Roots:         roots,
@@ -282,6 +282,31 @@ func verifyChainWithOptionalAnchor(
 		CurrentTime:   now(),
 	})
 	return err
+}
+
+// verifyIssuerForUnderlyingCert checks that the issuer of the signature matches the subject of the underlying certificate.
+// If the underlying certificate is nil, this check is skipped.
+func verifyIssuerForUnderlyingCert(signed descruntime.Signature, underlyingCert *x509.Certificate) error {
+	if underlyingCert == nil {
+		return nil
+	}
+
+	iss := strings.TrimSpace(signed.Signature.Issuer)
+	if iss == "" {
+		return nil
+	}
+
+	want, err := rfc2253.Parse(iss)
+	if err != nil {
+		return fmt.Errorf("parsing issuer %q failed: %w", iss, err)
+	}
+
+	subjectDN := underlyingCert.Subject
+
+	if !rfc2253.Equal(want, subjectDN) {
+		return fmt.Errorf("issuer mismatch between %q and %q: %w", want.String(), subjectDN.String(), err)
+	}
+	return nil
 }
 
 // baseIdentity builds a credential consumer identity for RSA handlers.

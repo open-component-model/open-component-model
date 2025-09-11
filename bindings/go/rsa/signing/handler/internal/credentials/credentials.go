@@ -30,15 +30,18 @@ func PrivateKeyFromCredentials(credentials map[string]string) *rsa.PrivateKey {
 	return rsapem.ParseRSAPrivateKeyPEM(b)
 }
 
-func PublicKeyFromCredentials(credentials map[string]string) (*rsa.PublicKey, any) {
+func PublicKeyFromCredentials(credentials map[string]string) *rsapem.RSAPublicKeyPEM {
 	val := credentials[CredentialKeyPublicKeyPEM]
 	b, err := loadBytes(val, CredentialKeyPublicKeyPEMFile, credentials)
 	if err != nil || len(b) == 0 {
 		// fallback: derive from private
 		if pk := PrivateKeyFromCredentials(credentials); pk != nil {
-			return &pk.PublicKey, pk
+			return &rsapem.RSAPublicKeyPEM{
+				PublicKey:            &pk.PublicKey,
+				UnderlyingPrivateKey: pk,
+			}
 		}
-		return nil, nil
+		return nil
 	}
 	return rsapem.ParseRSAPublicKeyPEM(b)
 }

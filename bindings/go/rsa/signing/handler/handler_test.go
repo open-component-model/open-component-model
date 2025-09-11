@@ -26,12 +26,12 @@ import (
 func Test_RSA_Handler(t *testing.T) {
 	// signer A
 	aKey := mustKey(t)
-	aCert := mustSelfSigned(t, "CN=signer", aKey)
+	aCert := mustSelfSigned(t, "signer", aKey)
 	aPriv, aPub := writeKeyAndChain(t, t.TempDir(), aKey, aCert)
 
 	// signer B (mismatch)
 	bKey := mustKey(t)
-	bCert := mustSelfSigned(t, "CN=other", bKey)
+	bCert := mustSelfSigned(t, "other", bKey)
 	_, bPub := writeKeyAndChain(t, t.TempDir(), bKey, bCert)
 
 	h, err := New(false)
@@ -157,13 +157,13 @@ func Test_RSA_Handler(t *testing.T) {
 							name: "pem_signature_with_matching_credentials_pub_issuer_mismatch",
 							build: func(t *testing.T) descruntime.Signature {
 								s := signPEM(t, aPriv, aPub)
-								s.Signature.Issuer = "mismatch"
+								s.Signature.Issuer = "cn=mismatch"
 								return s
 							},
 							creds: func(t *testing.T) map[string]string {
 								return map[string]string{rsacredentials.CredentialKeyPublicKeyPEMFile: aPub}
 							},
-							wantErr: "common name \"mismatch\" does not match expected \"CN=signer\"",
+							wantErr: "issuer mismatch between \"CN=mismatch\" and \"CN=signer\"",
 						},
 						{
 							name:  "pem_signature_with_mismatched_credentials_pub_fails",
@@ -233,7 +233,6 @@ func Test_RSA_Handler(t *testing.T) {
 					}
 
 					for _, tt := range tests {
-						tt := tt
 						t.Run(tt.name, func(t *testing.T) {
 							t.Parallel()
 							sig := tt.build(t)
@@ -261,7 +260,7 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 
 			// Keys and certs.
 			key := mustKey(t)
-			cert := mustSelfSigned(t, "CN=signer", key)
+			cert := mustSelfSigned(t, "cn=signer", key)
 			dir := t.TempDir()
 			privPath, chainPath := writeKeyAndChain(t, dir, key, cert)
 
@@ -456,7 +455,7 @@ func Test_RSA_Identity(t *testing.T) {
 		// helper to build a minimal SIGNATURE PEM for a given algorithm
 		newPEM := func(t *testing.T, alg string) string {
 			t.Helper()
-			cert := mustSelfSigned(t, "CN=signer", mustKey(t))
+			cert := mustSelfSigned(t, "cn=signer", mustKey(t))
 			// dummy bytes, no chain needed for identity parsing
 			return string(internalpem.SignatureBytesToPem(alg, []byte{0x01}, cert))
 		}
@@ -611,11 +610,11 @@ func writePKCS8PrivateKeyPEM(t *testing.T, dir string, key *rsa.PrivateKey) stri
 	return p
 }
 
-func issueCert(t *testing.T, parent *x509.Certificate, parentKey *rsa.PrivateKey, subjectCN string, isCA bool, pub *rsa.PublicKey) *x509.Certificate {
+func issueCert(t *testing.T, parent *x509.Certificate, parentKey *rsa.PrivateKey, subjectcn string, isCA bool, pub *rsa.PublicKey) *x509.Certificate {
 	t.Helper()
 	tmpl := &x509.Certificate{
 		SerialNumber:          mustRand128(t),
-		Subject:               pkix.Name{CommonName: subjectCN},
+		Subject:               pkix.Name{CommonName: subjectcn},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(7 * 24 * time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature,
@@ -653,13 +652,13 @@ type chain struct {
 func buildChain(t *testing.T) chain {
 	t.Helper()
 	rootKey := mustKey(t)
-	root := issueCert(t, nil, nil, "CN=root", true, &rootKey.PublicKey)
+	root := issueCert(t, nil, nil, "cn=root", true, &rootKey.PublicKey)
 
 	intermKey := mustKey(t)
-	interm := issueCert(t, root, rootKey, "CN=intermediate", true, &intermKey.PublicKey)
+	interm := issueCert(t, root, rootKey, "cn=intermediate", true, &intermKey.PublicKey)
 
 	leafKey := mustKey(t)
-	leaf := issueCert(t, interm, intermKey, "CN=leaf", false, &leafKey.PublicKey)
+	leaf := issueCert(t, interm, intermKey, "cn=leaf", false, &leafKey.PublicKey)
 
 	return chain{root, interm, leaf, rootKey, intermKey, leafKey}
 }
