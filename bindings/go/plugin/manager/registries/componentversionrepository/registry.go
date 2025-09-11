@@ -26,7 +26,7 @@ type constructedPlugin struct {
 func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](
 	scheme *runtime.Scheme,
 	r *RepositoryRegistry,
-	p repository.ComponentVersionRepository,
+	p repository.ComponentVersionRepositoryProvider,
 	prototype T,
 ) error {
 	r.mu.Lock()
@@ -58,7 +58,7 @@ type RepositoryRegistry struct {
 	constructedPlugins map[string]*constructedPlugin  // running plugins
 
 	// internalComponentVersionRepositoryPlugins contains all plugins that have been registered using internally import statement.
-	internalComponentVersionRepositoryPlugins map[runtime.Type]repository.ComponentVersionRepository
+	internalComponentVersionRepositoryPlugins map[runtime.Type]repository.ComponentVersionRepositoryProvider
 	// scheme is the holder of schemes. This hold will contain the scheme required to
 	// construct and understand the passed in types and what / how they need to look like. The passed in scheme during
 	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
@@ -188,7 +188,12 @@ func (r *RepositoryRegistry) GetComponentVersionRepository(ctx context.Context, 
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
 		}
 
-		return p, nil
+		repo, err := p.GetComponentVersionRepository(ctx, repositorySpecification, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get component version repository: %w", err)
+		}
+
+		return repo, nil
 	}
 
 	plugin, err := r.getPlugin(ctx, typ)
@@ -219,6 +224,6 @@ func NewComponentVersionRepositoryRegistry(ctx context.Context) *RepositoryRegis
 		registry:           make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins: make(map[string]*constructedPlugin),
 		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),
-		internalComponentVersionRepositoryPlugins: make(map[runtime.Type]repository.ComponentVersionRepository),
+		internalComponentVersionRepositoryPlugins: make(map[runtime.Type]repository.ComponentVersionRepositoryProvider),
 	}
 }
