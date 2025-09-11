@@ -23,14 +23,24 @@ import (
 
 const Realm = "repository/component/resolver"
 
+// ResolverRepository implements a component version repository with a resolver
+// mechanism. It uses glob patterns to match component names to
+// determine which OCM repository specification to use for resolving
+// component versions.
 type ResolverRepository struct {
+	// GoRoutineLimit limits the number of active goroutines for concurrent
+	// operations.
 	goRoutineLimit int
 
 	repositoryProvider repository.ComponentVersionRepositoryProvider
 	credentialProvider repository.CredentialProvider
 
+	// A list of resolvers to use for matching components to repositories.
+	// This list is immutable after creation.
 	resolvers []*resolverspec.Resolver
 
+	// This cache is based on index. So, the index of the resolver in the
+	// resolver slice corresponds to the index of the repository in this slice.
 	matchersMu sync.RWMutex
 	matchers   []*matcher.ResolverMatcher
 }
@@ -47,6 +57,11 @@ type ResolverRepositoryOptions struct {
 	GoRoutineLimit int
 }
 
+// NewResolverRepository creates a new ResolverRepository with the given
+// repository provider, credential provider, and list of resolvers.
+// The repository provider is used to create repositories based on the
+// repository specifications in the resolvers.
+// The credential provider is used to resolve credentials for the repositories.
 func NewResolverRepository(_ context.Context, repositoryProvider repository.ComponentVersionRepositoryProvider, credentialProvider repository.CredentialProvider, res []*resolverspec.Resolver, opts ...ResolverRepositoryOption) (*ResolverRepository, error) {
 	options := &ResolverRepositoryOptions{}
 	for _, opt := range opts {
@@ -59,7 +74,7 @@ func NewResolverRepository(_ context.Context, repositoryProvider repository.Comp
 
 	resolvers := deepCopyResolvers(res)
 
-	matchers := make([]*matcher.ResolverMatcher, 0, len(resolvers))
+	var matchers []*matcher.ResolverMatcher
 	var resolverErrs []error
 	for i, resolver := range resolvers {
 		m, err := matcher.NewResolverMatcher(resolver.ComponentName)
@@ -85,6 +100,10 @@ func NewResolverRepository(_ context.Context, repositoryProvider repository.Comp
 	}, nil
 }
 
+// GetComponentVersion retrieves a component version from the first repository
+// that matches the component name. If no repository matches the component name,
+// or if the component version is not found in any matching repository, an error
+// is returned.
 func (r *ResolverRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
 	repos := r.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -104,6 +123,12 @@ func (r *ResolverRepository) GetComponentVersion(ctx context.Context, component,
 	return nil, fmt.Errorf("component version %s/%s not found in any repository", component, version)
 }
 
+// ListComponentVersions lists all versions for a given component from all
+// matching repositories. The versions are deduplicated and sorted before being
+// returned. If no repository matches the component name, an empty list is
+// returned.
+// If a repository returns an error while listing versions, the error is
+// accumulated and returned after all repositories have been queried.
 func (r *ResolverRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
 	repos := r.RepositoriesForComponentIterator(ctx, component)
 
@@ -172,10 +197,6 @@ func (r *ResolverRepository) RepositoriesForComponentIterator(ctx context.Contex
 	}
 }
 
-func (r *ResolverRepository) GetResolvers() []*resolverspec.Resolver {
-	return deepCopyResolvers(r.resolvers)
-}
-
 func (r *ResolverRepository) matchesAnyResolver(component string) bool {
 	r.matchersMu.RLock()
 	defer r.matchersMu.RUnlock()
@@ -190,14 +211,14 @@ func (r *ResolverRepository) matchesAnyResolver(component string) bool {
 func (r *ResolverRepository) getRepositoryForSpecification(ctx context.Context, specification *runtime.Raw) (repository.ComponentVersionRepository, error) {
 	var credentials map[string]string
 	consumerIdentity, err := r.repositoryProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, specification)
-	if err == nil {
-		if r.credentialProvider != nil {
-			if credentials, err = r.credentialProvider.Resolve(ctx, consumerIdentity); err != nil {
-				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
-			}
+	if err != nil {
+		return nil, fmt.Errorf("getting credential consumer identity for repository %q failed: %w", specification.Name, err)
+	}
+
+	if r.credentialProvider != nil {
+		if credentials, err = r.credentialProvider.Resolve(ctx, consumerIdentity); err != nil {
+			return nil, fmt.Errorf("getting credentials for resource %q failed: %w", specification.Name, err)
 		}
-	} else {
-		slog.DebugContext(ctx, "no credentials found for repository", "realm", Realm, "repository", specification, "error", err)
 	}
 
 	repo, err := r.repositoryProvider.GetComponentVersionRepository(ctx, specification, credentials)
@@ -218,6 +239,8 @@ func deepCopyResolvers(resolvers []*resolverspec.Resolver) []*resolverspec.Resol
 	return copied
 }
 
+// AddComponentVersion adds a new component version to the first repository
+// that matches the component name.
 func (r *ResolverRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
 	repos := r.RepositoriesForComponentIterator(ctx, descriptor.Component.Name)
 	for repo, err := range repos {
@@ -229,6 +252,8 @@ func (r *ResolverRepository) AddComponentVersion(ctx context.Context, descriptor
 	return fmt.Errorf("no repository found for component %s to add version", descriptor.Component.Name)
 }
 
+// AddLocalResource adds a local resource to the first repository
+// that matches the component name.
 func (r *ResolverRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
 	repos := r.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -240,6 +265,10 @@ func (r *ResolverRepository) AddLocalResource(ctx context.Context, component, ve
 	return nil, fmt.Errorf("no repository found for component %s to add local resource", component)
 }
 
+// GetLocalResource retrieves a local resource from the first repository
+// that matches the component name. If no repository matches the component name,
+// or if the local resource is not found in any matching repository, an error
+// is returned.
 func (r *ResolverRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
 	repos := r.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -259,6 +288,8 @@ func (r *ResolverRepository) GetLocalResource(ctx context.Context, component, ve
 	return nil, nil, fmt.Errorf("local resource with identity %v in component version %s/%s not found in any repository", identity, component, version)
 }
 
+// AddLocalSource adds a local source to the first repository
+// that matches the component name.
 func (r *ResolverRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
 	repos := r.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
@@ -270,6 +301,10 @@ func (r *ResolverRepository) AddLocalSource(ctx context.Context, component, vers
 	return nil, fmt.Errorf("no repository found for component %s to add local source", component)
 }
 
+// GetLocalSource retrieves a local source from the first repository
+// that matches the component name. If no repository matches the component name,
+// or if the local source is not found in any matching repository, an error
+// is returned.
 func (r *ResolverRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
 	repos := r.RepositoriesForComponentIterator(ctx, component)
 	for repo, err := range repos {
