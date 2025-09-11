@@ -102,7 +102,7 @@ func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(m.data)), nil
 }
 
-func TestConstructWithSourceAndResource(t *testing.T) {
+func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 	// Create mock input methods for both source and resource
 	mockSourceInput := &mockSourceInputMethod{
 		processedSource: &descriptor.Source{
@@ -213,9 +213,9 @@ components:
         input:
           type: mock/v1
     componentReferences:
-      - name: test-component-external-ref-b
+      - name: test-component-external-ref-a
         version: v1.0.0
-        componentName: ocm.software/test-component-external-ref-b
+        componentName: ocm.software/test-component-external-ref-a
 `
 
 	var constructor constructorv1.ComponentConstructor
@@ -238,20 +238,6 @@ components:
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    "ocm.software/test-component-external-ref-a",
-					Version: "v1.0.0",
-				},
-			},
-			Provider: descriptor.Provider{
-				Name: "external-provider",
-			},
-		},
-	}))
-
-	assert.NoError(t, externalRepo.AddComponentVersion(t.Context(), &descriptor.Descriptor{
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    "ocm.software/test-component-external-ref-b",
 					Version: "v1.0.0",
 				},
 			},

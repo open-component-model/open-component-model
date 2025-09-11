@@ -70,11 +70,7 @@ func (p *vertexProcessor) processInternalComponent(ctx context.Context, vertex *
 		// Since ProcessTopology is called with reverse, referenced components
 		// must have been processed already. Therefore, we expect the descriptor
 		// to be available.
-		untypedRefDescriptor, ok := refVertex.GetAttribute(attributeComponentDescriptor)
-		if !ok {
-			return fmt.Errorf("missing descriptor for dependency %q of component %q", identity.String(), component.ToIdentity())
-		}
-		refDescriptor := untypedRefDescriptor.(*descriptor.Descriptor)
+		refDescriptor := refVertex.MustGetAttribute(attributeComponentDescriptor).(*descriptor.Descriptor)
 		referencedComponents[ref.ToIdentity().String()] = refDescriptor
 	}
 	if p.constructor.opts.OnStartComponentConstruct != nil {

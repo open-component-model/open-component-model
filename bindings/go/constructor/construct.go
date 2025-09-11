@@ -40,7 +40,8 @@ func ConstructDefault(ctx context.Context, constructor *constructor.ComponentCon
 }
 
 type DefaultConstructor struct {
-	componentDigestCache map[string]*descriptor.Digest
+	componentDigestCacheMu sync.Mutex
+	componentDigestCache   map[string]*descriptor.Digest
 
 	opts Options
 }
@@ -126,7 +127,8 @@ func (c *DefaultConstructor) construct(ctx context.Context, dag *syncdag.Directe
 
 func NewDefaultConstructor(opts Options) Constructor {
 	return &DefaultConstructor{
-		opts: opts,
+		componentDigestCache: make(map[string]*descriptor.Digest),
+		opts:                 opts,
 	}
 }
 
@@ -527,27 +529,40 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 		"ref", reference.ToIdentity(),
 	)
 	logger.Debug("processing reference")
-	var (
-		err              error
-		referencedDigest *descriptor.Digest
-	)
 
-	referencedDigest, cached := c.componentDigestCache[reference.ToComponentIdentity().String()]
-	if cached {
-		slog.DebugContext(ctx, "using cached digest for component reference", "component", reference.ToIdentity())
-	} else {
-		slog.DebugContext(ctx, "calculating digest for component reference", "component", reference.ToIdentity())
-		referencedDigest, err = hashing.DigestNormalizedDescriptor(referencedComponent, digest.SHA256, v4alpha1.Algorithm)
-		if err != nil {
-			return nil, fmt.Errorf("error calculating digest for component reference %q: %w", reference.ToIdentity().String(), err)
-		}
+	referencedComponentDigest, err := c.getComponentDigest(ctx, reference.ToIdentity().String(), referencedComponent)
+	if err != nil {
+		return nil, fmt.Errorf("error getting digest for referenced component %q: %w", reference.ToIdentity(), err)
 	}
 
 	ref := constructor.ConvertToDescriptorReference(reference)
-	ref.Digest = *referencedDigest
+	ref.Digest = *referencedComponentDigest
 
 	logger.Debug("reference processed successfully")
 	return ref, nil
+}
+
+// getComponentDigest tries to get the digest for a particular component from
+// cache. If there is no cached digest for that particular component, it
+// calculates the digest and stores it in the cache.
+// We want this operation to be atomar, to avoid concurrent calls for the
+// same component to have cache misses. That would lead to multiple
+// calculations of the same digest.
+func (c *DefaultConstructor) getComponentDigest(ctx context.Context, componentIdentity string, referencedComponent *descriptor.Descriptor) (*descriptor.Digest, error) {
+	c.componentDigestCacheMu.Lock()
+	defer c.componentDigestCacheMu.Unlock()
+
+	if componentDigest, cached := c.componentDigestCache[componentIdentity]; cached {
+		slog.DebugContext(ctx, "component digest found in cache", "component", componentIdentity)
+		return componentDigest, nil
+	}
+	slog.DebugContext(ctx, "component digest not found in cache", "component", componentIdentity)
+	referencedDigest, err := hashing.DigestNormalizedDescriptor(referencedComponent, digest.SHA256, v4alpha1.Algorithm)
+	if err != nil {
+		return nil, fmt.Errorf("error calculating digest for component reference %q: %w", componentIdentity, err)
+	}
+	c.componentDigestCache[componentIdentity] = referencedDigest
+	return referencedDigest, nil
 }
 
 // addColocatedResourceLocalBlob adds a local blob to the component version repository and defaults fields relevant

@@ -104,6 +104,6 @@ func (d *neighborDiscoverer) discoverExternalComponent(ctx context.Context, vert
 	vertex.Attributes.Store(attributeComponentDescriptor, desc)
 
 	// TODO(fabianburth): once we support recursive, we need to discover the
-	//  neighbors here (https://github.com/open-component-model/ocm-project/issues/666)
+	//   neighbors here (https://github.com/open-component-model/ocm-project/issues/666)
 	return nil, nil
 }
