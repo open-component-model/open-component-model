@@ -195,10 +195,6 @@ type RepositorySpec struct {
 	// that are available in this mock repository.
 	Components map[string][]string
 
-	// Resources is a map of component:version to a list of resource identities
-	// of resources that are available in this mock repository.
-	Resources map[string]map[string]string
-
 	// Policy defines additional behavior of the mock repository.
 	Policy string
 }
@@ -216,7 +212,6 @@ func (r *RepositorySpec) DeepCopyTyped() runtime.Typed {
 		Type:       r.Type,
 		Name:       r.Name,
 		Components: maps.Clone(r.Components),
-		Resources:  maps.Clone(r.Resources),
 		Policy:     r.Policy,
 	}
 }
