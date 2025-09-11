@@ -78,11 +78,6 @@ func (d *neighborDiscoverer) discoverInternalComponent(vertex *syncdag.Vertex[st
 	return neighbors, nil
 }
 
-// TODO(fabianburth): Once we support recursive, we need to discover
-//
-//	their neighbors too. Are there valid cases where an external
-//	component might reference a component in the constructor?
-//
 // discoverExternalComponent discovers a component from an external repository.
 // So, a component that is not part of the current constructor specification.
 func (d *neighborDiscoverer) discoverExternalComponent(ctx context.Context, vertex *syncdag.Vertex[string]) ([]string, error) {
@@ -106,5 +101,7 @@ func (d *neighborDiscoverer) discoverExternalComponent(ctx context.Context, vert
 
 	// TODO(fabianburth): once we support recursive, we need to discover the
 	//   neighbors here (https://github.com/open-component-model/ocm-project/issues/666)
+	//   Are there valid cases where an external component might reference a
+	//   component in the constructor?
 	return nil, nil
 }
