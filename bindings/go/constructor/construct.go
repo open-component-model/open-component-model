@@ -88,11 +88,15 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 	if err := c.discovery(ctx, dag, componentConstructor); err != nil {
 		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
-	descriptors, err := c.construct(ctx, dag)
-	if err != nil {
+	if err := c.construct(ctx, dag); err != nil {
 		return nil, fmt.Errorf("failed to constructComponent components from graph: %w", err)
 	}
-	return descriptors, nil
+
+	constructedDescriptors := make([]*descriptor.Descriptor, len(componentConstructor.Components))
+	for index, component := range componentConstructor.Components {
+		constructedDescriptors[index] = dag.MustGetVertex(component.ToIdentity().String()).MustGetAttribute(attributeComponentDescriptor).(*descriptor.Descriptor)
+	}
+	return constructedDescriptors, nil
 }
 
 func (c *DefaultConstructor) discovery(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
@@ -109,15 +113,15 @@ func (c *DefaultConstructor) discovery(ctx context.Context, dag *syncdag.Directe
 	return nil
 }
 
-func (c *DefaultConstructor) construct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) ([]*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) construct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) error {
 	processor := newVertexProcessor(c, dag)
 
 	slog.DebugContext(ctx, "starting processing of discovered component graph", "num_components", dag.LengthVertices())
 	if err := dag.ProcessTopology(ctx, processor, syncdag.WithReverseTopology(), syncdag.WithProcessGoRoutineLimit(c.opts.ConcurrencyLimit)); err != nil {
-		return nil, fmt.Errorf("failed to process component constructor graph: %w", err)
+		return fmt.Errorf("failed to process component constructor graph: %w", err)
 	}
-	slog.DebugContext(ctx, "component construction completed successfully", "num_components", len(processor.descriptors))
-	return processor.descriptors, nil
+	slog.DebugContext(ctx, "component construction completed successfully", "num_components", dag.LengthVertices())
+	return nil
 }
 
 func NewDefaultConstructor(opts Options) Constructor {
