@@ -45,7 +45,7 @@ type Handler struct {
 	now   func() time.Time
 }
 
-// New returns a Handler. If useSystemRoots is true, system trust roots are loaded.
+// New returns a Handler. If useSystemRoots is true, system trust roots are loaded, otherwise an empty pool is used.
 func New(useSystemRoots bool) (*Handler, error) {
 	var (
 		roots *x509.CertPool
