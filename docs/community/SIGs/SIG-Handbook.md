@@ -40,14 +40,18 @@ Fill out the [SIG Submission Template](SIG-Submission-Template.md) with all requ
 
 Submit your proposal and charter as a new issue in the OCM repository ([create issue](https://github.com/open-component-model/open-component-model/issues)). The OCM Technical Steering Committee (TSC) reviews and approves proposals through a formal vote. The proposal must be added to the TSC meeting agenda. Chair and Tech Lead must be proposed by the SIG and approved by the TSC.
 
-Once approved, announce your SIG in the community (mailing list, Slack, etc.) and update documentation. Add your SIG to `sigs.yaml` (see example/template below) and update documentation as needed.
+Once approved, announce your SIG in the community (mailing list, Slack, etc.) and update documentation. Add your SIG to [`sigs.yaml`](sigs.yaml) and update documentation as needed.
+
+In case the submission is not approved, the TSC will provide feedback to the proposers for revision and resubmission.
 
 ### 2.4 Decision-Making & TSC Approval
 
-- Prefer consensus; if consensus cannot be reached, a simple majority vote among Voting Members decides.
-- Quorum for votes is at least 50% of Voting Members present.
-- Changes to the SIG charter, leadership, or the dissolution of a SIG require TSC approval.
-- All decisions must be documented in meeting notes and made public in the OCM community repository.
+Routine decisions are made by consensus; if consensus cannot be reached, a simple majority vote of voting members present (with quorum) decides.
+
+Quorum for votes requires at least 50% of all voting members to be present.
+Major decisions (changes to the SIG charter, leadership, or dissolution) require a two-thirds supermajority of all voting members and formal approval by the TSC (majority vote).
+
+All decisions, votes, and meeting notes must be documented and made public in the OCM community repository.
 
 ### 2.5 SIG Lifecycle
 
