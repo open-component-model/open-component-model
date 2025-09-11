@@ -12,11 +12,18 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/renovate.json5
+      - .github/workflows/renovate.yml
 
 env:
   cache_archive: renovate_cache.tar.gz
   cache_dir: /tmp/renovate/cache/renovate/repository
   cache_key: renovate-cache
+  RENOVATE_CONFIG_FILE: .github/renovate.json5
 
 jobs:
   renovate:
@@ -24,13 +31,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-
-      - name: Generate token
-        id: generate_token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
         with:
-          app_id: ${{ secrets.OCMBOT_APP_ID }}
-          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          sparse-checkout:
+            ${{ env.RENOVATE_CONFIG_FILE }}
 
       # Restore previous cache artifact if enabled
       - name: Restore renovate cache artifact
@@ -54,25 +57,45 @@ jobs:
           sudo chown -R 12021:0 /tmp/renovate/
           ls -R "$cache_dir" || true
 
-      - name: Self-hosted Renovate
+      - if: ${{ github.event_name != 'pull_request' && github.repository_owner == 'open-component-model' }}
+        id: generate_token
+        uses: actions/create-github-app-token@a8d616148505b5069dccd32f177bb87d7f39123b # v2.1.1
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+
+      - name: Ensure Dry-Run on Pull Requests
+        if: ${{ github.event_name == 'pull_request' }}
+        run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
+
+      - name: Run
         uses: renovatebot/github-action@13da59cf7cfbd3bfea72ce26752ed22edf747ce9 # v43.0.2
         with:
-          configurationFile: .github/config/renovate.json5
-          token: ${{ steps.generate_token.outputs.token }}
+          env-regex: |
+            ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|GONOPROXY|GOPRIVATE|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
         env:
+          GONOPROXY: 'ocm.software/open-component-model/*'
+          GOPRIVATE: 'ocm.software/open-component-model/*'
+          RENOVATE_ONBOARDING: 'false'
+          RENOVATE_USERNAME: 'ocmbot[bot]'
+          RENOVATE_PLATFORM: 'github'
           RENOVATE_PLATFORM_COMMIT: 'true'
           RENOVATE_REPOSITORIES: "${{ github.repository }}"
           RENOVATE_REPOSITORY_CACHE: ${{ github.event_name == 'workflow_dispatch' && inputs.repoCache || 'enabled' }}
+          RENOVATE_ALLOWED_ENV: 'GONOPROXY,GOPRIVATE'
+          RENOVATE_ALLOWED_COMMANDS: |
+            ^(command -v go >/dev/null 2>&1 \|\| exit 0;\s*)?find\s+\.\s+-name\s+\"go\.mod\".*-path\s+'\*/integration/\*'.*go\s+mod\s+tidy
 
       - name: Compress renovate cache
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
+        if: ${{ env.RENOVATE_DRY_RUN == '' && (github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled') }}
         run: |
           set -euxo pipefail
           ls "$cache_dir" || true
           tar -czvf "$cache_archive" -C "$cache_dir" .
 
       - name: Upload renovate cache artifact
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled' }}
+        if: ${{ env.RENOVATE_DRY_RUN == '' && (github.event_name != 'workflow_dispatch' || inputs.repoCache != 'disabled') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ env.cache_key }}

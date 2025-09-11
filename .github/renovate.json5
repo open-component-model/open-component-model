@@ -14,10 +14,20 @@
   'git-submodules': {
     enabled: true,
   },
-  env: {
-    GONOPROXY: 'ocm.software/open-component-model',
-    GOPRIVATE: 'ocm.software/open-component-model',
+  'minimumReleaseAge': '14 days',
+  'branchPrefix': 'renovate/',
+  'gitAuthor': 'ocmbot[bot] <125909804+ocmbot[bot]@users.noreply.github.com>',
+  'gitIgnoredAuthors': [
+    '125909804+ocmbot[bot]@users.noreply.github.com',
+  ],
+  prConcurrentLimit: 0,
+  prHourlyLimit: 0,
+  patch: {
+    automerge: true,
+    automergeType: "pr"
   },
+  separateMinorPatch: true,
+  separateMultipleMajor: true,
   packageRules: [
     {
       matchManagers: [
