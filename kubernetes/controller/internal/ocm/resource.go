@@ -6,58 +6,29 @@ import (
 	"fmt"
 
 	ocmctx "ocm.software/ocm/api/ocm"
-	"ocm.software/ocm/api/ocm/compdesc"
 	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	"ocm.software/ocm/api/ocm/selectors"
+	"ocm.software/ocm/api/ocm/resourcerefs"
 	"ocm.software/ocm/api/ocm/tools/signing"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func GetResourceAccessForComponentVersion(
-	ctx context.Context,
-	session ocmctx.Session,
-	cv ocmctx.ComponentVersionAccess,
-	reference v1.ResourceReference,
-	cdSet *Descriptors,
-	resolver ocmctx.ComponentVersionResolver,
-	skipVerification bool,
-) (ocmctx.ResourceAccess, ocmctx.ComponentVersionAccess, error) {
+func GetResourceAccessForComponentVersion(ctx context.Context, cv ocmctx.ComponentVersionAccess, reference v1.ResourceReference, resolver ocmctx.ComponentVersionResolver, skipVerification bool) (ocmctx.ResourceAccess, ocmctx.ComponentVersionAccess, error) {
 	logger := log.FromContext(ctx)
-	// Resolve resource resourceReference to get resource and its component descriptor
-	resourceDesc, resourceCompDesc, err := compdesc.ResolveResourceReference(cv.GetDescriptor(), reference, compdesc.NewComponentVersionSet(cdSet.List...))
+
+	resAcc, cvAcc, err := resourcerefs.ResolveResourceReference(cv, reference, resolver)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to resolve resource reference: %w", err)
 	}
 
-	resourceCV, err := session.LookupComponentVersion(resolver, resourceCompDesc.GetName(), resourceCompDesc.GetVersion())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to lookup component version for resource: %w", err)
-	}
-
-	resourceAccesses, err := resourceCV.SelectResources(selectors.Identity(resourceDesc.GetIdentity(resourceCompDesc.GetResources())))
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to select resources: %w", err)
-	}
-
-	var resourceAccess ocmctx.ResourceAccess
-	switch len(resourceAccesses) {
-	case 0:
-		return nil, nil, errors.New("no resources selected")
-	case 1:
-		resourceAccess = resourceAccesses[0]
-	default:
-		return nil, nil, errors.New("cannot determine the resource access unambiguously")
-	}
-
 	if !skipVerification {
-		if err := verifyResource(resourceAccess, resourceCV); err != nil {
+		if err := verifyResource(resAcc, cvAcc); err != nil {
 			return nil, nil, fmt.Errorf("failed to verify resource: %w", err)
 		}
 	} else {
 		logger.V(1).Info("skipping resource verification")
 	}
 
-	return resourceAccess, resourceCV, nil
+	return resAcc, cvAcc, nil
 }
 
 // verifyResource verifies the resource digest with the digest from the component version access and component descriptor.
