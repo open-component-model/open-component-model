@@ -3,12 +3,11 @@ package input
 import (
 	"context"
 	"fmt"
-	"path"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
-	descriptorruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -89,11 +88,13 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 
 	// if the path is not set, create remote resource access
 	if helm.HelmRepository != "" && helm.Path == "" {
-		remoteResource, err := i.createRemoteResourceAccess(helm)
+		remoteResource, err := i.createRemoteResourceAccess(resource, helm)
 		if err != nil {
 			return nil, fmt.Errorf("error creating remote resource access: %w", err)
 		}
-		result.ProcessedResource = remoteResource
+
+		res := constructorruntime.ConvertToDescriptorResource(remoteResource)
+		result.ProcessedResource = res
 	}
 
 	return result, nil
@@ -101,45 +102,22 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 
 // createRemoteResourceAccess creates a resource descriptor with remote access information
 // for helm charts stored in remote repositories.
-func (i *InputMethod) createRemoteResourceAccess(helm v1.Helm) (*descriptorruntime.Resource, error) {
+func (i *InputMethod) createRemoteResourceAccess(resource *constructorruntime.Resource, helm v1.Helm) (*constructorruntime.Resource, error) {
 	ociAccess := &ocispec.OCIImage{
-		Type: runtime.Type{
-			Name: ocispec.LegacyType3, // TODO: is this correct? `helmResource` ?
-		},
-		ImageReference: helm.HelmRepository,
+		ImageReference: helm.Repository, // TODO: Get the right format.
+	}
+	// set the default type for OCIImage
+	if _, err := access.Scheme.DefaultType(ociAccess); err != nil {
+		return nil, fmt.Errorf("error setting default type for OCIImage: %w", err)
 	}
 
 	// TODO: Support version hints? Maybe the helmRepository should be a URL with version?
 	if helm.Version != "" {
-		ociAccess.ImageReference = helm.HelmRepository + ":" + helm.Version // https://repo/chart.6.3.1.tgz
+		ociAccess.ImageReference = helm.Repository + ":" + helm.Version // https://repo/chart.6.3.1.tgz
 	}
 
-	// TODO: Very dumb override if repository hint is set. Is this enough?
-	if helm.Repository != "" {
-		ociAccess.ImageReference = helm.Repository
-		if helm.Version != "" {
-			ociAccess.ImageReference = helm.Repository + ":" + helm.Version
-		}
-	}
-
-	// TODO: How do we create these? :D
-	resource := &descriptorruntime.Resource{
-		ElementMeta: descriptorruntime.ElementMeta{
-			ObjectMeta: descriptorruntime.ObjectMeta{
-				Name:    extractChartNameFromPath(helm.HelmRepository),
-				Version: helm.Version,
-			},
-		},
-		Type:     HelmRepositoryType,
-		Relation: descriptorruntime.ExternalRelation,
-		Access:   ociAccess,
-	}
+	resource.Access = ociAccess
+	resource.Type = HelmRepositoryType
 
 	return resource, nil
-}
-
-// extractChartNameFromPath extracts the chart name from the path or returns a default name
-func extractChartNameFromPath(ref string) string {
-	// TODO: for now, use the last part of the path as chart name
-	return path.Base(ref)
 }

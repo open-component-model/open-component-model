@@ -127,11 +127,6 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resource *constructorruntime.Resource
-		args     struct {
-			name    string
-			version string
-			t       string
-		}
 	}{
 		{
 			name: "remote chart with version https",
@@ -141,19 +136,11 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 						Type: runtime.Type{
 							Name: v1.Type,
 						},
+						Repository:     "https://internal.charts.example.com/charts",
 						HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz",
 						Version:        "6.9.1",
 					},
 				},
-			},
-			args: struct {
-				name    string
-				version string
-				t       string
-			}{
-				name:    "podinfo-6.9.1.tgz",
-				version: "6.9.1",
-				t:       input.HelmRepositoryType,
 			},
 		},
 		{
@@ -164,19 +151,11 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 						Type: runtime.Type{
 							Name: v1.Type,
 						},
+						Repository:     "https://internal.charts.example.com/charts",
 						HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo",
 						Version:        "6.9.1",
 					},
 				},
-			},
-			args: struct {
-				name    string
-				version string
-				t       string
-			}{
-				name:    "podinfo",
-				version: "6.9.1",
-				t:       input.HelmRepositoryType,
 			},
 		},
 	}
@@ -192,9 +171,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 			assert.NotNil(t, result.ProcessedResource, "should have remote resource access info")
 
 			// Verify the remote resource structure
-			assert.Equal(t, tc.args.name, result.ProcessedResource.Name, "chart name should be extracted correctly")
-			assert.Equal(t, tc.args.version, result.ProcessedResource.Version, "version should match specification")
-			assert.Equal(t, tc.args.t, result.ProcessedResource.Type, "resource type should be helmRepository")
+			assert.Equal(t, input.HelmRepositoryType, result.ProcessedResource.Type, "resource type should be helmRepository")
 
 			// Verify blob data is not empty by reading some content
 			reader, err := result.ProcessedBlobData.ReadCloser()
