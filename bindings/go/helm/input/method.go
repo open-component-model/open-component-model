@@ -104,14 +104,16 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 // for helm charts stored in remote repositories.
 func (i *InputMethod) createRemoteResourceAccess(resource *constructorruntime.Resource, helm v1.Helm) (*constructorruntime.Resource, error) {
 	ociAccess := &ocispec.OCIImage{
-		ImageReference: helm.Repository, // TODO: Get the right format.
+		ImageReference: helm.Repository,
 	}
+
 	// set the default type for OCIImage
 	if _, err := access.Scheme.DefaultType(ociAccess); err != nil {
 		return nil, fmt.Errorf("error setting default type for OCIImage: %w", err)
 	}
 
-	// TODO: Support version hints? Maybe the helmRepository should be a URL with version?
+	// TODO: Support version hints. We need to figure out how to do this in a way that is compatible with the OCIImage spec.
+	// For now we just use the version as the tag.
 	if helm.Version != "" {
 		ociAccess.ImageReference = helm.Repository + ":" + helm.Version // https://repo/chart.6.3.1.tgz
 	}
