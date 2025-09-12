@@ -50,9 +50,10 @@ func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](
 }
 
 // RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
+// It implements the ComponentVersionRepositoryProvider interface.
 type RepositoryRegistry struct {
 	ctx                context.Context
-	mu                 sync.Mutex
+	mu                 sync.RWMutex
 	registry           map[runtime.Type]mtypes.Plugin // Have this as a single plugin for read/write
 	constructedPlugins map[string]*constructedPlugin  // running plugins
 
@@ -64,6 +65,9 @@ type RepositoryRegistry struct {
 	// that their type is registered or not.
 	scheme *runtime.Scheme
 }
+
+// Ensure RepositoryRegistry implements ComponentVersionRepositoryProvider interface
+var _ repository.ComponentVersionRepositoryProvider = (*RepositoryRegistry)(nil)
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
 // All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
@@ -134,16 +138,49 @@ loop:
 	return repoPlugin, nil
 }
 
-// GetPlugin retrieves a plugin for the given specification type.
+// GetComponentVersionRepositoryCredentialConsumerIdentity retrieves the consumer identity
+// for a component version repository based on a given repository specification.
+func (r *RepositoryRegistry) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Check if this is an internal plugin first
+	typ := repositorySpecification.GetType()
+	if ok := r.scheme.IsRegistered(typ); ok {
+		// For internal plugins, we don't have credential identity support yet
+		// Return empty identity for now
+		return runtime.Identity{}, nil
+	}
+
+	// For external plugins, get the plugin and ask for identity
+	plugin, err := r.getPlugin(ctx, typ)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
+	}
+
+	request := &v1.GetIdentityRequest[runtime.Typed]{
+		Typ: repositorySpecification,
+	}
+
+	result, err := plugin.GetIdentity(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get identity: %w", err)
+	}
+
+	return result.Identity, nil
+}
+
+// GetComponentVersionRepository retrieves a component version repository based on a given
+// repository specification and credentials.
 // It first checks for internal plugins registered via RegisterInternalComponentVersionRepositoryPlugin,
 // then falls back to external plugins if no internal plugin is found.
-func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (repository.ComponentVersionRepositoryProvider, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *RepositoryRegistry) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	// look for an internal implementation that actually implements the interface
-	_, _ = r.scheme.DefaultType(spec)
-	typ := spec.GetType()
+	_, _ = r.scheme.DefaultType(repositorySpecification)
+	typ := repositorySpecification.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
 	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalComponentVersionRepositoryPlugins[typ]
@@ -151,7 +188,12 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
 		}
 
-		return p, nil
+		repo, err := p.GetComponentVersionRepository(ctx, repositorySpecification, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get component version repository: %w", err)
+		}
+
+		return repo, nil
 	}
 
 	plugin, err := r.getPlugin(ctx, typ)
@@ -159,7 +201,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
 	}
 
-	return r.externalToComponentVersionRepositoryProviderConverter(plugin, r.scheme), nil
+	return r.externalToComponentVersionRepository(plugin, r.scheme, repositorySpecification, credentials), nil
 }
 
 func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed], error) {

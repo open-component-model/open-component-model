@@ -55,20 +55,17 @@ func TestPluginManager(t *testing.T) {
 		}
 	})
 
-	proto, err := scheme.NewObject(typ)
-	require.NoError(t, err)
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
-	require.NoError(t, err)
-	provider, err := plugin.GetComponentVersionRepository(ctx, &dummyv1.Repository{
+	spec := &dummyv1.Repository{
 		Type:    typ,
 		BaseUrl: "https://ocm.software/test",
-	}, nil)
+	}
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, spec, nil)
 	require.NoError(t, err)
-	desc, err := provider.GetComponentVersion(ctx, "test-component", "1.0.0")
+	desc, err := plugin.GetComponentVersion(ctx, "test-component", "1.0.0")
 	require.NoError(t, err)
 	require.Equal(t, "test-component:1.0.0", desc.String())
 
-	blob, response, err := provider.GetLocalResource(ctx, "test-resource", "v0.0.1", nil)
+	blob, response, err := plugin.GetLocalResource(ctx, "test-resource", "v0.0.1", nil)
 	require.NoError(t, err)
 	reader, err := blob.ReadCloser()
 	require.NoError(t, err)
@@ -77,7 +74,7 @@ func TestPluginManager(t *testing.T) {
 	require.Equal(t, "test-resource", string(content))
 	require.Equal(t, "test-resource", response.Name)
 
-	sourceBlob, sourceResponse, err := provider.GetLocalSource(ctx, "test-source", "v0.0.1", nil)
+	sourceBlob, sourceResponse, err := plugin.GetLocalSource(ctx, "test-source", "v0.0.1", nil)
 	require.NoError(t, err)
 	reader, err = sourceBlob.ReadCloser()
 	require.NoError(t, err)
@@ -121,9 +118,11 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
 		}
 	})
-	proto, err := scheme.NewObject(typ)
-	require.NoError(t, err)
-	_, err = pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
+	spec := &dummyv1.Repository{
+		Type: typ,
+		BaseUrl: "test",
+	}
+	_, err = pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, spec, nil)
 	require.NoError(t, err)
 
 	// we need some time for the logs to be streamed back
@@ -192,22 +191,22 @@ func TestPluginManagerCancelContext(t *testing.T) {
 			Version: "v1",
 		},
 	}
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, proto, nil)
 	require.NoError(t, err)
-	_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+	_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
 	require.NoError(t, err)
 
 	// cancelling the outer context should not shut down the plugin only the ongoing request.
 	t.Log("cancelling outer context")
 	cancel()
-	_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+	_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
 	require.NoError(t, err)
 	//require.NoError(t, plugin.Ping(context.Background()))
 	t.Log("plugin is still alive, cancelling plugin context")
 	baseCancel()
 	require.Eventually(t, func() bool {
-		_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
-		return err == nil
+		_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
+		return err != nil
 	}, 1*time.Second, 100*time.Millisecond)
 	t.Log("plugin is stopped")
 }
@@ -247,16 +246,16 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 			Version: "v1",
 		},
 	}
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, proto, nil)
 	require.NoError(t, err)
-	_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+	_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
 	require.NoError(t, err)
 
 	// cancelling the outer context should not shut down the plugin only the ongoing request.
 	require.NoError(t, pm.Shutdown(ctx))
 	require.Eventually(t, func() bool {
-		_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
-		return err == nil
+		_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
+		return err != nil
 	}, 1*time.Second, 100*time.Millisecond)
 	_, err = os.Stat("/tmp/test-plugin-plugin.socket")
 	require.Error(t, err)
@@ -300,10 +299,10 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 			Version: "v1",
 		},
 	}
-	plugin, err := pm.ComponentVersionRepositoryRegistry.GetPlugin(ctx, proto)
+	plugin, err := pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, proto, nil)
 	//plugin, err := componentversionrepository.GetReadWriteComponentVersionRepositoryPluginForType(ctx, pm.ComponentVersionRepositoryRegistry, proto, scheme)
 	require.NoError(t, err)
-	_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
+	_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
 	require.NoError(t, err)
 
 	// Cancelling the shutdown context still should allow a graceful shutdown of the plugin because
@@ -313,8 +312,8 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 	cancel()
 
 	require.Eventually(t, func() bool {
-		_, err = plugin.GetComponentVersionRepository(context.Background(), proto, nil)
-		return err == nil
+		_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
+		return err != nil
 	}, 1*time.Second, 100*time.Millisecond)
 
 	// we need some time for the logs to be streamed back
