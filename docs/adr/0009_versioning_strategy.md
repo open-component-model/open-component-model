@@ -30,7 +30,7 @@ We maintain a monorepo with multiple components: `ocm-cli`, `ocm-controller`, an
 ```text
 /VERSION          <- Root version (ocm)
 ocm-cli/VERSION
-ocm-controller/VERSION
+kubernetes/controller/VERSION
 ```
 
 **Advantages:**
@@ -77,9 +77,9 @@ ocm-controller: v0.29.0
 
 ```text
 /VERSION          <- ocm (root)
-/ocm-cli/VERSION
-/ocm-controller/VERSION
 /VERSIONS.yaml    <- snapshot of all components
+ocm-cli/VERSION
+kubernetes/controller/VERSION
 ```
 
 As a simplification, the root VERSION file for ocm can be omitted entirely, with the VERSIONS.yaml serving as the single source of truth. It contains both the root and all sub-component versions, simplifying automation and ensuring a consistent snapshot for releases and documentation.
@@ -99,12 +99,13 @@ As a simplification, the root VERSION file for ocm can be omitted entirely, with
 
 ---
 
-## Principles for Versioning of `ocm` Root Component
+## Principles for SemVer of `ocm` Root Component
 
-* **Patch bump (x.y.z → z++)**: triggered by sub-component patch releases.
-* **Minor bump (x.y.z → y++)**: triggered by sub-component feature additions.
-* **Major bump (x.y.z → x++)**: triggered by sub-component breaking changes.
-* Every OCM release is a reproducible snapshot and maintains SemVer compliance.
+* **Patch bump (x.y.z → z++)**: triggered by any sub-component patch release.
+* **Minor bump (x.y.z → y++)**: triggered by any sub-component feature addition.
+* **Major bump (x.y.z → x++)**: triggered by any sub-component breaking change.
+
+Every OCM release is a reproducible snapshot and maintains SemVer compliance.
 
 ---
 
