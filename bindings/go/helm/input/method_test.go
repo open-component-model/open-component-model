@@ -14,7 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func TestInputMethod_GetResourceCredentialConsumerIdentity(t *testing.T) {
+func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 	inputMethod := &input.InputMethod{}
 
 	tests := []struct {
@@ -95,7 +95,7 @@ func TestInputMethod_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	}
 }
 
-func TestInputMethod_ProcessResource_LocalChart(t *testing.T) {
+func TestInputMethodProcessResourceLocalChart(t *testing.T) {
 	testDataDir := filepath.Join("testdata", "mychart")
 	helmSpec := v1.Helm{
 		Type: runtime.Type{
@@ -119,57 +119,98 @@ func TestInputMethod_ProcessResource_LocalChart(t *testing.T) {
 	assert.Nil(t, result.ProcessedResource, "should not have remote resource for local chart")
 }
 
-func TestInputMethod_ProcessResource_RemoteChart_Podinfo_Integration(t *testing.T) {
+func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	helmSpec := v1.Helm{
-		Type: runtime.Type{
-			Name: v1.Type,
+	testCases := []struct {
+		name     string
+		resource *constructorruntime.Resource
+		args     struct {
+			name    string
+			version string
+			t       string
+		}
+	}{
+		{
+			name: "remote chart with version https",
+			resource: &constructorruntime.Resource{
+				AccessOrInput: constructorruntime.AccessOrInput{
+					Input: &v1.Helm{
+						Type: runtime.Type{
+							Name: v1.Type,
+						},
+						HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz",
+						Version:        "6.9.1",
+					},
+				},
+			},
+			args: struct {
+				name    string
+				version string
+				t       string
+			}{
+				name:    "podinfo-6.9.1.tgz",
+				version: "6.9.1",
+				t:       input.HelmRepositoryType,
+			},
 		},
-		// TODO: Only direct URLs to chart tgz files are supported currently.
-		// Need to add support for index.yaml based repositories maybe?
-		// "https://stefanprodan.github.io/podinfo/" is supposed to be the index URL or rather the repository.
-		// For now, using direct link to a specific chart version.
-		// oci://ghcr.io/stefanprodan/podinfo/podinfo:6.9.1
-		HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz",
-		Version:        "6.9.1",
+		{
+			name: "remote chart with version oci",
+			resource: &constructorruntime.Resource{
+				AccessOrInput: constructorruntime.AccessOrInput{
+					Input: &v1.Helm{
+						Type: runtime.Type{
+							Name: v1.Type,
+						},
+						HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo",
+						Version:        "6.9.1",
+					},
+				},
+			},
+			args: struct {
+				name    string
+				version string
+				t       string
+			}{
+				name:    "podinfo",
+				version: "6.9.1",
+				t:       input.HelmRepositoryType,
+			},
+		},
 	}
 
-	resource := &constructorruntime.Resource{
-		AccessOrInput: constructorruntime.AccessOrInput{
-			Input: &helmSpec,
-		},
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			inputMethod := &input.InputMethod{}
+
+			result, err := inputMethod.ProcessResource(t.Context(), tc.resource, nil)
+			require.NoError(t, err, "should successfully download podinfo chart")
+			assert.NotNil(t, result, "result should not be nil")
+			assert.NotNil(t, result.ProcessedBlobData, "should have blob data for remote chart")
+			assert.NotNil(t, result.ProcessedResource, "should have remote resource access info")
+
+			// Verify the remote resource structure
+			assert.Equal(t, tc.args.name, result.ProcessedResource.Name, "chart name should be extracted correctly")
+			assert.Equal(t, tc.args.version, result.ProcessedResource.Version, "version should match specification")
+			assert.Equal(t, tc.args.t, result.ProcessedResource.Type, "resource type should be helmRepository")
+
+			// Verify blob data is not empty by reading some content
+			reader, err := result.ProcessedBlobData.ReadCloser()
+			require.NoError(t, err)
+			defer reader.Close()
+
+			// Read first few bytes to verify content exists
+			buffer := make([]byte, 100)
+			n, err := reader.Read(buffer)
+			require.NoError(t, err)
+			assert.Greater(t, n, 0, "blob should contain data")
+		})
 	}
-
-	inputMethod := &input.InputMethod{}
-
-	result, err := inputMethod.ProcessResource(t.Context(), resource, nil)
-
-	require.NoError(t, err, "should successfully download podinfo chart")
-	assert.NotNil(t, result, "result should not be nil")
-	assert.NotNil(t, result.ProcessedBlobData, "should have blob data for remote chart")
-	assert.NotNil(t, result.ProcessedResource, "should have remote resource access info")
-
-	// Verify the remote resource structure
-	assert.Equal(t, "podinfo-6.9.1.tgz", result.ProcessedResource.Name, "chart name should be extracted correctly")
-	assert.Equal(t, "6.9.1", result.ProcessedResource.Version, "version should match specification")
-	assert.Equal(t, input.HelmRepositoryType, result.ProcessedResource.Type, "resource type should be helmRepository")
-
-	// Verify blob data is not empty by reading some content
-	reader, err := result.ProcessedBlobData.ReadCloser()
-	require.NoError(t, err)
-	defer reader.Close()
-
-	// Read first few bytes to verify content exists
-	buffer := make([]byte, 100)
-	n, err := reader.Read(buffer)
-	require.NoError(t, err)
-	assert.Greater(t, n, 0, "blob should contain data")
 }
 
-func TestInputMethod_ProcessResource_BothPathAndRepo(t *testing.T) {
+func TestInputMethodProcessResourceBothPathAndRepo(t *testing.T) {
 	ctx := context.Background()
 
 	testDataDir := filepath.Join("testdata", "mychart")
