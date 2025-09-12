@@ -27,7 +27,7 @@ We maintain a monorepo with multiple components: `ocm-cli`, `ocm-controller`, an
 
 **Structure:**
 
-```
+```text
 /VERSION          <- Root version (ocm)
 ocm-cli/VERSION
 ocm-controller/VERSION
@@ -75,7 +75,7 @@ ocm-controller: v0.29.0
 
 **Structure:**
 
-```
+```text
 /VERSION          <- ocm (root)
 /ocm-cli/VERSION
 /ocm-controller/VERSION
