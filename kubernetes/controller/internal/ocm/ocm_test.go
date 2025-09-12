@@ -531,10 +531,10 @@ var _ = Describe("ocm utility", func() {
 		})
 
 		It("without retrieving descriptors", func(ctx SpecContext) {
-			MustBeSuccessful(VerifyComponentVersion(ctx, cv, []string{Signature1, Signature2, Signature3}))
+			MustBeSuccessful(VerifyComponentVersion(ctx, cv, repo, []string{Signature1, Signature2, Signature3}))
 		})
 		It("with retrieving descriptors", func(ctx SpecContext) {
-			descriptors := Must(VerifyComponentVersion(ctx, cv, []string{Signature1, Signature2, Signature3}))
+			descriptors := Must(VerifyComponentVersion(ctx, cv, repo, []string{Signature1, Signature2, Signature3}))
 			Expect(descriptors.List).To(HaveLen(2))
 		})
 		It("list component versions without verification", func(ctx SpecContext) {

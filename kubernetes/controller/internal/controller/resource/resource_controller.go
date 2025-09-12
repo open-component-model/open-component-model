@@ -17,7 +17,6 @@ import (
 	ocmctx "ocm.software/ocm/api/ocm"
 	"ocm.software/ocm/api/ocm/compdesc"
 	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	"ocm.software/ocm/api/ocm/resolvers"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -290,7 +289,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to lookup component version: %w", err)
 	}
 
-	cds, err := ocm.VerifyComponentVersionAndListDescriptors(ctx, octx, cv, sliceutils.Transform(component.Spec.Verify, func(verify v1alpha1.Verification) string {
+	sessionResolver := ocm.NewSessionResolver(octx, session)
+
+	_, err = ocm.VerifyComponentVersionAndListDescriptors(ctx, cv, sessionResolver, sliceutils.Transform(component.Spec.Verify, func(verify v1alpha1.Verification) string {
 		return verify.Signature
 	}))
 	if err != nil {
@@ -306,15 +307,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	startRetrievingResource := time.Now()
 	logger.V(1).Info("retrieving resource", "component", fmt.Sprintf("%s:%s", cv.GetName(), cv.GetVersion()), "reference", resourceReference, "duration", time.Since(startRetrievingResource))
-	resourceAccess, resourceCV, err := ocm.GetResourceAccessForComponentVersion(
-		ctx,
-		session,
-		cv,
-		resourceReference,
-		cds,
-		resolvers.NewCompoundResolver(repo, octx.GetResolver()),
-		resource.Spec.SkipVerify,
-	)
+	resourceAccess, resourceCV, err := ocm.GetResourceAccessForComponentVersion(ctx, cv, resourceReference, sessionResolver, resource.Spec.SkipVerify)
 	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", cv.GetName(), cv.GetVersion()), "reference", resourceReference, "duration", time.Since(startRetrievingResource))
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
