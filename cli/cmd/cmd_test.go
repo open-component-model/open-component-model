@@ -824,7 +824,7 @@ resources:
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
 				"--working-directory", workingDir,
-			), test.WithErrorOutput(logs))
+			))
 
 			r.Error(err, "expected error on adding component version with working directory")
 		})
@@ -854,12 +854,43 @@ resources:
 				"--repository", archiveFilePath,
 				"--working-directory", tmp,
 				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
-			), test.WithErrorOutput(logs))
+			))
 
 			r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
 
 			r.NoError(err, "could not construct component version with working directory")
 		})
+		for _, ext := range []string{"tar.gz", "tgz", "tar"} {
+			err = os.Chdir(tmp)
+			r.NoError(err, "failed to switch current working directory")
+			t.Run("expect success on creating archive - "+ext, func(t *testing.T) {
+				archiveFilePath = "transport-archive." + ext
+				_, err := test.OCM(t, test.WithArgs("add", "cv",
+					"--constructor", constructorYAMLFilePath,
+					"--repository", archiveFilePath,
+					"--working-directory", tmp,
+				), test.WithErrorOutput(logs))
+
+				r.NoError(err, "could not construct component version")
+
+				entries, err := logs.List()
+				r.NoError(err, "failed to list log entries")
+				r.NotEmpty(entries, "expected log entries to be present")
+				expected := []string{
+					"starting component construction",
+					"component construction completed",
+				}
+				for _, entry := range entries {
+					if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
+						require.Contains(t, expected, entry.Msg)
+						expected = slices.DeleteFunc(expected, func(s string) bool {
+							return s == entry.Msg
+						})
+					}
+				}
+			})
+
+		}
 	})
 }
 
