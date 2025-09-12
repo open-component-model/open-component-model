@@ -85,7 +85,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 	// We might want to allow the DAG to be passed in. This would allow to
 	// pre-populate it with known components to avoid re-resolving them.
 	dag := syncdag.NewDirectedAcyclicGraph[string]()
-	if err := c.discovery(ctx, dag, componentConstructor); err != nil {
+	if err := c.discover(ctx, dag, componentConstructor); err != nil {
 		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
 	if err := c.construct(ctx, dag); err != nil {
@@ -99,7 +99,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 	return constructedDescriptors, nil
 }
 
-func (c *DefaultConstructor) discovery(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
+func (c *DefaultConstructor) discover(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
 	discoverer := newNeighborDiscoverer(c, dag)
 	roots, err := discoverer.initializeDAGWithConstructor(componentConstructor)
 	if err != nil {
