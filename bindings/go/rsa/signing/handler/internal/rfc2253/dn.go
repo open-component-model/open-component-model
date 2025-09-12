@@ -143,8 +143,11 @@ func shortOrOID(s string) (asn1.ObjectIdentifier, bool) {
 // It calls Match in both directions, meaning that every attribute in a
 // is present in b, and every attribute in b is present in a.
 // Equal ignores ordering differences allowed by RFC 2253.
-func Equal(a, b pkix.Name) bool {
-	return Match(a, b) == nil && Match(b, a) == nil
+func Equal(a, b pkix.Name) error {
+	if err := Match(a, b); err != nil {
+		return err
+	}
+	return Match(b, a)
 }
 
 // Match reports whether name n satisfies all constraints in pattern p.

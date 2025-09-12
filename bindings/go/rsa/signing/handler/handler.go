@@ -305,7 +305,7 @@ func verifyIssuerForUnderlyingCert(signed descruntime.Signature, underlyingCert 
 
 	subjectDN := underlyingCert.Subject
 
-	if !rfc2253.Equal(want, subjectDN) {
+	if err := rfc2253.Equal(want, subjectDN); err != nil {
 		return fmt.Errorf("issuer mismatch between %q and %q: %w", want.String(), subjectDN.String(), err)
 	}
 	return nil
