@@ -7,6 +7,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/signing/hashing"
 )
 
 // DigestNormalizedDescriptor normalises and digests the given descriptor.
@@ -16,7 +17,7 @@ func DigestNormalizedDescriptor(desc *runtime.Descriptor, hashAlgo digest.Algori
 		return nil, fmt.Errorf("error normalising descriptor %s: %w", desc.Component.ToIdentity().String(), err)
 	}
 	descriptorDigest := &runtime.Digest{
-		HashAlgorithm:          ReverseSHAMapping[hashAlgo],
+		HashAlgorithm:          hashing.ReverseSHAMapping[hashAlgo],
 		NormalisationAlgorithm: normalisationAlgo,
 		Value:                  hashAlgo.FromBytes(normalisedData).Encoded(),
 	}
