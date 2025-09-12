@@ -29,6 +29,9 @@ on:
 
 jobs:
   release:
+    environment:
+      # enforce that this job is only run when approved by an approver for the go-modules environment
+      name: go-modules
     permissions:
       contents: write
       id-token: write
