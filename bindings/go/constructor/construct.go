@@ -2,6 +2,7 @@ package constructor
 
 import (
 	"context"
+	"crypto"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,12 +11,12 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	"golang.org/x/sync/errgroup"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/hashing"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -556,12 +557,26 @@ func (c *DefaultConstructor) getComponentDigest(ctx context.Context, componentId
 		return componentDigest, nil
 	}
 	slog.DebugContext(ctx, "component digest not found in cache", "component", componentIdentity)
-	referencedDigest, err := hashing.DigestNormalizedDescriptor(referencedComponent, digest.SHA256, v4alpha1.Algorithm)
+
+	componentDigest, err := calculateDigest(referencedComponent)
 	if err != nil {
-		return nil, fmt.Errorf("error calculating digest for component reference %q: %w", componentIdentity, err)
+		return nil, fmt.Errorf("failed to calculate digest: %w", err)
 	}
-	c.componentDigestCache[componentIdentity] = referencedDigest
-	return referencedDigest, nil
+	c.componentDigestCache[componentIdentity] = componentDigest
+	return componentDigest, nil
+}
+
+func calculateDigest(component *descriptor.Descriptor) (*descriptor.Digest, error) {
+	normalisedData, err := normalisation.Normalisations.Normalise(component, v4alpha1.Algorithm)
+	if err != nil {
+		return nil, fmt.Errorf("error normalising descriptor %s: %w", component.Component.ToIdentity().String(), err)
+	}
+
+	return &descriptor.Digest{
+		HashAlgorithm:          crypto.SHA256.String(),
+		NormalisationAlgorithm: v4alpha1.Algorithm,
+		Value:                  digest.SHA256.FromBytes(normalisedData).Encoded(),
+	}, nil
 }
 
 // addColocatedResourceLocalBlob adds a local blob to the component version repository and defaults fields relevant
