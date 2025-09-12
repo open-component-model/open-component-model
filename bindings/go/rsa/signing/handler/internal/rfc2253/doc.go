@@ -20,6 +20,6 @@
 //   - Configurable behavior via Options
 //   - Structural equality and subset checks with Equal and Match.
 //
-// The parser aims to be RFC-2253 compliant for practical certificate issuer cheecks,
+// The parser aims to be RFC-2253 compliant for practical certificate issuer checks,
 // but does not attempt to support every historical quirk.
 package rfc2253
