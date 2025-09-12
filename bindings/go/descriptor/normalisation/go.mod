@@ -2,8 +2,6 @@ module ocm.software/open-component-model/bindings/go/descriptor/normalisation
 
 go 1.25.0
 
-replace ocm.software/open-component-model/bindings/go/signing => github.com/fabianburth/open-component-model/bindings/go/signing v0.0.0-20250912121419-bf244c347e66
-
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/opencontainers/go-digest v1.0.0
@@ -11,7 +9,6 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250909064434-e1a06fe74668
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20250912092813-396078c6d574
 	sigs.k8s.io/yaml v1.6.0
 )
 

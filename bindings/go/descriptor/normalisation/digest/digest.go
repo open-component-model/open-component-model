@@ -8,7 +8,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/signing/hashing"
 )
 
 var ReverseSHAMapping = map[digest.Algorithm]string{
@@ -22,7 +21,7 @@ func DigestNormalizedDescriptor(desc *runtime.Descriptor, hashAlgo digest.Algori
 	if err != nil {
 		return nil, fmt.Errorf("error normalising descriptor %s: %w", desc.Component.ToIdentity().String(), err)
 	}
-	algo, ok := hashing.ReverseSHAMapping[hashAlgo]
+	algo, ok := ReverseSHAMapping[hashAlgo]
 	if !ok {
 		return nil, fmt.Errorf("unsupported hash algorithm: %s", hashAlgo)
 	}
