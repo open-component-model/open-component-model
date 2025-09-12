@@ -149,15 +149,17 @@ func processHelmResource(ctx context.Context, request *v1.ProcessResourceInputRe
 		},
 	}
 
-	helmMethod := &helminput.InputMethod{}
-	result, err := helmMethod.ProcessResource(ctx, resource, credentials)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process resource: %w", err)
-	}
-
 	tempDir := ""
 	if filesystemConfig != nil {
 		tempDir = filesystemConfig.TempFolder
+	}
+
+	helmMethod := &helminput.InputMethod{
+		TempFolder: tempDir,
+	}
+	result, err := helmMethod.ProcessResource(ctx, resource, credentials)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process resource: %w", err)
 	}
 	tmp, err := os.CreateTemp(tempDir, "helm-resource-*.tar.gz")
 	if err != nil {

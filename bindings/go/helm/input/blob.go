@@ -13,6 +13,9 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/downloader"
+	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/registry"
 	"oras.land/oras-go/v2"
 
@@ -24,9 +27,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
 
-var (
-	ErrEmptyPath        = errors.New("helm input path must not be empty")
-	ErrUnsupportedField = errors.New("unsupported input field must not be used")
+const (
+	HelmRepositoryType = "helmRepository"
 )
 
 // ReadOnlyChart contains Helm chart contents as tgz archive, some metadata and optionally a provenance file.
@@ -38,18 +40,40 @@ type ReadOnlyChart struct {
 }
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
-// It reads the contents from the filesystem and packages it as an OCI artifact.
-// The function returns an error if the path is empty or if there are issues reading the contents
-// from the filesystem. If provided tmpDir is empty, the temporary directory will be created.
-// in the system's default temp directory.
+// It reads the contents from the filesystem or downloads from a remote repository,
+// then packages it as an OCI artifact. The function returns an error if neither path
+// nor helmRepository are specified, or if there are issues reading/downloading the chart.
+// If the provided tmpDir is empty, the temporary directory will be created in the system's default temp directory.
 func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string) (blob.ReadOnlyBlob, error) {
+	return GetV1HelmBlobWithCredentials(ctx, helmSpec, tmpDir, nil)
+}
+
+// GetV1HelmBlobWithCredentials creates a ReadOnlyBlob from a v1.Helm specification with credential support.
+// This function supports both local filesystem charts and remote repository charts.
+// For remote repositories, credentials can be provided in the credential map with keys:
+// - "username": for basic authentication
+// - "password": for basic authentication
+func GetV1HelmBlobWithCredentials(ctx context.Context, helmSpec v1.Helm, tmpDir string, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	if err := validateInputSpec(helmSpec); err != nil {
 		return nil, fmt.Errorf("invalid helm input spec: %w", err)
 	}
 
-	chart, err := newReadOnlyChart(helmSpec.Path, tmpDir)
-	if err != nil {
-		return nil, fmt.Errorf("error loading input helm chart %q: %w", helmSpec.Path, err)
+	var chart *ReadOnlyChart
+	var err error
+
+	switch {
+	case helmSpec.Path != "":
+		chart, err = newReadOnlyChart(helmSpec.Path, tmpDir)
+		if err != nil {
+			return nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
+		}
+	case helmSpec.HelmRepository != "":
+		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("error loading remote helm chart from %q: %w", helmSpec.HelmRepository, err)
+		}
+	default:
+		return nil, fmt.Errorf("either path or helmRepository must be specified")
 	}
 
 	b := copyChartToOCILayout(ctx, chart)
@@ -60,28 +84,12 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string) (blob.R
 func validateInputSpec(helmSpec v1.Helm) error {
 	var err error
 
-	if helmSpec.Path == "" {
-		err = ErrEmptyPath
+	if helmSpec.Path == "" && helmSpec.HelmRepository == "" {
+		err = errors.New("either path or helmRepository must be specified")
 	}
 
-	var unsupportedFields []string
-	if helmSpec.HelmRepository != "" {
-		unsupportedFields = append(unsupportedFields, "helmRepository")
-	}
-	if helmSpec.CACert != "" {
-		unsupportedFields = append(unsupportedFields, "caCert")
-	}
-	if helmSpec.CACertFile != "" {
-		unsupportedFields = append(unsupportedFields, "caCertFile")
-	}
-	if helmSpec.Version != "" {
-		unsupportedFields = append(unsupportedFields, "version")
-	}
-	if helmSpec.Repository != "" {
-		unsupportedFields = append(unsupportedFields, "repository")
-	}
-	if len(unsupportedFields) > 0 {
-		err = errors.Join(err, ErrUnsupportedField, fmt.Errorf("%w: %s", ErrUnsupportedField, strings.Join(unsupportedFields, ", ")))
+	if helmSpec.Path != "" && helmSpec.HelmRepository != "" {
+		err = errors.New("only one of path or helmRepository can be specified")
 	}
 
 	return err
@@ -134,6 +142,103 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 	}
 
 	return result, nil
+}
+
+// newReadOnlyChartFromRemote downloads a chart from a remote Helm repository
+// and creates a ReadOnlyChart from it.
+func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
+	settings := cli.New()
+	tmpDir, err := os.MkdirTemp(tmpDirBase, "helmRemoteChart*")
+	if err != nil {
+		return nil, fmt.Errorf("error creating temporary directory: %w", err)
+	}
+	defer func() {
+		if cerr := os.RemoveAll(tmpDir); cerr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to cleanup temp dir: %w", cerr))
+		}
+	}()
+
+	var opts []getter.Option
+	if helmSpec.CACert != "" || helmSpec.CACertFile != "" {
+		caFilePath, err := setupTLSFiles(helmSpec, tmpDir)
+		if err != nil {
+			return nil, fmt.Errorf("error setting up TLS files: %w", err)
+		}
+
+		// certFile and keyFile are empty strings since we don't have client certificates
+		opts = append(opts, getter.WithTLSClientConfig("", "", caFilePath))
+	}
+
+	dl := &downloader.ChartDownloader{
+		Out:              os.Stderr,
+		Verify:           downloader.VerifyNever, // TODO: Support signature verification
+		Getters:          getter.All(settings),
+		RepositoryConfig: settings.RepositoryConfig,
+		RepositoryCache:  settings.RepositoryCache,
+		Options:          opts,
+	}
+
+	// TODO: Hack.
+	if username, ok := credentials["username"]; ok {
+		if password, ok := credentials["password"]; ok {
+			dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
+		}
+	}
+
+	savedPath, _, err := dl.DownloadTo(helmSpec.HelmRepository, helmSpec.Version, tmpDir)
+	if err != nil {
+		return nil, fmt.Errorf("error downloading chart %q version %q: %w", helmSpec.HelmRepository, helmSpec.Version, err)
+	}
+
+	chart, err := loader.Load(savedPath)
+	if err != nil {
+		return nil, fmt.Errorf("error loading downloaded chart from %q: %w", savedPath, err)
+	}
+
+	result = &ReadOnlyChart{
+		Name:    chart.Name(),
+		Version: chart.Metadata.Version,
+	}
+
+	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(savedPath); err != nil {
+		return nil, fmt.Errorf("error creating blob from downloaded chart %q: %w", savedPath, err)
+	}
+	provPath := savedPath + ".prov"
+	if _, err := os.Stat(provPath); err == nil {
+		if result.ProvBlob, err = filesystem.GetBlobFromOSPath(provPath); err != nil {
+			return nil, fmt.Errorf("error creating blob from provenance file %q: %w", provPath, err)
+		}
+	}
+
+	return result, nil
+}
+
+// setupTLSFiles sets up the TLS configuration files based on the helm specification
+func setupTLSFiles(helmSpec v1.Helm, tmpDir string) (caFilePath string, err error) {
+	var caFile *os.File
+
+	if helmSpec.CACertFile != "" {
+		caFile, err = os.Open(helmSpec.CACertFile)
+		if err != nil {
+			return "", fmt.Errorf("error opening CA certificate file %q: %w", helmSpec.CACertFile, err)
+		}
+	} else if helmSpec.CACert != "" {
+		caFile, err = os.CreateTemp(tmpDir, "caCert-*.pem")
+		if err != nil {
+			return "", fmt.Errorf("error creating temporary CA certificate file: %w", err)
+		}
+		defer func() {
+			if err2 := os.Remove(caFile.Name()); err2 != nil {
+				err = errors.Join(err, fmt.Errorf("failed to remove temp CA cert file: %w", err2))
+			}
+		}()
+
+		if _, err = caFile.WriteString(helmSpec.CACert); err != nil {
+			return "", fmt.Errorf("error writing CA certificate to temp file: %w", err)
+		}
+	}
+
+	return caFile.Name(), nil
 }
 
 // copyChartToOCILayout takes a ReadOnlyChart helper object and creates an OCI layout from it.
