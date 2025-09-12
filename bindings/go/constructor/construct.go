@@ -106,7 +106,7 @@ func (c *DefaultConstructor) discovery(ctx context.Context, dag *syncdag.Directe
 		return fmt.Errorf("failed to initialize component constructor graph: %w", err)
 	}
 	slog.DebugContext(ctx, "starting discovery based on components in constructor", "num_components", len(roots), "components", roots)
-	if err := dag.Discover(ctx, discoverer, syncdag.WithRoots[string](roots...), syncdag.WithDiscoveryGoRoutineLimit[string](c.opts.ConcurrencyLimit)); err != nil {
+	if err := dag.Discover(ctx, discoverer, syncdag.WithRoots(roots...), syncdag.WithDiscoveryGoRoutineLimit[string](c.opts.ConcurrencyLimit)); err != nil {
 		return fmt.Errorf("failed to discover component references: %w", err)
 	}
 	slog.DebugContext(ctx, "component reference discovery completed successfully", "num_components", dag.LengthVertices())

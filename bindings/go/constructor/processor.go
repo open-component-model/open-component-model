@@ -11,6 +11,10 @@ import (
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// vertexProcessor is responsible for processing discovered component in the DAG.
+// Hereby, processing means:
+// - constructing components that are part of the constructor specification
+// - uploading components to the target repository
 type vertexProcessor struct {
 	constructor *DefaultConstructor
 	dag         *syncdag.DirectedAcyclicGraph[string]
@@ -25,6 +29,7 @@ func newVertexProcessor(constructor *DefaultConstructor, dag *syncdag.DirectedAc
 	}
 }
 
+// ProcessVertex processes the component represented by the given vertex.
 func (p *vertexProcessor) ProcessVertex(ctx context.Context, v string) error {
 	vertex := p.dag.MustGetVertex(v)
 	_, isInternal := vertex.GetAttribute(attributeComponentConstructor)
@@ -34,7 +39,7 @@ func (p *vertexProcessor) ProcessVertex(ctx context.Context, v string) error {
 		// not in the constructor specification).
 		slog.DebugContext(ctx, "processing external component", "component", vertex.ID)
 		// TODO(fabianburth): once we support recursive, we need to perform
-		//  the transfer of the component here.
+		//  the transfer of the component here (https://github.com/open-component-model/ocm-project/issues/666).
 		// desc, err = processExternalComponent(vertex)
 		return nil
 	} else {

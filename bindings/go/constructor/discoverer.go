@@ -11,6 +11,8 @@ import (
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// neighborDiscoverer is responsible for setting up a DAG based on the
+// component in the constructor specification and their references.
 type neighborDiscoverer struct {
 	constructor *DefaultConstructor
 	dag         *syncdag.DirectedAcyclicGraph[string]
@@ -25,6 +27,8 @@ func newNeighborDiscoverer(constructor *DefaultConstructor, dag *syncdag.Directe
 	}
 }
 
+// DiscoverNeighbors neighbors analyzes the component represented by the given
+// vertex and returns the identities of referenced components as neighbors.
 func (d *neighborDiscoverer) DiscoverNeighbors(ctx context.Context, v string) (neighbors []string, err error) {
 	vertex := d.dag.MustGetVertex(v)
 	_, isInternal := vertex.GetAttribute(attributeComponentConstructor)
@@ -101,7 +105,5 @@ func (d *neighborDiscoverer) discoverExternalComponent(ctx context.Context, vert
 
 	// TODO(fabianburth): once we support recursive, we need to discover the
 	//   neighbors here (https://github.com/open-component-model/ocm-project/issues/666)
-	//   Are there valid cases where an external component might reference a
-	//   component in the constructor?
 	return nil, nil
 }
