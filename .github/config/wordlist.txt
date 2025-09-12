@@ -510,3 +510,13 @@ rekor
 tuf
 implementors
 cryptographic
+sig
+sigs
+sig's
+roadmap
+scalable
+centos
+monorepo
+supermajority
+resubmission
+
