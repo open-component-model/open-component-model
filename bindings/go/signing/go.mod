@@ -3,6 +3,7 @@ module ocm.software/open-component-model/bindings/go/signing
 go 1.25.0
 
 require (
+	github.com/opencontainers/go-digest v1.0.0
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250908094042-d969726ca758
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
