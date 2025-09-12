@@ -24,7 +24,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250909064434-e1a06fe74668
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
 	ocm.software/open-component-model/bindings/go/plugin v0.0.4
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250909064434-e1a06fe74668
+	ocm.software/open-component-model/bindings/go/repository v0.0.1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0

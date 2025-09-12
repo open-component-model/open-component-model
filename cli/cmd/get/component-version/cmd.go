@@ -9,10 +9,10 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
-
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
+	matcherv1 "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/spec"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -145,17 +145,34 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	reference := args[0]
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-	var resolvers []resolverruntime.Resolver
+	var matcherResolvers []*matcherv1.Resolver
 	if config != nil {
-		resolvers, err = resolversFromConfig(config, err)
+		matcherResolvers, err = matcherResolverForType(config, err)
 		if err != nil {
-			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
+			return fmt.Errorf("getting fallbackResolvers from configuration failed: %w", err)
 		}
 	}
-	repo, err := ocm.NewFromRefWithFallbackRepo(cmd.Context(), pluginManager, credentialGraph, resolvers, reference)
-	if err != nil {
-		return fmt.Errorf("could not initialize ocm repository: %w", err)
+	var repo *ocm.ComponentRepository
+	if len(matcherResolvers) > 0 {
+		repo, err = ocm.NewFromRefWithResolverRepo(cmd.Context(), pluginManager, credentialGraph, matcherResolvers, reference)
+		if err != nil {
+			return fmt.Errorf("could not initialize ocm repository: %w", err)
+		}
+	} else {
+		//nolint:staticcheck // no replacement for fallbackResolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+		var fallbackResolvers []resolverruntime.Resolver
+		if config != nil {
+			fallbackResolvers, err = fallbackResolversFromConfig(config, err)
+			if err != nil {
+				return fmt.Errorf("getting fallbackResolvers from configuration failed: %w", err)
+			}
+		}
+		
+		//nolint:staticcheck // no replacement for fallbackResolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+		repo, err = ocm.NewFromRefWithFallbackRepo(cmd.Context(), pluginManager, credentialGraph, fallbackResolvers, reference)
+		if err != nil {
+			return fmt.Errorf("could not initialize ocm repository: %w", err)
+		}
 	}
 
 	descs, err := repo.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
@@ -175,8 +192,17 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func matcherResolverForType(config *genericv1.Config, err error) ([]*matcherv1.Resolver, error) {
+	filtered, err := genericv1.FilterForType[*matcherv1.Config](resolverv1.Scheme, config)
+	if err != nil {
+		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
+	}
+	resolverConfigV1 := matcherv1.Merge(filtered...)
+	return resolverConfigV1.Resolvers, nil
+}
+
 //nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime.Resolver, error) {
+func fallbackResolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime.Resolver, error) {
 	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
 	if err != nil {
 		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
