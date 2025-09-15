@@ -38,17 +38,16 @@ We keep exactly two options for clarity. Option A is a component-scoped, persist
 
 Description:
 
-For each component, maintain dedicated release branches in the monorepo. Two naming variants are allowed:
+For each component, maintain dedicated release branches in the monorepo.
 
-* Variant A1 (component-first namespace, **preferred**): `releases/<component>/v<major>.<minor>`
-  * Examples: `releases/ocm-cli/v0.30`, `releases/ocm-controller/v0.29`
-* Variant A2 (major-first namespace, organizational alternative): `releases/v<major>/<component>/v<major>.<minor>`
-  * Example: `releases/v0/ocm-cli/v0.30` (useful when the organisation emphasises major lines)
+component-first namespace `releases/<component>/v<major>.<minor>`
+
+* Examples: `releases/ocm-cli/v0.30`, `releases/ocm-controller/v0.29`
 
 Workflow / triggers:
 
-* CI workflows listen on the appropriate prefix (`releases/<component>/**` or `releases/v<major>/**`) and build/publish only artifacts for the affected component.
-* Tagging: when a release is published from the branch, create an annotated tag like `ocm-cli/v0.30.1` (or `ocm-cli@v0.30.1`, final naming to be decided)).
+* CI workflows listen on the appropriate prefix (`releases/<component>/**`) and build/publish only artifacts for the affected component.
+* Tagging: when a release is published from the branch, create an annotated tag like `ocm-cli/v0.30.1` (or `ocm-cli@v0.30.1`, final naming to be decided).
 
 Hotfixes / cherry-picks:
 
@@ -65,11 +64,6 @@ Disadvantages:
 
 * More branches to maintain (but organised).
 * Coordination required when multiple components need synchronized releases.
-
-Notes on the Variant choice (A1 / A2) :
-
-* Variant A1 (component-first) is easier for teams focusing on per-component maintenance and for workflows that rely on simple branch-prefix filters.
-* Variant A2 (major-first) is useful if the organisation manages support per major (e.g. central teams owning `v1`, `v2`).
 
 ---
 
@@ -100,14 +94,18 @@ Disadvantages:
 
 | Option | Automatable | Visibility | Sub-Component Autonomy | Merge Conflict Risk | Maintenance / Backporting | Notes |
 | ------ | ----------- | --------- | ---------------------- | ------------------- | ------------------------ | ----- |
-| Option A — component-scoped branches (A1/A2/A3 variants) | high | high | high | medium | high | Preferred: clear per-component maintenance lines; persistent minor branches simplify backports |
+| Option A — component-scoped branches | high | high | high | medium | high | Preferred: clear per-component maintenance lines; persistent minor branches simplify backports |
 | Option B — tag-only / short-lived PRs | high | medium | high | low | low | Low branch proliferation; harder for long-term support/backports |
 
-Explanation: Option A is the recommended approach because it offers the clearest operational model for per-component maintenance while remaining automatable. Option B is suitable when branch proliferation must be minimised and the team does not plan long-term maintenance on older minor lines.
+Explanation:
+
+Option A is the recommended approach because it offers the clearest operational model for per-component maintenance while remaining automatable.
+
+Option B is suitable when branch proliferation must be minimised and the team does not plan long-term maintenance on older minor lines.
 
 ## Recommendation
 
-Adopt Option A: component-scoped release branches under `releases/<component>/vX.Y` (with the A1 component-first layout preferred). Allow the A2 major-first variant or A3 flat-name alternative only for specific tool compatibility or organizational reasons.
+Adopt Option A: component-scoped release branches under `releases/<component>/vX.Y`
 
 Rationale:
 
@@ -117,12 +115,12 @@ Rationale:
 
 Recommended conventions:
 
-* Branch name pattern (preferred): `releases/<component>/v<major>.<minor>`
+* Branch name pattern: `releases/<component>/v<major>.<minor>`
 * Release tags: `<component>/v<major>.<minor>.<patch>` or `<component>@v<major>.<minor>.<patch>` (preference: slash-separated e.g. `ocm-cli/v0.30.1`)
 * Workflows: place component-specific workflows in `/.github/workflows` with triggers:
   * `on: push` for branches: `releases/<component>/**`
   * path filters for the component sources and artifacts
-* Hotfix process: commit patch to `releases/<component>/v<major>.<minor>` → CI builds + publishes patch → optionally cherry-pick into `main` and other lines if relevant.
+* Hotfix process: commit patch to `releases/<component>/v<major>.<minor>` → CI builds + publishes patch → optionally cherry-pick into `main` and other release branches if relevant.
 
 ## Additional notes
 
