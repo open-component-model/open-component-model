@@ -23,7 +23,7 @@
 // Core Features:
 //
 //  1. Concurrent Processing:
-//     - Parallel processing of components, resources, and sources
+//     - Parallel processing of components, resources, and sources in topological order
 //     - Configurable concurrency limits
 //     - Thread-safe operations with synchronized access
 //
