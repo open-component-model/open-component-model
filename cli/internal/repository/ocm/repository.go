@@ -39,7 +39,7 @@ type ComponentRepository struct {
 
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, componentReference string) (*ComponentRepository, error) {
+func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
@@ -48,8 +48,10 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *cred
 	var creds map[string]string
 	identity, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, ref.Repository)
 	if err == nil {
-		if creds, err = graph.Resolve(ctx, identity); err != nil {
-			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", ref.Repository, err)
+		if graph != nil {
+			if creds, err = graph.Resolve(ctx, identity); err != nil {
+				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", ref.Repository, err.Error()))
+			}
 		}
 	} else {
 		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", ref.Repository, "error", err)
@@ -72,32 +74,28 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *cred
 // It resolves the appropriate plugin and credentials for the repository.
 //
 //nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph *credentials.Graph, resolvers []resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
+func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
 	if len(resolvers) == 0 {
 		//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-		resolvers = make([]resolverruntime.Resolver, 0)
+		resolvers = make([]*resolverruntime.Resolver, 0)
 	}
 
 	if ref.Repository != nil {
 		//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-		resolvers = append(resolvers, resolverruntime.Resolver{
+		resolvers = append(resolvers, &resolverruntime.Resolver{
 			Repository: ref.Repository,
 			// Add the current repository as a resolver with the highest possible
 			// priority.
 			Priority: math.MaxInt,
 		})
 	}
+
 	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-	res := make([]*resolverruntime.Resolver, 0, len(resolvers))
-	for _, r := range resolvers {
-		res = append(res, &r)
-	}
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-	fallbackRepo, err := fallback.NewFallbackRepository(ctx, manager.ComponentVersionRepositoryRegistry, graph, res)
+	fallbackRepo, err := fallback.NewFallbackRepository(ctx, manager.ComponentVersionRepositoryRegistry, graph, resolvers)
 	if err != nil {
 		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
 	}

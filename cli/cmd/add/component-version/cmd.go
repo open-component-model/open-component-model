@@ -12,12 +12,10 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
-	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
-	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
-	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/repository"
 	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
+	"ocm.software/open-component-model/cli/internal/repository/ocm"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -225,7 +223,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
 	var resolvers []*resolverruntime.Resolver
 	if config != nil {
-		resolvers, err = resolversFromConfig(config, err)
+		resolvers, err = ocm.ResolversFromConfig(config, err)
 		if err != nil {
 			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
 		}
@@ -338,7 +336,7 @@ type constructorProvider struct {
 	targetRepoSpec runtime.Typed
 	fallbackRepo   *v1.FallbackRepository
 	pluginManager  *manager.PluginManager
-	graph          *credentials.Graph
+	graph          credentials.GraphResolver
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
@@ -495,26 +493,4 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 	}
 
 	return opts, nil, fmt.Errorf("unknown log format to track component construction: %q", format)
-}
-
-//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-func resolversFromConfig(config *genericv1.Config, err error) ([]*resolverruntime.Resolver, error) {
-	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
-	if err != nil {
-		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
-	}
-	resolverConfigV1 := resolverv1.Merge(filtered...)
-
-	resolverConfig, err := resolverruntime.ConvertFromV1(ocirepository.Scheme, resolverConfigV1)
-	if err != nil {
-		return nil, fmt.Errorf("converting resolver configuration from v1 to runtime failed: %w", err)
-	}
-	var resolvers []*resolverruntime.Resolver
-	if resolverConfig != nil && len(resolverConfig.Resolvers) > 0 {
-		resolvers = make([]*resolverruntime.Resolver, len(resolverConfig.Resolvers))
-		for index, resolver := range resolverConfig.Resolvers {
-			resolvers[index] = &resolver
-		}
-	}
-	return resolvers, nil
 }
