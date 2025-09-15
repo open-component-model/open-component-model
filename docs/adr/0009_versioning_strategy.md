@@ -31,7 +31,7 @@ We need a versioning strategy that:
 
 ## Considered Options
 
-### 1. One `VERSION` File per Component
+### Option A: One `VERSION` File per Component
 
 **Structure:**
 
@@ -55,7 +55,7 @@ kubernetes/controller/VERSION
 
 ---
 
-### 2. Central `VERSIONS.yaml` in Root
+### Option B: Central `VERSIONS.yaml` in Root
 
 **Structure:**
 
@@ -79,7 +79,7 @@ ocm-controller: v0.29.0
 
 ---
 
-### 3. Hybrid – Sub-Component `VERSION` Files + Root `VERSIONS.yaml`
+### Option C: Hybrid – Sub-Component `VERSION` Files + Root `VERSIONS.yaml`
 
 **Structure:**
 
@@ -119,10 +119,12 @@ Every OCM release is a reproducible snapshot and maintains SemVer compliance.
 
 ## Comparison Table
 
-| Option                       | Automatable | Visibility | Sub-Component Autonomy | Merge Conflict Risk |
-| ---------------------------- | ----------- | ---------- | ---------------------- | ------------------- |
-| 1 – separate `VERSION` files | high        | medium     | high                   | low                 |
-| 2 – central `VERSIONS.yaml`  | high        | high       | low/medium             | medium              |
-| 3 – hybrid                   | high        | high       | high                   | medium              |
+| Option | Automatable | Visibility | Sub-Component Autonomy | Merge Conflict Risk | Notes |
+| ------ | ----------- | --------- | ---------------------- | ------------------- | ----- |
+| A – separate `VERSION` files | high | medium | high | low | Simple per-component automation; no central snapshot |
+| B – central `VERSIONS.yaml` | high | high | low/medium | medium | Single snapshot for website/CI; requires push/update discipline |
+| C – hybrid | high | high | high | medium | Combines autonomy and central snapshot; slightly more automation complexity |
 
 ## Decision Outcome
+
+Adopt Option...
