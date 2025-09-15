@@ -116,8 +116,10 @@ func (p *SigningHandlerPlugin) Verify(ctx context.Context, request *v1.VerifyReq
 
 	var response v1.VerifyResponse
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, Verify, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
+		return nil, fmt.Errorf("failed to sign from plugin %q: %w", p.ID, err)
 	}
-	return nil, fmt.Errorf("failed to sign from plugin %q: %w", p.ID, err)
+
+	return &response, nil
 }
 
 func (p *SigningHandlerPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
