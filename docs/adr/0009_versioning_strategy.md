@@ -29,7 +29,6 @@ We need a versioning strategy that:
 
 * Decision on release frequency and synchronization of releases for sub-components.
 
-
 ## Considered Options
 
 ### 1. One `VERSION` File per Component
