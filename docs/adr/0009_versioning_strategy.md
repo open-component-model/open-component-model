@@ -119,11 +119,11 @@ Every OCM release is a reproducible snapshot and maintains SemVer compliance.
 
 ## Comparison Table
 
-| Option | Automatable | Visibility | Sub-Component Autonomy | Merge Conflict Risk | Notes |
-| ------ | ----------- | --------- | ---------------------- | ------------------- | ----- |
-| A – separate `VERSION` files | high | medium | high | low | Simple per-component automation; no central snapshot |
-| B – central `VERSIONS.yaml` | high | high | low/medium | medium | Single snapshot for website/CI; requires push/update discipline |
-| C – hybrid | high | high | high | medium | Combines autonomy and central snapshot; slightly more automation complexity |
+| Option | Automatable | Visibility | Sub-Component Autonomy | Merge Conflict Risk | Maintenance / Backporting | Notes |
+| ------ | ----------- | --------- | ---------------------- | ------------------- | ------------------------ | ----- |
+| 1 – separate `VERSION` files | high | medium | high | low | high | Simple per-component automation; straightforward to backport fixes per component |
+| 2 – central `VERSIONS.yaml` | high | high | low/medium | medium | medium | Single snapshot for website/CI; requires discipline to keep per-component backports reflected centrally |
+| 3 – hybrid | high | high | high | medium | high | Combines autonomy and central snapshot; supports per-component backports while keeping a central overview |
 
 ## Decision Outcome
 
