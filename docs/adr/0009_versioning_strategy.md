@@ -6,7 +6,11 @@
 
 ## Context
 
-We maintain a monorepo with multiple components: `ocm-cli`, `ocm-controller`, and a root component `ocm` (which solely acts as a root component referencing versions of the sub-components). Each sub-component evolves at its own pace, and the root component should always represent a snapshot of sub-component versions. We need a versioning strategy that:
+We maintain a monorepo with multiple components: `ocm-cli`, `ocm-controller`, and a possible root/wrapper component `ocm` (final name to be decided. Solely acts as a root component referencing versions of the sub-components).
+
+Each sub-component evolves at its own pace, and the root component should always represent a snapshot of sub-component versions (and all the Go modules of the OCM Library).
+
+We need a versioning strategy that:
 
 * Ensures immutable, reproducible releases.
 * Supports independent development of sub-components.
@@ -20,6 +24,11 @@ We maintain a monorepo with multiple components: `ocm-cli`, `ocm-controller`, an
 * Automation potential and minimal manual intervention
 * SemVer compliance for both sub-components and root component
 * Ease of use for website and other consumers
+
+## Out of scope
+
+* Decision on release frequency and synchronization of releases for sub-components.
+
 
 ## Considered Options
 
