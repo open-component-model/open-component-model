@@ -39,8 +39,8 @@ var (
 // DefaultPrefix is the default prefix used for component descriptors.
 const DefaultPrefix = "component-descriptors"
 
-// CtfArchiveExtensions is the list of archive file extensions that should be treated as CTF
-var CtfArchiveExtensions = [...]string{".tar.gz", ".tgz", ".tar"}
+// ctfArchiveExtensions is the list of archive file extensions that should be treated as CTF
+var ctfArchiveExtensions = [...]string{".tar.gz", ".tgz", ".tar"}
 
 // ValidPrefixes is the list of valid prefixes for structured component references
 var ValidPrefixes = []string{
@@ -328,7 +328,7 @@ func guessType(repository string) (string, error) {
 // This helps identify repository strings that point to archive files, which should be treated as CTF.
 func looksLikeArchive(s string) bool {
 	s = strings.ToLower(s)
-	for _, ext := range CtfArchiveExtensions {
+	for _, ext := range ctfArchiveExtensions {
 		if strings.HasSuffix(s, ext) {
 			return true
 		}
