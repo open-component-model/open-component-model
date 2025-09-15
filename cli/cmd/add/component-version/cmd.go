@@ -12,6 +12,12 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
+	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/repository"
+	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -80,7 +86,7 @@ func New() *cobra.Command {
 		SuggestFor: []string{"component", "components", "version", "versions"},
 		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository based on a %[1]q file", DefaultComponentConstructorBaseName),
 		Args:       cobra.NoArgs,
-		Long: fmt.Sprintf(`Add component version(s) to an OCM repository that can be reused for transfers.
+		Long: fmt.Sprintf(`Add component version(s) to an OCM ocirepository that can be reused for transfers.
 
 A %[1]q file is used to specify the component version(s) to be added. It can contain both a single component or many components.
 
@@ -93,11 +99,11 @@ Otherwise the path to the %[1]q file will be used as the working directory.
 You are only allowed to reference files within the working directory or sub-directories of the working directory.
 
 Repository Reference Format:
-	[type::]{repository}
+	[type::]{ocirepository}
 
 For known types, currently only {%[2]s} are supported, which can be shortened to {%[3]s} respectively for convenience.
 
-If no type is given, the repository specification is interpreted based on introspection and heuristics:
+If no type is given, the ocirepository specification is interpreted based on introspection and heuristics:
 
 - URL schemes or domain patterns -> OCI registry
 - Local paths -> CTF archive
@@ -121,7 +127,7 @@ add component-version --%[1]s ghcr.io/my-org/my-repo --%[2]s %[3]s.yaml
 add component-version --%[1]s https://my-registry.com/my-repo --%[2]s %[3]s.yaml
 add component-version --%[1]s localhost:5000/my-repo --%[2]s %[3]s.yaml
 
-Specifying repository types explicitly:
+Specifying ocirepository types explicitly:
 
 add component-version --%[1]s ctf::./local/archive --%[2]s %[3]s.yaml
 add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.yaml
@@ -132,10 +138,10 @@ add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.y
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of component versions that can be constructed concurrently.")
-	cmd.Flags().StringP(FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "repository ref")
+	cmd.Flags().StringP(FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "ocirepository ref")
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the component constructor file")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
-	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
+	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the ocirepository")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
 
 	return cmd
@@ -196,7 +202,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 
 	repoSpec, err := GetRepositorySpec(cmd)
 	if err != nil {
-		return fmt.Errorf("getting repository spec failed: %w", err)
+		return fmt.Errorf("getting ocirepository spec failed: %w", err)
 	}
 
 	cacheDir, err := cmd.Flags().GetString(FlagBlobCacheDirectory)
@@ -214,21 +220,39 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
+	config := ocmctx.FromContext(cmd.Context()).Configuration()
+
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	var resolvers []*resolverruntime.Resolver
+	if config != nil {
+		resolvers, err = resolversFromConfig(config, err)
+		if err != nil {
+			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
+		}
+	}
+
+	fallback, err := v1.NewFallbackRepository(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, resolvers)
+	if err != nil {
+		return fmt.Errorf("creating fallback ocirepository failed: %w", err)
+	}
+
 	instance := &constructorProvider{
 		cache:          cacheDir,
 		targetRepoSpec: repoSpec,
+		fallbackRepo:   fallback,
 		pluginManager:  pluginManager,
 		graph:          credentialGraph,
 	}
 
 	opts := constructor.Options{
-		TargetRepositoryProvider:       instance,
-		ResourceRepositoryProvider:     instance,
-		SourceInputMethodProvider:      instance,
-		ResourceInputMethodProvider:    instance,
-		CredentialProvider:             instance.graph,
-		ConcurrencyLimit:               concurrencyLimit,
-		ComponentVersionConflictPolicy: ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
+		TargetRepositoryProvider:            instance,
+		ResourceRepositoryProvider:          instance,
+		SourceInputMethodProvider:           instance,
+		ResourceInputMethodProvider:         instance,
+		ExternalComponentRepositoryProvider: instance,
+		CredentialProvider:                  instance.graph,
+		ConcurrencyLimit:                    concurrencyLimit,
+		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 	}
 	if !skipReferenceDigestProcessing {
 		opts.ResourceDigestProcessorProvider = instance
@@ -248,12 +272,12 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	repositoryRef, err := cmd.Flags().GetString(FlagRepositoryRef)
 	if err != nil {
-		return nil, fmt.Errorf("getting repository reference flag failed: %w", err)
+		return nil, fmt.Errorf("getting ocirepository reference flag failed: %w", err)
 	}
 
 	typed, err := compref.ParseRepository(repositoryRef)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse repository: %w", err)
+		return nil, fmt.Errorf("failed to parse ocirepository: %w", err)
 	}
 
 	if ctfRepo, ok := typed.(*ctfv1.Repository); ok {
@@ -262,7 +286,7 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 			return nil, fmt.Errorf("getting base logger failed: %w", err)
 		}
 
-		logger.Debug("setting access mode for CTF repository", "path", ctfRepo.Path, "ref", repositoryRef)
+		logger.Debug("setting access mode for CTF ocirepository", "path", ctfRepo.Path, "ref", repositoryRef)
 
 		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
 		if _, err := os.Stat(ctfRepo.Path); os.IsNotExist(err) {
@@ -307,12 +331,18 @@ func getComponentConstructorFile(cmd *cobra.Command) (*file.Flag, error) {
 }
 
 var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
+var _ constructor.ExternalComponentRepositoryProvider = (*constructorProvider)(nil)
 
 type constructorProvider struct {
 	cache          string
 	targetRepoSpec runtime.Typed
+	fallbackRepo   *v1.FallbackRepository
 	pluginManager  *manager.PluginManager
 	graph          *credentials.Graph
+}
+
+func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
+	return prov.fallbackRepo, nil
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {
@@ -348,24 +378,19 @@ func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descripto
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
-	plugin, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, prov.targetRepoSpec)
-	if err != nil {
-		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", prov.targetRepoSpec, err)
-	}
 	var creds map[string]string
-	identity, err := plugin.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
+	identity, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
 	if err == nil {
-		if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
-			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", prov.targetRepoSpec, err)
+		if prov.graph != nil {
+			if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
+				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", prov.targetRepoSpec, err.Error()))
+			}
 		}
 	} else {
 		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", prov.targetRepoSpec, "error", err)
 	}
-	repo, err := plugin.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
-	if err != nil {
-		return nil, fmt.Errorf("getting component version repository for %q failed: %w", prov.targetRepoSpec, err)
-	}
-	return repo, err
+
+	return prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
 }
 
 func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.Options) (opts constructor.Options, stop func(), err error) {
@@ -470,4 +495,26 @@ func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.
 	}
 
 	return opts, nil, fmt.Errorf("unknown log format to track component construction: %q", format)
+}
+
+//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+func resolversFromConfig(config *genericv1.Config, err error) ([]*resolverruntime.Resolver, error) {
+	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
+	if err != nil {
+		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
+	}
+	resolverConfigV1 := resolverv1.Merge(filtered...)
+
+	resolverConfig, err := resolverruntime.ConvertFromV1(ocirepository.Scheme, resolverConfigV1)
+	if err != nil {
+		return nil, fmt.Errorf("converting resolver configuration from v1 to runtime failed: %w", err)
+	}
+	var resolvers []*resolverruntime.Resolver
+	if resolverConfig != nil && len(resolverConfig.Resolvers) > 0 {
+		resolvers = make([]*resolverruntime.Resolver, len(resolverConfig.Resolvers))
+		for index, resolver := range resolverConfig.Resolvers {
+			resolvers[index] = &resolver
+		}
+	}
+	return resolvers, nil
 }

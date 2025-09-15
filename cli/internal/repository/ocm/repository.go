@@ -18,7 +18,6 @@ import (
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
@@ -46,29 +45,25 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph *cred
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
 
-	repositorySpec := ref.Repository
-	plugin, err := manager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, repositorySpec)
-	if err != nil {
-		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", repositorySpec, err)
-	}
-
 	var creds map[string]string
-	identity, err := plugin.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repositorySpec)
+	identity, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, ref.Repository)
 	if err == nil {
 		if creds, err = graph.Resolve(ctx, identity); err != nil {
-			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", repositorySpec, err)
+			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", ref.Repository, err)
 		}
+	} else {
+		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", ref.Repository, "error", err)
 	}
 
-	provider, err := plugin.GetComponentVersionRepository(ctx, repositorySpec, creds)
+	prov, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, ref.Repository, creds)
 	if err != nil {
-		return nil, fmt.Errorf("getting repository %q failed: %w", repositorySpec, err)
+		return nil, fmt.Errorf("getting component version repository for %q failed: %w", ref.Repository, err)
 	}
 
 	return &ComponentRepository{
 		ref:         ref,
-		spec:        repositorySpec,
-		base:        provider,
+		spec:        ref.Repository,
+		base:        prov,
 		credentials: creds,
 	}, nil
 }
@@ -102,7 +97,7 @@ func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginMana
 		res = append(res, &r)
 	}
 	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-	fallbackRepo, err := fallback.NewFallbackRepository(ctx, provider.NewComponentVersionRepositoryProvider(), graph, res)
+	fallbackRepo, err := fallback.NewFallbackRepository(ctx, manager.ComponentVersionRepositoryRegistry, graph, res)
 	if err != nil {
 		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
 	}
