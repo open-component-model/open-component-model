@@ -8,7 +8,7 @@
 
 We maintain a monorepo with multiple components: `ocm-cli`, `ocm-controller`, and a possible root/wrapper component `ocm` (final name to be decided. Solely acts as a root component referencing versions of the sub-components).
 
-Each sub-component evolves at its own pace, and the root component should always represent a snapshot of sub-component versions (and all the Go modules of the OCM Library).
+Each sub-component evolves at its own pace, and the root component should always represent a snapshot of sub-component versions (and all their Go modules in the OCM Library).
 
 We need a versioning strategy that:
 
