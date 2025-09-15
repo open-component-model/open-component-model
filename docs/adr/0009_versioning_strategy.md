@@ -84,13 +84,13 @@ ocm-controller: v0.29.0
 **Structure:**
 
 ```text
-/VERSION          <- ocm (root)
+/VERSION          <- ocm (root component, optional)
 /VERSIONS.yaml    <- snapshot of all components
 ocm-cli/VERSION
 kubernetes/controller/VERSION
 ```
 
-As a simplification, the root VERSION file for ocm can be omitted entirely, with the VERSIONS.yaml serving as the single source of truth. It contains both the root and all sub-component versions, simplifying automation and ensuring a consistent snapshot for releases and documentation.
+Optional: As a simplification, the root VERSION file for ocm can be omitted entirely, with the VERSIONS.yaml serving as the single source of truth. It contains both the root and all sub-component versions, simplifying automation and ensuring a consistent snapshot for releases and documentation.
 
 **Advantages:**
 
