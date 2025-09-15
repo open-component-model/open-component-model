@@ -283,6 +283,9 @@ func ConvertFromV2Signature(signature *v2.Signature) *Signature {
 }
 
 func ConvertFromV2SignatureInfo(signature *v2.SignatureInfo) *SignatureInfo {
+	if signature == nil {
+		return nil
+	}
 	return &SignatureInfo{
 		Algorithm: signature.Algorithm,
 		Value:     signature.Value,
