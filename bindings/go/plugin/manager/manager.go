@@ -22,6 +22,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -38,6 +39,7 @@ type PluginManager struct {
 	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
 	ResourcePluginRegistry             *resource.ResourceRegistry
 	BlobTransformerRegistry            *blobtransformer.Registry
+	SigningRegistry                    *signinghandler.SigningRegistry
 
 	mu sync.Mutex
 
@@ -58,6 +60,7 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
 		ResourcePluginRegistry:             resource.NewResourceRegistry(ctx),
 		BlobTransformerRegistry:            blobtransformer.NewBlobTransformerRegistry(ctx),
+		SigningRegistry:                    signinghandler.NewSigningRegistry(ctx),
 		baseCtx:                            ctx,
 	}
 }
@@ -156,6 +159,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 		pm.DigestProcessorRegistry.Shutdown(ctx),
 		pm.ResourcePluginRegistry.Shutdown(ctx),
 		pm.BlobTransformerRegistry.Shutdown(ctx),
+		pm.SigningRegistry.Shutdown(ctx),
 	)
 
 	return errs
@@ -276,6 +280,11 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 		case mtypes.BlobTransformerPluginType:
 			slog.DebugContext(ctx, "adding blob transformer plugin", "id", plugin.ID)
 			if err := pm.BlobTransformerRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+			}
+		case mtypes.SigningHandlerPluginType:
+			slog.DebugContext(ctx, "adding signing plugin", "id", plugin.ID)
+			if err := pm.SigningRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		}
