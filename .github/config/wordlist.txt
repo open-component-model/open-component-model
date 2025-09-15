@@ -519,3 +519,9 @@ automatable
 backport
 backports
 backporting
+auditable
+hotfix
+hotfixes
+discoverability
+idempotency
+reviewable
