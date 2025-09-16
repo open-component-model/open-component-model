@@ -66,7 +66,7 @@ All decisions, votes, and meeting notes must be documented and made public in th
 - Schedule regular meetings (at least every 8 weeks; cadence may be adjusted for project needs).
 - Keep public meeting notes and publish them in the `SIGs` folder of the community repo.
 - Optionally record meetings and make them available to the community.
-- SIG mailing lists should use the domain `lists.linuxfoundation.org` and be provisioned via LFX. Example: `sig-placeholdere@lists.linuxfoundation.org`.
+- SIG mailing lists should use the domain `lists.linuxfoundation.org` and be provisioned via LFX. Example: `sig-placeholder@lists.linuxfoundation.org`.
 
 ### 3.2 Code Ownership & Repository Structure
 
