@@ -44,4 +44,4 @@ Refer to the [SIG Handbook](SIG-Handbook.md) for governance, decision-making, vo
 
 ---
 
-Submit this proposal to the OCM Technical Steering Committee (TSC) for review and approval. The TSC will vote on acceptance and leadership. See [SIG Handbook](SIG-Handbook.md) for full process.
+Submit this proposal in form of an [issue](https://github.com/open-component-model/open-component-model/issues) to the OCM Technical Steering Committee (TSC) for review and approval. The TSC will vote on acceptance and leadership. See [SIG Handbook](SIG-Handbook.md) for full process.

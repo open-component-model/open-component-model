@@ -515,7 +515,6 @@ sigs
 sig's
 roadmap
 scalable
-centos
 monorepo
 supermajority
 resubmission
