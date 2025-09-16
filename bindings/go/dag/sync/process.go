@@ -232,14 +232,14 @@ func (d *DirectedAcyclicGraph[T]) processLayer(
 		vertex := topology.MustGetVertex(id)
 		for _, child := range vertex.EdgeKeys() {
 			inDegree := topology.MustGetInDegree(child)
+			newValue := inDegree.Add(-1)
 			// If all parents of the child have been processed and the
 			// child has not been enqueued yet, add it to the next layer.
-			if inDegree.Load()-1 == 0 {
+			if newValue == 0 {
 				d.MustGetVertex(child).Attributes.Store(AttributeProcessingState, ProcessingStateQueued)
 				next = append(next, child)
 			}
 			vertex.Edges.Delete(child)
-			inDegree.Add(-1)
 		}
 		topology.Vertices.Delete(id)
 	}
