@@ -169,14 +169,11 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	}()
 
 	var opts []getter.Option
-	if helmSpec.CACert != "" || helmSpec.CACertFile != "" {
-		certFile, keyFile, caFilePath, err := setupTLSFiles(helmSpec, tmpDir, credentials)
-		if err != nil {
-			return nil, fmt.Errorf("error setting up TLS files: %w", err)
-		}
-
-		opts = append(opts, getter.WithTLSClientConfig(certFile, keyFile, caFilePath))
+	tlsOption, err := constructTLSOptions(helmSpec, tmpDir, credentials)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up TLS options: %w", err)
 	}
+	opts = append(opts, tlsOption)
 
 	var keyring string
 	if v, ok := credentials[CredentialKeyKeyring]; ok {
@@ -228,46 +225,46 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 }
 
 // setupTLSFiles sets up the TLS configuration files based on the helm specification
-func setupTLSFiles(helmSpec v1.Helm, tmpDir string, credentials map[string]string) (_ string, _ string, _ string, err error) {
-	var caFile *os.File
+func constructTLSOptions(helmSpec v1.Helm, tmpDir string, credentials map[string]string) (_ getter.Option, err error) {
+	var (
+		caFile                        *os.File
+		caFilePath, certFile, keyFile string
+	)
+
 	if helmSpec.CACertFile != "" {
-		caFile, err = os.Open(helmSpec.CACertFile)
-		if err != nil {
-			return "", "", "", fmt.Errorf("error opening CA certificate file %q: %w", helmSpec.CACertFile, err)
-		}
+		caFilePath = helmSpec.CACertFile
 	} else if helmSpec.CACert != "" {
 		caFile, err = os.CreateTemp(tmpDir, "caCert-*.pem")
 		if err != nil {
-			return "", "", "", fmt.Errorf("error creating temporary CA certificate file: %w", err)
+			return nil, fmt.Errorf("error creating temporary CA certificate file: %w", err)
 		}
 		if _, err = caFile.WriteString(helmSpec.CACert); err != nil {
-			return "", "", "", fmt.Errorf("error writing CA certificate to temp file: %w", err)
+			return nil, fmt.Errorf("error writing CA certificate to temp file: %w", err)
+		}
+		caFilePath = caFile.Name()
+		if err := caFile.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close temporary ca certificate file: %w", err)
 		}
 	}
 
-	defer func() {
-		if cerr := caFile.Close(); cerr != nil {
-			err = errors.Join(err, fmt.Errorf("failed to close temporary ca certificate file: %w", cerr))
-		}
-	}()
-
-	var certFile, keyFile string
 	// set up certFile and keyFile if they are provided in the credentials
 	if v, ok := credentials[CredentialKeyCertFile]; ok {
 		certFile = v
 		if _, err := os.Stat(certFile); err != nil {
-			return "", "", "", fmt.Errorf("certFile %q does not exist", certFile)
+			return nil, fmt.Errorf("certFile %q does not exist", certFile)
 		}
 	}
 
 	if v, ok := credentials[CredentialKeyClientKey]; ok {
 		keyFile = v
 		if _, err := os.Stat(keyFile); err != nil {
-			return "", "", "", fmt.Errorf("keyFile %q does not exist", keyFile)
+			return nil, fmt.Errorf("keyFile %q does not exist", keyFile)
 		}
 	}
 
-	return certFile, keyFile, caFile.Name(), nil
+	// it's safe to always add this option even with empty values
+	// because the default is empty.
+	return getter.WithTLSClientConfig(certFile, keyFile, caFilePath), nil
 }
 
 // copyChartToOCILayout takes a ReadOnlyChart helper object and creates an OCI layout from it.
