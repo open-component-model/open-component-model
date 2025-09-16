@@ -79,7 +79,7 @@ All decisions, votes, and meeting notes must be documented and made public in th
 - New members should read the SIG Handbook and understand the SIG's scope, responsibilities, and meeting cadence.
 - Join the SIG's communication channels (mailing list, Slack, etc.).
 - Get access to relevant repositories and documentation.
-- Attend the next scheduled SIG meeting and introduce yourself.
+- Attend the next scheduled SIG meeting and introduce themselves.
 - Review open issues, PRs, and the SIG roadmap to understand current priorities.
 - Ask questions and connect with the Chair, Tech Lead, or other members for guidance.
 - Voting status is granted after regular participation and consensus of existing Voting Members.
