@@ -36,9 +36,6 @@ const (
 	CredentialKeyClientKey = "keyFile"
 	// CredentialKeyKeyring is the key for storing the keyring name to use.
 	CredentialKeyKeyring = "keyring"
-	// TODO: Use this to decode.
-	// CredentialKeyCACertPassword is the key for storing password for the CA certificate.
-	// CredentialKeyCACertPassword = "caCertFilePassword"
 )
 
 // ReadOnlyChart contains Helm chart contents as tgz archive, some metadata and optionally a provenance file.
