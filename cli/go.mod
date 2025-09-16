@@ -23,7 +23,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250914002742-a215ca792a3e
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
-	ocm.software/open-component-model/bindings/go/plugin v0.0.5
+	ocm.software/open-component-model/bindings/go/plugin v0.0.6
 	ocm.software/open-component-model/bindings/go/repository v0.0.1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
@@ -36,7 +36,6 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
