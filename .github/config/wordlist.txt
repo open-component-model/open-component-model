@@ -526,3 +526,8 @@ discoverability
 idempotency
 reviewable
 submodules
+rollout
+rollouts
+rc
+rcs
+auditability
