@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 var (
@@ -39,33 +40,28 @@ var (
 type DirectedAcyclicGraph[T cmp.Ordered] struct {
 	// Vertices stores the nodes in the graph
 	Vertices *sync.Map // map[T]*Vertex[T]
-	// OutDegree of each vertex (number of outgoing edges)
-	OutDegree *sync.Map // map[T]int
-	// InDegree of each vertex (number of incoming edges)
-	InDegree *sync.Map // map[T]int
 }
 
 // NewDirectedAcyclicGraph creates a new directed acyclic graph.
 func NewDirectedAcyclicGraph[T cmp.Ordered]() *DirectedAcyclicGraph[T] {
 	return &DirectedAcyclicGraph[T]{
-		Vertices:  &sync.Map{},
-		OutDegree: &sync.Map{},
-		InDegree:  &sync.Map{},
+		Vertices: &sync.Map{},
 	}
 }
 
 // GetOutDegree returns the out-degree (number of outgoing edges) of the given
 // vertex and a boolean indicating if the vertex exists in the graph.
-func (d *DirectedAcyclicGraph[T]) GetOutDegree(id T) (int, bool) {
-	if outDegree, ok := d.OutDegree.Load(id); ok {
-		return outDegree.(int), true
+func (d *DirectedAcyclicGraph[T]) GetOutDegree(id T) (*atomic.Int64, bool) {
+	v, ok := d.GetVertex(id)
+	if !ok {
+		return nil, false
 	}
-	return 0, false
+	return &v.OutDegree, true
 }
 
 // MustGetOutDegree returns the out-degree of the given vertex, panicking if
 // the vertex does not exist in the graph.
-func (d *DirectedAcyclicGraph[T]) MustGetOutDegree(id T) int {
+func (d *DirectedAcyclicGraph[T]) MustGetOutDegree(id T) *atomic.Int64 {
 	inDegree, ok := d.GetOutDegree(id)
 	if !ok {
 		panic(fmt.Sprintf("out-degree for vertex %v not found in the graph", id))
@@ -75,16 +71,17 @@ func (d *DirectedAcyclicGraph[T]) MustGetOutDegree(id T) int {
 
 // GetInDegree returns the in-degree (number of incoming edges) of the given
 // vertex and a boolean indicating if the vertex exists in the graph.
-func (d *DirectedAcyclicGraph[T]) GetInDegree(id T) (int, bool) {
-	if inDegree, ok := d.InDegree.Load(id); ok {
-		return inDegree.(int), true
+func (d *DirectedAcyclicGraph[T]) GetInDegree(id T) (*atomic.Int64, bool) {
+	v, ok := d.GetVertex(id)
+	if !ok {
+		return nil, false
 	}
-	return 0, false
+	return &v.InDegree, true
 }
 
 // MustGetInDegree returns the in-degree of the given vertex, panicking if
 // the vertex does not exist in the graph.
-func (d *DirectedAcyclicGraph[T]) MustGetInDegree(id T) int {
+func (d *DirectedAcyclicGraph[T]) MustGetInDegree(id T) *atomic.Int64 {
 	inDegree, ok := d.GetInDegree(id)
 	if !ok {
 		panic(fmt.Sprintf("in-degree for vertex %v not found in the graph", id))
@@ -112,22 +109,11 @@ func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
 		cloned.Vertices.Store(key, value.(*Vertex[T]).Clone())
 		return true
 	})
-	d.OutDegree.Range(func(key, value any) bool {
-		cloned.OutDegree.Store(key, value)
-		return true
-	})
-	d.InDegree.Range(func(key, value any) bool {
-		cloned.InDegree.Store(key, value)
-		return true
-	})
 	return cloned
 }
 
 // AddVertex adds a new node to the graph.
 func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) error {
-	if _, exists := d.Vertices.Load(id); exists {
-		return fmt.Errorf("node %v already exists: %w", id, ErrAlreadyExists)
-	}
 	vertex := &Vertex[T]{
 		ID:         id,
 		Attributes: &sync.Map{},
@@ -138,10 +124,9 @@ func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) 
 			vertex.Attributes.Store(k, v)
 		}
 	}
-	d.Vertices.Store(vertex.ID, vertex)
-
-	d.OutDegree.Store(vertex.ID, 0)
-	d.InDegree.Store(vertex.ID, 0)
+	if actual, exists := d.Vertices.LoadOrStore(id, vertex); exists && actual != vertex {
+		return fmt.Errorf("node %v already exists: %w", id, ErrAlreadyExists)
+	}
 	return nil
 }
 
@@ -157,8 +142,7 @@ func (d *DirectedAcyclicGraph[T]) DeleteVertex(id T) error {
 		node.Edges.Range(func(edgeKey, _ any) bool {
 			if edgeKey == id {
 				// Decrement the in-degree of the node
-				inDegree, _ := d.InDegree.Load(node.ID)
-				d.InDegree.Store(node.ID, inDegree.(int)-1)
+				node.InDegree.Add(-1)
 				// Remove the edge from the node
 				node.Edges.Delete(id)
 			}
@@ -168,8 +152,6 @@ func (d *DirectedAcyclicGraph[T]) DeleteVertex(id T) error {
 	})
 
 	d.Vertices.Delete(id)
-	d.OutDegree.Delete(id)
-	d.InDegree.Delete(id)
 
 	return nil
 }
@@ -189,7 +171,7 @@ func formatCycle(cycle []string) string {
 // AddEdge adds a directed edge from one node to another.
 func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]any) error {
 	fromNode, fromExists := d.GetVertex(from)
-	_, toExists := d.GetVertex(to)
+	toNode, toExists := d.GetVertex(to)
 	if !fromExists {
 		return fmt.Errorf("node %v does not exist", from)
 	}
@@ -206,18 +188,16 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 		// Only initialize the map if the edge was added
 		fromNode.Edges.Store(to, &sync.Map{})
 		// Only increment the out-degree and in-degree if the edge was added
-		outDegree, _ := d.OutDegree.Load(from)
-		d.OutDegree.Store(from, outDegree.(int)+1)
-		inDegree, _ := d.InDegree.Load(to)
-		d.InDegree.Store(to, inDegree.(int)+1)
+		fromNode.OutDegree.Add(1)
+		toNode.InDegree.Add(1)
 
 		// Check if the graph is still a DAG
 		hasCycle, cycle := d.HasCycle()
 		if hasCycle {
 			// Ehmmm, we have a cycle, let's remove the edge we just added
 			fromNode.Edges.Delete(to)
-			d.OutDegree.Store(from, outDegree.(int)-1)
-			d.InDegree.Store(to, inDegree.(int)-1)
+			toNode.InDegree.Add(-1)
+			fromNode.OutDegree.Add(-1)
 			return fmt.Errorf("adding an edge from %v to %v would create a cycle: %w", fmt.Sprintf("%v", from), fmt.Sprintf("%v", to), &CycleError{
 				Cycle: cycle,
 			})
@@ -239,8 +219,8 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 // Roots returns the root nodes of the graph, which are nodes with no incoming edges.
 func (d *DirectedAcyclicGraph[T]) Roots() []T {
 	var roots []T
-	d.InDegree.Range(func(key, value any) bool {
-		if value.(int) == 0 {
+	d.Vertices.Range(func(key, value any) bool {
+		if value.(*Vertex[T]).InDegree.Load() == 0 {
 			roots = append(roots, key.(T))
 		}
 		return true
@@ -476,6 +456,8 @@ type Vertex[T cmp.Ordered] struct {
 	// Edges stores the IDs of the nodes that this node has an outgoing edge to,
 	// as well as any attributes associated with that edge.
 	Edges *sync.Map // map[T]*sync.Map with map[string]any (attributes)
+
+	InDegree, OutDegree atomic.Int64
 }
 
 func (v *Vertex[T]) Clone() *Vertex[T] {
@@ -484,6 +466,8 @@ func (v *Vertex[T]) Clone() *Vertex[T] {
 		Attributes: &sync.Map{},
 		Edges:      &sync.Map{},
 	}
+	cloned.InDegree.Store(v.InDegree.Load())
+	cloned.OutDegree.Store(v.OutDegree.Load())
 	v.Attributes.Range(func(key, value any) bool {
 		k := key.(string)
 		cloned.Attributes.Store(k, value)
