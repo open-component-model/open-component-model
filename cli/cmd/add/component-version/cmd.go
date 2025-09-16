@@ -84,7 +84,7 @@ func New() *cobra.Command {
 		SuggestFor: []string{"component", "components", "version", "versions"},
 		Short:      fmt.Sprintf("Add component version(s) to an OCM Repository based on a %[1]q file", DefaultComponentConstructorBaseName),
 		Args:       cobra.NoArgs,
-		Long: fmt.Sprintf(`Add component version(s) to an OCM ocirepository that can be reused for transfers.
+		Long: fmt.Sprintf(`Add component version(s) to an OCM repository that can be reused for transfers.
 
 A %[1]q file is used to specify the component version(s) to be added. It can contain both a single component or many components.
 
@@ -97,11 +97,11 @@ Otherwise the path to the %[1]q file will be used as the working directory.
 You are only allowed to reference files within the working directory or sub-directories of the working directory.
 
 Repository Reference Format:
-	[type::]{ocirepository}
+	[type::]{repository}
 
 For known types, currently only {%[2]s} are supported, which can be shortened to {%[3]s} respectively for convenience.
 
-If no type is given, the ocirepository specification is interpreted based on introspection and heuristics:
+If no type is given, the repository specification is interpreted based on introspection and heuristics:
 
 - URL schemes or domain patterns -> OCI registry
 - Local paths -> CTF archive
@@ -125,7 +125,7 @@ add component-version --%[1]s ghcr.io/my-org/my-repo --%[2]s %[3]s.yaml
 add component-version --%[1]s https://my-registry.com/my-repo --%[2]s %[3]s.yaml
 add component-version --%[1]s localhost:5000/my-repo --%[2]s %[3]s.yaml
 
-Specifying ocirepository types explicitly:
+Specifying repository types explicitly:
 
 add component-version --%[1]s ctf::./local/archive --%[2]s %[3]s.yaml
 add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.yaml
@@ -136,10 +136,10 @@ add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.y
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of component versions that can be constructed concurrently.")
-	cmd.Flags().StringP(FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "ocirepository ref")
+	cmd.Flags().StringP(FlagRepositoryRef, string(FlagRepositoryRef[0]), LegacyDefaultArchiveName, "repository ref")
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the component constructor file")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
-	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the ocirepository")
+	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
 
 	return cmd
@@ -200,7 +200,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 
 	repoSpec, err := GetRepositorySpec(cmd)
 	if err != nil {
-		return fmt.Errorf("getting ocirepository spec failed: %w", err)
+		return fmt.Errorf("getting repository spec failed: %w", err)
 	}
 
 	cacheDir, err := cmd.Flags().GetString(FlagBlobCacheDirectory)
@@ -231,7 +231,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 
 	fallback, err := v1.NewFallbackRepository(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, resolvers)
 	if err != nil {
-		return fmt.Errorf("creating fallback ocirepository failed: %w", err)
+		return fmt.Errorf("creating fallback repository failed: %w", err)
 	}
 
 	instance := &constructorProvider{
@@ -270,12 +270,12 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 	repositoryRef, err := cmd.Flags().GetString(FlagRepositoryRef)
 	if err != nil {
-		return nil, fmt.Errorf("getting ocirepository reference flag failed: %w", err)
+		return nil, fmt.Errorf("getting repository reference flag failed: %w", err)
 	}
 
 	typed, err := compref.ParseRepository(repositoryRef)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse ocirepository: %w", err)
+		return nil, fmt.Errorf("failed to parse repository: %w", err)
 	}
 
 	if ctfRepo, ok := typed.(*ctfv1.Repository); ok {
@@ -284,7 +284,7 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 			return nil, fmt.Errorf("getting base logger failed: %w", err)
 		}
 
-		logger.Debug("setting access mode for CTF ocirepository", "path", ctfRepo.Path, "ref", repositoryRef)
+		logger.Debug("setting access mode for CTF repository", "path", ctfRepo.Path, "ref", repositoryRef)
 
 		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
 		if _, err := os.Stat(ctfRepo.Path); os.IsNotExist(err) {
