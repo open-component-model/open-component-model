@@ -12,13 +12,10 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
-	"ocm.software/open-component-model/bindings/go/repository"
-	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
-	"ocm.software/open-component-model/cli/internal/repository/ocm"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
@@ -28,6 +25,9 @@ import (
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
+	"ocm.software/open-component-model/bindings/go/repository"
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -35,6 +35,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
+	"ocm.software/open-component-model/cli/internal/repository/ocm"
 	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
@@ -229,6 +230,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
 	fallback, err := v1.NewFallbackRepository(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, resolvers)
 	if err != nil {
 		return fmt.Errorf("creating fallback repository failed: %w", err)
@@ -328,15 +330,18 @@ func getComponentConstructorFile(cmd *cobra.Command) (*file.Flag, error) {
 	return constructorFlag, nil
 }
 
-var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
-var _ constructor.ExternalComponentRepositoryProvider = (*constructorProvider)(nil)
+var (
+	_ constructor.TargetRepositoryProvider            = (*constructorProvider)(nil)
+	_ constructor.ExternalComponentRepositoryProvider = (*constructorProvider)(nil)
+)
 
 type constructorProvider struct {
 	cache          string
 	targetRepoSpec runtime.Typed
-	fallbackRepo   *v1.FallbackRepository
-	pluginManager  *manager.PluginManager
-	graph          credentials.GraphResolver
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	fallbackRepo  *v1.FallbackRepository
+	pluginManager *manager.PluginManager
+	graph         credentials.GraphResolver
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
