@@ -30,12 +30,14 @@ import (
 
 const (
 	HelmRepositoryType = "helmRepository"
-	// CredentialKeyCertFile is the key for storing the location of a client certificate for mTLS
+	// CredentialKeyCertFile is the key for storing the location of a client certificate.
 	CredentialKeyCertFile = "certFile"
-	// CredentialKeyClientKey is the key for storing the location of a client private key for mTLS
+	// CredentialKeyClientKey is the key for storing the location of a client private key.
 	CredentialKeyClientKey = "keyFile"
+	// CredentialKeyKeyring is the key for storing the keyring name to use.
+	CredentialKeyKeyring = "keyring"
 	// TODO: Use this to decode.
-	// CredentialKeyCACertPassword is the key for storing password for the CA certificate
+	// CredentialKeyCACertPassword is the key for storing password for the CA certificate.
 	// CredentialKeyCACertPassword = "caCertFilePassword"
 )
 
@@ -176,13 +178,19 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		opts = append(opts, getter.WithTLSClientConfig(certFile, keyFile, caFilePath))
 	}
 
+	var keyring string
+	if v, ok := credentials[CredentialKeyKeyring]; ok {
+		keyring = v
+	}
+
 	dl := &downloader.ChartDownloader{
 		Out:              os.Stderr,
-		Verify:           downloader.VerifyNever, // TODO: Support signature verification
+		Verify:           downloader.VerifyIfPossible,
 		Getters:          getter.All(settings),
 		RepositoryConfig: settings.RepositoryConfig,
 		RepositoryCache:  settings.RepositoryCache,
 		Options:          opts,
+		Keyring:          keyring,
 	}
 
 	if username, ok := credentials[ocicredentials.CredentialKeyUsername]; ok {
