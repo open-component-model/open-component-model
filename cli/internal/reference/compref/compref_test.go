@@ -472,6 +472,26 @@ func TestParseRepository(t *testing.T) {
 		},
 	}
 
+	// Append test cases for all CTF archive extensions
+	for _, ext := range []string{"tar.gz", "tgz", "tar"} {
+		repoPath := "archive." + ext
+		tests = append(tests, struct {
+			name           string
+			repoRef        string
+			expectedType   runtime.Type
+			validateResult func(t *testing.T, result runtime.Typed, repoSpec string)
+		}{
+			name:         fmt.Sprintf("CTF Archive - %s", ext),
+			repoRef:      repoPath,
+			expectedType: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ctfv1.Repository)
+				require.True(t, ok, "expected *ctfv1.Repository")
+				require.Equal(t, repoPath, repo.Path)
+			},
+		})
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
@@ -515,4 +535,3 @@ func TestParseRepositoryErrorCases(t *testing.T) {
 		})
 	}
 }
-
