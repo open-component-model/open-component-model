@@ -172,14 +172,18 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	}
 	opts = append(opts, tlsOption)
 
-	var keyring string
+	var (
+		keyring string
+		verify  = downloader.VerifyNever
+	)
 	if v, ok := credentials[CredentialKeyKeyring]; ok {
 		keyring = v
+		verify = downloader.VerifyIfPossible
 	}
 
 	dl := &downloader.ChartDownloader{
 		Out:              os.Stderr,
-		Verify:           downloader.VerifyIfPossible,
+		Verify:           verify,
 		Getters:          getter.All(settings),
 		RepositoryConfig: settings.RepositoryConfig,
 		RepositoryCache:  settings.RepositoryCache,
