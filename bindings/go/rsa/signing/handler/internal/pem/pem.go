@@ -59,18 +59,17 @@ func (pem *RSAPublicKeyPEM) GetOptionalUnderlyingCert() *x509.Certificate {
 	return pem.UnderlyingCert
 }
 
-// ParseRSAPublicKeyPEM scans concatenated PEM data and returns the first RSA
-// public key found plus the original parsed object it came from:
-//   - For "PUBLIC KEY": returns (*rsa.PublicKey, crypto.PublicKey)
-//   - For "RSA PUBLIC KEY": returns (*rsa.PublicKey, *rsa.PublicKey)
-//   - For "CERTIFICATE": returns (*rsa.PublicKey, *x509.Certificate)
+// ParseRSAPublicKeyPEM scans concatenated PEM data and returns RSAPublicKeyPEM
+// if one can be parsed. It supports PKCS#1 ("RSA PUBLIC KEY") and PKIX ("PUBLIC KEY")
+// containers.
 //
-// If none can be parsed it returns (nil, nil).
+// If none can be parsed it returns (nil).
 func ParseRSAPublicKeyPEM(pemBytes []byte) *RSAPublicKeyPEM {
 	for len(pemBytes) > 0 {
 		block, rest := pem.Decode(pemBytes)
 		if block == nil {
-			break
+			// No more PEM blocks.
+			return nil
 		}
 		switch block.Type {
 		case pemPKIXPublicKey:
