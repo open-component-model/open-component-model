@@ -6,58 +6,31 @@ import (
 	"fmt"
 
 	ocmctx "ocm.software/ocm/api/ocm"
-	"ocm.software/ocm/api/ocm/compdesc"
-	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	"ocm.software/ocm/api/ocm/selectors"
+	metav1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
+	"ocm.software/ocm/api/ocm/cpi"
+	"ocm.software/ocm/api/ocm/resolvers"
 	"ocm.software/ocm/api/ocm/tools/signing"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func GetResourceAccessForComponentVersion(
-	ctx context.Context,
-	session ocmctx.Session,
-	cv ocmctx.ComponentVersionAccess,
-	reference v1.ResourceReference,
-	cdSet *Descriptors,
-	resolver ocmctx.ComponentVersionResolver,
-	skipVerification bool,
-) (ocmctx.ResourceAccess, ocmctx.ComponentVersionAccess, error) {
+func GetResourceAccessForComponentVersion(ctx context.Context, cv ocmctx.ComponentVersionAccess, reference metav1.ResourceReference, resolver ocmctx.ComponentVersionResolver, skipVerification bool) (ocmctx.ResourceAccess, ocmctx.ComponentVersionAccess, error) {
 	logger := log.FromContext(ctx)
-	// Resolve resource resourceReference to get resource and its component descriptor
-	resourceDesc, resourceCompDesc, err := compdesc.ResolveResourceReference(cv.GetDescriptor(), reference, compdesc.NewComponentVersionSet(cdSet.List...))
+
+	// resAcc, cvAcc, err := resourcerefs.ResolveResourceReference(cv, reference, resolver)
+	resAcc, cvAcc, err := ResolveResourceReference(cv, reference, resolver)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to resolve resource reference: %w", err)
 	}
 
-	resourceCV, err := session.LookupComponentVersion(resolver, resourceCompDesc.GetName(), resourceCompDesc.GetVersion())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to lookup component version for resource: %w", err)
-	}
-
-	resourceAccesses, err := resourceCV.SelectResources(selectors.Identity(resourceDesc.GetIdentity(resourceCompDesc.GetResources())))
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to select resources: %w", err)
-	}
-
-	var resourceAccess ocmctx.ResourceAccess
-	switch len(resourceAccesses) {
-	case 0:
-		return nil, nil, errors.New("no resources selected")
-	case 1:
-		resourceAccess = resourceAccesses[0]
-	default:
-		return nil, nil, errors.New("cannot determine the resource access unambiguously")
-	}
-
 	if !skipVerification {
-		if err := verifyResource(resourceAccess, resourceCV); err != nil {
+		if err := verifyResource(resAcc, cvAcc); err != nil {
 			return nil, nil, fmt.Errorf("failed to verify resource: %w", err)
 		}
 	} else {
 		logger.V(1).Info("skipping resource verification")
 	}
 
-	return resourceAccess, resourceCV, nil
+	return resAcc, cvAcc, nil
 }
 
 // verifyResource verifies the resource digest with the digest from the component version access and component descriptor.
@@ -86,4 +59,42 @@ func verifyResource(access ocmctx.ResourceAccess, cv ocmctx.ComponentVersionAcce
 	}
 
 	return nil
+}
+
+func ResolveResourceReference(cv cpi.ComponentVersionAccess, ref metav1.ResourceReference, resolver cpi.ComponentVersionResolver) (cpi.ResourceAccess, cpi.ComponentVersionAccess, error) {
+	if len(ref.Resource) == 0 || len(ref.Resource["name"]) == 0 {
+		return nil, nil, fmt.Errorf("no resource name specified")
+	}
+
+	eff, err := ResolveReferencePath(cv, ref.ReferencePath, resolver)
+	if err != nil {
+		return nil, nil, err
+	}
+	r, err := eff.GetResource(ref.Resource)
+	if err != nil {
+		return nil, nil, err
+	}
+	return r, eff, nil
+}
+
+func ResolveReferencePath(cv ocmctx.ComponentVersionAccess, path []metav1.Identity, resolver cpi.ComponentVersionResolver) (cpi.ComponentVersionAccess, error) {
+	if cv == nil {
+		return nil, fmt.Errorf("no component version specified")
+	}
+
+	for _, cr := range path {
+		cref, err := cv.GetReference(cr)
+		if err != nil {
+			return nil, fmt.Errorf("cannot resolve reference %s: %w", cr.String(), err)
+		}
+		resolver = resolvers.NewCompoundResolver(cv.Repository(), resolver)
+		cv, err = resolver.LookupComponentVersion(cref.GetComponentName(), cref.GetVersion())
+		if err != nil {
+			return nil, fmt.Errorf("cannot resolve component version for reference %s: %w", cr.String(), err)
+		}
+		if cv == nil {
+			return nil, fmt.Errorf("no component version specified (%s)", cref.String())
+		}
+	}
+	return cv, nil
 }
