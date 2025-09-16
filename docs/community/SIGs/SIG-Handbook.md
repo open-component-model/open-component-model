@@ -66,7 +66,7 @@ All decisions, votes, and meeting notes must be documented and made public in th
 - Schedule regular meetings (at least every 8 weeks; cadence may be adjusted for project needs).
 - Keep public meeting notes and publish them in the `SIGs` folder of the community repo.
 - Optionally record meetings and make them available to the community.
-- SIG mailing lists should use the domain `lists.linuxfoundation.org` and be provisioned via LFX. Example: `sig-placeholdere@lists.linuxfoundation.org`.
+- SIG mailing lists should use the domain `lists.linuxfoundation.org` and be provisioned via LFX. Example: `sig-placeholder@lists.linuxfoundation.org`.
 
 ### 3.2 Code Ownership & Repository Structure
 
@@ -79,7 +79,7 @@ All decisions, votes, and meeting notes must be documented and made public in th
 - New members should read the SIG Handbook and understand the SIG's scope, responsibilities, and meeting cadence.
 - Join the SIG's communication channels (mailing list, Slack, etc.).
 - Get access to relevant repositories and documentation.
-- Attend the next scheduled SIG meeting and introduce yourself.
+- Attend the next scheduled SIG meeting and introduce themselves.
 - Review open issues, PRs, and the SIG roadmap to understand current priorities.
 - Ask questions and connect with the Chair, Tech Lead, or other members for guidance.
 - Voting status is granted after regular participation and consensus of existing Voting Members.
