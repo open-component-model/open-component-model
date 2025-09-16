@@ -115,7 +115,7 @@ func (i *InputMethod) createRemoteResourceAccess(resource *constructorruntime.Re
 	// TODO: Support version hints. We need to figure out how to do this in a way that is compatible with the OCIImage spec.
 	// For now we just use the version as the tag.
 	if helm.Version != "" {
-		ociAccess.ImageReference = helm.Repository + ":" + helm.Version // https://repo/chart.6.3.1.tgz
+		ociAccess.ImageReference = helm.Repository + ":" + helm.Version // https://repo/chart-6.3.1.tgz:v1.2.3
 	}
 
 	resource.Access = ociAccess

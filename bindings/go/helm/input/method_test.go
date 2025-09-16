@@ -2,6 +2,8 @@ package input_test
 
 import (
 	"context"
+	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -178,11 +180,13 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 			require.NoError(t, err)
 			defer reader.Close()
 
-			// Read first few bytes to verify content exists
-			buffer := make([]byte, 100)
-			n, err := reader.Read(buffer)
+			tempFile, err := os.CreateTemp("", "test-")
 			require.NoError(t, err)
-			assert.Greater(t, n, 0, "blob should contain data")
+			defer os.Remove(tempFile.Name())
+
+			_, err = io.Copy(tempFile, reader)
+			require.NoError(t, err)
+			require.NotEmpty(t, tempFile.Name())
 		})
 	}
 }

@@ -155,15 +155,11 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 // and creates a ReadOnlyChart from it.
 func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
 	settings := cli.New()
+	// Note: DO NOT DELETE this folder, otherwise, the later reader will fail since the source is deleted.
 	tmpDir, err := os.MkdirTemp(tmpDirBase, "helmRemoteChart*")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory: %w", err)
 	}
-	defer func() {
-		if cerr := os.RemoveAll(tmpDir); cerr != nil {
-			err = errors.Join(err, fmt.Errorf("failed to cleanup temp dir: %w", cerr))
-		}
-	}()
 
 	var opts []getter.Option
 	tlsOption, err := constructTLSOptions(helmSpec, tmpDir, credentials)
@@ -391,18 +387,22 @@ func pushProvenanceLayer(ctx context.Context, provenance *filesystem.Blob, targe
 }
 
 func pushChartLayer(ctx context.Context, chart *filesystem.Blob, target oras.Target) (_ *ociImageSpecV1.Descriptor, err error) {
+	// We get the reader first because Digest only returns a boolean and no error.
+	// This hides errors like, "file not found" or "permission denied" on downloaded content.
+	chartReader, err := chart.ReadCloser()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get a reader for helm chart blob: %w", err)
+	}
+
 	chartDigStr, known := chart.Digest()
 	if !known {
 		return nil, fmt.Errorf("unknown digest for helm chart")
 	}
+
 	chartLayer := ociImageSpecV1.Descriptor{
 		MediaType: registry.ChartLayerMediaType,
 		Digest:    digest.Digest(chartDigStr),
 		Size:      chart.Size(),
-	}
-	chartReader, err := chart.ReadCloser()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get a reader for helm chart blob: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, chartReader.Close())
