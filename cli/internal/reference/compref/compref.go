@@ -125,7 +125,7 @@ func (ref *Ref) String() string {
 // This code roughly resembles
 // https://github.com/open-component-model/ocm/blob/2ea69c7ecca1e8be7e9d9f94dfdcac6090f1c69d/api/oci/ref_test.go
 // in a much smaller scope and size and will grow over time.
-func Parse(input string) (*Ref, error) {
+func Parse(input string, opts ...Option) (*Ref, error) {
 	ref := &Ref{}
 	originalInput := input
 
@@ -196,7 +196,7 @@ func Parse(input string) (*Ref, error) {
 		repositoryRef = input
 	}
 
-	repository, err := ParseRepository(repositoryRef)
+	repository, err := ParseRepository(repositoryRef, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse repository: %w", err)
 	}
@@ -222,7 +222,12 @@ func Parse(input string) (*Ref, error) {
 //
 // Where type can be "ctf" or "oci", and repository reference is the actual repository location.
 // If no type is specified, it will be guessed using heuristics.
-func ParseRepository(repoRef string) (runtime.Typed, error) {
+func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
+	options, err := NewOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
+
 	originalInput := repoRef
 	input := repoRef
 
@@ -263,6 +268,10 @@ func ParseRepository(repoRef string) (runtime.Typed, error) {
 		t.BaseUrl = uri.String()
 	case *ctfv1.Repository:
 		t.Path = input
+		if options.CTFAccessMode != "" {
+			Base.Debug("overriding ctf access mode for repository reference", "mode", options.CTFAccessMode, "ref", repoRef)
+			t.AccessMode = options.CTFAccessMode
+		}
 	default:
 		return nil, fmt.Errorf("unsupported repository type: %q", repoType)
 	}

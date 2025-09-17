@@ -312,7 +312,7 @@ type constructorProvider struct {
 	cache          string
 	targetRepoSpec runtime.Typed
 	pluginManager  *manager.PluginManager
-	graph          *credentials.Graph
+	graph          credentials.GraphResolver
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {
@@ -348,12 +348,8 @@ func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descripto
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
-	plugin, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, prov.targetRepoSpec)
-	if err != nil {
-		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", prov.targetRepoSpec, err)
-	}
 	var creds map[string]string
-	identity, err := plugin.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
+	identity, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
 	if err == nil {
 		if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
 			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", prov.targetRepoSpec, err)
@@ -361,7 +357,7 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 	} else {
 		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", prov.targetRepoSpec, "error", err)
 	}
-	repo, err := plugin.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
+	repo, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", prov.targetRepoSpec, err)
 	}
