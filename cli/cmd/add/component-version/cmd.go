@@ -338,7 +338,7 @@ var (
 type constructorProvider struct {
 	cache          string
 	targetRepoSpec runtime.Typed
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	fallbackRepo  *v1.FallbackRepository
 	pluginManager *manager.PluginManager
 	graph         credentials.GraphResolver
