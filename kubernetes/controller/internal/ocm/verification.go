@@ -64,7 +64,7 @@ func GetVerifications(ctx context.Context, client ctrl.Reader,
 	return v, nil
 }
 
-func VerifyComponentVersion(ctx context.Context, cv ocm.ComponentVersionAccess, sigs []string) (*Descriptors, error) {
+func VerifyComponentVersion(ctx context.Context, cv ocm.ComponentVersionAccess, resolver ocm.ComponentVersionResolver, sigs []string) (*Descriptors, error) {
 	logger := log.FromContext(ctx).WithName("signature-validation")
 
 	if len(sigs) == 0 || cv == nil {
@@ -72,9 +72,6 @@ func VerifyComponentVersion(ctx context.Context, cv ocm.ComponentVersionAccess, 
 
 		return nil, nil
 	}
-	octx := cv.GetContext()
-
-	resolver := resolvers.NewCompoundResolver(cv.Repository(), octx.GetResolver())
 	opts := signing.NewOptions(
 		signing.Resolver(resolver),
 		// TODO: Consider configurable options for digest verification (@frewilhelm @fabianburth)
@@ -96,24 +93,25 @@ func VerifyComponentVersion(ctx context.Context, cv ocm.ComponentVersionAccess, 
 	return &Descriptors{List: signing.ListComponentDescriptors(cv, ws)}, nil
 }
 
-func VerifyComponentVersionAndListDescriptors(
-	ctx context.Context,
-	octx ocm.Context,
-	cv ocm.ComponentVersionAccess,
-	sigs []string,
-) (*Descriptors, error) {
-	descriptors, err := VerifyComponentVersion(ctx, cv, sigs)
+func VerifyComponentVersionAndListDescriptors(ctx context.Context, cv ocm.ComponentVersionAccess, resolver ocm.ComponentVersionResolver, sigs []string) (*Descriptors, error) {
+	descriptors, err := VerifyComponentVersion(ctx, cv, resolver, sigs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify component: %w", err)
 	}
-
-	// if the component descriptors were not collected during signature validation, collect them now
-	if descriptors == nil || len(descriptors.List) == 0 {
-		descriptors, err = ListComponentDescriptors(ctx, cv, resolvers.NewCompoundResolver(cv.Repository(), octx.GetResolver()))
-		if err != nil {
-			return nil, fmt.Errorf("failed to list component descriptors: %w", err)
-		}
-	}
-
 	return descriptors, nil
 }
+
+func NewSessionResolver(ocmctx ocm.Context, session ocm.Session) resolvers.ComponentVersionResolver {
+	return &sessionResolver{ocmctx, session}
+}
+
+type sessionResolver struct {
+	ocm.Context
+	ocm.Session
+}
+
+func (s sessionResolver) LookupComponentVersion(name string, version string) (ocm.ComponentVersionAccess, error) {
+	return s.Session.LookupComponentVersion(s.GetResolver(), name, version)
+}
+
+var _ resolvers.ComponentVersionResolver = (*sessionResolver)(nil)

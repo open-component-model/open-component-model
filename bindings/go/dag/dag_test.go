@@ -58,10 +58,10 @@ func TestDAGAddNode(t *testing.T) {
 
 	t.Run("degrees", func(t *testing.T) {
 		r := require.New(t)
-		r.Equal(d.OutDegree["A"], 0, "expected out-degree of A to be 0, but got %d", d.OutDegree["A"])
-		r.Equal(d.InDegree["A"], 0, "expected in-degree of A to be 0, but got %d", d.InDegree["A"])
-		r.Equal(d.OutDegree["B"], 0, "expected out-degree of B to be 0, but got %d", d.OutDegree["B"])
-		r.Equal(d.InDegree["B"], 0, "expected in-degree of B to be 0, but got %d", d.InDegree["B"])
+		r.Equal(d.Vertices["A"].OutDegree, 0, "expected out-degree of A to be 0, but got %d", d.Vertices["A"].OutDegree)
+		r.Equal(d.Vertices["A"].InDegree, 0, "expected in-degree of A to be 0, but got %d", d.Vertices["A"].InDegree)
+		r.Equal(d.Vertices["B"].OutDegree, 0, "expected out-degree of B to be 0, but got %d", d.Vertices["B"].OutDegree)
+		r.Equal(d.Vertices["B"].InDegree, 0, "expected in-degree of B to be 0, but got %d", d.Vertices["B"].InDegree)
 	})
 
 	t.Run("delete", func(t *testing.T) {
@@ -70,9 +70,9 @@ func TestDAGAddNode(t *testing.T) {
 		r.Lenf(d.Vertices, 1, "expected 1 node after deleting 'A', but got %d", len(d.Vertices))
 		r.Equal("B", d.Vertices["B"].ID, "expected node ID to be 'B', but got %s", d.Vertices["B"].ID)
 		r.Error(d.DeleteVertex("A"), "expected error when deleting non-existent node 'A', but got nil")
-		_, outExists := d.OutDegree["A"]
+		_, outExists := d.Vertices["A"]
 		r.False(outExists)
-		_, inExists := d.InDegree["A"]
+		_, inExists := d.Vertices["A"]
 		r.False(inExists)
 	})
 }
@@ -96,11 +96,11 @@ func TestDAGAddEdge(t *testing.T) {
 	r.Len(d.Vertices["B"].Edges, 0, "expected 0 edges from B to A, but got %d", len(d.Vertices["B"].Edges))
 
 	t.Run("degrees", func(t *testing.T) {
-		r.Equal(d.OutDegree["A"], 1, "expected out-degree of A to be 1, but got %d", d.OutDegree["A"])
-		r.Equal(d.InDegree["A"], 0, "expected in-degree of A to be 0, but got %d", d.InDegree["A"])
+		r.Equal(d.Vertices["A"].OutDegree, 1, "expected out-degree of A to be 1, but got %d", d.Vertices["A"].OutDegree)
+		r.Equal(d.Vertices["A"].InDegree, 0, "expected in-degree of A to be 0, but got %d", d.Vertices["A"].InDegree)
 
-		r.Equal(d.OutDegree["B"], 0, "expected out-degree of B to be 0, but got %d", d.OutDegree["B"])
-		r.Equal(d.InDegree["B"], 1, "expected in-degree of B to be 1, but got %d", d.InDegree["B"])
+		r.Equal(d.Vertices["B"].OutDegree, 0, "expected out-degree of B to be 0, but got %d", d.Vertices["B"].OutDegree)
+		r.Equal(d.Vertices["B"].InDegree, 1, "expected in-degree of B to be 1, but got %d", d.Vertices["B"].InDegree)
 	})
 
 	t.Run("reverse", func(t *testing.T) {
@@ -118,9 +118,9 @@ func TestDAGAddEdge(t *testing.T) {
 		r.Lenf(d.Vertices, 1, "expected 1 node after deleting 'A', but got %d", len(d.Vertices))
 		r.Equal("B", d.Vertices["B"].ID, "expected node ID to be 'B', but got %s", d.Vertices["B"].ID)
 		r.Error(d.DeleteVertex("A"), "expected error when deleting non-existent node 'A', but got nil")
-		_, outExists := d.OutDegree["A"]
+		_, outExists := d.Vertices["A"]
 		r.False(outExists)
-		_, inExists := d.InDegree["A"]
+		_, inExists := d.Vertices["A"]
 		r.False(inExists)
 	})
 }

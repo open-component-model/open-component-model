@@ -237,33 +237,102 @@ func (r *ComponentMeta) ToIdentity() runtime.Identity {
 	return m
 }
 
-// Digest defines digest information such as hashing algorithm, normalization and the actual value.
-// See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#digest-info
+// Digest defines the hash-based fingerprint of a component descriptor or artifact.
+// It combines the hashing algorithm, normalization procedure, and the resulting value.
+// Digests are used as canonical identifiers for verifying integrity.
+//
+// See specification reference:
+//   - https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#digest-info
+//
 // +k8s:deepcopy-gen=true
 type Digest struct {
-	HashAlgorithm          string `json:"hashAlgorithm"`
+	// HashAlgorithm specifies the hashing algorithm applied after normalization.
+	// The choice of algorithm impacts compatibility across verifiers.
+	//
+	// See specification reference:
+	//   - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/digest-algorithms.md
+	HashAlgorithm string `json:"hashAlgorithm"`
+
+	// NormalisationAlgorithm defines how the component descriptor or artifact
+	// is transformed into a stable byte representation before hashing.
+	// Normalization ensures reproducibility by excluding volatile fields
+	// such as transport-related access specifications.
+	//
+	// See specification references:
+	//   - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md
+	//   - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/artifact-normalization-types.md
 	NormalisationAlgorithm string `json:"normalisationAlgorithm"`
-	Value                  string `json:"value"`
+
+	// Value is the encoded digest result produced from the normalized representation.
+	// Typically hex or base64 encoded, depending on the algorithm specification.
+	Value string `json:"value"`
 }
 
-// Signature contains a list of signatures for the component.
-// See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#signatures
-// See https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/02-signing.md
+// Signature represents a cryptographic attestation of a component version descriptor.
+// It binds a digest of the descriptor to a cryptographic signature, proving both
+// integrity (descriptor unchanged since signing) and authenticity (signed by a known issuer).
+//
+// A component version may carry multiple signatures, each using different digest
+// algorithms, normalization procedures, or signing keys. Every signature must
+// be uniquely identified by its Name.
+//
+// See specification references:
+//   - https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#signatures
+//   - https://github.com/open-component-model/ocm-spec/blob/main/doc/02-processing/02-signing.md
+//
 // +k8s:deepcopy-gen=true
 type Signature struct {
-	Name      string        `json:"name"`
-	Digest    Digest        `json:"digest"`
+	// Name is the unique identifier of the signature within the component version.
+	// Enables consumers to explicitly verify or remove a specific signature.
+	Name string `json:"name"`
+
+	// Digest is the canonical hash of the signed component descriptor.
+	// The digest must be computed using the declared HashAlgorithm and
+	// NormalisationAlgorithm. Volatile fields (e.g., access specifications)
+	// MUST be excluded to keep signatures reproducible across transports.
+	Digest Digest `json:"digest"`
+
+	// Signature is the metadata and cryptographic payload proving the authenticity
+	// of the digest. It includes details on the algorithm, encoding, and issuer.
 	Signature SignatureInfo `json:"signature"`
 }
 
-// SignatureInfo defines details of a signature.
-// See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#signature-info
+// SignatureInfo provides the metadata and cryptographic material for a signature.
+// It is used during signature verification to determine how to interpret and validate
+// the signature value against the associated digest.
+//
+// See specification reference:
+//   - https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/03-elements-sub.md#signature-info
+//
 // +k8s:deepcopy-gen=true
 type SignatureInfo struct {
+	// Algorithm specifies the cryptographic signing algorithm.
+	// Consumers select the corresponding verification procedure based on this value.
+	//
+	// See specification reference:
+	//   - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/signing-algorithms.md
 	Algorithm string `json:"algorithm"`
-	Value     string `json:"value"`
+
+	// Value contains the raw cryptographic signature over the digest.
+	// Encoding is typically base64 or hex, depending on Algorithm and MediaType.
+	//
+	// See specification reference:
+	//   - https://datatracker.ietf.org/doc/html/rfc4648
+	Value string `json:"value"`
+
+	// MediaType describes the technical encoding format of the Value.
+	// It provides consumers with the necessary context to decode and interpret the signature.
 	MediaType string `json:"mediaType"`
-	Issuer    string `json:"issuer,omitempty"`
+
+	// Issuer optionally identifies the signer of the signature.
+	// Values can be:
+	//   - an RFC2253 Distinguished Name (DN) string,
+	//   - or a free-form string identifier for the signing authority.
+	// If provided, it should be used to match the expected identity of the signer.
+	//
+	// See RFC 2253 for DN formatting:
+	//   - https://datatracker.ietf.org/doc/html/rfc2253
+	Issuer string `json:"issuer,omitempty"`
 }
 
 // Label that can be set on various objects in the Open Component Model domain.

@@ -18,10 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/ptr"
 	ocmctx "ocm.software/ocm/api/ocm"
-	"ocm.software/ocm/api/ocm/compdesc"
 	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"ocm.software/ocm/api/ocm/extensions/attrs/signingattr"
-	"ocm.software/ocm/api/ocm/resolvers"
 	"ocm.software/ocm/api/ocm/tools/signing"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -353,15 +351,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		ReferencePath: resource.Spec.Resource.ByReference.ReferencePath,
 	}
 
-	resourceAccess, _, err := ocm.GetResourceAccessForComponentVersion(
-		ctx,
-		session,
-		cv,
-		resourceReference,
-		&ocm.Descriptors{List: []*compdesc.ComponentDescriptor{cv.GetDescriptor()}},
-		resolvers.NewCompoundResolver(repo, octx.GetResolver()),
-		resource.Spec.SkipVerify,
-	)
+	resourceAccess, _, err := ocm.GetResourceAccessForComponentVersion(ctx, cv, resourceReference, ocm.NewSessionResolver(octx, session), resource.Spec.SkipVerify)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
