@@ -70,6 +70,22 @@ Sub-components use persistent release branches for maintenance:
 
 OCM root component releases directly from `main` branch with no release branches.
 
+## Component Relationship Model
+
+### Component Independence
+
+* **No Hard Dependencies**: CLI and Controller components are developed and released independently with no direct runtime dependencies between them
+* **Bundle Validation**: OCM root component validates that specific combinations of sub-components work together through integration testing
+* **Breaking Changes Policy**: Following Kubernetes model, breaking changes are permitted in minor releases across all components
+* **Compatibility Scope**: Version compatibility exists only within individual sub-components (e.g., cli/v0.30.x patch compatibility), not across different components
+
+### OCM Root as Integration Bundle
+
+* **Purpose**: OCM root component serves as a tested bundle of working sub-component releases, containing no independent business logic
+* **Validation**: Conformance tests ensure the specific combination of sub-component versions operates correctly together
+* **Version Matrix**: Component Constructor YAML defines the tested combination without imposing runtime dependencies
+* **Release Trigger**: Any final sub-component release automatically triggers OCM release candidate evaluation to create new tested bundles
+
 ## Contract
 
 ### Sub-Component Release Process
@@ -125,9 +141,28 @@ Sub-components follow a Release Candidate (RC) workflow similar to OCM releases:
 
 1. Implement fix on the appropriate `releases/<component>/vX.Y` branch
 2. Open PR targeting the release branch
-3. After merge, backport change to `main` branch (cherry-pick or separate PR)
+3. After merge, backport change to `main` branch (cherry-pick or separate PR) if applicable
 
 **Example**: Hotfix for CLI v0.30.2 goes to `releases/cli/v0.30` → `cli/v0.30.2`
+
+#### Sub-Component Release Types
+
+##### Regular Patch Releases
+
+* **Trigger**: Scheduled maintenance or feature backports
+* **Process**: Standard RC workflow (create RC → validate → promote to final)
+* **Impact on OCM root component**: final release tag triggers RC creation or uses existing RC for OCM root component
+
+##### Hotfix Releases
+
+* **Trigger**: Critical security issues or production bugs
+* **Process**: **Direct release from maintenance branch** (no RC required)
+* **Criteria**:
+  * Security vulnerabilities
+  * Critical production issues
+  * Zero-downtime urgent fixes
+* **Validation**: Expedited testing, bypasses RC workflow
+* **Impact on OCM root component**: final release tag triggers RC creation or uses existing RC for OCM root component
 
 #### Version Determination Logic
 
@@ -182,13 +217,35 @@ components:
 **Release Workflow**:
 
 1. Sub-component releases and creates tag (e.g., `cli/v0.30.1`)
-2. Check for existing OCM release candidate for next version
-3. If RC exists and no final release: Update existing RC with new sub-component versions
-4. If no RC exists: Create new RC (e.g., `ocm/v0.11.0-rc.1`)
-5. Run integration conformance tests from `/ocm/tests/` (if available)
-6. Manual promotion: RC → Final release (e.g., `ocm/v0.11.0`)
+2. **RC Detection Logic**:
+   * Check for existing OCM RC for the target version (e.g., `ocm/v0.11.0-rc.1`, `ocm/v0.11.0-rc.2`)
+   * Check if corresponding final release exists (e.g., `ocm/v0.11.0`)
+   * **If RC exists AND no final release**: Update existing RC with new sub-component version
+   * **If no RC exists OR final release exists**: Create new RC for next version
+3. Update component constructor with new sub-component versions
+4. Run integration conformance tests from `/ocm/tests/` (if available)
+5. Manual promotion: RC → Final release (e.g., `ocm/v0.11.0`)
 
 **No OCM Release Branches**: OCM releases are created directly from `main` branch since OCM is a snapshot-only component with no independent development lifecycle.
+
+### OCM RC Failure Recovery
+
+**When OCM RC Conformance Tests Fail**:
+
+1. **Root Cause Analysis**: Identify which sub-component interaction(s) caused the failure
+2. **Sub-component Patch Release**: Create patch releases for affected sub-components on their respective release branches
+3. **Patch Validation**: Each sub-component patch goes through normal testing (no RC required for patches)
+4. **RC Update Strategy**:
+   * **Option A**: Update existing RC with new patch versions
+   * **Option B**: Create new RC (rc.2, rc.3, etc.) with corrected sub-component versions
+5. **Re-test Integration**: Run conformance tests again with updated sub-component versions
+6. **Iterative Process**: Repeat until conformance tests pass
+
+**Example**:
+
+```text
+ocm/v0.12.0-rc.1 fails → cli/v0.31.1 patch → ocm/v0.12.0-rc.2 with updated CLI version
+```
 
 ### OCM Integration Testing
 
@@ -275,10 +332,13 @@ The release strategy is implemented through several automated workflows that han
 2. **Final tag creation**: Create annotated tag `<component>/vX.Y.Z` using OCM bot (from RC commit)
 3. **Final artifact publishing**: Publish final artifacts to registries
 4. **OCM Integration**:
-   * Check for existing OCM release candidate for next minor version
-   * If RC exists and no final release: Log that RC will include new sub-component version
-   * If no RC exists: Create new OCM RC with updated component constructor
-   * Run conformance tests from `/ocm/tests/` for the RC (if available)
+   * **Determine target OCM version**: Calculate next OCM version based on sub-component change type
+   * **RC Detection**: Check for existing RC tags for target version (e.g., `ocm/v0.12.0-rc.*`)
+   * **Final Release Check**: Verify no final release exists for target version (e.g., `ocm/v0.12.0`)
+   * **RC Reuse Logic**:
+     * **If existing RC found AND no final release**: Update existing RC's component constructor with new sub-component version
+     * **If no RC found OR final release exists**: Create new RC for next available version
+   * **Integration Testing**: Run conformance tests for RC (updated or newly created)
 5. **GitHub Release**: Create GitHub release with component-specific release notes
 6. **Notification**: Alert maintainers of successful sub-component release
 7. **Failure handling**: If any step fails, stop pipeline and alert maintainers
@@ -391,14 +451,36 @@ Day 3: Second sub-component release
 - 10:00 - Run: sub-component-release (component=kubernetes/controller, release_candidate=false)
          → Promotes kubernetes/controller/v0.30.0-rc.1 → kubernetes/controller/v0.30.0 (final)
 - 10:01 - CI detects: existing RC ocm/v0.12.0-rc.1 exists, no final v0.12.0
-- 10:02 - No new RC created - existing RC will include updated controller version
-- 10:03 - Log: "RC will include kubernetes/controller/v0.30.0 when finalized"
+- 10:02 - Updates existing ocm/v0.12.0-rc.1 with kubernetes/controller/v0.30.0
+- 10:03 - Re-runs conformance tests for updated RC
 
 Day 4: OCM final release with both components
 - 11:00 - Run: ocm-release (release_candidate=false)
          → Promotes ocm/v0.12.0-rc.1 → ocm/v0.12.0 (final)
 - 11:01 - Final release includes: cli/v0.31.0 + kubernetes/controller/v0.30.0
 - 11:02 - Generate release notes linking to both sub-component releases
+```
+
+### Example 3: OCM root component RC Failure and Recovery
+
+```text
+Day 1: Current state
+- ocm/v0.11.0 (final) with cli/v0.30.1 + kubernetes/controller/v0.29.2
+
+Day 2: Sub-component release triggers OCM RC
+- 10:00 - cli/v0.31.0 released (final)
+- 10:01 - CI automatically creates or re-uses ocm/v0.12.0-rc.1 with cli/v0.31.0 + kubernetes/controller/v0.29.2
+- 10:30 - OCM conformance tests FAIL (integration issue between CLI v0.31.0 and Controller v0.29.2)
+
+Day 3: Recovery through sub-component patches
+- 09:00 - Analysis identifies CLI bug in v0.31.0 affecting controller communication
+- 10:00 - cli/v0.31.1 released as hotfix (direct release, no RC)
+- 10:01 - CI creates ocm/v0.12.0-rc.2 with cli/v0.31.1 + kubernetes/controller/v0.29.2
+- 10:30 - OCM conformance tests PASS
+
+Day 4: OCM final release
+- 11:00 - Promote ocm/v0.12.0-rc.2 → ocm/v0.12.0 (final)
+- Note: ocm/v0.12.0-rc.1 remains in Git history as failed attempt
 ```
 
 ## Pros and Cons of the Proposal
