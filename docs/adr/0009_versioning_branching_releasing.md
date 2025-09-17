@@ -146,30 +146,7 @@ Sub-components follow a Release Candidate (RC) workflow similar to `ocm` root co
 
 **Example**: Hotfix for CLI v0.30.2 goes to `releases/cli/v0.30` → `cli/v0.30.2`
 
-#### Operational Automation Summary
-
-Condensed guidance for implementers: sub-component final tags drive an automated, auditable flow that updates the OCM version matrix and creates OCM release candidates. CI authors should rely on the workflow-level details (see the `sub-component-release` and `ocm-release` workflow sections) for step-by-step implementation; this summary only highlights automation requirements not already specified elsewhere.
-
-* **End-to-end flow (summary)**: sub-component final tag → publish artifacts → notify OCM automation → bot PR updates `/ocm/component-constructor.yaml` → merge → `ocm-release` creates RC → conformance tests → manual promotion to final.
-* **Artifact availability**: Automation MUST verify referenced artifacts exist in their registries before updating the constructor or creating an OCM RC tag (e.g., image manifest HEAD check, component descriptor presence). If validation fails, abort and notify maintainers.
-* **RC concurrency**: RC numbers are sequential and immutable. Implementations MUST handle races when multiple sub-components trigger RC creation concurrently (recommended: optimistic retry on tag creation or serialize RC creation via a single worker / GitHub Actions `concurrency`).
-* **Bot account & merge policy**: Use a dedicated GitHub App or machine account with scoped rights (create branches/files, open/merge PRs, create tags/releases). Deployments may choose auto-merge after CI checks or require manual review; enforce this via repository protection rules.
-
-This summary removes procedural duplication; refer to the detailed `sub-component-release` and `ocm-release` workflow sections for actionable steps and CI inputs.
-
-## Failure Recovery and Patch Workflow (revised)
-
-When an OCM RC fails conformance tests the recovery path is:
-
-1. Perform root cause analysis to identify the failing sub-component interaction(s).
-2. Create patch releases for affected sub-components on their release branches (patches are final tags created on `releases/<component>/vX.Y` branches).
-3. Each sub-component patch release triggers the same OCM automation: bot PR → PR merge → new OCM RC with incremented rc.N.
-4. Re-run conformance tests for the new RC. Repeat the process until a passing RC is obtained and manually promoted to final.
-
-Note: OCM RC tags are preserved for audit; failed RCs are not deleted or modified.
-
-
-### Sub-Component Release Types
+#### Sub-Component Release Types
 
 All sub-component releases follow a streamlined process with RC workflow only required for initial minor version releases:
 
@@ -325,8 +302,6 @@ The release strategy is implemented through several automated workflows that han
 
 **For Release Candidate Creation** (`release_candidate: true`):
 
-Refer to the **Operational Automation Summary** for non-functional requirements (artifact availability checks, RC concurrency handling, and bot merge policy); the steps below focus on workflow-level actions.
-
 1. **Pre-flight checks**: Validate branch naming convention and component existence
 2. **Version calculation**: Determine next patch version from existing tags on branch
 3. **RC number calculation**: Determine next RC number automatically (rc.1, rc.2, rc.3, ...)
@@ -366,8 +341,6 @@ Refer to the **Operational Automation Summary** for non-functional requirements 
 **Required Steps**:
 
 **For Release Candidate Creation** (`release_candidate: true`):
-
-See the **Operational Automation Summary** for required artifact checks, RC concurrency handling, and bot merge policy; the steps below describe workflow-level actions.
 
 1. **Version calculation**: Determine next OCM minor version based on sub-component changes
 2. **RC number calculation**: Determine next RC number for target version (rc.1, rc.2, rc.3, ...)
@@ -412,7 +385,19 @@ See the **Operational Automation Summary** for required artifact checks, RC conc
 
 ### Integration with `ocm` Root Component Releases
 
-Every sub-component release automatically triggers `ocm` root component release candidate evaluation. The authoritative, end-to-end sequence (artifact validation → bot PR → PR merge → OCM RC creation → conformance tests → manual promotion) is summarized in the **Operational Automation Summary** section. The CI/CD workflows in the next section provide the implementation-level steps for each workflow.
+Every sub-component release automatically triggers `ocm` root component release candidate evaluation:
+
+1. **OCM version calculation**: Apply minor version bump to `ocm` root component (patch/minor sub-component changes → OCM minor bump, major sub-component changes → OCM major bump)
+2. **Component constructor update**: Automatic PR against `main` branch to update `/ocm/component-constructor.yaml` with new sub-component versions
+   * **PR Creation**: OCM bot creates PR with updated component references
+   * **PR Content**: Updated component versions, OCM version bump, automatic change summary
+   * **PR Review Options**:
+     * **Option A**: Auto-merge after successful CI checks (faster, suitable for non-breaking changes)
+     * **Option B**: Manual review and approval required (safer, allows human oversight)
+   * **Implementation Decision**: The choice between auto-merge vs manual review can be configured per deployment
+3. **RC Creation**: After PR merge, automatically create new OCM release candidate with incremented RC number
+4. **Integration testing**: Conformance tests validate component combinations for the new RC
+5. **Manual promotion gate**: Human approval required for final OCM releases (RC → Final always manual)
 
 ## Release Process Examples
 
