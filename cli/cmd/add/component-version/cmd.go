@@ -26,7 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/repository"
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
@@ -221,16 +221,16 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	var resolvers []*resolverruntime.Resolver
 	if config != nil {
-		resolvers, err = ocm.ResolversFromConfig(config, err)
+		resolvers, err = ocm.ResolversFromConfig(config)
 		if err != nil {
 			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
 		}
 	}
 
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	fallback, err := v1.NewFallbackRepository(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, resolvers)
 	if err != nil {
 		return fmt.Errorf("creating fallback repository failed: %w", err)

@@ -9,8 +9,8 @@ import (
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 )
 
-//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-func ResolversFromConfig(config *genericv1.Config, err error) ([]*resolverruntime.Resolver, error) {
+//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
+func ResolversFromConfig(config *genericv1.Config) ([]*resolverruntime.Resolver, error) {
 	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
 	if err != nil {
 		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
