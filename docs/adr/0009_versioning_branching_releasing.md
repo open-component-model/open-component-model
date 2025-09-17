@@ -146,23 +146,36 @@ Sub-components follow a Release Candidate (RC) workflow similar to `ocm` root co
 
 **Example**: Hotfix for CLI v0.30.2 goes to `releases/cli/v0.30` → `cli/v0.30.2`
 
-#### Sub-Component Release Types
+#### Operational Automation Summary
 
-##### Regular Patch Releases
+Condensed guidance for implementers: sub-component final tags drive an automated, auditable flow that updates the OCM version matrix and creates OCM release candidates. CI authors should rely on the workflow-level details (see the `sub-component-release` and `ocm-release` workflow sections) for step-by-step implementation; this summary only highlights automation requirements not already specified elsewhere.
 
-* **Trigger**: Scheduled maintenance or feature backports
-* **Process**: Standard RC workflow (create RC → validate → promote to final)
-* **Impact on `ocm` root component**: final release tag triggers new OCM RC creation with incremented number
+* **End-to-end flow (summary)**: sub-component final tag → publish artifacts → notify OCM automation → bot PR updates `/ocm/component-constructor.yaml` → merge → `ocm-release` creates RC → conformance tests → manual promotion to final.
+* **Artifact availability**: Automation MUST verify referenced artifacts exist in their registries before updating the constructor or creating an OCM RC tag (e.g., image manifest HEAD check, component descriptor presence). If validation fails, abort and notify maintainers.
+* **RC concurrency**: RC numbers are sequential and immutable. Implementations MUST handle races when multiple sub-components trigger RC creation concurrently (recommended: optimistic retry on tag creation or serialize RC creation via a single worker / GitHub Actions `concurrency`).
+* **Bot account & merge policy**: Use a dedicated GitHub App or machine account with scoped rights (create branches/files, open/merge PRs, create tags/releases). Deployments may choose auto-merge after CI checks or require manual review; enforce this via repository protection rules.
 
-##### Hotfix Releases
+This summary removes procedural duplication; refer to the detailed `sub-component-release` and `ocm-release` workflow sections for actionable steps and CI inputs.
 
-* **Trigger**: Critical security issues or production bugs
-* **Process**: **Direct release from maintenance branch** (bypass RC workflow - detected automatically)
-* **Criteria**:
-  * Security vulnerabilities
-  * Critical production issues
-  * Zero-downtime urgent fixes
-* **Validation**: Expedited testing, automatically bypasses RC workflow when no RC exists for the target version
+## Failure Recovery and Patch Workflow (revised)
+
+When an OCM RC fails conformance tests the recovery path is:
+
+1. Perform root cause analysis to identify the failing sub-component interaction(s).
+2. Create patch releases for affected sub-components on their release branches (patches are final tags created on `releases/<component>/vX.Y` branches).
+3. Each sub-component patch release triggers the same OCM automation: bot PR → PR merge → new OCM RC with incremented rc.N.
+4. Re-run conformance tests for the new RC. Repeat the process until a passing RC is obtained and manually promoted to final.
+
+Note: OCM RC tags are preserved for audit; failed RCs are not deleted or modified.
+
+
+### Sub-Component Release Types
+
+All sub-component releases follow a streamlined process with RC workflow only required for initial minor version releases:
+
+* **Minor Version Releases**: Create new release branch → RC workflow → final release (e.g., cli/v0.30.0)
+* **Patch Releases**: Use existing release branch → direct final release (e.g., cli/v0.30.1, cli/v0.30.2)
+* **RC Requirement**: Only the initial minor version (.0) requires RC workflow; subsequent patches are released directly from the release branch
 * **Impact on `ocm` root component**: final release tag triggers new OCM RC creation with incremented number
 
 ### OCM Root Component Strategy
@@ -292,7 +305,7 @@ The release strategy is implemented through several automated workflows that han
 1. **Branch validation**: Verify that `releases/<component>/v<major>.<minor>` doesn't already exist
 2. **Source determination**: Create branch from `main` for new minor version release
 3. **Branch creation**: Create `releases/<component>/v<major>.<minor>` branch using OCM bot
-4. **Protection rules**: Apply branch protection (require PR reviews, status checks)
+4. **Protection rules**: Apply branch protection rules identical to `main` branch (require PR reviews, status checks, admin override settings)
 5. **Notification**: Alert component maintainers of new release branch creation
 
 **Note**: `ocm` root component does not require release branches - it uses tags directly from `main` branch.
@@ -307,41 +320,42 @@ The release strategy is implemented through several automated workflows that han
 
 * `component`: Component to release (e.g., "cli", "controller")
 * `release_candidate`: Boolean - true for RC creation, false for final release promotion
-* `release_candidate_name`: String - RC suffix (e.g., "rc.1", "rc.2") when creating RCs
 
 **Required Steps**:
 
 **For Release Candidate Creation** (`release_candidate: true`):
 
+Refer to the **Operational Automation Summary** for non-functional requirements (artifact availability checks, RC concurrency handling, and bot merge policy); the steps below focus on workflow-level actions.
+
 1. **Pre-flight checks**: Validate branch naming convention and component existence
 2. **Version calculation**: Determine next patch version from existing tags on branch
-3. **Component testing**: Run component-specific tests and verification
-4. **Artifact creation**: Build and publish RC artifacts (binaries, container images, component descriptors)
-5. **RC tag creation**: Create annotated tag `<component>/vX.Y.Z-rc.N` using OCM bot
-6. **RC validation**: Trigger extended validation and testing workflows
-7. **Notification**: Alert component maintainers of RC availability for validation
+3. **RC number calculation**: Determine next RC number automatically (rc.1, rc.2, rc.3, ...)
+4. **Component testing**: Run component-specific tests and verification
+5. **Artifact creation**: Build and publish RC artifacts (binaries, container images, component descriptors)
+6. **RC tag creation**: Create annotated tag `<component>/vX.Y.Z-rc.N` using OCM bot
+7. **RC validation**: Trigger extended validation and testing workflows
+8. **Notification**: Alert component maintainers of RC availability for validation
 
 **For Final Release Promotion** (`release_candidate: false`):
 
-1. **Release Type Detection**: Automatically detect if this is a hotfix (no prior RC exists for this patch version)
-2. **RC validation**: For normal releases, verify that latest RC exists and validation completed
-3. **Final tag creation**: Create annotated tag `<component>/vX.Y.Z` using OCM bot (from RC commit for normal releases, direct for hotfixes)
-4. **Final artifact publishing**: Publish final artifacts to registries
-5. **OCM Integration**:
-   * **Determine target OCM version**: Calculate next OCM version based on sub-component change type
+1. **RC validation**: Verify that latest RC exists and validation completed
+2. **Final tag creation**: Create annotated tag `<component>/vX.Y.Z` using OCM bot from RC commit
+3. **Final artifact publishing**: Publish final artifacts to registries
+4. **OCM Integration**:
+   * **Determine target `ocm`root component version**: Calculate next `ocm`root component version based on sub-component change type
    * **RC Detection**: Check for existing RC tags for target version (e.g., `ocm/v0.12.0-rc.*`)
    * **Final Release Check**: Verify no final release exists for target version (e.g., `ocm/v0.12.0`)
    * **RC Reuse Logic**:
      * **If no final release exists**: Create new RC with incremented number for target version
      * **If final release exists**: Create new RC for next available version
    * **Integration Testing**: Run conformance tests for the new RC
-6. **GitHub Release**: Create GitHub release with component-specific release notes
-7. **Notification**: Alert maintainers of successful sub-component release
-8. **Failure handling**: If any step fails, stop pipeline and alert maintainers
+5. **GitHub Release**: Create GitHub release with component-specific release notes
+6. **Notification**: Alert maintainers of successful sub-component release
+7. **Failure handling**: If any step fails, stop pipeline and alert maintainers
 
 ### Workflow: `ocm-release`
 
-**Trigger**: Manual workflow dispatch OR automated trigger from sub-component releases
+**Trigger**: **Automated trigger from all sub-component final releases** (patch, minor, major) AND manual workflow dispatch
 
 **Purpose**: Handle both OCM release candidate creation and promotion to final release
 
@@ -352,6 +366,8 @@ The release strategy is implemented through several automated workflows that han
 **Required Steps**:
 
 **For Release Candidate Creation** (`release_candidate: true`):
+
+See the **Operational Automation Summary** for required artifact checks, RC concurrency handling, and bot merge policy; the steps below describe workflow-level actions.
 
 1. **Version calculation**: Determine next OCM minor version based on sub-component changes
 2. **RC number calculation**: Determine next RC number for target version (rc.1, rc.2, rc.3, ...)
@@ -396,12 +412,7 @@ The release strategy is implemented through several automated workflows that han
 
 ### Integration with `ocm` Root Component Releases
 
-Every sub-component release automatically triggers `ocm` root component release candidate evaluation:
-
-1. **OCM version calculation**: Apply minor version bump to `ocm` root component (patch/minor sub-component changes → OCM minor bump, major sub-component changes → OCM major bump)
-2. **Component constructor update**: Automatic PR to update component references
-3. **Integration testing**: Conformance tests validate component combinations
-4. **Manual promotion gate**: Human approval required for final OCM releases
+Every sub-component release automatically triggers `ocm` root component release candidate evaluation. The authoritative, end-to-end sequence (artifact validation → bot PR → PR merge → OCM RC creation → conformance tests → manual promotion) is summarized in the **Operational Automation Summary** section. The CI/CD workflows in the next section provide the implementation-level steps for each workflow.
 
 ## Release Process Examples
 
