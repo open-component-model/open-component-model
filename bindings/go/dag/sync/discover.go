@@ -180,7 +180,11 @@ func (d *DirectedAcyclicGraph[T]) discover(
 	// been processed (done channel closed) or is currently being processed
 	// (done channel open) by another goroutine.
 	// Then, loaded is true.
-	doneCh, loaded := doneMap.LoadOrStore(id, make(chan struct{}))
+	ch := make(chan struct{})
+	// If we opened the done channel, we are also responsible for closing it.
+	defer close(ch)
+
+	doneCh, loaded := doneMap.LoadOrStore(id, ch)
 	done := doneCh.(chan struct{})
 	if loaded {
 		// If the node is already being discovered, wait until its discovery is done.
@@ -189,11 +193,9 @@ func (d *DirectedAcyclicGraph[T]) discover(
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-done:
+			return nil
 		}
-		return nil
 	}
-	// If we opened the done channel, we are also responsible for closing it.
-	defer close(done)
 
 	vertex, ok := d.GetVertex(id)
 	if !ok {
@@ -220,7 +222,7 @@ func (d *DirectedAcyclicGraph[T]) discover(
 	}
 	vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateDiscovered)
 
-	errGroup, ctx := errgroup.WithContext(ctx)
+	errGroup, egctx := errgroup.WithContext(ctx)
 	// TODO(fabianburth): Implement a worker pool approach.
 	// This is already useful to enforce a sequential discovery
 	// by setting the limit to 1. But in reality, this does not actually
@@ -235,9 +237,10 @@ func (d *DirectedAcyclicGraph[T]) discover(
 		//	  B   C
 		//	   \ /
 		//	    D
-		if err := d.AddVertex(neighborID, map[string]any{
+		err := d.AddVertex(neighborID, map[string]any{
 			AttributeDiscoveryState: DiscoveryStateDiscovering,
-		}); err != nil && !errors.Is(err, ErrAlreadyExists) {
+		})
+		if err != nil && !errors.Is(err, ErrAlreadyExists) {
 			vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateError)
 			return fmt.Errorf("failed to add vertex for reference %v: %w", neighborID, err)
 		}
@@ -245,8 +248,11 @@ func (d *DirectedAcyclicGraph[T]) discover(
 			vertex.Attributes.Store(AttributeDiscoveryState, DiscoveryStateError)
 			return fmt.Errorf("failed to add edge from %v to %v: %w", id, neighborID, err)
 		}
+		if errors.Is(err, ErrAlreadyExists) {
+			continue
+		}
 		errGroup.Go(func() error {
-			if err := d.discover(ctx, neighborID, discoverer, doneMap, opts); err != nil {
+			if err := d.discover(egctx, neighborID, discoverer, doneMap, opts); err != nil {
 				return fmt.Errorf("failed to discover reference %v: %w", neighborID, err)
 			}
 			return nil

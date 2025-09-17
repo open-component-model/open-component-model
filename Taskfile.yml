@@ -81,6 +81,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/repository/Taskfile.yml
     dir: ./bindings/go/repository
+  bindings/go/rsa:
+    optional: true
+    taskfile: ./bindings/go/rsa/Taskfile.yml
+    dir: ./bindings/go/rsa
   bindings/go/signing:
     optional: true
     taskfile: ./bindings/go/signing/Taskfile.yml

@@ -7,11 +7,9 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/stretchr/testify v1.11.1
 	helm.sh/helm/v3 v3.18.6
-	k8s.io/cli-runtime v0.33.3 // indirect
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.8
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250903091648-5c315c9cf5a2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250903091648-5c315c9cf5a2 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250909064434-e1a06fe74668
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
 	ocm.software/open-component-model/bindings/go/plugin v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
@@ -89,7 +87,7 @@ require (
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/term v0.35.0 // indirect
-	golang.org/x/text v0.29.0 // indirect; indirec
+	golang.org/x/text v0.29.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250908214217-97024824d090 // indirect
 	google.golang.org/grpc v1.75.1 // indirect
@@ -100,12 +98,14 @@ require (
 	k8s.io/api v0.34.0 // indirect
 	k8s.io/apiextensions-apiserver v0.34.0 // indirect
 	k8s.io/apimachinery v0.34.1 // indirect
+	k8s.io/cli-runtime v0.33.3 // indirect
 	k8s.io/client-go v0.34.0 // indirect
 	k8s.io/component-base v0.34.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
 	k8s.io/kubectl v0.33.3 // indirect
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250909064434-e1a06fe74668 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250909064434-e1a06fe74668 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
