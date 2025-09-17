@@ -30,7 +30,7 @@ We require a single, operational specification that defines how components are v
 
 We propose a Git-native versioning strategy that eliminates version files in favor of authoritative Git tags as the single source of truth. This approach combines SemVer-compliant Git tag-based versioning for individual sub-components with component-scoped persistent release branches for maintenance workflows, while leveraging an OCM Component Constructor YAML for managing the root OCM component's version matrix and coordinated releases.
 
-The strategy includes dedicated conformance testing at the OCM root component level to ensure component interoperability and validate integrated component combinations before final releases of the OCM root component. The tests will be created over time and are not mandatory for the initial rollout of this strategy.
+The strategy includes dedicated conformance testing at the `ocm` root component level to ensure component interoperability and validate integrated component combinations before final releases of the `ocm` root component. The tests will be created over time and are not mandatory for the initial rollout of this strategy.
 
 ## Description
 
@@ -40,7 +40,7 @@ We adopt a Git-native, tag-based versioning strategy that eliminates version fil
 * **Branching**: Component-scoped persistent release branches following the pattern `releases/<component>/v<major>.<minor>` for maintenance lines
 * **Publishing**: Annotated Git tags with Go module-compatible naming (`<component>/v<major>.<minor>.<patch>`) serve as the authoritative record of published artifacts
 * **OCM Root Component**: Uses OCM Component Constructor YAML as version matrix and releases directly from `main` branch without release branches
-* **Integration Validation**: Dedicated conformance tests at the OCM root component level validate sub-component interoperability and ensure tested combinations before final releases of the OCM root component.
+* **Integration Validation**: Dedicated conformance tests at the `ocm` root component level validate sub-component interoperability and ensure tested combinations before final releases of the `ocm` root component.
 
 ## High-level Architecture
 
@@ -50,7 +50,7 @@ All component versions are determined exclusively from Git tags:
 Repository Structure:
 ├── cli/                     # OCM CLI component
 ├── kubernetes/controller/   # OCM Controller component  
-├── ocm/                     # OCM root component
+├── ocm/                     # `ocm` root component
 │   ├── component-constructor.yaml  # Version matrix
 │   └── tests/              # Integration conformance tests
 └── .github/workflows/      # CI/CD automation
@@ -68,20 +68,20 @@ Sub-components use persistent release branches for maintenance:
 * `releases/cli/v0.30` - CLI v0.30.x maintenance line
 * `releases/kubernetes/controller/v0.29` - Controller v0.29.x maintenance line
 
-OCM root component releases directly from `main` branch with no release branches.
+`ocm` root component releases directly from `main` branch with no release branches.
 
 ## Component Relationship Model
 
 ### Component Independence
 
 * **No Hard Dependencies**: CLI and Controller components are developed and released independently with no direct runtime dependencies between them
-* **Bundle Validation**: OCM root component validates that specific combinations of sub-components work together through integration testing
+* **Bundle Validation**: `ocm` root component validates that specific combinations of sub-components work together through integration testing
 * **Breaking Changes Policy**: Following Kubernetes model, breaking changes are permitted in minor releases across all components
 * **Compatibility Scope**: Version compatibility exists only within individual sub-components (e.g., cli/v0.30.x patch compatibility), not across different components
 
 ### OCM Root as Integration Bundle
 
-* **Purpose**: OCM root component serves as a tested bundle of working sub-component releases, containing no independent business logic
+* **Purpose**: `ocm` root component serves as a tested bundle of working sub-component releases, containing no independent business logic
 * **Validation**: Conformance tests ensure the specific combination of sub-component versions operates correctly together
 * **Version Matrix**: Component Constructor YAML defines the tested combination without imposing runtime dependencies
 * **Release Trigger**: Any final sub-component release automatically triggers OCM release candidate evaluation to create new tested bundles
@@ -106,7 +106,7 @@ Sub-components (currently CLI and Controller) follow a structured release proces
 
 #### Release Workflow for Sub-Components
 
-Sub-components follow a Release Candidate (RC) workflow similar to OCM root component releases:
+Sub-components follow a Release Candidate (RC) workflow similar to `ocm` root component releases:
 
 **Release Candidate Creation**:
 
@@ -131,7 +131,7 @@ Sub-components follow a Release Candidate (RC) workflow similar to OCM root comp
 * **Steps**:
   1. **RC Verification**: Confirm RC exists and validation completed
   2. **Final Tag Creation**: Create final tag `<component>/v<major>.<minor>.<patch>`
-  3. **OCM Trigger**: Automatically trigger OCM root component release candidate creation
+  3. **OCM Trigger**: Automatically trigger `ocm` root component release candidate creation
   4. **GitHub Release**: Create GitHub release with component-specific release notes
   5. **Artifact Publishing**: Publish final artifacts to registries
   6. **Component Version Creation**: Generate and publish final OCM component version in ghcr.io
@@ -152,22 +152,22 @@ Sub-components follow a Release Candidate (RC) workflow similar to OCM root comp
 
 * **Trigger**: Scheduled maintenance or feature backports
 * **Process**: Standard RC workflow (create RC → validate → promote to final)
-* **Impact on OCM root component**: final release tag triggers RC creation or re-uses existing RC for OCM root component
+* **Impact on `ocm` root component**: final release tag triggers new OCM RC creation with incremented number
 
 ##### Hotfix Releases
 
 * **Trigger**: Critical security issues or production bugs
-* **Process**: **Direct release from maintenance branch** (no RC required)
+* **Process**: **Direct release from maintenance branch** (bypass RC workflow - detected automatically)
 * **Criteria**:
   * Security vulnerabilities
   * Critical production issues
   * Zero-downtime urgent fixes
-* **Validation**: Expedited testing, bypasses RC workflow
-* **Impact on OCM root component**: final release tag triggers RC creation or re-uses existing RC for OCM root component
+* **Validation**: Expedited testing, automatically bypasses RC workflow when no RC exists for the target version
+* **Impact on `ocm` root component**: final release tag triggers new OCM RC creation with incremented number
 
 ### OCM Root Component Strategy
 
-The OCM root component utilizes an **OCM Component Constructor YAML** located in `/ocm/component-constructor.yaml` as the authoritative version matrix. This constructor:
+The `ocm` root component utilizes an **OCM Component Constructor YAML** located in `/ocm/component-constructor.yaml` as the authoritative version matrix. This constructor:
 
 * References specific versions of all sub-components (cli, controller, etc.)
 * Acts as the definitive snapshot for reproducible OCM releases
@@ -204,7 +204,7 @@ components:
 
 1. Sub-component releases and creates tag (e.g., `cli/v0.30.1`)
 2. **RC Detection Logic**:
-   * Check for existing OCM root component RCs for the target version (e.g., `ocm/v0.11.0-rc.*`)
+   * Check for existing `ocm` root component RCs for the target version (e.g., `ocm/v0.11.0-rc.*`)
    * Check if corresponding final release exists (e.g., `ocm/v0.11.0`)
    * **If no final release exists**: Create new RC with incremented number (rc.1, rc.2, rc.3, ...)
    * **If final release exists**: Create new RC for next version (v0.12.0-rc.1)
@@ -220,7 +220,7 @@ components:
 
 1. **Root Cause Analysis**: Identify which sub-component interaction(s) caused the failure
 2. **Sub-component Patch Release**: Create patch releases for affected sub-components on their respective release branches
-3. **Patch Validation**: Each sub-component patch goes through normal testing (no RC required for patches)
+3. **Patch Validation**: Each sub-component patch goes through normal testing (hotfix releases bypass RC workflow)
 4. **RC Strategy**: Each sub-component patch release creates a new RC with incremented number (following standard RC numbering)
 5. **Re-test Integration**: Run conformance tests for the new RC with updated sub-component versions
 6. **Iterative Process**: Repeat until conformance tests pass
@@ -231,7 +231,7 @@ components:
 ocm/v0.12.0-rc.1 fails → cli/v0.31.1 patch → ocm/v0.12.0-rc.2 with CLI v0.31.1
 ```
 
-### OCM root component RC Lifecycle Management
+### `ocm` root component RC Lifecycle Management
 
 **RC Numbering Strategy**:
 
@@ -277,15 +277,6 @@ OCM releases use simplified aggregated release notes that reference existing sub
 
 This approach leverages existing sub-component release notes while maintaining traceability.
 
-### Component Constructor as Version Matrix
-
-The OCM root component utilizes an **OCM Component Constructor YAML** located in `/ocm/component-constructor.yaml` as the authoritative version matrix. This constructor:
-
-* **References exact sub-component versions**: Maps to specific Git tags (e.g., cli/v0.30.1)
-* **Enables reproducible builds**: Locks OCM to tested component combinations
-* **Supports partial updates**: OCM releases can include subset of sub-components with new versions
-* **Single source of truth**: Eliminates version conflicts between components
-
 ## CI/CD Workflows and Automation
 
 The release strategy is implemented through several automated workflows that handle different aspects of the release process:
@@ -304,7 +295,7 @@ The release strategy is implemented through several automated workflows that han
 4. **Protection rules**: Apply branch protection (require PR reviews, status checks)
 5. **Notification**: Alert component maintainers of new release branch creation
 
-**Note**: OCM root component does not require release branches - it uses tags directly from `main` branch.
+**Note**: `ocm` root component does not require release branches - it uses tags directly from `main` branch.
 
 ### Workflow: `sub-component-release`
 
@@ -332,10 +323,11 @@ The release strategy is implemented through several automated workflows that han
 
 **For Final Release Promotion** (`release_candidate: false`):
 
-1. **RC validation**: Verify that latest RC exists and validation completed
-2. **Final tag creation**: Create annotated tag `<component>/vX.Y.Z` using OCM bot (from RC commit)
-3. **Final artifact publishing**: Publish final artifacts to registries
-4. **OCM Integration**:
+1. **Release Type Detection**: Automatically detect if this is a hotfix (no prior RC exists for this patch version)
+2. **RC validation**: For normal releases, verify that latest RC exists and validation completed
+3. **Final tag creation**: Create annotated tag `<component>/vX.Y.Z` using OCM bot (from RC commit for normal releases, direct for hotfixes)
+4. **Final artifact publishing**: Publish final artifacts to registries
+5. **OCM Integration**:
    * **Determine target OCM version**: Calculate next OCM version based on sub-component change type
    * **RC Detection**: Check for existing RC tags for target version (e.g., `ocm/v0.12.0-rc.*`)
    * **Final Release Check**: Verify no final release exists for target version (e.g., `ocm/v0.12.0`)
@@ -343,9 +335,9 @@ The release strategy is implemented through several automated workflows that han
      * **If no final release exists**: Create new RC with incremented number for target version
      * **If final release exists**: Create new RC for next available version
    * **Integration Testing**: Run conformance tests for the new RC
-5. **GitHub Release**: Create GitHub release with component-specific release notes
-6. **Notification**: Alert maintainers of successful sub-component release
-7. **Failure handling**: If any step fails, stop pipeline and alert maintainers
+6. **GitHub Release**: Create GitHub release with component-specific release notes
+7. **Notification**: Alert maintainers of successful sub-component release
+8. **Failure handling**: If any step fails, stop pipeline and alert maintainers
 
 ### Workflow: `ocm-release`
 
@@ -356,23 +348,23 @@ The release strategy is implemented through several automated workflows that han
 **Inputs**:
 
 * `release_candidate`: Boolean - true for RC creation, false for final release promotion
-* `release_candidate_name`: String - RC suffix (e.g., "rc.1", "rc.2") when creating RCs
 
 **Required Steps**:
 
 **For Release Candidate Creation** (`release_candidate: true`):
 
 1. **Version calculation**: Determine next OCM minor version based on sub-component changes
-2. **Component constructor update**: Update `/ocm/component-constructor.yaml` with latest sub-component versions
-3. **RC tag creation**: Create annotated tag `ocm/vX.Y.Z-rc.N` directly from `main`
-4. **Integration testing**: Run conformance tests from `/ocm/tests/` (if available)
-5. **Notification**: Alert maintainers of OCM RC availability for validation
+2. **RC number calculation**: Determine next RC number for target version (rc.1, rc.2, rc.3, ...)
+3. **Component constructor update**: Update `/ocm/component-constructor.yaml` with latest sub-component versions
+4. **RC tag creation**: Create annotated tag `ocm/vX.Y.Z-rc.N` directly from `main`
+5. **Integration testing**: Run conformance tests from `/ocm/tests/` (if available)
+6. **Notification**: Alert maintainers of OCM RC availability for validation
 
 **For Final Release Promotion** (`release_candidate: false`):
 
-1. **RC validation**: Verify that specified RC exists and conformance tests have passed
-2. **Version resolution**: Resolve final sub-component versions at promotion time (latest available versions)
-3. **Component constructor update**: Update `/ocm/component-constructor.yaml` with final component versions
+1. **RC validation**: Automatically find and validate the latest RC for the target version (verify it exists and conformance tests have passed)
+2. **Version resolution**: Resolve final sub-component versions from the latest RC
+3. **Component constructor finalization**: Finalize `/ocm/component-constructor.yaml` with RC's component versions
 4. **Tag creation**: Create annotated tag `ocm/vX.Y.Z` directly from `main`
 5. **Release notes generation**: Generate simplified release notes linking to sub-component releases
 6. **Artifact publishing**: Publish OCM artifacts and update documentation
@@ -402,11 +394,11 @@ The release strategy is implemented through several automated workflows that han
 * **Protection**: Branch protection rules prevent direct pushes and require PR reviews
 * **Archival**: Old release branches archived when no longer maintained (policy TBD)
 
-### Integration with OCM Releases
+### Integration with `ocm` Root Component Releases
 
-Every sub-component release automatically triggers OCM release candidate evaluation:
+Every sub-component release automatically triggers `ocm` root component release candidate evaluation:
 
-1. **Version impact assessment**: Determine if new OCM RC needed or existing RC updated
+1. **OCM version calculation**: Apply minor version bump to `ocm` root component (patch/minor sub-component changes → OCM minor bump, major sub-component changes → OCM major bump)
 2. **Component constructor update**: Automatic PR to update component references
 3. **Integration testing**: Conformance tests validate component combinations
 4. **Manual promotion gate**: Human approval required for final OCM releases
@@ -466,7 +458,7 @@ Day 4: OCM final release with both components
 - Note: ocm/v0.12.0-rc.1 remains in Git history with CLI v0.31.0 + controller/v0.29.2
 ```
 
-### Example 3: OCM root component RC Failure and Recovery
+### Example 3: `ocm` root component RC Failure and Recovery
 
 ```text
 Day 1: Current state
@@ -474,7 +466,7 @@ Day 1: Current state
 
 Day 2: Sub-component release triggers OCM RC
 - 10:00 - cli/v0.31.0 released (final)
-- 10:01 - CI automatically creates or re-uses ocm/v0.12.0-rc.1 with cli/v0.31.0 + kubernetes/controller/v0.29.2
+- 10:01 - CI automatically creates ocm/v0.12.0-rc.1 with cli/v0.31.0 + kubernetes/controller/v0.29.2
 - 10:30 - OCM conformance tests FAIL (integration issue between CLI v0.31.0 and Controller v0.29.2)
 
 Day 3: Recovery through sub-component patches
@@ -508,4 +500,4 @@ Cons:
 
 This Git tag-based versioning strategy with OCM Component Constructor provides a robust, Git-native approach to monorepo component versioning and releasing. By eliminating version files and using Git tags as the single source of truth, we reduce maintenance overhead while ensuring full compatibility with Go module conventions and OCM specifications.
 
-The OCM root component serves as a tested integration point for sub-components, providing users with verified compatible component combinations while maintaining the flexibility for independent sub-component releases.
+The `ocm` root component serves as a tested integration point for sub-components, providing users with verified compatible component combinations while maintaining the flexibility for independent sub-component releases.
