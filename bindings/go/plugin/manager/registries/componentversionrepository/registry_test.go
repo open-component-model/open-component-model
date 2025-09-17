@@ -129,7 +129,9 @@ type mockPluginProvider struct {
 }
 
 func (m *mockPluginProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	return nil, nil
+	return runtime.Identity{
+		"test": "identity",
+	}, nil
 }
 
 func (m *mockPluginProvider) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
@@ -157,6 +159,11 @@ func TestInternalPluginRegistry(t *testing.T) {
 	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockPluginProvider{
 		mockPlugin: &mockedRepository{},
 	}, proto))
+
+	identity, err := registry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, proto)
+	require.NoError(t, err)
+	require.NotNil(t, identity)
+
 	retrievedPluginProvider, err := registry.GetComponentVersionRepository(ctx, proto, nil)
 	require.NoError(t, err)
 	require.NotNil(t, retrievedPluginProvider)

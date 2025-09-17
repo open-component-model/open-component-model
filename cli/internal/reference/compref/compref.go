@@ -39,6 +39,9 @@ var (
 // DefaultPrefix is the default prefix used for component descriptors.
 const DefaultPrefix = "component-descriptors"
 
+// ctfArchiveExtensions is the list of archive file extensions that should be treated as CTF
+var ctfArchiveExtensions = [...]string{".tar.gz", ".tgz", ".tar"}
+
 // ValidPrefixes is the list of valid prefixes for structured component references
 var ValidPrefixes = []string{
 	DefaultPrefix, // for component descriptors this is the default prefix
@@ -279,8 +282,9 @@ func ParseRepository(repoRef string) (runtime.Typed, error) {
 // It uses a practical set of heuristics:
 //   - If it has a URL scheme ("file://"), assume CTF
 //   - If it's an absolute filesystem path, assume CTF
-//   - If it looks like a domain (contains dots like ".com", ".io", etc.), assume OCI
 //   - If it contains a colon (e.g., "localhost:5000"), assume OCI
+//   - If it looks like an archive file (tar.gz, tgz or tar), assume CTF
+//   - If it looks like a domain (contains dots like ".com", ".io", etc.), assume OCI
 //   - Otherwise fallback to CTF
 func guessType(repository string) (string, error) {
 	// Try parsing as URL first
@@ -306,6 +310,11 @@ func guessType(repository string) (string, error) {
 		return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
 	}
 
+	// Check if it looks like an archive file → assume CTF
+	if looksLikeArchive(cleaned) {
+		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
+	}
+
 	// Contains domain-looking part (e.g., github.com, ghcr.io) → assume OCI
 	if looksLikeDomain(cleaned) {
 		return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
@@ -313,6 +322,18 @@ func guessType(repository string) (string, error) {
 
 	// Default fallback: assume CTF
 	return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
+}
+
+// looksLikeArchive checks if the string ends with tar.gz or tgz archive file extensions.
+// This helps identify repository strings that point to archive files, which should be treated as CTF.
+func looksLikeArchive(s string) bool {
+	s = strings.ToLower(s)
+	for _, ext := range ctfArchiveExtensions {
+		if strings.HasSuffix(s, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // looksLikeDomain checks if the string contains a dot with non-numeric parts (heuristic).
