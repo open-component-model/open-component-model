@@ -292,6 +292,7 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 		{"./local/path", false},
 		{"file://./local/path", false},
 		{"/absolute/path", false},
+		{"1.2.3.5:5000/open-component-model/ocm", true},
 	}
 
 	prefixes := []string{
