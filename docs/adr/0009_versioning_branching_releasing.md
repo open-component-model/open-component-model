@@ -106,35 +106,22 @@ Sub-components (currently CLI and Controller) follow a structured release proces
 
 #### Release Workflow for Sub-Components
 
-Sub-components follow a Release Candidate (RC) workflow similar to `ocm` root component releases:
+Sub-components follow a two-phase release process:
 
-**Release Candidate Creation**:
+##### Phase 1: Release Candidate Creation
 
-* **Trigger**: Manual workflow dispatch when ready to release from release branch
-* **Purpose**: Create RC for testing and validation before final release
+* Create and test release candidates from release branches
+* Generate RC tags for validation: `<component>/v<major>.<minor>.<patch>-rc.N`
+* Extended testing and validation period before final release
 
-**Steps**:
+##### Phase 2: Final Release Promotion
 
-1. **Pre-flight Checks**: Validate branch naming, component existence, and readiness
-2. **Version Calculation**: Determine next version from existing tags on the branch
-3. **Testing**: Run component-specific tests and verification
-4. **Build & Publish**: Create artifacts (binaries, container images)
-5. **Component Version Creation**: Generate and publish OCM RC component version in ghcr.io
-6. **RC Tag Creation**: Create annotated Git tag `<component>/v<major>.<minor>.<patch>-rc.1`
-7. **RC Validation**: Extended testing period for release candidate
-8. **Documentation**: Prepare release documentation and notes
+* Promote validated RC to final release
+* Create final Git tags: `<component>/v<major>.<minor>.<patch>`
+* Automatically trigger OCM root component release candidate evaluation
+* Publish final artifacts and release notes
 
-**Final Release Promotion**:
-
-* **Trigger**: Manual workflow dispatch after RC validation
-* **Purpose**: Promote validated RC to final release
-* **Steps**:
-  1. **RC Verification**: Confirm RC exists and validation completed
-  2. **Final Tag Creation**: Create final tag `<component>/v<major>.<minor>.<patch>`
-  3. **OCM Trigger**: Automatically trigger `ocm` root component release candidate creation
-  4. **GitHub Release**: Create GitHub release with component-specific release notes
-  5. **Artifact Publishing**: Publish final artifacts to registries
-  6. **Component Version Creation**: Generate and publish final OCM component version in ghcr.io
+*Detailed technical workflow steps are described in the [CI/CD Workflows section](#workflow-sub-component-release).*
 
 #### Hotfix/Backport Procedure
 
@@ -202,8 +189,6 @@ components:
 4. Run integration conformance tests from `/ocm/tests/` (if available)
 5. Manual promotion: RC → Final release (e.g., `ocm/v0.11.0`)
 
-**No OCM Release Branches**: OCM releases are created directly from `main` branch since OCM is a snapshot-only component with no independent development lifecycle.
-
 ### Failure Recovery for OCM Root Component
 
 **When OCM Root Component RC Conformance Tests Fail**:
@@ -221,26 +206,6 @@ components:
 ocm/v0.12.0-rc.1 fails → cli/v0.31.1 patch → ocm/v0.12.0-rc.2 with CLI v0.31.1
 ```
 
-### `ocm` root component RC Lifecycle Management
-
-**RC Numbering Strategy**:
-
-* **Sequential Numbering**: RCs are numbered sequentially (rc.1, rc.2, rc.3, ...) for each target version
-* **Immutable RCs**: Once created, RC tags are never modified or deleted
-* **Final Promotion**: Only the latest passing RC is promoted to final release
-
-**RC Selection for Final Release**:
-
-* **Latest Successful RC**: The most recent RC that passes all conformance tests
-* **Manual Verification**: Human approval required before promoting any RC to final
-* **Audit Trail**: All previous RCs remain in Git history with their test results
-
-**RC Cleanup Policy**:
-
-* **Historical Preservation**: Failed/superseded RCs remain in Git for audit purposes
-* **Documentation**: Each RC includes metadata about included sub-component versions
-* **Status Tracking**: CI systems track which RCs passed/failed conformance tests
-
 ### OCM Integration Testing
 
 The `/ocm/` directory contains:
@@ -250,22 +215,6 @@ The `/ocm/` directory contains:
 * **Test Scenarios**: End-to-end workflows validating component interoperability beyond individual component tests
 
 These conformance tests are executed during the RC-to-final promotion process to ensure component compatibility.
-
-### Release Notes Strategy
-
-OCM releases use simplified aggregated release notes that reference existing sub-component releases rather than duplicating content:
-
-```text
-## 📦 Included Components
-
-- **OCM CLI**: [`v0.30.1`](link-to-cli-release)
-- **OCM Controller**: [`v0.29.3`](link-to-controller-release)
-
----
-*This OCM release bundles the above tested and compatible component versions.*
-```
-
-This approach leverages existing sub-component release notes while maintaining traceability.
 
 ## CI/CD Workflows and Automation
 
@@ -374,7 +323,8 @@ The release strategy is implemented through several automated workflows that han
 
 * **Published state**: Annotated Git tag `<component>/v<major>.<minor>.<patch>` — tags are authoritative for published artifacts and their provenance
 * **OCM version matrix**: `/ocm/component-constructor.yaml` — OCM Component Constructor defining sub-component versions and relationships for OCM releases
-* **No version files**: Repository contains no VERSION files - all versions derived from Git tags
+
+*As described in the strategy above, no VERSION files are maintained - all versions are derived from Git tags.*
 
 ### Release Branch Lifecycle
 
@@ -398,6 +348,22 @@ Every sub-component release automatically triggers `ocm` root component release 
 3. **RC Creation**: After PR merge, automatically create new OCM release candidate with incremented RC number
 4. **Integration testing**: Conformance tests validate component combinations for the new RC
 5. **Manual promotion gate**: Human approval required for final OCM releases (RC → Final always manual)
+
+### Release Notes Strategy
+
+OCM releases use simplified aggregated release notes that reference existing sub-component releases rather than duplicating content:
+
+```text
+## 📦 Included Components
+
+- **OCM CLI**: [`v0.30.1`](link-to-cli-release)
+- **OCM Controller**: [`v0.29.3`](link-to-controller-release)
+
+---
+*This OCM release bundles the above tested and compatible component versions.*
+```
+
+This approach leverages existing sub-component release notes while maintaining traceability and avoiding content duplication.
 
 ## Release Process Examples
 
