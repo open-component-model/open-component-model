@@ -25,6 +25,7 @@ We require a single, operational specification that defines how components are v
 * Support simple and robust hotfix and backport workflows for older minor releases.
 * Provide a machine-readable snapshot for documentation and website consumption.
 * Keep CI complexity manageable and deterministic.
+* Ensure immutable releases for secure supply chain compliance and tamper-proof artifacts.
 
 ## Proposal
 
@@ -41,6 +42,7 @@ We adopt a Git-native, tag-based versioning strategy that eliminates version fil
 * **Publishing**: Annotated Git tags with Go module-compatible naming (`<component>/v<major>.<minor>.<patch>`) serve as the authoritative record of published artifacts
 * **OCM Root Component**: Uses OCM Component Constructor YAML as version matrix and releases directly from `main` branch without release branches
 * **Integration Validation**: Dedicated conformance tests at the `ocm` root component level validate sub-component interoperability and ensure tested combinations before final releases of the `ocm` root component.
+* **Immutable Releases**: All GitHub releases are configured as immutable with protected tags and signed attestations to prevent tampering and ensure supply chain security
 
 ## High-level Architecture
 
@@ -273,7 +275,7 @@ The release strategy is implemented through several automated workflows that han
      * **If no final release exists**: Create new RC with incremented number for target version
      * **If final release exists**: Create new RC for next available version
    * **Integration Testing**: Run conformance tests for the new RC
-5. **GitHub Release**: Create GitHub release with component-specific release notes
+5. **GitHub Release**: Create immutable GitHub release with component-specific release notes
 6. **Notification**: Alert maintainers of successful sub-component release
 7. **Failure handling**: If any step fails, stop pipeline and alert maintainers
 
@@ -306,7 +308,8 @@ The release strategy is implemented through several automated workflows that han
 4. **Tag creation**: Create annotated tag `ocm/vX.Y.Z` directly from `main`
 5. **Release notes generation**: Generate simplified release notes linking to sub-component releases
 6. **Artifact publishing**: Publish OCM artifacts and update documentation
-7. **Notification**: Alert maintainers of successful OCM release
+7. **Immutable GitHub Release**: Create immutable GitHub release with security protections
+8. **Notification**: Alert maintainers of successful OCM release
 
 ### Tagging, Naming and Formats
 
@@ -324,7 +327,15 @@ The release strategy is implemented through several automated workflows that han
 * **Published state**: Annotated Git tag `<component>/v<major>.<minor>.<patch>` — tags are authoritative for published artifacts and their provenance
 * **OCM version matrix**: `/ocm/component-constructor.yaml` — OCM Component Constructor defining sub-component versions and relationships for OCM releases
 
-*As described in the strategy above, no VERSION files are maintained - all versions are derived from Git tags.*
+### Immutable Releases and Supply Chain Security
+
+All final releases are published as [immutable GitHub releases](https://github.blog/changelog/2025-08-26-releases-now-support-immutability-in-public-preview/) to ensure supply chain security:
+
+* **Immutable Assets**: Once published, release assets cannot be added, modified, or deleted
+* **Protected Tags**: Tags for immutable releases are automatically protected from deletion or movement
+* **Signed Attestations**: All releases receive signed attestations using Sigstore bundle format for verification
+* **Verification**: Release integrity can be verified using GitHub CLI: `gh release verify <tag>` and `gh release verify-asset <tag> <asset>`
+* **Repository Configuration**: Immutability is enabled at the repository level and applies to all new releases
 
 ### Release Branch Lifecycle
 
@@ -452,6 +463,7 @@ Pros:
 * **Reduced Merge Conflicts**: No version files to conflict during parallel releases
 * **Single Source of Truth**: Git tags eliminate version drift between files and actual releases
 * **OCM Native**: Component Constructor used as version matrix follows OCM specification patterns
+* **Supply Chain Security**: Immutable releases with protected tags, locked assets and signed attestations prevent tampering and ensure artifact integrity
 
 Cons:
 
