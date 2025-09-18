@@ -1,8 +1,6 @@
 package v1alpha1_test
 
 import (
-	"encoding/json"
-	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,60 +17,6 @@ const (
 	PolicyReturnNilOnGetRepositoryForSpec = "nil-get-repository-for-spec"
 )
 
-type RepositorySpec struct {
-	Type runtime.Type `json:"type"`
-
-	// Name is used for identification of the mock repository.
-	Name string
-
-	// Components is a map of component names to a list of component versions
-	// that are available in this mock repository.
-	Components map[string][]string
-
-	// Policy defines additional behavior of the mock repository.
-	Policy string
-}
-
-func (r *RepositorySpec) GetType() runtime.Type {
-	return r.Type
-}
-
-func (r *RepositorySpec) SetType(t runtime.Type) {
-	r.Type = t
-}
-
-func (r *RepositorySpec) DeepCopyTyped() runtime.Typed {
-	return &RepositorySpec{
-		Type:       r.Type,
-		Name:       r.Name,
-		Components: maps.Clone(r.Components),
-		Policy:     r.Policy,
-	}
-}
-
-var _ runtime.Typed = (*RepositorySpec)(nil)
-
-func NewRepositorySpecRaw(t *testing.T, name string, components map[string][]string, failPolicy ...string) *runtime.Raw {
-	repoSpec := &RepositorySpec{
-		Type:       MockType,
-		Name:       name,
-		Components: components,
-	}
-	if len(failPolicy) == 1 {
-		repoSpec.Policy = failPolicy[0]
-	}
-
-	j, err := json.Marshal(repoSpec)
-	require.NoError(t, err)
-
-	raw := &runtime.Raw{
-		Type: MockType,
-		Data: j,
-	}
-
-	return raw
-}
-
 func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 	ctx := t.Context()
 
@@ -88,9 +32,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository: NewRepositorySpecRaw(t, "single-repo", map[string][]string{
-						"test-component": {"1.0.0"},
-					}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "test-component",
 				},
 			},
@@ -102,7 +44,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    NewRepositorySpecRaw(t, "single-repo", map[string][]string{}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "test-component",
 				},
 			},
@@ -114,21 +56,15 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository: NewRepositorySpecRaw(t, "repo1", map[string][]string{
-						"test-component": {"1.0.0"},
-					}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "test-component",
 				},
 				{
-					Repository: NewRepositorySpecRaw(t, "repo2", map[string][]string{
-						"other-component": {"1.0.0"},
-					}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "repo2",
 				},
 				{
-					Repository: NewRepositorySpecRaw(t, "repo3", map[string][]string{
-						"test-component": {"2.0.0"},
-					}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "test-component",
 				},
 			},
@@ -141,7 +77,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "ocm.software/core/test",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    NewRepositorySpecRaw(t, "repo-glob", map[string][]string{"ocm.software/core/test": {"1.0.0"}}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "ocm.software/core/*",
 				},
 			},
@@ -154,7 +90,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "ocm.software/other/test",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    NewRepositorySpecRaw(t, "repo-glob", map[string][]string{"ocm.software/core/test": {"1.0.0"}}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "ocm.software/core/*",
 				},
 			},
@@ -169,7 +105,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "ocm.software/core/test",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    NewRepositorySpecRaw(t, "repo-glob-multi", map[string][]string{"ocm.software/core/test": {"1.0.0"}}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "*.software/*/test",
 				},
 			},
@@ -181,11 +117,11 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "ocm.software/core/test",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    NewRepositorySpecRaw(t, "repo-glob-1", map[string][]string{"ocm.software/core/test": {"1.0.0"}}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "ocm.software/*/test",
 				},
 				{
-					Repository:    NewRepositorySpecRaw(t, "repo-glob-2", map[string][]string{"ocm.software/core/test": {"1.0.0"}}),
+					Repository:    &runtime.Raw{},
 					ComponentName: "ocm.software/core/*",
 				},
 			},
