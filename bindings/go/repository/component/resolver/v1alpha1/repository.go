@@ -15,7 +15,7 @@ const (
 	IdentityKey = "componentName"
 )
 
-// ResolverRepositorySpecProvider implements a component version repository with a resolver
+// ResolverRepositorySpecProvider implements a RepositorySpecProvider with a resolver
 // mechanism. It uses glob patterns to match component names to
 // determine which OCM repository specification to use for resolving
 // component versions.
@@ -29,11 +29,8 @@ type ResolverRepositorySpecProvider struct {
 	matchers []*matcher.ResolverMatcher
 }
 
-// NewResolverRepository creates a new ResolverRepositorySpecProvider with the given
-// repository provider, credential provider, and list of resolvers.
-// The repository provider is used to create repositories based on the
-// repository specifications in the resolvers.
-// The credential provider is used to resolve credentials for the repositories.
+// NewResolverRepository creates a new ResolverRepositorySpecProvider with a list of resolvers.
+// The resolvers are used to match component names to repository specifications.
 func NewResolverRepository(_ context.Context, res []*resolverspec.Resolver) (*ResolverRepositorySpecProvider, error) {
 	resolvers := deepCopyResolvers(res)
 
@@ -58,6 +55,11 @@ func NewResolverRepository(_ context.Context, res []*resolverspec.Resolver) (*Re
 	}, nil
 }
 
+// GetRepositorySpec returns the repository specification for the given component identity.
+// It matches the component name against the configured resolvers and returns
+// the first matching repository specification.
+// If no matching resolver is found, an error is returned.
+// componentIdentity must contain the key [IdentityKey] containing the name of the component e.g. "ocm.software/core/test".
 func (r *ResolverRepositorySpecProvider) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
 	componentName, ok := componentIdentity[IdentityKey]
 	if !ok || componentName == "" {
