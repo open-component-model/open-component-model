@@ -252,7 +252,7 @@ The release strategy is implemented through several automated workflows that han
 4. Create immutable GitHub release with attestations
 5. Notify maintainers or handle failures
 
-### Workflow: `ocm-release`
+### Workflow: `ocm-component-release`
 
 **Trigger**: Automated trigger from all sub-component final releases AND manual workflow dispatch
 
