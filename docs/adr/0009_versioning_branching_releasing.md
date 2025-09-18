@@ -76,7 +76,6 @@ Sub-components use persistent release branches for maintenance:
 * **No Direct Dependencies**: CLI and Controller are developed and released independently with no direct dependencies between them, though both share the common OCM library as their foundation
 * **Bundle Validation**: `ocm` root component validates that specific combinations of sub-components work together through integration testing
 * **Breaking Changes Policy**: Following Kubernetes model, breaking changes are permitted in minor releases across all components
-* **Compatibility Scope**: Version compatibility exists only within individual sub-components (e.g., cli/v0.30.x patch compatibility), not across different components
 
 ### OCM Root as Integration Bundle
 
