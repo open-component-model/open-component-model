@@ -84,13 +84,13 @@ func (p *vertexProcessor) processInternalComponent(ctx context.Context, vertex *
 		}
 	}
 	desc, err := p.constructor.constructComponent(ctx, component, referencedComponents)
-	if err != nil {
-		return fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
-	}
 	if p.constructor.opts.OnEndComponentConstruct != nil {
 		if err := p.constructor.opts.OnEndComponentConstruct(ctx, desc, err); err != nil {
 			return fmt.Errorf("error ending component construction for %q: %w", component.ToIdentity(), err)
 		}
+	}
+	if err != nil {
+		return fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
 	}
 	vertex.Attributes.Store(attributeComponentDescriptor, desc)
 	return nil
