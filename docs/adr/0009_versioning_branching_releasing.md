@@ -51,7 +51,7 @@ Repository Structure:
 ├── kubernetes/controller/   # OCM Controller component  
 ├── ocm/                     # `ocm` root component
 │   ├── component-constructor.yaml  # Version matrix
-│   └── tests/              # Integration conformance tests
+│   └── conformance/              # Integration conformance tests
 └── .github/workflows/      # CI/CD automation
 
 Tag-based Versioning:
