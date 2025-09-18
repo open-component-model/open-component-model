@@ -20,17 +20,18 @@ func ToMapBasedDAG[T cmp.Ordered](d *DirectedAcyclicGraph[T]) *dag.DirectedAcycl
 		if !ok {
 			return true
 		}
-		vertices[id] = &dag.Vertex[T]{
+		vtx := &dag.Vertex[T]{
 			ID:         v.ID,
 			Attributes: VertexAttributesToMap(v),
 			Edges:      VertexEdgesToMap(v),
+			InDegree:   int(v.InDegree.Load()),
+			OutDegree:  int(v.OutDegree.Load()),
 		}
+		vertices[id] = vtx
 		return true
 	})
 	return &dag.DirectedAcyclicGraph[T]{
-		Vertices:  vertices,
-		OutDegree: OutDegreeToMap(d),
-		InDegree:  InDegreeToMap(d),
+		Vertices: vertices,
 	}
 }
 
@@ -53,16 +54,6 @@ func VertexEdgesToMap[T cmp.Ordered](v *Vertex[T]) map[T]map[string]any {
 		return true
 	})
 	return edges
-}
-
-// OutDegreeToMap converts the graph's out-degree sync.Map to a regular.
-func OutDegreeToMap[T cmp.Ordered](d *DirectedAcyclicGraph[T]) map[T]int {
-	return MustSyncMapToMap[T, int](d.OutDegree)
-}
-
-// InDegreeToMap converts the graph's in-degree sync.Map to a regular map.
-func InDegreeToMap[T cmp.Ordered](d *DirectedAcyclicGraph[T]) map[T]int {
-	return MustSyncMapToMap[T, int](d.InDegree)
 }
 
 // SyncMapToMap converts a sync.Map to a regular map with type assertions.
