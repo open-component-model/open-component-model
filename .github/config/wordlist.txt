@@ -510,3 +510,5 @@ rekor
 tuf
 implementors
 cryptographic
+sig
+sigs
