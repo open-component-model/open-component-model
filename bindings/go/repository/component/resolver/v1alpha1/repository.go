@@ -88,10 +88,9 @@ func (r *ResolverRepository) GetRepositorySpec(_ context.Context, componentIdent
 	}
 
 	for index, resolver := range r.resolvers {
-		if !r.matchers[index].Match(componentName, "") {
-			continue
+		if r.matchers[index].Match(componentName, "") {
+			return resolver.Repository, nil
 		}
-		return resolver.Repository, nil
 	}
 
 	return nil, fmt.Errorf("no repository found for component identity %s", componentIdentity)
