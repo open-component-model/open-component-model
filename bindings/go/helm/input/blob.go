@@ -30,12 +30,12 @@ import (
 
 const (
 	HelmRepositoryType = "helmRepository"
-	// CredentialKeyCertFile is the key for storing the location of a client certificate.
-	CredentialKeyCertFile = "certFile"
-	// CredentialKeyClientKey is the key for storing the location of a client private key.
-	CredentialKeyClientKey = "keyFile"
-	// CredentialKeyKeyring is the key for storing the keyring name to use.
-	CredentialKeyKeyring = "keyring"
+	// CredentialCertFile is the key for storing the location of a client certificate.
+	CredentialCertFile = "certFile"
+	// CredentialKeyFile is the key for storing the location of a client private key.
+	CredentialKeyFile = "keyFile"
+	// CredentialKeyring is the key for storing the keyring name to use.
+	CredentialKeyring = "keyring"
 )
 
 // ReadOnlyChart contains Helm chart contents as tgz archive, some metadata and optionally a provenance file.
@@ -46,21 +46,38 @@ type ReadOnlyChart struct {
 	ProvBlob  *filesystem.Blob
 }
 
+// OptionsFunc is a function that modifies Options.
+type OptionsFunc func(options *Options)
+
+// WithCredentials sets the credentials to use for the remote repository.
+// The credentials could contain the following keys:
+// - "username": for basic authentication
+// - "password": for basic authentication
+// - "certFile": for TLS client certificate
+// - "keyFile": for TLS client private key
+// - "keyring": for keyring name to use
+// - "caCert": for CA certificate
+// - "caCertFile": for CA certificate file
+func WithCredentials(credentials map[string]string) OptionsFunc {
+	return func(options *Options) {
+		options.Credentials = credentials
+	}
+}
+
+type Options struct {
+	Credentials map[string]string
+}
+
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
 // It reads the contents from the filesystem or downloads from a remote repository,
 // then packages it as an OCI artifact. The function returns an error if neither path
 // nor helmRepository are specified, or if there are issues reading/downloading the chart.
-// If the provided tmpDir is empty, the temporary directory will be created in the system's default temp directory.
-func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string) (blob.ReadOnlyBlob, error) {
-	return GetV1HelmBlobWithCredentials(ctx, helmSpec, tmpDir, nil)
-}
+func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ...OptionsFunc) (blob.ReadOnlyBlob, error) {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
 
-// GetV1HelmBlobWithCredentials creates a ReadOnlyBlob from a v1.Helm specification with credential support.
-// This function supports both local filesystem charts and remote repository charts.
-// For remote repositories, credentials can be provided in the credential map with keys:
-// - "username": for basic authentication
-// - "password": for basic authentication
-func GetV1HelmBlobWithCredentials(ctx context.Context, helmSpec v1.Helm, tmpDir string, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	if err := validateInputSpec(helmSpec); err != nil {
 		return nil, fmt.Errorf("invalid helm input spec: %w", err)
 	}
@@ -75,7 +92,7 @@ func GetV1HelmBlobWithCredentials(ctx context.Context, helmSpec v1.Helm, tmpDir 
 			return nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
 		}
 	case helmSpec.HelmRepository != "":
-		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, credentials)
+		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, options.Credentials)
 		if err != nil {
 			return nil, fmt.Errorf("error loading remote helm chart from %q: %w", helmSpec.HelmRepository, err)
 		}
@@ -172,8 +189,10 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		keyring string
 		verify  = downloader.VerifyNever
 	)
-	if v, ok := credentials[CredentialKeyKeyring]; ok {
+	if v, ok := credentials[CredentialKeyring]; ok {
 		keyring = v
+		// We set verifyIfPossible to allow the download to run verify if keyring is defined. Without the keyring
+		// verification would not be possible at all.
 		verify = downloader.VerifyIfPossible
 	}
 
@@ -235,24 +254,26 @@ func constructTLSOptions(helmSpec v1.Helm, tmpDir string, credentials map[string
 		if err != nil {
 			return nil, fmt.Errorf("error creating temporary CA certificate file: %w", err)
 		}
+		defer func() {
+			if cerr := caFile.Close(); cerr != nil {
+				err = errors.Join(err, cerr)
+			}
+		}()
 		if _, err = caFile.WriteString(helmSpec.CACert); err != nil {
 			return nil, fmt.Errorf("error writing CA certificate to temp file: %w", err)
 		}
 		caFilePath = caFile.Name()
-		if err := caFile.Close(); err != nil {
-			return nil, fmt.Errorf("failed to close temporary ca certificate file: %w", err)
-		}
 	}
 
 	// set up certFile and keyFile if they are provided in the credentials
-	if v, ok := credentials[CredentialKeyCertFile]; ok {
+	if v, ok := credentials[CredentialCertFile]; ok {
 		certFile = v
 		if _, err := os.Stat(certFile); err != nil {
 			return nil, fmt.Errorf("certFile %q does not exist", certFile)
 		}
 	}
 
-	if v, ok := credentials[CredentialKeyClientKey]; ok {
+	if v, ok := credentials[CredentialKeyFile]; ok {
 		keyFile = v
 		if _, err := os.Stat(keyFile); err != nil {
 			return nil, fmt.Errorf("keyFile %q does not exist", keyFile)

@@ -2,6 +2,7 @@ package input
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
@@ -77,7 +78,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	helmBlob, err := GetV1HelmBlobWithCredentials(ctx, helm, i.TempFolder, credentials)
+	helmBlob, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(credentials))
 	if err != nil {
 		return nil, fmt.Errorf("error getting helm blob based on resource input specification: %w", err)
 	}

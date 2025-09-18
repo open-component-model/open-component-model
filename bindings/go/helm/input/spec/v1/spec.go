@@ -30,12 +30,13 @@ type Helm struct {
 	// a helm repository instead of the local filesystem.
 	HelmRepository string `json:"helmRepository,omitempty"`
 
-	// CACert was used in previous OCM versions in combination with HelmRepository to specify a TLS root certificate
-	// used to access the source helm repository.
+	// CACert used in combination with HelmRepository to specify a TLS root certificate to access the source helm repository.
+	// Deprecated: This field is deprecated in favor of using certificates through the credentials.
 	CACert string `json:"caCert,omitempty"`
 
-	// CACertFile was used in previous OCM versions in combination with HelmRepository to specify a relative filename
-	// for TLS root certificate, used to access the source helm repository.
+	// CACertFile used in combination with HelmRepository to specify a relative filename
+	// for TLS root certificate to access the source helm repository.
+	// Deprecated: This field is deprecated in favor of using certificates through the credentials.
 	CACertFile string `json:"caCertFile,omitempty"`
 }
 
