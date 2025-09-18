@@ -10,15 +10,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const Realm = "repository/component/resolver"
-const IdentityKey = "componentName"
+const (
+	Realm       = "repository/component/resolver"
+	IdentityKey = "componentName"
+)
 
 // ResolverRepositorySpecProvider implements a component version repository with a resolver
 // mechanism. It uses glob patterns to match component names to
 // determine which OCM repository specification to use for resolving
 // component versions.
 type ResolverRepositorySpecProvider struct {
-
 	// A list of resolvers to use for matching components to repositories.
 	// This list is immutable after creation.
 	resolvers []*resolverspec.Resolver
