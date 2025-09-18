@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 
 	"ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/matcher"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/spec"
@@ -26,8 +25,7 @@ type ResolverRepositorySpecProvider struct {
 
 	// This cache is based on index. So, the index of the resolver in the
 	// resolver slice corresponds to the index of the repository in this slice.
-	matchersMu sync.RWMutex
-	matchers   []*matcher.ResolverMatcher
+	matchers []*matcher.ResolverMatcher
 }
 
 // NewResolverRepository creates a new ResolverRepositorySpecProvider with the given
