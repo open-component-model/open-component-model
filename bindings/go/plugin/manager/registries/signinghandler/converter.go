@@ -15,7 +15,7 @@ type pluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
-func (r *pluginConverter) GetSigningCredentialConsumerIdentity(ctx context.Context, name string, unsigned descriptor.Digest, config runtime.Typed) (identity runtime.Identity, err error) {
+func (r *pluginConverter) GetSigningCredentialConsumerIdentity(ctx context.Context, name string, unsigned descriptor.Digest, config runtime.Typed) (runtime.Identity, error) {
 	request := &v1.GetSignerIdentityRequest[runtime.Typed]{
 		SignRequest: v1.SignRequest[runtime.Typed]{
 			Digest: descriptor.ConvertToV2Digest(&unsigned),
@@ -32,7 +32,7 @@ func (r *pluginConverter) GetSigningCredentialConsumerIdentity(ctx context.Conte
 	return result.Identity, nil
 }
 
-func (r *pluginConverter) Sign(ctx context.Context, unsigned descriptor.Digest, config runtime.Typed, credentials map[string]string) (signed descriptor.SignatureInfo, err error) {
+func (r *pluginConverter) Sign(ctx context.Context, unsigned descriptor.Digest, config runtime.Typed, credentials map[string]string) (descriptor.SignatureInfo, error) {
 	v2digest := descriptor.ConvertToV2Digest(&unsigned)
 
 	request := &v1.SignRequest[runtime.Typed]{
@@ -48,7 +48,7 @@ func (r *pluginConverter) Sign(ctx context.Context, unsigned descriptor.Digest, 
 	return signatureInfo, nil
 }
 
-func (r *pluginConverter) GetVerifyingCredentialConsumerIdentity(ctx context.Context, signed descriptor.Signature, config runtime.Typed) (identity runtime.Identity, err error) {
+func (r *pluginConverter) GetVerifyingCredentialConsumerIdentity(ctx context.Context, signed descriptor.Signature, config runtime.Typed) (runtime.Identity, error) {
 	request := &v1.GetVerifierIdentityRequest[runtime.Typed]{
 		VerifyRequest: v1.VerifyRequest[runtime.Typed]{
 			Signature: descriptor.ConvertToV2Signature(&signed),

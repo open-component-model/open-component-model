@@ -38,7 +38,7 @@ func handleJSONResponse(w http.ResponseWriter, response interface{}) {
 
 // credentialsFromHeader extracts credentials from the Authorization header if present
 // and unmarshals them into a map. If the header is absent, it returns an empty map.
-// if the header is present but cannot be unmarshaled, it writes an error response and returns ok as false.
+// If the header is present but cannot be unmarshaled, it writes an error response and returns ok as false.
 func credentialsFromHeader(w http.ResponseWriter, h http.Header) (credentials map[string]string, ok bool) {
 	authHeader := h.Get("Authorization")
 	if authHeader == "" {
@@ -89,7 +89,7 @@ func handleGetVerifierIdentity[T runtime.Typed](plugin v1.VerifierPluginContract
 	}
 }
 
-// handleSign handles the GetGlobalResource endpoint
+// handleSign handles the Sign endpoint
 func handleSign[T runtime.Typed](plugin v1.SignerPluginContract[T]) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		credentials, ok := credentialsFromHeader(w, r.Header)
