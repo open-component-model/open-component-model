@@ -29,7 +29,7 @@ We require a single, operational specification that defines how components are v
 
 ## Proposal
 
-We propose using Git tags insted of version files to track software versions. This approach uses component-specific version tags and dedicated release branches for updates, while leveraging an OCM Component Constructor YAML file to manage how all the parts work together.
+We propose using Git tags instead of version files to track software versions. This approach uses component-specific version tags and dedicated release branches for updates, while leveraging an OCM Component Constructor YAML file to manage how all the parts work together.
 
 Key elements:
 
