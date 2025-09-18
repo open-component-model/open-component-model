@@ -201,8 +201,9 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			res, err := resolver.NewResolverRepository(ctx, tc.repos)
 			r.NoError(err, "failed to create resolver repository when it should succeed")
 
-			identity, err := runtime.ParseURLToIdentity(tc.component)
-			r.NoError(err, "failed to parse component identity when it should succeed")
+			identity := runtime.Identity{
+				resolver.IdentityKey: tc.component,
+			}
 
 			repo, err := res.GetRepositorySpec(ctx, identity)
 			if tc.err(t, err, "error getting repository for component") {

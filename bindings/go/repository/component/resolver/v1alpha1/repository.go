@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path"
-	"strings"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/matcher"
@@ -14,6 +12,7 @@ import (
 )
 
 const Realm = "repository/component/resolver"
+const IdentityKey = "componentName"
 
 // ResolverSpecProvider implements a component version repository with a resolver
 // mechanism. It uses glob patterns to match component names to
@@ -60,31 +59,10 @@ func NewResolverRepository(_ context.Context, res []*resolverspec.Resolver) (*Re
 	}, nil
 }
 
-func componentNameFromIdentity(componentIdentity runtime.Identity) (string, error) {
-	ct := componentIdentity.String()
-	// split by ,
-	splits := strings.Split(ct, ",")
-
-	componentName := ""
-	for _, s := range splits {
-		valSplits := strings.Split(s, "=")
-		if len(valSplits) != 2 {
-			return "", fmt.Errorf("invalid identity format: %s", componentIdentity)
-		}
-		componentName = path.Join(componentName, strings.TrimSpace(valSplits[1]))
-	}
-
-	if componentName == "" {
-		return "", fmt.Errorf("component name not found in identity %s", componentIdentity)
-	}
-
-	return componentName, nil
-}
-
 func (r *ResolverSpecProvider) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
-	componentName, err := componentNameFromIdentity(componentIdentity)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract component name from identity %s: %w", componentIdentity, err)
+	componentName, ok := componentIdentity[IdentityKey]
+	if !ok || componentName == "" {
+		return nil, fmt.Errorf("failed to extract component name from identity %s", componentIdentity)
 	}
 
 	for index, resolver := range r.resolvers {
