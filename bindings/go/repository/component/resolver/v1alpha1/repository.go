@@ -15,11 +15,11 @@ import (
 
 const Realm = "repository/component/resolver"
 
-// ResolverRepository implements a component version repository with a resolver
+// ResolverSpecProvider implements a component version repository with a resolver
 // mechanism. It uses glob patterns to match component names to
 // determine which OCM repository specification to use for resolving
 // component versions.
-type ResolverRepository struct {
+type ResolverSpecProvider struct {
 
 	// A list of resolvers to use for matching components to repositories.
 	// This list is immutable after creation.
@@ -31,12 +31,12 @@ type ResolverRepository struct {
 	matchers   []*matcher.ResolverMatcher
 }
 
-// NewResolverRepository creates a new ResolverRepository with the given
+// NewResolverRepository creates a new ResolverSpecProvider with the given
 // repository provider, credential provider, and list of resolvers.
 // The repository provider is used to create repositories based on the
 // repository specifications in the resolvers.
 // The credential provider is used to resolve credentials for the repositories.
-func NewResolverRepository(_ context.Context, res []*resolverspec.Resolver) (*ResolverRepository, error) {
+func NewResolverRepository(_ context.Context, res []*resolverspec.Resolver) (*ResolverSpecProvider, error) {
 	resolvers := deepCopyResolvers(res)
 
 	var matchers []*matcher.ResolverMatcher
@@ -54,7 +54,7 @@ func NewResolverRepository(_ context.Context, res []*resolverspec.Resolver) (*Re
 		return nil, fmt.Errorf("one or more resolvers are invalid: %w", errors.Join(resolverErrs...))
 	}
 
-	return &ResolverRepository{
+	return &ResolverSpecProvider{
 		resolvers: resolvers,
 		matchers:  matchers,
 	}, nil
@@ -81,7 +81,7 @@ func componentNameFromIdentity(componentIdentity runtime.Identity) (string, erro
 	return componentName, nil
 }
 
-func (r *ResolverRepository) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
+func (r *ResolverSpecProvider) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
 	componentName, err := componentNameFromIdentity(componentIdentity)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract component name from identity %s: %w", componentIdentity, err)
