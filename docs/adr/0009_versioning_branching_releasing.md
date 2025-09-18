@@ -23,7 +23,7 @@ We require a single, operational specification that defines how components are v
 * Reproducible, auditable published releases.
 * Allow a release per component without forcing simultaneous releases of all components.
 * Support simple and robust hotfix and backport workflows for older minor releases.
-* Provide a machine-readable snapshot for documentation and website consumption.
+* Provide a machine-readable snapshot for tested combinations of sub-components in form of an OCM Component Constructor YAML file.
 * Keep CI complexity manageable and deterministic.
 * Ensure immutable releases for secure supply chain compliance and tamper-proof artifacts.
 
@@ -222,7 +222,6 @@ The release strategy is implemented through several automated workflows that han
 2. **Source determination**: Create branch from `main` for new minor version release
 3. **Branch creation**: Create `releases/<component>/v<major>.<minor>` branch using OCM bot
 4. **Protection rules**: Apply branch protection rules identical to `main` branch (require PR reviews, status checks, admin override settings)
-5. **Notification**: Alert component maintainers of new release branch creation
 
 **Note**: `ocm` root component does not require release branches - it uses tags directly from `main` branch.
 
