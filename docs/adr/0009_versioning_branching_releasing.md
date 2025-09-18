@@ -31,7 +31,7 @@ We require a single, operational specification that defines how components are v
 
 We propose a Git-native versioning strategy that eliminates version files in favor of authoritative Git tags as the single source of truth. This approach combines SemVer-compliant Git tag-based versioning for individual sub-components with component-scoped persistent release branches for maintenance workflows, while leveraging an OCM Component Constructor YAML for managing the root OCM component's version matrix and coordinated releases.
 
-The strategy includes dedicated conformance testing at the `ocm` root component level to ensure component interoperability and validate integrated component combinations before final releases of the `ocm` root component. The tests will be created over time and are not mandatory for the initial rollout of this strategy.
+All components will have to run extensive conformance tests to ensure compatibility between components. The tests will be created over time and are not mandatory for the initial rollout of this strategy.
 
 ## Description
 

@@ -11,16 +11,17 @@ import (
 func ToSyncMapBasedDAG[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) *DirectedAcyclicGraph[T] {
 	vertices := &sync.Map{}
 	for id, v := range d.Vertices {
-		vertices.Store(id, &Vertex[T]{
+		vtx := &Vertex[T]{
 			ID:         v.ID,
 			Attributes: VertexAttributesToSyncMap(v),
 			Edges:      VertexEdgesToSyncMap(v),
-		})
+		}
+		vtx.InDegree.Store(int64(v.InDegree))
+		vtx.OutDegree.Store(int64(v.OutDegree))
+		vertices.Store(id, vtx)
 	}
 	return &DirectedAcyclicGraph[T]{
-		Vertices:  vertices,
-		OutDegree: OutDegreeToSyncMap(d),
-		InDegree:  InDegreeToSyncMap(d),
+		Vertices: vertices,
 	}
 }
 
@@ -34,14 +35,6 @@ func VertexEdgesToSyncMap[T cmp.Ordered](v *dag.Vertex[T]) *sync.Map {
 		edges.Store(edgeID, MapToSyncMap[string, any](attrMap))
 	}
 	return edges
-}
-
-func OutDegreeToSyncMap[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) *sync.Map {
-	return MapToSyncMap[T, int](d.OutDegree)
-}
-
-func InDegreeToSyncMap[T cmp.Ordered](d *dag.DirectedAcyclicGraph[T]) *sync.Map {
-	return MapToSyncMap[T, int](d.InDegree)
 }
 
 // MapToSyncMap converts a map to a sync.Map.

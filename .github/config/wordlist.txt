@@ -537,3 +537,11 @@ implementers
 implementer
 implementer'
 implementers'
+sig
+sigs
+sig's
+roadmap
+scalable
+monorepo
+supermajority
+resubmission

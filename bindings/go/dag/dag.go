@@ -40,30 +40,26 @@ type Vertex[T cmp.Ordered] struct {
 	// Edges stores the IDs of the nodes that this node has an outgoing edge to.
 	// In kro, this would be the children of a resource.
 	Edges map[T]map[string]any
+
+	InDegree, OutDegree int
 }
 
 // DirectedAcyclicGraph represents a directed acyclic graph.
 type DirectedAcyclicGraph[T cmp.Ordered] struct {
 	// Vertices stores the nodes in the graph
-	Vertices  map[T]*Vertex[T]
-	OutDegree map[T]int // Out-degree of each vertex (number of outgoing edges)
-	InDegree  map[T]int // In-degree of each vertex (number of incoming edges)
+	Vertices map[T]*Vertex[T]
 }
 
 // NewDirectedAcyclicGraph creates a new directed acyclic graph.
 func NewDirectedAcyclicGraph[T cmp.Ordered]() *DirectedAcyclicGraph[T] {
 	return &DirectedAcyclicGraph[T]{
-		Vertices:  make(map[T]*Vertex[T]),
-		OutDegree: make(map[T]int),
-		InDegree:  make(map[T]int),
+		Vertices: make(map[T]*Vertex[T]),
 	}
 }
 
 func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
 	return &DirectedAcyclicGraph[T]{
-		Vertices:  maps.Clone(d.Vertices),
-		OutDegree: maps.Clone(d.OutDegree),
-		InDegree:  maps.Clone(d.InDegree),
+		Vertices: maps.Clone(d.Vertices),
 	}
 }
 
@@ -76,14 +72,13 @@ func (d *DirectedAcyclicGraph[T]) AddVertex(id T, attributes ...map[string]any) 
 		ID:         id,
 		Attributes: make(map[string]any),
 		Edges:      make(map[T]map[string]any),
+		InDegree:   0,
+		OutDegree:  0,
 	}
 
 	for _, attributes := range attributes {
 		maps.Copy(d.Vertices[id].Attributes, attributes)
 	}
-
-	d.OutDegree[id] = 0
-	d.InDegree[id] = 0
 	return nil
 }
 
@@ -97,16 +92,13 @@ func (d *DirectedAcyclicGraph[T]) DeleteVertex(id T) error {
 	for _, node := range d.Vertices {
 		if _, exists := node.Edges[id]; exists {
 			// Decrement the in-degree of the node
-			d.InDegree[node.ID]--
+			d.Vertices[node.ID].InDegree--
 			// Remove the edge from the node
 			delete(node.Edges, id)
 		}
 	}
 
 	delete(d.Vertices, id)
-	delete(d.OutDegree, id)
-	delete(d.InDegree, id)
-
 	return nil
 }
 
@@ -125,7 +117,7 @@ func formatCycle(cycle []string) string {
 // AddEdge adds a directed edge from one node to another.
 func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]any) error {
 	fromNode, fromExists := d.Vertices[from]
-	_, toExists := d.Vertices[to]
+	toNode, toExists := d.Vertices[to]
 	if !fromExists {
 		return fmt.Errorf("node %v does not exist", from)
 	}
@@ -142,16 +134,16 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 		// Only initialize the map if the edge was added
 		fromNode.Edges[to] = map[string]any{}
 		// Only increment the out-degree and in-degree if the edge was added
-		d.OutDegree[from]++
-		d.InDegree[to]++
+		fromNode.OutDegree++
+		toNode.InDegree++
 
 		// Check if the graph is still a DAG
 		hasCycle, cycle := d.HasCycle()
 		if hasCycle {
 			// Ehmmm, we have a cycle, let's remove the edge we just added
 			delete(fromNode.Edges, to)
-			d.OutDegree[from]--
-			d.InDegree[to]--
+			fromNode.OutDegree--
+			toNode.InDegree--
 
 			return fmt.Errorf("adding an edge from %v to %v would create a cycle: %w", fmt.Sprintf("%v", from), fmt.Sprintf("%v", to), &CycleError{
 				Cycle: cycle,
@@ -168,9 +160,9 @@ func (d *DirectedAcyclicGraph[T]) AddEdge(from, to T, attributes ...map[string]a
 
 func (d *DirectedAcyclicGraph[T]) Roots() []T {
 	var roots []T
-	for node, degree := range d.InDegree {
-		if degree == 0 {
-			roots = append(roots, node)
+	for key, node := range d.Vertices {
+		if node.InDegree == 0 {
+			roots = append(roots, key)
 		}
 	}
 	return roots
