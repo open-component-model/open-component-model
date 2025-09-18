@@ -124,9 +124,9 @@ Sub-components follow a two-phase release process:
 
 **Process**:
 
-1. Implement fix on the appropriate `releases/<component>/vX.Y` branch
-2. Open PR targeting the release branch
-3. After merge, backport change to `main` branch (cherry-pick or separate PR) if applicable
+1. Implement fix on the `main` branch
+2. Cherry-pick fix to relevant local release branch
+3. Open PR targeting the remote release branch
 
 **Example**: Hotfix for CLI v0.30.2 goes to `releases/cli/v0.30` → `cli/v0.30.2`
 
