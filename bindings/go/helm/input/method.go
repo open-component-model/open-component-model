@@ -14,7 +14,7 @@ import (
 
 // ErrLocalHelmInputDoesNotRequireCredentials is returned when credential-related operations are attempted
 // on local helm inputs, since those are based on local filesystem and do not require authentication or authorization.
-var ErrLocalHelmInputDoesNotRequireCredentials = fmt.Errorf("local helm inputs do not require credentials")
+var ErrLocalHelmInputDoesNotRequireCredentials = errors.New("local helm inputs do not require credentials")
 
 var _ interface {
 	constructor.ResourceInputMethod

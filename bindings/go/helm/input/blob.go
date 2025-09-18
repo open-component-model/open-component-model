@@ -221,7 +221,7 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	return result, nil
 }
 
-// setupTLSFiles sets up the TLS configuration files based on the helm specification
+// constructTLSOptions sets up the TLS configuration files based on the helm specification
 func constructTLSOptions(helmSpec v1.Helm, tmpDir string, credentials map[string]string) (_ getter.Option, err error) {
 	var (
 		caFile                        *os.File
