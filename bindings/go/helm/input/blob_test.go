@@ -70,7 +70,7 @@ func TestGetV1HelmBlob_ValidateFields(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := input.GetV1HelmBlob(ctx, tt.helmSpec, "")
+			b, _, err := input.GetV1HelmBlob(ctx, tt.helmSpec, "")
 			if tt.expectError {
 				require.Error(t, err)
 				assert.Nil(t, b, "expected nil blob for invalid helm spec")
@@ -119,7 +119,7 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 			spec := v1.Helm{
 				Path: tt.path,
 			}
-			b, err := input.GetV1HelmBlob(ctx, spec, "")
+			b, _, err := input.GetV1HelmBlob(ctx, spec, "")
 			require.NoError(t, err)
 			require.NotNil(t, b)
 
@@ -195,7 +195,7 @@ func TestGetV1HelmBlob_BadCharts(t *testing.T) {
 			spec := v1.Helm{
 				Path: tt.path,
 			}
-			b, err := input.GetV1HelmBlob(ctx, spec, "")
+			b, _, err := input.GetV1HelmBlob(ctx, spec, "")
 			require.Error(t, err)
 			require.Nil(t, b)
 			assert.Contains(t, err.Error(), tt.wantErrMgs)

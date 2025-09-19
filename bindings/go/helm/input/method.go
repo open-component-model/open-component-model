@@ -8,6 +8,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
+	"ocm.software/open-component-model/bindings/go/oci/internal/looseref"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocispec "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -44,6 +45,9 @@ type InputMethod struct {
 	TempFolder string
 }
 
+// HelmChartConsumerType is the type of the identity for remote helm repositories.
+const HelmChartConsumerType = "HelmChartRepository"
+
 // GetResourceCredentialConsumerIdentity returns credentials consumer identity for remote helm repositories
 // or nil for local helm inputs. Remote repositories may require authentication credentials.
 func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
@@ -61,7 +65,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
 	}
 
-	identity.SetType(runtime.NewVersionedType(v1.Type, v1.Version))
+	identity.SetType(runtime.NewVersionedType(HelmChartConsumerType, v1.Version))
 
 	return identity, nil
 }
@@ -78,7 +82,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
-	helmBlob, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(credentials))
+	helmBlob, chart, err := GetV1HelmBlob(ctx, helm, i.TempFolder, WithCredentials(credentials))
 	if err != nil {
 		return nil, fmt.Errorf("error getting helm blob based on resource input specification: %w", err)
 	}
@@ -87,9 +91,8 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		ProcessedBlobData: helmBlob,
 	}
 
-	// if the path is not set, create remote resource access
-	if helm.HelmRepository != "" && helm.Path == "" {
-		remoteResource, err := i.createRemoteResourceAccess(resource, helm)
+	if helm.Repository != "" {
+		remoteResource, err := i.createRemoteResourceAccess(resource, helm, chart)
 		if err != nil {
 			return nil, fmt.Errorf("error creating remote resource access: %w", err)
 		}
@@ -103,20 +106,30 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 
 // createRemoteResourceAccess creates a resource descriptor with remote access information
 // for helm charts stored in remote repositories.
-func (i *InputMethod) createRemoteResourceAccess(resource *constructorruntime.Resource, helm v1.Helm) (*constructorruntime.Resource, error) {
+func (i *InputMethod) createRemoteResourceAccess(resource *constructorruntime.Resource, helm v1.Helm, chart *ReadOnlyChart) (*constructorruntime.Resource, error) {
+	ref, err := looseref.ParseReference(helm.Repository)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse target access image reference %q: %w", helm.Repository, err)
+	}
+
+	// If "version" is specified, use it as a tag. If "tag" is not empty, we compare it with
+	// the provided version. If they don't match, return an error.
+	if chart.Version != "" {
+		if ref.Tag != "" && ref.Tag != chart.Version {
+			return nil, fmt.Errorf("provided version %q does not match tag %q", chart.Version, ref.Tag)
+		}
+
+		// This could be already equal, but set it anyway.
+		ref.Tag = chart.Version
+	}
+
 	ociAccess := &ocispec.OCIImage{
-		ImageReference: helm.Repository,
+		ImageReference: ref.String(),
 	}
 
 	// set the default type for OCIImage
 	if _, err := access.Scheme.DefaultType(ociAccess); err != nil {
 		return nil, fmt.Errorf("error setting default type for OCIImage: %w", err)
-	}
-
-	// TODO: Support version hints. We need to figure out how to do this in a way that is compatible with the OCIImage spec.
-	// For now we just use the version as the tag.
-	if helm.Version != "" {
-		ociAccess.ImageReference = helm.Repository + ":" + helm.Version // https://repo/chart-6.3.1.tgz:v1.2.3
 	}
 
 	resource.Access = ociAccess

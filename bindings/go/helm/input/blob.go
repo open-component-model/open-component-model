@@ -72,14 +72,14 @@ type Options struct {
 // It reads the contents from the filesystem or downloads from a remote repository,
 // then packages it as an OCI artifact. The function returns an error if neither path
 // nor helmRepository are specified, or if there are issues reading/downloading the chart.
-func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ...OptionsFunc) (blob.ReadOnlyBlob, error) {
+func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ...OptionsFunc) (blob.ReadOnlyBlob, *ReadOnlyChart, error) {
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
 	}
 
 	if err := validateInputSpec(helmSpec); err != nil {
-		return nil, fmt.Errorf("invalid helm input spec: %w", err)
+		return nil, nil, fmt.Errorf("invalid helm input spec: %w", err)
 	}
 
 	var chart *ReadOnlyChart
@@ -89,20 +89,20 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 	case helmSpec.Path != "":
 		chart, err = newReadOnlyChart(helmSpec.Path, tmpDir)
 		if err != nil {
-			return nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
+			return nil, nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
 		}
 	case helmSpec.HelmRepository != "":
 		chart, err = newReadOnlyChartFromRemote(ctx, helmSpec, tmpDir, options.Credentials)
 		if err != nil {
-			return nil, fmt.Errorf("error loading remote helm chart from %q: %w", helmSpec.HelmRepository, err)
+			return nil, nil, fmt.Errorf("error loading remote helm chart from %q: %w", helmSpec.HelmRepository, err)
 		}
 	default:
-		return nil, fmt.Errorf("either path or helmRepository must be specified")
+		return nil, nil, fmt.Errorf("either path or helmRepository must be specified")
 	}
 
 	b := copyChartToOCILayout(ctx, chart)
 
-	return b, nil
+	return b, chart, nil
 }
 
 func validateInputSpec(helmSpec v1.Helm) error {
