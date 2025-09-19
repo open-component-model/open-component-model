@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"

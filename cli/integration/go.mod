@@ -15,12 +15,12 @@ require (
 	helm.sh/helm/v3 v3.18.6
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.8
-	ocm.software/open-component-model/bindings/go/credentials v0.0.1
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250909064434-e1a06fe74668
+	ocm.software/open-component-model/bindings/go/credentials v0.0.2
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250914002742-a215ca792a3e
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
-	ocm.software/open-component-model/bindings/go/plugin v0.0.4
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250909064434-e1a06fe74668
+	ocm.software/open-component-model/bindings/go/plugin v0.0.6
+	ocm.software/open-component-model/bindings/go/repository v0.0.1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	ocm.software/open-component-model/cli v0.0.0-20250909064434-e1a06fe74668
 	oras.land/oras-go/v2 v2.6.0
@@ -34,14 +34,13 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
-	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
-	github.com/creack/pty v1.1.19 // indirect
+	github.com/creack/pty v1.1.24 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/distribution/reference v0.6.0 // indirect
@@ -89,8 +88,7 @@ require (
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.38.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.37.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.38.0 // indirect
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.8.0 // indirect
@@ -106,11 +104,12 @@ require (
 	google.golang.org/grpc v1.75.1 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250909064434-e1a06fe74668 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250915165427-710b0c881b3c // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250915111817-4c193200483f // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250909064434-e1a06fe74668 // indirect
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250914002742-a215ca792a3e // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

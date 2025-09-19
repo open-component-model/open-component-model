@@ -10,13 +10,10 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
-	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
-	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -145,10 +142,10 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	reference := args[0]
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	var resolvers []resolverruntime.Resolver
+	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	var resolvers []*resolverruntime.Resolver
 	if config != nil {
-		resolvers, err = resolversFromConfig(config, err)
+		resolvers, err = ocm.ResolversFromConfig(config)
 		if err != nil {
 			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
 		}
@@ -173,25 +170,6 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 	return nil
-}
-
-//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime.Resolver, error) {
-	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
-	if err != nil {
-		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
-	}
-	resolverConfigV1 := resolverv1.Merge(filtered...)
-
-	resolverConfig, err := resolverruntime.ConvertFromV1(repository.Scheme, resolverConfigV1)
-	if err != nil {
-		return nil, fmt.Errorf("converting resolver configuration from v1 to runtime failed: %w", err)
-	}
-	var resolvers []resolverruntime.Resolver
-	if resolverConfig != nil && len(resolverConfig.Resolvers) > 0 {
-		resolvers = resolverConfig.Resolvers
-	}
-	return resolvers, nil
 }
 
 func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, descs []*descruntime.Descriptor, format string, mode string, recursive int) error {
