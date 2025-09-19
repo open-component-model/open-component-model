@@ -137,10 +137,10 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	config := ocmctx.FromContext(ctx).Configuration()
 
 	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-	var resolvers []resolverruntime.Resolver
+	var resolvers []*resolverruntime.Resolver
 	if config != nil {
-		var err error
-		if resolvers, err = resolversFromConfig(config, err); err != nil {
+		resolvers, err = ocm.ResolversFromConfig(config)
+		if err != nil {
 			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
 		}
 	}
