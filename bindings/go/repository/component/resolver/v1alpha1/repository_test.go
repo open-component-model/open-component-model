@@ -14,11 +14,11 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 	ctx := t.Context()
 
 	cases := []struct {
-		name      string
-		component string
-		repos     []*resolverspec.Resolver
-		expected  []string
-		err       assert.ErrorAssertionFunc
+		name            string
+		component       string
+		repos           []*resolverspec.Resolver
+		shouldReturnRep bool
+		err             assert.ErrorAssertionFunc
 	}{
 		{
 			name:      "test-component with one version",
@@ -29,8 +29,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 					ComponentName: "test-component",
 				},
 			},
-			expected: []string{"single-repo"},
-			err:      assert.NoError,
+			shouldReturnRep: true,
+			err:             assert.NoError,
 		},
 		{
 			name:      "test-component with no version",
@@ -41,8 +41,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 					ComponentName: "test-component",
 				},
 			},
-			expected: []string{"single-repo"},
-			err:      assert.NoError,
+			shouldReturnRep: true,
+			err:             assert.NoError,
 		},
 		{
 			name:      "test-component with multiple repositories",
@@ -61,8 +61,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 					ComponentName: "test-component",
 				},
 			},
-			expected: []string{"repo1", "repo3"},
-			err:      assert.NoError,
+			shouldReturnRep: true,
+			err:             assert.NoError,
 		},
 		{
 			// glob component name pattern
@@ -74,8 +74,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 					ComponentName: "ocm.software/core/*",
 				},
 			},
-			expected: []string{"repo-glob"},
-			err:      assert.NoError,
+			shouldReturnRep: true,
+			err:             assert.NoError,
 		},
 		{
 			// glob component name pattern no match
@@ -87,7 +87,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 					ComponentName: "ocm.software/core/*",
 				},
 			},
-			expected: []string{},
+			shouldReturnRep: false,
 			err: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Error(t, err, "expected error when getting repository for spec")
 			},
@@ -102,8 +102,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 					ComponentName: "*.software/*/test",
 				},
 			},
-			expected: []string{"repo-glob-multi"},
-			err:      assert.NoError,
+			shouldReturnRep: true,
+			err:             assert.NoError,
 		},
 		{
 			name:      "multiple glob results",
@@ -118,8 +118,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 					ComponentName: "ocm.software/core/*",
 				},
 			},
-			expected: []string{"repo-glob-1", "repo-glob-2"},
-			err:      assert.NoError,
+			shouldReturnRep: true,
+			err:             assert.NoError,
 		},
 	}
 
@@ -135,11 +135,11 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			}
 
 			repo, err := res.GetRepositorySpec(ctx, identity)
-			if tc.err(t, err, "error getting repository for component") {
-				return
-			} else {
-				r.NoError(err, "failed to get repository spec when it should succeed")
+			tc.err(t, err, "error getting repository for component")
+			if tc.shouldReturnRep {
 				r.NotNil(repo, "expected non-nil repository spec")
+			} else {
+				assert.Nil(t, repo, "expected nil repository spec")
 			}
 		})
 	}
