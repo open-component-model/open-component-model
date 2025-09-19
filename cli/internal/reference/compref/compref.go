@@ -256,11 +256,19 @@ func ParseRepository(repoRef string) (runtime.Typed, error) {
 
 	switch t := typed.(type) {
 	case *ociv1.Repository:
-		uri, err := url.Parse(input)
+		// For OCI repositories, we accept URLs with or without a scheme.
+		// If a scheme is provided (e.g., https, http, oci), keep it in the resulting string.
+		// If no scheme is provided, return a string without scheme containing host, optional port, and path.
+		uri, err := runtime.ParseURLAndAllowNoScheme(input)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse repository URI %q: %w", input, err)
 		}
-		t.BaseUrl = uri.String()
+		if uri.Scheme != "" {
+			// Preserve the full URL including scheme if it was explicitly set
+			t.BaseUrl = uri.String()
+		} else {
+			t.BaseUrl = fmt.Sprintf("%s%s", uri.Host, uri.EscapedPath())
+		}
 	case *ctfv1.Repository:
 		t.Path = input
 	default:

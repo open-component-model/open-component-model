@@ -292,6 +292,7 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 		{"./local/path", false},
 		{"file://./local/path", false},
 		{"/absolute/path", false},
+		{"1.2.3.5:5000/open-component-model/ocm", true},
 	}
 
 	prefixes := []string{
@@ -403,6 +404,16 @@ func TestParseRepository(t *testing.T) {
 		{
 			name:         "OCI Registry - localhost with port",
 			repoRef:      "localhost:5000/my-repo",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, repoSpec, repo.BaseUrl)
+			},
+		},
+		{
+			name:         "OCI Registry - IP with port",
+			repoRef:      "1.2.3.4:5000/my-repo",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ociv1.Repository)

@@ -19,11 +19,9 @@ type Helm struct {
 	// Repository field property can be used to specify the repository hint for the generated local artifact access.
 	// It is prefixed by the component name, if	it does not start with slash "/".
 	// The repository hint is a full OCI repository reference, where the helm chart needs to be uploaded to.
-	// TODO(ikhandamirov,jakobmoellerdev): decide what to do, if the field is set.
 	Repository string `json:"repository,omitempty"`
 
-	// Version field is included for compatibility with previous OCM version.
-	// The Version of the resource is taken from the Chart.yaml file.
+	// Version defines the version of the chart to use.
 	Version string `json:"version,omitempty"`
 
 	// HelmRepository was used in previous OCM versions specify, to if the helm chart should be loaded from
