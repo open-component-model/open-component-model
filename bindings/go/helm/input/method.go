@@ -45,11 +45,8 @@ type InputMethod struct {
 	TempFolder string
 }
 
-const (
-	// HelmChartConsumerType is the type of the identity for remote helm repositories.
-	HelmChartConsumerType        = "HelmChartRepository"
-	HelmChartConsumerTypeVersion = "v1"
-)
+// LegacyHelmChartConsumerType is the type of the identity for remote helm repositories.
+const LegacyHelmChartConsumerType = "HelmChartRepository"
 
 // GetResourceCredentialConsumerIdentity returns credentials consumer identity for remote helm repositories
 // or nil for local helm inputs. Remote repositories may require authentication credentials.
@@ -68,7 +65,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 		return nil, fmt.Errorf("error parsing helm repository URL to identity: %w", err)
 	}
 
-	identity.SetType(runtime.NewVersionedType(HelmChartConsumerType, HelmChartConsumerTypeVersion))
+	identity.SetType(runtime.NewUnversionedType(LegacyHelmChartConsumerType))
 
 	return identity, nil
 }

@@ -77,7 +77,7 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 				assert.NoError(t, err)
 				if tt.expectIdentity {
 					assert.NotNil(t, identity)
-					assert.Equal(t, "HelmChartRepository/v1", identity["type"])
+					assert.Equal(t, input.LegacyHelmChartConsumerType, identity["type"])
 					assert.Equal(t, "https", identity["scheme"])
 
 					// Check hostname based on the specific test case
