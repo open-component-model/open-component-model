@@ -142,7 +142,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 
-			res := pathmatcher.NewPathMatchingSpecProvider(ctx, tc.repos)
+			res := pathmatcher.NewSpecProvider(ctx, tc.repos)
 
 			identity := runtime.Identity{
 				descruntime.IdentityAttributeName: tc.component,

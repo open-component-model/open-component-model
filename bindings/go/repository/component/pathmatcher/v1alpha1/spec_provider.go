@@ -10,20 +10,20 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// PathMatchingSpecProvider implements a ComponentVersionRepositorySpecProvider with
+// SpecProvider implements a ComponentVersionRepositorySpecProvider with
 // a resolver mechanism. It uses path patterns leveraging the go path standard
 // library to match component names to determine which OCM repository
 // specification to use for resolving component versions.
-type PathMatchingSpecProvider struct {
+type SpecProvider struct {
 	// A list of resolvers to use for matching components to repositories.
 	// This list is immutable after creation.
 	resolvers []*resolverspec.Resolver
 }
 
-// NewPathMatchingSpecProvider creates a new PathMatchingSpecProvider with a list of resolvers.
+// NewSpecProvider creates a new SpecProvider with a list of resolvers.
 // The resolvers are used to match component names to repository specifications.
-func NewPathMatchingSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver) *PathMatchingSpecProvider {
-	return &PathMatchingSpecProvider{
+func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver) *SpecProvider {
+	return &SpecProvider{
 		resolvers: resolvers,
 	}
 }
@@ -33,7 +33,7 @@ func NewPathMatchingSpecProvider(_ context.Context, resolvers []*resolverspec.Re
 // the first matching repository specification.
 // If no matching resolver is found, an error is returned.
 // componentIdentity must contain the key [IdentityKey] containing the name of the component e.g. "ocm.software/core/test".
-func (r *PathMatchingSpecProvider) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
+func (r *SpecProvider) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
 	componentName, ok := componentIdentity[descruntime.IdentityAttributeName]
 	if !ok {
 		return nil, fmt.Errorf("failed to extract component name from identity %s", componentIdentity)
