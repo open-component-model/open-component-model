@@ -62,7 +62,7 @@ func NewSpecResolver(_ context.Context, res []*resolverspec.Resolver) (*SpecReso
 // componentIdentity must contain the key [IdentityKey] containing the name of the component e.g. "ocm.software/core/test".
 func (r *SpecResolver) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
 	componentName, ok := componentIdentity[IdentityKey]
-	if !ok || componentName == "" {
+	if !ok {
 		return nil, fmt.Errorf("failed to extract component name from identity %s", componentIdentity)
 	}
 

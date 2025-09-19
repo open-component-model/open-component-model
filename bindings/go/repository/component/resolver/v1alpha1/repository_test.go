@@ -21,6 +21,20 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 		err             assert.ErrorAssertionFunc
 	}{
 		{
+			name:      "test-component with no name",
+			component: "",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:    &runtime.Raw{},
+					ComponentName: "test-component",
+				},
+			},
+			shouldReturnRep: false,
+			err: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Error(t, err, "expected error when getting repository for spec")
+			},
+		},
+		{
 			name:      "test-component with one version",
 			component: "test-component",
 			repos: []*resolverspec.Resolver{
