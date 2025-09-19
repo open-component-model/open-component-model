@@ -1,27 +1,58 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm sign component-version
+description: Sign component version(s) inside an OCM repository.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm sign component-version
 
-The official Open Component Model (OCM) CLI
+Sign component version(s) inside an OCM repository
 
 ### Synopsis
 
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Sign component version(s) inside an OCM repository.
+
+The format of a component reference is:
+	[type::]{repository}/[valid-prefix]/{component}[:version]
+
+For valid prefixes {component-descriptors|none} are available. If <none> is used, it defaults to "component-descriptors". This is because by default,
+OCM components are stored within a specific sub-repository.
+
+For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.
+
+If no type is given, the repository path is interpreted based on introspection and heuristics.
+
 
 ```
-ocm [sub-command] [flags]
+ocm sign component-version {reference} [flags]
+```
+
+### Examples
+
+```
+Signing a single component version:
+
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
 ```
 
 ### Options
+
+```
+      --concurrency-limit int       maximum amount of parallel requests to the repository for resolving component versions (default 4)
+      --dry-run                     if enabled, the signature is not actually written to the repository
+      --force                       if enabled, existing signatures under the attempted name are overwritten
+      --hash string                 algorithm to use for hashing the normalised component version (default "SHA-256")
+  -h, --help                        help for component-version
+      --normalisation string        algorithm to use for normalising the component version (default "jsonNormalisation/v4alpha1")
+      --signature string            name of the signature to verify. if not set, all signatures are verified
+      --signer-spec string          path to an optional signer specification file
+      --verify-digest-consistency   if enabled, all signature digests are verified before the signature itself is verified (default true)
+```
+
+### Options inherited from parent commands
 
 ```
       --config string                      supply configuration by a given configuration file.
@@ -41,7 +72,6 @@ ocm [sub-command] [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            Using the option, this configuration file be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -64,12 +94,5 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 * [ocm sign]({{< relref "ocm_sign.md" >}})	 - sign anything in OCM
-* [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify anything in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
 
