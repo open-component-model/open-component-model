@@ -134,7 +134,7 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 
-			res, err := resolver.NewResolverRepository(ctx, tc.repos)
+			res, err := resolver.NewSpecResolver(ctx, tc.repos)
 			r.NoError(err, "failed to create resolver repository when it should succeed")
 
 			identity := runtime.Identity{
