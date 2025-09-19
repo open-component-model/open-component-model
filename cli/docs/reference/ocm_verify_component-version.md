@@ -15,27 +15,39 @@ Verify component version(s) inside an OCM repository
 
 Verify component version(s) inside an OCM repository.
 
+If this command succeeds on a trusted signature, it can be trusted.
+
+This command checks cryptographic signatures stored on component versions
+to ensure integrity, authenticity, and provenance. Each signature covers a
+normalised and hashed form of the component descriptor, which is compared
+against the expected digest and verified with the configured verifier.
+
 The format of a component reference is:
 	[type::]{repository}/[valid-prefix]/{component}[:version]
 
-For valid prefixes {component-descriptors|none} are available. If <none> is used, it defaults to "component-descriptors". This is because by default,
-OCM components are stored within a specific sub-repository.
+Valid prefixes: {component-descriptors|none}. If <none> is used, it defaults to "component-descriptors".
+Supported repository types: {OCIRepository|CommonTransportFormat} (short forms: {OCI|oci|CTF|ctf}).
+If no type is given, the repository path is inferred by heuristics.
 
-For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.
+Verification steps performed:
+  * Resolve the repository and fetch the target component version.
+  * Verify digest consistency if not disabled (--verify-digest-consistency).
+  * Normalise the descriptor with the algorithm recorded in the signature.
+  * Recompute the hash and compare with the signature digest.
+  * Verify the signature against the provided verifier specification (--verifier-spec),
+    or fall back to the default RSASSA-PSS verifier if not specified.
 
-If no type is given, the repository path is interpreted based on introspection and heuristics.
+Behavior:
+  * If --signature is set, only the named signature is verified.
+  * Without --signature, all available signatures are verified.
+  * Verification fails fast on the first invalid signature.
 
+Use this command in automated pipelines or audits to validate the
+authenticity of component versions before promotion, deployment,
+or further processing.
 
 ```
 ocm verify component-version {reference} [flags]
-```
-
-### Examples
-
-```
-Verifying a single component version:
-
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 ```
 
 ### Options
@@ -45,7 +57,7 @@ verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0
   -h, --help                        help for component-version
       --signature string            name of the signature to verify. if not set, all signatures are verified
       --verifier-spec string        path to an optional verifier specification file
-      --verify-digest-consistency   if enabled, all signature digests are verified before the signature itself is verified (default true)
+      --verify-digest-consistency   verify that all digests match the descriptor before verifying the signature itself (default true)
 ```
 
 ### Options inherited from parent commands

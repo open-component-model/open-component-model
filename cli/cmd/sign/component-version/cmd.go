@@ -48,40 +48,66 @@ func New() *cobra.Command {
 		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
 		Long: fmt.Sprintf(`Sign component version(s) inside an OCM repository.
 
+This command creates or updates cryptographic signatures on component versions
+stored in an OCM repository. The signature covers a normalised and hashed form
+of the component descriptor, ensuring integrity and authenticity of the
+component and its resources, no matter where and how they are stored.
+
 The format of a component reference is:
 	[type::]{repository}/[valid-prefix]/{component}[:version]
 
-For valid prefixes {%[1]s|none} are available. If <none> is used, it defaults to %[1]q. This is because by default,
-OCM components are stored within a specific sub-repository.
+Valid prefixes: {%[1]s|none}. If <none> is used, it defaults to %[1]q.
+Supported repository types: {%[2]s} (short forms: {%[3]s}).
+If no type is given, the repository path is inferred by heuristics.
 
-For known types, currently only {%[2]s} are supported, which can be shortened to {%[3]s} respectively for convenience.
+Verification steps performed before signing:
+  * Resolve the repository and fetch the target component version.
+  * Check digest consistency if not disabled (--verify-digest-consistency).
+  * Normalise the descriptor using the chosen algorithm (--normalisation).
+  * Hash the normalised form with the given algorithm (--hash).
+  * Produce a signature with the configured signer specification (--signer-spec).
 
-If no type is given, the repository path is interpreted based on introspection and heuristics.
-`,
+Behavior:
+  * If a signature with the same name exists and --force is not set, the command fails.
+  * With --force, an existing signature is overwritten.
+  * With --dry-run, a signature is computed but not written back.
+  * Without --signature, the default name "default" is used.
+
+Use this command in automated pipelines or interactive workflows to
+establish provenance of component versions and prepare them for downstream
+verification. Also use it for testing integrity workflows.`,
 			compref.DefaultPrefix,
 			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
 			strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
 		),
 		Example: strings.TrimSpace(`
-Signing a single component version:
+# Sign a component version with default algorithms
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 
+# Sign with custom signature name
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+
+# Use a signer specification file
+sign component-version ./repo/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./rsassa-pss.yaml
+
+# Dry-run signing
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature test --dry-run
+
+# Force overwrite an existing signature
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature --force
 `),
 		RunE:              VerifyComponentVersion,
 		DisableAutoGenTag: true,
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
-	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. if not set, all signatures are verified")
-	cmd.Flags().Bool(FlagVerifyDigestConsistency, true, "if enabled, all signature digests are verified before the signature itself is verified")
-	cmd.Flags().String(FlagSignerSpec, "", "path to an optional signer specification file")
-	cmd.Flags().Bool(FlagDryRun, false, "if enabled, the signature is not actually written to the repository")
-
-	// TODO ensure this is an enum
-	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "algorithm to use for normalising the component version")
-	// TODO ensure this is an enum
-	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "algorithm to use for hashing the normalised component version")
-	cmd.Flags().Bool(FlagForce, false, "if enabled, existing signatures under the attempted name are overwritten")
+	cmd.Flags().String(FlagSignature, "", "name of the signature to create or update. defaults to \"default\"")
+	cmd.Flags().Bool(FlagVerifyDigestConsistency, true, "verify that all digests are complete and valid before signing")
+	cmd.Flags().String(FlagSignerSpec, "", "path to a signer specification file; defaults to RSASSA-PSS if not provided")
+	cmd.Flags().Bool(FlagDryRun, false, "compute signature but do not persist it to the repository")
+	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "normalisation algorithm to use (default jsonNormalisation/v4alpha1)")
+	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")
+	cmd.Flags().Bool(FlagForce, false, "overwrite existing signatures under the same name")
 
 	return cmd
 }
@@ -127,13 +153,13 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 	signerSpecPath, err := cmd.Flags().GetString(FlagSignerSpec)
 	if err != nil {
-		return fmt.Errorf("getting verifier spec flag failed: %w", err)
+		return fmt.Errorf("getting signer-spec flag failed: %w", err)
 	}
 
 	reference := args[0]
 	config := ocmctx.FromContext(ctx).Configuration()
 
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	//nolint:staticcheck // no replacement for resolvers available yet
 	var resolvers []*resolverruntime.Resolver
 	if config != nil {
 		resolvers, err = ocm.ResolversFromConfig(config)
@@ -153,25 +179,24 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 	if verifyDigestConsistency {
 		if err := isSafelyDigestible(&desc.Component); err != nil {
-			logger.WarnContext(ctx, "component version is not considered safely digestable, proceed at your own risk", "error", err.Error())
+			logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
 		}
-		// TODO(jakobmoellerdev): fully recursive reference validation is required here to be truly safe.
 	}
 
 	var signerSpec runtime.Typed
 	if signerSpecPath == "" {
-		logger.InfoContext(ctx, "no verifier specification file given, attempting to use default configuration (RSASSA-PSS)")
+		logger.InfoContext(ctx, "no signer specification file given, using default RSASSA-PSS")
 		signerSpec = &v1alpha1.Config{}
 		_, _ = v1alpha1.Scheme.DefaultType(signerSpec)
 	} else {
 		genericScheme := runtime.NewScheme(runtime.WithAllowUnknown())
-		verifierSpecBytes, err := os.ReadFile(signerSpecPath)
+		specBytes, err := os.ReadFile(signerSpecPath)
 		if err != nil {
-			return fmt.Errorf("reading verifier specification file %q failed: %w", signerSpecPath, err)
+			return fmt.Errorf("reading signer specification file %q failed: %w", signerSpecPath, err)
 		}
 		signerSpec = &runtime.Raw{}
-		if err := genericScheme.Decode(bytes.NewReader(verifierSpecBytes), signerSpec); err != nil {
-			return fmt.Errorf("decoding verifier specification file %q failed: %w", signerSpecPath, err)
+		if err := genericScheme.Decode(bytes.NewReader(specBytes), signerSpec); err != nil {
+			return fmt.Errorf("decoding signer specification file %q failed: %w", signerSpecPath, err)
 		}
 	}
 
@@ -181,7 +206,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	if signatureName == "" {
-		logger.InfoContext(ctx, "no signature name given, using default name", "name", "default")
+		logger.InfoContext(ctx, "no signature name given, using default", "name", "default")
 		signatureName = "default"
 	}
 	sigExists := func(signature descruntime.Signature) bool {
@@ -190,7 +215,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 	if slices.ContainsFunc(desc.Signatures, sigExists) {
 		if force, _ := cmd.Flags().GetBool(FlagForce); force {
-			logger.InfoContext(ctx, "signature with name already exists, but force flag is set, overwriting", "name", signatureName)
+			logger.InfoContext(ctx, "overwriting existing signature due to --force", "name", signatureName)
 		} else {
 			return fmt.Errorf("signature with name %q already exists", signatureName)
 		}
@@ -202,19 +227,19 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	var credentials map[string]string
-	if credentialConsumerIdentity, err := handler.GetSigningCredentialConsumerIdentity(ctx, signatureName, *unsignedDigestSpec, signerSpec); err == nil {
-		if credentials, err = credentialGraph.Resolve(ctx, credentialConsumerIdentity); err != nil {
-			logger.DebugContext(ctx, "could not resolve credentials for signature verification handler", "error", err.Error())
+	if consumerID, err := handler.GetSigningCredentialConsumerIdentity(ctx, signatureName, *unsignedDigestSpec, signerSpec); err == nil {
+		if credentials, err = credentialGraph.Resolve(ctx, consumerID); err != nil {
+			logger.DebugContext(ctx, "could not resolve credentials", "error", err.Error())
 		}
 	}
 
 	if len(credentials) > 0 {
-		logger.DebugContext(ctx, "discovered credentials from graph for signing", "attributes", slices.Collect(maps.Keys(credentials)))
+		logger.DebugContext(ctx, "using discovered credentials for signing", "attributes", slices.Collect(maps.Keys(credentials)))
 	}
 
 	signature, err := handler.Sign(ctx, *unsignedDigestSpec, signerSpec, credentials)
 	if err != nil {
-		return fmt.Errorf("creating signature from digest failed: %w", err)
+		return fmt.Errorf("creating signature failed: %w", err)
 	}
 
 	if dryRun, _ := cmd.Flags().GetBool(FlagDryRun); dryRun {
@@ -233,11 +258,10 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := repo.ComponentVersionRepository().AddComponentVersion(ctx, desc); err != nil {
-		return fmt.Errorf("updating component version with generated signature failed: %w", err)
+		return fmt.Errorf("updating component version with signature failed: %w", err)
 	}
 
 	logger.InfoContext(ctx, "signed successfully", "name", signatureName, "digest", unsignedDigestSpec.Value, "hashAlgorithm", unsignedDigestSpec.HashAlgorithm, "normalisationAlgorithm", unsignedDigestSpec.NormalisationAlgorithm)
-
 	return nil
 }
 
@@ -250,7 +274,7 @@ func generateDigest(
 ) (*descruntime.Digest, error) {
 	if legacyAlgo := "jsonNormalisation/v3"; normalisationAlgorithm == legacyAlgo {
 		normalisationAlgorithm = v4alpha1.Algorithm
-		logger.WarnContext(ctx, "detected legacy signature algorithm, enabling best effort compatibility. consider updating your signature specification", "algorithm", normalisationAlgorithm, "legacy", legacyAlgo, "new", "hint")
+		logger.WarnContext(ctx, "legacy normalisation algorithm detected, using v4alpha1", "legacy", legacyAlgo, "new", v4alpha1.Algorithm)
 	}
 
 	normalised, err := normalisation.Normalise(desc, normalisationAlgorithm)
@@ -270,36 +294,28 @@ func generateDigest(
 	if _, err := instance.Write(normalised); err != nil {
 		return nil, fmt.Errorf("hashing component version failed: %w", err)
 	}
-	freshlyCalculatedDigest := instance.Sum(nil)
+	freshDigest := instance.Sum(nil)
 	return &descruntime.Digest{
 		HashAlgorithm:          hash.HashFunc().String(),
 		NormalisationAlgorithm: normalisationAlgorithm,
-		Value:                  hex.EncodeToString(freshlyCalculatedDigest),
+		Value:                  hex.EncodeToString(freshDigest),
 	}, nil
 }
 
-// isSafelyDigestible checks if a component version is considered safely digestible.
-// This means that all digests are present and valid and that all resources have a digest.
-// if this is not the case normalisation and digesting is possible, but can lead to non-unique values when passed
-// to digesting algorithms.
-// TODO deduplicate with verify
 func isSafelyDigestible(cd *descruntime.Component) error {
-	// check for digests on component references
 	for _, reference := range cd.References {
 		if reference.Digest.HashAlgorithm == "" || reference.Digest.NormalisationAlgorithm == "" || reference.Digest.Value == "" {
 			return fmt.Errorf("missing digest in componentReference for %s:%s", reference.Name, reference.Version)
 		}
 	}
-
 	for _, res := range cd.Resources {
 		if (res.Access != nil && res.Access.GetType().String() != "None") &&
 			(res.Digest == nil || res.Digest.HashAlgorithm == "" || res.Digest.NormalisationAlgorithm == "" || res.Digest.Value == "") {
 			return fmt.Errorf("missing digest in resource for %s:%s", res.Name, res.Version)
 		}
 		if (res.Access == nil || res.Access.GetType().String() == "None") && res.Digest != nil {
-			return fmt.Errorf("digest for resource with empty (None) access not allowed %s:%s", res.Name, res.Version)
+			return fmt.Errorf("digest for resource with empty access not allowed %s:%s", res.Name, res.Version)
 		}
 	}
-
 	return nil
 }

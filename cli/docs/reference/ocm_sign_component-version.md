@@ -15,16 +15,34 @@ Sign component version(s) inside an OCM repository
 
 Sign component version(s) inside an OCM repository.
 
+This command creates or updates cryptographic signatures on component versions
+stored in an OCM repository. The signature covers a normalised and hashed form
+of the component descriptor, ensuring integrity and authenticity of the
+component and its resources, no matter where and how they are stored.
+
 The format of a component reference is:
 	[type::]{repository}/[valid-prefix]/{component}[:version]
 
-For valid prefixes {component-descriptors|none} are available. If <none> is used, it defaults to "component-descriptors". This is because by default,
-OCM components are stored within a specific sub-repository.
+Valid prefixes: {component-descriptors|none}. If <none> is used, it defaults to "component-descriptors".
+Supported repository types: {OCIRepository|CommonTransportFormat} (short forms: {OCI|oci|CTF|ctf}).
+If no type is given, the repository path is inferred by heuristics.
 
-For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.
+Verification steps performed before signing:
+  * Resolve the repository and fetch the target component version.
+  * Check digest consistency if not disabled (--verify-digest-consistency).
+  * Normalise the descriptor using the chosen algorithm (--normalisation).
+  * Hash the normalised form with the given algorithm (--hash).
+  * Produce a signature with the configured signer specification (--signer-spec).
 
-If no type is given, the repository path is interpreted based on introspection and heuristics.
+Behavior:
+  * If a signature with the same name exists and --force is not set, the command fails.
+  * With --force, an existing signature is overwritten.
+  * With --dry-run, a signature is computed but not written back.
+  * Without --signature, the default name "default" is used.
 
+Use this command in automated pipelines or interactive workflows to
+establish provenance of component versions and prepare them for downstream
+verification. Also use it for testing integrity workflows.
 
 ```
 ocm sign component-version {reference} [flags]
@@ -33,23 +51,34 @@ ocm sign component-version {reference} [flags]
 ### Examples
 
 ```
-Signing a single component version:
+# Sign a component version with default algorithms
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 
+# Sign with custom signature name
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+
+# Use a signer specification file
+sign component-version ./repo/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./rsassa-pss.yaml
+
+# Dry-run signing
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature test --dry-run
+
+# Force overwrite an existing signature
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature --force
 ```
 
 ### Options
 
 ```
       --concurrency-limit int       maximum amount of parallel requests to the repository for resolving component versions (default 4)
-      --dry-run                     if enabled, the signature is not actually written to the repository
-      --force                       if enabled, existing signatures under the attempted name are overwritten
-      --hash string                 algorithm to use for hashing the normalised component version (default "SHA-256")
+      --dry-run                     compute signature but do not persist it to the repository
+      --force                       overwrite existing signatures under the same name
+      --hash string                 hash algorithm to use (SHA256, SHA512) (default "SHA-256")
   -h, --help                        help for component-version
-      --normalisation string        algorithm to use for normalising the component version (default "jsonNormalisation/v4alpha1")
-      --signature string            name of the signature to verify. if not set, all signatures are verified
-      --signer-spec string          path to an optional signer specification file
-      --verify-digest-consistency   if enabled, all signature digests are verified before the signature itself is verified (default true)
+      --normalisation string        normalisation algorithm to use (default jsonNormalisation/v4alpha1) (default "jsonNormalisation/v4alpha1")
+      --signature string            name of the signature to create or update. defaults to "default"
+      --signer-spec string          path to a signer specification file; defaults to RSASSA-PSS if not provided
+      --verify-digest-consistency   verify that all digests are complete and valid before signing (default true)
 ```
 
 ### Options inherited from parent commands

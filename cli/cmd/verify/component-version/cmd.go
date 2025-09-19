@@ -46,32 +46,47 @@ func New() *cobra.Command {
 		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
 		Long: fmt.Sprintf(`Verify component version(s) inside an OCM repository.
 
+If this command succeeds on a trusted signature, it can be trusted.
+
+This command checks cryptographic signatures stored on component versions
+to ensure integrity, authenticity, and provenance. Each signature covers a
+normalised and hashed form of the component descriptor, which is compared
+against the expected digest and verified with the configured verifier.
+
 The format of a component reference is:
 	[type::]{repository}/[valid-prefix]/{component}[:version]
 
-For valid prefixes {%[1]s|none} are available. If <none> is used, it defaults to %[1]q. This is because by default,
-OCM components are stored within a specific sub-repository.
+Valid prefixes: {%[1]s|none}. If <none> is used, it defaults to %[1]q.
+Supported repository types: {%[2]s} (short forms: {%[3]s}).
+If no type is given, the repository path is inferred by heuristics.
 
-For known types, currently only {%[2]s} are supported, which can be shortened to {%[3]s} respectively for convenience.
+Verification steps performed:
+  * Resolve the repository and fetch the target component version.
+  * Verify digest consistency if not disabled (--verify-digest-consistency).
+  * Normalise the descriptor with the algorithm recorded in the signature.
+  * Recompute the hash and compare with the signature digest.
+  * Verify the signature against the provided verifier specification (--verifier-spec),
+    or fall back to the default RSASSA-PSS verifier if not specified.
 
-If no type is given, the repository path is interpreted based on introspection and heuristics.
-`,
+Behavior:
+  * If --signature is set, only the named signature is verified.
+  * Without --signature, all available signatures are verified.
+  * Verification fails fast on the first invalid signature.
+
+Use this command in automated pipelines or audits to validate the
+authenticity of component versions before promotion, deployment,
+or further processing.`,
 			compref.DefaultPrefix,
 			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
 			strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
 		),
-		Example: strings.TrimSpace(`
-Verifying a single component version:
-
-verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
-`),
 		RunE:              VerifyComponentVersion,
 		DisableAutoGenTag: true,
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. if not set, all signatures are verified")
-	cmd.Flags().Bool(FlagVerifyDigestConsistency, true, "if enabled, all signature digests are verified before the signature itself is verified")
+	cmd.Flags().Bool(FlagVerifyDigestConsistency, true, "verify that all digests match the descriptor before verifying the signature itself")
 	cmd.Flags().String(FlagVerifierSpec, "", "path to an optional verifier specification file")
 
 	return cmd
@@ -123,13 +138,13 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 	verifierSpecPath, err := cmd.Flags().GetString(FlagVerifierSpec)
 	if err != nil {
-		return fmt.Errorf("getting verifier spec flag failed: %w", err)
+		return fmt.Errorf("getting verifier-spec flag failed: %w", err)
 	}
 
 	reference := args[0]
 	config := ocmctx.FromContext(ctx).Configuration()
 
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
+	//nolint:staticcheck // no replacement for resolvers available yet
 	var resolvers []*resolverruntime.Resolver
 	if config != nil {
 		resolvers, err = ocm.ResolversFromConfig(config)
@@ -149,13 +164,13 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 	if verifyDigestConsistency {
 		if err := isSafelyDigestible(&desc.Component); err != nil {
-			logger.WarnContext(ctx, "component version is not considered safely digestable, proceed at your own risk", "error", err.Error())
+			logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
 		}
 	}
 
 	var verifierSpec runtime.Typed
 	if verifierSpecPath == "" {
-		logger.InfoContext(ctx, "no verifier specification file given, attempting to use default configuration (RSASSA-PSS)")
+		logger.InfoContext(ctx, "no verifier specification file given, using default RSASSA-PSS")
 		verifierSpec = &v1alpha1.Config{}
 		_, _ = v1alpha1.Scheme.DefaultType(verifierSpec)
 	} else {
@@ -190,32 +205,32 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.SetLimit(concurrencyLimit)
 	for _, signature := range sigs {
+		s := signature
 		eg.Go(func() error {
 			start := time.Now()
-			logger.InfoContext(egctx, "verifying signature", "name", signature.Name)
+			logger.InfoContext(egctx, "verifying signature", "name", s.Name)
 			defer func() {
-				logger.InfoContext(egctx, "signature verification completed", "name", signature.Name, "duration", time.Since(start).String())
+				logger.InfoContext(egctx, "signature verification completed", "name", s.Name, "duration", time.Since(start).String())
 			}()
 
-			// verify digest consistency first, if enabled
 			if verifyDigestConsistency {
-				if err := verifyDigestMatchesDescriptor(egctx, desc, signature, logger); err != nil {
+				if err := verifyDigestMatchesDescriptor(egctx, desc, s, logger); err != nil {
 					return err
 				}
 			}
 
 			var credentials map[string]string
-			if credentialConsumerIdentity, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, signature, verifierSpec); err == nil {
-				if credentials, err = credentialGraph.Resolve(egctx, credentialConsumerIdentity); err != nil {
-					logger.DebugContext(egctx, "could not resolve credentials for signature verification handler", "error", err.Error())
+			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, s, verifierSpec); err == nil {
+				if credentials, err = credentialGraph.Resolve(egctx, consumerID); err != nil {
+					logger.DebugContext(egctx, "could not resolve credentials for verification", "error", err.Error())
 				}
 			}
 
 			if len(credentials) > 0 {
-				logger.DebugContext(egctx, "discovered credentials from graph for signature verification", "attributes", slices.Collect(maps.Keys(credentials)))
+				logger.DebugContext(egctx, "using discovered credentials for verification", "attributes", slices.Collect(maps.Keys(credentials)))
 			}
 
-			return handler.Verify(egctx, signature, verifierSpec, credentials)
+			return handler.Verify(egctx, s, verifierSpec, credentials)
 		})
 	}
 
@@ -230,7 +245,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 func verifyDigestMatchesDescriptor(ctx context.Context, desc *descruntime.Descriptor, signature descruntime.Signature, logger *slog.Logger) error {
 	if legacyAlgo := "jsonNormalisation/v3"; signature.Digest.NormalisationAlgorithm == legacyAlgo {
 		signature.Digest.NormalisationAlgorithm = v4alpha1.Algorithm
-		logger.WarnContext(ctx, "detected legacy signature algorithm, enabling best effort compatibility. consider updating your signature specification", "algorithm", signature.Digest.NormalisationAlgorithm, "legacy", legacyAlgo, "new", "hint")
+		logger.WarnContext(ctx, "legacy normalisation algorithm detected, using v4alpha1", "legacy", legacyAlgo, "new", v4alpha1.Algorithm)
 	}
 
 	normalised, err := normalisation.Normalise(desc, signature.Digest.NormalisationAlgorithm)
@@ -250,38 +265,31 @@ func verifyDigestMatchesDescriptor(ctx context.Context, desc *descruntime.Descri
 	if _, err := instance.Write(normalised); err != nil {
 		return fmt.Errorf("hashing component version failed: %w", err)
 	}
-	freshlyCalculatedDigest := instance.Sum(nil)
+	freshDigest := instance.Sum(nil)
 	digestFromSignature, err := hex.DecodeString(signature.Digest.Value)
 	if err != nil {
 		return fmt.Errorf("decoding digest from signature failed: %w", err)
 	}
-	if !bytes.Equal(freshlyCalculatedDigest, digestFromSignature) {
-		return fmt.Errorf("digest from signature does not match calculated digest from descriptor")
+	if !bytes.Equal(freshDigest, digestFromSignature) {
+		return fmt.Errorf("digest from signature does not match descriptor digest")
 	}
 	return nil
 }
 
-// isSafelyDigestible checks if a component version is considered safely digestible.
-// This means that all digests are present and valid and that all resources have a digest.
-// if this is not the case normalisation and digesting is possible, but can lead to non-unique values when passed
-// to digesting algorithms.
 func isSafelyDigestible(cd *descruntime.Component) error {
-	// check for digests on component references
 	for _, reference := range cd.References {
 		if reference.Digest.HashAlgorithm == "" || reference.Digest.NormalisationAlgorithm == "" || reference.Digest.Value == "" {
 			return fmt.Errorf("missing digest in componentReference for %s:%s", reference.Name, reference.Version)
 		}
 	}
-
 	for _, res := range cd.Resources {
 		if (res.Access != nil && res.Access.GetType().String() != "None") &&
 			(res.Digest == nil || res.Digest.HashAlgorithm == "" || res.Digest.NormalisationAlgorithm == "" || res.Digest.Value == "") {
 			return fmt.Errorf("missing digest in resource for %s:%s", res.Name, res.Version)
 		}
 		if (res.Access == nil || res.Access.GetType().String() == "None") && res.Digest != nil {
-			return fmt.Errorf("digest for resource with empty (None) access not allowed %s:%s", res.Name, res.Version)
+			return fmt.Errorf("digest for resource with empty access not allowed %s:%s", res.Name, res.Version)
 		}
 	}
-
 	return nil
 }
