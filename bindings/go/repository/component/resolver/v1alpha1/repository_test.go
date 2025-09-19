@@ -10,13 +10,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var MockType = runtime.NewUnversionedType("mock-repository")
-
-const (
-	PolicyErrorOnGetRepositoryForSpec     = "fail-get-repository-for-spec"
-	PolicyReturnNilOnGetRepositoryForSpec = "nil-get-repository-for-spec"
-)
-
 func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 	ctx := t.Context()
 
