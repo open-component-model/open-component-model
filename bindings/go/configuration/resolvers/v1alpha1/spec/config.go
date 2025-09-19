@@ -24,13 +24,13 @@ func init() {
 // Config is the new OCM configuration type for configuring glob based
 // resolvers that replace the deprecated fallback resolvers.
 //
-//   - type: resolvers.config.ocm.software
-//     resolvers:
-//   - repository:
-//     type: OCIRegistry
-//     baseUrl: ghcr.io
-//     subPath: open-component-model/components
-//     componentName: ocm.software/core/*
+//	type: resolvers.config.ocm.software
+//	resolvers:
+//	- repository:
+//	    type: OCIRegistry
+//	    baseUrl: ghcr.io
+//	    subPath: open-component-model/components
+//	    componentName: ocm.software/core/*
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
