@@ -77,7 +77,7 @@ func TestInputMethodGetResourceCredentialConsumerIdentity(t *testing.T) {
 				assert.NoError(t, err)
 				if tt.expectIdentity {
 					assert.NotNil(t, identity)
-					assert.Equal(t, "helm/v1", identity["type"])
+					assert.Equal(t, "HelmChartRepository/v1", identity["type"])
 					assert.Equal(t, "https", identity["scheme"])
 
 					// Check hostname based on the specific test case
@@ -138,7 +138,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 						Type: runtime.Type{
 							Name: v1.Type,
 						},
-						Repository:     "https://internal.charts.example.com/charts",
+						Repository:     "internal.charts.example.com/charts",
 						HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz",
 						Version:        "6.9.1",
 					},
@@ -153,7 +153,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 						Type: runtime.Type{
 							Name: v1.Type,
 						},
-						Repository:     "https://internal.charts.example.com/charts",
+						Repository:     "internal.charts.example.com/charts",
 						HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo",
 						Version:        "6.9.1",
 					},
