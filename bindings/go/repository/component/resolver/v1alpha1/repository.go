@@ -15,11 +15,11 @@ const (
 	IdentityKey = "componentName"
 )
 
-// ResolverRepositorySpecProvider implements a RepositorySpecProvider with a resolver
+// SpecResolver implements a RepositorySpecProvider with a resolver
 // mechanism. It uses glob patterns to match component names to
 // determine which OCM repository specification to use for resolving
 // component versions.
-type ResolverRepositorySpecProvider struct {
+type SpecResolver struct {
 	// A list of resolvers to use for matching components to repositories.
 	// This list is immutable after creation.
 	resolvers []*resolverspec.Resolver
@@ -29,9 +29,9 @@ type ResolverRepositorySpecProvider struct {
 	matchers []*matcher.ResolverMatcher
 }
 
-// NewResolverRepository creates a new ResolverRepositorySpecProvider with a list of resolvers.
+// NewSpecResolver creates a new SpecResolver with a list of resolvers.
 // The resolvers are used to match component names to repository specifications.
-func NewResolverRepository(_ context.Context, res []*resolverspec.Resolver) (*ResolverRepositorySpecProvider, error) {
+func NewSpecResolver(_ context.Context, res []*resolverspec.Resolver) (*SpecResolver, error) {
 	resolvers := deepCopyResolvers(res)
 
 	var matchers []*matcher.ResolverMatcher
@@ -49,7 +49,7 @@ func NewResolverRepository(_ context.Context, res []*resolverspec.Resolver) (*Re
 		return nil, fmt.Errorf("one or more resolvers are invalid: %w", errors.Join(resolverErrs...))
 	}
 
-	return &ResolverRepositorySpecProvider{
+	return &SpecResolver{
 		resolvers: resolvers,
 		matchers:  matchers,
 	}, nil
@@ -60,7 +60,7 @@ func NewResolverRepository(_ context.Context, res []*resolverspec.Resolver) (*Re
 // the first matching repository specification.
 // If no matching resolver is found, an error is returned.
 // componentIdentity must contain the key [IdentityKey] containing the name of the component e.g. "ocm.software/core/test".
-func (r *ResolverRepositorySpecProvider) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
+func (r *SpecResolver) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
 	componentName, ok := componentIdentity[IdentityKey]
 	if !ok || componentName == "" {
 		return nil, fmt.Errorf("failed to extract component name from identity %s", componentIdentity)
