@@ -28,17 +28,20 @@ Supported repository types: {OCIRepository|CommonTransportFormat} (short forms: 
 If no type is given, the repository path is inferred by heuristics.
 
 Verification steps performed before signing:
-  * Resolve the repository and fetch the target component version.
-  * Check digest consistency if not disabled (--verify-digest-consistency).
-  * Normalise the descriptor using the chosen algorithm (--normalisation).
-  * Hash the normalised form with the given algorithm (--hash).
-  * Produce a signature with the configured signer specification (--signer-spec).
+
+* Resolve the repository and fetch the target component version.
+* Check digest consistency if not disabled (--verify-digest-consistency).
+* Normalise the descriptor using the chosen algorithm (--normalisation).
+* Hash the normalised form with the given algorithm (--hash).
+* Produce a signature with the configured signer specification (--signer-spec).
 
 Behavior:
-  * If a signature with the same name exists and --force is not set, the command fails.
-  * With --force, an existing signature is overwritten.
-  * With --dry-run, a signature is computed but not written back.
-  * Without --signature, the default name "default" is used.
+
+* If a signature with the same name exists and --force is not set, the command fails.
+* With --force, an existing signature is overwritten.
+* With --dry-run, a signature is computed but not persisted to the repository.
+* If --signature is omitted, the default signature name "default" is used.
+* If --signer-spec is omitted, the default RSASSA-PSS plugin is used (without auto-generated key material)
 
 Use this command in automated pipelines or interactive workflows to
 establish provenance of component versions and prepare them for downstream

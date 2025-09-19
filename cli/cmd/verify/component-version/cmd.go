@@ -61,17 +61,23 @@ Supported repository types: {%[2]s} (short forms: {%[3]s}).
 If no type is given, the repository path is inferred by heuristics.
 
 Verification steps performed:
-  * Resolve the repository and fetch the target component version.
-  * Verify digest consistency if not disabled (--verify-digest-consistency).
-  * Normalise the descriptor with the algorithm recorded in the signature.
-  * Recompute the hash and compare with the signature digest.
-  * Verify the signature against the provided verifier specification (--verifier-spec),
+
+* Resolve the repository and fetch the target component version.
+* Verify digest consistency if not disabled (--verify-digest-consistency).
+* Normalise the descriptor with the algorithm recorded in the signature.
+* Recompute the hash and compare with the signature digest.
+* Verify the signature against the provided verifier specification (--verifier-spec),
     or fall back to the default RSASSA-PSS verifier if not specified.
 
 Behavior:
-  * If --signature is set, only the named signature is verified.
-  * Without --signature, all available signatures are verified.
-  * Verification fails fast on the first invalid signature.
+
+* If --signature is set, only the named signature is verified.
+* Without --signature, all available signatures are verified.
+* Verification fails fast on the first invalid signature.
+* If --verifier-spec is not provided, the default RSASSA-PSS verifier plugin is used.
+    This default plugin supports verifying signatures without a configuration file,
+    and uses either discovered credentials or performs keyless verification through encoded PEM certificates 
+    when possible.
 
 Use this command in automated pipelines or audits to validate the
 authenticity of component versions before promotion, deployment,
