@@ -5,8 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1/spec"
-	resolver "ocm.software/open-component-model/bindings/go/repository/component/resolver/v1alpha1"
+	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -25,8 +26,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "test-component",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "test-component",
 				},
 			},
 			shouldReturnRep: false,
@@ -39,8 +40,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "test-component",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "test-component",
 				},
 			},
 			shouldReturnRep: true,
@@ -51,8 +52,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "test-component",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "test-component",
 				},
 			},
 			shouldReturnRep: true,
@@ -63,16 +64,16 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "test-component",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "test-component",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "test-component",
 				},
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "repo2",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "repo2",
 				},
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "test-component",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "test-component",
 				},
 			},
 			shouldReturnRep: true,
@@ -84,8 +85,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "ocm.software/core/test",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "ocm.software/core/*",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "ocm.software/core/*",
 				},
 			},
 			shouldReturnRep: true,
@@ -97,8 +98,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "ocm.software/other/test",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "ocm.software/core/*",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "ocm.software/core/*",
 				},
 			},
 			shouldReturnRep: false,
@@ -112,8 +113,8 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "ocm.software/core/test",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "*.software/*/test",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "*.software/*/test",
 				},
 			},
 			shouldReturnRep: true,
@@ -124,12 +125,12 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			component: "ocm.software/core/test",
 			repos: []*resolverspec.Resolver{
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "ocm.software/*/test",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "ocm.software/*/test",
 				},
 				{
-					Repository:    &runtime.Raw{},
-					ComponentName: "ocm.software/core/*",
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "ocm.software/core/*",
 				},
 			},
 			shouldReturnRep: true,
@@ -141,11 +142,10 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 
-			res, err := resolver.NewSpecResolver(ctx, tc.repos)
-			r.NoError(err, "failed to create resolver repository when it should succeed")
+			res := pathmatcher.NewPathMatchingSpecProvider(ctx, tc.repos)
 
 			identity := runtime.Identity{
-				resolver.IdentityKey: tc.component,
+				descruntime.IdentityAttributeName: tc.component,
 			}
 
 			repo, err := res.GetRepositorySpec(ctx, identity)
