@@ -15,20 +15,17 @@ import (
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
+
+	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/cli/internal/flags/log"
-
-	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
-	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
+	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
@@ -196,7 +193,9 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		eg.Go(func() error {
 			start := time.Now()
 			logger.InfoContext(egctx, "verifying signature", "name", signature.Name)
-			defer logger.InfoContext(egctx, "signature verification completed", "name", signature.Name, "duration", time.Since(start).String())
+			defer func() {
+				logger.InfoContext(egctx, "signature verification completed", "name", signature.Name, "duration", time.Since(start).String())
+			}()
 
 			// verify digest consistency first, if enabled
 			if verifyDigestConsistency {
@@ -260,25 +259,6 @@ func verifyDigestMatchesDescriptor(ctx context.Context, desc *descruntime.Descri
 		return fmt.Errorf("digest from signature does not match calculated digest from descriptor")
 	}
 	return nil
-}
-
-//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-func resolversFromConfig(config *genericv1.Config, err error) ([]resolverruntime.Resolver, error) {
-	filtered, err := genericv1.FilterForType[*resolverv1.Config](resolverv1.Scheme, config)
-	if err != nil {
-		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
-	}
-	resolverConfigV1 := resolverv1.Merge(filtered...)
-
-	resolverConfig, err := resolverruntime.ConvertFromV1(repository.Scheme, resolverConfigV1)
-	if err != nil {
-		return nil, fmt.Errorf("converting resolver configuration from v1 to runtime failed: %w", err)
-	}
-	var resolvers []resolverruntime.Resolver
-	if resolverConfig != nil && len(resolverConfig.Resolvers) > 0 {
-		resolvers = resolverConfig.Resolvers
-	}
-	return resolvers, nil
 }
 
 // isSafelyDigestible checks if a component version is considered safely digestible.
