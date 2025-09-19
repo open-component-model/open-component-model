@@ -13,6 +13,8 @@ import (
 	"ocm.software/open-component-model/cli/cmd/get"
 	ocmcmd "ocm.software/open-component-model/cli/cmd/internal/cmd"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
+	"ocm.software/open-component-model/cli/cmd/sign"
+	"ocm.software/open-component-model/cli/cmd/verify"
 	"ocm.software/open-component-model/cli/cmd/version"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 )
@@ -56,5 +58,7 @@ func New() *cobra.Command {
 	cmd.AddCommand(add.New())
 	cmd.AddCommand(version.New())
 	cmd.AddCommand(download.New())
+	cmd.AddCommand(verify.New())
+	cmd.AddCommand(sign.New())
 	return cmd
 }

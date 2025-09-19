@@ -1,27 +1,72 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm verify component-version
+description: Verify component version(s) inside an OCM repository.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm verify component-version
 
-The official Open Component Model (OCM) CLI
+Verify component version(s) inside an OCM repository
 
 ### Synopsis
 
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Verify component version(s) inside an OCM repository.
+
+If this command succeeds on a trusted signature, it can be trusted.
+
+This command checks cryptographic signatures stored on component versions
+to ensure integrity, authenticity, and provenance. Each signature covers a
+normalised and hashed form of the component descriptor, which is compared
+against the expected digest and verified with the configured verifier.
+
+The format of a component reference is:
+	[type::]{repository}/[valid-prefix]/{component}[:version]
+
+Valid prefixes: {component-descriptors|none}. If <none> is used, it defaults to "component-descriptors".
+Supported repository types: {OCIRepository|CommonTransportFormat} (short forms: {OCI|oci|CTF|ctf}).
+If no type is given, the repository path is inferred by heuristics.
+
+Verification steps performed:
+
+* Resolve the repository and fetch the target component version.
+* Verify digest consistency if not disabled (--verify-digest-consistency).
+* Normalise the descriptor with the algorithm recorded in the signature.
+* Recompute the hash and compare with the signature digest.
+* Verify the signature against the provided verifier specification (--verifier-spec),
+    or fall back to the default RSASSA-PSS verifier if not specified.
+
+Behavior:
+
+* If --signature is set, only the named signature is verified.
+* Without --signature, all available signatures are verified.
+* Verification fails fast on the first invalid signature.
+* If --verifier-spec is not provided, the default RSASSA-PSS verifier plugin is used.
+    This default plugin supports verifying signatures without a configuration file,
+    and uses either discovered credentials or performs keyless verification through encoded PEM certificates 
+    when possible.
+
+Use this command in automated pipelines or audits to validate the
+authenticity of component versions before promotion, deployment,
+or further processing.
 
 ```
-ocm [sub-command] [flags]
+ocm verify component-version {reference} [flags]
 ```
 
 ### Options
+
+```
+      --concurrency-limit int       maximum amount of parallel requests to the repository for resolving component versions (default 4)
+  -h, --help                        help for component-version
+      --signature string            name of the signature to verify. if not set, all signatures are verified
+      --verifier-spec string        path to an optional verifier specification file
+      --verify-digest-consistency   verify that all digests match the descriptor before verifying the signature itself (default true)
+```
+
+### Options inherited from parent commands
 
 ```
       --config string                      supply configuration by a given configuration file.
@@ -41,7 +86,6 @@ ocm [sub-command] [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            Using the option, this configuration file be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -64,12 +108,5 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - sign anything in OCM
 * [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify anything in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
 

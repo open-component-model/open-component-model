@@ -1,27 +1,27 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm sign
+description: sign anything in OCM.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm sign
 
-The official Open Component Model (OCM) CLI
-
-### Synopsis
-
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+sign anything in OCM
 
 ```
-ocm [sub-command] [flags]
+ocm sign {component-version|component-versions|cv|cvs} [flags]
 ```
 
 ### Options
+
+```
+  -h, --help   help for sign
+```
+
+### Options inherited from parent commands
 
 ```
       --config string                      supply configuration by a given configuration file.
@@ -41,7 +41,6 @@ ocm [sub-command] [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            Using the option, this configuration file be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -64,12 +63,6 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - sign anything in OCM
-* [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify anything in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
+* [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
+* [ocm sign component-version]({{< relref "ocm_sign_component-version.md" >}})	 - Sign component version(s) inside an OCM repository
 
