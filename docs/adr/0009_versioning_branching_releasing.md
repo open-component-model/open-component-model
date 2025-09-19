@@ -109,7 +109,7 @@ Sub-components follow a two-phase release process:
 
 * Create and test release candidates from release branches
 * Generate RC tags for validation: `<component>/v<major>.<minor>.<patch>-rc.N`
-* Extended testing and validation period before final release
+* Period of one sprint (two weeks) for testing and validation by external stakeholders before final release
 
 ##### Phase 2: Final Release Promotion
 
