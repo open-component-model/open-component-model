@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
@@ -24,6 +25,9 @@ import (
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
+	"ocm.software/open-component-model/bindings/go/repository"
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
+	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -31,6 +35,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
+	"ocm.software/open-component-model/cli/internal/repository/ocm"
 	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
@@ -214,21 +219,40 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
+	config := ocmctx.FromContext(cmd.Context()).Configuration()
+
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
+	var resolvers []*resolverruntime.Resolver
+	if config != nil {
+		resolvers, err = ocm.ResolversFromConfig(config)
+		if err != nil {
+			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
+		}
+	}
+
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
+	fallback, err := v1.NewFallbackRepository(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, resolvers)
+	if err != nil {
+		return fmt.Errorf("creating fallback repository failed: %w", err)
+	}
+
 	instance := &constructorProvider{
 		cache:          cacheDir,
 		targetRepoSpec: repoSpec,
+		fallbackRepo:   fallback,
 		pluginManager:  pluginManager,
 		graph:          credentialGraph,
 	}
 
 	opts := constructor.Options{
-		TargetRepositoryProvider:       instance,
-		ResourceRepositoryProvider:     instance,
-		SourceInputMethodProvider:      instance,
-		ResourceInputMethodProvider:    instance,
-		CredentialProvider:             instance.graph,
-		ConcurrencyLimit:               concurrencyLimit,
-		ComponentVersionConflictPolicy: ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
+		TargetRepositoryProvider:            instance,
+		ResourceRepositoryProvider:          instance,
+		SourceInputMethodProvider:           instance,
+		ResourceInputMethodProvider:         instance,
+		ExternalComponentRepositoryProvider: instance,
+		CredentialProvider:                  instance.graph,
+		ConcurrencyLimit:                    concurrencyLimit,
+		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 	}
 	if !skipReferenceDigestProcessing {
 		opts.ResourceDigestProcessorProvider = instance
@@ -306,13 +330,22 @@ func getComponentConstructorFile(cmd *cobra.Command) (*file.Flag, error) {
 	return constructorFlag, nil
 }
 
-var _ constructor.TargetRepositoryProvider = (*constructorProvider)(nil)
+var (
+	_ constructor.TargetRepositoryProvider            = (*constructorProvider)(nil)
+	_ constructor.ExternalComponentRepositoryProvider = (*constructorProvider)(nil)
+)
 
 type constructorProvider struct {
 	cache          string
 	targetRepoSpec runtime.Typed
-	pluginManager  *manager.PluginManager
-	graph          *credentials.Graph
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
+	fallbackRepo  *v1.FallbackRepository
+	pluginManager *manager.PluginManager
+	graph         credentials.GraphResolver
+}
+
+func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
+	return prov.fallbackRepo, nil
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {
@@ -348,24 +381,19 @@ func (c *constructorPlugin) DownloadResource(ctx context.Context, res *descripto
 }
 
 func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
-	plugin, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetPlugin(ctx, prov.targetRepoSpec)
-	if err != nil {
-		return nil, fmt.Errorf("getting plugin for repository %q failed: %w", prov.targetRepoSpec, err)
-	}
 	var creds map[string]string
-	identity, err := plugin.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
+	identity, err := prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, prov.targetRepoSpec)
 	if err == nil {
-		if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
-			return nil, fmt.Errorf("getting credentials for repository %q failed: %w", prov.targetRepoSpec, err)
+		if prov.graph != nil {
+			if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
+				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", prov.targetRepoSpec, err.Error()))
+			}
 		}
 	} else {
 		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", prov.targetRepoSpec, "error", err)
 	}
-	repo, err := plugin.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
-	if err != nil {
-		return nil, fmt.Errorf("getting component version repository for %q failed: %w", prov.targetRepoSpec, err)
-	}
-	return repo, err
+
+	return prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
 }
 
 func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.Options) (opts constructor.Options, stop func(), err error) {

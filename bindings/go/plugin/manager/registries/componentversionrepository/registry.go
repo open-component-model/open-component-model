@@ -147,9 +147,17 @@ func (r *RepositoryRegistry) GetComponentVersionRepositoryCredentialConsumerIden
 	// Check if this is an internal plugin first
 	typ := repositorySpecification.GetType()
 	if ok := r.scheme.IsRegistered(typ); ok {
-		// For internal plugins, we don't have credential identity support yet
-		// Return empty identity for now
-		return runtime.Identity{}, nil
+		p, ok := r.internalComponentVersionRepositoryPlugins[typ]
+		if !ok {
+			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
+		}
+
+		identity, err := p.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repositorySpecification)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get component version repository: %w", err)
+		}
+
+		return identity, nil
 	}
 
 	// For external plugins, get the plugin and ask for identity

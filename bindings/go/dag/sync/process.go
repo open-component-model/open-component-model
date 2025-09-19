@@ -225,21 +225,21 @@ func (d *DirectedAcyclicGraph[T]) processLayer(
 	// phase
 	upperBound := 0
 	for _, id := range ids {
-		upperBound += topology.MustGetOutDegree(id)
+		upperBound += int(topology.MustGetOutDegree(id).Load())
 	}
 	next := make([]T, 0, upperBound)
 	for _, id := range ids {
 		vertex := topology.MustGetVertex(id)
 		for _, child := range vertex.EdgeKeys() {
 			inDegree := topology.MustGetInDegree(child)
-			topology.InDegree.Store(child, inDegree-1)
-			vertex.Edges.Delete(child)
+			newValue := inDegree.Add(-1)
 			// If all parents of the child have been processed and the
 			// child has not been enqueued yet, add it to the next layer.
-			if topology.MustGetInDegree(child) == 0 {
+			if newValue == 0 {
 				d.MustGetVertex(child).Attributes.Store(AttributeProcessingState, ProcessingStateQueued)
 				next = append(next, child)
 			}
+			vertex.Edges.Delete(child)
 		}
 		topology.Vertices.Delete(id)
 	}
