@@ -21,7 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
-	"ocm.software/open-component-model/bindings/go/oci/internal/looseref"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
