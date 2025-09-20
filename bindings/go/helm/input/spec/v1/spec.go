@@ -19,24 +19,22 @@ type Helm struct {
 	// Repository field property can be used to specify the repository hint for the generated local artifact access.
 	// It is prefixed by the component name, if	it does not start with slash "/".
 	// The repository hint is a full OCI repository reference, where the helm chart needs to be uploaded to.
-	// TODO(ikhandamirov,jakobmoellerdev): decide what to do, if the field is set.
 	Repository string `json:"repository,omitempty"`
 
-	// Version field is included for compatibility with previous OCM version.
-	// Support for this option is not implemented yet. The Version of the resource is taken from the Chart.yaml file.
+	// Version defines the version of the chart to use.
 	Version string `json:"version,omitempty"`
 
 	// HelmRepository was used in previous OCM versions specify, to if the helm chart should be loaded from
-	// a helm repository instead of the local filesystem. Support for this option is not implemented yet.
+	// a helm repository instead of the local filesystem.
 	HelmRepository string `json:"helmRepository,omitempty"`
 
-	// CACert was used in previous OCM versions in combination with HelmRepository to specify a TLS root certificate
-	// used to access the source helm repository. Support for this option is not implemented yet.
+	// CACert used in combination with HelmRepository to specify a TLS root certificate to access the source helm repository.
+	// Deprecated: This field is deprecated in favor of using certificates through the credentials.
 	CACert string `json:"caCert,omitempty"`
 
-	// CACertFile was used in previous OCM versions in combination with HelmRepository to specify a relative filename
-	// for TLS root certificate, used to access the source helm repository.
-	// Support for this option is not implemented yet.
+	// CACertFile used in combination with HelmRepository to specify a relative filename
+	// for TLS root certificate to access the source helm repository.
+	// Deprecated: This field is deprecated in favor of using certificates through the credentials.
 	CACertFile string `json:"caCertFile,omitempty"`
 }
 
