@@ -12,17 +12,14 @@ import (
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"golang.org/x/sync/errgroup"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/ptr"
 	ocmctx "ocm.software/ocm/api/ocm"
-	"ocm.software/ocm/api/ocm/compdesc"
 	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"ocm.software/ocm/api/ocm/extensions/attrs/signingattr"
-	"ocm.software/ocm/api/ocm/resolvers"
 	"ocm.software/ocm/api/ocm/tools/signing"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -69,7 +66,7 @@ type Reconciler struct {
 	// we use a tracker so as to only write to the status, and not read from it.
 	resourceWatches func(parent client.Object) []client.Object
 
-	DownloadCache cache.DigestObjectCache[string, []client.Object]
+	DownloadCache cache.DigestObjectCache[string, []*unstructured.Unstructured]
 
 	OCMContextCache *ocm.ContextCache
 }
@@ -275,7 +272,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	// Download the resource
 	key := resource.Status.Resource.Digest
 
-	objs, err := r.DownloadCache.Load(key, func() ([]client.Object, error) {
+	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
 		return r.DownloadResourceWithOCM(ctx, deployer, resource)
 	})
 	if err != nil {
@@ -310,7 +307,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	ctx context.Context,
 	deployer *deliveryv1alpha1.Deployer,
 	resource *deliveryv1alpha1.Resource,
-) (objs []client.Object, err error) {
+) (objs []*unstructured.Unstructured, err error) {
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.ConfigureContextFailedReason, err.Error())
@@ -354,15 +351,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		ReferencePath: resource.Spec.Resource.ByReference.ReferencePath,
 	}
 
-	resourceAccess, _, err := ocm.GetResourceAccessForComponentVersion(
-		ctx,
-		session,
-		cv,
-		resourceReference,
-		&ocm.Descriptors{List: []*compdesc.ComponentDescriptor{cv.GetDescriptor()}},
-		resolvers.NewCompoundResolver(repo, octx.GetResolver()),
-		resource.Spec.SkipVerify,
-	)
+	resourceAccess, _, err := ocm.GetResourceAccessForComponentVersion(ctx, cv, resourceReference, ocm.NewSessionResolver(octx, session), resource.Spec.SkipVerify)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
@@ -396,10 +385,10 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	return objs, nil
 }
 
-func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []client.Object, err error) {
+func decodeObjectsFromManifest(manifest io.ReadCloser) (_ []*unstructured.Unstructured, err error) {
 	const bufferSize = 4096
 	decoder := yaml.NewYAMLOrJSONDecoder(manifest, bufferSize)
-	var objs []client.Object
+	var objs []*unstructured.Unstructured
 	for {
 		var obj unstructured.Unstructured
 		err := decoder.Decode(&obj)
@@ -495,7 +484,7 @@ func digestSpec(s string) (v1.DigestSpec, error) {
 // applyConcurrently applies the resource objects to the cluster concurrently.
 //
 // See Apply for more details on how the objects are applied.
-func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []client.Object) error {
+func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
 	if len(objs) > 1 {
 		// TODO(jakobmoellerdev): remove once https://github.com/open-component-model/ocm-k8s-toolkit/issues/273#issue-3201709052
 		//  is implemented in the deployer controller. We need proper apply detection so we can support pruning diffs.
@@ -512,7 +501,7 @@ func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1
 	for i := range objs {
 		eg.Go(func() error {
 			//nolint:forcetypeassert // we know that objs[i] is a client.Object because we just cloned it
-			obj := objs[i].DeepCopyObject().(client.Object)
+			obj := objs[i].DeepCopyObject().(*unstructured.Unstructured)
 
 			return r.apply(egctx, resource, deployer, obj)
 		})
@@ -524,17 +513,17 @@ func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1
 // apply applies the object to the cluster using Server-Side Apply. It sets the controller reference on the object
 // and patches it with the FieldManager set to the deployer UID. It also updates the deployer status with the
 // applied object reference.
-func (r *Reconciler) apply(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, obj client.Object) error {
+func (r *Reconciler) apply(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, obj *unstructured.Unstructured) error {
 	setOwnershipLabels(obj, resource, deployer)
 	setOwnershipAnnotations(obj, resource)
 	if err := controllerutil.SetControllerReference(deployer, obj, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference on object: %w", err)
 	}
 
-	if err := r.GetClient().Patch(ctx, obj, client.Apply, &client.PatchOptions{
-		Force:           ptr.To(true),
-		FieldManager:    fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
-		FieldValidation: metav1.FieldValidationWarn,
+	applyConfig := client.ApplyConfigurationFromUnstructured(obj)
+	if err := r.GetClient().Apply(ctx, applyConfig, &client.ApplyOptions{
+		Force:        ptr.To(true),
+		FieldManager: fmt.Sprintf("%s/%s", deployerManager, deployer.UID),
 	}); err != nil {
 		return fmt.Errorf("failed to apply object: %w", err)
 	}
@@ -545,7 +534,7 @@ func (r *Reconciler) apply(ctx context.Context, resource *deliveryv1alpha1.Resou
 // trackConcurrently tracks the objects for the deployer concurrently.
 //
 // See track for more details on how the objects are tracked.
-func (r *Reconciler) trackConcurrently(ctx context.Context, deployer *deliveryv1alpha1.Deployer, objs []client.Object) error {
+func (r *Reconciler) trackConcurrently(ctx context.Context, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
 	eg, egctx := errgroup.WithContext(ctx)
 
 	for i := range objs {
@@ -583,7 +572,7 @@ func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deplo
 	return nil
 }
 
-func updateDeployedObjectStatusReferences(objs []client.Object, deployer *deliveryv1alpha1.Deployer) {
+func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer *deliveryv1alpha1.Deployer) {
 	for _, obj := range objs {
 		apiVersion, kind := obj.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
 		ref := deliveryv1alpha1.DeployedObjectReference{

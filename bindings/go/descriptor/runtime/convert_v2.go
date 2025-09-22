@@ -266,16 +266,32 @@ func ConvertFromV2Signatures(signatures []v2.Signature) []Signature {
 	}
 	n := make([]Signature, len(signatures))
 	for i := range signatures {
-		n[i].Name = signatures[i].Name
-		n[i].Digest = *ConvertFromV2Digest(&signatures[i].Digest)
-		n[i].Signature = SignatureInfo{
-			Algorithm: signatures[i].Signature.Algorithm,
-			Value:     signatures[i].Signature.Value,
-			MediaType: signatures[i].Signature.MediaType,
-			Issuer:    signatures[i].Signature.Issuer,
-		}
+		n[i] = *ConvertFromV2Signature(&signatures[i])
 	}
 	return n
+}
+
+func ConvertFromV2Signature(signature *v2.Signature) *Signature {
+	if signature == nil {
+		return nil
+	}
+	return &Signature{
+		Name:      signature.Name,
+		Digest:    *ConvertFromV2Digest(&signature.Digest),
+		Signature: *ConvertFromV2SignatureInfo(&signature.Signature),
+	}
+}
+
+func ConvertFromV2SignatureInfo(signature *v2.SignatureInfo) *SignatureInfo {
+	if signature == nil {
+		return nil
+	}
+	return &SignatureInfo{
+		Algorithm: signature.Algorithm,
+		Value:     signature.Value,
+		MediaType: signature.MediaType,
+		Issuer:    signature.Issuer,
+	}
 }
 
 // ConvertToV2Provider converts an internal provider identity to a string format expected by v2.
@@ -465,16 +481,32 @@ func ConvertToV2Signatures(signatures []Signature) []v2.Signature {
 	}
 	n := make([]v2.Signature, len(signatures))
 	for i := range signatures {
-		n[i].Name = signatures[i].Name
-		n[i].Digest = *ConvertToV2Digest(&signatures[i].Digest)
-		n[i].Signature = v2.SignatureInfo{
-			Algorithm: signatures[i].Signature.Algorithm,
-			Value:     signatures[i].Signature.Value,
-			MediaType: signatures[i].Signature.MediaType,
-			Issuer:    signatures[i].Signature.Issuer,
-		}
+		n[i] = *ConvertToV2Signature(&signatures[i])
 	}
 	return n
+}
+
+func ConvertToV2Signature(sig *Signature) *v2.Signature {
+	if sig == nil {
+		return nil
+	}
+	return &v2.Signature{
+		Name:      sig.Name,
+		Digest:    *ConvertToV2Digest(&sig.Digest),
+		Signature: *ConvertToV2SignatureInfo(&sig.Signature),
+	}
+}
+
+func ConvertToV2SignatureInfo(sig *SignatureInfo) *v2.SignatureInfo {
+	if sig == nil {
+		return nil
+	}
+	return &v2.SignatureInfo{
+		Algorithm: sig.Algorithm,
+		Value:     sig.Value,
+		MediaType: sig.MediaType,
+		Issuer:    sig.Issuer,
+	}
 }
 
 // ConvertFromV2LocalBlob converts a v2.LocalBlob to runtime.LocalBlob.

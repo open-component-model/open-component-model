@@ -12,5 +12,11 @@
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
-// New concepts will likely be introduced in the future (contributions welcome!).
+// An alternative concept is to use the [v1alpha1.SpecProvider]
 package v1
+
+import (
+	"ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
+)
+
+var _ v1alpha1.SpecProvider

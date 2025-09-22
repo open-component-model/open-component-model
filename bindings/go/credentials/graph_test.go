@@ -144,7 +144,7 @@ const invalidRecursionYAML = testYAML + `
         secretId: "recursive-creds"
 `
 
-func GetGraph(t testing.TB, yaml string) (*credentials.Graph, error) {
+func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
 	t.Helper()
 	r := require.New(t)
 	scheme := runtime.NewScheme()
@@ -486,4 +486,35 @@ consumers:
 			}
 		})
 	}
+}
+
+func TestResolutionErrors(t *testing.T) {
+	id := runtime.Identity{
+		"type": "not exists",
+	}
+
+	r := require.New(t)
+	g, err := credentials.ToGraph(t.Context(), &credentialruntime.Config{}, credentials.Options{})
+	require.NoError(t, err)
+	creds, err := g.Resolve(t.Context(), id)
+	r.Empty(creds)
+	r.Error(err)
+	r.ErrorIs(err, credentials.ErrNoDirectCredentials)
+	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: failed to match any node: no direct credentials found in graph", id.String()))
+
+	g, err = credentials.ToGraph(t.Context(), &credentialruntime.Config{}, credentials.Options{
+		RepositoryPluginProvider: credentials.GetRepositoryPluginFn(func(ctx context.Context, repoType runtime.Typed) (credentials.RepositoryPlugin, error) {
+			return RepositoryPlugin{
+				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
+					return runtime.Identity{}, nil
+				},
+			}, nil
+		}),
+	})
+	r.NoError(err)
+	creds, err = g.Resolve(t.Context(), id)
+	r.Empty(creds)
+	r.Error(err)
+	r.ErrorIs(err, credentials.ErrNoIndirectCredentials)
+	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: no indirect credentials found in graph", id.String()))
 }

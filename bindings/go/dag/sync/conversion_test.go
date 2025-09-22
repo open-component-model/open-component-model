@@ -21,9 +21,9 @@ func TestMapToSynced(t *testing.T) {
 	r.NoError(mapBasedDAG.AddEdge("B", "C", map[string]any{"key": "2"}))
 
 	syncMapBasedDAG := NewDirectedAcyclicGraph[string]()
-	r.NoError(syncMapBasedDAG.addRawVertex(NewVertex("A", map[string]any{"key": "1"})))
-	r.NoError(syncMapBasedDAG.addRawVertex(NewVertex("B", map[string]any{"key": "2"})))
-	r.NoError(syncMapBasedDAG.addRawVertex(NewVertex("C", map[string]any{"key": "3"})))
+	r.NoError(syncMapBasedDAG.AddVertex("A", map[string]any{"key": "1"}))
+	r.NoError(syncMapBasedDAG.AddVertex("B", map[string]any{"key": "2"}))
+	r.NoError(syncMapBasedDAG.AddVertex("C", map[string]any{"key": "3"}))
 
 	r.NoError(syncMapBasedDAG.AddEdge("A", "B", map[string]any{"key": "1"}))
 	r.NoError(syncMapBasedDAG.AddEdge("B", "C", map[string]any{"key": "2"}))
@@ -46,13 +46,13 @@ func TestMapToSynced(t *testing.T) {
 		r.ElementsMatchf(syncMapBasedDAG.MustGetVertex("B").EdgeKeys(), slices.Collect(maps.Keys(mapBasedDAG.Vertices["B"].Edges)), "expected vertex B to match, but they differ")
 		r.ElementsMatchf(syncMapBasedDAG.MustGetVertex("C").EdgeKeys(), slices.Collect(maps.Keys(mapBasedDAG.Vertices["C"].Edges)), "expected vertex C to match, but they differ")
 
-		r.Equalf(syncMapBasedDAG.MustGetOutDegree("A"), mapBasedDAG.OutDegree["A"], "expected out-degree to match, but they differ")
-		r.Equalf(syncMapBasedDAG.MustGetOutDegree("B"), mapBasedDAG.OutDegree["B"], "expected out-degree to match, but they differ")
-		r.Equalf(syncMapBasedDAG.MustGetOutDegree("C"), mapBasedDAG.OutDegree["C"], "expected out-degree to match, but they differ")
+		r.Equalf(int(syncMapBasedDAG.MustGetOutDegree("A").Load()), mapBasedDAG.Vertices["A"].OutDegree, "expected out-degree to match, but they differ")
+		r.Equalf(int(syncMapBasedDAG.MustGetOutDegree("B").Load()), mapBasedDAG.Vertices["B"].OutDegree, "expected out-degree to match, but they differ")
+		r.Equalf(int(syncMapBasedDAG.MustGetOutDegree("C").Load()), mapBasedDAG.Vertices["C"].OutDegree, "expected out-degree to match, but they differ")
 
-		r.Equalf(syncMapBasedDAG.MustGetInDegree("A"), mapBasedDAG.InDegree["A"], "expected in-degree to match, but they differ")
-		r.Equalf(syncMapBasedDAG.MustGetInDegree("B"), mapBasedDAG.InDegree["B"], "expected in-degree to match, but they differ")
-		r.Equalf(syncMapBasedDAG.MustGetInDegree("C"), mapBasedDAG.InDegree["C"], "expected in-degree to match, but they differ")
+		r.Equalf(int(syncMapBasedDAG.MustGetInDegree("A").Load()), mapBasedDAG.Vertices["A"].InDegree, "expected in-degree to match, but they differ")
+		r.Equalf(int(syncMapBasedDAG.MustGetInDegree("B").Load()), mapBasedDAG.Vertices["B"].InDegree, "expected in-degree to match, but they differ")
+		r.Equalf(int(syncMapBasedDAG.MustGetInDegree("C").Load()), mapBasedDAG.Vertices["C"].InDegree, "expected in-degree to match, but they differ")
 
 		r.Equalf(syncMapBasedDAG.Roots(), mapBasedDAG.Roots(), "expected roots to match, but they differ")
 	}

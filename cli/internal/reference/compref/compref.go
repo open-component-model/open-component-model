@@ -39,6 +39,9 @@ var (
 // DefaultPrefix is the default prefix used for component descriptors.
 const DefaultPrefix = "component-descriptors"
 
+// ctfArchiveExtensions is the list of archive file extensions that should be treated as CTF
+var ctfArchiveExtensions = [...]string{".tar.gz", ".tgz", ".tar"}
+
 // ValidPrefixes is the list of valid prefixes for structured component references
 var ValidPrefixes = []string{
 	DefaultPrefix, // for component descriptors this is the default prefix
@@ -185,46 +188,97 @@ func Parse(input string) (*Ref, error) {
 		return nil, fmt.Errorf("invalid component name %q in %q, must match %q", ref.Component, originalInput, ComponentRegex)
 	}
 
-	// Step 6: Resolve type if not explicitly given
+	// Step 6: Build repository object using ParseRepository
+	var repositoryRef string
+	if ref.Type != "" {
+		repositoryRef = ref.Type + "::" + input
+	} else {
+		repositoryRef = input
+	}
+
+	repository, err := ParseRepository(repositoryRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse repository: %w", err)
+	}
+
+	ref.Repository = repository
+
+	// Extract the type from the parsed repository for consistency
 	if ref.Type == "" {
-		t, err := GuessType(input)
-		if err != nil {
-			return nil, fmt.Errorf("failed to detect repository type from %q: %w", input, err)
+		switch repository.(type) {
+		case *ociv1.Repository:
+			ref.Type = runtime.NewVersionedType(ociv1.Type, ociv1.Version).String()
+		case *ctfv1.Repository:
+			ref.Type = runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String()
 		}
-		Base.Debug("ocm had to guess your repository type", "type", t, "input", input)
-		ref.Type = t
 	}
-
-	// Step 7: Build repository object
-	rtyp, err := runtime.TypeFromString(ref.Type)
-	if err != nil {
-		return nil, fmt.Errorf("unknown type %q in %q: %w", ref.Type, originalInput, err)
-	}
-
-	typed, err := RepositoryScheme.NewObject(rtyp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repository of type %q: %w", ref.Type, err)
-	}
-
-	switch t := typed.(type) {
-	case *ociv1.Repository:
-		uri, err := url.Parse(input)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse repository URI %q: %w", input, err)
-		}
-		t.BaseUrl = uri.String()
-	case *ctfv1.Repository:
-		t.Path = input
-	default:
-		return nil, fmt.Errorf("unsupported repository type: %q", ref.Type)
-	}
-
-	ref.Repository = typed
 
 	return ref, nil
 }
 
-// GuessType tries to guess the repository type ("ctf" or "oci")
+// ParseRepository parses a repository reference string and returns a typed repository object.
+// It accepts repository strings in the format:
+//   - [<type>::]<repository-ref>
+//
+// Where type can be "ctf" or "oci", and repository reference is the actual repository location.
+// If no type is specified, it will be guessed using heuristics.
+func ParseRepository(repoRef string) (runtime.Typed, error) {
+	originalInput := repoRef
+	input := repoRef
+
+	// Extract optional type
+	var repoType string
+	if idx := strings.Index(input, "::"); idx != -1 {
+		repoType = input[:idx]
+		input = input[idx+2:]
+	}
+
+	// Resolve type if isn't explicitly given
+	if repoType == "" {
+		t, err := guessType(input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to detect repository type from %q: %w", input, err)
+		}
+		Base.Debug("ocm had to guess your repository type", "type", t, "input", input)
+		repoType = t
+	}
+
+	// Build repository object
+	rtyp, err := runtime.TypeFromString(repoType)
+	if err != nil {
+		return nil, fmt.Errorf("unknown type %q in %q: %w", repoType, originalInput, err)
+	}
+
+	typed, err := RepositoryScheme.NewObject(rtyp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create repository of type %q: %w", repoType, err)
+	}
+
+	switch t := typed.(type) {
+	case *ociv1.Repository:
+		// For OCI repositories, we accept URLs with or without a scheme.
+		// If a scheme is provided (e.g., https, http, oci), keep it in the resulting string.
+		// If no scheme is provided, return a string without scheme containing host, optional port, and path.
+		uri, err := runtime.ParseURLAndAllowNoScheme(input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse repository URI %q: %w", input, err)
+		}
+		if uri.Scheme != "" {
+			// Preserve the full URL including scheme if it was explicitly set
+			t.BaseUrl = uri.String()
+		} else {
+			t.BaseUrl = fmt.Sprintf("%s%s", uri.Host, uri.EscapedPath())
+		}
+	case *ctfv1.Repository:
+		t.Path = input
+	default:
+		return nil, fmt.Errorf("unsupported repository type: %q", repoType)
+	}
+
+	return typed, nil
+}
+
+// guessType tries to guess the repository type ("ctf" or "oci")
 // from an untyped repository specification string.
 //
 // You may ask yourself why this is needed.
@@ -236,10 +290,11 @@ func Parse(input string) (*Ref, error) {
 // It uses a practical set of heuristics:
 //   - If it has a URL scheme ("file://"), assume CTF
 //   - If it's an absolute filesystem path, assume CTF
-//   - If it looks like a domain (contains dots like ".com", ".io", etc.), assume OCI
 //   - If it contains a colon (e.g., "localhost:5000"), assume OCI
+//   - If it looks like an archive file (tar.gz, tgz or tar), assume CTF
+//   - If it looks like a domain (contains dots like ".com", ".io", etc.), assume OCI
 //   - Otherwise fallback to CTF
-func GuessType(repository string) (string, error) {
+func guessType(repository string) (string, error) {
 	// Try parsing as URL first
 	if u, err := url.Parse(repository); err == nil {
 		if u.Scheme == "file" {
@@ -263,6 +318,11 @@ func GuessType(repository string) (string, error) {
 		return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
 	}
 
+	// Check if it looks like an archive file → assume CTF
+	if looksLikeArchive(cleaned) {
+		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
+	}
+
 	// Contains domain-looking part (e.g., github.com, ghcr.io) → assume OCI
 	if looksLikeDomain(cleaned) {
 		return runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(), nil
@@ -270,6 +330,18 @@ func GuessType(repository string) (string, error) {
 
 	// Default fallback: assume CTF
 	return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
+}
+
+// looksLikeArchive checks if the string ends with tar.gz or tgz archive file extensions.
+// This helps identify repository strings that point to archive files, which should be treated as CTF.
+func looksLikeArchive(s string) bool {
+	s = strings.ToLower(s)
+	for _, ext := range ctfArchiveExtensions {
+		if strings.HasSuffix(s, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // looksLikeDomain checks if the string contains a dot with non-numeric parts (heuristic).

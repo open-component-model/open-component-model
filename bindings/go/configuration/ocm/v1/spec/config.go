@@ -30,16 +30,16 @@ func init() {
 // Config is the OCM configuration type for configuring legacy fallback
 // resolvers.
 //
-//   - type: ocm.config.ocm.software
-//     resolvers:
-//   - repository:
-//     type: CommonTransportFormat/v1
-//     filePath: ./ocm/primary-transport-archive
-//     priority: 100
-//   - repository:
-//     type: CommonTransportFormat/v1
-//     filePath: ./ocm/primary-transport-archive
-//     priority: 10
+//	type: ocm.config.ocm.software
+//	resolvers:
+//	- repository:
+//	    type: CommonTransportFormat/v1
+//	    filePath: ./ocm/primary-transport-archive
+//	    priority: 100
+//	- repository:
+//	    type: CommonTransportFormat/v1
+//	    filePath: ./ocm/primary-transport-archive
+//	    priority: 10
 //
 // Deprecated: Resolvers are deprecated and are only added for backwards
 // compatibility.
