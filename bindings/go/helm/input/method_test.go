@@ -139,7 +139,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 						Type: runtime.Type{
 							Name: v1.Type,
 						},
-						Repository:     "internal.charts.example.com/charts",
+						Repository:     "internal.charts.example.com/charts:6.9.1",
 						HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz",
 						Version:        "1.2.3", // technically version is not needed because it's a direct TGZ download
 					},
@@ -159,7 +159,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 						Type: runtime.Type{
 							Name: v1.Type,
 						},
-						Repository:     "internal.charts.example.com/charts",
+						Repository:     "internal.charts.example.com/charts:6.9.1",
 						HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo",
 						Version:        "6.9.1",
 					},
@@ -199,7 +199,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 						Type: runtime.Type{
 							Name: v1.Type,
 						},
-						Repository:     "internal.charts.example.com/charts",
+						Repository:     "internal.charts.example.com/charts:6.9.1",
 						HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo:6.9.1",
 						Version:        "6.9.1",
 					},
