@@ -129,6 +129,7 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resource *constructorruntime.Resource
+		error    func(t *testing.T, err error) bool
 	}{
 		{
 			name: "remote chart with version https",
@@ -140,13 +141,18 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 						},
 						Repository:     "internal.charts.example.com/charts",
 						HelmRepository: "https://stefanprodan.github.io/podinfo/podinfo-6.9.1.tgz",
-						Version:        "6.9.1",
+						Version:        "1.2.3", // technically version is not needed because it's a direct TGZ download
 					},
 				},
 			},
+			error: func(t *testing.T, err error) bool {
+				require.NoError(t, err)
+
+				return true
+			},
 		},
 		{
-			name: "remote chart with version oci",
+			name: "remote chart with only version in spec",
 			resource: &constructorruntime.Resource{
 				AccessOrInput: constructorruntime.AccessOrInput{
 					Input: &v1.Helm{
@@ -159,6 +165,71 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 					},
 				},
 			},
+			error: func(t *testing.T, err error) bool {
+				require.NoError(t, err)
+
+				return true
+			},
+		},
+		{
+			name: "neither version nor reference version specified should fail",
+			resource: &constructorruntime.Resource{
+				AccessOrInput: constructorruntime.AccessOrInput{
+					Input: &v1.Helm{
+						Type: runtime.Type{
+							Name: v1.Type,
+						},
+						Repository:     "internal.charts.example.com/charts",
+						HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo",
+						Version:        "",
+					},
+				},
+			},
+			error: func(t *testing.T, err error) bool {
+				require.Error(t, err)
+
+				return false
+			},
+		},
+		{
+			name: "remote chart with versioned oci reference url",
+			resource: &constructorruntime.Resource{
+				AccessOrInput: constructorruntime.AccessOrInput{
+					Input: &v1.Helm{
+						Type: runtime.Type{
+							Name: v1.Type,
+						},
+						Repository:     "internal.charts.example.com/charts",
+						HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo:6.9.1",
+						Version:        "6.9.1",
+					},
+				},
+			},
+			error: func(t *testing.T, err error) bool {
+				require.NoError(t, err)
+
+				return true
+			},
+		},
+		{
+			name: "should not be able to download chart if given version and reference version do not match",
+			resource: &constructorruntime.Resource{
+				AccessOrInput: constructorruntime.AccessOrInput{
+					Input: &v1.Helm{
+						Type: runtime.Type{
+							Name: v1.Type,
+						},
+						Repository:     "internal.charts.example.com/charts",
+						HelmRepository: "oci://ghcr.io/stefanprodan/charts/podinfo:6.9.0",
+						Version:        "6.9.1",
+					},
+				},
+			},
+			error: func(t *testing.T, err error) bool {
+				require.ErrorContains(t, err, "chart reference and version mismatch: 6.9.1 is not 6.9.0")
+
+				return false
+			},
 		},
 	}
 
@@ -167,7 +238,10 @@ func TestInputMethodProcessResourceRemoteChartPodinfoIntegration(t *testing.T) {
 			inputMethod := &input.InputMethod{}
 
 			result, err := inputMethod.ProcessResource(t.Context(), tc.resource, nil)
-			require.NoError(t, err, "should successfully download podinfo chart")
+			if !tc.error(t, err) {
+				return
+			}
+
 			assert.NotNil(t, result, "result should not be nil")
 			assert.NotNil(t, result.ProcessedBlobData, "should have blob data for remote chart")
 			assert.NotNil(t, result.ProcessedResource, "should have remote resource access info")

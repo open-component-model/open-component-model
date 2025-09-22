@@ -112,15 +112,14 @@ func (i *InputMethod) createRemoteResourceAccess(resource *constructorruntime.Re
 		return nil, fmt.Errorf("failed to parse target access image reference %q: %w", helm.Repository, err)
 	}
 
-	// If "version" is specified, use it as a tag. If "tag" is not empty, we compare it with
-	// the provided version. If they don't match, return an error.
-	if chart.Version != "" {
-		if ref.Tag != "" && ref.Tag != chart.Version {
-			return nil, fmt.Errorf("provided version %q does not match tag %q", chart.Version, ref.Tag)
-		}
+	if ref.Tag == "" {
+		return nil, fmt.Errorf("tag is required for remote helm repository")
+	}
 
-		// This could be already equal, but set it anyway.
-		ref.Tag = chart.Version
+	// If the given repository oci reference contains a tag, make sure it matches the version derived
+	// from the fetched chart.
+	if ref.Tag != chart.Version {
+		return nil, fmt.Errorf("provided version %q does not match tag %q", ref.Tag, chart.Version)
 	}
 
 	ociAccess := &ocispec.OCIImage{

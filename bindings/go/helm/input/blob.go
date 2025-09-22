@@ -24,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
@@ -196,6 +197,13 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		verify = downloader.VerifyIfPossible
 	}
 
+	var plainHTTP bool
+	if strings.HasPrefix(helmSpec.HelmRepository, "http://") {
+		plainHTTP = true
+	}
+
+	opts = append(opts, getter.WithPlainHTTP(plainHTTP))
+
 	dl := &downloader.ChartDownloader{
 		Out:              os.Stderr,
 		Verify:           verify,
@@ -212,7 +220,24 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		}
 	}
 
-	savedPath, _, err := dl.DownloadTo(helmSpec.HelmRepository, helmSpec.Version, tmpDir)
+	// We don't let helm download decide on the version of the chart. Version, either through ref or through
+	// the spec.Version field always MUST be defined. This is only true for OCI repositories.
+	// In the case of HTTP/S repositories, the version is taken from the URL.
+	version := helmSpec.Version
+	if version == "" && strings.HasPrefix(helmSpec.HelmRepository, "oci://") {
+		ref, err := looseref.ParseReference(helmSpec.HelmRepository)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing helm repository reference %q: %w", helmSpec.HelmRepository, err)
+		}
+
+		if ref.Tag == "" {
+			return nil, errors.New("either helm repository tag or spec.Version has to be set")
+		}
+
+		version = ref.Tag
+	}
+
+	savedPath, _, err := dl.DownloadTo(helmSpec.HelmRepository, version, tmpDir)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading chart %q version %q: %w", helmSpec.HelmRepository, helmSpec.Version, err)
 	}
