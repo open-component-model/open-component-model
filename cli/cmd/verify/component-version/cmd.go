@@ -2,11 +2,7 @@ package componentversion
 
 import (
 	"bytes"
-	"context"
-	"crypto"
-	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"maps"
 	"os"
 	"slices"
@@ -17,8 +13,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -28,6 +22,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
+	"ocm.software/open-component-model/cli/internal/signing"
 )
 
 const (
@@ -93,7 +88,7 @@ or further processing.`,
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. if not set, all signatures are verified")
 	cmd.Flags().Bool(FlagVerifyDigestConsistency, true, "verify that all digests match the descriptor before verifying the signature itself")
-	cmd.Flags().String(FlagVerifierSpec, "", "path to an optional verifier specification file")
+	cmd.Flags().String(FlagVerifierSpec, "", "path to an optional verifier specification file. If empty, defaults to an empty RSASSA-PSS configuration.")
 
 	return cmd
 }
@@ -169,7 +164,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	if verifyDigestConsistency {
-		if err := isSafelyDigestible(&desc.Component); err != nil {
+		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 			logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
 		}
 	}
@@ -220,7 +215,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 			}()
 
 			if verifyDigestConsistency {
-				if err := verifyDigestMatchesDescriptor(egctx, desc, s, logger); err != nil {
+				if err := signing.VerifyDigestMatchesDescriptor(egctx, desc, s, logger); err != nil {
 					return err
 				}
 			}
@@ -245,57 +240,5 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
-	return nil
-}
-
-func verifyDigestMatchesDescriptor(ctx context.Context, desc *descruntime.Descriptor, signature descruntime.Signature, logger *slog.Logger) error {
-	if legacyAlgo := "jsonNormalisation/v3"; signature.Digest.NormalisationAlgorithm == legacyAlgo {
-		signature.Digest.NormalisationAlgorithm = v4alpha1.Algorithm
-		logger.WarnContext(ctx, "legacy normalisation algorithm detected, using v4alpha1", "legacy", legacyAlgo, "new", v4alpha1.Algorithm)
-	}
-
-	normalised, err := normalisation.Normalise(desc, signature.Digest.NormalisationAlgorithm)
-	if err != nil {
-		return fmt.Errorf("normalising component version failed: %w", err)
-	}
-	var hash crypto.Hash
-	switch signature.Digest.HashAlgorithm {
-	case crypto.SHA256.String():
-		hash = crypto.SHA256
-	case crypto.SHA512.String():
-		hash = crypto.SHA512
-	default:
-		return fmt.Errorf("unsupported hash algorithm %q", signature.Digest.HashAlgorithm)
-	}
-	instance := hash.New()
-	if _, err := instance.Write(normalised); err != nil {
-		return fmt.Errorf("hashing component version failed: %w", err)
-	}
-	freshDigest := instance.Sum(nil)
-	digestFromSignature, err := hex.DecodeString(signature.Digest.Value)
-	if err != nil {
-		return fmt.Errorf("decoding digest from signature failed: %w", err)
-	}
-	if !bytes.Equal(freshDigest, digestFromSignature) {
-		return fmt.Errorf("digest from signature does not match descriptor digest")
-	}
-	return nil
-}
-
-func isSafelyDigestible(cd *descruntime.Component) error {
-	for _, reference := range cd.References {
-		if reference.Digest.HashAlgorithm == "" || reference.Digest.NormalisationAlgorithm == "" || reference.Digest.Value == "" {
-			return fmt.Errorf("missing digest in componentReference for %s:%s", reference.Name, reference.Version)
-		}
-	}
-	for _, res := range cd.Resources {
-		if (res.Access != nil && res.Access.GetType().String() != "None") &&
-			(res.Digest == nil || res.Digest.HashAlgorithm == "" || res.Digest.NormalisationAlgorithm == "" || res.Digest.Value == "") {
-			return fmt.Errorf("missing digest in resource for %s:%s", res.Name, res.Version)
-		}
-		if (res.Access == nil || res.Access.GetType().String() == "None") && res.Digest != nil {
-			return fmt.Errorf("digest for resource with empty access not allowed %s:%s", res.Name, res.Version)
-		}
-	}
 	return nil
 }

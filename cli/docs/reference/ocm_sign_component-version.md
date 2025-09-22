@@ -79,8 +79,8 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
       --hash string                 hash algorithm to use (SHA256, SHA512) (default "SHA-256")
   -h, --help                        help for component-version
       --normalisation string        normalisation algorithm to use (default jsonNormalisation/v4alpha1) (default "jsonNormalisation/v4alpha1")
-      --signature string            name of the signature to create or update. defaults to "default"
-      --signer-spec string          path to a signer specification file; defaults to RSASSA-PSS if not provided
+      --signature string            name of the signature to create or update. defaults to "default" (default "default")
+      --signer-spec string          path to a signer specification file. If empty, defaults to an empty RSASSA-PSS configuration.
       --verify-digest-consistency   verify that all digests are complete and valid before signing (default true)
 ```
 

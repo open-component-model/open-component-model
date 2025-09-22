@@ -62,7 +62,7 @@ ocm verify component-version {reference} [flags]
       --concurrency-limit int       maximum amount of parallel requests to the repository for resolving component versions (default 4)
   -h, --help                        help for component-version
       --signature string            name of the signature to verify. if not set, all signatures are verified
-      --verifier-spec string        path to an optional verifier specification file
+      --verifier-spec string        path to an optional verifier specification file. If empty, defaults to an empty RSASSA-PSS configuration.
       --verify-digest-consistency   verify that all digests match the descriptor before verifying the signature itself (default true)
 ```
 
