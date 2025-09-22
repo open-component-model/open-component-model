@@ -17,15 +17,15 @@ type Helm struct {
 	Path string `json:"path"`
 
 	// Repository field property can be used to specify the repository hint for the generated local artifact access.
-	// It is prefixed by the component name, if	it does not start with slash "/".
+	// It is prefixed by the component name if it does not start with slash "/".
 	// The repository hint is a full OCI repository reference, where the helm chart needs to be uploaded to.
+	// This value will be used during chart upload.
 	Repository string `json:"repository,omitempty"`
 
 	// Version defines the version of the chart to use.
 	Version string `json:"version,omitempty"`
 
-	// HelmRepository was used in previous OCM versions specify, to if the helm chart should be loaded from
-	// a helm repository instead of the local filesystem.
+	// HelmRepository this field is used to signify the source helm repository where to download the chart from.
 	HelmRepository string `json:"helmRepository,omitempty"`
 
 	// CACert used in combination with HelmRepository to specify a TLS root certificate to access the source helm repository.
