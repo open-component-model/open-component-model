@@ -141,3 +141,11 @@ type HealthCheckable interface {
 	// is properly configured. It performs a lightweight check without modifying the repository.
 	CheckHealth(ctx context.Context) error
 }
+
+// ComponentVersionRepositorySpecProvider defines the interface for resolving repository specifications
+// based on a given component identity.
+type ComponentVersionRepositorySpecProvider interface {
+	// GetRepositorySpec returns the repository specification for the given component identity.
+	// It can use various strategies to determine the appropriate repository specification.
+	GetRepositorySpec(ctx context.Context, componentIdentity runtime.Identity) (runtime.Typed, error)
+}

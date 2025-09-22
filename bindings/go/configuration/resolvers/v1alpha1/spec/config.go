@@ -24,13 +24,13 @@ func init() {
 // Config is the new OCM configuration type for configuring glob based
 // resolvers that replace the deprecated fallback resolvers.
 //
-//   - type: resolvers.config.ocm.software
-//     resolvers:
-//   - repository:
-//     type: OCIRegistry
-//     baseUrl: ghcr.io
-//     subPath: open-component-model/components
-//     componentName: ocm.software/core/*
+//	type: resolvers.config.ocm.software
+//	resolvers:
+//	- repository:
+//	    type: OCIRegistry
+//	    baseUrl: ghcr.io
+//	    subPath: open-component-model/components
+//	    componentName: ocm.software/core/*
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -64,14 +64,14 @@ type Resolver struct {
 	// component versions.
 	Repository *runtime.Raw `json:"repository"`
 
-	// ComponentName specifies a glob pattern for matching component names.
+	// ComponentNamePattern specifies a glob pattern for matching component names.
 	// It limits the usage of the repository to resolve only components with names
 	// that match the given pattern.
 	// Examples:
 	//   - "ocm.software/core/*" (matches any component in the core namespace)
 	//   - "*.software/*/test" (matches test components in any software namespace)
 	//   - "ocm.software/core/[tc]est" (matches "test" or "cest" in core namespace)
-	ComponentName string `json:"componentName,omitempty"`
+	ComponentNamePattern string `json:"componentNamePattern,omitempty"`
 }
 
 // Lookup creates a new Config from a central V1 config.
