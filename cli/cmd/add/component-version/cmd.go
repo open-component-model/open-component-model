@@ -256,7 +256,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	var resolvers []*resolverruntime.Resolver
 	if config != nil {
-		resolvers, err = ocm.ResolversFromConfig(config)
+		resolvers, err = ocm.FallbackResolversFromConfig(config)
 		if err != nil {
 			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
 		}
