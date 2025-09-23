@@ -9,12 +9,12 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/downloader"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/registry"
@@ -39,6 +39,33 @@ const (
 	// CredentialKeyring is the key for storing the keyring name to use.
 	CredentialKeyring = "keyring"
 )
+
+const (
+	// The cost timeout references curl's default connection timeout.
+	// https://github.com/curl/curl/blob/master/lib/connect.h#L40C21-L40C21
+	// The helm commands are usually executed manually. Considering the acceptable waiting time, we reduced the entire request time to 120s.
+	DefaultHTTPTimeout = 120
+)
+
+var defaultOptions = []getter.Option{getter.WithTimeout(time.Second * DefaultHTTPTimeout)}
+
+// getterProviders returns the available getter providers.
+// This replaces the need for cli.New() and avoids the explosion of the dependency tree.
+func getterProviders() getter.Providers {
+	return getter.Providers{
+		getter.Provider{
+			Schemes: []string{"http", "https"},
+			New: func(options ...getter.Option) (getter.Getter, error) {
+				options = append(options, defaultOptions...)
+				return getter.NewHTTPGetter(options...)
+			},
+		},
+		getter.Provider{
+			Schemes: []string{registry.OCIScheme},
+			New:     getter.NewOCIGetter,
+		},
+	}
+}
 
 // ReadOnlyChart contains Helm chart contents as tgz archive, some metadata and optionally a provenance file.
 type ReadOnlyChart struct {
@@ -177,7 +204,6 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 // newReadOnlyChartFromRemote downloads a chart from a remote Helm repository
 // and creates a ReadOnlyChart from it.
 func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
-	settings := cli.New()
 	// Since this temporary folder is created with tmpDirBase as a prefix, it will be cleaned up by the caller.
 	tmpDir, err := os.MkdirTemp(tmpDirBase, "helmRemoteChart*")
 	if err != nil {
@@ -214,11 +240,12 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	opts = append(opts, getter.WithPlainHTTP(plainHTTP))
 
 	dl := &downloader.ChartDownloader{
-		Out:              os.Stderr,
-		Verify:           verify,
-		Getters:          getter.All(settings),
-		RepositoryConfig: settings.RepositoryConfig,
-		RepositoryCache:  settings.RepositoryCache,
+		Out:     os.Stderr,
+		Verify:  verify,
+		Getters: getterProviders(),
+		// set by ocm v1 originally.
+		RepositoryCache:  "/tmp/.helmcache",
+		RepositoryConfig: "/tmp/.helmrepo",
 		Options:          opts,
 		Keyring:          keyring,
 	}
