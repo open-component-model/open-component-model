@@ -46,6 +46,10 @@ type ReadOnlyChart struct {
 	Version   string
 	ChartBlob *filesystem.Blob
 	ProvBlob  *filesystem.Blob
+
+	// chartTempDir is the temporary directory where the chart is downloaded to. This is cleaned after the writer
+	// has finished with copying it later in copyChartToOCILayoutAsync.
+	chartTempDir string
 }
 
 // Option is a function that modifies Options.
@@ -253,8 +257,9 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	}
 
 	result = &ReadOnlyChart{
-		Name:    chart.Name(),
-		Version: chart.Metadata.Version,
+		Name:         chart.Name(),
+		Version:      chart.Metadata.Version,
+		chartTempDir: tmpDir,
 	}
 
 	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(savedPath); err != nil {
@@ -332,7 +337,8 @@ func copyChartToOCILayoutAsync(ctx context.Context, chart *ReadOnlyChart, w *io.
 	// err accumulates any error from copy, gzip, or layout writing.
 	var err error
 	defer func() {
-		_ = w.CloseWithError(err) // Always returns nil.
+		_ = w.CloseWithError(err)            // Always returns nil.
+		_ = os.RemoveAll(chart.chartTempDir) // Always remove the created temp folder for the chart.
 	}()
 
 	zippedBuf := gzip.NewWriter(w)
