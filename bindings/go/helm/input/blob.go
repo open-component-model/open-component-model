@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -30,7 +31,7 @@ import (
 )
 
 const (
-	HelmRepositoryType = "helmRepository"
+	HelmRepositoryType = "helmChart"
 	// CredentialCertFile is the key for storing the location of a client certificate.
 	CredentialCertFile = "certFile"
 	// CredentialKeyFile is the key for storing the location of a client private key.
@@ -47,7 +48,7 @@ type ReadOnlyChart struct {
 	ProvBlob  *filesystem.Blob
 }
 
-// OptionsFunc is a function that modifies Options.
+// Option is a function that modifies Options.
 type Option func(options *Options)
 
 // WithCredentials sets the credentials to use for the remote repository.
@@ -59,7 +60,7 @@ type Option func(options *Options)
 // - "keyring": for keyring name to use
 // - "caCert": for CA certificate
 // - "caCertFile": for CA certificate file
-func WithCredentials(credentials map[string]string) OptionsFunc {
+func WithCredentials(credentials map[string]string) Option {
 	return func(options *Options) {
 		options.Credentials = credentials
 	}
@@ -73,7 +74,7 @@ type Options struct {
 // It reads the contents from the filesystem or downloads from a remote repository,
 // then packages it as an OCI artifact. The function returns an error if neither path
 // nor helmRepository are specified, or if there are issues reading/downloading the chart.
-func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ...OptionsFunc) (blob.ReadOnlyBlob, *ReadOnlyChart, error) {
+func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ...Option) (blob.ReadOnlyBlob, *ReadOnlyChart, error) {
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
@@ -173,7 +174,7 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 // and creates a ReadOnlyChart from it.
 func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBase string, credentials map[string]string) (result *ReadOnlyChart, err error) {
 	settings := cli.New()
-	// Note: DO NOT DELETE this folder, otherwise, the later reader will fail since the source is deleted.
+	// Since this temporary folder is created with tmpDirBase as a prefix, it will be cleaned up by the caller.
 	tmpDir, err := os.MkdirTemp(tmpDirBase, "helmRemoteChart*")
 	if err != nil {
 		return nil, fmt.Errorf("error creating temporary directory: %w", err)
@@ -194,11 +195,15 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 		keyring = v
 		// We set verifyIfPossible to allow the download to run verify if keyring is defined. Without the keyring
 		// verification would not be possible at all.
+		// https://github.com/open-component-model/ocm/blob/be847549af3d2947a2c8bc2b38d51a20c2a8a9ba/api/tech/helm/downloader.go#L128
 		verify = downloader.VerifyIfPossible
 	}
 
 	var plainHTTP bool
 	if strings.HasPrefix(helmSpec.HelmRepository, "http://") {
+		slog.WarnContext(ctx, "using plain HTTP for chart download",
+			"repository", helmSpec.HelmRepository,
+		)
 		plainHTTP = true
 	}
 
