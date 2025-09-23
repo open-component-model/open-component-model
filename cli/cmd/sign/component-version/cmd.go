@@ -1,15 +1,18 @@
 package componentversion
 
 import (
-	"bytes"
 	"crypto"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
 
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
@@ -19,8 +22,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
+	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
+	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 	"ocm.software/open-component-model/cli/internal/signing"
 )
@@ -29,6 +34,7 @@ const (
 	FlagConcurrencyLimit        = "concurrency-limit"
 	FlagSignerSpec              = "signer-spec"
 	FlagSignature               = "signature"
+	FlagOutput                  = "output"
 	FlagNormalisationAlgorithm  = "normalisation"
 	FlagHashAlgorithm           = "hash"
 	FlagVerifyDigestConsistency = "verify-digest-consistency"
@@ -101,9 +107,11 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 # Force overwrite an existing signature
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature --force
 `),
-		RunE:              VerifyComponentVersion,
+		RunE:              SignComponentVersion,
 		DisableAutoGenTag: true,
 	}
+
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatYAML.String(), render.OutputFormatJSON.String()}, "output format of the resulting signature")
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, DefaultSignatureName, "name of the signature to create or update. defaults to \"default\"")
@@ -127,145 +135,201 @@ func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error 
 	return nil
 }
 
-func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
+func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
+
 	logger, err := log.GetBaseLogger(cmd)
 	if err != nil {
 		return fmt.Errorf("getting base logger failed: %w", err)
 	}
 
-	pluginManager := ocmctx.FromContext(ctx).PluginManager()
+	ocmContext := ocmctx.FromContext(ctx)
+	if ocmContext == nil {
+		return fmt.Errorf("no OCM context found")
+	}
+
+	pluginManager := ocmContext.PluginManager()
 	if pluginManager == nil {
-		return fmt.Errorf("could not retrieve plugin manager from context")
+		return fmt.Errorf("plugin manager not available in context")
 	}
 
-	credentialGraph := ocmctx.FromContext(ctx).CredentialGraph()
+	credentialGraph := ocmContext.CredentialGraph()
 	if credentialGraph == nil {
-		return fmt.Errorf("could not retrieve credential graph from context")
+		return fmt.Errorf("credential graph not available in context")
 	}
 
-	signatureName, err := cmd.Flags().GetString(FlagSignature)
-	if err != nil {
-		return fmt.Errorf("getting signature name flag failed: %w", err)
+	// flags
+	signatureName, _ := cmd.Flags().GetString(FlagSignature)
+	if signatureName == "" {
+		signatureName = DefaultSignatureName
 	}
+	verifyDigestConsistency, _ := cmd.Flags().GetBool(FlagVerifyDigestConsistency)
+	signerSpecPath, _ := cmd.Flags().GetString(FlagSignerSpec)
+	force, _ := cmd.Flags().GetBool(FlagForce)
+	dryRun, _ := cmd.Flags().GetBool(FlagDryRun)
 
-	verifyDigestConsistency, err := cmd.Flags().GetBool(FlagVerifyDigestConsistency)
-	if err != nil {
-		return fmt.Errorf("getting verify-digest-consistency flag failed: %w", err)
-	} else if !verifyDigestConsistency {
+	if !verifyDigestConsistency {
 		logger.WarnContext(ctx, "digest consistency verification is disabled")
 	}
 
-	signerSpecPath, err := cmd.Flags().GetString(FlagSignerSpec)
-	if err != nil {
-		return fmt.Errorf("getting signer-spec flag failed: %w", err)
-	}
-
-	reference := args[0]
-	config := ocmctx.FromContext(ctx).Configuration()
-
-	//nolint:staticcheck // no replacement for resolvers available yet
-	var resolvers []*resolverruntime.Resolver
-	if config != nil {
-		resolvers, err = ocm.ResolversFromConfig(config)
-		if err != nil {
-			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
+	ref := args[0]
+	var resolvers []*resolverruntime.Resolver //nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
+	if cfg := ocmContext.Configuration(); cfg != nil {
+		if resolvers, err = ocm.ResolversFromConfig(cfg); err != nil {
+			return fmt.Errorf("resolvers from configuration failed: %w", err)
 		}
 	}
-	repo, err := ocm.NewFromRefWithFallbackRepo(ctx, pluginManager, credentialGraph, resolvers, reference, compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
+
+	repo, err := ocm.NewFromRefWithFallbackRepo(
+		ctx, pluginManager, credentialGraph, resolvers, ref,
+		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite),
+	)
 	if err != nil {
-		return fmt.Errorf("could not initialize ocm repository: %w", err)
+		return fmt.Errorf("initializing repository failed: %w", err)
 	}
 
 	desc, err := repo.GetComponentVersion(ctx)
 	if err != nil {
-		return fmt.Errorf("getting component reference and versions failed: %w", err)
+		return fmt.Errorf("getting component version failed: %w", err)
 	}
 
 	if verifyDigestConsistency {
 		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-			logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
+			logger.WarnContext(ctx, "component version not safely digestible", "error", err.Error())
 		}
+		// TODO(jakobmoellerdev): add full recursion check on all references here based on repo / resolvers
 	}
 
-	var signerSpec runtime.Typed
-	if signerSpecPath == "" {
-		logger.InfoContext(ctx, "no signer specification file given, using default RSASSA-PSS")
-		signerSpec = &v1alpha1.Config{}
-		_, _ = v1alpha1.Scheme.DefaultType(signerSpec)
-	} else {
-		genericScheme := runtime.NewScheme(runtime.WithAllowUnknown())
-		specBytes, err := os.ReadFile(signerSpecPath)
-		if err != nil {
-			return fmt.Errorf("reading signer specification file %q failed: %w", signerSpecPath, err)
-		}
-		signerSpec = &runtime.Raw{}
-		if err := genericScheme.Decode(bytes.NewReader(specBytes), signerSpec); err != nil {
-			return fmt.Errorf("decoding signer specification file %q failed: %w", signerSpecPath, err)
-		}
+	// signer spec
+	signerSpec, err := loadSignerSpec(signerSpecPath, logger)
+	if err != nil {
+		return err
 	}
 
 	handler, err := pluginManager.SigningRegistry.GetPlugin(ctx, signerSpec)
 	if err != nil {
-		return fmt.Errorf("getting signature handler plugin failed: %w", err)
+		return fmt.Errorf("getting signature handler failed: %w", err)
 	}
 
-	if signatureName == "" {
-		logger.InfoContext(ctx, "no signature name given, using default", "name", "default")
-		signatureName = "default"
-	}
-	sigExists := func(signature descruntime.Signature) bool {
-		return signature.Name == signatureName
-	}
-
+	// existing signature check
+	sigExists := func(sig descruntime.Signature) bool { return sig.Name == signatureName }
 	if slices.ContainsFunc(desc.Signatures, sigExists) {
-		if force, _ := cmd.Flags().GetBool(FlagForce); force {
-			logger.InfoContext(ctx, "overwriting existing signature due to --force", "name", signatureName)
-		} else {
-			return fmt.Errorf("signature with name %q already exists", signatureName)
+		if !force {
+			return fmt.Errorf("signature %q already exists", signatureName)
 		}
+		logger.InfoContext(ctx, "overwriting existing signature", "name", signatureName)
 	}
 
-	unsignedDigestSpec, err := signing.GenerateDigest(ctx, desc, logger, cmd.Flag(FlagNormalisationAlgorithm).Value.String(), cmd.Flag(FlagHashAlgorithm).Value.String())
+	// digest
+	unsignedDigest, err := signing.GenerateDigest(
+		ctx, desc, logger,
+		cmd.Flag(FlagNormalisationAlgorithm).Value.String(),
+		cmd.Flag(FlagHashAlgorithm).Value.String(),
+	)
 	if err != nil {
 		return fmt.Errorf("generating digest failed: %w", err)
 	}
 
-	var credentials map[string]string
-	if consumerID, err := handler.GetSigningCredentialConsumerIdentity(ctx, signatureName, *unsignedDigestSpec, signerSpec); err == nil {
-		if credentials, err = credentialGraph.Resolve(ctx, consumerID); err != nil {
+	// credentials
+	credentials := map[string]string{}
+	if consumerID, err := handler.GetSigningCredentialConsumerIdentity(ctx, signatureName, *unsignedDigest, signerSpec); err == nil {
+		if creds, err := credentialGraph.Resolve(ctx, consumerID); err == nil {
+			credentials = creds
+			logger.DebugContext(ctx, "using discovered credentials", "attributes", slices.Collect(maps.Keys(credentials)))
+		} else {
 			logger.DebugContext(ctx, "could not resolve credentials", "error", err.Error())
 		}
 	}
 
-	if len(credentials) > 0 {
-		logger.DebugContext(ctx, "using discovered credentials for signing", "attributes", slices.Collect(maps.Keys(credentials)))
-	}
-
-	signature, err := handler.Sign(ctx, *unsignedDigestSpec, signerSpec, credentials)
+	// sign
+	sigBytes, err := handler.Sign(ctx, *unsignedDigest, signerSpec, credentials)
 	if err != nil {
-		return fmt.Errorf("creating signature failed: %w", err)
+		return fmt.Errorf("signing failed: %w", err)
 	}
 
-	if dryRun, _ := cmd.Flags().GetBool(FlagDryRun); dryRun {
-		logger.InfoContext(ctx, "signature update skipped due to dry run")
+	out := descruntime.Signature{
+		Name:      signatureName,
+		Digest:    *unsignedDigest,
+		Signature: sigBytes,
+	}
+
+	if err := printSignature(cmd, out); err != nil {
+		return err
+	}
+
+	if dryRun {
+		logger.InfoContext(ctx, "dry run: signature not persisted")
 		return nil
 	}
 
+	// persist signature
 	if idx := slices.IndexFunc(desc.Signatures, sigExists); idx >= 0 {
-		desc.Signatures[idx].Signature = signature
+		desc.Signatures[idx] = out
 	} else {
-		desc.Signatures = append(desc.Signatures, descruntime.Signature{
-			Name:      signatureName,
-			Digest:    *unsignedDigestSpec,
-			Signature: signature,
-		})
+		desc.Signatures = append(desc.Signatures, out)
 	}
 
 	if err := repo.ComponentVersionRepository().AddComponentVersion(ctx, desc); err != nil {
-		return fmt.Errorf("updating component version with signature failed: %w", err)
+		return fmt.Errorf("updating component version failed: %w", err)
 	}
 
-	logger.InfoContext(ctx, "signed successfully", "name", signatureName, "digest", unsignedDigestSpec.Value, "hashAlgorithm", unsignedDigestSpec.HashAlgorithm, "normalisationAlgorithm", unsignedDigestSpec.NormalisationAlgorithm)
+	logger.InfoContext(ctx, "signed successfully",
+		"name", signatureName,
+		"digest", unsignedDigest.Value,
+		"hashAlgorithm", unsignedDigest.HashAlgorithm,
+		"normalisationAlgorithm", unsignedDigest.NormalisationAlgorithm,
+	)
+	return nil
+}
+
+func loadSignerSpec(path string, logger *slog.Logger) (_ runtime.Typed, err error) {
+	if path == "" {
+		logger.Info("no signer spec file provided, using default RSASSA-PSS")
+		spec := &v1alpha1.Config{}
+		_, _ = v1alpha1.Scheme.DefaultType(spec)
+		return spec, nil
+	}
+
+	data, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading signer spec %q failed: %w", path, err)
+	}
+	defer func() {
+		err = errors.Join(err, data.Close())
+	}()
+
+	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+	raw := &runtime.Raw{}
+	if err := scheme.Decode(data, raw); err != nil {
+		return nil, fmt.Errorf("decoding signer spec %q failed: %w", path, err)
+	}
+	return raw, nil
+}
+
+func printSignature(cmd *cobra.Command, sig descruntime.Signature) error {
+	output, err := enum.Get(cmd.Flags(), FlagOutput)
+	if err != nil {
+		return fmt.Errorf("getting output flag failed: %w", err)
+	}
+
+	v2sig := descruntime.ConvertToV2Signature(&sig)
+
+	switch strings.ToLower(output) {
+	case render.OutputFormatJSON.String():
+		b, err := json.MarshalIndent(v2sig, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshalling signature to json failed: %w", err)
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), string(b))
+	case render.OutputFormatYAML.String():
+		b, err := yaml.Marshal(v2sig)
+		if err != nil {
+			return fmt.Errorf("marshalling signature to yaml failed: %w", err)
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), string(b))
+	default:
+		return fmt.Errorf("unsupported output format %q (supported: json|yaml|text)", output)
+	}
+
 	return nil
 }

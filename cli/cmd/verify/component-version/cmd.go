@@ -110,12 +110,17 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting base logger failed: %w", err)
 	}
 
-	pluginManager := ocmctx.FromContext(ctx).PluginManager()
+	ocmContext := ocmctx.FromContext(ctx)
+	if ocmContext == nil {
+		return fmt.Errorf("no OCM context found")
+	}
+
+	pluginManager := ocmContext.PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not retrieve plugin manager from context")
 	}
 
-	credentialGraph := ocmctx.FromContext(ctx).CredentialGraph()
+	credentialGraph := ocmContext.CredentialGraph()
 	if credentialGraph == nil {
 		return fmt.Errorf("could not retrieve credential graph from context")
 	}
@@ -143,7 +148,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	config := ocmctx.FromContext(ctx).Configuration()
+	config := ocmContext.Configuration()
 
 	//nolint:staticcheck // no replacement for resolvers available yet
 	var resolvers []*resolverruntime.Resolver
