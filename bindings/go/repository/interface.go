@@ -165,7 +165,7 @@ type ComponentLister interface {
 	// If the underlying store implementation does not support pagination, it may decide to ignore
 	// this parameter, and to return the list from the first element.
 	//
-	// The signature is compatible with ORAS TagLister:
+	// The signature is inspired by ORAS TagLister interface:
 	// https://pkg.go.dev/oras.land/oras-go/v2/registry@v2.6.0#TagLister
 	ListComponents(ctx context.Context, last string, fn func(names []string) error) error
 }
