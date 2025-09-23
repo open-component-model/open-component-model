@@ -9,6 +9,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
+	repov1 "ocm.software/open-component-model/bindings/go/repository"
 
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -145,7 +146,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
 	var resolvers []*resolverruntime.Resolver
 	if config != nil {
-		resolvers, err = ocm.ResolversFromConfig(config)
+		resolvers, err = ocm.FallbackResolversFromConfig(config)
 		if err != nil {
 			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
 		}
@@ -286,7 +287,7 @@ func buildTableFormatSerializer() list.ListSerializer[string] {
 	})
 }
 
-func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repo *ocm.ComponentRepository, recursive int) syncdag.DiscoverNeighborsFunc[string] {
+func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repo *ocm.ComponentRepository, repoSpecProvider repov1.ComponentVersionRepositorySpecProvider, recursive int) syncdag.DiscoverNeighborsFunc[string] {
 	switch {
 	case recursive != 0:
 		return func(ctx context.Context, v string) ([]string, error) {
@@ -297,6 +298,12 @@ func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repo *o
 			id, _ := runtime.ParseIdentity(v)
 			// root descriptors are already known
 			if untypedDesc, ok := vertex.GetAttribute(descriptorAttribute); !ok {
+				//  if newResolver != nil {
+				// 	repoSpec, err := repoSpecProvider.GetRepositorySpec(ctx, id)
+				// get repo from plugin mng GetComponentVersionRegistry. (look im code)
+				// // TODO erro blabal
+				// else old kram
+
 				desc, err = repo.ComponentVersionRepository().GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
 				if err != nil {
 					return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
