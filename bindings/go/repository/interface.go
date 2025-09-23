@@ -149,3 +149,23 @@ type ComponentVersionRepositorySpecProvider interface {
 	// It can use various strategies to determine the appropriate repository specification.
 	GetRepositorySpec(ctx context.Context, componentIdentity runtime.Identity) (runtime.Typed, error)
 }
+
+// ComponentLister defines the interface for listing OCM components in an OCI store.
+// It is an optional interface that can be implemented to expose the contents of a specific store,
+// e.g. of a CTF archive, of a Docker catalog etc.
+type ComponentLister interface {
+	// ListComponents lists names of OCM components contained in the OCM store.
+	//
+	// If the underlying store implementation supports pagination, the callback function `fn` is called
+	// for every page of the result. Otherwise, the complete list is retrieved and provided
+	// to the callback function at once.
+	//
+	// The `last` parameter is an index number. If it is not empty, the entries from 0 to this number
+	// will be excluded from the returned list. Otherwise, the results will contain the compete list.
+	// If the underlying store implementation does not support pagination, it may decide to ignore
+	// this parameter, and to return the list from the first element.
+	//
+	// The signature is compatible with ORAS TagLister:
+	// https://pkg.go.dev/oras.land/oras-go/v2/registry@v2.6.0#TagLister
+	ListComponents(ctx context.Context, last string, fn func(names []string) error) error
+}
