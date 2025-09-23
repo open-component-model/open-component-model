@@ -48,7 +48,7 @@ type ReadOnlyChart struct {
 }
 
 // OptionsFunc is a function that modifies Options.
-type OptionsFunc func(options *Options)
+type Option func(options *Options)
 
 // WithCredentials sets the credentials to use for the remote repository.
 // The credentials could contain the following keys:
