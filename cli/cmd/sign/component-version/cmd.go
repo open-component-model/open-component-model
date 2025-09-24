@@ -84,6 +84,23 @@ Behavior:
 * If --signature is omitted, the default signature name "default" is used.
 * If --signer-spec is omitted, the default RSASSA-PSS plugin is used (without auto-generated key material)
 
+Note that the signature can only be generated when supplied with private key material fitting to the signature algorithm.
+An example credential configuration that can be used for the default signature configuration:
+
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: default
+    credentials:
+    - type: Credentials/v1
+      properties:
+        public_key_pem: <PEM> 
+        private_key_pem: <PEM>
+
 Use this command in automated pipelines or interactive workflows to
 establish provenance of component versions and prepare them for downstream
 verification. Also use it for testing integrity workflows.`,
@@ -283,8 +300,11 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 
 func loadSignerSpec(path string, logger *slog.Logger) (_ runtime.Typed, err error) {
 	if path == "" {
-		logger.Info("no signer spec file provided, using default RSASSA-PSS")
-		spec := &v1alpha1.Config{}
+		spec := &v1alpha1.Config{
+			SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
+			SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
+		}
+		logger.Info("no signer spec file provided, using default", "algorithm", spec.SignatureAlgorithm, "encodingPolicy", spec.SignatureEncodingPolicy)
 		_, _ = v1alpha1.Scheme.DefaultType(spec)
 		return spec, nil
 	}

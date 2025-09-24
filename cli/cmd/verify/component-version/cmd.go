@@ -12,6 +12,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
+
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -171,6 +172,22 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
 
+	var sigs []descruntime.Signature
+	if signatureName != "" {
+		for _, sig := range desc.Signatures {
+			if sig.Name == signatureName {
+				sigs = append(sigs, sig)
+				break
+			}
+		}
+	} else {
+		sigs = desc.Signatures
+	}
+
+	if len(sigs) == 0 {
+		return fmt.Errorf("no signatures found to verify")
+	}
+
 	if verifyDigestConsistency {
 		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 			logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
@@ -202,18 +219,6 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	handler, err := pluginManager.SigningRegistry.GetPlugin(ctx, verifierSpec)
 	if err != nil {
 		return fmt.Errorf("getting signature handler plugin failed: %w", err)
-	}
-
-	var sigs []descruntime.Signature
-	if signatureName != "" {
-		for _, sig := range desc.Signatures {
-			if sig.Name == signatureName {
-				sigs = append(sigs, sig)
-				break
-			}
-		}
-	} else {
-		sigs = desc.Signatures
 	}
 
 	eg, egctx := errgroup.WithContext(ctx)
@@ -272,8 +277,14 @@ func verifyResourceDigest(cmd *cobra.Command, resource descruntime.Resource, plu
 		return nil
 	}
 
+	// TODO(jakobmoellerdev): Get ready for a long explanation on this one
+	//  Technically it would be best here to offer something like a LocalResourceDigestProcessor,
+	//  but that would require a lot of refactoring and plugin work. Instead I choose here to opinionate on CTF/OCI
+	//  localReference formats which are always open container digests. I am well aware this could break in other OCM
+	//  repository implementations but want to take things step by step.
 	var local v2.LocalBlob
 	if err := v2.Scheme.Convert(resource.Access, &local); err == nil {
+		logger.DebugContext(ctx, "resource is local, using digest from local reference as shortcut validation", "identity", resource.ToIdentity())
 		containerDig, err := digest.Parse(local.LocalReference)
 		if err != nil {
 			return fmt.Errorf("parsing local resource digest %q failed: %w", local.LocalReference, err)
@@ -282,6 +293,7 @@ func verifyResourceDigest(cmd *cobra.Command, resource descruntime.Resource, plu
 			return fmt.Errorf("resource digest mismatch for local resource %q: expected %s, got %s", resource.Name, resource.Digest.Value, containerDig.Encoded())
 		}
 	} else {
+		logger.DebugContext(ctx, "validating resource digest via processor", "identity", resource.ToIdentity())
 		processor, err := pluginManager.DigestProcessorRegistry.GetPlugin(cmd.Context(), resource.Access)
 		if err != nil {
 			return fmt.Errorf("getting digest processor for resource %q failed: %w", resource.Name, err)
