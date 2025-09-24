@@ -52,7 +52,6 @@ func NewComponentLister(archive ctf.CTF, opts ...ComponentListerOption) (*CTFCom
 }
 
 // ListComponents lists all unique component names found in the CTF archive.
-// If SortAlphabetically option is set, the names are sorted alphabetically.
 // The function does not support pagination and returns the complete list at once.
 // Thus, the `last` parameter and the `NameListPageSize` listing option are ignored.
 func (l *CTFComponentLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
