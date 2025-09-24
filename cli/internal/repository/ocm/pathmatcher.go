@@ -5,63 +5,71 @@ import (
 	"fmt"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverspec.Resolver, componentReference string) (*ComponentRepository, error) {
+func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverspec.Resolver, componentReference string) (ComponentRepositoryProvider, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
 	if len(resolvers) == 0 {
-		//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 		resolvers = make([]*resolverspec.Resolver, 0)
 	}
 
 	if ref.Repository != nil {
-		raw := &runtime.Raw{} // TODO figure out
+		raw := &runtime.Raw{} // TODO #575 figure out how to convert ref.Repository to raw
 
 		resolvers = append(resolvers, &resolverspec.Resolver{
 			Repository:           raw,
-			ComponentNamePattern: componentReference,
+			ComponentNamePattern: ref.Component,
 		})
 	}
 
 	provider := pathmatcher.NewSpecProvider(ctx, resolvers)
-	return &ComponentRepository{
-		ref:  ref,
-		base: nil, //TODO: figure out
+
+	return func(ctx context.Context, identity runtime.Identity) (*ComponentRepository, error) {
+		componentIdentity := runtime.Identity{
+			descruntime.IdentityAttributeName: ref.Component,
+		}
+		repoSpec, err := provider.GetRepositorySpec(ctx, componentIdentity)
+		if err != nil {
+			return nil, fmt.Errorf("getting repository spec for component reference %q failed: %w", componentReference, err)
+		}
+		consumerIdentity, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
+		credMap, err := graph.Resolve(ctx, consumerIdentity)
+		if err != nil {
+			return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", ref.Repository, err)
+		}
+		base, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, repoSpec, credMap)
+		if err != nil {
+			return nil, fmt.Errorf("getting component version repository for %q failed: %w", ref.Repository, err)
+		}
+
+		return &ComponentRepository{
+			ref:  ref,
+			base: base,
+		}, nil
 	}, nil
 }
 
-//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 func ResolversFromConfig(config *genericv1.Config) ([]*resolverspec.Resolver, error) {
 	filtered, err := genericv1.FilterForType[*resolverspec.Config](resolverv1.Scheme, config)
 	if err != nil {
 		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
 	}
-	resolverConfigV1 := resolverspec.Merge(filtered...)
 
-	resolverConfig, err := resolverruntime.ConvertFromV1(ocirepository.Scheme, resolverConfigV1)
-	if err != nil {
-		return nil, fmt.Errorf("converting resolver configuration from v1 to runtime failed: %w", err)
+	result := make([]*resolverspec.Resolver, 0, len(filtered))
+	for _, r := range filtered {
+		result = append(result, r.Resolvers...)
 	}
-	var resolvers []*resolverruntime.Resolver
-	if resolverConfig != nil && len(resolverConfig.Resolvers) > 0 {
-		resolvers = make([]*resolverruntime.Resolver, len(resolverConfig.Resolvers))
-		for index, resolver := range resolverConfig.Resolvers {
-			resolvers[index] = &resolver
-		}
-	}
-	return resolvers, nil
+
+	return result, nil
 }

@@ -22,6 +22,10 @@ import (
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
+// ComponentRepositoryProvider is a function type that provides a ComponentVersionRepository
+// based on the given context and identity.
+type ComponentRepositoryProvider func(ctx context.Context, identity runtime.Identity) (*ComponentRepository, error)
+
 // ComponentRepository is a wrapper around the [v1.ReadWriteOCMRepositoryPluginContract] that provides
 // useful CLI relevant helper functions that make high level operations easier.
 // It manages component references, repository specifications, and credentials for OCM operations.
