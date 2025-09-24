@@ -1,0 +1,293 @@
+# Plugin registry
+
+* **Status**: proposed
+* **Deciders**: Plugin registry with automatic plugin discovery
+* **Date**: 2025.09.24
+
+**Technical Story**:
+Provide a way to distribute, download, and discover plugins for OCM.
+
+---
+
+## Context and Problem Statement
+
+Right now, if you want to download an OCM plugin, you need to know exactly where it lives and what it's called.
+For example:
+
+```shell
+ocm download plugin ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0 --resource-name demo
+```
+
+Compare this to other ecosystems like helm or npm, where you can simply run `helm install my-chart` or `npm install package-name`.
+
+What we need is a way for users to discover plugins from registries, install them by name, and manage them like any other package manager would.
+We also want to support multiple registries so enterprises can have their own private plugin collections alongside public ones.
+
+---
+
+## Decision Drivers
+
+We want to reuse as much of OCM's existing infrastructure as possible rather than reinventing the wheel.
+The plugin download mechanism already works well, and component versions are a core part of how OCM operates.
+
+We also need this to feel native to OCM, using component versions, references, and credentials the way everything else does.
+It should scale to support multiple registries, including private ones that enterprises need.
+We can also leverage OCM's sign/verify system for verifying plugins.
+
+---
+
+## Outcome
+
+TBD
+
+---
+
+## ComponentVersion based plugins system
+
+### Registry Component Structure
+
+The Component Version approach treats a plugin registry like any other OCM component, but instead of containing resources directly, it contains references to individual plugin components.
+Think of it as a table of contents that points to where all the plugins actually live:
+
+```yaml
+# Registry Component: ghcr.io/ocm/registry//ocm.software/plugin-registry:v1.0.0
+name: ocm.software/plugin-registry
+version: v1.0.0
+provider: ocm.software
+
+references:
+  - name: ecrplugin
+    version: 0.27.0
+    component: ocm.software/plugins/ecrplugin
+    digest:
+      hashAlgorithm: SHA-256
+      value: abc123...
+  - name: helminput
+    version: 0.5.2
+    component: ocm.software/plugins/helminput
+    digest:
+      hashAlgorithm: SHA-256
+      value: def456...
+  - name: cvedb
+    version: 1.2.0
+    component: enterprise.corp/plugins/cvedb
+    digest:
+      hashAlgorithm: SHA-256
+      value: ghi789...
+
+resources:
+  - name: registry-metadata
+    type: blob
+    version: v1.0.0
+    access:
+      type: localBlob
+      localReference: sha256:...
+    # Contains plugin descriptions, categories, etc.
+```
+
+### Individual Plugin Component Structure
+
+Each plugin is just a regular OCM component version containing the actual plugin binaries for different platforms.
+This part doesn't change from how plugins work now:
+
+```yaml
+# Plugin Component: ghcr.io/ocm/registry//ocm.software/plugins/ecrplugin:0.27.0
+name: ocm.software/plugins/ecrplugin
+version: 0.27.0
+provider: ocm.software
+
+resources:
+  - name: demo                    # Plugin binary name
+    type: ocmPlugin
+    version: 0.27.0
+    extraIdentity:
+      architecture: amd64
+      os: linux
+    access:
+      type: localBlob
+      localReference: sha256:ac3f34...
+  - name: demo
+    type: ocmPlugin
+    version: 0.27.0
+    extraIdentity:
+      architecture: amd64
+      os: darwin
+    access:
+      type: localBlob
+      localReference: sha256:f1764c...
+  # ... additional platforms
+
+  - name: plugin-metadata        # Plugin description
+    type: blob
+    version: 0.27.0
+    access:
+      type: localBlob
+      localReference: sha256:...
+    # Contains: description, usage, capabilities, etc.
+```
+
+## User Workflow
+
+These are general flows regardless of the registry implementation.
+
+CLI command could be added that updated user's configuration with the repository:
+
+```bash
+ocm plugin registry add official ghcr.io/ocm/registry//ocm.software/plugin-registry:v1.0.0
+```
+
+Or, the user can configure it manually:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+- type: plugin.registry.config.ocm.software
+  registries:
+  - name: official
+    url: ghcr.io/ocm/registry//ocm.software/plugin-registry:v1.0.0
+  - name: enterprise
+    url: internal.corp/registry//enterprise.plugins/registry:latest
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[3]q
+        password: %[4]q
+```
+
+From there, the user can list plugins from the registry:
+
+```bash
+ocm plugin registry list
+NAME         VERSION   DESCRIPTION                     REGISTRY
+ecrplugin    0.27.0    AWS ECR repository plugin       official
+helminput    0.5.2     Helm input method plugin        official
+cvedb        1.2.0     CVE database integration        enterprise
+```
+
+And install plugins by name:
+
+```bash
+ocm plugin registry install ecrplugin
+# This automatically resolves to ocm.software/plugins/ecrplugin:0.27.0,
+# downloads the right binary for your platform, and installs it to ~/.ocm/plugins/
+
+# Or install a specific version if you need to
+ocm plugin registry install ecrplugin@0.26.0
+```
+
+New plugins can be published to the registry by simply pushing a new component version to the registry:
+
+```bash
+# Publish a new version of the plugin
+ocm plugin registry push ocm.software/plugins/ecrplugin:0.28.0
+```
+
+## Alternative manifest-based plugins system
+
+### Registry Index Structure
+
+The alternative approach works more like Helm chart repositories, basically a manifest file hosted somewhere that lists
+all the available plugins and where to download them from:
+
+```yaml
+# https://plugins.ocm.software/index.yaml
+apiVersion: v1
+entries:
+  ecrplugin:
+    - name: ecrplugin
+      version: 0.27.0
+      description: AWS ECR repository plugin
+      home: https://github.com/ocm/ecrplugin
+      sources:
+        - https://github.com/ocm/ecrplugin
+      created: "2025-09-01T10:00:00Z"
+      digest: sha256:abc123...
+      downloads:
+        - os: linux
+          architecture: amd64
+          url: https://plugins.ocm.software/ecrplugin/0.27.0/ecrplugin-linux-amd64
+          sha256: ac3f340100668ff6e6c8f43284b6763893d652edb2333f9a8e97f21478c3e393
+        - os: darwin
+          architecture: amd64
+          url: https://plugins.ocm.software/ecrplugin/0.27.0/ecrplugin-darwin-amd64
+          sha256: f1764c6d84cdcae35886d02441de1cc81c7df02a3f5bb7710a1418bfe1b985c0
+        - os: windows
+          architecture: amd64
+          url: https://plugins.ocm.software/ecrplugin/0.27.0/ecrplugin-windows-amd64.exe
+          sha256: c81bf976fec0007476b738af769947e75544ca1661369e8d30403bab6553224e
+
+  helmInput:
+    - name: helmInput
+      version: 0.5.2
+      description: Helm input method plugin
+      home: https://github.com/ocm/helmInput
+      created: "2025-08-15T14:30:00Z"
+      digest: sha256:def456...
+      downloads:
+        - os: linux
+          architecture: amd64
+          url: https://plugins.ocm.software/helminput/0.5.2/helminput-linux-amd64
+          sha256: 112f227eb5310d4b9f85c0bf5ca0ad97464c0ea3f54c936bdecdebba01143c6a
+
+generated: "2025-09-24T10:00:00Z"
+```
+
+### Index Generation
+
+Registry maintainers update the index by:
+
+```bash
+# Generate index.yaml from plugin directory
+ocm plugin registry generate-index ./plugins/ > index.yaml
+
+# Upload to registry
+aws s3 cp index.yaml s3://plugins.ocm.software/
+aws s3 sync ./plugins/ s3://plugins.ocm.software/
+```
+
+---
+
+## Pros and Cons
+
+### Component Version Registry Approach
+
+#### Pros
+
+The component version approach has some really nice benefits.
+It integrates natively with everything OCM already does; repositories, credentials, signatures.
+You get verification through OCM's signature system.
+It can include private registries and enterprise deployments, and it's consistent with how other OCM artifacts work.
+
+The best part is that we can reuse about 90% of the existing `ocm download plugin` implementation, and existing workflows keep working.
+Component descriptors also give you metadata, labels, and provenance information.
+
+#### Cons
+
+It does require some OCM knowledge to host registries.
+Plugin publishers need to understand component versions, and setting up registries requires OCM tooling.
+There's also a bit more metadata overhead compared to simple file downloads.
+
+### Manifest Index Registry Approach
+
+#### Pros
+
+The manifest approach has the advantage of being familiar with existing systems like helm, npm, etc, that people already know.
+It's simple for plugin authors to publish binaries, lightweight in terms of metadata, and you can host it on simple web servers, CDNs, or object storage.
+You don't need any OCM knowledge to set up a registry.
+
+#### Cons
+
+We'd need to build all the code. Meaning, caching, authentication, and all that.
+It's inconsistent with how other OCM artifacts work, provides less structured metadata about plugins, and doesn't have
+built-in integrity verification beyond basic checksums.
+
+## Conclusion
+
+Recommendation: Component Version Registry Approach
+
+Reasons:
+
+1. Uses a lot of existing code
+2. Uses OCM's sign/verify flow for plugins
+3. Consistent with existing OCM ecosystem, like landscaper.
+4. Authentication, creds, everything already exists.
