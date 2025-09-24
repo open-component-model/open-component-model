@@ -160,12 +160,15 @@ type ComponentLister interface {
 	// for every page of the result. Otherwise, the complete list is retrieved and provided
 	// to the callback function at once.
 	//
-	// The `last` parameter is an index number. If it is not empty, the entries from 0 to this number
-	// will be excluded from the returned list. Otherwise, the results will contain the complete list.
-	// If the underlying store implementation does not support pagination, it may decide to ignore
-	// this parameter, and to return the list from the first element.
+	// The `last` parameter is the value of the last element of the previous page.
+	// If `last` is NOT empty, the entries in the returned list start after the component name specified by `last`.
+	// Otherwise, the results start from the top of the component list.
+	// If the underlying store implementation does not support pagination, it may ignore this parameter,
+	// and return the complete list.
 	//
 	// The signature is inspired by ORAS TagLister interface:
 	// https://pkg.go.dev/oras.land/oras-go/v2/registry@v2.6.0#TagLister
+	// See also:
+	// https://distribution.github.io/distribution/spec/api/#tags-paginated
 	ListComponents(ctx context.Context, last string, fn func(names []string) error) error
 }
