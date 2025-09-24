@@ -14,13 +14,13 @@ require (
 	golang.org/x/crypto v0.42.0
 	helm.sh/helm/v3 v3.19.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
-	ocm.software/open-component-model/bindings/go/configuration v0.0.8
+	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250919174641-be28d8d1c750
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
 	ocm.software/open-component-model/bindings/go/plugin v0.0.6
-	ocm.software/open-component-model/bindings/go/repository v0.0.1
+	ocm.software/open-component-model/bindings/go/repository v0.0.2-0.20250919174641-be28d8d1c750
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	ocm.software/open-component-model/cli v0.0.0-20250919174641-be28d8d1c750
 	oras.land/oras-go/v2 v2.6.0
