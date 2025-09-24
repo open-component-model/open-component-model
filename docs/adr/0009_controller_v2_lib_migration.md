@@ -243,6 +243,49 @@ This combination of flow and sequence views makes it clear that:
 - Deduplication and bounded concurrency ensure scalability and safety.
 - The new OCM reference library is the single backend integration point.
 
+#### On Caching Component Versions
+
+Caching component versions is critical to achieving both performance and correctness in the migration.  
+The design must balance fast lookups with safe invalidation to prevent stale or inconsistent results.
+
+##### Cache Key Generation
+
+Cache keys must uniquely and deterministically represent all inputs relevant to resolution:
+
+- **Configuration inputs**: Repository access credentials, secrets, or configuration objects that affect resolution.
+- **Repository specification**: Canonicalized representation of repository type, URL, and options.
+- **Component identity**: Name and version of the component.
+
+Keys are generated as follows:
+
+`Compute key = SHA-256(Canonical(config) + Canonical(repoSpec) + componentName + version)`
+
+1. Serialize each input deterministically (e.g., canonical JSON with sorted keys).
+2. Concatenate serialized inputs in a fixed order.
+3. Compute a stable digest (e.g., SHA-256) to produce a fixed-size cache key.
+
+This ensures that any change to configuration, repository, or component identity leads to a different cache key.
+
+##### Invalidation Strategy
+
+To ensure correctness, cache entries should be invalidated when their inputs change. To combine this with our existing
+informers in the controllers, we will add event handlers that call back to the cache for invalidation:
+
+- **Event-driven invalidation**
+  - Watch Kubernetes objects (Secrets, ConfigMaps, Repository CRs).
+  - Evict all cache entries derived from updated objects, use partial references to limit scope.
+  - Example: On Secret change, evict all entries using that Secret for repository access.
+
+- **Time-based invalidation (TTL)**
+  - Apply TTL for entries derived from all component versions due to potential updates in the repository.
+  - Example: A component version was last fetched 10 minutes ago; if TTL is 30 minutes, keep it.
+
+- **Negative caching**
+  - Cache failed lookups with a short TTL to avoid hammering failing backends.
+
+- **Hierarchical keys**
+  - Structure keys as `config -> repo → component → version` to allow partial reuse and targeted eviction.
+
 #### Benefits
 
 * **Performance**: Scales across hundreds of repositories and thousands of versions without overloading backends.
