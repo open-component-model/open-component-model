@@ -42,5 +42,3 @@ func NewFromRefWithResolvers(ctx context.Context, pluginManager *manager.PluginM
 	slog.DebugContext(ctx, "using fallback resolvers", slog.Int("count", len(fallbackResolvers)))
 	return NewFromRefWithFallbackRepo(ctx, pluginManager, credentialGraph, fallbackResolvers, componentReference)
 }
-
-// we need to get the type from config *genericv1.Config

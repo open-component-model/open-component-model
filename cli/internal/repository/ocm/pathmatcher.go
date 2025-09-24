@@ -8,13 +8,14 @@ import (
 	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
+// NewFromRefWithPathMatcher creates a new ComponentRepository instance for the given component reference.
+// It resolves the appropriate plugin and credentials for the repository.
 func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverspec.Resolver, componentReference string) (ComponentRepositoryProvider, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
@@ -36,10 +37,7 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 	provider := pathmatcher.NewSpecProvider(ctx, resolvers)
 
 	return func(ctx context.Context, identity runtime.Identity) (*ComponentRepository, error) {
-		componentIdentity := runtime.Identity{
-			descruntime.IdentityAttributeName: ref.Component,
-		}
-		repoSpec, err := provider.GetRepositorySpec(ctx, componentIdentity)
+		repoSpec, err := provider.GetRepositorySpec(ctx, identity)
 		if err != nil {
 			return nil, fmt.Errorf("getting repository spec for component reference %q failed: %w", componentReference, err)
 		}
