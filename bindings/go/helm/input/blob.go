@@ -261,7 +261,8 @@ func newReadOnlyChartFromRemote(ctx context.Context, helmSpec v1.Helm, tmpDirBas
 	// In the case of HTTP/S repositories, the version is taken from the URL.
 	version := helmSpec.Version
 	if version == "" && strings.HasPrefix(helmSpec.HelmRepository, "oci://") {
-		ref, err := looseref.ParseReference(helmSpec.HelmRepository)
+		stripped := strings.TrimPrefix(helmSpec.HelmRepository, "oci://")
+		ref, err := looseref.ParseReference(stripped)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing helm repository reference %q: %w", helmSpec.HelmRepository, err)
 		}
