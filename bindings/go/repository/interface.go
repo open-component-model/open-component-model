@@ -161,7 +161,7 @@ type ComponentLister interface {
 	// to the callback function at once.
 	//
 	// The `last` parameter is an index number. If it is not empty, the entries from 0 to this number
-	// will be excluded from the returned list. Otherwise, the results will contain the compete list.
+	// will be excluded from the returned list. Otherwise, the results will contain the complete list.
 	// If the underlying store implementation does not support pagination, it may decide to ignore
 	// this parameter, and to return the list from the first element.
 	//
