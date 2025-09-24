@@ -221,6 +221,7 @@ ocm.software/open-component-model/bindings/go/blob v0.0.9 h1:XNK04PnqvsE6KHx/04m
 ocm.software/open-component-model/bindings/go/blob v0.0.9/go.mod h1:BjErnbAzzY4mJ6cO/hIFj8Gf/v9zerkIQ1Y1XQEOB5M=
 ocm.software/open-component-model/bindings/go/configuration v0.0.8 h1:IH5ARqAwUJIV8U3l7Mv/txmjh7HbSwYMGSk9V8QlTVo=
 ocm.software/open-component-model/bindings/go/configuration v0.0.8/go.mod h1:VZ8jQ3a6oTWyOpY09C7V3L0CfzKe9i1/Z4uJjLAVjN4=
+ocm.software/open-component-model/bindings/go/configuration v0.0.9/go.mod h1:VZ8jQ3a6oTWyOpY09C7V3L0CfzKe9i1/Z4uJjLAVjN4=
 ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250919174641-be28d8d1c750 h1:24YXm17YEd69VEU63ZODf25auERwd+MDShHYf3yJ0OI=
 ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250919174641-be28d8d1c750/go.mod h1:HM4GqA8jk/LVj266QQ2Bo7Yre9nqDVMiD2EcAPhM120=
 ocm.software/open-component-model/bindings/go/credentials v0.0.2 h1:PYCu8QYgY7+KcOVLCc0TYJ5PLhXgU7+lbfcrgA0zjyE=
@@ -247,6 +248,7 @@ ocm.software/open-component-model/bindings/go/plugin v0.0.6 h1:psmz0BW00SpKJ4FJQ
 ocm.software/open-component-model/bindings/go/plugin v0.0.6/go.mod h1:I0/JRdVqQ+E2673hzVq/PDfet8wUh0UKdBXgNEvGn4g=
 ocm.software/open-component-model/bindings/go/repository v0.0.1 h1:Kt+X/AR6HDfKsCfHsEJ/9CQ+fsEXb+yuTiBu6G08cNs=
 ocm.software/open-component-model/bindings/go/repository v0.0.1/go.mod h1:VvTUl90bjymXixw9YqYhHWC/rjY+3wOj1MtldgUWa7Y=
+ocm.software/open-component-model/bindings/go/repository v0.0.2-0.20250919174641-be28d8d1c750/go.mod h1:um1nVE+7OL6p7HiTuAPH9FARSHWlroC08N3jVnJaXNY=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2 h1:YA20enOxMsk4gDWF+Anltwkc616dXebfgPz/0Bl0EKE=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
