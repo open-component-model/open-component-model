@@ -102,6 +102,32 @@ func TestListComponents(t *testing.T) {
 	}
 }
 
+func TestWithPageSize(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    int
+		expected int
+	}{
+		{"page size equals one", 1, 1},
+		{"page size equals ten", 10, 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a ComponentListerOptions instance
+			opts := &ComponentListerOptions{}
+
+			// Apply the option function
+			optionFunc := WithPageSize(tt.input)
+			optionFunc(opts)
+
+			// Verify the field was set correctly
+			if opts.NameListPageSize != tt.expected {
+				t.Errorf("Expected NameListPageSize to be %v, got %v", tt.expected, opts.NameListPageSize)
+			}
+		})
+	}
+}
+
 // NewMockCTF creates a new empty mock CTF.
 func NewMockCTF(compNames []string) *MockCTF {
 	m := &MockCTF{}
