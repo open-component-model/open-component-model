@@ -47,12 +47,6 @@ func TestListComponents(t *testing.T) {
 			expected: []string{"componentC", "componentB", "duplicate", "componentD", "componentA"},
 		},
 		{
-			name:     "SortAlphabetically option - results alphabetically sorted",
-			sort:     true,
-			input:    testData,
-			expected: []string{"componentA", "componentB", "componentC", "componentD", "duplicate"},
-		},
-		{
 			name:     "NameListPageSize option should be ignored",
 			pageSize: 2,
 			input:    testData,
@@ -86,12 +80,9 @@ func TestListComponents(t *testing.T) {
 			archive := NewMockCTF(tt.input)
 
 			// Set listing options.
-			var opts []repo.ComponentListerOption
-			if tt.sort {
-				opts = append(opts, repo.WithSortAlphabetically(tt.sort))
-			}
+			var opts []ComponentListerOption
 			if tt.pageSize > 0 {
-				opts = append(opts, repo.WithPageSize(tt.pageSize))
+				opts = append(opts, WithPageSize(tt.pageSize))
 			}
 
 			// Create an instance of the CTFComponentLister.

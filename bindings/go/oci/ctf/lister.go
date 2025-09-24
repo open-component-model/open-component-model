@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -19,23 +18,34 @@ type CTFComponentLister struct {
 	archive ctf.CTF
 
 	// options holds the configuration options for the lister.
-	options repo.ComponentListerOptions
+	options ComponentListerOptions
 }
 
 var _ repo.ComponentLister = (*CTFComponentLister)(nil)
 
+type ComponentListerOptions struct {
+	// NameListPageSize specifies the page size that should be used by the `ComponentLister` API.
+	// If zero or not set, the complete list is returned.
+	NameListPageSize int
+}
+
+type ComponentListerOption func(*ComponentListerOptions)
+
+// WithPageSize sets the page size used by component lister for the returned list.
+func WithPageSize(size int) ComponentListerOption {
+	return func(o *ComponentListerOptions) {
+		o.NameListPageSize = size
+	}
+}
+
 // NewComponentLister creates a new ComponentLister for the given CTF archive.
-func NewComponentLister(archive ctf.CTF, opts ...repo.ComponentListerOption) (*CTFComponentLister, error) {
+func NewComponentLister(archive ctf.CTF, opts ...ComponentListerOption) (*CTFComponentLister, error) {
 	lister := &CTFComponentLister{
 		archive: archive,
 	}
 
 	for _, opt := range opts {
 		opt(&lister.options)
-	}
-
-	if lister.options.Logger == nil {
-		lister.options.Logger = slog.Default().With("realm", "ctf-lister")
 	}
 
 	return lister, nil
@@ -47,20 +57,16 @@ func NewComponentLister(archive ctf.CTF, opts ...repo.ComponentListerOption) (*C
 // Thus, the `last` parameter and the `NameListPageSize` listing option are ignored.
 func (l *CTFComponentLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
 	if l.options.NameListPageSize > 0 {
-		l.logInfo(ctx, "pagination is not supported, ignoring page size option", "pageSize", l.options.NameListPageSize)
+		l.log(ctx, "pagination is not supported, ignoring page size option", "pageSize", l.options.NameListPageSize)
 	}
 
 	if last != "" {
-		l.logInfo(ctx, "pagination is not supported, ignoring 'last' parameter", "last", last)
+		l.log(ctx, "pagination is not supported, ignoring 'last' parameter", "last", last)
 	}
 
 	names, err := l.getAllNames(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to list components: %w", err)
-	}
-
-	if l.options.SortAlphabetically {
-		slices.Sort(names)
 	}
 
 	if err = fn(names); err != nil {
@@ -103,13 +109,6 @@ func (l *CTFComponentLister) getAllNames(ctx context.Context) ([]string, error) 
 	return unsortedNames, nil
 }
 
-func (l *CTFComponentLister) logInfo(ctx context.Context, msg string, args ...any) {
-	l.log(ctx, slog.LevelInfo, msg, args...)
-}
-
-func (l *CTFComponentLister) log(ctx context.Context, level slog.Level, msg string, args ...any) {
-	logger := l.options.Logger
-	if logger != nil {
-		logger.Log(ctx, level, msg, args...)
-	}
+func (l *CTFComponentLister) log(ctx context.Context, msg string, args ...any) {
+	slog.Default().With(slog.String("realm", "ctf-lister")).InfoContext(ctx, msg, args...)
 }
