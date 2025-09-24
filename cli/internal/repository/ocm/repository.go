@@ -24,6 +24,7 @@ import (
 
 // ComponentRepositoryProvider is a function type that provides a ComponentVersionRepository
 // based on the given context and identity.
+// The identity can be used to select a proper repository if the provider supports multiple repositories.
 type ComponentRepositoryProvider func(ctx context.Context, identity runtime.Identity) (*ComponentRepository, error)
 
 // ComponentRepository is a wrapper around the [v1.ReadWriteOCMRepositoryPluginContract] that provides
