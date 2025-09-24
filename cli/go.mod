@@ -13,15 +13,15 @@ require (
 	golang.org/x/sys v0.36.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.8
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250919063228-9ba366336564
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250919174641-be28d8d1c750
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.4
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250919063228-9ba366336564
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250919174641-be28d8d1c750
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250919063228-9ba366336564
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250919174641-be28d8d1c750
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
 	ocm.software/open-component-model/bindings/go/plugin v0.0.6
 	ocm.software/open-component-model/bindings/go/repository v0.0.1
@@ -54,5 +54,5 @@ require (
 	golang.org/x/term v0.35.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250919063228-9ba366336564 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250919174641-be28d8d1c750 // indirect
 )
