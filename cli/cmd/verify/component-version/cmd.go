@@ -9,13 +9,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
-
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -172,6 +175,11 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 			logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
 		}
+		for _, resource := range desc.Component.Resources {
+			if err := verifyResourceDigest(cmd, resource, pluginManager, credentialGraph); err != nil {
+				return fmt.Errorf("resource digest verification failed: %w", err)
+			}
+		}
 	}
 
 	var verifierSpec runtime.Typed
@@ -245,5 +253,54 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
+	return nil
+}
+
+func verifyResourceDigest(cmd *cobra.Command, resource descruntime.Resource, pluginManager *manager.PluginManager, credentialGraph credentials.GraphResolver) error {
+	ctx := cmd.Context()
+	logger, err := log.GetBaseLogger(cmd)
+	if err != nil {
+		return fmt.Errorf("getting base logger failed: %w", err)
+	}
+
+	if !signing.HasUsableAccess(resource) {
+		logger.WarnContext(ctx, "resource without usable access was skipped for digest consistency check", "identity", resource.ToIdentity())
+		return nil
+	}
+	if resource.Digest == nil {
+		logger.WarnContext(ctx, "resource without digest was skipped for digest consistency check", "identity", resource.ToIdentity())
+		return nil
+	}
+
+	var local v2.LocalBlob
+	if err := v2.Scheme.Convert(resource.Access, &local); err == nil {
+		containerDig, err := digest.Parse(local.LocalReference)
+		if err != nil {
+			return fmt.Errorf("parsing local resource digest %q failed: %w", local.LocalReference, err)
+		}
+		if containerDig.Encoded() != resource.Digest.Value {
+			return fmt.Errorf("resource digest mismatch for local resource %q: expected %s, got %s", resource.Name, resource.Digest.Value, containerDig.Encoded())
+		}
+	} else {
+		processor, err := pluginManager.DigestProcessorRegistry.GetPlugin(cmd.Context(), resource.Access)
+		if err != nil {
+			return fmt.Errorf("getting digest processor for resource %q failed: %w", resource.Name, err)
+		}
+		var creds map[string]string
+		if identity, err := processor.GetResourceDigestProcessorCredentialConsumerIdentity(cmd.Context(), &resource); err == nil {
+			if creds, err = credentialGraph.Resolve(cmd.Context(), identity); err != nil {
+				logger.DebugContext(cmd.Context(), "could not resolve credentials for resource digest processing", "error", err.Error())
+			}
+		} else {
+			logger.DebugContext(cmd.Context(), "could not get identity for resource digest processing", "error", err.Error())
+		}
+		processed, err := processor.ProcessResourceDigest(ctx, &resource, creds)
+		if err != nil {
+			return fmt.Errorf("verifying resource digest for resource %q failed during processing: %w", resource.Name, err)
+		}
+		if processed.Digest.Value != resource.Digest.Value {
+			return fmt.Errorf("resource digest mismatch for resource %q: expected %s, got %s", resource.Name, resource.Digest.Value, processed.Digest.Value)
+		}
+	}
 	return nil
 }

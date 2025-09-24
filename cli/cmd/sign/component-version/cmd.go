@@ -197,7 +197,6 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 			logger.WarnContext(ctx, "component version not safely digestible", "error", err.Error())
 		}
-		// TODO(jakobmoellerdev): add full recursion check on all references here based on repo / resolvers
 	}
 
 	// signer spec

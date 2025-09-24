@@ -143,7 +143,7 @@ func IsSafelyDigestible(cd *descruntime.Component) error {
 	}
 
 	for _, res := range cd.Resources {
-		hasAccess := res.Access != nil && res.Access.GetType().String() != AccessTypeNone
+		hasAccess := HasUsableAccess(res)
 
 		if hasAccess {
 			if res.Digest == nil ||
@@ -157,6 +157,11 @@ func IsSafelyDigestible(cd *descruntime.Component) error {
 		}
 	}
 	return nil
+}
+
+// HasUsableAccess checks if a resource has an access type other than "None".
+func HasUsableAccess(res descruntime.Resource) bool {
+	return res.Access != nil && res.Access.GetType().String() != AccessTypeNone
 }
 
 // ensureNormalisationAlgo resolves the effective normalisation algorithm.
