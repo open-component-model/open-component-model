@@ -5,13 +5,16 @@
 * **Date**: 2025.09.24
 
 **Technical Story**:
+
 Provide a way to distribute, download, and discover plugins for OCM.
 
 ---
 
 ## Context and Problem Statement
 
-Right now, if you want to download an OCM plugin, you need to know exactly where it lives and what it's called.
+Right now, if you want to download an OCM plugin, you need to know the exact name of the component version and the name
+of the resource containing the plugin binary.
+
 For example:
 
 ```shell
@@ -27,12 +30,17 @@ We also want to support multiple registries so enterprises can have their own pr
 
 ## Decision Drivers
 
-We want to reuse as much of OCM's existing infrastructure as possible rather than reinventing the wheel.
+We want to reuse as much of the existing infrastructure as possible rather than reinventing the wheel.
 The plugin download mechanism already works well, and component versions are a core part of how OCM operates.
 
 We also need this to feel native to OCM, using component versions, references, and credentials the way everything else does.
-It should scale to support multiple registries, including private ones that enterprises need.
-We can also leverage OCM's sign/verify system for verifying plugins.
+It should scale to support multiple registries, including private ones.
+We can also leverage the sign/verify system for verifying plugins.
+This is outlined under [ComponentVersion based plugins system](#componentversion-based-plugins-system).
+
+Another approach is to use a manifest-based registry, like helm or npm.
+This would be a lot more work to maintain, but it would be more familiar to users of existing registries.
+This is outlined under [Alternative manifest-based plugins system](#alternative-manifest-based-plugins-system).
 
 ---
 
@@ -46,8 +54,9 @@ TBD
 
 ### Registry Component Structure
 
-The Component Version approach treats a plugin registry like any other OCM component, but instead of containing resources directly, it contains references to individual plugin components.
-Think of it as a table of contents that points to where all the plugins actually live:
+The Component Version approach treats a plugin registry like any other OCM component, but instead of containing resources
+directly, it contains references to individual plugin components.
+Like a table of contents that points to where all the plugins actually live:
 
 ```yaml
 # Registry Component: ghcr.io/ocm/registry//ocm.software/plugin-registry:v1.0.0
@@ -61,18 +70,21 @@ references:
     component: ocm.software/plugins/ecrplugin
     digest:
       hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v1
       value: abc123...
   - name: helminput
     version: 0.5.2
     component: ocm.software/plugins/helminput
     digest:
       hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v1
       value: def456...
   - name: cvedb
     version: 1.2.0
     component: enterprise.corp/plugins/cvedb
     digest:
       hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v1
       value: ghi789...
 
 resources:
@@ -130,7 +142,7 @@ resources:
 
 These are general flows regardless of the registry implementation.
 
-CLI command could be added that updated user's configuration with the repository:
+CLI command could be added that updated the user's configuration with the repository:
 
 ```bash
 ocm plugin registry add official ghcr.io/ocm/registry//ocm.software/plugin-registry:v1.0.0
@@ -167,9 +179,8 @@ cvedb        1.2.0     CVE database integration        enterprise
 And install plugins by name:
 
 ```bash
+# Fetch latest version of the plugin
 ocm plugin registry install ecrplugin
-# This automatically resolves to ocm.software/plugins/ecrplugin:0.27.0,
-# downloads the right binary for your platform, and installs it to ~/.ocm/plugins/
 
 # Or install a specific version if you need to
 ocm plugin registry install ecrplugin@0.26.0
@@ -178,8 +189,8 @@ ocm plugin registry install ecrplugin@0.26.0
 New plugins can be published to the registry by simply pushing a new component version to the registry:
 
 ```bash
-# Publish a new version of the plugin
-ocm plugin registry push ocm.software/plugins/ecrplugin:0.28.0
+# Publish a new version of the plugin, this would also implicitly update the registry component and bump the version
+ocm plugin registry push ocm.software/plugins/ecrplugin:0.28.0 ... # some more parameters potentially
 ```
 
 ## Alternative manifest-based plugins system
@@ -245,7 +256,10 @@ aws s3 cp index.yaml s3://plugins.ocm.software/
 aws s3 sync ./plugins/ s3://plugins.ocm.software/
 ```
 
----
+### User Workflow for Index-based registries
+
+The user workflow largely remains the same as outlined in [User Workflow](#user-workflow). The underlying implementation
+changes, of course, to use the index instead of the registry component.
 
 ## Pros and Cons
 
@@ -253,33 +267,32 @@ aws s3 sync ./plugins/ s3://plugins.ocm.software/
 
 #### Pros
 
-The component version approach has some really nice benefits.
-It integrates natively with everything OCM already does; repositories, credentials, signatures.
-You get verification through OCM's signature system.
+It integrates with everything ocm already does; repositories, credentials, signatures, verification, distribution,
+download, upload, etc.
 It can include private registries and enterprise deployments, and it's consistent with how other OCM artifacts work.
 
-The best part is that we can reuse about 90% of the existing `ocm download plugin` implementation, and existing workflows keep working.
+We can reuse a large portion of the existing `ocm download plugin` implementation, and existing workflows keep working.
 Component descriptors also give you metadata, labels, and provenance information.
 
 #### Cons
 
-It does require some OCM knowledge to host registries.
-Plugin publishers need to understand component versions, and setting up registries requires OCM tooling.
+It does require some ocm knowledge to host registries.
+Plugin publishers need to understand component versions, and setting up registries requires ocm tooling.
 There's also a bit more metadata overhead compared to simple file downloads.
 
 ### Manifest Index Registry Approach
 
 #### Pros
 
-The manifest approach has the advantage of being familiar with existing systems like helm, npm, etc, that people already know.
-It's simple for plugin authors to publish binaries, lightweight in terms of metadata, and you can host it on simple web servers, CDNs, or object storage.
-You don't need any OCM knowledge to set up a registry.
+The manifest approach has the advantage of being familiar with existing systems like helm, npm, etc., that people already know.
+It's simple for plugin authors to publish binaries, lightweight in terms of metadata, and you can host it on simple web servers or object storage.
+You don't need any ocm knowledge to set up a registry. Anyone can host a registry anywhere as long as the manifest is accessible.
 
 #### Cons
 
-We'd need to build all the code. Meaning, caching, authentication, and all that.
-It's inconsistent with how other OCM artifacts work, provides less structured metadata about plugins, and doesn't have
-built-in integrity verification beyond basic checksums.
+We'd need to build all the code. Meaning, caching, authentication, discovery, etc. It's a lot of work to maintain and support.
+It's inconsistent with how other ocm artifacts work, provides less structured metadata about plugins, and doesn't have
+built-in integrity verification beyond basic checksum.
 
 ## Conclusion
 
@@ -288,6 +301,6 @@ Recommendation: Component Version Registry Approach
 Reasons:
 
 1. Uses a lot of existing code
-2. Uses OCM's sign/verify flow for plugins
-3. Consistent with existing OCM ecosystem, like landscaper.
-4. Authentication, creds, everything already exists.
+2. Uses the existing sign/verify flow for plugins
+3. Consistent with the existing ocm ecosystem, like landscaper.
+4. Authentication, credentials, everything already exists.
