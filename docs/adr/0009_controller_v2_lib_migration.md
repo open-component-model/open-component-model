@@ -87,7 +87,9 @@ Focus areas:
 
 Reimplement core building blocks on top of the new library:
 
-- **Resource controller** reusing cache architecture of Phase 1.
+- **Resource controller** reusing cache architecture of Phase 1. (accessing the same LRU cache / resolution service)
+  - When downloading resources, the required verification architecture is very similar to the resolution service.
+  - We should likely reuse digest verification code from the CLI "ocm verify cv" code for our logic here.
 
 #### Phase 3 — Supplemental Controllers
 
@@ -201,29 +203,39 @@ Explanation of flowchart components:
 
 ```mermaid
 sequenceDiagram
-    participant RepoCtrl as Controller
-    participant Cache as LRU Cache
-    participant Queue as Version Lookup Queue
-    participant SF as Singleflight
-    participant SEM as Concurrency Semaphore
-    participant Worker as Worker
-    participant Resolver as OCM Resolver
-
-    RepoCtrl->>Cache: Lookup(componentX:v1.0)
-    alt Cache Hit
-        Cache-->>RepoCtrl: Return cached version
-    else Cache Miss
-        Cache-->>RepoCtrl: Not found
-        RepoCtrl->>Queue: Enqueue lookup request
-        Queue->>SF: Deduplicate request
-        SF->>SEM: Acquire slot (limit concurrent lookups)
-        SEM->>Worker: Assign request
-        Worker->>Resolver: Resolve & Verify version
-        Resolver-->>Worker: Resolved component
-        Worker->>Cache: Store in cache (also on failure)
-        Cache-->>RepoCtrl: Available on next reconcile as a result
-        Worker->>RepoCtrl: trigger requeue event
+    box Controller
+        participant RepoCtrl1 as Reconcile (Run 1)
+        participant RepoCtrl2 as Reconcile (Run 2)
+        participant Watch as Watch/Informer
     end
+
+    box Resolution Service
+        participant Cache as LRU Cache
+        participant Queue as Lookup Queue
+        participant SF as Singleflight
+        participant SEM as Semaphore
+        participant Worker as Worker
+        participant Resolver as OCM Resolver
+    end
+
+    Note over RepoCtrl1: Reconcile Run #1<br/>(cache miss)
+    RepoCtrl1->>Cache: Lookup(componentX:v1.0)
+    Cache-->>RepoCtrl1: Not found
+    RepoCtrl1->>Queue: Enqueue lookup
+    RepoCtrl1->>RepoCtrl1: Update Status Progressing
+    Queue->>SF: Deduplicate request
+    SF->>SEM: Acquire slot
+    SEM->>Worker: Assign request
+    Worker->>Resolver: Resolve & Verify
+    Resolver-->>Worker: Resolved component
+    Worker->>Cache: Store in cache
+    Worker->>Watch: Emit event to Handler
+
+    Note over RepoCtrl2: Reconcile Run #2<br/>(cache hit, after event)
+    Watch->>RepoCtrl2: React to event
+    RepoCtrl2->>Cache: Lookup(componentX:v1.0)
+    Cache-->>RepoCtrl2: Return cached version
+    RepoCtrl2-->>RepoCtrl2: Update Status Done
 ```
 
 Explanation of sequence:
