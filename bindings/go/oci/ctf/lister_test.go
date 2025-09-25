@@ -73,7 +73,7 @@ func TestListComponents(t *testing.T) {
 
 			// Create an instance of the CTFComponentLister.
 			var lister repo.ComponentLister
-			lister, _ = NewComponentLister(archive)
+			lister = NewComponentLister(archive)
 
 			// Collect the returned component names.
 			result := []string{}

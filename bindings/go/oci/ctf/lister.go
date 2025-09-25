@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -21,12 +23,12 @@ type CTFComponentLister struct {
 var _ repo.ComponentLister = (*CTFComponentLister)(nil)
 
 // NewComponentLister creates a new ComponentLister for the given CTF archive.
-func NewComponentLister(archive ctf.CTF) (*CTFComponentLister, error) {
+func NewComponentLister(archive ctf.CTF) *CTFComponentLister {
 	lister := &CTFComponentLister{
 		archive: archive,
 	}
 
-	return lister, nil
+	return lister
 }
 
 // ListComponents lists all unique component names found in the CTF archive. The order of the elements
@@ -35,7 +37,8 @@ func NewComponentLister(archive ctf.CTF) (*CTFComponentLister, error) {
 // Thus, the `last` parameter is ignored.
 func (l *CTFComponentLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
 	if last != "" {
-		l.log(ctx, "pagination is not supported, ignoring 'last' parameter", "last", last)
+		logger := getLogger()
+		logger.DebugContext(ctx, "pagination is not supported, ignoring 'last' parameter", "last", last)
 	}
 
 	names, err := l.getAllNames(ctx)
@@ -43,11 +46,7 @@ func (l *CTFComponentLister) ListComponents(ctx context.Context, last string, fn
 		return fmt.Errorf("unable to list components: %w", err)
 	}
 
-	if err = fn(names); err != nil {
-		return fmt.Errorf("callback function returned an error: %w", err)
-	}
-
-	return nil
+	return fn(names)
 }
 
 func (l *CTFComponentLister) getAllNames(ctx context.Context) ([]string, error) {
@@ -61,8 +60,7 @@ func (l *CTFComponentLister) getAllNames(ctx context.Context) ([]string, error) 
 		return []string{}, nil
 	}
 
-	seen := make(map[string]struct{})
-	unsortedNames := []string{}
+	accumulatedNames := make(map[string]struct{})
 	for _, art := range arts {
 		// If repository starts with "component-descriptors/", the rest is the component name.
 		prefix := ocipath.DefaultComponentDescriptorPath + "/"
@@ -72,16 +70,12 @@ func (l *CTFComponentLister) getAllNames(ctx context.Context) ([]string, error) 
 			continue
 		}
 		comp = strings.TrimPrefix(comp, prefix)
-
-		if !seen[comp] {
-			seen[comp] = true
-			unsortedNames = append(unsortedNames, comp)
-		}
+		accumulatedNames[comp] = struct{}{}
 	}
 
-	return unsortedNames, nil
+	return slices.Collect(maps.Keys(accumulatedNames)), nil
 }
 
-func (l *CTFComponentLister) log(ctx context.Context, msg string, args ...any) {
-	slog.Default().With(slog.String("realm", "ctf-lister")).InfoContext(ctx, msg, args...)
+func getLogger() *slog.Logger {
+	return slog.Default().With(slog.String("realm", "ctf-lister"))
 }
