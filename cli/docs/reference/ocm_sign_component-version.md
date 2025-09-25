@@ -32,6 +32,7 @@ Creates or update cryptographic signatures on component descriptors.
 - Sign hash (--signer-spec)
 
 ## Behavior
+
 - Conflicting signatures cause failure unless --force is set (then overwrite)
 - --dry-run: compute only, do not persist signature
 - Default signature name: default

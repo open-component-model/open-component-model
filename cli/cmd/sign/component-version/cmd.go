@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
+
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -26,7 +28,6 @@ import (
 	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 	"ocm.software/open-component-model/cli/internal/signing"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -72,6 +73,7 @@ func New() *cobra.Command {
 - Sign hash (--signer-spec)
 
 ## Behavior
+
 - Conflicting signatures cause failure unless --force is set (then overwrite)
 - --dry-run: compute only, do not persist signature
 - Default signature name: default
