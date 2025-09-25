@@ -12,8 +12,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
-
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -28,6 +26,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 	"ocm.software/open-component-model/cli/internal/signing"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -322,22 +321,21 @@ func printSignature(cmd *cobra.Command, sig descruntime.Signature) error {
 
 	v2sig := descruntime.ConvertToV2Signature(&sig)
 
+	var b []byte
 	switch strings.ToLower(output) {
 	case render.OutputFormatJSON.String():
-		b, err := json.MarshalIndent(v2sig, "", "  ")
-		if err != nil {
+		if b, err = json.MarshalIndent(v2sig, "", "  "); err != nil {
 			return fmt.Errorf("marshalling signature to json failed: %w", err)
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), string(b))
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(b))
 	case render.OutputFormatYAML.String():
-		b, err := yaml.Marshal(v2sig)
-		if err != nil {
+		if b, err = yaml.Marshal(v2sig); err != nil {
 			return fmt.Errorf("marshalling signature to yaml failed: %w", err)
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), string(b))
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(b))
 	default:
 		return fmt.Errorf("unsupported output format %q (supported: json|yaml|text)", output)
 	}
 
-	return nil
+	return err
 }

@@ -9,17 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opencontainers/go-digest"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -105,7 +101,7 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
-	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. if not set, all signatures are verified")
+	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. If not set, all signatures are verified.")
 	cmd.Flags().Bool(FlagVerifyDigestConsistency, true, "verify that all digests match the descriptor before verifying the signature itself")
 	cmd.Flags().String(FlagVerifierSpec, "", "path to an optional verifier specification file. If empty, defaults to an empty RSASSA-PSS configuration.")
 
@@ -207,11 +203,6 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 			logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
 		}
-		for _, resource := range desc.Component.Resources {
-			if err := verifyResourceDigest(cmd, resource, pluginManager, credentialGraph); err != nil {
-				return fmt.Errorf("resource digest verification failed: %w", err)
-			}
-		}
 	}
 
 	var verifierSpec runtime.Typed
@@ -239,22 +230,21 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.SetLimit(concurrencyLimit)
 	for _, signature := range sigs {
-		s := signature
 		eg.Go(func() error {
 			start := time.Now()
-			logger.InfoContext(egctx, "verifying signature", "name", s.Name)
+			logger.InfoContext(egctx, "verifying signature", "name", signature.Name)
 			defer func() {
-				logger.InfoContext(egctx, "signature verification completed", "name", s.Name, "duration", time.Since(start).String())
+				logger.InfoContext(egctx, "signature verification completed", "name", signature.Name, "duration", time.Since(start).String())
 			}()
 
 			if verifyDigestConsistency {
-				if err := signing.VerifyDigestMatchesDescriptor(egctx, desc, s, logger); err != nil {
+				if err := signing.VerifyDigestMatchesDescriptor(egctx, desc, signature, logger); err != nil {
 					return err
 				}
 			}
 
 			var credentials map[string]string
-			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, s, verifierSpec); err == nil {
+			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, signature, verifierSpec); err == nil {
 				if credentials, err = credentialGraph.Resolve(egctx, consumerID); err != nil {
 					logger.DebugContext(egctx, "could not resolve credentials for verification", "error", err.Error())
 				}
@@ -264,7 +254,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				logger.DebugContext(egctx, "using discovered credentials for verification", "attributes", slices.Collect(maps.Keys(credentials)))
 			}
 
-			return handler.Verify(egctx, s, verifierSpec, credentials)
+			return handler.Verify(egctx, signature, verifierSpec, credentials)
 		})
 	}
 
@@ -273,61 +263,5 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
-	return nil
-}
-
-func verifyResourceDigest(cmd *cobra.Command, resource descruntime.Resource, pluginManager *manager.PluginManager, credentialGraph credentials.GraphResolver) error {
-	ctx := cmd.Context()
-	logger, err := log.GetBaseLogger(cmd)
-	if err != nil {
-		return fmt.Errorf("getting base logger failed: %w", err)
-	}
-
-	if !signing.HasUsableAccess(resource) {
-		logger.WarnContext(ctx, "resource without usable access was skipped for digest consistency check", "identity", resource.ToIdentity())
-		return nil
-	}
-	if resource.Digest == nil {
-		logger.WarnContext(ctx, "resource without digest was skipped for digest consistency check", "identity", resource.ToIdentity())
-		return nil
-	}
-
-	// TODO(jakobmoellerdev): Get ready for a long explanation on this one
-	//  Technically it would be best here to offer something like a LocalResourceDigestProcessor,
-	//  but that would require a lot of refactoring and plugin work. Instead I choose here to opinionate on CTF/OCI
-	//  localReference formats which are always open container digests. I am well aware this could break in other OCM
-	//  repository implementations but want to take things step by step.
-	var local v2.LocalBlob
-	if err := v2.Scheme.Convert(resource.Access, &local); err == nil {
-		logger.DebugContext(ctx, "resource is local, using digest from local reference as shortcut validation", "identity", resource.ToIdentity())
-		containerDig, err := digest.Parse(local.LocalReference)
-		if err != nil {
-			return fmt.Errorf("parsing local resource digest %q failed: %w", local.LocalReference, err)
-		}
-		if containerDig.Encoded() != resource.Digest.Value {
-			return fmt.Errorf("resource digest mismatch for local resource %q: expected %s, got %s", resource.Name, resource.Digest.Value, containerDig.Encoded())
-		}
-	} else {
-		logger.DebugContext(ctx, "validating resource digest via processor", "identity", resource.ToIdentity())
-		processor, err := pluginManager.DigestProcessorRegistry.GetPlugin(cmd.Context(), resource.Access)
-		if err != nil {
-			return fmt.Errorf("getting digest processor for resource %q failed: %w", resource.Name, err)
-		}
-		var creds map[string]string
-		if identity, err := processor.GetResourceDigestProcessorCredentialConsumerIdentity(cmd.Context(), &resource); err == nil {
-			if creds, err = credentialGraph.Resolve(cmd.Context(), identity); err != nil {
-				logger.DebugContext(cmd.Context(), "could not resolve credentials for resource digest processing", "error", err.Error())
-			}
-		} else {
-			logger.DebugContext(cmd.Context(), "could not get identity for resource digest processing", "error", err.Error())
-		}
-		processed, err := processor.ProcessResourceDigest(ctx, &resource, creds)
-		if err != nil {
-			return fmt.Errorf("verifying resource digest for resource %q failed during processing: %w", resource.Name, err)
-		}
-		if processed.Digest.Value != resource.Digest.Value {
-			return fmt.Errorf("resource digest mismatch for resource %q: expected %s, got %s", resource.Name, resource.Digest.Value, processed.Digest.Value)
-		}
-	}
 	return nil
 }

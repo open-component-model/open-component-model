@@ -143,9 +143,7 @@ func IsSafelyDigestible(cd *descruntime.Component) error {
 	}
 
 	for _, res := range cd.Resources {
-		hasAccess := HasUsableAccess(res)
-
-		if hasAccess {
+		if HasUsableAccess(res) {
 			if res.Digest == nil ||
 				res.Digest.HashAlgorithm == "" ||
 				res.Digest.NormalisationAlgorithm == "" ||

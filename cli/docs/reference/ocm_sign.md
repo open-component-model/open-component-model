@@ -1,6 +1,6 @@
 ---
 title: ocm sign
-description: sign anything in OCM.
+description: create signatures for component versions in OCM.
 suppressTitle: true
 toc: true
 sidebar:
@@ -9,7 +9,7 @@ sidebar:
 
 ## ocm sign
 
-sign anything in OCM
+create signatures for component versions in OCM
 
 ```
 ocm sign {component-version|component-versions|cv|cvs} [flags]

@@ -135,5 +135,5 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 
 ### SEE ALSO
 
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - sign anything in OCM
+* [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
 

@@ -20,7 +20,7 @@ func Register(
 		return err
 	}
 
-	h, err := handler.New(true)
+	hdlr, err := handler.New(true)
 	if err != nil {
 		return err
 	}
@@ -29,7 +29,7 @@ func Register(
 		signinghandler.RegisterInternalComponentSignatureHandler(
 			scheme,
 			signingHandlerRegistry,
-			h,
+			hdlr,
 			&v1alpha1.Config{},
 		),
 	)

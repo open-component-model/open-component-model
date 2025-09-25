@@ -1,6 +1,6 @@
 ---
 title: ocm verify
-description: verify anything in OCM.
+description: verify digests and signatures of component versions in OCM.
 suppressTitle: true
 toc: true
 sidebar:
@@ -9,7 +9,7 @@ sidebar:
 
 ## ocm verify
 
-verify anything in OCM
+verify digests and signatures of component versions in OCM
 
 ```
 ocm verify {component-version|component-versions|cv|cvs} [flags]
