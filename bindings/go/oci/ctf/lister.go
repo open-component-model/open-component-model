@@ -68,11 +68,10 @@ func (l *CTFComponentLister) getAllNames(ctx context.Context) ([]string, error) 
 		prefix := ocipath.DefaultComponentDescriptorPath + "/"
 		comp := art.Repository
 
-		if strings.HasPrefix(comp, prefix) {
-			comp = strings.TrimPrefix(comp, prefix)
-		} else {
+		if !strings.HasPrefix(comp, prefix) {
 			continue
 		}
+		comp = strings.TrimPrefix(comp, prefix)
 
 		if !seen[comp] {
 			seen[comp] = true
