@@ -286,6 +286,15 @@ informers in the controllers, we will add event handlers that call back to the c
 - **Event-driven invalidation**
   - Watch Kubernetes objects (Secrets, ConfigMaps, Repository CRs).
   - Evict all cache entries derived from updated objects, use partial references to limit scope.
+    Assuming an aggregated cache key like:
+    
+    ```shell
+    SHA-256(Canonical(config) + Canonical(repoSpec) + Component A + version)
+    SHA-256(Canonical(config) + Canonical(repoSpec) + Component B + version)
+    ```
+    
+    then the invalidation of `Canonical(config)` or `Canonical(repoSpec)` would lead to invalidation of all cvs under that given scope, so both `A` and `B` would have to be fetched again.
+
   - Example: On Secret change, evict all entries using that Secret for repository access.
 
 - **Time-based invalidation (TTL)**
