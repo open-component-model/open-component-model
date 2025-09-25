@@ -23,20 +23,13 @@ type CTFComponentLister struct {
 
 var _ repo.ComponentLister = (*CTFComponentLister)(nil)
 
-type ComponentListerOptions struct {
-	// NameListPageSize specifies the page size that should be used by the `ComponentLister` API.
-	// If zero or not set, the complete list is returned.
-	NameListPageSize int
-}
+// ComponentListerOptions holds configuration options for the CTFComponentLister.
+// The current implementation does not have any options, but this struct is defined
+// for future extensibility.
+type ComponentListerOptions struct{}
 
+// ComponentListerOption defines a function type for setting options in ComponentListerOptions.
 type ComponentListerOption func(*ComponentListerOptions)
-
-// WithPageSize sets the page size used by component lister for the returned list.
-func WithPageSize(size int) ComponentListerOption {
-	return func(o *ComponentListerOptions) {
-		o.NameListPageSize = size
-	}
-}
 
 // NewComponentLister creates a new ComponentLister for the given CTF archive.
 func NewComponentLister(archive ctf.CTF, opts ...ComponentListerOption) (*CTFComponentLister, error) {
@@ -51,14 +44,11 @@ func NewComponentLister(archive ctf.CTF, opts ...ComponentListerOption) (*CTFCom
 	return lister, nil
 }
 
-// ListComponents lists all unique component names found in the CTF archive.
+// ListComponents lists all unique component names found in the CTF archive. The order of the elements
+// is determined by the underlying implementation of the store.
 // The function does not support pagination and returns the complete list at once.
-// Thus, the `last` parameter and the `NameListPageSize` listing option are ignored.
+// Thus, the `last` parameter is ignored.
 func (l *CTFComponentLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
-	if l.options.NameListPageSize > 0 {
-		l.log(ctx, "pagination is not supported, ignoring page size option", "pageSize", l.options.NameListPageSize)
-	}
-
 	if last != "" {
 		l.log(ctx, "pagination is not supported, ignoring 'last' parameter", "last", last)
 	}
@@ -78,7 +68,7 @@ func (l *CTFComponentLister) ListComponents(ctx context.Context, last string, fn
 func (l *CTFComponentLister) getAllNames(ctx context.Context) ([]string, error) {
 	idx, err := l.archive.GetIndex(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("unable to get idx: %w", err)
+		return nil, fmt.Errorf("unable to get CTF index: %w", err)
 	}
 
 	arts := idx.GetArtifacts()

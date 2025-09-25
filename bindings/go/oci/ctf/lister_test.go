@@ -35,20 +35,12 @@ func TestListComponents(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		sort     bool
-		pageSize int
 		last     string
 		input    []string
 		expected []string
 	}{
 		{
 			name:     "default behavior - store order preserved",
-			input:    testData,
-			expected: []string{"componentC", "componentB", "duplicate", "componentD", "componentA"},
-		},
-		{
-			name:     "NameListPageSize option should be ignored",
-			pageSize: 2,
 			input:    testData,
 			expected: []string{"componentC", "componentB", "duplicate", "componentD", "componentA"},
 		},
@@ -79,15 +71,9 @@ func TestListComponents(t *testing.T) {
 			// Create a mock CTF store with the test data.
 			archive := NewMockCTF(tt.input)
 
-			// Set listing options.
-			var opts []ComponentListerOption
-			if tt.pageSize > 0 {
-				opts = append(opts, WithPageSize(tt.pageSize))
-			}
-
 			// Create an instance of the CTFComponentLister.
 			var lister repo.ComponentLister
-			lister, _ = NewComponentLister(archive, opts...)
+			lister, _ = NewComponentLister(archive)
 
 			// Collect the returned component names.
 			result := []string{}
@@ -98,32 +84,6 @@ func TestListComponents(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestWithPageSize(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    int
-		expected int
-	}{
-		{"page size equals one", 1, 1},
-		{"page size equals ten", 10, 10},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a ComponentListerOptions instance
-			opts := &ComponentListerOptions{}
-
-			// Apply the option function
-			optionFunc := WithPageSize(tt.input)
-			optionFunc(opts)
-
-			// Verify the field was set correctly
-			if opts.NameListPageSize != tt.expected {
-				t.Errorf("Expected NameListPageSize to be %v, got %v", tt.expected, opts.NameListPageSize)
-			}
 		})
 	}
 }
@@ -146,6 +106,7 @@ func NewMockCTF(compNames []string) *MockCTF {
 	return m
 }
 
+// Methods of the CTF interface.
 func (m *MockCTF) Format() ctf.FileFormat {
 	var format ctf.FileFormat
 	return format
