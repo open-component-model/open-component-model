@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
@@ -18,6 +19,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+const DefaultCreator = "ocm.software/open-component-model/bindings/go/oci"
+
 // CachingComponentVersionRepositoryProvider is a caching implementation of the repository.ComponentVersionRepositoryProvider interface.
 // It provides efficient caching mechanisms for repository operations by maintaining:
 // - A credential cache for authentication information
@@ -25,25 +28,41 @@ import (
 // - An authorization cache for auth tokens
 // - A shared HTTP client with retry capabilities
 type CachingComponentVersionRepositoryProvider struct {
+	creator            string
 	scheme             *runtime.Scheme
+	storeCache         *storeCache
 	credentialCache    *credentialCache
 	ociCache           *ociCache
 	authorizationCache auth.Cache
 	httpClient         *http.Client
+	tempDir            string
 }
 
 var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
 
 // NewComponentVersionRepositoryProvider creates a new instance of CachingComponentVersionRepositoryProvider
 // with initialized caches and default HTTP client configuration.
-func NewComponentVersionRepositoryProvider() *CachingComponentVersionRepositoryProvider {
-	return &CachingComponentVersionRepositoryProvider{
+func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVersionRepositoryProvider {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	if options.UserAgent == "" {
+		options.UserAgent = DefaultCreator
+	}
+
+	provider := &CachingComponentVersionRepositoryProvider{
+		creator:            options.UserAgent,
 		scheme:             repoSpec.Scheme,
 		credentialCache:    &credentialCache{},
 		ociCache:           &ociCache{scheme: repoSpec.Scheme},
 		authorizationCache: auth.NewCache(),
 		httpClient:         retry.DefaultClient,
+		tempDir:            options.TempDir,
 	}
+
+	return provider
 }
 
 // GetComponentVersionRepositoryCredentialConsumerIdentity implements the repository.ComponentVersionRepositoryProvider interface.
@@ -85,6 +104,8 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	opts := []oci.RepositoryOption{
 		oci.WithManifestCache(manifests),
 		oci.WithLayerCache(layers),
+		oci.WithTempDir(b.tempDir),
+		oci.WithCreator(b.creator),
 	}
 
 	switch obj := obj.(type) {
@@ -96,9 +117,25 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			Client:     b.httpClient,
 			Cache:      b.authorizationCache,
 			Credential: b.credentialCache.get,
+			Header: map[string][]string{
+				"User-Agent": {b.creator},
+			},
 		}, opts...)
 	case *ctfrepospecv1.Repository:
-		return ocirepository.NewFromCTFRepoV1(ctx, obj, opts...)
+		store := b.storeCache.get(ctx, obj.Path)
+		if store != nil {
+			repo, err := oci.NewRepository(append(opts, ocictf.WithCTF(store))...)
+			if err != nil {
+				return nil, fmt.Errorf("unable to create new repository from cache: %w", err)
+			}
+			return repo, nil
+		}
+		repo, store, err := ocirepository.NewFromCTFRepoV1(ctx, obj, opts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ctf repo from spec: %w", err)
+		}
+		b.storeCache.add(ctx, obj.Path, store)
+		return repo, nil
 	default:
 		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
 	}
