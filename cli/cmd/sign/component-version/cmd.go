@@ -54,38 +54,40 @@ func New() *cobra.Command {
 		SuggestFor: []string{"version", "versions"},
 		Short:      "Sign component version(s) inside an OCM repository",
 		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
-		Long: fmt.Sprintf(`Sign component version(s) inside an OCM repository.
+		Long: fmt.Sprintf(`Creates or update cryptographic signatures on component descriptors.
 
-This command creates or updates cryptographic signatures on component versions
-stored in an OCM repository. The signature covers a normalised and hashed form
-of the component descriptor, ensuring integrity and authenticity of the
-component and its resources, no matter where and how they are stored.
+## Reference Format
 
-The format of a component reference is:
 	[type::]{repository}/[valid-prefix]/{component}[:version]
 
-Valid prefixes: {%[1]s|none}. If <none> is used, it defaults to %[1]q.
-Supported repository types: {%[2]s} (short forms: {%[3]s}).
-If no type is given, the repository path is inferred by heuristics.
+- Prefixes: {%[1]s|none} (default: %[1]q)  
+- Repo types: {%[2]s} (short: {%[3]s})  
 
-Verification steps performed before signing:
+## OCM Signing explained in simple steps
 
-* Resolve the repository and fetch the target component version.
-* Check digest consistency if not disabled (--verify-digest-consistency).
-* Normalise the descriptor using the chosen algorithm (--normalisation).
-* Hash the normalised form with the given algorithm (--hash).
-* Produce a signature with the configured signer specification (--signer-spec).
+- Resolve OCM repository
+- Fetch component version  
+- Verify digests (--verify-digest-consistency)
+- Normalise descriptor (--normalisation)
+- Hash normalised descriptor (--hash)
+- Sign hash (--signer-spec)
 
-Behavior:
+## Behavior
+- Conflicting signatures cause failure unless --force is set (then overwrite)
+- --dry-run: compute only, do not persist signature
+- Default signature name: default
+- Default signer: RSASSA-PSS plugin (needs private key)
 
-* If a signature with the same name exists and --force is not set, the command fails.
-* With --force, an existing signature is overwritten.
-* With --dry-run, a signature is computed but not persisted to the repository.
-* If --signature is omitted, the default signature name "default" is used.
-* If --signer-spec is omitted, the default RSASSA-PSS plugin is used (without auto-generated key material)
+Use this command to establish provenance of component versions.`,
+			compref.DefaultPrefix,
+			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
+			strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
+		),
+		Example: strings.TrimSpace(`
+# Sign a component version with default algorithms
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 
-Note that the signature can only be generated when supplied with private key material fitting to the signature algorithm.
-An example credential configuration that can be used for the default signature configuration:
+## Example Credential Config
 
     type: generic.config.ocm.software/v1
     configurations:
@@ -98,20 +100,7 @@ An example credential configuration that can be used for the default signature c
         credentials:
         - type: Credentials/v1
           properties:
-            public_key_pem: <PEM> 
             private_key_pem: <PEM>
-            
-
-Use this command in automated pipelines or interactive workflows to
-establish provenance of component versions and prepare them for downstream
-verification. Also use it for testing integrity workflows.`,
-			compref.DefaultPrefix,
-			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
-			strings.Join([]string{ociv1.ShortType, ociv1.ShortType2, ctfv1.ShortType, ctfv1.ShortType2}, "|"),
-		),
-		Example: strings.TrimSpace(`
-# Sign a component version with default algorithms
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
 
 # Sign with custom signature name
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
@@ -123,8 +112,7 @@ sign component-version ./repo/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./rs
 sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature test --dry-run
 
 # Force overwrite an existing signature
-sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature --force
-`),
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature --force`),
 		RunE:              SignComponentVersion,
 		DisableAutoGenTag: true,
 	}

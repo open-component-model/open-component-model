@@ -13,47 +13,65 @@ Verify component version(s) inside an OCM repository
 
 ### Synopsis
 
-Verify component version(s) inside an OCM repository.
+Verify component version(s) inside an OCM repository based on signatures.
 
-If this command succeeds on a trusted signature, it can be trusted.
+## Reference Format
 
-This command checks cryptographic signatures stored on component versions
-to ensure integrity, authenticity, and provenance. Each signature covers a
-normalised and hashed form of the component descriptor, which is compared
-against the expected digest and verified with the configured verifier.
-
-The format of a component reference is:
 	[type::]{repository}/[valid-prefix]/{component}[:version]
 
-Valid prefixes: {component-descriptors|none}. If <none> is used, it defaults to "component-descriptors".
-Supported repository types: {OCIRepository|CommonTransportFormat} (short forms: {OCI|oci|CTF|ctf}).
-If no type is given, the repository path is inferred by heuristics.
+- Prefixes: {component-descriptors|none} (default: "component-descriptors")  
+- Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})
 
-Verification steps performed:
+## OCM Verification explained in simple steps
 
-* Resolve the repository and fetch the target component version.
-* Verify digest consistency if not disabled (--verify-digest-consistency).
-* Normalise the descriptor with the algorithm recorded in the signature.
-* Recompute the hash and compare with the signature digest.
-* Verify the signature against the provided verifier specification (--verifier-spec),
-    or fall back to the default RSASSA-PSS verifier if not specified.
+- Resolve OCM repository  
+- Fetch component version  
+- Verify digests (--verify-digest-consistency)  
+- Normalise descriptor (algorithm from signature)  
+- Recompute hash and compare with signature digest  
+- Verify signature (--verifier-spec, default RSASSA-PSS verifier)  
 
-Behavior:
+## Behavior
 
-* If --signature is set, only the named signature is verified.
-* Without --signature, all available signatures are verified.
-* Verification fails fast on the first invalid signature.
-* If --verifier-spec is not provided, the default RSASSA-PSS verifier plugin is used.
-    This default plugin supports verifying signatures without a configuration file,
-    and uses either discovered credentials or performs keyless verification through encoded PEM certificates 
-    when possible.
+- --signature: verify only the named signature  
+- Without --signature: verify all signatures  
+- Fail fast on first invalid signature  
+- Default verifier: RSASSA-PSS plugin  
+  - Supports config-less verification  
+  - Uses discovered credentials or PEM certificates when possible  
 
-Use this command in automated pipelines or audits to validate the
-authenticity of component versions before promotion, deployment,
-or further processing.
+Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.
 
 ```
 ocm verify component-version {reference} [flags]
+```
+
+### Examples
+
+```
+# Verify all component version signatures found in a component version
+verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+
+## Example Credential Config
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            public_key_pem: <PEM>
+
+# Verify a specific signature
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+
+# Use a verifier specification file
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./rsassa-pss.yaml
 ```
 
 ### Options
