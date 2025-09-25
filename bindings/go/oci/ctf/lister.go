@@ -16,29 +16,14 @@ import (
 type CTFComponentLister struct {
 	// archive is the CTF store that is able to handle CTF contents.
 	archive ctf.CTF
-
-	// options holds the configuration options for the lister.
-	options ComponentListerOptions
 }
 
 var _ repo.ComponentLister = (*CTFComponentLister)(nil)
 
-// ComponentListerOptions holds configuration options for the CTFComponentLister.
-// The current implementation does not have any options, but this struct is defined
-// for future extensibility.
-type ComponentListerOptions struct{}
-
-// ComponentListerOption defines a function type for setting options in ComponentListerOptions.
-type ComponentListerOption func(*ComponentListerOptions)
-
 // NewComponentLister creates a new ComponentLister for the given CTF archive.
-func NewComponentLister(archive ctf.CTF, opts ...ComponentListerOption) (*CTFComponentLister, error) {
+func NewComponentLister(archive ctf.CTF) (*CTFComponentLister, error) {
 	lister := &CTFComponentLister{
 		archive: archive,
-	}
-
-	for _, opt := range opts {
-		opt(&lister.options)
 	}
 
 	return lister, nil
