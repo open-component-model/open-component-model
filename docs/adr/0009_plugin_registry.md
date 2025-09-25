@@ -63,6 +63,14 @@ Like a table of contents that points to where all the plugins actually live:
 name: ocm.software/plugin-registry
 version: v1.0.0
 provider: ocm.software
+labels:
+  - name: category
+    value: <plugin-type>
+  - name: registry
+    value: official
+  - name: description
+    value: Official OCM plugin registry
+  # Further values can be added here
 
 references:
   - name: ecrplugin
@@ -86,15 +94,6 @@ references:
       hashAlgorithm: SHA-256
       normalisationAlgorithm: jsonNormalisation/v1
       value: ghi789...
-
-resources:
-  - name: registry-metadata
-    type: blob
-    version: v1.0.0
-    access:
-      type: localBlob
-      localReference: sha256:...
-    # Contains plugin descriptions, categories, etc.
 ```
 
 ### Individual Plugin Component Structure
@@ -145,7 +144,7 @@ These are general flows regardless of the registry implementation.
 CLI command could be added that updated the user's configuration with the repository:
 
 ```bash
-ocm plugin registry add official ghcr.io/ocm/registry//ocm.software/plugin-registry:v1.0.0
+ocm plugin registry add official ghcr.io/ocm/registry//ocm.software/plugin-registry
 ```
 
 Or, the user can configure it manually:
@@ -156,14 +155,19 @@ configurations:
 - type: plugin.registry.config.ocm.software
   registries:
   - name: official
-    url: ghcr.io/ocm/registry//ocm.software/plugin-registry:v1.0.0
+    url: ghcr.io/ocm/registry//ocm.software/plugin-registry
   - name: enterprise
-    url: internal.corp/registry//enterprise.plugins/registry:latest
-    credentials:
-    - type: Credentials/v1
-      properties:
-        username: %[3]q
-        password: %[4]q
+    url: internal.corp/registry//enterprise.plugins/registry
+- type: credentials.config.ocm.software
+  consumers:
+    - identity:
+        type: PluginRegistry/v1
+        hostname: internal.corp
+      credentials:
+        - type: Credentials/v1
+          properties:
+            username: %[3]q
+            password: %[4]q
 ```
 
 From there, the user can list plugins from the registry:
