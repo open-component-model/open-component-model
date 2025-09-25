@@ -46,19 +46,20 @@ Behavior:
 Note that the signature can only be generated when supplied with private key material fitting to the signature algorithm.
 An example credential configuration that can be used for the default signature configuration:
 
-type: generic.config.ocm.software/v1
-configurations:
-- type: credentials.config.ocm.software
-  consumers:
-  - identity:
-      type: RSA/v1alpha1
-      algorithm: RSASSA-PSS
-      signature: default
-    credentials:
-    - type: Credentials/v1
-      properties:
-        public_key_pem: <PEM> 
-        private_key_pem: <PEM>
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            public_key_pem: <PEM> 
+            private_key_pem: <PEM>
+            
 
 Use this command in automated pipelines or interactive workflows to
 establish provenance of component versions and prepare them for downstream
