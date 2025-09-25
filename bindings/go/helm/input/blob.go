@@ -53,14 +53,14 @@ var defaultOptions = []getter.Option{getter.WithTimeout(time.Second * DefaultHTT
 // This replaces the need for cli.New() and avoids the explosion of the dependency tree.
 func getterProviders() getter.Providers {
 	return getter.Providers{
-		getter.Provider{
+		{
 			Schemes: []string{"http", "https"},
 			New: func(options ...getter.Option) (getter.Getter, error) {
 				options = append(options, defaultOptions...)
 				return getter.NewHTTPGetter(options...)
 			},
 		},
-		getter.Provider{
+		{
 			Schemes: []string{registry.OCIScheme},
 			New:     getter.NewOCIGetter,
 		},
