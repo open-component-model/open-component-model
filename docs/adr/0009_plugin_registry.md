@@ -190,12 +190,11 @@ ocm plugin registry install ecrplugin
 ocm plugin registry install ecrplugin@0.26.0
 ```
 
-New plugins can be published to the registry by simply pushing a new component version to the registry:
+New plugins can be published to the registry by authorized pipelines, CI pipelines, using the component version constructor
+file for the original root component. During this process the version of the root component is bumped appropriately.
 
-```bash
-# Publish a new version of the plugin, this would also implicitly update the registry component and bump the version
-ocm plugin registry push ocm.software/plugins/ecrplugin:0.28.0 ... # some more parameters potentially
-```
+All other operations, like pushing a new version of the plugin is done via regular `ocm add cv` commands with the component
+constructor file of the plugin.
 
 ## Alternative manifest-based plugins system
 
@@ -283,6 +282,8 @@ Component descriptors also give you metadata, labels, and provenance information
 It does require some ocm knowledge to host registries.
 Plugin publishers need to understand component versions, and setting up registries requires ocm tooling.
 There's also a bit more metadata overhead compared to simple file downloads.
+However, this can be further simplified with various commands that hide away this complexity. Simple things like
+`ocm plugin registry add` or `ocm plugin registry create` can be added to make it easier to get started.
 
 ### Manifest Index Registry Approach
 
