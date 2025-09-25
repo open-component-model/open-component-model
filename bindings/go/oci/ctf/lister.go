@@ -61,7 +61,7 @@ func (l *CTFComponentLister) getAllNames(ctx context.Context) ([]string, error) 
 		return []string{}, nil
 	}
 
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	unsortedNames := []string{}
 	for _, art := range arts {
 		// If repository starts with "component-descriptors/", the rest is the component name.
