@@ -42,13 +42,13 @@ func TestListComponents(t *testing.T) {
 		{
 			name:     "default behavior - store order preserved",
 			input:    testData,
-			expected: []string{"componentC", "componentB", "duplicate", "componentD", "componentA"},
+			expected: []string{"componentA", "componentB", "componentC", "componentD", "duplicate"},
 		},
 		{
 			name:     "last parameter should be ignored",
 			last:     "2",
 			input:    testData,
-			expected: []string{"componentC", "componentB", "duplicate", "componentD", "componentA"},
+			expected: []string{"componentA", "componentB", "componentC", "componentD", "duplicate"},
 		},
 		{
 			name:     "single component in the store - one result",

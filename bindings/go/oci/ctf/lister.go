@@ -31,8 +31,7 @@ func NewComponentLister(archive ctf.CTF) *CTFComponentLister {
 	return lister
 }
 
-// ListComponents lists all unique component names found in the CTF archive. The order of the elements
-// is determined by the underlying implementation of the store.
+// ListComponents lists all unique component names found in the CTF archive. List elements are lexically sorted.
 // The function does not support pagination and returns the complete list at once.
 // Thus, the `last` parameter is ignored.
 func (l *CTFComponentLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
@@ -73,7 +72,10 @@ func (l *CTFComponentLister) getAllNames(ctx context.Context) ([]string, error) 
 		accumulatedNames[comp] = struct{}{}
 	}
 
-	return slices.Collect(maps.Keys(accumulatedNames)), nil
+	nameList := slices.Collect(maps.Keys(accumulatedNames))
+	slices.Sort(nameList)
+
+	return nameList, nil
 }
 
 func getLogger() *slog.Logger {
