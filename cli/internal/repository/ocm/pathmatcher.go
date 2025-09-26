@@ -56,6 +56,9 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 			return nil, fmt.Errorf("getting repository spec for component reference %q failed: %w", componentReference, err)
 		}
 		consumerIdentity, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
+		if err != nil {
+			return nil, fmt.Errorf("getting consumer identity for repository %q failed: %w", ref.Repository, err)
+		}
 		credMap, err := graph.Resolve(ctx, consumerIdentity)
 		if err != nil {
 			return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", ref.Repository, err)

@@ -18,6 +18,7 @@ import (
 // using fallback resolvers.
 func NewFromRefWithResolvers(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.GraphResolver, config *genericv1.Config, componentReference string) (ComponentRepositoryProvider, error) {
 	var (
+		//nolint:staticcheck // compatibility mode for deprecated resolvers
 		fallbackResolvers []*resolverruntime.Resolver
 		pathMatchers      []*resolverspec.Resolver
 		err               error
