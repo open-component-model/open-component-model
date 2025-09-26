@@ -14,6 +14,17 @@ import (
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
+func convertToRaw(repository runtime.Typed) (*runtime.Raw, error) {
+	scheme := runtime.NewScheme()
+	scheme.MustRegister(repository, "v1")
+	raw := runtime.Raw{}
+	err := scheme.Convert(repository, &raw)
+	if err != nil {
+		return nil, fmt.Errorf("conversion to raw failed: %w", err)
+	}
+	return &raw, nil
+}
+
 // NewFromRefWithPathMatcher creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
 func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverspec.Resolver, componentReference string) (ComponentRepositoryProvider, error) {
@@ -26,7 +37,10 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 	}
 
 	if ref.Repository != nil {
-		raw := &runtime.Raw{} // TODO #575 figure out how to convert ref.Repository to raw
+		raw, err := convertToRaw(ref.Repository)
+		if err != nil {
+			return nil, fmt.Errorf("converting repository to raw failed: %w", err)
+		}
 
 		resolvers = append(resolvers, &resolverspec.Resolver{
 			Repository:           raw,
