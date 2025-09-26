@@ -38,7 +38,9 @@ Decision-making and conflict resolution processes are defined in this handbook a
 
 Create your SIG charter as a markdown document in a new folder `SIG-<sig-name>` under the [`docs/community/SIGs`](https://github.com/open-component-model/open-component-model/tree/main/docs/community/SIGs) directory. The charter should include all required information (purpose, scope, initial leadership, initial voting members, meeting cadence, communication channels, repository needs, and code/test ownership statement).
 
-Submit a pull request with your charter, then create a SIG proposal issue using the [SIG proposal template](https://github.com/open-component-model/open-component-model/issues/new?template=sig_proposal.md) linking to your charter PR. The OCM Technical Steering Committee (TSC) reviews and approves proposals through a formal vote. The proposal must be added to the TSC meeting agenda. Chair and Tech Lead must be proposed by the SIG and approved by the TSC.
+Submit a pull request with your charter, then create a SIG proposal issue using the [SIG proposal template](https://github.com/open-component-model/open-component-model/issues/new?template=sig_proposal.md) linking to your charter PR.
+
+The proposal will be added to the [TSC meeting agenda](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes). The OCM Technical Steering Committee (TSC) reviews and approves proposals through a formal vote.
 
 Once approved, merge your charter PR and create a separate PR to add your SIG to [`sigs.yaml`](sigs.yaml). Then announce your SIG in the community (mailing list, Slack, etc.) and update documentation as needed.
 
@@ -51,7 +53,7 @@ Routine decisions are made by consensus; if consensus cannot be reached, a simpl
 Quorum for votes requires at least 50% of all voting members to be present.
 Major decisions (changes to the SIG charter, leadership, or dissolution) require a two-thirds supermajority of all voting members and formal approval by the TSC (majority vote).
 
-All decisions, votes, and meeting notes must be documented and made public in the OCM community repository.
+All decisions, votes, and meeting notes must be documented and made public in the [`docs/community`](https://github.com/open-component-model/open-component-model/tree/main/docs/community) section in the `open-component-model` Github repository. Every SIG has a sub-folder in the `docs/community/SIGs` directory where charter, meeting notes, decisions, and other relevant documentation are stored.
 
 ### 2.5 SIG Lifecycle
 

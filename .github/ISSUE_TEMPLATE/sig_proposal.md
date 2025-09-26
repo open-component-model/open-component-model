@@ -7,23 +7,29 @@ labels: "kind/sig-proposal"
 
 > **Note:** In OCM, the SIG proposal and charter are submitted together in a single step as Github issue. This simplifies the process for a small project and ensures all required information is available for review and approval.
 
-This submission is intentionally minimal. Please keep *all* substantive content (scope, responsibilities, leadership & voting members, meeting cadence, communications, code/test ownership, dependencies) exclusively in the **Charter**.
+This proposal submission is intentionally minimal. All substantive content (scope, responsibilities, leadership & voting members, meeting cadence, communications, code/test ownership, dependencies) must be provided exclusively in the **Charter document**.
 
-The **Charter** should be created as markdown document in a new folder `SIG-<sig-name>` under the [`docs/community/SIGs`](https://github.com/open-component-model/open-component-model/tree/main/docs/community/SIGs) directory in the OCM community repo, and linked to below.
+## Proposal
 
-## TL;DR (2–4 sentences)
+Brief summary of the SIG's goal and scope.
 
-Brief summary of the SIG’s goal and scope.
+## Required Links
 
-## Links
+- **Charter PR:** _Link to your charter pull request_
+- **`sigs.yaml` PR:** _To be created after SIG approval_
 
-- **Charter** PR: < link to PR for charter >
-- **`sigs.yaml`** PR: < link to PR for `sigs.yaml` > (to be created after approval)
+## TSC Review
 
-## TSC Agenda
+- **Target TSC meeting date:** `YYYY-MM-DD` _(optional)_
 
-- Target TSC meeting date: `YYYY-MM-DD` (optional)
+_For upcoming TSC meeting dates, check the [TSC meeting notes](https://github.com/open-component-model/open-component-model/tree/main/docs/steering/meeting-notes)_
 
-## Optional context for reviewers (≤5 sentences)
+## Additional Context _(Optional)_
 
-Short additional context if helpful. Do not duplicate Charter content.
+_Provide brief additional context if helpful for reviewers (maximum 5 sentences). Do not duplicate charter content._
+
+## Charter Requirements
+
+- Create the charter as a markdown document in a new folder: `SIG-<sig-name>`
+- Location: [`docs/community/SIGs`](https://github.com/open-component-model/open-component-model/tree/main/docs/community/SIGs) directory
+- Submit as a pull request and link it above
