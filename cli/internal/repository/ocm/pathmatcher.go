@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -76,7 +75,7 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 }
 
 func ResolversFromConfig(config *genericv1.Config) ([]*resolverspec.Resolver, error) {
-	filtered, err := genericv1.FilterForType[*resolverspec.Config](resolverv1.Scheme, config)
+	filtered, err := genericv1.FilterForType[*resolverspec.Config](resolverspec.Scheme, config)
 	if err != nil {
 		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
 	}
