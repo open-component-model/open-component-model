@@ -11,10 +11,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
@@ -54,7 +53,6 @@ func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginMana
 			base: fallbackRepo,
 		}, nil
 	}, nil
-
 }
 
 //nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
