@@ -415,6 +415,47 @@ func Test_Integration_CTF(t *testing.T) {
 	})
 }
 
+func Test_Integration_CTF_Lister(t *testing.T) {
+	t.Parallel()
+
+	// Test data.
+	cvs := []struct {
+		name    string
+		version string
+	}{
+		{"test-component", "v1.0.0"},
+		{"test-component", "v2.0.0"},
+		{"test-component3", "v1.0.0"},
+		{"test-component2", "v1.0.0"},
+	}
+
+	// Expectation: sorted list, elements are unique.
+	expectedList := []string{"test-component", "test-component2", "test-component3"}
+
+	// Write components to CTF, while validating that everything is written correctly.
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	require.NoError(t, err)
+	archive := ctf.NewFileSystemCTF(fs)
+	store := ocictf.NewFromCTF(archive)
+	repo, err := oci.NewRepository(oci.WithResolver(store), oci.WithTempDir(t.TempDir()))
+	require.NoError(t, err)
+
+	for _, cv := range cvs {
+		uploadDownloadBarebonesComponentVersion(t, repo, cv.name, cv.version)
+	}
+
+	// Retrieve the component list and check the results.
+	lister := ocictf.NewComponentLister(archive)
+	result := []string{}
+	err = lister.ListComponents(t.Context(), "", func(names []string) error {
+		result = append(result, names...)
+		return nil
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, expectedList, result)
+}
+
 func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, component string, version string) {
 	ctx := t.Context()
 	r := require.New(t)
