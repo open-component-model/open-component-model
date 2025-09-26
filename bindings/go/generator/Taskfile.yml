@@ -26,9 +26,20 @@ tasks:
   ocmtypegen/generate:
     deps: ["ocmtypegen/install"]
     desc: "Run Type OCM Type Code Generation in the Project"
-    cmds:
+    cmds: [ task: ocmtypegen/concurrent ]
+
+  ocmtypegen/concurrent:
+    internal: true
+    deps:
       - for: { var: GO_MODULES }
-        cmd: '{{ .ROOT_DIR }}/tmp/bin/ocmtypegen {{ .ROOT_DIR }}/{{.ITEM}}'
+        task: 'ocmtypegen/module'
+        vars: { ITEM: '{{ .ITEM }}' }
+
+  ocmtypegen/module:
+    internal: true
+    silent: true
+    prefix: '{{.ITEM}}'
+    cmd: '{{ .ROOT_DIR }}/tmp/bin/ocmtypegen {{ .ROOT_DIR }}/{{.ITEM}}'
 
   ocmtypegen/test:
     desc: "Run OCM Type Generation test"
