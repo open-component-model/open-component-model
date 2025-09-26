@@ -107,32 +107,32 @@ func NewMockCTF(compNames []string) *MockCTF {
 }
 
 // Methods of the CTF interface.
-func (m *MockCTF) Format() ctf.FileFormat {
-	var format ctf.FileFormat
-	return format
-}
 
+// GetIndex is the only used method of the mock implementation.
 func (m *MockCTF) GetIndex(ctx context.Context) (v1.Index, error) {
 	return m.idx, nil
 }
 
+func (m *MockCTF) Format() ctf.FileFormat {
+	panic("not implemented")
+}
+
 func (m *MockCTF) SetIndex(ctx context.Context, index v1.Index) error {
-	return nil
+	panic("not implemented")
 }
 
 func (m *MockCTF) ListBlobs(ctx context.Context) ([]string, error) {
-	return []string{}, nil
+	panic("not implemented")
 }
 
 func (m *MockCTF) GetBlob(ctx context.Context, digest string) (blob.ReadOnlyBlob, error) {
-	var b blob.ReadOnlyBlob
-	return b, nil
+	panic("not implemented")
 }
 
 func (m *MockCTF) SaveBlob(ctx context.Context, blob blob.ReadOnlyBlob) error {
-	return nil
+	panic("not implemented")
 }
 
 func (m *MockCTF) DeleteBlob(ctx context.Context, digest string) error {
-	return nil
+	panic("not implemented")
 }
