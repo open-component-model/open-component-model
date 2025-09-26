@@ -36,9 +36,9 @@ func Register(
 	manifests := inmemory.New()
 	layers := inmemory.New()
 
-	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(Creator), provider.WithTempDir(filesystemConfig.TempFolder))
+	prov := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(Creator), provider.WithTempDir(filesystemConfig.TempFolder))
 
-	// TODO: extend provider to dervice resource repo from access spec
+	// TODO: extend prov to dervice resource repo from access spec
 	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, filesystemConfig: filesystemConfig}
 	ociBlobTransformerPlugin := transformer.New(logger)
 
@@ -46,13 +46,13 @@ func Register(
 		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 			scheme,
 			compverRegistry,
-			CachingComponentVersionRepositoryProvider,
+			prov,
 			&ociv1.Repository{},
 		),
 		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 			scheme,
 			compverRegistry,
-			CachingComponentVersionRepositoryProvider,
+			prov,
 			&ctfv1.Repository{},
 		),
 		resource.RegisterInternalResourcePlugin(

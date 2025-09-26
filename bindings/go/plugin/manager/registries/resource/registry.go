@@ -11,6 +11,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -20,7 +21,7 @@ func NewResourceRegistry(ctx context.Context) *ResourceRegistry {
 		ctx:                ctx,
 		registry:           make(map[runtime.Type]types.Plugin),
 		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),
-		internalPlugins:    make(map[runtime.Type]Repository),
+		internalPlugins:    make(map[runtime.Type]repository.ResourceRepositoryProvider),
 		constructedPlugins: make(map[string]*constructedPlugin),
 	}
 }
@@ -30,14 +31,9 @@ type ResourceRegistry struct {
 	ctx                context.Context
 	mu                 sync.Mutex
 	registry           map[runtime.Type]types.Plugin
-	internalPlugins    map[runtime.Type]Repository
+	constructedPlugins map[string]*constructedPlugin
+	internalPlugins    map[runtime.Type]repository.ResourceRepositoryProvider
 	scheme             *runtime.Scheme
-	constructedPlugins map[string]*constructedPlugin // running plugins
-}
-
-// ResourceScheme returns the scheme used by the Resource registry.
-func (r *ResourceRegistry) ResourceScheme() *runtime.Scheme {
-	return r.scheme
 }
 
 // AddPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
@@ -53,6 +49,105 @@ func (r *ResourceRegistry) AddPlugin(plugin types.Plugin, constructionType runti
 	r.registry[constructionType] = plugin
 
 	return nil
+}
+
+func startAndReturnPlugin(ctx context.Context, r *ResourceRegistry, plugin *types.Plugin) (v1.ReadWriteResourcePluginContract, error) {
+	if err := plugin.Cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
+	}
+
+	client, loc, err := plugins.WaitForPlugin(ctx, plugin)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
+	}
+
+	// start log streaming once the plugin is up and running.
+	go plugins.StartLogStreamer(r.ctx, plugin)
+
+	var jsonSchema []byte
+loop:
+	for _, tps := range plugin.Types {
+		for _, tp := range tps {
+			jsonSchema = tp.JSONSchema
+			break loop
+		}
+	}
+
+	resourcePlugin := NewResourceRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
+	r.constructedPlugins[plugin.ID] = &constructedPlugin{
+		Plugin: resourcePlugin,
+		cmd:    plugin.Cmd,
+	}
+
+	return resourcePlugin, nil
+}
+
+func (r *ResourceRegistry) GetResourceRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Check if this is an internal plugin first
+	typ := repositorySpecification.GetType()
+	if ok := r.scheme.IsRegistered(typ); ok {
+		p, ok := r.internalPlugins[typ]
+		if !ok {
+			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
+		}
+
+		identity, err := p.GetResourceRepositoryCredentialConsumerIdentity(ctx, repositorySpecification)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get component version repository: %w", err)
+		}
+
+		return identity, nil
+	}
+
+	// For external plugins, get the plugin and ask for identity
+	plugin, err := r.getPlugin(ctx, typ)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
+	}
+
+	request := &v1.GetIdentityRequest[runtime.Typed]{
+		Typ: repositorySpecification,
+	}
+
+	result, err := plugin.GetIdentity(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get identity: %w", err)
+	}
+
+	return result.Identity, nil
+}
+
+func (r *ResourceRegistry) GetResourceRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ResourceRepository, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// look for an internal implementation that actually implements the interface
+	_, _ = r.scheme.DefaultType(repositorySpecification)
+	typ := repositorySpecification.GetType()
+	// if we find the type has been registered internally, we look for internal plugins for it.
+	if ok := r.scheme.IsRegistered(typ); ok {
+		p, ok := r.internalPlugins[typ]
+		if !ok {
+			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
+		}
+
+		repo, err := p.GetResourceRepository(ctx, repositorySpecification, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get component version repository: %w", err)
+		}
+
+		return repo, nil
+	}
+
+	plugin, err := r.getPlugin(ctx, typ)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
+	}
+
+	return r.externalToResourcePluginConverter(plugin, r.scheme, repositorySpecification), nil
 }
 
 // GetResourcePlugin returns Resource plugins for a specific type.
@@ -143,35 +238,4 @@ func (r *ResourceRegistry) Shutdown(ctx context.Context) error {
 	}
 
 	return errs
-}
-
-func startAndReturnPlugin(ctx context.Context, r *ResourceRegistry, plugin *types.Plugin) (v1.ReadWriteResourcePluginContract, error) {
-	if err := plugin.Cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
-	}
-
-	client, loc, err := plugins.WaitForPlugin(ctx, plugin)
-	if err != nil {
-		return nil, fmt.Errorf("failed to wait for plugin to start: %w", err)
-	}
-
-	// start log streaming once the plugin is up and running.
-	go plugins.StartLogStreamer(r.ctx, plugin)
-
-	var jsonSchema []byte
-loop:
-	for _, tps := range plugin.Types {
-		for _, tp := range tps {
-			jsonSchema = tp.JSONSchema
-			break loop
-		}
-	}
-
-	resourcePlugin := NewResourceRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
-	r.constructedPlugins[plugin.ID] = &constructedPlugin{
-		Plugin: resourcePlugin,
-		cmd:    plugin.Cmd,
-	}
-
-	return resourcePlugin, nil
 }
