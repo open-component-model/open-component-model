@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -54,6 +55,7 @@ func PluginManager(cmd *cobra.Command) error {
 			pluginCfg.IdleTimeout = v2alpha1.Duration(time.Hour)
 		}
 
+		var loadedAnyPlugins bool
 		for _, pluginLocation := range pluginCfg.Locations {
 			err := pluginManager.RegisterPlugins(cmd.Context(), pluginLocation,
 				manager.WithIdleTimeout(time.Duration(pluginCfg.IdleTimeout)),
@@ -65,6 +67,12 @@ func PluginManager(cmd *cobra.Command) error {
 			if err != nil {
 				return err
 			}
+
+			loadedAnyPlugins = true
+		}
+
+		if !loadedAnyPlugins {
+			slog.DebugContext(cmd.Context(), "no plugins found at any of the configured locations", slog.String("locations", strings.Join(pluginCfg.Locations, ", ")))
 		}
 	}
 
