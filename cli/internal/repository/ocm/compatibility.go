@@ -34,12 +34,12 @@ func NewFromRefWithResolvers(ctx context.Context, pluginManager *manager.PluginM
 			return nil, fmt.Errorf("getting resolvers from configuration failed: %w", err)
 		}
 	}
-	// prefer path matchers if available
-	if len(pathMatchers) > 0 {
-		slog.DebugContext(ctx, "using path matcher resolvers", slog.Int("count", len(pathMatchers)))
-		return NewFromRefWithPathMatcher(ctx, pluginManager, credentialGraph, pathMatchers, componentReference)
+	// only use fallback resolvers if we got them from config and there are no path matchers
+	if len(pathMatchers) == 0 && len(fallbackResolvers) > 0 {
+		slog.DebugContext(ctx, "using fallback resolvers", slog.Int("count", len(fallbackResolvers)))
+		return NewFromRefWithFallbackRepo(ctx, pluginManager, credentialGraph, fallbackResolvers, componentReference)
 	}
 
-	slog.DebugContext(ctx, "using fallback resolvers", slog.Int("count", len(fallbackResolvers)))
-	return NewFromRefWithFallbackRepo(ctx, pluginManager, credentialGraph, fallbackResolvers, componentReference)
+	slog.DebugContext(ctx, "using path matcher resolvers", slog.Int("count", len(pathMatchers)))
+	return NewFromRefWithPathMatcher(ctx, pluginManager, credentialGraph, pathMatchers, componentReference)
 }
