@@ -26,10 +26,9 @@ import (
 )
 
 const (
-	FlagConcurrencyLimit        = "concurrency-limit"
-	FlagSignature               = "signature"
-	FlagVerifyDigestConsistency = "verify-digest-consistency"
-	FlagVerifierSpec            = "verifier-spec"
+	FlagConcurrencyLimit = "concurrency-limit"
+	FlagSignature        = "signature"
+	FlagVerifierSpec     = "verifier-spec"
 )
 
 func New() *cobra.Command {
@@ -102,7 +101,6 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. If not set, all signatures are verified.")
-	cmd.Flags().Bool(FlagVerifyDigestConsistency, true, "verify that all digests match the descriptor before verifying the signature itself")
 	cmd.Flags().String(FlagVerifierSpec, "", "path to an optional verifier specification file. If empty, defaults to an empty RSASSA-PSS configuration.")
 
 	return cmd
@@ -150,13 +148,6 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting concurrency limit flag failed: %w", err)
 	}
 
-	verifyDigestConsistency, err := cmd.Flags().GetBool(FlagVerifyDigestConsistency)
-	if err != nil {
-		return fmt.Errorf("getting verify-digest-consistency flag failed: %w", err)
-	} else if !verifyDigestConsistency {
-		logger.WarnContext(ctx, "digest consistency verification is disabled")
-	}
-
 	verifierSpecPath, err := cmd.Flags().GetString(FlagVerifierSpec)
 	if err != nil {
 		return fmt.Errorf("getting verifier-spec flag failed: %w", err)
@@ -199,10 +190,8 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no signatures found to verify")
 	}
 
-	if verifyDigestConsistency {
-		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-			logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
-		}
+	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
+		logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
 	}
 
 	var verifierSpec runtime.Typed
@@ -237,10 +226,8 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				logger.InfoContext(egctx, "signature verification completed", "name", signature.Name, "duration", time.Since(start).String())
 			}()
 
-			if verifyDigestConsistency {
-				if err := signing.VerifyDigestMatchesDescriptor(egctx, desc, signature, logger); err != nil {
-					return err
-				}
+			if err := signing.VerifyDigestMatchesDescriptor(egctx, desc, signature, logger); err != nil {
+				return err
 			}
 
 			var credentials map[string]string
