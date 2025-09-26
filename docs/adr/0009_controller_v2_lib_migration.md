@@ -13,9 +13,8 @@ Enable a clear and efficient migration path for engineers moving the OCM control
 
 The *ocm-k8s-toolkit* (now renamed to `open-component-model/kubernetes/controller`, referred to as the OCM Kubernetes Controller Toolkit) provides a set of controllers for managing OCM objects within Kubernetes clusters. Its primary responsibilities include:
 
-1. Synchronizing and verifying OCM Component Versions from OCM repositories.
+1. Synchronizing and verifying OCM Component Versions and derived resources from OCM repositories.
 2. Aggregating and interpreting `.ocmconfig` configurations to enable repository access and configuration.
-3. Synchronizing and verifying OCM resources contained within OCM Component Versions.
 
 Beyond these core functions, the toolkit also offers:
 
@@ -196,7 +195,7 @@ Explanation of flowchart components:
 
 - Controllers always hit the LRU cache first.
 - On a cache miss, the request is added to the lookup queue, and status is set to "in progress"
-- singleflight deduplicates requests for the same version to ensure only one actual backend fetch occurs.
+- singleflight deduplicates requests for the same key (see below) to ensure only one actual backend fetch occurs.
 - the semaphore ensures no more than N concurrent lookups proceed, protecting both cluster and remote repositories.
 - requests are then handled by a worker pool, where workers call the OCM Resolver in the new reference library.
 - once resolved, results are added back to the LRU cache, ready for the next reconcile loop.
