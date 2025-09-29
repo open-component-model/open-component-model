@@ -12,22 +12,20 @@ The SIG Runtime steers, develops, and maintains the **OCM Kubernetes Runtime Too
 ### Scope
 
 - Design, implementation, and maintenance of the OCM Runtime toolkit.
-- Integrations for Kubernetes resource orchestration and GitOps workflows, starting with **Kro** (Kubernetes resource orchestration) and **Flux** (GitOps).
-- Authoring and curating **patterns**, **reference architectures**, and **best practices** for runtime deployments using OCM.
+- Integrations with **Kro** (Kubernetes resource orchestration) and **Flux** (GitOps workflows).
+- Authoring and curating **patterns** and **best practices** for runtime deployments using OCM.
 - Community enablement: docs, examples, troubleshooting guides, support channels, and triage for runtime-related topics.
-
-> Decision-making, voting, escalation, and conflict resolution follow the **OCM SIG Handbook** and project governance; they are not duplicated here.
 
 ## Deliverables
 
 - Production-grade **Runtime Toolkit** releases with versioned artifacts and upgrade notes.
 - **Integrations** with Kro and Flux, including examples and tests. Actively participate in upstream discussions, issues, and PRs.
-- **Best-practice patterns**: reference repos, blueprints, Helm/Kustomize samples.
-- **Operational docs**: install, day-2 ops, migration handling,security hardening.
-- **Conformance & e2e tests** for runtime behaviors and supported OCM CLI and Kubernetes versions.
+- **Best-practice patterns**: reference docs, blueprints, Helm/Kustomize samples.
+- **Operational docs**: install, day-2 ops, migration handling, security hardening.
+- **Conformance & e2e tests** for runtime scenarios and supported OCM CLI and Kubernetes versions.
 - **Public roadmap** and release notes.
 
-## Responsibilities (expanded)
+## Responsibilities
 
 1. **Development & Maintenance (Runtime Toolkit)**
    - Own controller APIs/CRDs and backward-compatibility guarantees.
@@ -50,18 +48,18 @@ The SIG Runtime steers, develops, and maintains the **OCM Kubernetes Runtime Too
 
 ## Areas of Ownership (Code & Tests)
 
-- **Primary:** OCM Runtime Toolkit GitHub repositories and folders:
+- **Primary:** OCM Runtime Toolkit GitHub code repositories and folders:
   - https://github.com/morri-son/open-component-model /kubernetes/controller
   - ...
 - **Test ownership:** component-level tests and runtime e2e/conformance tests for owned code.
 
-> Code/test ownership declarations will be reflected in `CODEOWNERS` and repository READMEs
+> Code/test ownership declarations will be reflected in `CODEOWNERS` and repository READMEs.
 
 ## Interfaces & Dependencies
 
 - **External projects:** [Kro](https://kro.run), [Flux](https://fluxcd.io).
-- **OCM Internally** CLI, OCM specification, Website/Docs (for docs publishing).
-- **Contract management:** publish versioned compatibility tables (e.g. OCM CLI and Kubernetes version) and breaking-change notices.
+- **OCM internal** CLI, OCM library, OCM specification, website/docs (for docs publishing).
+- **Contract management:** publish versioned compatibility matrix (e.g. for OCM CLI and Kubernetes versions) and breaking-change notices.
 
 ## Operating Model
 
@@ -73,12 +71,12 @@ The SIG Runtime steers, develops, and maintains the **OCM Kubernetes Runtime Too
   Administrative lead(s); schedule meetings, ensure process adherence, represent SIG to the TSC.
 - **Tech Lead(s):** _TBD (can potentially be the same as Chair)_
   Technical direction; approves designs/roadmaps; final reviewer on architectural changes.
-- **Maintainers/Reviewers:** listed in repo `CODEOWNERS`.
-- **Members/Contributors:** anyone adhering to the CoC and contribution guidelines.
+- **Maintainers:** listed in repo `CODEOWNERS`.
+- **Contributors:** anyone adhering to the CoC and contribution guidelines.
 
 ### Membership & Voting
 
-- **Voting members:** Chair(s), Tech Lead(s), and designated maintainers/reviewers of SIG-owned code.
+- **Voting members:** Chair(s), Tech Lead(s), and designated maintainers of SIG-owned code.
 - **Becoming a voting member:** nomination by an existing voting member and confirmation at a public SIG meeting.
 
 ### Meetings
