@@ -14,7 +14,7 @@ import (
 )
 
 func convertToRaw(repository runtime.Typed) (*runtime.Raw, error) {
-	scheme := runtime.NewScheme()
+	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
 	scheme.MustRegister(repository, "v1")
 	raw := runtime.Raw{}
 	err := scheme.Convert(repository, &raw)
