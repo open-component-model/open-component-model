@@ -9,7 +9,7 @@ require (
 	helm.sh/helm/v3 v3.19.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.8
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250919174641-be28d8d1c750
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250929111900-08cb1b0e7343
 	ocm.software/open-component-model/bindings/go/oci v0.0.8
 	ocm.software/open-component-model/bindings/go/plugin v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
@@ -105,8 +105,8 @@ require (
 	k8s.io/kubectl v0.34.1 // indirect
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250919174641-be28d8d1c750 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250919174641-be28d8d1c750 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250929111900-08cb1b0e7343 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250929111900-08cb1b0e7343 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
