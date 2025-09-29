@@ -47,7 +47,7 @@ func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginMana
 		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
 	}
 
-	return func(ctx context.Context, _ runtime.Identity) (*ComponentRepository, error) {
+	return func(ctx context.Context, _ *runtime.Identity) (*ComponentRepository, error) {
 		return &ComponentRepository{
 			ref:  ref,
 			base: fallbackRepo,

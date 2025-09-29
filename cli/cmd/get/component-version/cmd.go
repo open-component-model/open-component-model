@@ -145,7 +145,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	repo, err := repoProvider(cmd.Context(), runtime.Identity{})
+	repo, err := repoProvider(cmd.Context(), nil)
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
@@ -298,7 +298,7 @@ func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repoPro
 			id, _ := runtime.ParseIdentity(v)
 			// root descriptors are already known
 			if untypedDesc, ok := vertex.GetAttribute(descriptorAttribute); !ok {
-				repo, err := repoProvider(ctx, id)
+				repo, err := repoProvider(ctx, &id)
 				if err != nil {
 					return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
 				}
