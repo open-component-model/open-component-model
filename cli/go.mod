@@ -6,7 +6,6 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/jedib0t/go-pretty/v6 v6.6.8
 	github.com/nlepage/go-tarfs v1.2.1
-	github.com/opencontainers/go-digest v1.0.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
@@ -14,16 +13,16 @@ require (
 	golang.org/x/sys v0.36.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.8
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250919174641-be28d8d1c750
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250929111900-08cb1b0e7343
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.4
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250919063228-9ba366336564
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250919174641-be28d8d1c750
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250929111900-08cb1b0e7343
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250929111900-08cb1b0e7343
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250919174641-be28d8d1c750
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250929111900-08cb1b0e7343
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
 	ocm.software/open-component-model/bindings/go/plugin v0.0.7
 	ocm.software/open-component-model/bindings/go/repository v0.0.1
@@ -45,6 +44,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
+	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
