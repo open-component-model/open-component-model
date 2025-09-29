@@ -49,7 +49,7 @@ The SIG Runtime steers, develops, and maintains the **OCM Kubernetes Runtime Too
 ## Areas of Ownership (Code & Tests)
 
 - **Primary:** OCM Runtime Toolkit GitHub code repositories and folders:
-  - https://github.com/morri-son/open-component-model /kubernetes/controller
+  - [open-component-model](https://github.com/morri-son/open-component-model) /kubernetes/controller
   - ...
 - **Test ownership:** component-level tests and runtime e2e/conformance tests for owned code.
 
