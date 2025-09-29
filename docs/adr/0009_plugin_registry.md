@@ -166,8 +166,8 @@ configurations:
       credentials:
         - type: Credentials/v1
           properties:
-            username: %[3]q
-            password: %[4]q
+            username: username
+            password: password
 ```
 
 From there, the user can list plugins from the registry:
