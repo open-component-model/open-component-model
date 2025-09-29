@@ -92,15 +92,17 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 		// we want to preserve the order.
 		slices.Sort(roots)
 	} else {
-		for index, root := range roots {
-			if _, exists := t.dag.GetVertex(root); !exists {
+		filteredRoots := make([]T, 0, len(roots))
+		for _, root := range roots {
+			if _, exists := t.dag.GetVertex(root); exists {
 				// If root does not exist in the dag yet, we exclude it from the
 				// current rendering run.
 				// The root might be added to the graph, after the rendering
 				// has started, so we do not want to fail the rendering.
-				roots = append(roots[:index], roots[index+1:]...)
+				filteredRoots = append(filteredRoots, root)
 			}
 		}
+		roots = filteredRoots
 	}
 
 	for i, root := range roots {
