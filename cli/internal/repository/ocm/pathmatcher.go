@@ -3,10 +3,12 @@ package ocm
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -49,14 +51,27 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 
 	provider := pathmatcher.NewSpecProvider(ctx, resolvers)
 
-	return func(ctx context.Context, identity runtime.Identity) (*ComponentRepository, error) {
-		repoSpec, err := provider.GetRepositorySpec(ctx, identity)
+	return func(ctx context.Context, identity *runtime.Identity) (*ComponentRepository, error) {
+		if identity == nil {
+			identity = &runtime.Identity{
+				descruntime.IdentityAttributeName: ref.Component,
+			}
+		}
+		repoSpec, err := provider.GetRepositorySpec(ctx, *identity)
 		if err != nil {
 			return nil, fmt.Errorf("getting repository spec for component reference %q failed: %w", componentReference, err)
 		}
+
+		var creds map[string]string
 		consumerIdentity, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
-		if err != nil {
-			return nil, fmt.Errorf("getting consumer identity for repository %q failed: %w", ref.Repository, err)
+		if err == nil {
+			if graph != nil {
+				if creds, err = graph.Resolve(ctx, *identity); err != nil {
+					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", ref.Repository, err.Error()))
+				}
+			}
+		} else {
+			slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", ref.Repository, "error", err)
 		}
 		credMap, err := graph.Resolve(ctx, consumerIdentity)
 		if err != nil {
@@ -68,8 +83,10 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 		}
 
 		return &ComponentRepository{
-			ref:  ref,
-			base: base,
+			ref:         ref,
+			base:        base,
+			spec:        repoSpec,
+			credentials: creds,
 		}, nil
 	}, nil
 }
