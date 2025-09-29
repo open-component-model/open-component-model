@@ -34,7 +34,7 @@ type Config struct {
 
 func (cfg *Config) GetSignatureEncodingPolicy() SignatureEncodingPolicy {
 	if cfg == nil || cfg.SignatureEncodingPolicy == "" {
-		return SignatureEncodingPolicyPEM
+		return SignatureEncodingPolicyDefault
 	}
 	return cfg.SignatureEncodingPolicy
 }
