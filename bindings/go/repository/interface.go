@@ -92,15 +92,6 @@ type LocalSourceRepository interface {
 	GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error)
 }
 
-type ResourceRepositoryProvider interface {
-	// GetResourceRepositoryCredentialConsumerIdentity retrieves the consumer
-	// identity for a given repository specification.
-	GetResourceRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error)
-	// GetResourceRepository retrieves a resource repository with the given
-	// specification and credentials.
-	GetResourceRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ResourceRepository, error)
-}
-
 // ResourceRepository defines the interface for storing and retrieving OCM resources
 // independently of component versions from a store implementation.
 type ResourceRepository interface {
