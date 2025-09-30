@@ -38,6 +38,8 @@ type ComponentRepository struct {
 	credentials map[string]string // Credentials for repository access
 }
 
+//TODO: ComponentRepository could be removed? maybe? maybe not? fabian? :D
+
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
 func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, componentReference string) (*ComponentRepository, error) {

@@ -17,7 +17,6 @@ import (
 
 func convertToRaw(repository runtime.Typed) (*runtime.Raw, error) {
 	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-	scheme.MustRegister(repository, "v1")
 	raw := runtime.Raw{}
 	err := scheme.Convert(repository, &raw)
 	if err != nil {
@@ -62,21 +61,18 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 			return nil, fmt.Errorf("getting repository spec for component reference %q failed: %w", componentReference, err)
 		}
 
-		var creds map[string]string
-		consumerIdentity, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
+		var credMap map[string]string
+		consumerIdentity, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, ref.Repository)
 		if err == nil {
 			if graph != nil {
-				if creds, err = graph.Resolve(ctx, *identity); err != nil {
+				if credMap, err = graph.Resolve(ctx, consumerIdentity); err != nil {
 					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", ref.Repository, err.Error()))
 				}
 			}
 		} else {
 			slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", ref.Repository, "error", err)
 		}
-		credMap, err := graph.Resolve(ctx, consumerIdentity)
-		if err != nil {
-			return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", ref.Repository, err)
-		}
+
 		base, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, repoSpec, credMap)
 		if err != nil {
 			return nil, fmt.Errorf("getting component version repository for %q failed: %w", ref.Repository, err)
@@ -86,7 +82,7 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 			ref:         ref,
 			base:        base,
 			spec:        repoSpec,
-			credentials: creds,
+			credentials: credMap,
 		}, nil
 	}, nil
 }
