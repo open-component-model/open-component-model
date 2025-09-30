@@ -43,6 +43,7 @@ func (p *Plugin) GetComponentVersionRepositoryCredentialConsumerIdentity(_ conte
 	return nil, fmt.Errorf("not implemented because ctfs do not need consumer identity based credentials")
 }
 
+// TODO: #575 can this be called with raw?
 func (p *Plugin) GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentVersionRepository, error) {
 	ctfRepoSpec, ok := repositorySpecification.(*ctfv1.Repository)
 	if !ok {
