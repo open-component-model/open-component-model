@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"golang.org/x/sync/errgroup"
-
 	"ocm.software/open-component-model/bindings/go/constructor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"

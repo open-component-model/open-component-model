@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -147,6 +148,13 @@ func (r *RepositoryRegistry) GetComponentVersionRepositoryCredentialConsumerIden
 	// Check if this is an internal plugin first
 	typ := repositorySpecification.GetType()
 	if ok := r.scheme.IsRegistered(typ); ok {
+		// repositorySpecification can be *runtime.Raw, if so convert to runtime.Typed for  GetComponentVersionRepositoryCredentialConsumerIdentity
+		if converted, err := manager.EnsureTyped(repositorySpecification, r.scheme); err != nil {
+			return nil, fmt.Errorf("failed to ensure typed for type %v: %w", typ, err)
+		} else {
+			repositorySpecification = converted
+		}
+
 		p, ok := r.internalComponentVersionRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
