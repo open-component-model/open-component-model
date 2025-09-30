@@ -1038,8 +1038,8 @@ github.com/fluxcd/pkg/apis/event v0.19.0 h1:ZJU2voontkzp5rNYA4JMOu40S4tRcrWi4Do5
 github.com/fluxcd/pkg/apis/event v0.19.0/go.mod h1:deuIyUb6lh+Z1Ccvwwxhm1wNM3kpSo+vF1IgRnpaZfQ=
 github.com/fluxcd/pkg/apis/meta v1.21.0 h1:R+bN02chcs0HUmyVDQhqe/FHmYLjipVDMLnyYfNX850=
 github.com/fluxcd/pkg/apis/meta v1.21.0/go.mod h1:XUAEUgT4gkWDAEN79E141tmL+v4SV50tVZ/Ojpc/ueg=
-github.com/fluxcd/pkg/runtime v0.84.0 h1:3M+egIQwQU9YYjKQkczyawG+9RUOkGtkDMQlePnEeTM=
-github.com/fluxcd/pkg/runtime v0.84.0/go.mod h1:Wt9mUzQgMPQMu2D/wKl5pG4zh5vu/tfF5wq9pPobxOQ=
+github.com/fluxcd/pkg/runtime v0.85.0 h1:oOIeK2XvvsnvB0b1l/2pDuNzhFKSqP6UM+CirRLQvF0=
+github.com/fluxcd/pkg/runtime v0.85.0/go.mod h1:Wt9mUzQgMPQMu2D/wKl5pG4zh5vu/tfF5wq9pPobxOQ=
 github.com/fluxcd/pkg/ssa v0.52.0 h1:CmznD3p0hp7wgtPMNGE4egyxeb+UOnMdrJ+bL+QnTDE=
 github.com/fluxcd/pkg/ssa v0.52.0/go.mod h1:v+h9RC0JxWIqMTK2Eo+8Nh700AXyZChZ2TiLVj4tf3M=
 github.com/fogleman/gg v1.2.1-0.20190220221249-0403632d5b90/go.mod h1:R/bRT+9gY/C5z7JzPU0zXsXHKM4/ayA+zqcVNZzPa1k=
