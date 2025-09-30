@@ -2,6 +2,7 @@ module ocm.software/open-component-model/bindings/go/oci/integration
 
 go 1.25.0
 
+replace ocm.software/open-component-model/bindings/go/ctf => github.com/fabianburth/open-component-model/bindings/go/ctf v0.0.0-20250930092919-8138a3fcda86
 require (
 	github.com/nlepage/go-tarfs v1.2.1
 	github.com/opencontainers/go-digest v1.0.0
