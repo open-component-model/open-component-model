@@ -162,13 +162,27 @@ func OpenCTFFromOSPath(path string, flag int) (*FileSystemCTF, error) {
 // For FormatDirectory, the path is treated as a directory, otherwise the path is interpreted as a file with
 // an extension that determines its behavior.
 // For more information on how a flag behaves for FormatTAR (and FormatTGZ), see ExtractTAR.
-func OpenCTFByFileExtension(ctx context.Context, opts OpenCTFOptions) (archive CTF, discovered FileFormat, err error) {
-	ext := filepath.Ext(opts.Path)
-	// check if the extension is in the form of ".tar.gz" in which case the extension is ".tar" and ".gz"
-	// but filepath.Ext only returns ".gz". Then we need to check if the previous extension is ".tar"
-	if doubleGzExt := ".gz"; ext == doubleGzExt {
-		ext = filepath.Ext(opts.Path[:len(opts.Path)-len(doubleGzExt)]) + ext
+func OpenCTFByFileExtension(ctx context.Context, opts OpenCTFOptions) (CTF, FileFormat, error) {
+	discovered := DiscoverCTFFormatFromPath(opts.Path)
+
+	// Update the options with the discovered format
+	opts.Format = discovered
+	archive, err := OpenCTF(ctx, opts)
+	if err != nil {
+		return nil, FormatUnknown, fmt.Errorf("failed to open CTF: %w", err)
 	}
+
+	return archive, discovered, nil
+}
+
+func DiscoverCTFFormatFromPath(path string) FileFormat {
+	ext := filepath.Ext(path)
+	// check if the extension is in the form of ".tar.gz" in which case the extension is ".tar" and ".gz"
+	// but filepath. Ext only returns ".gz". Then we need to check if the previous extension is ".tar"
+	if doubleGzExt := ".gz"; ext == doubleGzExt {
+		ext = filepath.Ext(path[:len(path)-len(doubleGzExt)]) + ext
+	}
+	var discovered FileFormat
 	switch ext {
 	case ".tgz", ".tar.gz":
 		discovered = FormatTGZ
@@ -177,14 +191,7 @@ func OpenCTFByFileExtension(ctx context.Context, opts OpenCTFOptions) (archive C
 	default:
 		discovered = FormatDirectory
 	}
-
-	// Update the options with the discovered format
-	opts.Format = discovered
-	if archive, err = OpenCTF(ctx, opts); err != nil {
-		return nil, FormatUnknown, fmt.Errorf("failed to open CTF: %w", err)
-	}
-
-	return archive, discovered, nil
+	return discovered
 }
 
 // WorkWithinCTF opens a CTF using the provided options and calls the work function with the CTF.
