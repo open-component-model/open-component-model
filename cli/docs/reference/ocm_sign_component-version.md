@@ -81,17 +81,16 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 ### Options
 
 ```
-      --concurrency-limit int       maximum amount of parallel requests to the repository for resolving component versions (default 4)
-      --dry-run                     compute signature but do not persist it to the repository
-      --force                       overwrite existing signatures under the same name
-      --hash string                 hash algorithm to use (SHA256, SHA512) (default "SHA-256")
-  -h, --help                        help for component-version
-      --normalisation string        normalisation algorithm to use (default jsonNormalisation/v4alpha1) (default "jsonNormalisation/v4alpha1")
-  -o, --output enum                 output format of the resulting signature
-                                    (must be one of [json yaml]) (default yaml)
-      --signature string            name of the signature to create or update. defaults to "default" (default "default")
-      --signer-spec string          path to a signer specification file. If empty, defaults to an empty RSASSA-PSS configuration.
-      --verify-digest-consistency   verify that all digests are complete and valid before signing (default true)
+      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
+      --dry-run                 compute signature but do not persist it to the repository
+      --force                   overwrite existing signatures under the same name
+      --hash string             hash algorithm to use (SHA256, SHA512) (default "SHA-256")
+  -h, --help                    help for component-version
+      --normalisation string    normalisation algorithm to use (default jsonNormalisation/v4alpha1) (default "jsonNormalisation/v4alpha1")
+  -o, --output enum             output format of the resulting signature
+                                (must be one of [json yaml]) (default yaml)
+      --signature string        name of the signature to create or update. defaults to "default" (default "default")
+      --signer-spec string      path to a signer specification file. If empty, defaults to an empty RSASSA-PSS configuration.
 ```
 
 ### Options inherited from parent commands

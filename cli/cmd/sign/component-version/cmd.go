@@ -31,15 +31,14 @@ import (
 )
 
 const (
-	FlagConcurrencyLimit        = "concurrency-limit"
-	FlagSignerSpec              = "signer-spec"
-	FlagSignature               = "signature"
-	FlagOutput                  = "output"
-	FlagNormalisationAlgorithm  = "normalisation"
-	FlagHashAlgorithm           = "hash"
-	FlagVerifyDigestConsistency = "verify-digest-consistency"
-	FlagDryRun                  = "dry-run"
-	FlagForce                   = "force"
+	FlagConcurrencyLimit       = "concurrency-limit"
+	FlagSignerSpec             = "signer-spec"
+	FlagSignature              = "signature"
+	FlagOutput                 = "output"
+	FlagNormalisationAlgorithm = "normalisation"
+	FlagHashAlgorithm          = "hash"
+	FlagDryRun                 = "dry-run"
+	FlagForce                  = "force"
 )
 
 const (
@@ -122,7 +121,6 @@ sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.2
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().String(FlagSignature, DefaultSignatureName, "name of the signature to create or update. defaults to \"default\"")
-	cmd.Flags().Bool(FlagVerifyDigestConsistency, true, "verify that all digests are complete and valid before signing")
 	cmd.Flags().String(FlagSignerSpec, "", "path to a signer specification file. If empty, defaults to an empty RSASSA-PSS configuration.")
 	cmd.Flags().Bool(FlagDryRun, false, "compute signature but do not persist it to the repository")
 	cmd.Flags().String(FlagNormalisationAlgorithm, v4alpha1.Algorithm, "normalisation algorithm to use (default jsonNormalisation/v4alpha1)")
@@ -170,14 +168,9 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	if signatureName == "" {
 		signatureName = DefaultSignatureName
 	}
-	verifyDigestConsistency, _ := cmd.Flags().GetBool(FlagVerifyDigestConsistency)
 	signerSpecPath, _ := cmd.Flags().GetString(FlagSignerSpec)
 	force, _ := cmd.Flags().GetBool(FlagForce)
 	dryRun, _ := cmd.Flags().GetBool(FlagDryRun)
-
-	if !verifyDigestConsistency {
-		logger.WarnContext(ctx, "digest consistency verification is disabled")
-	}
 
 	ref := args[0]
 	var resolvers []*resolverruntime.Resolver //nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
@@ -200,10 +193,8 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
 
-	if verifyDigestConsistency {
-		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-			logger.WarnContext(ctx, "component version not safely digestible", "error", err.Error())
-		}
+	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
+		logger.WarnContext(ctx, "component version not safely digestible", "error", err.Error())
 	}
 
 	// signer spec

@@ -25,8 +25,7 @@ Verify component version(s) inside an OCM repository based on signatures.
 ## OCM Verification explained in simple steps
 
 - Resolve OCM repository  
-- Fetch component version  
-- Verify digests (--verify-digest-consistency)  
+- Fetch component version 
 - Normalise descriptor (algorithm from signature)  
 - Recompute hash and compare with signature digest  
 - Verify signature (--verifier-spec, default RSASSA-PSS verifier)  
