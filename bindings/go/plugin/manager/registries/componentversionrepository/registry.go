@@ -198,6 +198,13 @@ func (r *RepositoryRegistry) GetComponentVersionRepository(ctx context.Context, 
 	typ := repositorySpecification.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
 	if ok := r.scheme.IsRegistered(typ); ok {
+		// repositorySpecification can be *runtime.Raw, if so convert to runtime.Typed for  GetComponentVersionRepositoryCredentialConsumerIdentity
+		if converted, err := mtypes.EnsureTyped(repositorySpecification, r.scheme); err != nil {
+			return nil, fmt.Errorf("failed to ensure typed for type %v: %w", typ, err)
+		} else {
+			repositorySpecification = converted
+		}
+
 		p, ok := r.internalComponentVersionRepositoryPlugins[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
