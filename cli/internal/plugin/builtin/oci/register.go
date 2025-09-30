@@ -33,13 +33,9 @@ func Register(
 	repository.MustAddToScheme(scheme)
 	access.MustAddToScheme(scheme)
 
-	manifests := inmemory.New()
-	layers := inmemory.New()
-
 	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(Creator), provider.WithTempDir(filesystemConfig.TempFolder))
 
-	// TODO: extend provider to dervice resource repo from access spec
-	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, filesystemConfig: filesystemConfig}
+	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: inmemory.New(), layers: inmemory.New(), filesystemConfig: filesystemConfig}
 	ociBlobTransformerPlugin := transformer.New(logger)
 
 	return errors.Join(
