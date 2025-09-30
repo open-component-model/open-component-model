@@ -2,10 +2,7 @@ module ocm.software/open-component-model/cli
 
 go 1.25.0
 
-replace (
-	ocm.software/open-component-model/bindings/go/ctf => github.com/fabianburth/open-component-model/bindings/go/ctf v0.0.0-20250930092919-8138a3fcda86
-	ocm.software/open-component-model/bindings/go/oci => github.com/fabianburth/open-component-model/bindings/go/oci v0.0.0-20250930110039-d373ef0323e1
-)
+replace ocm.software/open-component-model/bindings/go/oci => github.com/fabianburth/open-component-model/bindings/go/oci v0.0.0-20250930090025-762a9482ea92
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
