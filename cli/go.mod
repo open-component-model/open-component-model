@@ -2,6 +2,8 @@ module ocm.software/open-component-model/cli
 
 go 1.25.0
 
+replace ocm.software/open-component-model/bindings/go/oci => github.com/fabianburth/open-component-model/bindings/go/oci v0.0.0-20250930090025-762a9482ea92
+
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/jedib0t/go-pretty/v6 v6.6.8
@@ -12,7 +14,7 @@ require (
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.36.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
-	ocm.software/open-component-model/bindings/go/configuration v0.0.8
+	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250929111900-08cb1b0e7343
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
@@ -24,7 +26,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20250929111900-08cb1b0e7343
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
 	ocm.software/open-component-model/bindings/go/plugin v0.0.6
-	ocm.software/open-component-model/bindings/go/repository v0.0.1
+	ocm.software/open-component-model/bindings/go/repository v0.0.2
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
