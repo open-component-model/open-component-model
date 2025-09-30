@@ -55,6 +55,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 	provider := &CachingComponentVersionRepositoryProvider{
 		creator:            options.UserAgent,
 		scheme:             repoSpec.Scheme,
+		storeCache:         &storeCache{store: make(map[string]*ocictf.Store)},
 		credentialCache:    &credentialCache{},
 		ociCache:           &ociCache{scheme: repoSpec.Scheme},
 		authorizationCache: auth.NewCache(),
