@@ -113,7 +113,7 @@ func (c *storeCache) get(_ context.Context, path string) *oci.Store {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	store, _ := c.store[path]
+	store := c.store[path]
 	return store
 }
 

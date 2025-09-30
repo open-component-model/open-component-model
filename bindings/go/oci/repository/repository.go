@@ -48,7 +48,7 @@ func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository,
 		TempDir: repoOpts.TempDir,
 	}
 
-	archive, format, err := ctf.OpenCTFByFileExtension(ctx, ctfOpts)
+	archive, _, err := ctf.OpenCTFByFileExtension(ctx, ctfOpts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to open ctf archive %q: %w", path, err)
 	}
