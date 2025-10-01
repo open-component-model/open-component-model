@@ -46,7 +46,8 @@ This is outlined under [Alternative manifest-based plugins system](#alternative-
 
 ## Outcome
 
-TBD
+The decision is to use a Component-Version-based registry. OCM components are integral to the OCM ecosystem, and we want
+to reuse as much of the existing infrastructure as possible.
 
 ---
 
@@ -139,35 +140,38 @@ resources:
 
 ## User Workflow
 
-These are general flows regardless of the registry implementation.
-
-CLI command could be added that updated the user's configuration with the repository:
+CLI command could be added that updated for convenience ( but out of scope for this proposal ):
 
 ```bash
 ocm plugin registry add official ghcr.io/ocm/registry//ocm.software/plugin-registry
 ```
 
-Or, the user can configure it manually:
+The configuration for the registry is stored in the OCM configuration file. We also configure any resolvers and credentials
+needed to access the registry:
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
-- type: plugin.registry.config.ocm.software
-  registries:
-  - name: official
-    url: ghcr.io/ocm/registry//ocm.software/plugin-registry
-  - name: enterprise
-    url: internal.corp/registry//enterprise.plugins/registry
-- type: credentials.config.ocm.software
-  consumers:
-    - identity:
-        type: PluginRegistry/v1
-        hostname: internal.corp
-      credentials:
-        - type: Credentials/v1
-          properties:
-            username: username
-            password: password
+  - type: plugin.registry.config.ocm.software
+    registries:
+      - ocm.software/plugin-registry
+  - type: resolvers.config.ocm.software/v1alpha1
+    resolvers:
+      - componentNamePattern: ocm.software/plugin-registry
+        repository:
+          type: OCIRegistry/v1
+          baseUrl: ghcr.io
+          subPath: open-component-model/plugins
+  - type: credentials.config.ocm.software
+    consumers:
+      - identity:
+          type: OCIRegistry/v1
+          hostname: ghcr.io
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: gituser
+              password: password
 ```
 
 From there, the user can list plugins from the registry:
