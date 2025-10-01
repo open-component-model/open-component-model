@@ -23,10 +23,23 @@ import (
 // work on an extracted filesystem version.
 // The path is cleaned to ensure it is a valid file path.
 // The access mode is converted to a bitmask for use with the CTF archive.
-func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository, options ...oci.RepositoryOption) (*oci.Repository, *ocictf.Store, error) {
+func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository, options ...oci.RepositoryOption) (*oci.Repository, error) {
+	store, err := NewStoreFromCTFRepoV1(ctx, repository, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	repo, err := oci.NewRepository(append(options, ocictf.WithCTF(store))...)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create new repository: %w", err)
+	}
+	return repo, nil
+}
+
+func NewStoreFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository, options ...oci.RepositoryOption) (*ocictf.Store, error) {
 	path := repository.Path
 	if path == "" {
-		return nil, nil, fmt.Errorf("a path is required")
+		return nil, fmt.Errorf("a path is required")
 	}
 
 	path = filepath.Clean(path)
@@ -34,7 +47,7 @@ func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository,
 
 	format := ctf.DiscoverCTFFormatFromPath(path)
 	if mask&ctf.O_RDWR != 0 && (format == ctf.FormatTAR || format == ctf.FormatTGZ) {
-		return nil, nil, fmt.Errorf("readwrite access is not supported for archive formats such as %s", format.String())
+		return nil, fmt.Errorf("readwrite access is not supported for archive formats such as %s", format.String())
 	}
 
 	repoOpts := &oci.RepositoryOptions{}
@@ -50,16 +63,10 @@ func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository,
 
 	archive, _, err := ctf.OpenCTFByFileExtension(ctx, ctfOpts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to open ctf archive %q: %w", path, err)
+		return nil, fmt.Errorf("unable to open ctf archive %q: %w", path, err)
 	}
 
-	store := ocictf.NewFromCTF(archive)
-
-	repo, err := oci.NewRepository(append(options, ocictf.WithCTF(store))...)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to create new repository: %w", err)
-	}
-	return repo, store, nil
+	return ocictf.NewFromCTF(archive), nil
 }
 
 // NewFromOCIRepoV1 creates a new [*oci.Repository] instance from an OCI repository v1 specification.
