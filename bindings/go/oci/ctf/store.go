@@ -152,8 +152,8 @@ func (s *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
 	var b blob.ReadOnlyBlob
 
-	s.indexMu.RLock()
-	defer s.indexMu.RUnlock()
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
 
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {

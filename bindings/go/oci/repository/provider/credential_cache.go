@@ -105,21 +105,22 @@ func equalCredentials(a, b auth.Credential) bool {
 }
 
 type storeCache struct {
-	mu    sync.RWMutex
+	mu    sync.Mutex
 	store map[string]*oci.Store
 }
 
-func (c *storeCache) get(_ context.Context, path string) *oci.Store {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	store := c.store[path]
-	return store
-}
-
-func (c *storeCache) add(_ context.Context, path string, store *oci.Store) {
+func (c *storeCache) loadOrStore(_ context.Context, path string, load func(path string) (*oci.Store, error)) (*oci.Store, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if store, ok := c.store[path]; ok {
+		return store, nil
+	}
+	store, err := load(path)
+	if err != nil {
+		return nil, err
+	}
 	c.store[path] = store
+
+	return store, nil
 }

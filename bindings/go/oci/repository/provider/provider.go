@@ -123,19 +123,17 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			},
 		}, opts...)
 	case *ctfrepospecv1.Repository:
-		store := b.storeCache.get(ctx, obj.Path)
-		if store != nil {
-			repo, err := oci.NewRepository(append(opts, ocictf.WithCTF(store))...)
-			if err != nil {
-				return nil, fmt.Errorf("unable to create new repository from cache: %w", err)
-			}
-			return repo, nil
+		loadFunc := func(path string) (*ocictf.Store, error) {
+			return ocirepository.NewStoreFromCTFRepoV1(ctx, obj, opts...)
 		}
-		repo, store, err := ocirepository.NewFromCTFRepoV1(ctx, obj, opts...)
+		store, err := b.storeCache.loadOrStore(ctx, obj.Path, loadFunc)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve store from cache: %w", err)
+		}
+		repo, err := oci.NewRepository(append(opts, ocictf.WithCTF(store))...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create ctf repo from spec: %w", err)
 		}
-		b.storeCache.add(ctx, obj.Path, store)
 		return repo, nil
 	default:
 		return nil, fmt.Errorf("unsupported repository specification type %T", obj)
