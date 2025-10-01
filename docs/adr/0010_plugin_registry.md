@@ -51,6 +51,13 @@ to reuse as much of the existing infrastructure as possible.
 
 ---
 
+## Out of Scope
+
+- Dealing with duplicate plugins from different registries
+- Automatic discovery is handled by a different issue
+
+---
+
 ## ComponentVersion based plugins system
 
 ### Registry Component Structure
@@ -135,12 +142,11 @@ resources:
     access:
       type: localBlob
       localReference: sha256:...
-    # Contains: description, usage, capabilities, etc.
 ```
 
 ## User Workflow
 
-CLI command could be added that updated for convenience ( but out of scope for this proposal ):
+CLI command could be added for convenience to add registries (but out of scope for this proposal):
 
 ```bash
 ocm plugin registry add official ghcr.io/ocm/registry//ocm.software/plugin-registry
@@ -154,7 +160,7 @@ type: generic.config.ocm.software/v1
 configurations:
   - type: plugin.registry.config.ocm.software
     registries:
-      - ocm.software/plugin-registry
+      - ocm.software/plugin-registry # Official registry URL would be defaulted and overridden by the user if needed
   - type: resolvers.config.ocm.software/v1alpha1
     resolvers:
       - componentNamePattern: ocm.software/plugin-registry
@@ -174,31 +180,42 @@ configurations:
               password: password
 ```
 
-From there, the user can list plugins from the registry:
+From there, the user can list plugins from all registries or a single registry:
 
 ```bash
+# all registries
 ocm plugin registry list
-NAME         VERSION   DESCRIPTION                     REGISTRY
-ecrplugin    0.27.0    AWS ECR repository plugin       official
-helminput    0.5.2     Helm input method plugin        official
-cvedb        1.2.0     CVE database integration        enterprise
+NAME                             VERSION   DESCRIPTION                     REGISTRY
+ocm.software/plugin/ecrplugin    0.27.0    AWS ECR repository plugin       ocm.software/plugin-registry
+ocm.software/plugin/helminput    0.5.2     Helm input method plugin        ocm.software/plugin-registry
+example.com/plugin/cvedb         1.2.0     CVE database integration        example.com/plugin-registry
+```
+
+```bash
+# single registry
+ocm plugin registry list --registry ocm.software/plugin-registry
+NAME                             VERSION   DESCRIPTION                     REGISTRY
+ocm.software/plugin/ecrplugin    0.27.0    AWS ECR repository plugin       ocm.software/plugin-registry
+ocm.software/plugin/helminput    0.5.2     Helm input method plugin        ocm.software/plugin-registry
 ```
 
 And install plugins by name:
 
 ```bash
-# Fetch latest version of the plugin
-ocm plugin registry install ecrplugin
+# Would look for the plugin in the configured registry 
+ocm plugin registry install ocm.software/plugin/ecrplugin
 
 # Or install a specific version if you need to
-ocm plugin registry install ecrplugin@0.26.0
+ocm plugin registry install ocm.software/plugin/ecrplugin@0.26.0
 ```
 
-New plugins can be published to the registry by authorized pipelines, CI pipelines, using the component version constructor
-file for the original root component. During this process the version of the root component is bumped appropriately.
+New plugins can be published to the registry by authorized pipelines, CI pipelines, using the component constructor
+file for the original root component. During this process a new component version is created and published to the registry.
 
 All other operations, like pushing a new version of the plugin is done via regular `ocm add cv` commands with the component
 constructor file of the plugin.
+
+A plugin needs to be identifiable by its full component identity to avoid conflicts with other plugins. 
 
 ## Alternative manifest-based plugins system
 
