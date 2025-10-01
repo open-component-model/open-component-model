@@ -6,6 +6,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -153,6 +154,11 @@ type TargetRepositoryProvider interface {
 	// GetTargetRepository returns the target ocm component version repository
 	// for the given component specification in the constructor.
 	GetTargetRepository(ctx context.Context, comp *constructor.Component) (TargetRepository, error)
+}
+
+type ExternalComponentRepositoryProvider interface {
+	// GetExternalRepository returns the target ocm repository for the given component specification in the constructor.
+	GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error)
 }
 
 type ResourceRepository interface {

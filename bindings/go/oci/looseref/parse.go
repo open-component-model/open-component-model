@@ -1,3 +1,10 @@
+// Package looseref provides a looser reference parser for OCI registry references.
+//
+// It extends ORAS's parser with two extra features:
+// 1. References without registry components (e.g., "hello-world:v1")
+// 2. Preserves the tag even when digest is present (e.g., "hello-world:v1@sha256:abc")
+//
+// Used by Open Component Model's references and maintains compatibility with standard OCI registry formats.
 package looseref
 
 import (

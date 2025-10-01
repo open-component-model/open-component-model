@@ -141,3 +141,34 @@ type HealthCheckable interface {
 	// is properly configured. It performs a lightweight check without modifying the repository.
 	CheckHealth(ctx context.Context) error
 }
+
+// ComponentVersionRepositorySpecProvider defines the interface for resolving repository specifications
+// based on a given component identity.
+type ComponentVersionRepositorySpecProvider interface {
+	// GetRepositorySpec returns the repository specification for the given component identity.
+	// It can use various strategies to determine the appropriate repository specification.
+	GetRepositorySpec(ctx context.Context, componentIdentity runtime.Identity) (runtime.Typed, error)
+}
+
+// ComponentLister defines the interface for listing OCM components in an OCI store.
+// It is an optional interface that can be implemented to expose the contents of a specific store,
+// e.g. of a CTF archive, of a Docker catalog etc.
+type ComponentLister interface {
+	// ListComponents lists names of OCM components contained in the OCM store.
+	//
+	// If the underlying store implementation supports pagination, the callback function `fn` is called
+	// for every page of the result. Otherwise, the complete list is retrieved and provided
+	// to the callback function at once.
+	//
+	// The `last` parameter is the value of the last element of the previous page.
+	// If `last` is NOT empty, the entries in the returned list start after the component name specified by `last`.
+	// Otherwise, the results start from the top of the component list.
+	// If the underlying store implementation does not support pagination, it may ignore this parameter,
+	// and return the complete list.
+	//
+	// The signature is inspired by ORAS TagLister interface:
+	// https://pkg.go.dev/oras.land/oras-go/v2/registry@v2.6.0#TagLister
+	// See also:
+	// https://distribution.github.io/distribution/spec/api/#tags-paginated
+	ListComponents(ctx context.Context, last string, fn func(names []string) error) error
+}
