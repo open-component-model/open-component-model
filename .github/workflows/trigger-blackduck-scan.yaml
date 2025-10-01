@@ -15,7 +15,7 @@ on:
 
 jobs:
   trigger-scan:
-    uses: open-component-model/.github/.github/workflows/blackduck-scan.yaml@dd76dd8c0de880a09bf57094a67b9dafdbfa9c34
+    uses: open-component-model/.github/.github/workflows/blackduck-scan.yaml@f453facaee11c4ed100461b75b1a841af7cd9b45
     with:
       # required to be able to differentiate between PRs and pushes in the called workflow (rapid or full scan)
       event_type: ${{ github.event_name }} 
