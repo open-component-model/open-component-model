@@ -1,78 +1,152 @@
 # SIG Runtime — Charter
 
 **Status:** Proposed  
-**Last updated:** 2025-09-29
+**Last updated:** 2025-10-01
 
 ## Mission & Scope
 
 ### Mission
 
-The SIG Runtime steers, develops, and maintains the **OCM Kubernetes Runtime Toolkit** aka OCM controller and its integrations so that OCM components can be deployed, orchestrated, verified, and operated reliably on Kubernetes clusters.
+The SIG Runtime maintains and shapes
+
+- **OCM Language Bindings** ([`bindings`](https://github.com/open-component-model/open-component-model/tree/main/bindings))
+- **OCM CLI** ([`cli`](https://github.com/open-component-model/open-component-model/tree/main/cli))
+- **OCM Kubernetes Controller** ([`kubernetes/controller`](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller))
+
+The mission of SIG Runtime is to allow OCM Components to be
+
+- creatable
+- signable
+- transportable
+- verifiable
+- deployable
 
 ### Scope
 
-- Design, implementation, and maintenance of the OCM Runtime toolkit.
-- Integrations with **Kro** (Kubernetes resource orchestration) and **Flux** (GitOps workflows).
-- Authoring and curating **patterns** and **best practices** for runtime deployments using OCM.
-- Community enablement: docs, examples, troubleshooting guides, support channels, and triage for runtime-related topics.
+* **OCM Language Bindings**
+
+    * Modular, extensible runtime library for components and versions
+    * Support for dynamic creation of component versions
+    * Standards-compliant signing and verification per the [OCM Specification](https://github.com/open-component-model/ocm-spec/tree/main)
+    * Introspection, transport, and transformation of components and versions
+
+* **OCM CLI**
+
+    * Unified toolchain to create, inspect, sign, verify, and transport components and versions
+    * Direct alignment with language bindings to ensure consistent semantics
+
+* **OCM Kubernetes Controller**
+
+    * Native Kubernetes API for OCM repositories, components, and artifacts
+    * Seamless integration with mainstream deployment frameworks (e.g., Flux, Kro)
+    * Controllers to synchronize, verify, and deploy OCM component versions within clusters
+
+* **Patterns and Best Practices**
+
+    * Authoring, curation, and dissemination of runtime deployment patterns
+    * Reference implementations, blueprints, and operational guidance for the community
+
 
 ## Deliverables
 
-- Production-grade **Runtime Toolkit** releases with versioned artifacts and upgrade notes.
-- **Integrations** with Kro and Flux, including examples and tests. Actively participate in upstream discussions, issues, and PRs.
-- **Best-practice patterns**: reference docs, blueprints, Helm/Kustomize samples.
-- **Operational docs**: install, day-2 ops, migration handling, security hardening.
-- **Conformance & e2e tests** for runtime scenarios and supported OCM CLI and Kubernetes versions.
-- **Public roadmap** and release notes.
+* **OCM Language Bindings (Go)**
+
+    * Maintained as a first-class module with regular, versioned releases
+
+* **OCM Kubernetes Controller**
+
+    * Production-grade controller with predictable release cadence
+
+* **Best-Practice Patterns**
+
+    * Reference documentation, blueprints, and deployment samples (Helm, Kustomize)
+
+* **Operational Documentation**
+
+    * Installation, upgrades, day-2 operations, migration strategies, and security hardening
+
+* **Conformance and End-to-End Testing**
+
+    * Runtime validation across supported OCM CLI and Kubernetes versions
+
+* **Public Roadmap and Release Notes**
+
+    * Transparent planning and lifecycle communication for the community
 
 ## Responsibilities
 
-1. **Development & Maintenance (Runtime Toolkit)**
-   - Own controller APIs/CRDs and backward-compatibility guarantees.
-   - Define support matrix and SLAs for support and deprecation policy.
-   - Provide performance benchmarks and SLOs, e.g., for reconciliation latency and resource footprint.
+1. **Development & Maintenance (Bindings and Controller)**
 
-2. **Integration with Kro (Kubernetes Resource Orchestration)**
-   - ...
+    * Own and evolve controller APIs/CRDs with backward-compatibility guarantees
+    * Define support matrix, SLAs, and deprecation policy
+    * Deliver performance benchmarks and SLOs (e.g., reconciliation latency, resource footprint)
+    * Maintain security posture: dependency scanning, CVE triage, patch workflow
+    * Manage releases: versioning, changelogs, upgrade guidance
 
-3. **Integration with Flux (GitOps)**
-   - ...
+2. **Patterns & Best Practices**
 
-4. **Patterns & Best Practices**
-   - ...
+    * Curate and update reference deployment patterns (Helm, Kustomize, Kro+Flux flows)
+    * Provide tested blueprints for multi-environment delivery, signing, and verification pipelines
+    * Publish operational hardening guides (RBAC, audit logging, secret management)
+    * Incorporate adoption feedback into evolving best practices
 
-5. **Community Support**
-   - Run triage for runtime-related issues and questions.
-   - Provide documentation, define and keep up support channels, and maintain a troubleshooting playbook.
-   - Labeling/taxonomy for issues and PRs; SLA targets for response and review.
+3. **Community Support**
+
+    * Run triage for runtime issues and provide timely support
+    * Maintain documentation, troubleshooting guides, and support channels
+    * Define issue/PR taxonomy and enforce SLA targets for response and review
+    * Onboard contributors with clear guides, examples, and “good first issue” tracking
+    * Facilitate public demos, office hours, and knowledge-sharing sessions
 
 ## Areas of Ownership (Code & Tests)
 
-- **Primary:** OCM Runtime Toolkit GitHub code repositories and folders:
-  - [open-component-model](https://github.com/morri-son/open-component-model) /kubernetes/controller
-  - ...
-- **Test ownership:** component-level tests and runtime e2e/conformance tests for owned code.
+* **Primary Code Repositories**
 
-> Code/test ownership declarations will be reflected in `CODEOWNERS` and repository READMEs.
+    * **OCM Language Bindings** — [`bindings`](https://github.com/open-component-model/open-component-model/tree/main/bindings)
+    * **OCM Kubernetes Controller** — [`kubernetes/controller`](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller)
+    * **OCM CLI** — [`ocm`](https://github.com/open-component-model/open-component-model/tree/main/ocm)
+
+* **Test Coverage**
+
+    * Component-level unit and integration tests for owned code
+    * Runtime end-to-end and conformance test suites
+
+> Ownership will be explicitly declared in `CODEOWNERS` files and documented in repository `README`s.
 
 ## Interfaces & Dependencies
 
-- **External projects:** [Kro](https://kro.run), [Flux](https://fluxcd.io).
-- **OCM internal** CLI, OCM library, OCM specification, website/docs (for docs publishing).
-- **Contract management:** publish versioned compatibility matrix (e.g. for OCM CLI and Kubernetes versions) and breaking-change notices.
+* **External Integrations that are regularly tested**
+
+    * [Kro](https://kro.run) for dependency orchestration
+    * [Flux](https://fluxcd.io) for delivery and deployment
+
+* **OCM Internal**
+
+    * Controllers and CLI consume the [`bindings`](https://github.com/open-component-model/open-component-model/tree/main/bindings)
+
+* **Specification Compliance**
+
+    * All runtime libraries must implement the latest [OCM Specification](https://github.com/open-component-model/ocm-spec/) to the fullest extent possible
+
+---
 
 ## Operating Model
 
-> Where not specified, the OCM SIG Handbook governs process details (decision-making, conflict resolution, escalation).
+> Unless otherwise specified here, processes follow the **OCM SIG Handbook** (decision-making, conflict resolution, escalation).
 
 ### Roles
 
-- **Chair(s):** _TBD_  
-  Administrative lead(s); schedule meetings, ensure process adherence, represent SIG to the TSC.
-- **Tech Lead(s):** _TBD (can potentially be the same as Chair)_
-  Technical direction; approves designs/roadmaps; final reviewer on architectural changes.
-- **Maintainers:** listed in repo `CODEOWNERS`.
-- **Contributors:** anyone adhering to the CoC and contribution guidelines.
+* **Chair(s)** — TBD
+  Provide administrative leadership, schedule and run meetings, ensure process adherence, and represent the SIG to the TSC.
+
+* **Tech Lead(s)** — TBD
+  Define technical direction, approve designs and roadmaps, and act as final reviewers for architectural changes.
+
+* **Maintainers**
+  Defined in repository `CODEOWNERS`; responsible for code quality, reviews, and releases.
+
+* **Contributors**
+  Any community member following the Code of Conduct and contribution guidelines.
 
 ### Membership & Voting
 
@@ -81,12 +155,11 @@ The SIG Runtime steers, develops, and maintains the **OCM Kubernetes Runtime Too
 
 ### Meetings
 
-- **Regular meeting:** bi-weekly, 30–60 min, recorded with public notes.
-- ...
+- **Participation in [OCM Community Call](https://ocm.software/community/engagement/#community-calls):** regular updates and discussions held within the OCM shared community call.
 
 ### Communication
 
-- **GitHub:** issues/PRs labeled `sig/runtime`.
-- **Slack Channel:** ?
-- **Mailing list:** ?
-- **Docs & notes:** under `docs/community/SIGs/SIG-Runtime/` and meeting notes folder.
+- **Zulip Channel:** [`neonephos-ocm-support`](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support)
+- **Slack Channel in Kubernetes Slack (_deprecated_):** [`#open-component-model-sig-runtime`](https://kubernetes.slack.com/archives/C05UWBE8R1D)
+- **Mailing list:** `open-component-model-sig-runtime@lists.neonephos.org` (To be created)
+- **Docs & notes:** under [`docs/community/SIGs/Runtime/`](.) and meeting notes folder. Technical Decisions are centrally tracked / aligned with TSC via [ADRs](./../../../adr)
