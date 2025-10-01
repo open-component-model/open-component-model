@@ -25,9 +25,9 @@ The team already operates GitHub‑based release workflows for OCM v1. We consid
 
 ### Important scope decisions
 
-* **Lockstep MAJOR/MINOR:** Both sub‑components finalize **the same X.Y** at sprint start. This is supportive for an `ocm` root component to be introduced later, which will share X.Y and patch in tandem when any sub-component patches.
+* **Lockstep MAJOR/MINOR:** Both sub‑components use **the same X.Y** at sprint start. This is supportive for an `ocm` root component to be introduced later, which will share X.Y and patch in tandem when any sub-component patches.
 * **Per‑component PATCH:** Patch releases may happen independently per sub‑component **between** sprints.
-* **Promotion of RC to final** happens using the same release artifacts (no rebuild).
+* **Promotion of RC to final** happens using the same artifacts produced by the RC build for the final release (no rebuild).
 
 ### Out of scope (for this ADR)
 
