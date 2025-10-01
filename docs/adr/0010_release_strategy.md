@@ -31,7 +31,7 @@ The team already operates GitHub‑based release workflows for OCM v1. We consid
 
 ### Out of scope (for this ADR)
 
-* **Root ocm component** Not implemented in this ADR; later, it will share **X.Y** and **patch in tandem** when any sub‑component patches.
+* **Root ocm component** Not implemented in this ADR; later, it will share **X.Y** and **patch in tandem** when any sub‑component patches are created.
 * **Emergency patches:** Any special treatment/definition of emergency patches; we define the process only for "normal" patches.
 * **Support policy details beyond y‑2:** We set **y‑2** support (≈3 months) now; exact branch retirement/EOL steps will be defined later.
 * **Testing strategy expansion:** Beyond current component‑specific tests; additional integration/system/conformance testing is excluded from this ADR.
