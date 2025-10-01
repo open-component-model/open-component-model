@@ -860,6 +860,7 @@ resources:
 
 			r.NoError(err, "could not construct component version with working directory")
 		})
+
 		for _, ext := range []string{"tar.gz", "tgz", "tar"} {
 			err = os.Chdir(tmp)
 			r.NoError(err, "failed to switch current working directory")
@@ -871,23 +872,7 @@ resources:
 					"--working-directory", tmp,
 				), test.WithErrorOutput(logs))
 
-				r.NoError(err, "could not construct component version")
-
-				entries, err := logs.List()
-				r.NoError(err, "failed to list log entries")
-				r.NotEmpty(entries, "expected log entries to be present")
-				expected := []string{
-					"starting component construction",
-					"component construction completed",
-				}
-				for _, entry := range entries {
-					if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
-						require.Contains(t, expected, entry.Msg)
-						expected = slices.DeleteFunc(expected, func(s string) bool {
-							return s == entry.Msg
-						})
-					}
-				}
+				r.Error(err, "expected command not to be able to write to ctf archive of format", "format", ext)
 			})
 
 		}
