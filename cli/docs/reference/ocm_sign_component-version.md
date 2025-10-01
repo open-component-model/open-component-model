@@ -1,27 +1,99 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm sign component-version
+description: Sign component version(s) inside an OCM repository.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm sign component-version
 
-The official Open Component Model (OCM) CLI
+Sign component version(s) inside an OCM repository
 
 ### Synopsis
 
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Creates or update cryptographic signatures on component descriptors.
+
+## Reference Format
+
+	[type::]{repository}/[valid-prefix]/{component}[:version]
+
+- Prefixes: {component-descriptors|none} (default: "component-descriptors")  
+- Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})  
+
+## OCM Signing explained in simple steps
+
+- Resolve OCM repository
+- Fetch component version  
+- Verify digests (--verify-digest-consistency)
+- Normalise descriptor (--normalisation)
+- Hash normalised descriptor (--hash)
+- Sign hash (--signer-spec)
+
+## Behavior
+
+- Conflicting signatures cause failure unless --force is set (then overwrite)
+- --dry-run: compute only, do not persist signature
+- Default signature name: default
+- Default signer: RSASSA-PSS plugin (needs private key)
+
+Use this command to establish provenance of component versions.
 
 ```
-ocm [sub-command] [flags]
+ocm sign component-version {reference} [flags]
+```
+
+### Examples
+
+```
+# Sign a component version with default algorithms
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+
+## Example Credential Config
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            private_key_pem: <PEM>
+
+# Sign with custom signature name
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+
+# Use a signer specification file
+sign component-version ./repo/ocm//ocm.software/ocmcli:0.23.0 --signer-spec ./rsassa-pss.yaml
+
+# Dry-run signing
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature test --dry-run
+
+# Force overwrite an existing signature
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature --force
 ```
 
 ### Options
+
+```
+      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
+      --dry-run                 compute signature but do not persist it to the repository
+      --force                   overwrite existing signatures under the same name
+      --hash string             hash algorithm to use (SHA256, SHA512) (default "SHA-256")
+  -h, --help                    help for component-version
+      --normalisation string    normalisation algorithm to use (default jsonNormalisation/v4alpha1) (default "jsonNormalisation/v4alpha1")
+  -o, --output enum             output format of the resulting signature
+                                (must be one of [json yaml]) (default yaml)
+      --signature string        name of the signature to create or update. defaults to "default" (default "default")
+      --signer-spec string      path to a signer specification file. If empty, defaults to an empty RSASSA-PSS configuration.
+```
+
+### Options inherited from parent commands
 
 ```
       --config string                      supply configuration by a given configuration file.
@@ -41,7 +113,6 @@ ocm [sub-command] [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            Using the option, this configuration file be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -64,12 +135,5 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
 * [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
-* [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
 
