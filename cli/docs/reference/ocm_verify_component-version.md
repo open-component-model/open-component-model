@@ -1,27 +1,88 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm verify component-version
+description: Verify component version(s) inside an OCM repository.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm verify component-version
 
-The official Open Component Model (OCM) CLI
+Verify component version(s) inside an OCM repository
 
 ### Synopsis
 
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Verify component version(s) inside an OCM repository based on signatures.
+
+## Reference Format
+
+	[type::]{repository}/[valid-prefix]/{component}[:version]
+
+- Prefixes: {component-descriptors|none} (default: "component-descriptors")  
+- Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})
+
+## OCM Verification explained in simple steps
+
+- Resolve OCM repository  
+- Fetch component version 
+- Normalise descriptor (algorithm from signature)  
+- Recompute hash and compare with signature digest  
+- Verify signature (--verifier-spec, default RSASSA-PSS verifier)  
+
+## Behavior
+
+- --signature: verify only the named signature  
+- Without --signature: verify all signatures  
+- Fail fast on first invalid signature  
+- Default verifier: RSASSA-PSS plugin  
+  - Supports config-less verification  
+  - Uses discovered credentials or PEM certificates when possible  
+
+Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.
 
 ```
-ocm [sub-command] [flags]
+ocm verify component-version {reference} [flags]
+```
+
+### Examples
+
+```
+# Verify all component version signatures found in a component version
+verify component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0
+
+## Example Credential Config
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: RSA/v1alpha1
+          algorithm: RSASSA-PSS
+          signature: default
+        credentials:
+        - type: Credentials/v1
+          properties:
+            public_key_pem: <PEM>
+
+# Verify a specific signature
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --signature my-signature
+
+# Use a verifier specification file
+sign component-version ghcr.io/open-component-model/ocm//ocm.software/ocmcli:0.23.0 --verifier-spec ./rsassa-pss.yaml
 ```
 
 ### Options
+
+```
+      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
+  -h, --help                    help for component-version
+      --signature string        name of the signature to verify. If not set, all signatures are verified.
+      --verifier-spec string    path to an optional verifier specification file. If empty, defaults to an empty RSASSA-PSS configuration.
+```
+
+### Options inherited from parent commands
 
 ```
       --config string                      supply configuration by a given configuration file.
@@ -41,7 +102,6 @@ ocm [sub-command] [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            Using the option, this configuration file be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -64,12 +124,5 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
 * [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
 
