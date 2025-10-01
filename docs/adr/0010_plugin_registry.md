@@ -53,8 +53,9 @@ to reuse as much of the existing infrastructure as possible.
 
 ## Out of Scope
 
-- Dealing with duplicate plugins from different registries
-- Automatic discovery is handled by a different issue
+Dealing with duplicate plugins from different registries is out of the scope of this ADR. That's a complex problem and needs 
+to be handled in a greater scope. Figuring out what should happen, which plugin would take precedence, should we error
+out, or should we just pick one of them. We can discuss this in a separate ADR.
 
 ---
 
@@ -110,7 +111,7 @@ Each plugin is just a regular OCM component version containing the actual plugin
 This part doesn't change from how plugins work now:
 
 ```yaml
-# Plugin Component: ghcr.io/ocm/registry//ocm.software/plugins/ecrplugin:0.27.0
+# Plugin Component: ocm.software/plugins/ecrplugin:0.27.0
 name: ocm.software/plugins/ecrplugin
 version: 0.27.0
 provider: ocm.software
@@ -305,6 +306,10 @@ Plugin publishers need to understand component versions, and setting up registri
 There's also a bit more metadata overhead compared to simple file downloads.
 However, this can be further simplified with various commands that hide away this complexity. Simple things like
 `ocm plugin registry add` or `ocm plugin registry create` can be added to make it easier to get started.
+
+However, to alleviate the complexity somewhat, OCM should provide tooling to simplify the process of publishing plugins.
+Either by providing convenience commands or by providing a plugin publishing pipeline that can be used with CI/CD such
+as a dedicated GitHub action.
 
 ### Manifest Index Registry Approach
 
