@@ -65,6 +65,11 @@ func TestListComponents(t *testing.T) {
 			input:    []string{"not-a-component", "not-a-component-again"},
 			expected: []string{},
 		},
+		{
+			name:     "overlapping component names",
+			input:    []string{"component-descriptors/foo/bar", "component-descriptors/foo/bar/baz"},
+			expected: []string{"foo/bar", "foo/bar/baz"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
