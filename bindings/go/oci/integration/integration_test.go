@@ -423,14 +423,18 @@ func Test_Integration_CTF_Lister(t *testing.T) {
 		name    string
 		version string
 	}{
-		{"test-component", "v1.0.0"},
-		{"test-component", "v2.0.0"},
-		{"test-component3", "v1.0.0"},
-		{"test-component2", "v1.0.0"},
+		{"github.com/acme.org/helloworld", "v1.0.0"},
+		{"github.com/acme.org/helloworld", "v2.0.0"},
+		{"github.com/acme.org/helloocm", "v1.0.0"},
+		{"github.com/acme.org/hello-open-component-model", "v1.0.0"},
 	}
 
 	// Expectation: sorted list, elements are unique.
-	expectedList := []string{"test-component", "test-component2", "test-component3"}
+	expectedList := []string{
+		"github.com/acme.org/hello-open-component-model",
+		"github.com/acme.org/helloocm",
+		"github.com/acme.org/helloworld",
+	}
 
 	// Write components to CTF, while validating that everything is written correctly.
 	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
