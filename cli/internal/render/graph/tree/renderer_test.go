@@ -46,7 +46,7 @@ func TestRunRenderLoop(t *testing.T) {
 					Component: fmt.Sprintf("%s (%s)", d.Component.Name, state.(syncdag.DiscoveryState)),
 					Version:   d.Component.Version,
 					Provider:  d.Component.Provider.Name,
-					Identity:  fmt.Sprintf("%v", vertex.ID),
+					Identity:  d.Component.ToIdentity().String(),
 				}, nil
 			}
 			return Row{}, fmt.Errorf("vertex %v does not have a descriptor attribute", vertex.ID)
@@ -66,8 +66,8 @@ func TestRunRenderLoop(t *testing.T) {
 		// without this, the test would be flaky or fail
 		synctest.Wait()
 		output := buf.String()
-		expected := ` NESTING  COMPONENT             VERSION  PROVIDER  IDENTITY 
- └─       comp-a (discovering)  v1.0.0   acme      A        
+		expected := ` NESTING  COMPONENT             VERSION  PROVIDER  IDENTITY                   
+ └─       comp-a (discovering)  v1.0.0   acme      name=comp-a,version=v1.0.0 
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -91,9 +91,9 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(2) + ` NESTING  COMPONENT             VERSION  PROVIDER  IDENTITY 
- └─ ●     comp-a (discovering)  v1.0.0   acme      A        
-    └─    comp-b (discovering)  v2.0.0   acme      B        
+		expected = render.EraseNLines(2) + ` NESTING  COMPONENT             VERSION  PROVIDER  IDENTITY                   
+ └─ ●     comp-a (discovering)  v1.0.0   acme      name=comp-a,version=v1.0.0 
+    └─    comp-b (discovering)  v2.0.0   acme      name=comp-b,version=v2.0.0 
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -105,10 +105,10 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(3) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY 
- └─ ●      comp-a (discovering)  v1.0.0   acme      A        
-    └─ ●   comp-b (discovering)  v2.0.0   acme      B        
-       └─  comp-c (discovering)  v1.5.0   other     C        
+		expected = render.EraseNLines(3) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY                   
+ └─ ●      comp-a (discovering)  v1.0.0   acme      name=comp-a,version=v1.0.0 
+    └─ ●   comp-b (discovering)  v2.0.0   acme      name=comp-b,version=v2.0.0 
+       └─  comp-c (discovering)  v1.5.0   other     name=comp-c,version=v1.5.0 
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -120,11 +120,11 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(4) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY 
- └─ ●      comp-a (discovering)  v1.0.0   acme      A        
-    ├─ ●   comp-b (discovering)  v2.0.0   acme      B        
-    │  └─  comp-c (discovering)  v1.5.0   other     C        
-    └─     comp-d (discovering)  v3.0.0   acme      D        
+		expected = render.EraseNLines(4) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY                   
+ └─ ●      comp-a (discovering)  v1.0.0   acme      name=comp-a,version=v1.0.0 
+    ├─ ●   comp-b (discovering)  v2.0.0   acme      name=comp-b,version=v2.0.0 
+    │  └─  comp-c (discovering)  v1.5.0   other     name=comp-c,version=v1.5.0 
+    └─     comp-d (discovering)  v3.0.0   acme      name=comp-d,version=v3.0.0 
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -134,11 +134,11 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(5) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY 
- └─ ●      comp-a (discovering)  v1.0.0   acme      A        
-    ├─ ●   comp-b (discovering)  v2.0.0   acme      B        
-    │  └─  comp-c (discovering)  v1.5.0   other     C        
-    └─     comp-d (completed)    v3.0.0   acme      D        
+		expected = render.EraseNLines(5) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY                   
+ └─ ●      comp-a (discovering)  v1.0.0   acme      name=comp-a,version=v1.0.0 
+    ├─ ●   comp-b (discovering)  v2.0.0   acme      name=comp-b,version=v2.0.0 
+    │  └─  comp-c (discovering)  v1.5.0   other     name=comp-c,version=v1.5.0 
+    └─     comp-d (completed)    v3.0.0   acme      name=comp-d,version=v3.0.0 
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -148,11 +148,11 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(5) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY 
- └─ ●      comp-a (discovering)  v1.0.0   acme      A        
-    ├─ ●   comp-b (discovering)  v2.0.0   acme      B        
-    │  └─  comp-c (completed)    v1.5.0   other     C        
-    └─     comp-d (completed)    v3.0.0   acme      D        
+		expected = render.EraseNLines(5) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY                   
+ └─ ●      comp-a (discovering)  v1.0.0   acme      name=comp-a,version=v1.0.0 
+    ├─ ●   comp-b (discovering)  v2.0.0   acme      name=comp-b,version=v2.0.0 
+    │  └─  comp-c (completed)    v1.5.0   other     name=comp-c,version=v1.5.0 
+    └─     comp-d (completed)    v3.0.0   acme      name=comp-d,version=v3.0.0 
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -162,11 +162,11 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(5) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY 
- └─ ●      comp-a (discovering)  v1.0.0   acme      A        
-    ├─ ●   comp-b (completed)    v2.0.0   acme      B        
-    │  └─  comp-c (completed)    v1.5.0   other     C        
-    └─     comp-d (completed)    v3.0.0   acme      D        
+		expected = render.EraseNLines(5) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY                   
+ └─ ●      comp-a (discovering)  v1.0.0   acme      name=comp-a,version=v1.0.0 
+    ├─ ●   comp-b (completed)    v2.0.0   acme      name=comp-b,version=v2.0.0 
+    │  └─  comp-c (completed)    v1.5.0   other     name=comp-c,version=v1.5.0 
+    └─     comp-d (completed)    v3.0.0   acme      name=comp-d,version=v3.0.0 
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -177,11 +177,11 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(5) + ` NESTING   COMPONENT           VERSION  PROVIDER  IDENTITY 
- └─ ●      comp-a (completed)  v1.0.0   acme      A        
-    ├─ ●   comp-b (completed)  v2.0.0   acme      B        
-    │  └─  comp-c (completed)  v1.5.0   other     C        
-    └─     comp-d (completed)  v3.0.0   acme      D        
+		expected = render.EraseNLines(5) + ` NESTING   COMPONENT           VERSION  PROVIDER  IDENTITY                   
+ └─ ●      comp-a (completed)  v1.0.0   acme      name=comp-a,version=v1.0.0 
+    ├─ ●   comp-b (completed)  v2.0.0   acme      name=comp-b,version=v2.0.0 
+    │  └─  comp-c (completed)  v1.5.0   other     name=comp-c,version=v1.5.0 
+    └─     comp-d (completed)  v3.0.0   acme      name=comp-d,version=v3.0.0 
 `
 		r.Equal(expected, output)
 		buf.Reset()
@@ -194,14 +194,14 @@ func TestRunRenderLoop(t *testing.T) {
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
-		expected = render.EraseNLines(5) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY 
- ├─ ●      comp-a (completed)    v1.0.0   acme      A        
- │  ├─ ●   comp-b (completed)    v2.0.0   acme      B        
- │  │  └─  comp-c (completed)    v1.5.0   other     C        
- │  └─     comp-d (completed)    v3.0.0   acme      D        
- ├─ ●      comp-d (discovering)  v3.0.0   acme      X        
- │  └─     comp-d (discovering)  v3.0.0   acme      Z        
- └─        comp-d (discovering)  v3.0.0   acme      Y        
+		expected = render.EraseNLines(5) + ` NESTING   COMPONENT             VERSION  PROVIDER  IDENTITY                   
+ ├─ ●      comp-a (completed)    v1.0.0   acme      name=comp-a,version=v1.0.0 
+ │  ├─ ●   comp-b (completed)    v2.0.0   acme      name=comp-b,version=v2.0.0 
+ │  │  └─  comp-c (completed)    v1.5.0   other     name=comp-c,version=v1.5.0 
+ │  └─     comp-d (completed)    v3.0.0   acme      name=comp-d,version=v3.0.0 
+ ├─ ●      comp-d (discovering)  v3.0.0   acme      name=comp-d,version=v3.0.0 
+ │  └─     comp-d (discovering)  v3.0.0   acme      name=comp-d,version=v3.0.0 
+ └─        comp-d (discovering)  v3.0.0   acme      name=comp-d,version=v3.0.0 
 `
 		r.Equal(expected, output)
 
@@ -224,8 +224,8 @@ func TestRenderOnce(t *testing.T) {
 	renderer := New(ctx, d)
 
 	r.NoError(d.AddVertex("A", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-a", "v1.0.0", "acme")))
-	expected := ` NESTING  COMPONENT  VERSION  PROVIDER  IDENTITY 
- └─       comp-a     v1.0.0   acme      A        
+	expected := ` NESTING  COMPONENT  VERSION  PROVIDER  IDENTITY                   
+ └─       comp-a     v1.0.0   acme      name=comp-a,version=v1.0.0 
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output := buf.String()
@@ -234,9 +234,9 @@ func TestRenderOnce(t *testing.T) {
 
 	// Add B
 	r.NoError(d.AddVertex("B", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-b", "v2.0.0", "acme")))
-	expected = ` NESTING  COMPONENT  VERSION  PROVIDER  IDENTITY 
- ├─       comp-a     v1.0.0   acme      A        
- └─       comp-b     v2.0.0   acme      B        
+	expected = ` NESTING  COMPONENT  VERSION  PROVIDER  IDENTITY                   
+ ├─       comp-a     v1.0.0   acme      name=comp-a,version=v1.0.0 
+ └─       comp-b     v2.0.0   acme      name=comp-b,version=v2.0.0 
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
@@ -244,9 +244,9 @@ func TestRenderOnce(t *testing.T) {
 	r.Equal(expected, output)
 	// Add B as child of A
 	r.NoError(d.AddEdge("A", "B"))
-	expected = ` NESTING  COMPONENT  VERSION  PROVIDER  IDENTITY 
- └─ ●     comp-a     v1.0.0   acme      A        
-    └─    comp-b     v2.0.0   acme      B        
+	expected = ` NESTING  COMPONENT  VERSION  PROVIDER  IDENTITY                   
+ └─ ●     comp-a     v1.0.0   acme      name=comp-a,version=v1.0.0 
+    └─    comp-b     v2.0.0   acme      name=comp-b,version=v2.0.0 
 `
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	output = buf.String()
@@ -262,11 +262,11 @@ func TestRenderOnce(t *testing.T) {
 	r.NoError(d.AddEdge("A", "D"))
 
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
-	expected = ` NESTING   COMPONENT  VERSION  PROVIDER  IDENTITY 
- └─ ●      comp-a     v1.0.0   acme      A        
-    ├─ ●   comp-b     v2.0.0   acme      B        
-    │  └─  comp-c     v1.5.0   other     C        
-    └─     comp-d     v3.0.0   acme      D        
+	expected = ` NESTING   COMPONENT  VERSION  PROVIDER  IDENTITY                   
+ └─ ●      comp-a     v1.0.0   acme      name=comp-a,version=v1.0.0 
+    ├─ ●   comp-b     v2.0.0   acme      name=comp-b,version=v2.0.0 
+    │  └─  comp-c     v1.5.0   other     name=comp-c,version=v1.5.0 
+    └─     comp-d     v3.0.0   acme      name=comp-d,version=v3.0.0 
 `
 	output = buf.String()
 	buf.Reset()

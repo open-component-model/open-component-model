@@ -38,7 +38,7 @@ func defaultVertexSerializer[T cmp.Ordered]() VertexSerializer[T] {
 				Component: d.Component.Name,
 				Version:   d.Component.Version,
 				Provider:  d.Component.Provider.Name,
-				Identity:  fmt.Sprintf("%v", vertex.ID),
+				Identity:  d.Component.ToIdentity().String(),
 			}, nil
 		}
 		return Row{}, fmt.Errorf("vertex %v does not have a descriptor attribute", vertex.ID)
