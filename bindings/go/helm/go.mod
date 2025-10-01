@@ -9,9 +9,9 @@ require (
 	helm.sh/helm/v3 v3.19.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.8
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250919174641-be28d8d1c750
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250929111900-08cb1b0e7343
 	ocm.software/open-component-model/bindings/go/oci v0.0.8
-	ocm.software/open-component-model/bindings/go/plugin v0.0.4
+	ocm.software/open-component-model/bindings/go/plugin v0.0.6
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 )
@@ -31,11 +31,11 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
+	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/evanphx/json-patch v5.9.11+incompatible // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
-	github.com/go-errors/errors v1.4.2 // indirect
+	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-openapi/jsonpointer v0.21.2 // indirect
 	github.com/go-openapi/jsonreference v0.20.5 // indirect
@@ -105,8 +105,8 @@ require (
 	k8s.io/kubectl v0.34.1 // indirect
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250919174641-be28d8d1c750 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250919174641-be28d8d1c750 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250929111900-08cb1b0e7343 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250929111900-08cb1b0e7343 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
