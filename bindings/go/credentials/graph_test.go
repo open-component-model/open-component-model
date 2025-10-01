@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/credentials/spec/config"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
@@ -532,4 +533,228 @@ func TestResolutionErrors(t *testing.T) {
 	r.Error(err)
 	r.ErrorIs(err, credentials.ErrNoIndirectCredentials)
 	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: no indirect credentials found in graph", id.String()))
+}
+
+func TestIdentityMerge(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+	yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          password: pass
+`
+
+	split := strings.Split(yaml, "---")
+	var configs []*credentialruntime.Config
+	for _, yaml := range split {
+		var configv1 v1.Config
+		r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+		configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+	}
+
+	graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+	r.NoError(err)
+
+	creds, err := graph.Resolve(ctx, runtime.Identity{
+		"type":     "OCIRegistry",
+		"hostname": "docker.io",
+	})
+	r.NoError(err)
+	r.NotNil(creds)
+	r.IsType(&v1.DirectCredentials{}, creds)
+	properties := creds.(*v1.DirectCredentials).Properties
+	r.Equal("user", properties["username"])
+	r.Equal("pass", properties["password"])
+}
+
+func TestCredentialMerge(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+	yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+      - type: Credentials/v1
+        properties:
+          password: pass
+`
+
+	split := strings.Split(yaml, "---")
+	var configs []*credentialruntime.Config
+	for _, yaml := range split {
+		var configv1 v1.Config
+		r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+		configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+	}
+
+	graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+	r.NoError(err)
+
+	creds, err := graph.Resolve(ctx, runtime.Identity{
+		"type":     "OCIRegistry",
+		"hostname": "docker.io",
+	})
+	r.NoError(err)
+	r.NotNil(creds)
+	r.IsType(&v1.DirectCredentials{}, creds)
+	properties := creds.(*v1.DirectCredentials).Properties
+	r.Equal("user", properties["username"])
+	r.Equal("pass", properties["password"])
+}
+
+func TestCredential_Match_Partial_Match_in_Path(t *testing.T) {
+	t.Run("loose query, but strict definition", func(t *testing.T) {
+		ctx := t.Context()
+		r := require.New(t)
+		yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+      path: "some-owner/some-repo"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+`
+
+		split := strings.Split(yaml, "---")
+		var configs []*credentialruntime.Config
+		for _, yaml := range split {
+			var configv1 v1.Config
+			r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+			configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+		}
+
+		graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+		r.NoError(err)
+
+		creds, err := graph.Resolve(ctx, runtime.Identity{
+			"type":     "OCIRegistry",
+			"hostname": "docker.io",
+		})
+		r.Error(err)
+		r.Nil(creds)
+	})
+
+	t.Run("strict query, but loose definition", func(t *testing.T) {
+		ctx := t.Context()
+		r := require.New(t)
+		yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+`
+
+		split := strings.Split(yaml, "---")
+		var configs []*credentialruntime.Config
+		for _, yaml := range split {
+			var configv1 v1.Config
+			r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+			configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+		}
+
+		graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+		r.NoError(err)
+
+		creds, err := graph.Resolve(ctx, runtime.Identity{
+			"type":     "OCIRegistry",
+			"hostname": "docker.io",
+			"path":     "some-owner/some-repo",
+		})
+		r.NoError(err)
+		r.NotNil(creds)
+		r.IsType(&v1.DirectCredentials{}, creds)
+		properties := creds.(*v1.DirectCredentials).Properties
+		r.Equal("user", properties["username"])
+	})
+
+	t.Run("strict query, but loose definition (scheme) should be forbidden", func(t *testing.T) {
+		ctx := t.Context()
+		r := require.New(t)
+		yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+`
+
+		split := strings.Split(yaml, "---")
+		var configs []*credentialruntime.Config
+		for _, yaml := range split {
+			var configv1 v1.Config
+			r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+			configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+		}
+
+		graph, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+		r.NoError(err)
+
+		creds, err := graph.Resolve(ctx, runtime.Identity{
+			"type":     "OCIRegistry",
+			"hostname": "docker.io",
+			"scheme":   "http",
+		})
+		r.Error(err)
+		r.Nil(creds)
+	})
+}
+
+func TestCredentialCustomType_Unrecognized(t *testing.T) {
+	r := require.New(t)
+	yaml := `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: "docker.io"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: user
+      - type: Custom/v1
+        password: pass
+`
+
+	split := strings.Split(yaml, "---")
+	var configs []*credentialruntime.Config
+	for _, yaml := range split {
+		var configv1 v1.Config
+		r.NoError(config.Scheme.Decode(strings.NewReader(yaml), &configv1))
+		configs = append(configs, credentialruntime.ConvertFromV1(&configv1))
+	}
+
+	_, err := credentials.ToGraph(t.Context(), credentialruntime.Merge(configs...), credentials.Options{})
+	r.Error(err)
 }

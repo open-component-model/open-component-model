@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	cfg "ocm.software/open-component-model/bindings/go/credentials/spec/config"
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -42,6 +43,10 @@ type GraphResolver interface {
 // It initializes the graph structure and ingests the configuration into the graph.
 // Returns an error if the configuration cannot be properly ingested.
 func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (GraphResolver, error) {
+	if opts.CredentialRepositoryTypeScheme == nil {
+		opts.CredentialRepositoryTypeScheme = cfg.Scheme
+	}
+
 	g := &Graph{
 		syncedDag:                newSyncedDag(),
 		credentialPluginProvider: opts.CredentialPluginProvider,

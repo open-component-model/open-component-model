@@ -2,6 +2,7 @@ package credentials
 
 import (
 	"fmt"
+	"path"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -122,4 +123,28 @@ func (g *syncedDag) addIdentity(identity runtime.Identity) error {
 		}
 	}
 	return nil
+}
+
+// IdentityMatchesPath returns true if the identity a matches the subpath of the identity b.
+// If the path attribute is not set in either identity, it returns true.
+// If the path attribute is set in both identities,
+// it returns true if the path attribute of b contains the path attribute of a.
+// For more information, check path.Match.
+// IdentityMatchesPath deletes the path attribute from both identities, because it is expected
+// that it is used in a chain with Identity.Match and the authority decision of the path attribute.
+//
+// see IdentityMatchingChainFn and Identity.Match for more information.
+func IdentityMatchesPath(i, o runtime.Identity) bool {
+	ip, iok := i[runtime.IdentityAttributePath]
+	delete(i, runtime.IdentityAttributePath)
+	op, ook := o[runtime.IdentityAttributePath]
+	delete(o, runtime.IdentityAttributePath)
+	if !iok && !ook || (ip == "" && op == "") || op == "" {
+		return true
+	}
+	match, err := path.Match(op, ip)
+	if err != nil {
+		return false
+	}
+	return match
 }
