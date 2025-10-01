@@ -7,7 +7,6 @@ import (
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 
-	oci "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -23,6 +22,9 @@ type cachedCredential struct {
 // It maintains a list of credentials indexed by repository identity (hostname and port).
 // The cache supports multiple credential types including username/password,
 // refresh tokens, and access tokens.
+//
+// The purpose of the cache is to be able to centrally update the credentials
+// also for existing repositories.
 type credentialCache struct {
 	mu          sync.RWMutex
 	credentials []cachedCredential
@@ -102,25 +104,4 @@ func equalCredentials(a, b auth.Credential) bool {
 		a.Password == b.Password &&
 		a.RefreshToken == b.RefreshToken &&
 		a.AccessToken == b.AccessToken
-}
-
-type storeCache struct {
-	mu    sync.Mutex
-	store map[string]*oci.Store
-}
-
-func (c *storeCache) loadOrStore(_ context.Context, path string, load func(path string) (*oci.Store, error)) (*oci.Store, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if store, ok := c.store[path]; ok {
-		return store, nil
-	}
-	store, err := load(path)
-	if err != nil {
-		return nil, err
-	}
-	c.store[path] = store
-
-	return store, nil
 }

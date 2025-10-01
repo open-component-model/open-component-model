@@ -289,8 +289,8 @@ func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 }
 
 func (s *Repository) Tags(ctx context.Context, _ string, fn func(tags []string) error) error {
-	s.indexMu.RLock()
-	defer s.indexMu.RUnlock()
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
 
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {

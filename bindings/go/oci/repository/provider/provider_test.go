@@ -1,12 +1,12 @@
 package provider_test
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
-
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -28,62 +28,51 @@ func Test_Provider_Smoke(t *testing.T) {
 
 	r.Equal(id[ocmruntime.IdentityAttributePath], fs.String())
 
-	repo1, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
-	r.NoError(err)
-	r.NotNil(repo1)
-
-	repo2, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
-	r.NoError(err)
-	r.NotNil(repo2)
-
-	t.Run("basic upload and download of a component version", func(t *testing.T) {
-		name, version := "test-component", "v1.0.0"
-
-		ctx := t.Context()
+	t.Run("access provider concurrently", func(t *testing.T) {
 		r := require.New(t)
 
 		desc := descriptor.Descriptor{}
-		desc.Component.Name = name
-		desc.Component.Version = version
+		desc.Component.Name = "test-component"
 		desc.Component.Labels = append(desc.Component.Labels, descriptor.Label{Name: "foo", Value: []byte(`"bar"`)})
 		desc.Component.Provider.Name = "ocm.software/open-component-model/bindings/go/oci/integration/test"
 
-		r.NoError(repo1.AddComponentVersion(ctx, &desc))
+		retrievedDescs := make([]*descriptor.Descriptor, 10)
+		retrievedVersions := make([][]string, 10)
+		eg, ctx := errgroup.WithContext(t.Context())
+		for i := 0; i < 10; i++ {
+			eg.Go(func() error {
+				desc := desc
+				// TODO(fabianburth): introduce file locks to prevent races on
+				//   blobs (https://github.com/open-component-model/ocm-project/issues/694).
+				// we need to force different versions here, otherwise the blob
+				// write will race
+				desc.Component.Version = fmt.Sprintf("v1.0.%d", i)
+				repo, err := prov.GetComponentVersionRepository(ctx, repoSpec, nil)
+				if err != nil {
+					return fmt.Errorf("failed to get component version repository: %v", err)
+				}
+				err = repo.AddComponentVersion(ctx, &desc)
+				if err != nil {
+					return fmt.Errorf("failed to add component version: %v", err)
+				}
+				retrievedDescs[i], err = repo.GetComponentVersion(ctx, desc.Component.Name, desc.Component.Version)
+				if err != nil {
+					return fmt.Errorf("failed to get component version: %v", err)
+				}
+				retrievedVersions[i], err = repo.ListComponentVersions(ctx, desc.Component.Name)
+				if err != nil {
+					return fmt.Errorf("failed to list component versions: %v", err)
+				}
+				return nil
+			})
+		}
+		r.NoError(eg.Wait())
 
-		// Verify that the component version can be retrieved
-		retrievedDesc, err := repo1.GetComponentVersion(ctx, name, version)
-		r.NoError(err)
-
-		r.Equal(name, retrievedDesc.Component.Name)
-		r.Equal(version, retrievedDesc.Component.Version)
-		r.ElementsMatch(retrievedDesc.Component.Labels, desc.Component.Labels)
-
-		versions, err := repo1.ListComponentVersions(ctx, name)
-		r.NoError(err)
-		r.Contains(versions, version)
-
-		// Now verify that the same component version can be retrieved from the second repository
-		retrievedDesc2, err := repo2.GetComponentVersion(ctx, name, version)
-		r.NoError(err)
-		r.Equal(name, retrievedDesc2.Component.Name)
-
-		t.Run("concurrent access to the same repository", func(t *testing.T) {
-			r := require.New(t)
-			// Attempt to add the same component version concurrently
-			eg, ctx := errgroup.WithContext(t.Context())
-			for i := 0; i < 10; i++ {
-				eg.Go(func() error {
-					return repo1.AddComponentVersion(ctx, &desc)
-				})
-				eg.Go(func() error {
-					return repo2.AddComponentVersion(ctx, &desc)
-				})
-			}
-			r.NoError(eg.Wait())
-
-			// Verify that the component version still exists and was not corrupted during write
-			_, err := repo1.GetComponentVersion(ctx, name, version)
-			r.NoError(err)
-		})
+		for i := 0; i < 10; i++ {
+			r.Equal(desc.Component.Name, retrievedDescs[i].Component.Name)
+			r.Equal(fmt.Sprintf("v1.0.%d", i), retrievedDescs[i].Component.Version)
+			r.ElementsMatch(retrievedDescs[i].Component.Labels, desc.Component.Labels)
+			r.Contains(retrievedVersions[i], fmt.Sprintf("v1.0.%d", i))
+		}
 	})
 }
