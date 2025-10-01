@@ -330,7 +330,7 @@ require (
 	github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/tonglil/buflogr v1.1.1 // indirect
-	github.com/transparency-dev/formats v0.0.0-20250825093915-4fde0c3c9ab1 // indirect
+	github.com/transparency-dev/formats v0.0.0-20250929095936-9974c5907dab // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect
 	github.com/transparency-dev/tessera v1.0.0-rc3 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
