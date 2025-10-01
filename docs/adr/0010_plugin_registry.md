@@ -115,7 +115,13 @@ This part doesn't change from how plugins work now:
 name: ocm.software/plugins/ecrplugin
 version: 0.27.0
 provider: ocm.software
-
+labels:
+  - name: category
+    value: <plugin-type>
+  - name: registry
+    value: official
+  - name: description
+    value: Official ECR plugin
 resources:
   - name: demo                    # Plugin binary name
     type: ocmPlugin
@@ -135,14 +141,6 @@ resources:
     access:
       type: localBlob
       localReference: sha256:f1764c...
-  # ... additional platforms
-
-  - name: plugin-metadata        # Plugin description
-    type: blob
-    version: 0.27.0
-    access:
-      type: localBlob
-      localReference: sha256:...
 ```
 
 ## User Workflow
