@@ -63,7 +63,7 @@ func (l *CTFComponentLister) getAllNames(ctx context.Context) ([]string, error) 
 
 	arts := idx.GetArtifacts()
 	if len(arts) == 0 {
-		return []string{}, nil
+		return nil, nil
 	}
 
 	accumulatedNames := make(map[string]struct{})
