@@ -15,6 +15,7 @@ var (
 	ResourceRepositoryPluginType         PluginType = "resourceRepository"
 	BlobTransformerPluginType            PluginType = "blobTransformer"
 	SigningHandlerPluginType             PluginType = "signingHandler"
+	ComponentListerPluginType            PluginType = "componentLister"
 )
 
 type Location struct {
