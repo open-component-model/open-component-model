@@ -2,6 +2,7 @@ package oci
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -22,6 +23,8 @@ type CTFComponentLister struct {
 
 var _ repo.ComponentLister = (*CTFComponentLister)(nil)
 
+var ErrFnNil = errors.New("expected a valid callback function, but got nil")
+
 // NewComponentLister creates a new ComponentLister for the given CTF archive.
 func NewComponentLister(archive ctf.CTF) *CTFComponentLister {
 	lister := &CTFComponentLister{
@@ -35,6 +38,10 @@ func NewComponentLister(archive ctf.CTF) *CTFComponentLister {
 // The function does not support pagination and returns the complete list at once.
 // Thus, the `last` parameter is ignored.
 func (l *CTFComponentLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
+	if fn == nil {
+		return ErrFnNil
+	}
+
 	if last != "" {
 		logger := getLogger()
 		logger.DebugContext(ctx, "pagination is not supported, ignoring 'last' parameter", "last", last)

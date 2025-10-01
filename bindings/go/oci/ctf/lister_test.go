@@ -93,6 +93,14 @@ func TestListComponents(t *testing.T) {
 	}
 }
 
+func TestListComponentsFnNil(t *testing.T) {
+	archive := NewMockCTF([]string{})
+	var lister repo.ComponentLister
+	lister = NewComponentLister(archive)
+	err := lister.ListComponents(t.Context(), "", nil)
+	assert.EqualError(t, err, ErrFnNil.Error())
+}
+
 // NewMockCTF creates a new empty mock CTF.
 func NewMockCTF(compNames []string) *MockCTF {
 	m := &MockCTF{}
