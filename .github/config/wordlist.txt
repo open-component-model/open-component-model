@@ -529,4 +529,12 @@ modularity
 rollout
 ttl
 canonicalized
+eol
+slsa
+backport
+backports
+cicd
+checksums
+rc
+rcs
 pem

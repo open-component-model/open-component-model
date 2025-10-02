@@ -36,11 +36,11 @@ func (d *neighborDiscoverer) DiscoverNeighbors(ctx context.Context, v string) (n
 		// This means we are on an external component node (= component is
 		// not in the constructor specification).
 		slog.DebugContext(ctx, "discovering external component", "component", vertex.ID)
-		_, err := d.discoverExternalComponent(ctx, vertex)
+		neighbors, err := d.discoverExternalComponent(ctx, vertex)
 		if err != nil {
 			return nil, fmt.Errorf("failed to discover external component: %w", err)
 		}
-		return nil, nil
+		return neighbors, nil
 	}
 	// This means we are on a constructor node (= component is in the
 	// constructor specification).
@@ -103,7 +103,9 @@ func (d *neighborDiscoverer) discoverExternalComponent(ctx context.Context, vert
 	}
 	vertex.Attributes.Store(attributeComponentDescriptor, desc)
 
-	// TODO(fabianburth): once we support recursive, we need to discover the
-	//   neighbors here (https://github.com/open-component-model/ocm-project/issues/666)
-	return nil, nil
+	neighbors := make([]string, len(desc.Component.References))
+	for index, ref := range desc.Component.References {
+		neighbors[index] = ref.ToIdentity().String()
+	}
+	return neighbors, nil
 }
