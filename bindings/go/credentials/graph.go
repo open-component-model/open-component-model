@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	cfg "ocm.software/open-component-model/bindings/go/credentials/spec/config"
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -35,13 +36,17 @@ type Options struct {
 }
 
 type GraphResolver interface {
-	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
+	Resolve(ctx context.Context, identity runtime.Identity) (runtime.Typed, error)
 }
 
 // ToGraph creates a new credential graph from the provided configuration and options.
 // It initializes the graph structure and ingests the configuration into the graph.
 // Returns an error if the configuration cannot be properly ingested.
 func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (GraphResolver, error) {
+	if opts.CredentialRepositoryTypeScheme == nil {
+		opts.CredentialRepositoryTypeScheme = cfg.Scheme
+	}
+
 	g := &Graph{
 		syncedDag:                newSyncedDag(),
 		credentialPluginProvider: opts.CredentialPluginProvider,
@@ -71,7 +76,7 @@ type Graph struct {
 // Resolve attempts to resolve credentials for the given identity.
 // It first tries direct resolution through the DAG, and if that fails,
 // falls back to indirect resolution through plugins.
-func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	if _, err := identity.ParseType(); err != nil {
 		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", err)
 	}

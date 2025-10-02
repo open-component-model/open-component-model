@@ -15,3 +15,9 @@ type DirectCredentials struct {
 	Type       runtime.Type      `json:"type"`
 	Properties map[string]string `json:"properties"`
 }
+
+func CredentialsFromMap(properties map[string]string) *DirectCredentials {
+	return &DirectCredentials{
+		Properties: properties,
+	}
+}
