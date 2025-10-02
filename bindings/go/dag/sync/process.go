@@ -78,12 +78,12 @@ func (d *GraphProcessor[K, V]) Process(ctx context.Context) error {
 		return fmt.Errorf("failed to read graph: %w", err)
 	}
 
-	errGroup, gctx := errgroup.WithContext(ctx)
-	if d.opts.Concurrency > 0 {
-		errGroup.SetLimit(d.opts.Concurrency)
-	}
-
 	for len(queue) > 0 {
+		errGroup, gctx := errgroup.WithContext(ctx)
+		if d.opts.Concurrency > 0 {
+			errGroup.SetLimit(d.opts.Concurrency)
+		}
+
 		batch := slices.Clone(queue)
 		queue = nil
 
