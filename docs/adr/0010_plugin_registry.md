@@ -295,7 +295,8 @@ download, upload, etc.
 It can include private registries and enterprise deployments, and it's consistent with how other OCM artifacts work.
 
 We can reuse a large portion of the existing `ocm download plugin` implementation, and existing workflows keep working.
-Component descriptors also give you metadata, labels, and provenance information.
+Component descriptors also give you metadata, labels, and provenance information. This command then would be replaced
+by the new command structure.
 
 #### Cons
 
