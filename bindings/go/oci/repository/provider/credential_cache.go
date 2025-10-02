@@ -7,6 +7,7 @@ import (
 
 	"oras.land/oras-go/v2/registry/remote/auth"
 
+	oci "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -101,4 +102,25 @@ func equalCredentials(a, b auth.Credential) bool {
 		a.Password == b.Password &&
 		a.RefreshToken == b.RefreshToken &&
 		a.AccessToken == b.AccessToken
+}
+
+type storeCache struct {
+	mu    sync.Mutex
+	store map[string]*oci.Store
+}
+
+func (c *storeCache) loadOrStore(_ context.Context, path string, load func(path string) (*oci.Store, error)) (*oci.Store, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if store, ok := c.store[path]; ok {
+		return store, nil
+	}
+	store, err := load(path)
+	if err != nil {
+		return nil, err
+	}
+	c.store[path] = store
+
+	return store, nil
 }
