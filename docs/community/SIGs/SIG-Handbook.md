@@ -42,7 +42,7 @@ Submit a pull request containing your charter. To get the TSC aware of the submi
 
 The OCM Technical Steering Committee (TSC) reviews and approves proposals through a formal vote.
 
-Once approved, merge your charter PR and announce your SIG in the community using the appropiate channels (mailing list, Slack, etc.).
+Once approved, merge your charter PR and announce your SIG in the community using the appropriate channels (mailing list, Slack, etc.).
 
 In case the submission is not approved, the TSC will provide feedback to the proposers for revision of the charter PR and resubmission.
 
