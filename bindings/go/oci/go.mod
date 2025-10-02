@@ -13,7 +13,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250929111900-08cb1b0e7343
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251002091116-d5e8b62a2c00
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/repository v0.0.2
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2

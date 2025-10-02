@@ -9,13 +9,13 @@ require (
 	golang.org/x/sync v0.17.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.8
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250929111900-08cb1b0e7343
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251002091116-d5e8b62a2c00
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250929111900-08cb1b0e7343
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251002091116-d5e8b62a2c00
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/repository v0.0.1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20250929111900-08cb1b0e7343
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251002091116-d5e8b62a2c00
 )
 
 require (
@@ -31,6 +31,6 @@ require (
 	golang.org/x/text v0.29.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250929111900-08cb1b0e7343 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251002091116-d5e8b62a2c00 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
