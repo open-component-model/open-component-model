@@ -45,22 +45,22 @@ The mission of SIG Runtime is to allow OCM Components to be
 ## Deliverables
 
 - **OCM Language Bindings (Go)**
-  - Maintained as a first-class module with regular, versioned releases
+Maintained as a first-class module with regular, versioned releases
 
 - **OCM Kubernetes Controller**
-  - Production-grade controller with predictable release cadence
+Production-grade controller with predictable release cadence
 
 - **Best-Practice Patterns**
-  - Reference documentation, blueprints, and deployment samples (Helm, Kustomize)
+Reference documentation, blueprints, and deployment samples (Helm, Kustomize)
 
 - **Operational Documentation**
-  - Installation, upgrades, Day 2 operations, migration strategies, and security hardening
+Installation, upgrades, Day 2 operations, migration strategies, and security hardening
 
 - **Conformance and End-to-End Testing**
-  - Runtime validation across supported OCM CLI and Kubernetes versions
+Runtime validation across supported OCM CLI and Kubernetes versions
 
 - **Public Roadmap and Release Notes**
-  - Transparent planning and lifecycle communication for the community
+Transparent planning and lifecycle communication for the community
 
 ## Responsibilities
 
