@@ -86,8 +86,13 @@ func (d *GraphDiscoverer[K, V]) CurrentEdges(key K) []K {
 		}
 		edges = make([]K, len(v.Edges))
 		for k, edge := range v.Edges {
-			idx := edge[attributeOrderIndex]
-			edges[idx.(int)] = k
+			// Order edges by index if present.
+			// If not, we append them in the order they are returned from the iterator (not stable).
+			if idx, ok := edge[attributeOrderIndex]; ok {
+				edges[idx.(int)] = k
+			} else {
+				panic("edges without order index should never exist")
+			}
 		}
 		return nil
 	})
