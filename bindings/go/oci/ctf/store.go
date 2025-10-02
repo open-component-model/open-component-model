@@ -51,7 +51,6 @@ func NewFromCTF(store ctf.CTF) *Store {
 // - Handle blob operations (Fetch, Exists, Push) through the CTF's blob archive
 // - Emulate an OCM OCI Repository for accessing component versions stored in the CTF
 type Store struct {
-	mu      sync.RWMutex
 	archive ctf.CTF
 }
 
@@ -70,7 +69,6 @@ func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Sto
 	ref := rawRef.(looseref.LooseReference)
 
 	return &Repository{
-		indexMu: &s.mu,
 		archive: s.archive,
 		repo:    ref.Repository,
 	}, nil
@@ -90,7 +88,7 @@ func (s *Store) ComponentVersionReference(ctx context.Context, component, versio
 type Repository struct {
 	archive ctf.CTF
 	repo    string
-	indexMu *sync.RWMutex
+	indexMu sync.RWMutex
 }
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
@@ -152,8 +150,8 @@ func (s *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
 	var b blob.ReadOnlyBlob
 
-	s.indexMu.Lock()
-	defer s.indexMu.Unlock()
+	s.indexMu.RLock()
+	defer s.indexMu.RUnlock()
 
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
