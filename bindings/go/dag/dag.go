@@ -44,6 +44,21 @@ type Vertex[T cmp.Ordered] struct {
 	InDegree, OutDegree int
 }
 
+func (v *Vertex[T]) Clone() *Vertex[T] {
+	clone := &Vertex[T]{
+		ID:        v.ID,
+		InDegree:  v.InDegree,
+		OutDegree: v.OutDegree,
+	}
+	clone.Attributes = maps.Clone(v.Attributes)
+	clone.Edges = make(map[T]map[string]any, len(v.Edges))
+	for k, v := range v.Edges {
+		clone.Edges[k] = maps.Clone(v)
+	}
+
+	return clone
+}
+
 // DirectedAcyclicGraph represents a directed acyclic graph.
 type DirectedAcyclicGraph[T cmp.Ordered] struct {
 	// Vertices stores the nodes in the graph
@@ -58,9 +73,11 @@ func NewDirectedAcyclicGraph[T cmp.Ordered]() *DirectedAcyclicGraph[T] {
 }
 
 func (d *DirectedAcyclicGraph[T]) Clone() *DirectedAcyclicGraph[T] {
-	return &DirectedAcyclicGraph[T]{
-		Vertices: maps.Clone(d.Vertices),
+	clone := &DirectedAcyclicGraph[T]{Vertices: make(map[T]*Vertex[T], len(d.Vertices))}
+	for k, v := range d.Vertices {
+		clone.Vertices[k] = v.Clone()
 	}
+	return clone
 }
 
 // AddVertex adds a new node to the graph.
