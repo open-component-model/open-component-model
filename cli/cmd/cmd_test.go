@@ -132,10 +132,11 @@ COMPONENT                   │ VERSION │ PROVIDER
 			expectedError:  false,
 		},
 		{
-			name:           "tree output",
-			args:           []string{"get", "cv", path, "--output=tree"},
-			expectedOutput: "── ocm.software/test-component:0.0.1",
-			expectedError:  false,
+			name: "tree output",
+			args: []string{"get", "cv", path, "--output=tree"},
+			expectedOutput: `NESTING  COMPONENT                    VERSION  PROVIDER      IDENTITY                                       
+ └─       ocm.software/test-component  0.0.1    ocm.software  name=ocm.software/test-component,version=0.0.1`,
+			expectedError: false,
 		},
 		{
 			name:           "Invalid output format",
@@ -326,9 +327,10 @@ COMPONENT           │ VERSION │ PROVIDER
 		{
 			name: "tree output",
 			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
-			expectedOutput: `── ocm.software/root:0.0.1
-   ├─ ocm.software/leaf-a:0.0.1
-   ╰─ ocm.software/leaf-b:0.0.1`,
+			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
+ └─ ●     ocm.software/root    0.0.1    ocm.software  name=ocm.software/root,version=0.0.1   
+    ├─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 
+    └─    ocm.software/leaf-b  0.0.1    ocm.software  name=ocm.software/leaf-b,version=0.0.1`,
 			expectedError: false,
 		},
 	}
@@ -602,11 +604,12 @@ COMPONENT           │ VERSION │ PROVIDER
 		{
 			name: "tree output - all versions",
 			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
-			expectedOutput: `╭─ ocm.software/root:0.0.2
-│  ╰─ ocm.software/leaf-a:0.0.1
-╰─ ocm.software/root:0.0.1
-   ├─ ocm.software/leaf-a:0.0.1
-   ╰─ ocm.software/leaf-b:0.0.1`,
+			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
+ ├─ ●     ocm.software/root    0.0.2    ocm.software  name=ocm.software/root,version=0.0.2   
+ │  └─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 
+ └─ ●     ocm.software/root    0.0.1    ocm.software  name=ocm.software/root,version=0.0.1   
+    ├─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 
+    └─    ocm.software/leaf-b  0.0.1    ocm.software  name=ocm.software/leaf-b,version=0.0.1`,
 			expectedError: false,
 		},
 		{
