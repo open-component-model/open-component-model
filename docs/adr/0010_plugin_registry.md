@@ -208,7 +208,7 @@ ocm plugin registry install ocm.software/plugin/ecrplugin
 ocm plugin registry install ocm.software/plugin/ecrplugin@0.26.0
 ```
 
-New plugins can be published to the registry by authorized pipelines, CI pipelines, using the component constructor
+New plugins can be published to the registry by authorized CI pipelines, using the component constructor
 file for the original root component. During this process a new component version is created and published to the registry.
 
 All other operations, like pushing a new version of the plugin is done via regular `ocm add cv` commands with the component
@@ -300,7 +300,7 @@ Component descriptors also give you metadata, labels, and provenance information
 #### Cons
 
 It does require some ocm knowledge to host registries.
-Plugin publishers need to understand component versions, and setting up registries requires ocm tooling.
+Plugin publishers need to understand the concept of component versions, and setting up registries requires ocm tooling.
 There's also a bit more metadata overhead compared to simple file downloads.
 However, this can be further simplified with various commands that hide away this complexity. Simple things like
 `ocm plugin registry add` or `ocm plugin registry create` can be added to make it easier to get started.
