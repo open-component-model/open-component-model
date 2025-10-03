@@ -213,3 +213,24 @@ func TestDAGTopologicalSort(t *testing.T) {
 		})
 	}
 }
+
+func TestClone(t *testing.T) {
+	r := require.New(t)
+	d := NewDirectedAcyclicGraph[string]()
+	r.NoError(d.AddVertex("A", map[string]any{"key": "1"}))
+	r.NoError(d.AddVertex("B", map[string]any{"key": "2"}))
+	r.NoError(d.AddEdge("A", "B", map[string]any{"key": "3"}))
+
+	clone := d.Clone()
+	d.Vertices["A"].Attributes["key"] = "modified"
+	r.Equal("modified", d.Vertices["A"].Attributes["key"], "modifying original graph should not affect clone")
+	r.Equal("1", clone.Vertices["A"].Attributes["key"], "modifying original graph should not affect clone")
+
+	d.Vertices["B"].Attributes["key"] = "modified"
+	r.Equal("modified", d.Vertices["B"].Attributes["key"], "modifying original graph should not affect clone")
+	r.Equal("2", clone.Vertices["B"].Attributes["key"], "modifying original graph should not affect clone")
+
+	d.Vertices["A"].Edges["B"]["key"] = "modified"
+	r.Equal("modified", d.Vertices["A"].Edges["B"]["key"], "modifying original graph should not affect clone")
+	r.Equal("3", clone.Vertices["A"].Edges["B"]["key"], "modifying original graph should not affect clone")
+}
