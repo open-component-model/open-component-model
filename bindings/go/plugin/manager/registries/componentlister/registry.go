@@ -149,9 +149,9 @@ loop:
 
 // GetComponentListerCredentialConsumerIdentity retrieves the consumer identity
 // for a component lister based on a given repository specification.
-//func (r *ComponentListerRegistry) GetComponentListerCredentialConsumerIdentity(ctx context.Context,
+// func (r *ComponentListerRegistry) GetComponentListerCredentialConsumerIdentity(ctx context.Context,
 //	repositorySpecification runtime.Typed,
-//) (runtime.Identity, error) {
+// ) (runtime.Identity, error) {
 //	r.mu.Lock()
 //	defer r.mu.Unlock()
 //
@@ -187,7 +187,7 @@ loop:
 //	}
 //
 //	return result.Identity, nil
-//}
+// }
 
 // GetComponentListerPlugin returns ComponentLister plugins for a specific type.
 func (r *ComponentListerRegistry) GetComponentListerPlugin(ctx context.Context,
