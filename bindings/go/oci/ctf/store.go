@@ -215,6 +215,7 @@ func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 		}, nil
 	}
 
+	slog.Info("reference not found in index", "repository", repo, "reference", reference)
 	return ociImageSpecV1.Descriptor{}, errdef.ErrNotFound
 }
 
@@ -233,8 +234,20 @@ func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	repo := s.repo
 
 	var meta v1.ArtifactMetadata
-
-	if ref, err := looseref.ParseReference(reference); err == nil {
+	// This is a workaround around currently covering two cases:
+	// - a bug in our looseref parser, which parses `sha256:abc` as
+	//   repository: sha256, tag: abc (https://github.com/open-component-model/ocm-project/issues/700)
+	// - the canonical oras implementation of a store where a manifest can be
+	//   referenced by multiple tags instead of just by one tag as implemented
+	//   by the ctf store implementation (we decided against implementing this
+	//   for ctf, as ctf will be replaced by oci layouts in the future)
+	if _, err := digest.Parse(reference); err == nil {
+		meta = v1.ArtifactMetadata{
+			Repository: repo,
+			Digest:     desc.Digest.String(),
+			MediaType:  desc.MediaType,
+		}
+	} else if ref, err := looseref.ParseReference(reference); err == nil {
 		if err := ref.ValidateReferenceAsTag(); err == nil {
 			meta = v1.ArtifactMetadata{
 				Repository: repo,
@@ -307,6 +320,11 @@ func (s *Repository) Tags(ctx context.Context, _ string, fn func(tags []string) 
 	tags := make([]string, 0, len(arts))
 	for _, art := range arts {
 		if art.Repository != repo {
+			continue
+		}
+		// This is check is required because in Tag, we omit the tag completely
+		// in case it is a valid digest.
+		if art.Tag == "" {
 			continue
 		}
 		tags = append(tags, art.Tag)

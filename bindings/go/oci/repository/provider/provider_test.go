@@ -61,7 +61,7 @@ func Test_Provider_Smoke(t *testing.T) {
 				}
 				retrievedVersions[i], err = repo.ListComponentVersions(ctx, desc.Component.Name)
 				if err != nil {
-					return fmt.Errorf("failed to list component versions: %v", err)
+					return fmt.Errorf("failed to list component versions for index %d: %v", i, err)
 				}
 				return nil
 			})
