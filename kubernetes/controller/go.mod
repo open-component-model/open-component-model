@@ -27,6 +27,12 @@ require (
 	k8s.io/client-go v0.34.1
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
 	ocm.software/ocm v0.29.1
+	ocm.software/open-component-model/bindings/go/configuration v0.0.9
+	ocm.software/open-component-model/bindings/go/credentials v0.0.2
+	ocm.software/open-component-model/bindings/go/oci v0.0.7
+	ocm.software/open-component-model/bindings/go/plugin v0.0.7
+	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250915165427-710b0c881b3c
+	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	sigs.k8s.io/controller-runtime v0.22.1
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -103,9 +109,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.4 // indirect
 	github.com/aws/smithy-go v1.23.0 // indirect
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.10.1 // indirect
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
+	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/buildkite/agent/v3 v3.107.0 // indirect
 	github.com/buildkite/go-pipeline v0.16.0 // indirect
 	github.com/buildkite/interpolate v0.1.5 // indirect
@@ -230,6 +238,7 @@ require (
 	github.com/in-toto/attestation v1.1.2 // indirect
 	github.com/in-toto/in-toto-golang v0.9.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jedisct1/go-minisign v0.0.0-20241212093149-d2f9f49435c7 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
@@ -273,6 +282,7 @@ require (
 	github.com/mozillazg/docker-credential-acr-helper v0.4.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
+	github.com/nlepage/go-tarfs v1.2.1 // indirect
 	github.com/nozzle/throttler v0.0.0-20180817012639-2ea982251481 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/oleiade/reflections v1.1.0 // indirect
@@ -335,6 +345,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/vbatts/tar-split v0.12.1 // indirect
+	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
@@ -393,6 +404,14 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/kubectl v0.34.1 // indirect
+	ocm.software/open-component-model/bindings/go/blob v0.0.9 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20250915165427-710b0c881b3c // indirect
+	ocm.software/open-component-model/bindings/go/ctf v0.2.0 // indirect
+	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250912092813-396078c6d574 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250915165427-710b0c881b3c // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20250915165427-710b0c881b3c // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect
