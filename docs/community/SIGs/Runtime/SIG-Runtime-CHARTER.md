@@ -12,7 +12,7 @@ The SIG Runtime maintains and shapes:
 - **OCM Language Bindings** ([bindings](https://github.com/open-component-model/open-component-model/tree/main/bindings))
 - **OCM CLI** ([cli](https://github.com/open-component-model/open-component-model/tree/main/cli))
 - **OCM Kubernetes Controller** ([kubernetes/controller](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller))
-- **Legacy version of OCM Library and CLI** ([ocm](https://github.com/open-component-model/ocm/tree/main))
+- **Legacy version of OCM Library and CLI (only maintenance)** ([ocm](https://github.com/open-component-model/ocm/tree/main))
 
 The mission of SIG Runtime is to allow OCM components to be:
 
