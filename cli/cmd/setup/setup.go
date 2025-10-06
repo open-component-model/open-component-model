@@ -85,16 +85,13 @@ func PluginManager(cmd *cobra.Command) error {
 	ctx := ocmctx.WithPluginManager(cmd.Context(), pluginManager)
 	cmd.SetContext(ctx)
 
-	previouspostRunE := cmd.PersistentPostRunE
-	cmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
-		var err error
-		if previouspostRunE != nil {
-			err = previouspostRunE(cmd, args)
-		}
-		ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
+	cobra.OnFinalize(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return errors.Join(err, pluginManager.Shutdown(ctx))
-	}
+		if err := pluginManager.Shutdown(shutdownCtx); err != nil {
+			slog.ErrorContext(shutdownCtx, "failed to shutdown plugin manager", slog.String("error", err.Error()))
+		}
+	})
 
 	return nil
 }
