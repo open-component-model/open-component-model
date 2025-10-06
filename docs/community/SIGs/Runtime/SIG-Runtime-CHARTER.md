@@ -7,13 +7,13 @@
 
 ### Mission
 
-The SIG Runtime maintains and shapes
+The SIG Runtime maintains and shapes:
 
 - **OCM Language Bindings** ([bindings](https://github.com/open-component-model/open-component-model/tree/main/bindings))
 - **OCM CLI** ([cli](https://github.com/open-component-model/open-component-model/tree/main/cli))
 - **OCM Kubernetes Controller** ([kubernetes/controller](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller))
 
-The mission of SIG Runtime is to allow OCM Components to be
+The mission of SIG Runtime is to allow OCM components to be:
 
 - creatable
 - signable
@@ -44,23 +44,17 @@ The mission of SIG Runtime is to allow OCM Components to be
 
 ## Deliverables
 
-- **OCM Language Bindings (Go)**
-Maintained as a first-class module with regular, versioned releases
+- **OCM Language Bindings** - Go libraries, maintained as a first-class module with regular, versioned releases
 
-- **OCM Kubernetes Controller**
-Production-grade controller with predictable release cadence
+- **OCM Kubernetes Controller** - Production-grade controller with predictable release cadence
 
-- **Best-Practice Patterns**
-Reference documentation, blueprints, and deployment samples (Helm, Kustomize)
+- **Best-Practice Patterns** - Reference documentation, blueprints, and deployment samples (Helm, Kustomize)
 
-- **Operational Documentation**
-Installation, upgrades, Day 2 operations, migration strategies, and security hardening
+- **Operational Documentation** - Installation, upgrades, Day 2 operations, migration strategies, and security hardening
 
-- **Conformance and End-to-End Testing**
-Runtime validation across supported OCM CLI and Kubernetes versions
+- **Conformance and End-to-End Testing** - Runtime validation across supported OCM CLI and Kubernetes versions
 
-- **Public Roadmap and Release Notes**
-Transparent planning and lifecycle communication for the community
+- **Public Roadmap and Release Notes** - Transparent planning and lifecycle communication for the community
 
 ## Responsibilities
 
@@ -86,12 +80,12 @@ Transparent planning and lifecycle communication for the community
 
 ## Areas of Ownership (Code & Tests)
 
-- **Primary Code Repositories**
+- **Primary Code Repositories:**
   - **OCM Language Bindings** — [bindings](https://github.com/open-component-model/open-component-model/tree/main/bindings)
   - **OCM Kubernetes Controller** — [kubernetes/controller](https://github.com/open-component-model/open-component-model/tree/main/kubernetes/controller)
   - **OCM CLI** — [cli](https://github.com/open-component-model/open-component-model/tree/main/cli)
 
-- **Test Coverage**
+- **Test Strategy**
   - Component-level unit and integration tests for owned code
   - End-to-end and conformance test suites for the runtime
 
@@ -99,7 +93,7 @@ Transparent planning and lifecycle communication for the community
 
 ## Interfaces & Dependencies
 
-- **External Integrations that are regularly tested**
+- **External Integrations that are regularly tested:**
   - [Kro](https://kro.run) for dependency orchestration
   - [Flux](https://fluxcd.io) for delivery and deployment
 
