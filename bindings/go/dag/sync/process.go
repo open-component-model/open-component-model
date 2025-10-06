@@ -90,7 +90,7 @@ func (d *GraphProcessor[K, V]) Process(ctx context.Context) error {
 		for _, node := range batch {
 			errGroup.Go(func() error {
 				if err := d.opts.Processor.ProcessValue(gctx, d.CurrentValue(node)); err != nil {
-					return fmt.Errorf("process %v: %w", node, err)
+					return fmt.Errorf("failed to process value for node %v in graph: %w", node, err)
 				}
 				return nil
 			})

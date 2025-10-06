@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -149,4 +151,43 @@ func TestProcessReverseTopology(t *testing.T) {
 		err := processor.Process(ctx)
 		r.ErrorContains(err, "fail on A")
 	})
+}
+
+func TestProcessTopology_ConcurrentExecution(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	//    A
+	//   / \
+	//  B   C
+	//   \ /
+	//    D
+	graph := dag.NewDirectedAcyclicGraph[string]()
+	r.NoError(graph.AddVertex("A", map[string]any{attributeValue: "A"}))
+	r.NoError(graph.AddVertex("B", map[string]any{attributeValue: "B"}))
+	r.NoError(graph.AddVertex("C", map[string]any{attributeValue: "C"}))
+	r.NoError(graph.AddVertex("D", map[string]any{attributeValue: "D"}))
+	r.NoError(graph.AddEdge("A", "B", nil))
+	r.NoError(graph.AddEdge("A", "C", nil))
+	r.NoError(graph.AddEdge("B", "D", nil))
+	r.NoError(graph.AddEdge("C", "D", nil))
+
+	var concurrent int32
+	var maxConcurrent int32
+	processorFunc := ProcessorFunc[string](func(ctx context.Context, v string) error {
+		cur := atomic.AddInt32(&concurrent, 1)
+		defer atomic.AddInt32(&concurrent, -1)
+		atomic.StoreInt32(&maxConcurrent, max(atomic.LoadInt32(&maxConcurrent), cur))
+		time.Sleep(100 * time.Millisecond)
+		return nil
+	})
+
+	processor := NewGraphProcessor(ToSyncedGraph(graph), &GraphProcessorOptions[string, string]{
+		Processor:   processorFunc,
+		Concurrency: 2, // enforce limit
+	})
+
+	r.NoError(processor.Process(ctx))
+
+	r.LessOrEqual(int(maxConcurrent), 2, "must never exceed concurrency limit 2")
 }
