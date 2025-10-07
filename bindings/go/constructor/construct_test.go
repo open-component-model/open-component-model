@@ -10,17 +10,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"sigs.k8s.io/yaml"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"sigs.k8s.io/yaml"
 )
 
 // mockTargetRepository implements TargetRepository for testing
@@ -105,6 +104,7 @@ func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
 func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 	t.Parallel()
 
+	// Mock source input method
 	mockSourceInput := &mockSourceInputMethod{
 		processedSource: &descriptor.Source{
 			ElementMeta: descriptor.ElementMeta{
@@ -119,6 +119,8 @@ func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 			},
 		},
 	}
+
+	// Mock resource input method
 	mockResourceInput := &mockInputMethod{
 		processedResource: &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{
@@ -133,17 +135,25 @@ func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 			Relation: descriptor.LocalRelation,
 		},
 	}
+
 	sourceProvider := &mockSourceInputMethodProvider{
 		methods: map[runtime.Type]SourceInputMethod{
 			runtime.NewVersionedType("mock", "v1"): mockSourceInput,
 		},
 	}
+
 	resourceProvider := &mockInputMethodProvider{
 		methods: map[runtime.Type]ResourceInputMethod{
 			runtime.NewVersionedType("mock", "v1"): mockResourceInput,
 		},
 	}
 
+	// Example component structure:
+	//    A
+	//   / \
+	//  B   C
+	//   \ /
+	//    D
 	yamlData := `
 components:
   - name: ocm.software/test-component
@@ -174,6 +184,19 @@ components:
     version: v1.0.0
     provider:
       name: test-provider
+    resources:
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: json
+        input:
+          type: mock/v1
+    sources:
+      - name: test-source
+        version: v1.0.0
+        type: git
+        input:
+          type: mock/v1
     componentReferences:
       - name: test-component-external-ref-a
         version: v1.0.0
@@ -182,6 +205,19 @@ components:
     version: v1.0.0
     provider:
       name: test-provider
+    resources:
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: json
+        input:
+          type: mock/v1
+    sources:
+      - name: test-source
+        version: v1.0.0
+        type: git
+        input:
+          type: mock/v1
     componentReferences:
       - name: test-component-external-ref-a
         version: v1.0.0
@@ -192,6 +228,7 @@ components:
 	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &constructor))
 	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
 
+	// External repository with external descriptor
 	externalRepo, err := ocirepository.NewFromCTFRepoV1(t.Context(), &ctf.Repository{
 		Path:       t.TempDir(),
 		AccessMode: ctf.AccessModeReadWrite,
@@ -211,27 +248,38 @@ components:
 	}
 	require.NoError(t, externalRepo.AddComponentVersion(t.Context(), externalDescriptor))
 
+	runAssertions := func(t *testing.T, descMap map[string]*descriptor.Descriptor) {
+		t.Helper()
+
+		// ocm.software/test-component
+		desc := descMap["ocm.software/test-component"]
+		require.NotNil(t, desc)
+		assert.Equal(t, "test-provider", desc.Component.Provider.Name)
+		assert.Len(t, desc.Component.Resources, 1)
+		assert.Len(t, desc.Component.Sources, 1)
+		assert.Equal(t, "application/json", desc.Component.Resources[0].Access.(*v2.LocalBlob).MediaType)
+		assert.Equal(t, "application/octet-stream", desc.Component.Sources[0].Access.(*v2.LocalBlob).MediaType)
+
+		// ocm.software/test-component-ref-a
+		descA := descMap["ocm.software/test-component-ref-a"]
+		require.NotNil(t, descA)
+		assert.Equal(t, "test-provider", descA.Component.Provider.Name)
+		assert.Len(t, descA.Component.Resources, 1)
+		assert.Len(t, descA.Component.Sources, 1)
+		assert.Equal(t, "application/json", descA.Component.Resources[0].Access.(*v2.LocalBlob).MediaType)
+		assert.Equal(t, "application/octet-stream", descA.Component.Sources[0].Access.(*v2.LocalBlob).MediaType)
+
+		// ocm.software/test-component-ref-b
+		descB := descMap["ocm.software/test-component-ref-b"]
+		require.NotNil(t, descB)
+		assert.Equal(t, "test-provider", descB.Component.Provider.Name)
+		assert.Len(t, descB.Component.Resources, 1)
+		assert.Len(t, descB.Component.Sources, 1)
+		assert.Equal(t, "application/json", descB.Component.Resources[0].Access.(*v2.LocalBlob).MediaType)
+		assert.Equal(t, "application/octet-stream", descB.Component.Sources[0].Access.(*v2.LocalBlob).MediaType)
+	}
+
 	t.Run("with external references", func(t *testing.T) {
-		mockRepo := newMockTargetRepository()
-		opts := Options{
-			SourceInputMethodProvider:           sourceProvider,
-			ResourceInputMethodProvider:         resourceProvider,
-			TargetRepositoryProvider:            &mockTargetRepositoryProvider{repo: mockRepo},
-			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
-		}
-		constructorInstance := NewDefaultConstructor(opts)
-
-		descriptors, err := constructorInstance.Construct(t.Context(), converted)
-		require.NoError(t, err)
-		assert.Len(t, descriptors, 3)
-
-		// external ref should have been fetched
-		uploaded, err := mockRepo.GetComponentVersion(t.Context(), externalDescriptor.Component.Name, externalDescriptor.Component.Version)
-		require.NoError(t, err)
-		require.NotNil(t, uploaded)
-	})
-
-	t.Run("skip external references", func(t *testing.T) {
 		mockRepo := newMockTargetRepository()
 		opts := Options{
 			SourceInputMethodProvider:           sourceProvider,
@@ -244,11 +292,43 @@ components:
 
 		descriptors, err := constructorInstance.Construct(t.Context(), converted)
 		require.NoError(t, err)
-		assert.Len(t, descriptors, 3)
+		require.Len(t, descriptors, 3)
 
-		// external ref should NOT have been fetched or uploaded
+		descMap := make(map[string]*descriptor.Descriptor)
+		for _, d := range descriptors {
+			descMap[d.Component.Name] = d
+		}
+		runAssertions(t, descMap)
+
+		uploaded, err := mockRepo.GetComponentVersion(t.Context(), externalDescriptor.Component.Name, externalDescriptor.Component.Version)
+		require.NoError(t, err, "external reference should have been uploaded")
+		require.NotNil(t, uploaded)
+		assert.Equal(t, externalDescriptor, uploaded)
+	})
+
+	t.Run("skip external references", func(t *testing.T) {
+		mockRepo := newMockTargetRepository()
+		opts := Options{
+			SourceInputMethodProvider:           sourceProvider,
+			ResourceInputMethodProvider:         resourceProvider,
+			TargetRepositoryProvider:            &mockTargetRepositoryProvider{repo: mockRepo},
+			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
+			ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicySkip,
+		}
+		constructorInstance := NewDefaultConstructor(opts)
+
+		descriptors, err := constructorInstance.Construct(t.Context(), converted)
+		require.NoError(t, err)
+		require.Len(t, descriptors, 3)
+
+		descMap := make(map[string]*descriptor.Descriptor)
+		for _, d := range descriptors {
+			descMap[d.Component.Name] = d
+		}
+		runAssertions(t, descMap)
+
 		_, err = mockRepo.GetComponentVersion(t.Context(), externalDescriptor.Component.Name, externalDescriptor.Component.Version)
-		assert.Error(t, err, "external component should be skipped when SkipExternalReferences is true")
+		assert.Error(t, err, "external component should not be uploaded when SkipExternalReferences is true")
 	})
 }
 

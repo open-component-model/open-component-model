@@ -113,10 +113,10 @@ const (
 type ExternalComponentVersionCopyPolicy int
 
 const (
+	// ExternalComponentVersionCopyPolicySkip will skip the copy of the component version to the target repository.
+	// This is the default policy.
+	ExternalComponentVersionCopyPolicySkip = iota
 	// ExternalComponentVersionCopyPolicyCopyOrFail will copy the external component version to the target repository.
 	// If a copy fails, the construction process will fail.
-	// This is the default policy.
 	ExternalComponentVersionCopyPolicyCopyOrFail ExternalComponentVersionCopyPolicy = iota
-	// ExternalComponentVersionCopyPolicySkip will skip the copy of the component version to the target repository.
-	ExternalComponentVersionCopyPolicySkip
 )
