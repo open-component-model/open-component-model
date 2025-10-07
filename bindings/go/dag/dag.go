@@ -330,7 +330,7 @@ func (d *DirectedAcyclicGraph[T]) HasCycle() (bool, []string) {
 
 func (d *DirectedAcyclicGraph[T]) Contains(v T) (ok bool) {
 	_, ok = d.Vertices[v]
-	return
+	return ok
 }
 
 // Reverse converts Parent → Child to Child → Parent.
