@@ -76,26 +76,20 @@ func (r *ComponentListerPlugin) GetIdentity(ctx context.Context, request *v1.Get
 	return &identity, nil
 }
 
-func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request v1.ListComponentsRequest[runtime.Typed], credentials map[string]string) ([]string, error) {
-	var params []plugins.KV
-	addParam := func(k, v string) {
-		params = append(params, plugins.KV{Key: k, Value: v})
+func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[runtime.Typed], credentials map[string]string) ([]string, error) {
+	// We know we only have this single schema for all endpoints which require validation.
+	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+		return nil, err
 	}
-	addParam("last", request.Last)
 
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
-		return nil, err
-	}
-
 	var result []string
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ListComponents, http.MethodGet, plugins.WithResult(&result), plugins.WithQueryParams(params), plugins.WithHeader(credHeader)); err != nil {
-		return nil, fmt.Errorf("failed to get component versions from %s: %w", r.ID, err)
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ListComponents, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&result), plugins.WithHeader(credHeader)); err != nil {
+		return nil, fmt.Errorf("failed to get component names from %s: %w", r.ID, err)
 	}
 
 	return result, nil

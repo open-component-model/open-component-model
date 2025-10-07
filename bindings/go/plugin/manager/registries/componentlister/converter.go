@@ -18,7 +18,7 @@ type componentListerPluginConverter struct {
 }
 
 func (r *componentListerPluginConverter) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
-	request := v1.ListComponentsRequest[runtime.Typed]{
+	request := &v1.ListComponentsRequest[runtime.Typed]{
 		Repository: r.repositorySpecification,
 		Last:       last,
 	}

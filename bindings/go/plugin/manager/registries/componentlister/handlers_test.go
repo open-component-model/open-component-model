@@ -31,7 +31,7 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 		{
 			name: "ListComponentsHandlerFunc unauthorized error",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ListComponentsHandlerFunc(func(ctx context.Context, request v1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
+				handler := ListComponentsHandlerFunc(func(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
 					return []string{}, nil
 				}, scheme, &dummyv1.Repository{})
 
@@ -46,7 +46,7 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 			request: func(base string) *http.Request {
 				parse, _ := url.Parse(base)
 				return &http.Request{
-					Method: "GET",
+					Method: http.MethodPost,
 					URL:    parse,
 				}
 			},
@@ -54,7 +54,7 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 		{
 			name: "ListComponentsHandlerFunc success",
 			handlerFunc: func() http.HandlerFunc {
-				handler := ListComponentsHandlerFunc(func(ctx context.Context, request v1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
+				handler := ListComponentsHandlerFunc(func(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
 					return []string{"test-component-1", "test-component-2"}, nil
 				}, scheme, &dummyv1.Repository{})
 
@@ -77,9 +77,10 @@ func TestListComponentsHandlerFunc(t *testing.T) {
 				parse, _ := url.Parse(base)
 
 				return &http.Request{
-					Method: "GET",
+					Method: http.MethodPost,
 					URL:    parse,
 					Header: header,
+					Body:   io.NopCloser(strings.NewReader(`{"repository":{"type":"DummyRepository/v1","baseUrl":""},"last":""}`)),
 				}
 			},
 		},

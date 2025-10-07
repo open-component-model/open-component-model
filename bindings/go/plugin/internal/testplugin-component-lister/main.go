@@ -26,7 +26,8 @@ func (m *TestPlugin) Ping(_ context.Context) error {
 	return nil
 }
 
-func (m *TestPlugin) ListComponents(ctx context.Context, request listerv1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
+func (m *TestPlugin) ListComponents(ctx context.Context, request *listerv1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
+	logger.DebugContext(ctx, "ListComponents", "request", request)
 	return []string{"test-component-1", "test-component-2"}, nil
 }
 

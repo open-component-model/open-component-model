@@ -19,5 +19,5 @@ type IdentityProvider[T runtime.Typed] interface {
 type ComponentListerPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	IdentityProvider[T]
-	ListComponents(ctx context.Context, request ListComponentsRequest[T], credentials map[string]string) ([]string, error)
+	ListComponents(ctx context.Context, request *ListComponentsRequest[T], credentials map[string]string) ([]string, error)
 }

@@ -47,7 +47,7 @@ func TestPing(t *testing.T) {
 func TestListComponentsHandler(t *testing.T) {
 	// Setup test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == ListComponents && r.Method == http.MethodGet {
+		if r.URL.Path == ListComponents && r.Method == http.MethodPost {
 			err := json.NewEncoder(w).Encode([]string{"test-component-1", "test-component-2"})
 			require.NoError(t, err)
 			return
@@ -65,7 +65,7 @@ func TestListComponentsHandler(t *testing.T) {
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
-	list, err := plugin.ListComponents(ctx, v1.ListComponentsRequest[runtime.Typed]{
+	list, err := plugin.ListComponents(ctx, &v1.ListComponentsRequest[runtime.Typed]{
 		Repository: &dummyv1.Repository{},
 		Last:       "",
 	}, map[string]string{})

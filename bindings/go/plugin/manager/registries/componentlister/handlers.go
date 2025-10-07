@@ -15,12 +15,10 @@ import (
 // This is a convenience wrapper containing header and query parameter parsing logic that is not important to know for
 // the plugin implementor.
 func ListComponentsHandlerFunc[T runtime.Typed](f func(ctx context.Context,
-	request v1.ListComponentsRequest[T],
+	request *v1.ListComponentsRequest[T],
 	credentials map[string]string) ([]string, error), scheme *runtime.Scheme, typ T,
 ) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		query := request.URL.Query()
-		last := query.Get("last")
 		rawCredentials := []byte(request.Header.Get("Authorization"))
 		credentials := map[string]string{}
 		if err := json.Unmarshal(rawCredentials, &credentials); err != nil {
@@ -28,16 +26,20 @@ func ListComponentsHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			return
 		}
 
-		versions, err := f(request.Context(), v1.ListComponentsRequest[T]{
-			Repository: typ,
-			Last:       last,
-		}, credentials)
+		// body contains encoded ListComponentsRequest.
+		body, err := plugins.DecodeJSONRequestBody[v1.ListComponentsRequest[T]](writer, request)
+		if err != nil {
+			plugins.NewError(fmt.Errorf("failed to marshal request body: %w", err), http.StatusInternalServerError).Write(writer)
+			return
+		}
+
+		componentNames, err := f(request.Context(), body, credentials)
 		if err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(versions); err != nil {
+		if err := json.NewEncoder(writer).Encode(componentNames); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}

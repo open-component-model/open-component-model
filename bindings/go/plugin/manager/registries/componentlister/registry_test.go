@@ -79,7 +79,7 @@ func TestPluginFlow(t *testing.T) {
 
 	expectedList := []string{"test-component-1", "test-component-2"}
 	var result []string
-	err = retrievedListerPlugin.ListComponents(ctx, "", func(names []string) error {
+	err = retrievedListerPlugin.ListComponents(ctx, "last", func(names []string) error {
 		result = append(result, names...)
 		return nil
 	})
