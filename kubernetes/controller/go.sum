@@ -1726,8 +1726,8 @@ github.com/transparency-dev/formats v0.0.0-20250825093915-4fde0c3c9ab1 h1:FGRPvu
 github.com/transparency-dev/formats v0.0.0-20250825093915-4fde0c3c9ab1/go.mod h1:tHyb0WDzfS6s82G60ZJfQitD/wt8zSN6lr/o8ft9KkM=
 github.com/transparency-dev/merkle v0.0.2 h1:Q9nBoQcZcgPamMkGn7ghV8XiTZ/kRxn1yCG81+twTK4=
 github.com/transparency-dev/merkle v0.0.2/go.mod h1:pqSy+OXefQ1EDUVmAJ8MUhHB9TXGuzVAT58PqBoHz1A=
-github.com/transparency-dev/tessera v1.0.0-rc3 h1:v385KqMekDUKI3ZVJHCHE5MAz8LBrWsEKa6OzYLrz0k=
-github.com/transparency-dev/tessera v1.0.0-rc3/go.mod h1:aaLlvG/sEPMzT96iIF4hua6Z9pLzkfDtkbaUAR4IL8I=
+github.com/transparency-dev/tessera v1.0.0 h1:4OT1V9xJLa5NnYlFWWlCdZkCm18/o12rdd+bCTje7XE=
+github.com/transparency-dev/tessera v1.0.0/go.mod h1:TLvfjlkbmsmKVEJUtzO2eb9Q2IBnK3EJ0dI4G0oxEOU=
 github.com/ulikunitz/xz v0.5.15 h1:9DNdB5s+SgV3bQ2ApL10xRc35ck0DuIX/isZvIk+ubY=
 github.com/ulikunitz/xz v0.5.15/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
