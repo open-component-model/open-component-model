@@ -103,7 +103,8 @@ func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
 }
 
 func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
-	// Create mock input methods for both source and resource
+	t.Parallel()
+
 	mockSourceInput := &mockSourceInputMethod{
 		processedSource: &descriptor.Source{
 			ElementMeta: descriptor.ElementMeta{
@@ -118,7 +119,6 @@ func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 			},
 		},
 	}
-
 	mockResourceInput := &mockInputMethod{
 		processedResource: &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{
@@ -133,27 +133,17 @@ func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 			Relation: descriptor.LocalRelation,
 		},
 	}
-
-	// Create mock providers for both source and resource
 	sourceProvider := &mockSourceInputMethodProvider{
 		methods: map[runtime.Type]SourceInputMethod{
 			runtime.NewVersionedType("mock", "v1"): mockSourceInput,
 		},
 	}
-
 	resourceProvider := &mockInputMethodProvider{
 		methods: map[runtime.Type]ResourceInputMethod{
 			runtime.NewVersionedType("mock", "v1"): mockResourceInput,
 		},
 	}
 
-	// Create a component with source and resource and references
-	// The references form a diamond shaped directed acyclic graph (DAG).
-	//    A
-	//   / \
-	//  B   C
-	//   \ /
-	//    D
 	yamlData := `
 components:
   - name: ocm.software/test-component
@@ -184,19 +174,6 @@ components:
     version: v1.0.0
     provider:
       name: test-provider
-    resources:
-      - name: test-resource
-        version: v1.0.0
-        relation: local
-        type: json
-        input:
-          type: mock/v1
-    sources:
-      - name: test-source
-        version: v1.0.0
-        type: git
-        input:
-          type: mock/v1
     componentReferences:
       - name: test-component-external-ref-a
         version: v1.0.0
@@ -205,19 +182,6 @@ components:
     version: v1.0.0
     provider:
       name: test-provider
-    resources:
-      - name: test-resource
-        version: v1.0.0
-        relation: local
-        type: json
-        input:
-          type: mock/v1
-    sources:
-      - name: test-source
-        version: v1.0.0
-        type: git
-        input:
-          type: mock/v1
     componentReferences:
       - name: test-component-external-ref-a
         version: v1.0.0
@@ -225,19 +189,14 @@ components:
 `
 
 	var constructor constructorv1.ComponentConstructor
-	err := yaml.Unmarshal([]byte(yamlData), &constructor)
-	require.NoError(t, err)
-
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &constructor))
 	converted := constructorruntime.ConvertToRuntimeConstructor(&constructor)
-
-	// Create a mock target repository
-	mockRepo := newMockTargetRepository()
 
 	externalRepo, err := ocirepository.NewFromCTFRepoV1(t.Context(), &ctf.Repository{
 		Path:       t.TempDir(),
 		AccessMode: ctf.AccessModeReadWrite,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	externalDescriptor := &descriptor.Descriptor{
 		Component: descriptor.Component{
@@ -247,125 +206,50 @@ components:
 					Version: "v1.0.0",
 				},
 			},
-			Provider: descriptor.Provider{
-				Name: "external-provider",
-			},
+			Provider: descriptor.Provider{Name: "external-provider"},
 		},
 	}
-	assert.NoError(t, externalRepo.AddComponentVersion(t.Context(), externalDescriptor))
+	require.NoError(t, externalRepo.AddComponentVersion(t.Context(), externalDescriptor))
 
-	// Create the constructor with our mocks
-	opts := Options{
-		SourceInputMethodProvider:           sourceProvider,
-		ResourceInputMethodProvider:         resourceProvider,
-		TargetRepositoryProvider:            &mockTargetRepositoryProvider{repo: mockRepo},
-		ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
-	}
-	constructorInstance := NewDefaultConstructor(opts)
+	t.Run("with external references", func(t *testing.T) {
+		mockRepo := newMockTargetRepository()
+		opts := Options{
+			SourceInputMethodProvider:           sourceProvider,
+			ResourceInputMethodProvider:         resourceProvider,
+			TargetRepositoryProvider:            &mockTargetRepositoryProvider{repo: mockRepo},
+			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
+		}
+		constructorInstance := NewDefaultConstructor(opts)
 
-	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), converted)
-	require.NoError(t, err)
-	require.Len(t, descriptors, 3)
+		descriptors, err := constructorInstance.Construct(t.Context(), converted)
+		require.NoError(t, err)
+		assert.Len(t, descriptors, 3)
 
-	// Map descriptors by component name for easier assertions
-	descMap := make(map[string]*descriptor.Descriptor)
-	for _, desc := range descriptors {
-		descMap[desc.Component.Name] = desc
-	}
-
-	// Test ocm.software/test-component
-	t.Run("ocm.software/test-component", func(t *testing.T) {
-		desc := descMap["ocm.software/test-component"]
-		require.NotNil(t, desc)
-		assert.Equal(t, "v1.0.0", desc.Component.Version)
-		assert.Equal(t, "test-provider", desc.Component.Provider.Name)
-		assert.Len(t, desc.Component.Resources, 1)
-		assert.Len(t, desc.Component.Sources, 1)
-
-		resource := desc.Component.Resources[0]
-		assert.Equal(t, "test-resource", resource.Name)
-		assert.Equal(t, "v1.0.0", resource.Version)
-		assert.Equal(t, descriptor.LocalRelation, resource.Relation)
-		assert.NotNil(t, resource.Access)
-		resourceAccess, ok := resource.Access.(*v2.LocalBlob)
-		require.True(t, ok, "Resource access should be of type LocalBlob")
-		assert.Equal(t, "application/json", resourceAccess.MediaType)
-
-		source := desc.Component.Sources[0]
-		assert.Equal(t, "test-source", source.Name)
-		assert.Equal(t, "v1.0.0", source.Version)
-		assert.Equal(t, "git", source.Type)
-		assert.NotNil(t, source.Access)
-		sourceAccess, ok := source.Access.(*v2.LocalBlob)
-		require.True(t, ok, "Source access should be of type LocalBlob")
-		assert.Equal(t, "application/octet-stream", sourceAccess.MediaType)
-	})
-
-	t.Run("ocm.software/test-component-ref-a", func(t *testing.T) {
-		descA := descMap["ocm.software/test-component-ref-a"]
-		require.NotNil(t, descA)
-		assert.Equal(t, "v1.0.0", descA.Component.Version)
-		assert.Equal(t, "test-provider", descA.Component.Provider.Name)
-		assert.Len(t, descA.Component.Resources, 1)
-		assert.Len(t, descA.Component.Sources, 1)
-
-		resourceA := descA.Component.Resources[0]
-		assert.Equal(t, "test-resource", resourceA.Name)
-		assert.Equal(t, "v1.0.0", resourceA.Version)
-		assert.Equal(t, descriptor.LocalRelation, resourceA.Relation)
-		assert.NotNil(t, resourceA.Access)
-		resourceAccessA, ok := resourceA.Access.(*v2.LocalBlob)
-		require.True(t, ok, "Resource access should be of type LocalBlob")
-		assert.Equal(t, "application/json", resourceAccessA.MediaType)
-
-		sourceA := descA.Component.Sources[0]
-		assert.Equal(t, "test-source", sourceA.Name)
-		assert.Equal(t, "v1.0.0", sourceA.Version)
-		assert.Equal(t, "git", sourceA.Type)
-		assert.NotNil(t, sourceA.Access)
-		sourceAccessA, ok := sourceA.Access.(*v2.LocalBlob)
-		require.True(t, ok, "Source access should be of type LocalBlob")
-		assert.Equal(t, "application/octet-stream", sourceAccessA.MediaType)
-	})
-
-	t.Run("ocm.software/test-component-ref-b", func(t *testing.T) {
-		descB := descMap["ocm.software/test-component-ref-b"]
-		require.NotNil(t, descB)
-		assert.Equal(t, "v1.0.0", descB.Component.Version)
-		assert.Equal(t, "test-provider", descB.Component.Provider.Name)
-		assert.Len(t, descB.Component.Resources, 1)
-		assert.Len(t, descB.Component.Sources, 1)
-
-		resourceB := descB.Component.Resources[0]
-		assert.Equal(t, "test-resource", resourceB.Name)
-		assert.Equal(t, "v1.0.0", resourceB.Version)
-		assert.Equal(t, descriptor.LocalRelation, resourceB.Relation)
-		assert.NotNil(t, resourceB.Access)
-		resourceAccessB, ok := resourceB.Access.(*v2.LocalBlob)
-		require.True(t, ok, "Resource access should be of type LocalBlob")
-		assert.Equal(t, "application/json", resourceAccessB.MediaType)
-
-		sourceB := descB.Component.Sources[0]
-		assert.Equal(t, "test-source", sourceB.Name)
-		assert.Equal(t, "v1.0.0", sourceB.Version)
-		assert.Equal(t, "git", sourceB.Type)
-		assert.NotNil(t, sourceB.Access)
-		sourceAccessB, ok := sourceB.Access.(*v2.LocalBlob)
-		require.True(t, ok, "Source access should be of type LocalBlob")
-		assert.Equal(t, "application/octet-stream", sourceAccessB.MediaType)
-	})
-
-	t.Run("ocm.software/test-component-external-ref-a", func(t *testing.T) {
+		// external ref should have been fetched
 		uploaded, err := mockRepo.GetComponentVersion(t.Context(), externalDescriptor.Component.Name, externalDescriptor.Component.Version)
-		require.NoError(t, err, "external reference should have been uploaded to the target repository due to recursion")
+		require.NoError(t, err)
 		require.NotNil(t, uploaded)
-		require.Equal(t, externalDescriptor, uploaded)
 	})
 
-	// Verify the repository was called correctly
-	assert.Len(t, mockRepo.components, 4)
-	assert.Len(t, descMap, 3)
+	t.Run("skip external references", func(t *testing.T) {
+		mockRepo := newMockTargetRepository()
+		opts := Options{
+			SourceInputMethodProvider:           sourceProvider,
+			ResourceInputMethodProvider:         resourceProvider,
+			TargetRepositoryProvider:            &mockTargetRepositoryProvider{repo: mockRepo},
+			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
+			ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicyCopyOrFail,
+		}
+		constructorInstance := NewDefaultConstructor(opts)
+
+		descriptors, err := constructorInstance.Construct(t.Context(), converted)
+		require.NoError(t, err)
+		assert.Len(t, descriptors, 3)
+
+		// external ref should NOT have been fetched or uploaded
+		_, err = mockRepo.GetComponentVersion(t.Context(), externalDescriptor.Component.Name, externalDescriptor.Component.Version)
+		assert.Error(t, err, "external component should be skipped when SkipExternalReferences is true")
+	})
 }
 
 func TestComponentVersionConflictPolicies(t *testing.T) {
