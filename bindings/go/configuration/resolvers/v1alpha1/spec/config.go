@@ -9,7 +9,7 @@ import (
 
 const (
 	ConfigType = "resolvers.config.ocm.software"
-	Version    = "v1"
+	Version    = "v1alpha1"
 )
 
 var Scheme = runtime.NewScheme()

@@ -38,9 +38,9 @@ func (p *vertexProcessor) ProcessVertex(ctx context.Context, v string) error {
 		// This means we are on an external component node (= component is
 		// not in the constructor specification).
 		slog.DebugContext(ctx, "processing external component", "component", vertex.ID)
-		// TODO(fabianburth): once we support recursive, we need to perform
-		//  the transfer of the component here (https://github.com/open-component-model/ocm-project/issues/666).
-		// desc, err = processExternalComponent(vertex)
+		if err := p.processExternalComponent(ctx, vertex); err != nil {
+			return fmt.Errorf("failed to process external component: %w", err)
+		}
 		return nil
 	} else {
 		// This means we are on a constructor node (= component is in the
@@ -52,6 +52,23 @@ func (p *vertexProcessor) ProcessVertex(ctx context.Context, v string) error {
 	}
 
 	slog.DebugContext(ctx, "component constructed successfully")
+
+	return nil
+}
+
+func (p *vertexProcessor) processExternalComponent(ctx context.Context, vertex *syncdag.Vertex[string]) error {
+	desc := vertex.MustGetAttribute(attributeComponentDescriptor).(*descriptor.Descriptor)
+
+	constructorComponent := constructor.ConvertFromDescriptorComponent(&desc.Component)
+	repo, err := p.constructor.opts.GetTargetRepository(ctx, constructorComponent)
+	if err != nil {
+		return fmt.Errorf("error getting target repository for component %q: %w", desc.Component.ToIdentity(), err)
+	}
+	if err := repo.AddComponentVersion(ctx, desc); err != nil {
+		return fmt.Errorf("error adding component version to target: %w", err)
+	}
+
+	slog.DebugContext(ctx, "external component added to target repository")
 
 	return nil
 }

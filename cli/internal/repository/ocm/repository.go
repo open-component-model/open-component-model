@@ -74,8 +74,8 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph crede
 // It resolves the appropriate plugin and credentials for the repository.
 //
 //nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
-	ref, err := compref.Parse(componentReference)
+func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverruntime.Resolver, componentReference string, options ...compref.Option) (*ComponentRepository, error) {
+	ref, err := compref.Parse(componentReference, options...)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}

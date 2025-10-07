@@ -234,8 +234,7 @@ func buildRenderer(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string
 		serializer := buildMachineFormatSerializer(format)
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTree.String():
-		serializer := buildTreeFormatSerializer()
-		return tree.New(ctx, dag, tree.WithVertexSerializer(serializer), tree.WithRoots(roots...)), nil
+		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
 	case render.OutputFormatTable.String():
 		serializer := buildTableFormatSerializer()
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
@@ -264,13 +263,6 @@ func buildMachineFormatSerializer(format string) list.ListSerializer[string] {
 	default:
 		panic(fmt.Errorf("invalid machine output format %q", format)) // should not happen as checked before
 	}
-}
-
-func buildTreeFormatSerializer() tree.VertexSerializer[string] {
-	return tree.VertexSerializerFunc[string](func(vertex *syncdag.Vertex[string]) (string, error) {
-		id, _ := runtime.ParseIdentity(vertex.ID)
-		return fmt.Sprintf("%s:%s", id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]), nil
-	})
 }
 
 func buildTableFormatSerializer() list.ListSerializer[string] {
