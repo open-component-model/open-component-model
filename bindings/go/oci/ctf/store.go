@@ -69,7 +69,7 @@ func (s *Store) StoreForReference(_ context.Context, reference string) (spec.Sto
 	}
 	ref := rawRef.(looseref.LooseReference)
 
-	return &Repository{
+	return &repository{
 		indexMu: &s.mu,
 		archive: s.archive,
 		repo:    ref.Repository,
@@ -87,7 +87,7 @@ func (s *Store) ComponentVersionReference(ctx context.Context, component, versio
 }
 
 // Repository implements the spec.Store interface for a CTF OCI Repository.
-type Repository struct {
+type repository struct {
 	archive ctf.CTF
 	repo    string
 	indexMu *sync.RWMutex
@@ -95,7 +95,7 @@ type Repository struct {
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
-func (s *Repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	b, err := s.archive.GetBlob(ctx, target.Digest.String())
 	if err != nil {
 		return nil, fmt.Errorf("unable to get blob: %w", err)
@@ -105,7 +105,7 @@ func (s *Repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor
 
 // Exists checks if a blob exists in the CTF archive based on its descriptor.
 // Returns true if the blob exists, false otherwise.
-func (s *Repository) Exists(ctx context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
+func (s *repository) Exists(ctx context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
 	blobs, err := s.archive.ListBlobs(ctx)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
@@ -116,7 +116,7 @@ func (s *Repository) Exists(ctx context.Context, target ociImageSpecV1.Descripto
 	return slices.Contains(blobs, target.Digest.String()), nil
 }
 
-func (s *Repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
+func (s *repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
 	desc, err := s.Resolve(ctx, reference)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, err
@@ -130,7 +130,7 @@ func (s *Repository) FetchReference(ctx context.Context, reference string) (ociI
 
 // Push stores a new blob in the CTF archive with the expected descriptor.
 // The content is read from the provided io.Reader.
-func (s *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
+func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
 	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
@@ -149,7 +149,7 @@ func (s *Repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 // Alternatively, it is also possible to provide a digest directly, e.g., "sha256:abc123...".
 // If a full reference is given, it will be resolved against the blob Repository immediately.
 // Returns the descriptor if found, or an error if the reference is invalid or not found.
-func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
+func (s *repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
 	var b blob.ReadOnlyBlob
 
 	s.indexMu.Lock()
@@ -222,7 +222,7 @@ func (s *Repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 // Tag associates a descriptor with a reference in the CTF archive's index.
 // The reference should be in the format "repository:tag", but can also be just a tag or digest.
 // This operation updates the index to maintain the mapping between references and their corresponding descriptors.
-func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
+func (s *repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -301,7 +301,7 @@ func (s *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	return nil
 }
 
-func (s *Repository) Tags(ctx context.Context, _ string, fn func(tags []string) error) error {
+func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) error) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
