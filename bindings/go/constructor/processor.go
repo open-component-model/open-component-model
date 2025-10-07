@@ -16,9 +16,8 @@ import (
 // - constructing components that are part of the constructor specification
 // - uploading components to the target repository
 type vertexProcessor struct {
-	constructor                  *DefaultConstructor
-	dag                          *syncdag.DirectedAcyclicGraph[string]
-	shouldCopyExternalReferences bool
+	constructor *DefaultConstructor
+	dag         *syncdag.DirectedAcyclicGraph[string]
 }
 
 var _ syncdag.VertexProcessor[string] = (*vertexProcessor)(nil)
