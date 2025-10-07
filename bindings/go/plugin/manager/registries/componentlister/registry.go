@@ -50,7 +50,7 @@ func RegisterInternalComponentListerPlugin[T runtime.Typed](
 	return nil
 }
 
-// RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
+// ComponentListerRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
 type ComponentListerRegistry struct {
 	ctx                            context.Context
 	mu                             sync.Mutex

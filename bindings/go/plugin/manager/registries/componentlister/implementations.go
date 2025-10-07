@@ -40,7 +40,7 @@ var (
 	_ v1.ComponentListerPluginContract[runtime.Typed] = &ComponentListerPlugin{}
 )
 
-// NewConstructionRepositoryPlugin creates a new component lister plugin instance with the provided configuration.
+// NewComponentListerPlugin creates a new component lister plugin instance with the provided configuration.
 // It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
 func NewComponentListerPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *ComponentListerPlugin {
 	return &ComponentListerPlugin{
