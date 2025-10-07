@@ -11,7 +11,7 @@ type Descriptors struct {
 	List []*compdesc.ComponentDescriptor
 }
 
-// TODO: Rework because its ugly.
+// MarshalJSON TODO: Rework because its ugly.
 func (c Descriptors) MarshalJSON() ([]byte, error) {
 	list := `{"components":[`
 	for index, desc := range c.List {
