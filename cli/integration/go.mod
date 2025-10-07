@@ -9,20 +9,20 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/spf13/cobra v1.10.1
 	github.com/stretchr/testify v1.11.1
-	github.com/testcontainers/testcontainers-go v0.38.0
-	github.com/testcontainers/testcontainers-go/modules/registry v0.38.0
+	github.com/testcontainers/testcontainers-go v0.39.0
+	github.com/testcontainers/testcontainers-go/modules/registry v0.39.0
 	golang.org/x/crypto v0.42.0
 	helm.sh/helm/v3 v3.19.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
-	ocm.software/open-component-model/bindings/go/configuration v0.0.8
+	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251002101013-e0cc2f41d070
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/oci v0.0.7
+	ocm.software/open-component-model/bindings/go/oci v0.0.9
 	ocm.software/open-component-model/bindings/go/plugin v0.0.7
-	ocm.software/open-component-model/bindings/go/repository v0.0.1
+	ocm.software/open-component-model/bindings/go/repository v0.0.2
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
-	ocm.software/open-component-model/cli v0.0.0-20251002101013-e0cc2f41d070
+	ocm.software/open-component-model/cli v0.0.0-20250929111900-08cb1b0e7343
 	oras.land/oras-go/v2 v2.6.0
 )
 
@@ -85,7 +85,7 @@ require (
 	github.com/veqryn/slog-context v0.8.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.38.0 // indirect
@@ -104,14 +104,14 @@ require (
 	google.golang.org/grpc v1.75.1 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251002101013-e0cc2f41d070 // indirect
-	ocm.software/open-component-model/bindings/go/ctf v0.2.0 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251007063058-665f1cf6d76a // indirect
+	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251002101013-e0cc2f41d070 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251002101013-e0cc2f41d070 // indirect
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251002101013-e0cc2f41d070 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251002101013-e0cc2f41d070 // indirect
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251007091609-0f6fd5aa0c28 // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20250915165427-710b0c881b3c // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

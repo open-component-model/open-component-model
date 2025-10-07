@@ -20,10 +20,23 @@ import (
 // NewFromCTFRepoV1 creates a new [*oci.Repository] instance from a CTF repository v1 specification.
 // It opens the CTF archive specified in the repository path and returns the instance.
 // Based on the underlying format, write operations may be limited. (e.g. for archived ctfs, editing the CTF may
-// work on a extracted filesystem version.
+// work on an extracted filesystem version.
 // The path is cleaned to ensure it is a valid file path.
 // The access mode is converted to a bitmask for use with the CTF archive.
 func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository, options ...oci.RepositoryOption) (*oci.Repository, error) {
+	store, err := NewStoreFromCTFRepoV1(ctx, repository, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	repo, err := oci.NewRepository(append(options, ocictf.WithCTF(store))...)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create new repository: %w", err)
+	}
+	return repo, nil
+}
+
+func NewStoreFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository, options ...oci.RepositoryOption) (*ocictf.Store, error) {
 	path := repository.Path
 	if path == "" {
 		return nil, fmt.Errorf("a path is required")
@@ -31,6 +44,11 @@ func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository,
 
 	path = filepath.Clean(path)
 	mask := repository.AccessMode.ToAccessBitmask()
+
+	format := ctf.DiscoverCTFFormatFromPath(path)
+	if mask&ctf.O_RDWR != 0 && (format == ctf.FormatTAR || format == ctf.FormatTGZ) {
+		return nil, fmt.Errorf("readwrite access is not supported for archive formats such as %s", format.String())
+	}
 
 	repoOpts := &oci.RepositoryOptions{}
 	for _, opt := range options {
@@ -47,9 +65,8 @@ func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository,
 	if err != nil {
 		return nil, fmt.Errorf("unable to open ctf archive %q: %w", path, err)
 	}
-	store := ocictf.NewFromCTF(archive)
 
-	return oci.NewRepository(append(options, ocictf.WithCTF(store))...)
+	return ocictf.NewFromCTF(archive), nil
 }
 
 // NewFromOCIRepoV1 creates a new [*oci.Repository] instance from an OCI repository v1 specification.

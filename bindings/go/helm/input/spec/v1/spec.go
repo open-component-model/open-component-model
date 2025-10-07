@@ -7,6 +7,7 @@ import (
 // Helm describes an input sourced by a file system directory having a typical helm chart structure:
 // Chart.yaml, values.yaml, charts/, templates/, ...
 
+// Helm implements the input type for helm charts.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
