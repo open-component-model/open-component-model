@@ -12,6 +12,9 @@ type storeCache struct {
 	store map[string]*ocictf.Store
 }
 
+// loadOrStore returns the existing oci store for the path, if present.
+// Otherwise, it uses the load function to get a new oci store, and caches and
+// returns this new oci store.
 func (c *storeCache) loadOrStore(_ context.Context, path string, load func(path string) (*ocictf.Store, error)) (*ocictf.Store, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

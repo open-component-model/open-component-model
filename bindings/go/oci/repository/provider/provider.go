@@ -28,16 +28,48 @@ const DefaultCreator = "ocm.software/open-component-model/bindings/go/oci"
 // - An authorization cache for auth tokens
 // - A shared HTTP client with retry capabilities
 type CachingComponentVersionRepositoryProvider struct {
-	// Creator is the creator of new Component Versions.
+	// The creator is the creator of new Component Versions.
 	// See AnnotationOCMCreator for details
-	creator            string
-	scheme             *runtime.Scheme
-	storeCache         *storeCache
-	credentialCache    *credentialCache
-	ociCache           *ociCache
+	creator string
+
+	scheme *runtime.Scheme
+
+	// storeCache is a thread-safe cache implementation for caching instances
+	// of the ctf store with the oci repository path as key.
+	// The ctf is a file-based implementation of an oras oci store. Currently,
+	// it relies on locks on the data structure level (instead of on the file level).
+	// The cache avoids creating multiple stores operating on the same files,
+	// which is required to avoid race conditions.
+	storeCache *storeCache
+
+	// The purpose of the cache is to be able to centrally update the credentials
+	// also for repositories (including already existing repositories) provided
+	// by this repository provider.
+	credentialCache *credentialCache
+
+	// ociCache provides caching for OCI descriptors (manifests and layers) with
+	// oci repository path as key. It is used for caching the oci descriptors
+	// of local blobs.
+	// In case of oci artifacts, it caches the oci descriptor of the manifest
+	// which is added to an index manifest alongside the component version's
+	// manifest.
+	// In case of non-oci artifacts, it caches the oci descriptor of the layer
+	// which is added to the manifest of the component version.
+	ociCache *ociCache
+
+	// authorizationCache caches the auth-scheme and auth-token for the
+	// "Authorization" header in accessing the remote registry.
+	// It is shared by all repositories provided by this provider.
 	authorizationCache auth.Cache
-	httpClient         *http.Client
-	tempDir            string
+
+	// httpClient is the shared HTTP client used by all repositories provided.
+	httpClient *http.Client
+
+	// tempDir is the shared default temporary filesystem directory for any
+	// temporary data created by the repositories provided by the provider
+	// (such as the extracted directory representation of a tar
+	// or tar.gz ctf archive).
+	tempDir string
 }
 
 var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
@@ -128,6 +160,12 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		loadFunc := func(path string) (*ocictf.Store, error) {
 			return ocirepository.NewStoreFromCTFRepoV1(ctx, obj, opts...)
 		}
+		// TODO(fabianburth): loadOrStore checks whether the cache already contains a store for
+		//  the given path. If it does, it returns the cached store.
+		//  If not, it calls loadFunc to create a new store, stores it in the cache,
+		//  and then returns the newly created store.
+		//  Without this cache, we would create multiple stores for the same path
+		//  which would race on file access (https://github.com/open-component-model/ocm-project/issues/694).
 		store, err := b.storeCache.loadOrStore(ctx, obj.Path, loadFunc)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve store from cache: %w", err)
