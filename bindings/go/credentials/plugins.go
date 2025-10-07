@@ -1,5 +1,3 @@
-// Package credentials provides a flexible and extensible credential management system
-// for the Open Component Model (OCM).
 package credentials
 
 import (

@@ -29,7 +29,7 @@ func (g *syncedDag) getVertex(id string) (v *dag.Vertex[string], ok bool) {
 	g.dagMu.RLock()
 	defer g.dagMu.RUnlock()
 	v, ok = g.dag.Vertices[id]
-	return
+	return v, ok
 }
 
 func (g *syncedDag) getIdentity(id string) (runtime.Identity, bool) {
