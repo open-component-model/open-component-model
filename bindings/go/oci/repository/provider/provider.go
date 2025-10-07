@@ -28,6 +28,8 @@ const DefaultCreator = "ocm.software/open-component-model/bindings/go/oci"
 // - An authorization cache for auth tokens
 // - A shared HTTP client with retry capabilities
 type CachingComponentVersionRepositoryProvider struct {
+	// Creator is the creator of new Component Versions.
+	// See AnnotationOCMCreator for details
 	creator            string
 	scheme             *runtime.Scheme
 	storeCache         *storeCache
