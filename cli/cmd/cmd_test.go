@@ -951,6 +951,7 @@ components:
 			"--working-directory", tmp,
 			"--config", legacyResolverConfigYAMLFilePath,
 			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
+			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
 
 		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
@@ -963,20 +964,16 @@ components:
 		helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
 		r.NoError(err, "could not create helper test repository")
 
-		listOfAvailableCVsAfterConstruct := []runtime.Identity{{
+		for _, identity := range []runtime.Identity{{
 			descriptor.IdentityAttributeName:    "ocm.software/a",
 			descriptor.IdentityAttributeVersion: "1.0.0",
-		},
-			{
-				descriptor.IdentityAttributeName:    "ocm.software/b",
-				descriptor.IdentityAttributeVersion: "1.0.0",
-			},
-			{
-				descriptor.IdentityAttributeName:    "ocm.software/external",
-				descriptor.IdentityAttributeVersion: "1.0.0",
-			},
-		}
-		for _, identity := range listOfAvailableCVsAfterConstruct {
+		}, {
+			descriptor.IdentityAttributeName:    "ocm.software/b",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}, {
+			descriptor.IdentityAttributeName:    "ocm.software/external",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}} {
 			t.Run(identity.String(), func(t *testing.T) {
 				r := require.New(t)
 				_, err := helperRepo.GetComponentVersion(t.Context(),

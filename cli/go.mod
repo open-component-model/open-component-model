@@ -13,7 +13,7 @@ require (
 	golang.org/x/sys v0.36.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251007063058-665f1cf6d76a
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251007133026-a1de8fc5798a
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.4
