@@ -173,6 +173,10 @@ func TestLoadConfigurations(t *testing.T) {
 					{
 						"type": "filesystem.config.ocm.software/v1alpha1",
 						"tempFolder": "/tmp/test"
+					},
+					{
+						"type": "whatever.config.ocm.software/v1alpha1",
+						"whatever": "whatever"
 					}
 				]
 			}`),
@@ -218,7 +222,7 @@ func TestLoadConfigurations(t *testing.T) {
 			wantErr: false,
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
 				assert.NotNil(t, cfg)
-				assert.Len(t, cfg.Configurations, 1)
+				assert.Len(t, cfg.Configurations, 2)
 			},
 		},
 		{
@@ -258,7 +262,7 @@ func TestLoadConfigurations(t *testing.T) {
 			checkResult: func(t *testing.T, cfg *genericv1.Config) {
 				assert.NotNil(t, cfg)
 				// FlatMap merges configurations
-				assert.Len(t, cfg.Configurations, 1)
+				assert.Len(t, cfg.Configurations, 2)
 			},
 		},
 		{
@@ -289,6 +293,94 @@ func TestLoadConfigurations(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadConfigurationsInOrder(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, v1alpha1.AddToScheme(scheme))
+
+	secretA := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret-a",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			v1alpha1.OCMConfigKey: []byte(`{
+				"type": "generic.config.ocm.software/v1",
+				"configurations": [
+					{
+						"type": "filesystem.config.ocm.software/v1alpha1",
+						"tempFolder": "/tmp/test"
+					},
+					{
+						"type": "whatever.config.ocm.software/v1alpha1",
+						"whatever": "whatever"
+					}
+				]
+			}`),
+		},
+	}
+	secretB := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret-b",
+			Namespace: "default",
+		},
+		Data: map[string][]byte{
+			v1alpha1.OCMConfigKey: []byte(`{
+				"type": "generic.config.ocm.software/v1",
+				"configurations": [
+					{
+						"type": "filesystem.config.ocm.software/v1alpha1",
+						"tempFolder": "/tmp/testa"
+					},
+				]
+			}`),
+		},
+	}
+
+	namespace := "default"
+	ocmConfigsA := []v1alpha1.OCMConfiguration{
+		{
+			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				Kind: "Secret",
+				Name: "test-secret-a",
+			},
+		},
+		{
+			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				Kind: "Secret",
+				Name: "test-secret-b",
+			},
+		},
+	}
+	ocmConfigsB := []v1alpha1.OCMConfiguration{
+		{
+			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				Kind: "Secret",
+				Name: "test-secret-b",
+			},
+		},
+		{
+			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				Kind: "Secret",
+				Name: "test-secret-a",
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(secretA, secretB).
+		Build()
+
+	cfgA, err := LoadConfigurations(context.Background(), client, namespace, ocmConfigsA)
+	require.NoError(t, err)
+
+	cfgB, err := LoadConfigurations(context.Background(), client, namespace, ocmConfigsB)
+	require.NoError(t, err)
+
+	require.Equal(t, cfgA, cfgB)
 }
 
 func TestFilterForType(t *testing.T) {

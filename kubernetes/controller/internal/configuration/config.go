@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -70,9 +71,15 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		return &genericv1.Config{}, nil
 	}
 
-	configs := make([]*genericv1.Config, 0, len(ocmConfigs))
+	// Best effort sort of the configs to ensure they are always processed in the same order.
+	sort.Slice(ocmConfigs, func(i, j int) bool {
+		key1 := ocmConfigs[i].Name + "." + ocmConfigs[i].Namespace
+		key2 := ocmConfigs[j].Name + "." + ocmConfigs[j].Namespace
 
-	// TODO: This needs to make sure that the config is ordered and resolved in the SAME WAY.
+		return key1 < key2
+	})
+
+	configs := make([]*genericv1.Config, 0, len(ocmConfigs))
 	for _, ocmConfig := range ocmConfigs {
 		ns := ocmConfig.Namespace
 		if ns == "" {
