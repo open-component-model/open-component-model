@@ -200,7 +200,7 @@ func GetOCMResourceImageRef(ctx context.Context, componentReference, resourceNam
 	return r.Items[0].Element.Access.ImageReference, nil
 }
 
-// CreateNamespace Create Kubernetes namespace.
+// CreateNamespace creates Kubernetes namespace.
 func CreateNamespace(ctx context.Context, ns string) error {
 	cmd := exec.CommandContext(ctx, "kubectl", "create", "ns", ns)
 	_, err := Run(cmd)
