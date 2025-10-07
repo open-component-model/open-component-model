@@ -109,6 +109,7 @@ type Resource struct {
 	ConstructorAttributes `json:",inline"`
 }
 
+// ConstructorAttributes defines additional attributes used in a component constructor context.
 // +k8s:deepcopy-gen=true
 type ConstructorAttributes struct {
 	CopyPolicy `json:"copyPolicy,omitempty"`
