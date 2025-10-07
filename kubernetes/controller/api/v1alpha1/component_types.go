@@ -97,11 +97,11 @@ type ComponentStatus struct {
 	EffectiveOCMConfig []OCMConfiguration `json:"effectiveOCMConfig,omitempty"`
 }
 
+// Component is the Schema for the components API.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Resource is Ready",priority=1
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Resource"
-// Component is the Schema for the components API.
 type Component struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

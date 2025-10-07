@@ -397,6 +397,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 				newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.resource, b)
 				r.NoError(err, "Failed to add test resource")
 				r.NotNil(newRes, "Resource should not be nil after adding")
+				desc.Component.Resources[0] = *newRes
 
 				// Then add the component version
 				err = repo.AddComponentVersion(ctx, desc)
@@ -855,6 +856,7 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 	newRes, err := repo.AddLocalResource(ctx, desc.Component.Name, desc.Component.Version, resource, b)
 	r.NoError(err, "Failed to add OCI layout resource")
 	r.NotNil(newRes, "Resource should not be nil after adding")
+	desc.Component.Resources[0] = *newRes
 
 	// Add the component version
 	err = repo.AddComponentVersion(ctx, desc)
@@ -1316,6 +1318,7 @@ func TestRepository_GetLocalSource(t *testing.T) {
 				newSrc, err := repo.AddLocalSource(ctx, desc.Component.Name, desc.Component.Version, tc.source, b)
 				r.NoError(err, "Failed to add test source")
 				r.NotNil(newSrc, "Source should not be nil after adding")
+				desc.Component.Sources[0] = *newSrc
 
 				// Then add the component version
 				err = repo.AddComponentVersion(ctx, desc)
