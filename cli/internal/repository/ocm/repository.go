@@ -25,20 +25,21 @@ import (
 // ComponentRepositoryProvider is a function type that provides a ComponentVersionRepository
 // based on the given context and identity.
 // The identity can be used to select a proper repository if the provider supports multiple repositories.
+// Deprecated: will be removed
 type ComponentRepositoryProvider func(ctx context.Context, identity *runtime.Identity) (*ComponentRepository, error)
 
 // ComponentRepository is a wrapper around the [v1.ReadWriteOCMRepositoryPluginContract] that provides
 // useful CLI relevant helper functions that make high level operations easier.
 // It manages component references, repository specifications, and credentials for OCM operations.
+// Deprecated: will be removed
 type ComponentRepository struct {
+	// TODO: ComponentRepository could be removed? maybe? maybe not? fabian? :D
 	ref  *compref.Ref                          // Component reference containing repository and component information
 	spec runtime.Typed                         // Repository specification
 	base repository.ComponentVersionRepository // Base repository plugin contract
 
 	credentials map[string]string // Credentials for repository access
 }
-
-//TODO: ComponentRepository could be removed? maybe? maybe not? fabian? :D
 
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
@@ -70,41 +71,6 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph crede
 		spec:        ref.Repository,
 		base:        prov,
 		credentials: creds,
-	}, nil
-}
-
-// NewFromRefWithFallbackRepo creates a new ComponentRepository instance for the given component reference.
-// It resolves the appropriate plugin and credentials for the repository.
-//
-//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverruntime.Resolver, componentReference string) (*ComponentRepository, error) {
-	ref, err := compref.Parse(componentReference)
-	if err != nil {
-		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
-	}
-	if len(resolvers) == 0 {
-		//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-		resolvers = make([]*resolverruntime.Resolver, 0)
-	}
-
-	if ref.Repository != nil {
-		//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-		resolvers = append(resolvers, &resolverruntime.Resolver{
-			Repository: ref.Repository,
-			// Add the current repository as a resolver with the highest possible
-			// priority.
-			Priority: math.MaxInt,
-		})
-	}
-
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	fallbackRepo, err := fallback.NewFallbackRepository(ctx, manager.ComponentVersionRepositoryRegistry, graph, resolvers)
-	if err != nil {
-		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
-	}
-	return &ComponentRepository{
-		ref:  ref,
-		base: fallbackRepo,
 	}, nil
 }
 

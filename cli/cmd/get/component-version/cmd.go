@@ -103,9 +103,15 @@ func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error 
 }
 
 func GetComponentVersion(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not retrieve plugin manager from context")
+	}
+
+	ocmContext := ocmctx.FromContext(ctx)
+	if ocmContext == nil {
+		return fmt.Errorf("no OCM context found")
 	}
 
 	credentialGraph := ocmctx.FromContext(cmd.Context()).CredentialGraph()
@@ -139,7 +145,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	config := ocmctx.FromContext(cmd.Context()).Configuration()
+	config := ocmContext.Configuration()
 	repoProvider, err := ocm.NewFromRefWithResolvers(cmd.Context(), pluginManager, credentialGraph, config, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)

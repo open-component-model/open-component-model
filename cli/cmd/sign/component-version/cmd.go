@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -173,17 +172,14 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool(FlagDryRun)
 
 	ref := args[0]
-	var resolvers []*resolverruntime.Resolver //nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	if cfg := ocmContext.Configuration(); cfg != nil {
-		if resolvers, err = ocm.ResolversFromConfig(cfg); err != nil {
-			return fmt.Errorf("resolvers from configuration failed: %w", err)
-		}
+	config := ocmContext.Configuration()
+	repoProvider, err := ocm.NewFromRefWithResolvers(cmd.Context(), pluginManager, credentialGraph, config, ref,
+		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	repo, err := ocm.NewFromRefWithFallbackRepo(
-		ctx, pluginManager, credentialGraph, resolvers, ref,
-		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite),
-	)
+	repo, err := repoProvider(cmd.Context(), nil)
 	if err != nil {
 		return fmt.Errorf("initializing repository failed: %w", err)
 	}
