@@ -5,6 +5,7 @@ package configuration
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -24,7 +25,7 @@ import (
 func GetConfigFromSecret(secret *corev1.Secret) (*genericv1.Config, error) {
 	data, ok := secret.Data[v1alpha1.OCMConfigKey]
 	if !ok || len(data) == 0 {
-		return nil, nil
+		return nil, errors.New("no ocm config found in secret")
 	}
 
 	var cfg genericv1.Config
@@ -41,7 +42,7 @@ func GetConfigFromSecret(secret *corev1.Secret) (*genericv1.Config, error) {
 func GetConfigFromConfigMap(configMap *corev1.ConfigMap) (*genericv1.Config, error) {
 	data, ok := configMap.Data[v1alpha1.OCMConfigKey]
 	if !ok || len(data) == 0 {
-		return nil, nil
+		return nil, errors.New("no ocm config found in secret")
 	}
 
 	var cfg genericv1.Config

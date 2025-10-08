@@ -50,7 +50,7 @@ func TestGetConfigFromSecret(t *testing.T) {
 				Data: map[string][]byte{},
 			},
 			wantNil: true,
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "empty ocm config",
@@ -64,7 +64,7 @@ func TestGetConfigFromSecret(t *testing.T) {
 				},
 			},
 			wantNil: true,
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "invalid json",
@@ -133,7 +133,7 @@ func TestGetConfigFromConfigMap(t *testing.T) {
 				Data: map[string]string{},
 			},
 			wantNil: true,
-			wantErr: false,
+			wantErr: true,
 		},
 	}
 

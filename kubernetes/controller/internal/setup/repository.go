@@ -20,7 +20,8 @@ type RepositoryOptions struct {
 }
 
 // NewRepository creates an OCM repository for the given repository specification.
-// This creates a direct repository connection without fallback support.
+// The repository is resolved using the given plugin manager and credential graph.
+// In case the credential graph is not set, the repository is resolved without credentials.
 func NewRepository(ctx context.Context, repoSpec runtime.Typed, opts RepositoryOptions) (repository.ComponentVersionRepository, error) {
 	if opts.Logger.GetSink() == nil {
 		opts.Logger = logr.Discard()
