@@ -73,40 +73,8 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		return &genericv1.Config{}, nil
 	}
 
-	objects := make([]client.Object, 0, len(ocmConfigs))
-	fetchGroup, ctx := errgroup.WithContext(ctx)
-	appendMutex := &sync.Mutex{}
-	for _, ocmConfig := range ocmConfigs {
-		ns := ocmConfig.Namespace
-		if ns == "" {
-			ns = namespace
-		}
-
-		var obj client.Object
-		switch ocmConfig.Kind {
-		case "Secret":
-			obj = &corev1.Secret{}
-		case "ConfigMap":
-			obj = &corev1.ConfigMap{}
-		default:
-			return nil, fmt.Errorf("unsupported configuration kind: %s", ocmConfig.Kind)
-		}
-
-		fetchGroup.Go(func() error {
-			key := client.ObjectKey{Namespace: ns, Name: ocmConfig.Name}
-			if err := k8sClient.Get(ctx, key, obj); err != nil {
-				return fmt.Errorf("failed to get %s %s/%s: %w", ocmConfig.Kind, ns, ocmConfig.Name, err)
-			}
-
-			appendMutex.Lock()
-			objects = append(objects, obj)
-			appendMutex.Unlock()
-
-			return nil
-		})
-	}
-
-	if err := fetchGroup.Wait(); err != nil {
+	objects, err := gatherConfigurationObjects(ctx, k8sClient, ocmConfigs, namespace)
+	if err != nil {
 		return nil, err
 	}
 
@@ -116,7 +84,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		config *genericv1.Config
 	}
 
-	hashGroup, ctx := errgroup.WithContext(ctx)
+	hashGroup, _ := errgroup.WithContext(ctx)
 	configMutex := &sync.Mutex{}
 	for _, obj := range objects {
 		hashGroup.Go(func() error {
@@ -162,4 +130,45 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 	}
 
 	return genericv1.FlatMap(cfgs...), nil
+}
+
+func gatherConfigurationObjects(ctx context.Context, k8sClient client.Reader, ocmConfigs []v1alpha1.OCMConfiguration, namespace string) ([]client.Object, error) {
+	objects := make([]client.Object, 0, len(ocmConfigs))
+	fetchGroup, ctx := errgroup.WithContext(ctx)
+	appendMutex := &sync.Mutex{}
+	for _, ocmConfig := range ocmConfigs {
+		ns := ocmConfig.Namespace
+		if ns == "" {
+			ns = namespace
+		}
+
+		var obj client.Object
+		switch ocmConfig.Kind {
+		case "Secret":
+			obj = &corev1.Secret{}
+		case "ConfigMap":
+			obj = &corev1.ConfigMap{}
+		default:
+			return nil, fmt.Errorf("unsupported configuration kind: %s", ocmConfig.Kind)
+		}
+
+		fetchGroup.Go(func() error {
+			key := client.ObjectKey{Namespace: ns, Name: ocmConfig.Name}
+			if err := k8sClient.Get(ctx, key, obj); err != nil {
+				return fmt.Errorf("failed to get %s %s/%s: %w", ocmConfig.Kind, ns, ocmConfig.Name, err)
+			}
+
+			appendMutex.Lock()
+			objects = append(objects, obj)
+			appendMutex.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := fetchGroup.Wait(); err != nil {
+		return nil, err
+	}
+
+	return objects, nil
 }
