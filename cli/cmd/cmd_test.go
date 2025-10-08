@@ -942,7 +942,7 @@ components:
 `)
 
 		// Create a replacement test file to be added to the component version
-		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-replace-wd.yaml")
+		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
 		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
 
 		cmd, err := test.OCM(t, test.WithArgs("add", "cv",
