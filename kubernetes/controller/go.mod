@@ -26,15 +26,19 @@ require (
 	k8s.io/apiserver v0.34.1
 	k8s.io/client-go v0.34.1
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
+	sigs.k8s.io/controller-runtime v0.22.1
+	sigs.k8s.io/yaml v1.6.0
+)
+
+require (
 	ocm.software/ocm v0.30.0
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250915165427-710b0c881b3c
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
 	ocm.software/open-component-model/bindings/go/plugin v0.0.7
 	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250915165427-710b0c881b3c
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
-	sigs.k8s.io/controller-runtime v0.22.1
-	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
@@ -409,7 +413,6 @@ require (
 	ocm.software/open-component-model/bindings/go/ctf v0.2.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20250912092813-396078c6d574 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250915165427-710b0c881b3c // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20250915165427-710b0c881b3c // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
