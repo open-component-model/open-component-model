@@ -22,10 +22,10 @@ func TestProcessTopology(t *testing.T) {
 		//   \ /
 		//    D
 		graph := dag.NewDirectedAcyclicGraph[string]()
-		r.NoError(graph.AddVertex("A", map[string]any{attributeValue: "A"}))
-		r.NoError(graph.AddVertex("B", map[string]any{attributeValue: "B"}))
-		r.NoError(graph.AddVertex("C", map[string]any{attributeValue: "C"}))
-		r.NoError(graph.AddVertex("D", map[string]any{attributeValue: "D"}))
+		r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+		r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "B"}))
+		r.NoError(graph.AddVertex("C", map[string]any{AttributeValue: "C"}))
+		r.NoError(graph.AddVertex("D", map[string]any{AttributeValue: "D"}))
 		r.NoError(graph.AddEdge("A", "B", nil))
 		r.NoError(graph.AddEdge("A", "C", nil))
 		r.NoError(graph.AddEdge("B", "D", nil))
@@ -63,8 +63,8 @@ func TestProcessTopology(t *testing.T) {
 		ctx := t.Context()
 
 		graph := dag.NewDirectedAcyclicGraph[string]()
-		r.NoError(graph.AddVertex("A", map[string]any{attributeValue: "A"}))
-		r.NoError(graph.AddVertex("B", map[string]any{attributeValue: "B"}))
+		r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+		r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "B"}))
 		r.NoError(graph.AddEdge("A", "B", nil))
 
 		processorFunc := ProcessorFunc[string](func(ctx context.Context, v string) error {
@@ -91,10 +91,10 @@ func TestProcessReverseTopology(t *testing.T) {
 		//   \ /
 		//    D
 		graph := dag.NewDirectedAcyclicGraph[string]()
-		r.NoError(graph.AddVertex("A", map[string]any{attributeValue: "A"}))
-		r.NoError(graph.AddVertex("B", map[string]any{attributeValue: "B"}))
-		r.NoError(graph.AddVertex("C", map[string]any{attributeValue: "C"}))
-		r.NoError(graph.AddVertex("D", map[string]any{attributeValue: "D"}))
+		r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+		r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "B"}))
+		r.NoError(graph.AddVertex("C", map[string]any{AttributeValue: "C"}))
+		r.NoError(graph.AddVertex("D", map[string]any{AttributeValue: "D"}))
 		r.NoError(graph.AddEdge("A", "B", nil))
 		r.NoError(graph.AddEdge("A", "C", nil))
 		r.NoError(graph.AddEdge("B", "D", nil))
@@ -134,8 +134,8 @@ func TestProcessReverseTopology(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
 		graph := dag.NewDirectedAcyclicGraph[string]()
-		r.NoError(graph.AddVertex("A", map[string]any{attributeValue: "A"}))
-		r.NoError(graph.AddVertex("B", map[string]any{attributeValue: "A"}))
+		r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+		r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "A"}))
 		r.NoError(graph.AddEdge("A", "B", nil))
 
 		processorFunc := ProcessorFunc[string](func(ctx context.Context, v string) error {
@@ -163,10 +163,10 @@ func TestProcessTopology_ConcurrentExecution(t *testing.T) {
 	//   \ /
 	//    D
 	graph := dag.NewDirectedAcyclicGraph[string]()
-	r.NoError(graph.AddVertex("A", map[string]any{attributeValue: "A"}))
-	r.NoError(graph.AddVertex("B", map[string]any{attributeValue: "B"}))
-	r.NoError(graph.AddVertex("C", map[string]any{attributeValue: "C"}))
-	r.NoError(graph.AddVertex("D", map[string]any{attributeValue: "D"}))
+	r.NoError(graph.AddVertex("A", map[string]any{AttributeValue: "A"}))
+	r.NoError(graph.AddVertex("B", map[string]any{AttributeValue: "B"}))
+	r.NoError(graph.AddVertex("C", map[string]any{AttributeValue: "C"}))
+	r.NoError(graph.AddVertex("D", map[string]any{AttributeValue: "D"}))
 	r.NoError(graph.AddEdge("A", "B", nil))
 	r.NoError(graph.AddEdge("A", "C", nil))
 	r.NoError(graph.AddEdge("B", "D", nil))
