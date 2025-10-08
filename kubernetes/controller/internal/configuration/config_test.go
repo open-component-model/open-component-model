@@ -12,9 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
@@ -331,9 +329,13 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
-						"type": "filesystem.config.ocm.software/v1alpha1",
-						"tempFolder": "/tmp/testa"
+						"type": "whatever.config.ocm.software/v1alpha1",
+						"whatever": "whatever"
 					},
+					{
+						"type": "filesystem.config.ocm.software/v1alpha1",
+						"tempFolder": "/tmp/test"
+					}
 				]
 			}`),
 		},
@@ -381,27 +383,4 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, cfgA, cfgB)
-}
-
-func TestFilterForType(t *testing.T) {
-	// Create a filesystem config
-	fsCfg := &filesystemv1alpha1.Config{
-		TempFolder: "/tmp/test",
-	}
-
-	// Convert to raw
-	raw := &ocmruntime.Raw{}
-	err := filesystemv1alpha1.Scheme.Convert(fsCfg, raw)
-	require.NoError(t, err)
-
-	// Create generic config with the raw filesystem config
-	cfg := &genericv1.Config{
-		Configurations: []*ocmruntime.Raw{raw},
-	}
-
-	// Filter for filesystem config
-	filtered, err := FilterForType[*filesystemv1alpha1.Config](filesystemv1alpha1.Scheme, cfg)
-	require.NoError(t, err)
-	require.Len(t, filtered, 1)
-	assert.Equal(t, "/tmp/test", filtered[0].TempFolder)
 }

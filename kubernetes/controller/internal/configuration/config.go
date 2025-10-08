@@ -8,14 +8,18 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 )
+
+const semaphoreLimit = 10
 
 // GetConfigFromSecret extracts and decodes OCM configuration from a Kubernetes Secret.
 // It looks for configuration data under the OCMConfigKey.
@@ -71,15 +75,10 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		return &genericv1.Config{}, nil
 	}
 
-	// Best effort sort of the configs to ensure they are always processed in the same order.
-	sort.Slice(ocmConfigs, func(i, j int) bool {
-		key1 := ocmConfigs[i].Name + "." + ocmConfigs[i].Namespace
-		key2 := ocmConfigs[j].Name + "." + ocmConfigs[j].Namespace
-
-		return key1 < key2
-	})
-
-	configs := make([]*genericv1.Config, 0, len(ocmConfigs))
+	objects := make([]client.Object, 0, len(ocmConfigs))
+	fetchGroup, ctx := errgroup.WithContext(ctx)
+	fetchGroup.SetLimit(semaphoreLimit)
+	appendMutex := &sync.Mutex{}
 	for _, ocmConfig := range ocmConfigs {
 		ns := ocmConfig.Namespace
 		if ns == "" {
@@ -96,28 +95,75 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 			return nil, fmt.Errorf("unsupported configuration kind: %s", ocmConfig.Kind)
 		}
 
-		key := client.ObjectKey{Namespace: ns, Name: ocmConfig.Name}
-		if err := k8sClient.Get(ctx, key, obj); err != nil {
-			return nil, fmt.Errorf("failed to get %s %s/%s: %w", ocmConfig.Kind, ns, ocmConfig.Name, err)
-		}
+		fetchGroup.Go(func() error {
+			key := client.ObjectKey{Namespace: ns, Name: ocmConfig.Name}
+			if err := k8sClient.Get(ctx, key, obj); err != nil {
+				return fmt.Errorf("failed to get %s %s/%s: %w", ocmConfig.Kind, ns, ocmConfig.Name, err)
+			}
 
-		cfg, err := GetConfigFromObject(obj)
-		if err != nil {
-			return nil, err
-		}
+			appendMutex.Lock()
+			objects = append(objects, obj)
+			appendMutex.Unlock()
 
-		// It's possible that config is nil if the secret doesn't have the required key or there is no data.
-		if cfg != nil {
-			configs = append(configs, cfg)
-		}
+			return nil
+		})
 	}
 
-	return genericv1.FlatMap(configs...), nil
-}
+	if err := fetchGroup.Wait(); err != nil {
+		return nil, err
+	}
 
-// FilterForType is a convenience wrapper around genericv1.FilterForType
-// that filters configurations by type T.
-// Note: This isn't really used at the moment.
-func FilterForType[T runtime.Typed](scheme *runtime.Scheme, config *genericv1.Config) ([]T, error) {
-	return genericv1.FilterForType[T](scheme, config)
+	// hash all the config so we sort based on data
+	var configs []struct {
+		hash   []byte
+		config *genericv1.Config
+	}
+
+	hashGroup, ctx := errgroup.WithContext(ctx)
+	hashGroup.SetLimit(semaphoreLimit)
+	configMutex := &sync.Mutex{}
+	for _, obj := range objects {
+		hashGroup.Go(func() error {
+			cfg, err := GetConfigFromObject(obj)
+			if err != nil {
+				return err
+			}
+
+			if cfg == nil {
+				return nil
+			}
+
+			hash, err := ocm.GetObjectHash(obj)
+			if err != nil {
+				return err
+			}
+
+			configMutex.Lock()
+			configs = append(configs, struct {
+				hash   []byte
+				config *genericv1.Config
+			}{
+				hash:   hash,
+				config: cfg,
+			})
+			configMutex.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := hashGroup.Wait(); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(configs, func(i, j int) bool {
+		return bytes.Compare(configs[i].hash, configs[j].hash) < 0
+	})
+
+	cfgs := make([]*genericv1.Config, 0, len(configs))
+	for _, cfg := range configs {
+		cfgs = append(cfgs, cfg.config)
+	}
+
+	return genericv1.FlatMap(cfgs...), nil
 }
