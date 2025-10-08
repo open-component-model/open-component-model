@@ -5,6 +5,7 @@ import (
 	"context"
 	"slices"
 
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 )
 
@@ -12,15 +13,12 @@ import (
 // order index if available, otherwise by their key.
 // This function may be used to implement Renderer with a consistent
 // order of neighbors in the output.
-func GetNeighborsSorted[T cmp.Ordered](ctx context.Context, vertex *syncdag.Vertex[T]) []T {
+func GetNeighborsSorted[T cmp.Ordered](ctx context.Context, vertex *dag.Vertex[T]) []T {
 	var neighbors []T
 
-	vertex.Edges.Range(func(key, _ any) bool {
-		if childId, ok := key.(T); ok {
-			neighbors = append(neighbors, childId)
-		}
-		return true
-	})
+	for childId, _ := range vertex.Edges {
+		neighbors = append(neighbors, childId)
+	}
 
 	slices.SortFunc(neighbors, func(edgeIdA, edgeIdB T) int {
 		return compareByOrderIndex(ctx, vertex, edgeIdA, edgeIdB)
@@ -35,7 +33,7 @@ func GetNeighborsSorted[T cmp.Ordered](ctx context.Context, vertex *syncdag.Vert
 // difference (i.e. edgeA.Index - edgeB.Index).
 // If the order index is not set on one of both edges, it falls back to
 // comparing the edge IDs.
-func compareByOrderIndex[T cmp.Ordered](ctx context.Context, vertex *syncdag.Vertex[T], edgeIdA, edgeIdB T) int {
+func compareByOrderIndex[T cmp.Ordered](ctx context.Context, vertex *dag.Vertex[T], edgeIdA, edgeIdB T) int {
 	orderA := getOrderIndex(ctx, vertex, edgeIdA)
 	orderB := getOrderIndex(ctx, vertex, edgeIdB)
 
@@ -50,12 +48,16 @@ func compareByOrderIndex[T cmp.Ordered](ctx context.Context, vertex *syncdag.Ver
 
 // getOrderIndex retrieves the value of AttributeOrderIndex for the given
 // edgeId.
-func getOrderIndex[T cmp.Ordered](_ context.Context, vertex *syncdag.Vertex[T], key T) *int {
-	value, exists := vertex.GetEdgeAttribute(key, syncdag.AttributeOrderIndex)
-	if !exists {
+func getOrderIndex[T cmp.Ordered](_ context.Context, vertex *dag.Vertex[T], key T) *int {
+	edge, ok := vertex.Edges[key]
+	if !ok {
 		return nil
 	}
-	order, ok := value.(int)
+	orderIndex, ok := edge[syncdag.AttributeOrderIndex]
+	if !ok {
+		return nil
+	}
+	order, ok := orderIndex.(int)
 	if !ok {
 		return nil
 	}

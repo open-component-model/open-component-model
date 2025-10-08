@@ -10,13 +10,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/cli/internal/render"
 )
 
 func withTestAttributes(state syncdag.DiscoveryState, name, version, provider string) map[string]any {
-	return map[string]any{syncdag.AttributeDiscoveryState: state, descriptorAttribute: &descriptor.Descriptor{
+	return map[string]any{syncdag.AttributeDiscoveryState: state, syncdag.AttributeValue: &descriptor.Descriptor{
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
@@ -34,31 +35,45 @@ func TestRunRenderLoop(t *testing.T) {
 		ctx := t.Context()
 		r := require.New(t)
 
-		d := syncdag.NewDirectedAcyclicGraph[string]()
+		graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 
 		buf := &bytes.Buffer{}
 		logWriter := testLogWriter{t}
 		writer := io.MultiWriter(buf, logWriter)
-		vertexSerializer := func(vertex *syncdag.Vertex[string]) (Row, error) {
-			state, _ := vertex.Attributes.Load(syncdag.AttributeDiscoveryState)
-			if d, ok := vertex.MustGetAttribute(descriptorAttribute).(*descriptor.Descriptor); ok {
-				return Row{
-					Component: fmt.Sprintf("%s (%s)", d.Component.Name, state.(syncdag.DiscoveryState)),
-					Version:   d.Component.Version,
-					Provider:  d.Component.Provider.Name,
-					Identity:  d.Component.ToIdentity().String(),
-				}, nil
+		vertexSerializer := func(vertex *dag.Vertex[string]) (Row, error) {
+			untypedState, ok := vertex.Attributes[syncdag.AttributeDiscoveryState]
+			if !ok {
+				return Row{}, fmt.Errorf("vertex %v does not have a %s attribute", vertex.ID, syncdag.AttributeDiscoveryState)
 			}
-			return Row{}, fmt.Errorf("vertex %v does not have a descriptor attribute", vertex.ID)
+			state, ok := untypedState.(syncdag.DiscoveryState)
+			if !ok {
+				return Row{}, fmt.Errorf("vertex %v has a state attribute of unexpected type %T, expected type %T", vertex.ID, untypedState, syncdag.DiscoveryState(0))
+			}
+			untypedComponent, ok := vertex.Attributes[syncdag.AttributeValue]
+			if !ok {
+				return Row{}, fmt.Errorf("vertex %v does not have a %s attribute", vertex.ID, syncdag.AttributeValue)
+			}
+			component, ok := untypedComponent.(*descriptor.Descriptor)
+			if !ok {
+				return Row{}, fmt.Errorf("vertex %v has a value attribute of unexpected type %T, expected type %T", vertex.ID, untypedComponent, &descriptor.Descriptor{})
+			}
+			return Row{
+				Component: fmt.Sprintf("%s (%s)", component.Component.Name, state),
+				Version:   component.Component.Version,
+				Provider:  component.Component.Provider.Name,
+				Identity:  component.Component.ToIdentity().String(),
+			}, nil
 		}
 
 		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		renderer := New[string](ctx, d, WithVertexSerializerFunc(vertexSerializer))
+		renderer := New[string](ctx, graph, WithVertexSerializerFunc(vertexSerializer))
 
 		refreshRate := 10 * time.Millisecond
 		waitFunc := render.RunRenderLoop(ctx, renderer, render.WithRefreshRate(refreshRate), render.WithRenderOptions(render.WithWriter(writer)))
 
-		r.NoError(d.AddVertex("A", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-a", "v1.0.0", "acme")))
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			return d.AddVertex("A", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-a", "v1.0.0", "acme"))
+		}))
 
 		// sleep to allow ticker based render loop to start
 		time.Sleep(refreshRate)
@@ -85,9 +100,15 @@ func TestRunRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Add B as child of A
-		r.NoError(d.AddVertex("B", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-b", "v2.0.0", "acme")))
-		r.NoError(d.AddEdge("A", "B"))
-		vB, _ := d.GetVertex("B")
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			if err := d.AddVertex("B", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-b", "v2.0.0", "acme")); err != nil {
+				return fmt.Errorf("failed adding vertex: %w", err)
+			}
+			if err := d.AddEdge("A", "B"); err != nil {
+				return fmt.Errorf("failed adding edge: %w", err)
+			}
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -99,9 +120,15 @@ func TestRunRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Add C as child of B
-		r.NoError(d.AddVertex("C", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-c", "v1.5.0", "other")))
-		r.NoError(d.AddEdge("B", "C"))
-		vC, _ := d.GetVertex("C")
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			if err := d.AddVertex("C", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-c", "v1.5.0", "other")); err != nil {
+				return fmt.Errorf("failed adding vertex: %w", err)
+			}
+			if err := d.AddEdge("B", "C"); err != nil {
+				return fmt.Errorf("failed adding edge: %w", err)
+			}
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -113,10 +140,15 @@ func TestRunRenderLoop(t *testing.T) {
 		r.Equal(expected, output)
 		buf.Reset()
 
-		// Add D as another child of A
-		r.NoError(d.AddVertex("D", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-d", "v3.0.0", "acme")))
-		r.NoError(d.AddEdge("A", "D"))
-		vD, _ := d.GetVertex("D")
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			if err := d.AddVertex("D", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-d", "v3.0.0", "acme")); err != nil {
+				return fmt.Errorf("failed adding vertex: %w", err)
+			}
+			if err := d.AddEdge("A", "D"); err != nil {
+				return fmt.Errorf("failed adding edge: %w", err)
+			}
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -130,7 +162,10 @@ func TestRunRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Mark D as completed
-		vD.Attributes.Store(syncdag.AttributeDiscoveryState, syncdag.DiscoveryStateCompleted)
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			d.Vertices["D"].Attributes[syncdag.AttributeDiscoveryState] = syncdag.DiscoveryStateCompleted
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -144,7 +179,10 @@ func TestRunRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Mark C as completed
-		vC.Attributes.Store(syncdag.AttributeDiscoveryState, syncdag.DiscoveryStateCompleted)
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			d.Vertices["C"].Attributes[syncdag.AttributeDiscoveryState] = syncdag.DiscoveryStateCompleted
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -158,7 +196,10 @@ func TestRunRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Mark B as completed
-		vB.Attributes.Store(syncdag.AttributeDiscoveryState, syncdag.DiscoveryStateCompleted)
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			d.Vertices["B"].Attributes[syncdag.AttributeDiscoveryState] = syncdag.DiscoveryStateCompleted
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -172,8 +213,10 @@ func TestRunRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Mark A as completed
-		vA, _ := d.GetVertex("A")
-		vA.Attributes.Store(syncdag.AttributeDiscoveryState, syncdag.DiscoveryStateCompleted)
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			d.Vertices["A"].Attributes[syncdag.AttributeDiscoveryState] = syncdag.DiscoveryStateCompleted
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -187,10 +230,21 @@ func TestRunRenderLoop(t *testing.T) {
 		buf.Reset()
 
 		// Multiple roots
-		r.NoError(d.AddVertex("X", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-d", "v3.0.0", "acme")))
-		r.NoError(d.AddVertex("Y", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-d", "v3.0.0", "acme")))
-		r.NoError(d.AddVertex("Z", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-d", "v3.0.0", "acme")))
-		r.NoError(d.AddEdge("X", "Z"))
+		r.NoError(graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			if err := d.AddVertex("X", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-d", "v3.0.0", "acme")); err != nil {
+				return err
+			}
+			if err := d.AddVertex("Y", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-d", "v3.0.0", "acme")); err != nil {
+				return err
+			}
+			if err := d.AddVertex("Z", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-d", "v3.0.0", "acme")); err != nil {
+				return err
+			}
+			if err := d.AddEdge("X", "Z"); err != nil {
+				return err
+			}
+			return nil
+		}))
 		time.Sleep(refreshRate)
 		synctest.Wait()
 		output = buf.String()
@@ -215,13 +269,18 @@ func TestRenderOnce(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
 
-	d := syncdag.NewDirectedAcyclicGraph[string]()
+	// We are cheating here. Since this logic is completely synchronous, we keep
+	// using the reference to the raw dag and not the synced wrapper.
+	// This makes adding vertices and edges much simpler.
+	// DO NOT DO THIS IN PRODUCTION CODE!
+	d := dag.NewDirectedAcyclicGraph[string]()
+	graph := syncdag.ToSyncedGraph(d)
 
 	buf := &bytes.Buffer{}
 	logWriter := testLogWriter{t}
 	writer := io.MultiWriter(buf, logWriter)
 
-	renderer := New(ctx, d)
+	renderer := New(ctx, graph)
 
 	r.NoError(d.AddVertex("A", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-a", "v1.0.0", "acme")))
 	expected := ` NESTING  COMPONENT  VERSION  PROVIDER  IDENTITY                   
