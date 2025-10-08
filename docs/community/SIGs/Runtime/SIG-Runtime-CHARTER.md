@@ -27,7 +27,7 @@ The mission of SIG Runtime is to allow OCM components to be:
 - **OCM Language Bindings**
   - Modular, extensible runtime library for components and versions
   - Support for dynamic creation of component versions
-  - Standards-compliant signing and verification per the [OCM Specification](https://github.com/open-component-model/ocm-spec/tree/main)
+  - Cryptographic standard-compliant signing and verification per the [OCM Specification](https://github.com/open-component-model/ocm-spec/tree/main)
   - Introspection, transport, and transformation of components and versions
 
 - **OCM CLI**
