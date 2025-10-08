@@ -17,6 +17,7 @@ You should be familiar with the following concepts:
 - [Kubernetes](https://kubernetes.io/) ecosystem
 - [kro](https://kro.run)
 - Kubernetes resource deployer such as [FluxCD](https://fluxcd.io/).
+- [Task](https://taskfile.dev/)
 
 ## Concept
 
