@@ -19,8 +19,6 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 )
 
-const semaphoreLimit = 10
-
 // GetConfigFromSecret extracts and decodes OCM configuration from a Kubernetes Secret.
 // It looks for configuration data under the OCMConfigKey.
 func GetConfigFromSecret(secret *corev1.Secret) (*genericv1.Config, error) {
@@ -77,7 +75,6 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 
 	objects := make([]client.Object, 0, len(ocmConfigs))
 	fetchGroup, ctx := errgroup.WithContext(ctx)
-	fetchGroup.SetLimit(semaphoreLimit)
 	appendMutex := &sync.Mutex{}
 	for _, ocmConfig := range ocmConfigs {
 		ns := ocmConfig.Namespace
@@ -120,7 +117,6 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 	}
 
 	hashGroup, ctx := errgroup.WithContext(ctx)
-	hashGroup.SetLimit(semaphoreLimit)
 	configMutex := &sync.Mutex{}
 	for _, obj := range objects {
 		hashGroup.Go(func() error {
