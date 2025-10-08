@@ -31,7 +31,7 @@ The mission of SIG Runtime is to allow OCM components to be:
   - Introspection, transport, and transformation of components and versions
 
 - **OCM CLI**
-  - Unified toolchain to create, inspect, sign, verify, and transport components and versions
+  - Unified toolchain to create, inspect, sign, verify, and transport components versions
   - Direct alignment with language bindings to ensure consistent semantics
 
 - **OCM Kubernetes Controller**
@@ -52,8 +52,6 @@ The mission of SIG Runtime is to allow OCM components to be:
 - **Best-Practice Patterns** - Reference documentation, blueprints, and deployment samples (Helm, Kustomize)
 
 - **Operational Documentation** - Installation, upgrades, Day 2 operations, migration strategies, and security hardening
-
-- **Conformance and End-to-End Testing** - Runtime validation across supported OCM CLI and Kubernetes versions
 
 - **Public Roadmap and Release Notes** - Transparent planning and lifecycle communication for the community
 
