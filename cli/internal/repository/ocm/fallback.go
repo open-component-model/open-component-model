@@ -13,7 +13,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
@@ -21,8 +20,9 @@ import (
 // It resolves the appropriate plugin and credentials for the repository.
 //
 //nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverruntime.Resolver, componentReference string) (ComponentRepositoryProvider, error) {
-	ref, err := compref.Parse(componentReference)
+func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver,
+	resolvers []*resolverruntime.Resolver, componentReference string, options ...compref.Option) (*ComponentRepository, error) {
+	ref, err := compref.Parse(componentReference, options...)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
@@ -46,12 +46,9 @@ func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginMana
 	if err != nil {
 		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
 	}
-
-	return func(ctx context.Context, _ *runtime.Identity) (*ComponentRepository, error) {
-		return &ComponentRepository{
-			ref:  ref,
-			base: fallbackRepo,
-		}, nil
+	return &ComponentRepository{
+		ref:  ref,
+		base: fallbackRepo,
 	}, nil
 }
 

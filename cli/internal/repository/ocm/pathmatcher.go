@@ -72,7 +72,7 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 		} else {
 			slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", ref.Repository, "error", err)
 		}
-
+		
 		base, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, repoSpec, credMap)
 		if err != nil {
 			return nil, fmt.Errorf("getting component version repository for %q failed: %w", ref.Repository, err)

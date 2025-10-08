@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -153,19 +152,17 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	config := ocmContext.Configuration()
 
 	//nolint:staticcheck // no replacement for resolvers available yet
-	var resolvers []*resolverruntime.Resolver
-	if config != nil {
-		resolvers, err = ocm.ResolversFromConfig(config)
-		if err != nil {
-			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
-		}
-	}
-	repo, err := ocm.NewFromRefWithFallbackRepo(ctx, pluginManager, credentialGraph, resolvers, reference)
+	config := ocmContext.Configuration()
+	repoProvider, err := ocm.NewFromRefWithResolvers(cmd.Context(), pluginManager, credentialGraph, config, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
+	}
+
+	repo, err := repoProvider(cmd.Context(), nil)
+	if err != nil {
+		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
 	desc, err := repo.GetComponentVersion(ctx)
