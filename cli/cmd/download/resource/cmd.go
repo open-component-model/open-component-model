@@ -14,6 +14,7 @@ import (
 
 	"github.com/nlepage/go-tarfs"
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
@@ -122,12 +123,21 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
+	ref, err := compref.Parse(reference)
+	if err != nil {
+		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
+	}
+	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, nil, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(cmd.Context())
+	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), nil /*?*/)
+	if err != nil {
+		return fmt.Errorf("could not access ocm repository: %w", err)
+	}
+
+	desc, err := repo.GetComponentVersion(cmd.Context(), ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
@@ -146,7 +156,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	}
 	res := &toDownload[0]
 
-	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, repo, res, requestedIdentity)
+	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, requestedIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}

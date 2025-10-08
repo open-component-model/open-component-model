@@ -171,20 +171,23 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool(FlagForce)
 	dryRun, _ := cmd.Flags().GetBool(FlagDryRun)
 
-	ref := args[0]
+	reference := args[0]
+	ref, err := compref.Parse(reference)
+	if err != nil {
+		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
+	}
 	config := ocmContext.Configuration()
-	repoProvider, err := ocm.NewFromRefWithResolvers(cmd.Context(), pluginManager, credentialGraph, config, ref,
-		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
+	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	repo, err := repoProvider(cmd.Context(), nil)
+	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), nil /*?*/)
 	if err != nil {
-		return fmt.Errorf("initializing repository failed: %w", err)
+		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(ctx)
+	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
@@ -262,7 +265,7 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		desc.Signatures = append(desc.Signatures, out)
 	}
 
-	if err := repo.ComponentVersionRepository().AddComponentVersion(ctx, desc); err != nil {
+	if err := repo.AddComponentVersion(ctx, desc); err != nil {
 		return fmt.Errorf("updating component version failed: %w", err)
 	}
 

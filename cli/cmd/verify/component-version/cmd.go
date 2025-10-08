@@ -155,17 +155,21 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 	//nolint:staticcheck // no replacement for resolvers available yet
 	config := ocmContext.Configuration()
-	parsedRef, repoProvider, err := ocm.NewFromRefWithResolvers(cmd.Context(), pluginManager, credentialGraph, config, reference)
+	ref, err := compref.Parse(reference)
+	if err != nil {
+		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
+	}
+	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	repo, err := repoProvider(cmd.Context(), nil)
+	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), nil /*?*/)
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	desc, err := ocm.GetComponentVersion(ctx, parsedRef, repo)
+	desc, err := ocm.GetComponentVersion(ctx, ref.Component, ref.Version, repo)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
