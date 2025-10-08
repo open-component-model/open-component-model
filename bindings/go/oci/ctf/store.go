@@ -100,6 +100,13 @@ type repository struct {
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
 func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.fetch(ctx, target)
+}
+
+// fetch is the internal version of Fetch that assumes the caller holds the lock.
+func (s *repository) fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	b, err := s.archive.GetBlob(ctx, target.Digest.String())
 	if err != nil {
 		return nil, fmt.Errorf("unable to get blob: %w", err)
@@ -110,6 +117,13 @@ func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor
 // Exists checks if a blob exists in the CTF archive based on its descriptor.
 // Returns true if the blob exists, false otherwise.
 func (s *repository) Exists(ctx context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.exists(ctx, target)
+}
+
+// exists is the internal version of Exists that assumes the caller holds the lock.
+func (s *repository) exists(ctx context.Context, target ociImageSpecV1.Descriptor) (bool, error) {
 	blobs, err := s.archive.ListBlobs(ctx)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
@@ -121,11 +135,13 @@ func (s *repository) Exists(ctx context.Context, target ociImageSpecV1.Descripto
 }
 
 func (s *repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
-	desc, err := s.Resolve(ctx, reference)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	desc, err := s.resolve(ctx, reference)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
-	data, err := s.Fetch(ctx, desc)
+	data, err := s.fetch(ctx, desc)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
@@ -135,11 +151,14 @@ func (s *repository) FetchReference(ctx context.Context, reference string) (ociI
 // Push stores a new blob in the CTF archive with the expected descriptor.
 // The content is read from the provided io.Reader.
 func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
 	if introspection.IsOCICompliantManifest(expected) {
-		if err := s.Tag(ctx, expected, expected.Digest.String()); err != nil {
+		if err := s.tag(ctx, expected, expected.Digest.String()); err != nil {
 			return fmt.Errorf("unable to save manifest for descriptor %v: %w", expected, err)
 		}
 	}
@@ -154,10 +173,14 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 // If a full reference is given, it will be resolved against the blob Repository immediately.
 // Returns the descriptor if found, or an error if the reference is invalid or not found.
 func (s *repository) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
-	var b blob.ReadOnlyBlob
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.resolve(ctx, reference)
+}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// resolve is the internal version of Resolve that assumes the caller holds the lock.
+func (s *repository) resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
+	var b blob.ReadOnlyBlob
 
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
@@ -229,7 +252,11 @@ func (s *repository) Resolve(ctx context.Context, reference string) (ociImageSpe
 func (s *repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.tag(ctx, desc, reference)
+}
 
+// tag is the internal version of Tag that assumes the caller holds the lock.
+func (s *repository) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, reference string) error {
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to get index: %w", err)
@@ -286,7 +313,7 @@ func (s *repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		}
 	}
 
-	ok, err := s.Exists(ctx, desc)
+	ok, err := s.exists(ctx, desc)
 	if err != nil {
 		return fmt.Errorf("unable to check if descriptor exists: %w", err)
 	}
@@ -306,16 +333,17 @@ func (s *repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 }
 
 func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
 
 	idx, err := s.archive.GetIndex(ctx)
 	if err != nil {
+		s.mu.RUnlock()
 		return fmt.Errorf("unable to get index: %w", err)
 	}
 
 	arts := idx.GetArtifacts()
 	if len(arts) == 0 {
+		s.mu.RUnlock()
 		return nil
 	}
 
@@ -334,6 +362,8 @@ func (s *repository) Tags(ctx context.Context, _ string, fn func(tags []string) 
 		tags = append(tags, art.Tag)
 	}
 
+	// Unlock before invoking the callback to avoid potential re-entrant locking deadlocks.
+	s.mu.RUnlock()
 	return fn(tags)
 }
 
