@@ -201,9 +201,15 @@ func persistentPreRunE(cmd *cobra.Command, _ []string) error {
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {
+	ctx := cmd.Context()
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not retrieve plugin manager from context")
+	}
+
+	ocmContext := ocmctx.FromContext(ctx)
+	if ocmContext == nil {
+		return fmt.Errorf("no OCM context found")
 	}
 
 	credentialGraph := ocmctx.FromContext(cmd.Context()).CredentialGraph()
@@ -256,6 +262,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	var resolvers []*resolverruntime.Resolver
 	if config != nil {
+		//TODO #575: migrate to compatibility layer in ocm package
 		resolvers, err = ocm.FallbackResolversFromConfig(config)
 		if err != nil {
 			return fmt.Errorf("getting resolvers from configuration failed: %w", err)

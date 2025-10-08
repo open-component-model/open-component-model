@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
@@ -27,10 +28,11 @@ func convertToRaw(repository runtime.Typed) (*runtime.Raw, error) {
 
 // NewFromRefWithPathMatcher creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, resolvers []*resolverspec.Resolver, componentReference string) (ComponentRepositoryProvider, error) {
+func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver,
+	resolvers []*resolverspec.Resolver, componentReference string) (*compref.Ref, ComponentVersionRepositoryProvider, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
-		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
+		return nil, nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
 	if len(resolvers) == 0 {
 		resolvers = make([]*resolverspec.Resolver, 0)
@@ -39,7 +41,7 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 	if ref.Repository != nil {
 		raw, err := convertToRaw(ref.Repository)
 		if err != nil {
-			return nil, fmt.Errorf("converting repository to raw failed: %w", err)
+			return nil, nil, fmt.Errorf("converting repository to raw failed: %w", err)
 		}
 
 		resolvers = append(resolvers, &resolverspec.Resolver{
@@ -50,7 +52,7 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 
 	provider := pathmatcher.NewSpecProvider(ctx, resolvers)
 
-	return func(ctx context.Context, identity *runtime.Identity) (*ComponentRepository, error) {
+	return ref, func(ctx context.Context, identity *runtime.Identity) (repository.ComponentVersionRepository, error) {
 		if identity == nil {
 			identity = &runtime.Identity{
 				descruntime.IdentityAttributeName: ref.Component,
@@ -72,18 +74,13 @@ func NewFromRefWithPathMatcher(ctx context.Context, manager *manager.PluginManag
 		} else {
 			slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", ref.Repository, "error", err)
 		}
-		
+
 		base, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, repoSpec, credMap)
 		if err != nil {
 			return nil, fmt.Errorf("getting component version repository for %q failed: %w", ref.Repository, err)
 		}
 
-		return &ComponentRepository{
-			ref:         ref,
-			base:        base,
-			spec:        repoSpec,
-			credentials: credMap,
-		}, nil
+		return base, nil
 	}, nil
 }
 

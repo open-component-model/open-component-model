@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -43,13 +45,13 @@ func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Gr
 }
 
 // DownloadResourceData handles the actual data download from repository
-func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.GraphResolver, repo *ocm.ComponentRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
+func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.GraphResolver, ref *compref.Ref, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
 	access := res.GetAccess()
 	var data blob.ReadOnlyBlob
 	var err error
 
 	if IsLocal(access) {
-		data, _, err = repo.GetLocalResource(ctx, identity)
+		data, _, err = ocm.GetLocalResource(ctx, identity, ref, repo)
 	} else {
 		var plugin resource.Repository
 		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)
