@@ -2678,8 +2678,8 @@ sigs.k8s.io/kustomize/kyaml v0.20.1 h1:PCMnA2mrVbRP3NIB6v9kYCAc38uvFLVs8j/CD567A
 sigs.k8s.io/kustomize/kyaml v0.20.1/go.mod h1:0EmkQHRUsJxY8Ug9Niig1pUMSCGHxQ5RklbpV/Ri6po=
 sigs.k8s.io/randfill v1.0.0 h1:JfjMILfT8A6RbawdsK2JXGBR5AQVfd+9TbzrlneTyrU=
 sigs.k8s.io/randfill v1.0.0/go.mod h1:XeLlZ/jmk4i1HRopwe7/aU3H5n1zNUcX6TM94b3QxOY=
-sigs.k8s.io/release-utils v0.12.1 h1:3p9w137wBTTApHlL8izdJHcCuaBe8wZhQz+B0QIAaBE=
-sigs.k8s.io/release-utils v0.12.1/go.mod h1:0z7JOb7iQcuDQcemQw5CSVrkH8evRHY0DMMjcyRB1e4=
+sigs.k8s.io/release-utils v0.12.2 h1:H06v3FuLElAkf7Ikkd9ll8hnhdtQ+OgktJAni3iIAl8=
+sigs.k8s.io/release-utils v0.12.2/go.mod h1:Ab9Lb/FpGUw4lUXj1QYbUcF2TRzll+GS7Md54W1G7sA=
 sigs.k8s.io/structured-merge-diff/v4 v4.7.0 h1:qPeWmscJcXP0snki5IYF79Z8xrl8ETFxgMd7wez1XkI=
 sigs.k8s.io/structured-merge-diff/v4 v4.7.0/go.mod h1:dDy58f92j70zLsuZVuUX5Wp9vtxXpaZnkPGWeqDfCps=
 sigs.k8s.io/structured-merge-diff/v6 v6.3.0 h1:jTijUJbW353oVOd9oTlifJqOGEkUw2jB/fXCbTiQEco=
