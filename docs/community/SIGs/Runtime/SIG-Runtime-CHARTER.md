@@ -32,7 +32,7 @@ The mission of SIG Runtime is to allow OCM components to be:
 
 - **OCM CLI**
   - Unified toolchain to create, inspect, sign, verify, and transport components versions
-  - Direct alignment with language bindings to ensure consistent semantics
+  - CLI commands and flags should mirror the capabilities and behavior of the language bindings
 
 - **OCM Kubernetes Controller**
   - Native Kubernetes API for OCM repositories, components, and artifacts
