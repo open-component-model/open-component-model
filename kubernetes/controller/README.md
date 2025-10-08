@@ -153,7 +153,7 @@ task deploy
 or
 
 ```console
-kubectl apply -k https://github.com/open-component-model/open-component-model/kubernetes/controller/config/default?ref=main
+kubectl apply -k "https://github.com/open-component-model/open-component-model/kubernetes/controller/config/default?ref=main"
 ```
 
 > [!IMPORTANT]
