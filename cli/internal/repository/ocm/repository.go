@@ -22,31 +22,14 @@ import (
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-// ComponentRepositoryProvider is a function type that provides a ComponentVersionRepository
-// based on the given context and identity.
-// The identity can be used to select a proper repository if the provider supports multiple repositories.
-// Deprecated: will be removed
-type ComponentRepositoryProvider func(ctx context.Context, identity *runtime.Identity) (*ComponentRepository, error)
-
-// ComponentRepository is a wrapper around the [v1.ReadWriteOCMRepositoryPluginContract] that provides
-// useful CLI relevant helper functions that make high level operations easier.
-// It manages component references, repository specifications, and credentials for OCM operations.
-// Deprecated: will be removed
-type ComponentRepository struct {
-	// TODO: ComponentRepository could be removed? maybe? maybe not? fabian? :D
-	ref  *compref.Ref                          // Component reference containing repository and component information
-	spec runtime.Typed                         // Repository specification
-	base repository.ComponentVersionRepository // Base repository plugin contract
-
-	credentials map[string]string // Credentials for repository access
-}
+type ComponentVersionRepositoryProvider func(ctx context.Context, identity *runtime.Identity) (repository.ComponentVersionRepository, error)
 
 // NewFromRef creates a new ComponentRepository instance for the given component reference.
 // It resolves the appropriate plugin and credentials for the repository.
-func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, componentReference string) (*ComponentRepository, error) {
+func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, componentReference string) (*compref.Ref, repository.ComponentVersionRepository, error) {
 	ref, err := compref.Parse(componentReference)
 	if err != nil {
-		return nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
+		return nil, nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
 	}
 
 	var creds map[string]string
@@ -63,65 +46,51 @@ func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph crede
 
 	prov, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, ref.Repository, creds)
 	if err != nil {
-		return nil, fmt.Errorf("getting component version repository for %q failed: %w", ref.Repository, err)
+		return nil, nil, fmt.Errorf("getting component version repository for %q failed: %w", ref.Repository, err)
 	}
 
-	return &ComponentRepository{
-		ref:         ref,
-		spec:        ref.Repository,
-		base:        prov,
-		credentials: creds,
-	}, nil
+	return ref, prov, nil
 }
 
-func (repo *ComponentRepository) Version(ctx context.Context) (string, error) {
-	version := repo.ref.Version
+func Version(ctx context.Context, ref *compref.Ref, repo repository.ComponentVersionRepository) (string, error) {
+	version := ref.Version
 	if version == "" {
-		versions, err := repo.Versions(ctx, VersionOptions{LatestOnly: true})
+		versions, err := Versions(ctx, VersionOptions{LatestOnly: true}, ref, repo)
 		if err != nil {
 			return "", fmt.Errorf("getting component versions failed: %w", err)
 		}
 		if len(versions) == 0 {
-			return "", fmt.Errorf("no versions found for component %q", repo.ref.Component)
+			return "", fmt.Errorf("no versions found for component %q", ref.Component)
 		}
 		if len(versions) > 1 {
-			return "", fmt.Errorf("multiple versions found for component %q, expected only one: %v", repo.ref.Component, versions)
+			return "", fmt.Errorf("multiple versions found for component %q, expected only one: %v", ref.Component, versions)
 		}
 		version = versions[0]
 	}
 	return version, nil
 }
 
-func (repo *ComponentRepository) GetComponentVersion(ctx context.Context) (*descriptor.Descriptor, error) {
-	version, err := repo.Version(ctx)
+func GetComponentVersion(ctx context.Context, ref *compref.Ref, repo repository.ComponentVersionRepository) (*descriptor.Descriptor, error) {
+	version, err := Version(ctx, ref, repo)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version failed: %w", err)
 	}
 
-	desc, err := repo.base.GetComponentVersion(ctx, repo.ref.Component, version)
+	desc, err := repo.GetComponentVersion(ctx, ref.Component, version)
 	if err != nil {
-		return nil, fmt.Errorf("getting component descriptor for %q failed: %w", repo.ref.Component, err)
+		return nil, fmt.Errorf("getting component descriptor for %q failed: %w", ref.Component, err)
 	}
 
 	return desc, nil
 }
 
-func (repo *ComponentRepository) GetLocalResource(ctx context.Context, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	version, err := repo.Version(ctx)
+func GetLocalResource(ctx context.Context, identity runtime.Identity, ref *compref.Ref, repo repository.ComponentVersionRepository) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+	version, err := Version(ctx, ref, repo)
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting component version failed: %w", err)
 	}
 
-	return repo.base.GetLocalResource(ctx, repo.ref.Component, version, identity)
-}
-
-func (repo *ComponentRepository) ComponentVersionRepository() repository.ComponentVersionRepository {
-	return repo.base
-}
-
-// ComponentReference returns the component reference associated with this repository.
-func (repo *ComponentRepository) ComponentReference() *compref.Ref {
-	return repo.ref
+	return repo.GetLocalResource(ctx, ref.Component, version, identity)
 }
 
 // GetComponentVersionsOptions configures how component versions are retrieved.
@@ -132,8 +101,8 @@ type GetComponentVersionsOptions struct {
 
 // GetComponentVersions retrieves component version descriptors based on the provided options.
 // It supports concurrent retrieval of multiple versions with a configurable limit.
-func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions) ([]*descriptor.Descriptor, error) {
-	versions, err := repo.Versions(ctx, opts.VersionOptions)
+func GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions, ref *compref.Ref, repo repository.ComponentVersionRepository) ([]*descriptor.Descriptor, error) {
+	versions, err := Versions(ctx, opts.VersionOptions, ref, repo)
 	if err != nil {
 		return nil, fmt.Errorf("getting component versions failed: %w", err)
 	}
@@ -145,7 +114,7 @@ func (repo *ComponentRepository) GetComponentVersions(ctx context.Context, opts 
 	eg.SetLimit(opts.ConcurrencyLimit)
 	for i, version := range versions {
 		eg.Go(func() error {
-			desc, err := repo.base.GetComponentVersion(ctx, repo.ref.Component, version)
+			desc, err := repo.GetComponentVersion(ctx, ref.Component, version)
 			if err != nil {
 				return fmt.Errorf("getting component version failed: %w", err)
 			}
@@ -188,12 +157,12 @@ type VersionOptions struct {
 
 // Versions retrieve available versions for the component based on the provided options.
 // It supports filtering by semantic version constraints and retrieving only the latest version.
-func (repo *ComponentRepository) Versions(ctx context.Context, opts VersionOptions) ([]string, error) {
-	if repo.ref.Version != "" {
-		return []string{repo.ref.Version}, nil
+func Versions(ctx context.Context, opts VersionOptions, ref *compref.Ref, repo repository.ComponentVersionRepository) ([]string, error) {
+	if ref.Version != "" {
+		return []string{ref.Version}, nil
 	}
 
-	versions, err := repo.base.ListComponentVersions(ctx, repo.ref.Component)
+	versions, err := repo.ListComponentVersions(ctx, ref.Component)
 	if err != nil {
 		return nil, fmt.Errorf("listing component versions failed: %w", err)
 	}

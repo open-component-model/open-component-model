@@ -146,7 +146,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 
 	reference := args[0]
 	config := ocmContext.Configuration()
-	repoProvider, err := ocm.NewFromRefWithResolvers(cmd.Context(), pluginManager, credentialGraph, config, reference)
+	parsedRef, repoProvider, err := ocm.NewFromRefWithResolvers(cmd.Context(), pluginManager, credentialGraph, config, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
@@ -155,13 +155,13 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
-	descs, err := repo.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
+	descs, err := ocm.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
 		VersionOptions: ocm.VersionOptions{
 			SemverConstraint: constraint,
 			LatestOnly:       latestOnly,
 		},
 		ConcurrencyLimit: concurrencyLimit,
-	})
+	}, parsedRef, repo)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
@@ -172,7 +172,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, descs []*descruntime.Descriptor, repoProvider ocm.ComponentRepositoryProvider, format, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, descs []*descruntime.Descriptor, repoProvider ocm.ComponentVersionRepositoryProvider, format, mode string, recursive int) error {
 	dag := syncdag.NewDirectedAcyclicGraph[string]()
 
 	roots := make([]string, len(descs))
@@ -286,7 +286,7 @@ func buildTableFormatSerializer() list.ListSerializer[string] {
 	})
 }
 
-func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repoProvider ocm.ComponentRepositoryProvider, recursive int) syncdag.DiscoverNeighborsFunc[string] {
+func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repoProvider ocm.ComponentVersionRepositoryProvider, recursive int) syncdag.DiscoverNeighborsFunc[string] {
 	switch {
 	case recursive != 0:
 		return func(ctx context.Context, v string) ([]string, error) {
@@ -301,7 +301,7 @@ func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repoPro
 					return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
 				}
 
-				desc, err = repo.ComponentVersionRepository().GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
+				desc, err = repo.GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
 				if err != nil {
 					return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
 				}
