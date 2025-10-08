@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	"ocm.software/open-component-model/bindings/go/dag"
 
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/cli/internal/render/graph"
@@ -48,12 +49,12 @@ type Renderer[T cmp.Ordered] struct {
 	// The roots are optional. If not provided, the Renderer will
 	// dynamically determine the roots from the DirectedAcyclicGraph.
 	roots []T
-	// The dag from which the tree is rendered.
-	dag *syncdag.DirectedAcyclicGraph[T]
+	// The graph from which the tree is rendered.
+	graph *syncdag.SyncedDirectedAcyclicGraph[T]
 }
 
 // New creates a new Renderer for the given DirectedAcyclicGraph.
-func New[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T], opts ...RendererOption[T]) *Renderer[T] {
+func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcyclicGraph[T], opts ...RendererOption[T]) *Renderer[T] {
 	options := &RendererOptions[T]{}
 	for _, opt := range opts {
 		opt(options)
@@ -64,7 +65,7 @@ func New[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T
 	}
 
 	if len(options.Roots) == 0 {
-		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from dag")
+		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from graph")
 	}
 
 	return &Renderer[T]{
@@ -73,7 +74,7 @@ func New[T cmp.Ordered](ctx context.Context, dag *syncdag.DirectedAcyclicGraph[T
 		style:            DefaultTreeStyle,
 		tableStyle:       defaultTableStyle(),
 		roots:            options.Roots,
-		dag:              dag,
+		graph:            graph,
 	}
 }
 
@@ -87,38 +88,57 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 
 	roots := t.roots
 	if len(roots) == 0 {
-		roots = t.dag.Roots()
+		if err := t.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[T]) error {
+			roots = d.Roots()
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to auto-detect roots from graph: %w", err)
+		}
 		// We only do this for auto-detected roots. If the roots are provided,
 		// we want to preserve the order.
 		slices.Sort(roots)
 	} else {
 		filteredRoots := make([]T, 0, len(roots))
-		for _, root := range roots {
-			if _, exists := t.dag.GetVertex(root); exists {
-				// If root does not exist in the dag yet, we exclude it from the
-				// current rendering run.
-				// The root might be added to the graph, after the rendering
-				// has started, so we do not want to fail the rendering.
-				filteredRoots = append(filteredRoots, root)
+		if err := t.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[T]) error {
+			for _, root := range roots {
+				if _, exists := d.Vertices[root]; exists {
+					// If root does not exist in the graph yet, we exclude it from the
+					// current rendering run.
+					// The root might be added to the graph, after the rendering
+					// has started, so we do not want to fail the rendering.
+					filteredRoots = append(filteredRoots, root)
+				}
 			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("failed to filter non-existent roots: %w", err)
 		}
 		roots = filteredRoots
 	}
 
-	for i, root := range roots {
-		isLast := i == len(roots)-1
-		if err := t.traverseGraph(ctx, root, 0, true, isLast, nil); err != nil {
-			return fmt.Errorf("failed to traverse graph: %w", err)
+	if err := t.graph.WithReadLock(func(lockedGraph *dag.DirectedAcyclicGraph[T]) error {
+		slog.DebugContext(ctx, "locking graph for traversal", "roots", roots)
+		defer slog.DebugContext(ctx, "unlocking graph after traversal")
+
+		for i, root := range roots {
+			isLast := i == len(roots)-1
+			if err := t.traverseGraph(ctx, lockedGraph, root, 0, true, isLast, nil); err != nil {
+				return fmt.Errorf("failed to traverse graph: %w", err)
+			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
+
 	t.tableWriter.SetOutputMirror(writer)
 	t.tableWriter.Render()
 	return nil
 }
 
 // traverseGraph recursively walks the DAG and adds each vertex as a table row with proper tree nesting.
-func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T, level int, isRoot, isLast bool, ancestorsHasMore []bool) error {
-	vertex, ok := t.dag.GetVertex(nodeId)
+func (t *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.DirectedAcyclicGraph[T], nodeId T, level int, isRoot, isLast bool, ancestorsHasMore []bool) error {
+	vertex, ok := lockedGraph.Vertices[nodeId]
 	if !ok {
 		return fmt.Errorf("vertex for nodeId %v does not exist", nodeId)
 	}
@@ -145,7 +165,7 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, nodeId T, level int, is
 		connector := !isLast
 		// Add current node's connector state to the ancestor tracking for its children
 		nextAncestors = append(nextAncestors, connector)
-		if err := t.traverseGraph(ctx, child, level+1, false, childIsLast, nextAncestors); err != nil {
+		if err := t.traverseGraph(ctx, lockedGraph, child, level+1, false, childIsLast, nextAncestors); err != nil {
 			return err
 		}
 	}
