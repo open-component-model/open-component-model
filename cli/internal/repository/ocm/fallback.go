@@ -3,7 +3,6 @@ package ocm
 import (
 	"context"
 	"fmt"
-	"math"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
@@ -16,43 +15,33 @@ import (
 
 	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-// NewFromRefWithFallbackRepo creates a new ComponentRepository instance for the given component reference.
-// It resolves the appropriate plugin and credentials for the repository.
-//
-//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-func NewFromRefWithFallbackRepo(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver,
-	resolvers []*resolverruntime.Resolver, componentReference string, options ...compref.Option) (*compref.Ref, ComponentVersionRepositoryProvider, error) {
-	ref, err := compref.Parse(componentReference, options...)
-	if err != nil {
-		return nil, nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
-	}
-	if len(resolvers) == 0 {
-		//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-		resolvers = make([]*resolverruntime.Resolver, 0)
-	}
+type fallbackProvider struct {
+	manager   *manager.PluginManager
+	graph     credentials.GraphResolver
+	resolvers []*resolverruntime.Resolver
+}
 
-	if ref.Repository != nil {
-		//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-		resolvers = append(resolvers, &resolverruntime.Resolver{
-			Repository: ref.Repository,
-			// Add the current repository as a resolver with the highest possible
-			// priority.
-			Priority: math.MaxInt,
-		})
+func newFromConfigWithFallback(
+	manager *manager.PluginManager,
+	graph credentials.GraphResolver,
+	resolvers []*resolverruntime.Resolver) *fallbackProvider {
+	return &fallbackProvider{
+		manager:   manager,
+		graph:     graph,
+		resolvers: resolvers,
 	}
+}
 
+func (f *fallbackProvider) GetComponentVersionRepository(ctx context.Context, _ runtime.Identity) (repository.ComponentVersionRepository, error) {
 	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	fallbackRepo, err := fallback.NewFallbackRepository(ctx, manager.ComponentVersionRepositoryRegistry, graph, resolvers)
+	fallbackRepo, err := fallback.NewFallbackRepository(ctx, f.manager.ComponentVersionRepositoryRegistry, f.graph, f.resolvers)
 	if err != nil {
-		return nil, nil, fmt.Errorf("creating fallback repository failed: %w", err)
+		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
 	}
 
-	return ref, func(ctx context.Context, identity *runtime.Identity) (repository.ComponentVersionRepository, error) {
-		return fallbackRepo, nil
-	}, nil
+	return fallbackRepo, nil
 }
 
 //nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575

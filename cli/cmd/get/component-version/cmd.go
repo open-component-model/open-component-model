@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -146,22 +147,28 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 
 	reference := args[0]
 	config := ocmContext.Configuration()
-	parsedRef, repoProvider, err := ocm.NewFromRefWithResolvers(cmd.Context(), pluginManager, credentialGraph, config, reference)
+
+	// we have a reference and parse it
+	ref, _ := compref.Parse(reference)
+	slog.DebugContext(ctx, "parsed component reference", "reference", reference, "parsed", ref)
+
+	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	repo, err := repoProvider(cmd.Context(), nil)
+	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), nil /*?*/)
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
+
 	descs, err := ocm.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
 		VersionOptions: ocm.VersionOptions{
 			SemverConstraint: constraint,
 			LatestOnly:       latestOnly,
 		},
 		ConcurrencyLimit: concurrencyLimit,
-	}, parsedRef, repo)
+	}, ref.Component, ref.Version, repo)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
@@ -296,7 +303,7 @@ func buildNeighbourDiscoverer(dag *syncdag.DirectedAcyclicGraph[string], repoPro
 			id, _ := runtime.ParseIdentity(v)
 			// root descriptors are already known
 			if untypedDesc, ok := vertex.GetAttribute(descriptorAttribute); !ok {
-				repo, err := repoProvider(ctx, &id)
+				repo, err := repoProvider.GetComponentVersionRepository(ctx, id)
 				if err != nil {
 					return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
 				}
