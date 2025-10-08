@@ -146,7 +146,7 @@ To install the OCM K8s Toolkit into your running Kubernetes cluster, you can use
 ```console
 # In the ocm mono-repo root directory
 cd kubernetes/controller
-make deploy
+task deploy
 ```
 
 or
