@@ -122,7 +122,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 // preserving the order of the input list. The order of the input list is defined by the Spec defining the configuration
 // references.
 func gatherConfigurationObjects(ctx context.Context, k8sClient client.Reader, ocmConfigs []v1alpha1.OCMConfiguration, namespace string) ([]client.Object, error) {
-	// pre-allocate the output array to the same length as the input list for concurrent operations.
+	// pre-allocate the output array to the same length as the input list for concurrent operations
 	objects := make([]client.Object, len(ocmConfigs))
 	fetchGroup, ctx := errgroup.WithContext(ctx)
 	for i, ocmConfig := range ocmConfigs {
