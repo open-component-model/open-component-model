@@ -59,6 +59,11 @@ func (p *vertexProcessor) ProcessVertex(ctx context.Context, v string) error {
 func (p *vertexProcessor) processExternalComponent(ctx context.Context, vertex *syncdag.Vertex[string]) error {
 	desc := vertex.MustGetAttribute(attributeComponentDescriptor).(*descriptor.Descriptor)
 
+	if p.constructor.opts.ExternalComponentVersionCopyPolicy == ExternalComponentVersionCopyPolicySkip {
+		slog.DebugContext(ctx, "external component was skipped")
+		return nil
+	}
+
 	constructorComponent := constructor.ConvertFromDescriptorComponent(&desc.Component)
 	repo, err := p.constructor.opts.GetTargetRepository(ctx, constructorComponent)
 	if err != nil {
