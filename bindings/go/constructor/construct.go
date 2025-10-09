@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
@@ -48,11 +49,6 @@ type DefaultConstructor struct {
 
 var _ Constructor = (*DefaultConstructor)(nil)
 
-const (
-	attributeComponentConstructor = "componentConstructor"
-	attributeComponentDescriptor  = "componentDescriptor"
-)
-
 type componentVersionRepositoryWrapper struct {
 	repository repository.ComponentVersionRepository
 }
@@ -66,6 +62,11 @@ func RepositoryAsExternalComponentVersionRepositoryProvider(repo repository.Comp
 }
 
 var _ ExternalComponentRepositoryProvider = (*componentVersionRepositoryWrapper)(nil)
+
+type ConstructorOrExternalComponent struct {
+	ConstructorComponent *constructor.Component
+	ExternalComponent    *descriptor.Descriptor
+}
 
 func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
 	logger := log.Base().With("operation", "constructComponent")
@@ -83,46 +84,75 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 		return nil, nil
 	}
 
-	// We might want to allow the DAG to be passed in. This would allow to
-	// pre-populate it with known components to avoid re-resolving them.
-	dag := syncdag.NewDirectedAcyclicGraph[string]()
-	if err := c.discover(ctx, dag, componentConstructor); err != nil {
+	graph, err := c.discover(ctx, componentConstructor)
+	if err != nil {
 		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
-	if err := c.construct(ctx, dag); err != nil {
+	processedDescriptors, err := c.construct(ctx, graph)
+	if err != nil {
 		return nil, fmt.Errorf("failed to constructComponent components from graph: %w", err)
 	}
 
 	constructedDescriptors := make([]*descriptor.Descriptor, len(componentConstructor.Components))
 	for index, component := range componentConstructor.Components {
-		constructedDescriptors[index] = dag.MustGetVertex(component.ToIdentity().String()).MustGetAttribute(attributeComponentDescriptor).(*descriptor.Descriptor)
+		constructedDescriptors[index] = processedDescriptors[component.ToIdentity().String()]
 	}
 	return constructedDescriptors, nil
 }
 
-func (c *DefaultConstructor) discover(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string], componentConstructor *constructor.ComponentConstructor) error {
-	discoverer := newNeighborDiscoverer(c, dag)
-	roots, err := discoverer.initializeDAGWithConstructor(componentConstructor)
-	if err != nil {
-		return fmt.Errorf("failed to initialize component constructor graph: %w", err)
+func (c *DefaultConstructor) discover(ctx context.Context, componentConstructor *constructor.ComponentConstructor) (*syncdag.SyncedDirectedAcyclicGraph[string], error) {
+	roots := make([]string, len(componentConstructor.Components))
+	for index, component := range componentConstructor.Components {
+		roots[index] = component.ToIdentity().String()
 	}
-	slog.DebugContext(ctx, "starting discovery based on components in constructor", "num_components", len(roots), "components", roots)
-	if err := dag.Discover(ctx, discoverer, syncdag.WithRoots(roots...), syncdag.WithDiscoveryGoRoutineLimit[string](c.opts.ConcurrencyLimit)); err != nil {
-		return fmt.Errorf("failed to discover component references: %w", err)
+	resAndDis := resolverAndDiscoverer{
+		componentConstructor:                componentConstructor,
+		externalComponentRepositoryProvider: c.opts.ExternalComponentRepositoryProvider,
 	}
-	slog.DebugContext(ctx, "component reference discovery completed successfully", "num_components", dag.LengthVertices())
-	return nil
+	graphDiscoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *ConstructorOrExternalComponent]{
+		Roots:      roots,
+		Resolver:   &resAndDis,
+		Discoverer: &resAndDis,
+	})
+	slog.DebugContext(ctx, "starting discovery based on components in constructor", "components", roots)
+	if err := graphDiscoverer.Discover(ctx); err != nil {
+		return nil, fmt.Errorf("failed to discover components: %w", err)
+	}
+	slog.DebugContext(ctx, "component reference discovery completed successfully")
+	return graphDiscoverer.Graph(), nil
 }
 
-func (c *DefaultConstructor) construct(ctx context.Context, dag *syncdag.DirectedAcyclicGraph[string]) error {
-	processor := newVertexProcessor(c, dag)
-
-	slog.DebugContext(ctx, "starting processing of discovered component graph", "num_components", dag.LengthVertices())
-	if err := dag.ProcessTopology(ctx, processor, syncdag.WithReverseTopology(), syncdag.WithProcessGoRoutineLimit(c.opts.ConcurrencyLimit)); err != nil {
-		return fmt.Errorf("failed to process component constructor graph: %w", err)
+func (c *DefaultConstructor) construct(ctx context.Context, graph *syncdag.SyncedDirectedAcyclicGraph[string]) (map[string]*descriptor.Descriptor, error) {
+	var reversedGraph *dag.DirectedAcyclicGraph[string]
+	var err error
+	if err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		if reversedGraph, err = d.Reverse(); err != nil {
+			return fmt.Errorf("failed to reverse graph: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	slog.DebugContext(ctx, "component construction completed successfully", "num_components", dag.LengthVertices())
-	return nil
+
+	proc := processor{
+		constructor: c,
+		processedDescriptors: descriptors{
+			mu:          sync.RWMutex{},
+			descriptors: make(map[string]*descriptor.Descriptor),
+		},
+	}
+
+	syncedReversedGraph := syncdag.ToSyncedGraph(reversedGraph)
+
+	graphProcessor := syncdag.NewGraphProcessor(syncedReversedGraph, &syncdag.GraphProcessorOptions[string, *ConstructorOrExternalComponent]{
+		Processor: &proc,
+	})
+	slog.DebugContext(ctx, "starting processing of discovered component graph")
+	if err := graphProcessor.Process(ctx); err != nil {
+		return nil, fmt.Errorf("failed to process component constructor graph: %w", err)
+	}
+	slog.DebugContext(ctx, "component construction completed successfully")
+	return proc.processedDescriptors.descriptors, nil
 }
 
 func NewDefaultConstructor(opts Options) Constructor {

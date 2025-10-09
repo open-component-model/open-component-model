@@ -4,100 +4,82 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// vertexProcessor is responsible for processing discovered component in the DAG.
+// processor is responsible for processing discovered component in the DAG.
 // Hereby, processing means:
 // - constructing components that are part of the constructor specification
 // - uploading components to the target repository
-type vertexProcessor struct {
-	constructor *DefaultConstructor
-	dag         *syncdag.DirectedAcyclicGraph[string]
+type processor struct {
+	constructor          *DefaultConstructor
+	processedDescriptors descriptors
 }
 
-var _ syncdag.VertexProcessor[string] = (*vertexProcessor)(nil)
-
-func newVertexProcessor(constructor *DefaultConstructor, dag *syncdag.DirectedAcyclicGraph[string]) *vertexProcessor {
-	return &vertexProcessor{
-		constructor: constructor,
-		dag:         dag,
-	}
+type descriptors struct {
+	mu sync.RWMutex
+	// descriptors use the same key as the DAG, i.e. the component identity
+	// string. Since ProcessValue is guaranteed to be called at most once for
+	// each node, this is safe.
+	descriptors map[string]*descriptor.Descriptor
 }
 
-// ProcessVertex processes the component represented by the given vertex.
-func (p *vertexProcessor) ProcessVertex(ctx context.Context, v string) error {
-	vertex := p.dag.MustGetVertex(v)
-	_, isInternal := vertex.GetAttribute(attributeComponentConstructor)
+func (c *descriptors) store(_ context.Context, descriptor *descriptor.Descriptor) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	if !isInternal {
-		// This means we are on an external component node (= component is
-		// not in the constructor specification).
-		slog.DebugContext(ctx, "processing external component", "component", vertex.ID)
-		if err := p.processExternalComponent(ctx, vertex); err != nil {
-			return fmt.Errorf("failed to process external component: %w", err)
-		}
-		return nil
-	} else {
-		// This means we are on a constructor node (= component is in the
-		// constructor specification).
-		slog.DebugContext(ctx, "processing internal component", "component", vertex.ID)
-		if err := p.processInternalComponent(ctx, vertex); err != nil {
-			return fmt.Errorf("failed to process internal component: %w", err)
-		}
+	id := descriptor.Component.ToIdentity().String()
+	if _, ok := c.descriptors[id]; ok {
+		return fmt.Errorf("descriptor for %s has already been processed", id)
 	}
-
-	slog.DebugContext(ctx, "component constructed successfully")
-
+	c.descriptors[id] = descriptor
 	return nil
 }
 
-func (p *vertexProcessor) processExternalComponent(ctx context.Context, vertex *syncdag.Vertex[string]) error {
-	desc := vertex.MustGetAttribute(attributeComponentDescriptor).(*descriptor.Descriptor)
+func (c *descriptors) load(_ context.Context, id string) (*descriptor.Descriptor, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
-	if p.constructor.opts.ExternalComponentVersionCopyPolicy == ExternalComponentVersionCopyPolicySkip {
-		slog.DebugContext(ctx, "external component was skipped")
-		return nil
+	desc, ok := c.descriptors[id]
+	if !ok {
+		return nil, fmt.Errorf("descriptor for %s not found", id)
 	}
+	return desc, nil
+}
 
-	constructorComponent := constructor.ConvertFromDescriptorComponent(&desc.Component)
-	repo, err := p.constructor.opts.GetTargetRepository(ctx, constructorComponent)
-	if err != nil {
-		return fmt.Errorf("error getting target repository for component %q: %w", desc.Component.ToIdentity(), err)
+var _ syncdag.Processor[*ConstructorOrExternalComponent] = (*processor)(nil)
+
+func (p *processor) ProcessValue(ctx context.Context, component *ConstructorOrExternalComponent) error {
+	switch {
+	case component.ConstructorComponent != nil:
+		if err := p.processConstructorComponent(ctx, component.ConstructorComponent); err != nil {
+			return fmt.Errorf("failed processing constructor component: %w", err)
+		}
+	case component.ExternalComponent != nil:
+		if err := p.processExternalComponent(ctx, component.ExternalComponent); err != nil {
+			return fmt.Errorf("failed processing external component: %w", err)
+		}
 	}
-	if err := repo.AddComponentVersion(ctx, desc); err != nil {
-		return fmt.Errorf("error adding component version to target: %w", err)
-	}
-
-	slog.DebugContext(ctx, "external component added to target repository")
-
 	return nil
 }
 
-// processInternalComponent processes a component from the internal constructor
-// specification.
-func (p *vertexProcessor) processInternalComponent(ctx context.Context, vertex *syncdag.Vertex[string]) error {
-	component := vertex.MustGetAttribute(attributeComponentConstructor).(*constructor.Component)
+func (p *processor) processConstructorComponent(ctx context.Context, component *constructor.Component) error {
 	referencedComponents := make(map[string]*descriptor.Descriptor, len(component.References))
 	// Collect the descriptors of all referenced components to calculate their
 	// digest for the component reference.
 	for _, ref := range component.References {
-		identity := ocmruntime.Identity{
-			descriptor.IdentityAttributeName:    ref.Component,
-			descriptor.IdentityAttributeVersion: ref.Version,
-		}
-		refVertex, exists := p.dag.GetVertex(identity.String())
-		if !exists {
-			return fmt.Errorf("missing dependency %q for component %q", identity.String(), component.ToIdentity())
-		}
+		id := ref.ToComponentIdentity().String()
 		// Since ProcessTopology is called with reverse, referenced components
 		// must have been processed already. Therefore, we expect the descriptor
 		// to be available.
-		refDescriptor := refVertex.MustGetAttribute(attributeComponentDescriptor).(*descriptor.Descriptor)
+		refDescriptor, err := p.processedDescriptors.load(ctx, id)
+		if err != nil {
+			return fmt.Errorf("missing dependency %s for component %s", id, component.ToIdentity().String())
+		}
 		referencedComponents[ref.ToIdentity().String()] = refDescriptor
 	}
 	if p.constructor.opts.OnStartComponentConstruct != nil {
@@ -114,6 +96,35 @@ func (p *vertexProcessor) processInternalComponent(ctx context.Context, vertex *
 	if err != nil {
 		return fmt.Errorf("error constructing component %q: %w", component.ToIdentity(), err)
 	}
-	vertex.Attributes.Store(attributeComponentDescriptor, desc)
+	if err := p.processedDescriptors.store(ctx, desc); err != nil {
+		return fmt.Errorf("failed to store processed descriptor: %w", err)
+	}
+	return nil
+}
+
+func (p *processor) processExternalComponent(ctx context.Context, descriptor *descriptor.Descriptor) error {
+	if p.constructor.opts.ExternalComponentVersionCopyPolicy == ExternalComponentVersionCopyPolicySkip {
+		slog.DebugContext(ctx, "external component was skipped")
+
+		if err := p.processedDescriptors.store(ctx, descriptor); err != nil {
+			return fmt.Errorf("failed to store processed descriptor: %w", err)
+		}
+		return nil
+	}
+
+	constructorComponent := constructor.ConvertFromDescriptorComponent(&descriptor.Component)
+	repo, err := p.constructor.opts.GetTargetRepository(ctx, constructorComponent)
+	if err != nil {
+		return fmt.Errorf("error getting target repository for component %q: %w", descriptor.Component.ToIdentity(), err)
+	}
+	if err := repo.AddComponentVersion(ctx, descriptor); err != nil {
+		return fmt.Errorf("error adding component version to target: %w", err)
+	}
+	slog.DebugContext(ctx, "external component added to target repository")
+
+	if err := p.processedDescriptors.store(ctx, descriptor); err != nil {
+		return fmt.Errorf("failed to store processed descriptor: %w", err)
+	}
+
 	return nil
 }
