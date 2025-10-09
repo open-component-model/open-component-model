@@ -85,5 +85,9 @@ func (p proxyProvider) GetComponentVersionRepository(ctx context.Context, identi
 		}
 	}
 
-	return p.provider.GetComponentVersionRepository(ctx, identity)
+	if p.provider != nil {
+		return p.provider.GetComponentVersionRepository(ctx, identity)
+	}
+
+	return nil, fmt.Errorf("no component version repository found for identity %q", identity.String())
 }

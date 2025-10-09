@@ -31,6 +31,8 @@ func newFromConfigWithPathMatcher(
 		return nil, fmt.Errorf("no resolvers configured")
 	}
 
+	// TODO: add a fallback entry with wildcard * which is being injected by constructor as resolver
+	// set as MIN PRIO in this case
 	provider := pathmatcher.NewSpecProvider(ctx, resolvers)
 
 	return &resolverProvider{

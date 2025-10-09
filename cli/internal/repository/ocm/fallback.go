@@ -27,6 +27,8 @@ func newFromConfigWithFallback(
 	manager *manager.PluginManager,
 	graph credentials.GraphResolver,
 	resolvers []*resolverruntime.Resolver) *fallbackProvider {
+	// TODO: add a fallback entry with wildcard * which is being injected by constructor as resolver
+	// set as MAX PRIO in this case
 	return &fallbackProvider{
 		manager:   manager,
 		graph:     graph,
