@@ -13,15 +13,13 @@ import (
 )
 
 type compRefProvider struct {
-	ref                *compref.Ref
-	manager            *manager.PluginManager
-	repositoryProvider repository.ComponentVersionRepositoryProvider
-	graph              credentials.GraphResolver
+	ref     *compref.Ref
+	manager *manager.PluginManager
+	graph   credentials.GraphResolver
 }
 
 func newFromCompRef(componentReference string,
 	manager *manager.PluginManager,
-	repositoryProvider repository.ComponentVersionRepositoryProvider,
 	graph credentials.GraphResolver, options ...compref.Option) (*compRefProvider, error) {
 	ref, err := compref.Parse(componentReference, options...)
 	if err != nil {
@@ -29,10 +27,9 @@ func newFromCompRef(componentReference string,
 	}
 
 	return &compRefProvider{
-		ref:                ref,
-		manager:            manager,
-		repositoryProvider: repositoryProvider,
-		graph:              graph,
+		ref:     ref,
+		manager: manager,
+		graph:   graph,
 	}, nil
 }
 
@@ -50,5 +47,5 @@ func (c compRefProvider) GetComponentVersionRepository(ctx context.Context, _ ru
 		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository",
 			"repository", c.ref.Repository, "error", err)
 	}
-	return c.repositoryProvider.GetComponentVersionRepository(ctx, c.ref.Repository, credMap)
+	return c.manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, c.ref.Repository, credMap)
 }

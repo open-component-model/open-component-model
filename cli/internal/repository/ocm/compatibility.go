@@ -37,7 +37,7 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 	)
 
 	if componentReference != "" {
-		compRefProv, err = newFromCompRef(componentReference, pluginManager, nil, credentialGraph, options...)
+		compRefProv, err = newFromCompRef(componentReference, pluginManager, credentialGraph, options...)
 		if err != nil {
 			return nil, fmt.Errorf("parsing component reference failed: %w", err)
 		}
@@ -63,7 +63,7 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
 
 		provider = newFromConfigWithFallback(pluginManager, credentialGraph, fallbackResolvers)
-	} else {
+	} else if len(pathMatchers) > 0 {
 		slog.DebugContext(ctx, "using path matcher resolvers", slog.Int("count", len(pathMatchers)))
 		provider, err = newFromConfigWithPathMatcher(ctx, pluginManager, credentialGraph, pathMatchers)
 		if err != nil {
