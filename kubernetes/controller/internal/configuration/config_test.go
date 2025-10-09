@@ -286,7 +286,7 @@ func TestLoadConfigurations(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				if tt.checkResult != nil {
-					tt.checkResult(t, cfg)
+					tt.checkResult(t, cfg.Config)
 				}
 			}
 		})
@@ -298,13 +298,138 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	secretA := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secret-a",
-			Namespace: "default",
+	tests := []struct {
+		name       string
+		namespace  string
+		secrets    []*corev1.Secret
+		ocmConfigs [][]v1alpha1.OCMConfiguration
+		wantErr    bool
+		errorCheck require.ErrorAssertionFunc
+		equal      require.ComparisonAssertionFunc
+	}{
+		{
+			name:      "order of internal configs should not matter",
+			namespace: "default",
+			ocmConfigs: [][]v1alpha1.OCMConfiguration{
+				{
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-a",
+						},
+					},
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-b",
+						},
+					},
+				},
+				{
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-a",
+						},
+					},
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-b",
+						},
+					},
+				},
+			},
+			secrets: []*corev1.Secret{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret-a",
+						Namespace: "default",
+					},
+					Data: map[string][]byte{
+						v1alpha1.OCMConfigKey: []byte(`
+							{
+								"type": "generic.config.ocm.software/v1",
+								"configurations": [
+							{
+								"type": "filesystem.config.ocm.software/v1alpha1",
+								"tempFolder": "/tmp/test"
+							},
+							{
+								"type": "whatever.config.ocm.software/v1alpha1",
+								"whatever": "whatever"
+							}
+						]
+					}`),
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret-b",
+						Namespace: "default",
+					},
+					Data: map[string][]byte{
+						v1alpha1.OCMConfigKey: []byte(`
+							{
+								"type": "generic.config.ocm.software/v1",
+								"configurations": [
+							{
+								"type": "whatever.config.ocm.software/v1alpha1",
+								"whatever": "whatever"
+							},
+							{
+								"type": "filesystem.config.ocm.software/v1alpha1",
+								"tempFolder": "/tmp/test"
+							}
+						]
+						}`),
+					},
+				},
+			},
+			errorCheck: require.NoError,
+			equal:      require.Equal,
 		},
-		Data: map[string][]byte{
-			v1alpha1.OCMConfigKey: []byte(`{
+		{
+			name:      "order of declared configs should matter",
+			namespace: "default",
+			ocmConfigs: [][]v1alpha1.OCMConfiguration{
+				{
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-a",
+						},
+					},
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-b",
+						},
+					},
+				},
+				{
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-b",
+						},
+					},
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-a",
+						},
+					},
+				},
+			},
+			secrets: []*corev1.Secret{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret-a",
+						Namespace: "default",
+					},
+					Data: map[string][]byte{
+						v1alpha1.OCMConfigKey: []byte(`{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
@@ -317,15 +442,15 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 					}
 				]
 			}`),
-		},
-	}
-	secretB := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secret-b",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{
-			v1alpha1.OCMConfigKey: []byte(`{
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret-b",
+						Namespace: "default",
+					},
+					Data: map[string][]byte{
+						v1alpha1.OCMConfigKey: []byte(`{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
@@ -338,49 +463,28 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 					}
 				]
 			}`),
+					},
+				},
+			},
+
+			errorCheck: require.NoError,
+			equal:      require.NotEqual,
 		},
 	}
 
-	namespace := "default"
-	ocmConfigsA := []v1alpha1.OCMConfiguration{
-		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-				Kind: "Secret",
-				Name: "test-secret-a",
-			},
-		},
-		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-				Kind: "Secret",
-				Name: "test-secret-b",
-			},
-		},
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.secrets[0], tt.secrets[1]).
+				Build()
+
+			cfgA, err := LoadConfigurations(context.Background(), client, tt.namespace, tt.ocmConfigs[0])
+			require.NoError(t, err)
+
+			cfgB, err := LoadConfigurations(context.Background(), client, tt.namespace, tt.ocmConfigs[1])
+			tt.errorCheck(t, err)
+			tt.equal(t, cfgA, cfgB)
+		})
 	}
-	ocmConfigsB := []v1alpha1.OCMConfiguration{
-		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-				Kind: "Secret",
-				Name: "test-secret-b",
-			},
-		},
-		{
-			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-				Kind: "Secret",
-				Name: "test-secret-a",
-			},
-		},
-	}
-
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(secretA, secretB).
-		Build()
-
-	cfgA, err := LoadConfigurations(context.Background(), client, namespace, ocmConfigsA)
-	require.NoError(t, err)
-
-	cfgB, err := LoadConfigurations(context.Background(), client, namespace, ocmConfigsB)
-	require.NoError(t, err)
-
-	require.Equal(t, cfgA, cfgB)
 }

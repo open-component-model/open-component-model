@@ -68,7 +68,7 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
-	pm, err := setup.NewPluginManager(ctx, cfg, setup.PluginManagerOptions{
+	pm, err := setup.NewPluginManager(ctx, cfg.Config, setup.PluginManagerOptions{
 		Locations:   []string{"/tmp/ocm-plugins"},
 		IdleTimeout: 5 * time.Minute,
 		Logger:      logger,
@@ -81,7 +81,7 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 
 	registerOCIPlugin(t, pm, "test", "v1.0.0")
 
-	credGraph, err := setup.NewCredentialGraph(ctx, cfg, setup.CredentialGraphOptions{
+	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 		PluginManager: pm,
 		Logger:        logger,
 	})
@@ -89,7 +89,7 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 	require.NotNil(t, credGraph)
 
 	// TODO: I haven't configured any resolvers yet, so this is just empty.
-	_, err = setup.GetResolvers(cfg, setup.ResolverOptions{
+	_, err = setup.GetResolvers(cfg.Config, setup.ResolverOptions{
 		Logger: logger,
 	})
 	require.NoError(t, err)
@@ -205,8 +205,7 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 	require.NotNil(t, cfg)
 
 	assert.NotNil(t, cfg)
-	assert.Len(t, cfg.Configurations, 2, "should have loaded 2 configurations (credentials + plugin)")
-	assert.NotEmpty(t, cfg.Configurations, "configurations should be loaded from both Secret and ConfigMap")
+	assert.Len(t, cfg.Config.Configurations, 2, "should have loaded 2 configurations (credentials + plugin)")
 }
 
 func TestIntegration_ErrorHandling(t *testing.T) {
