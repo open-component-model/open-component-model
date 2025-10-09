@@ -7,6 +7,7 @@ import (
 
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -51,5 +52,5 @@ func (r *SpecProvider) GetRepositorySpec(_ context.Context, componentIdentity ru
 		}
 	}
 
-	return nil, fmt.Errorf("no repository found for component identity %s", componentIdentity)
+	return nil, repository.ErrNotFound
 }
