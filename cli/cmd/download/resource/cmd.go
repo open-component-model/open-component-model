@@ -132,7 +132,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), nil /*?*/)
+	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), ref.Identity())
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}

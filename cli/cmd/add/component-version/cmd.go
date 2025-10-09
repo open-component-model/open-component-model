@@ -12,6 +12,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -371,7 +372,10 @@ type constructorProvider struct {
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
-	return prov.repositoryProvider.GetComponentVersionRepository(ctx, nil /*?*/)
+	id := runtime.Identity{}
+	id[descruntime.IdentityAttributeName] = name
+	id[descruntime.IdentityAttributeVersion] = version
+	return prov.repositoryProvider.GetComponentVersionRepository(ctx, id)
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {

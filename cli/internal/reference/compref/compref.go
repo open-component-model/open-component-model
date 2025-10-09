@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -107,6 +108,17 @@ func (ref *Ref) String() string {
 		sb.WriteString("@" + ref.Digest)
 	}
 	return sb.String()
+}
+
+func (ref *Ref) Identity() runtime.Identity {
+	id := runtime.Identity{}
+	if ref.Component != "" {
+		id[descruntime.IdentityAttributeName] = ref.Component
+	}
+	if ref.Version != "" {
+		id[descruntime.IdentityAttributeVersion] = ref.Version
+	}
+	return id
 }
 
 // Parse parses an input string into a Ref.
