@@ -80,8 +80,7 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 func (p proxyProvider) GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error) {
 	if p.compRefProv != nil {
 		// check if the identity matches the component reference repository
-		if identity.GetType() == p.compRefProv.ref.Repository.GetType() {
-			// TODO: validate if check is correct
+		if identity.Equal(p.compRefProv.ref.Identity()) {
 			return p.compRefProv.GetComponentVersionRepository(ctx, identity)
 		}
 	}

@@ -14,44 +14,13 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
 type ComponentVersionRepositoryProvider interface {
 	GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error)
-}
-
-// NewFromRef creates a new ComponentRepository instance for the given component reference.
-// It resolves the appropriate plugin and credentials for the repository.
-func NewFromRef(ctx context.Context, manager *manager.PluginManager, graph credentials.GraphResolver, componentReference string) (*compref.Ref, repository.ComponentVersionRepository, error) {
-	ref, err := compref.Parse(componentReference)
-	if err != nil {
-		return nil, nil, fmt.Errorf("parsing component reference %q failed: %w", componentReference, err)
-	}
-
-	var creds map[string]string
-	identity, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, ref.Repository)
-	if err == nil {
-		if graph != nil {
-			if creds, err = graph.Resolve(ctx, identity); err != nil {
-				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", ref.Repository, err.Error()))
-			}
-		}
-	} else {
-		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", ref.Repository, "error", err)
-	}
-
-	prov, err := manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, ref.Repository, creds)
-	if err != nil {
-		return nil, nil, fmt.Errorf("getting component version repository for %q failed: %w", ref.Repository, err)
-	}
-
-	return ref, prov, nil
 }
 
 func Version(ctx context.Context, component, version string, repo repository.ComponentVersionRepository) (string, error) {
