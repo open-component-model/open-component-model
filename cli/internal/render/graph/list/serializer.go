@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 
-	"ocm.software/open-component-model/bindings/go/dag"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/cli/internal/render"
 )
 

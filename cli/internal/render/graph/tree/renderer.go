@@ -11,8 +11,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/jedib0t/go-pretty/v6/table"
-	"ocm.software/open-component-model/bindings/go/dag"
 
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/cli/internal/render/graph"
 )
