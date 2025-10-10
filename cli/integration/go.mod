@@ -106,7 +106,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251007133026-a1de8fc5798a // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
-	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
+	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251002101013-e0cc2f41d070 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect
