@@ -4,12 +4,6 @@ go 1.25.1
 
 replace ocm.software/open-component-model/cli => ../
 
-replace (
-	ocm.software/open-component-model/bindings/go/constructor => ../../bindings/go/constructor
-	ocm.software/open-component-model/bindings/go/dag => ../../bindings/go/dag
-	ocm.software/open-component-model/bindings/go/descriptor/runtime => ../../bindings/go/descriptor/runtime
-)
-
 require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -144,7 +138,7 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect
 	ocm.software/ocm v0.31.0 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251007133026-a1de8fc5798a // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251010080918-cf762d5f2c83 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251002101013-e0cc2f41d070 // indirect
