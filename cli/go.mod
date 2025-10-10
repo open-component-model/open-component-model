@@ -33,7 +33,10 @@ require (
 )
 
 replace ocm.software/open-component-model/bindings/go/plugin => ../bindings/go/plugin
+
 replace ocm.software/open-component-model/bindings/go/oci => ../bindings/go/oci
+
+replace ocm.software/open-component-model/bindings/go/repository => ../bindings/go/repository
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
@@ -43,6 +46,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
