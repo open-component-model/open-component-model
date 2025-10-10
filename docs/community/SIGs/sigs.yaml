@@ -17,8 +17,8 @@ sigs:
       url: 
       notes: https://github.com/open-component-model/open-component-model/tree/main/community/docs/SIGs/Runtime/meeting-notes
     communication:
-      mailing_list: https://lists.neonephos.org/g/open-component-model-sig-runtime
-      zulip:
+      mailing_list: open-component-model-sig-runtime@lists.neonephos.org
+      zulip: https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support
     repositories:
       - https://github.com/open-component-model/open-component-model
     status: active

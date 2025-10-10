@@ -133,5 +133,5 @@ The mission of SIG Runtime is to allow OCM components to be:
 
 - **Zulip Channel:** [neonephos-ocm-support](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support)
 - **Slack Channel in Kubernetes Slack (_deprecated_):** [#open-component-model-sig-runtime](https://kubernetes.slack.com/archives/C05UWBE8R1D)
-- **Mailing list:** `open-component-model-sig-runtime@lists.neonephos.org` (to be created)
+- **Mailing list:** `open-component-model-sig-runtime@lists.neonephos.org`
 - **Docs & notes:** under [docs/community/SIGs/Runtime/](.) and meeting notes folder. Technical decisions are centrally tracked and aligned with TSC via [ADRs](./../../../adr)
