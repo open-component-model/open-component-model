@@ -17,6 +17,7 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -34,6 +35,7 @@ type PluginManager struct {
 	// Registries containing various typed plugins. These should be called directly using the
 	// plugin manager to locate a required plugin.
 	ComponentVersionRepositoryRegistry *componentversionrepository.RepositoryRegistry
+	ComponentListerRegistry            *componentlister.ComponentListerRegistry
 	CredentialRepositoryRegistry       *credentialrepository.RepositoryRegistry
 	InputRegistry                      *input.RepositoryRegistry
 	DigestProcessorRegistry            *digestprocessor.RepositoryRegistry
@@ -55,6 +57,7 @@ type PluginManager struct {
 func NewPluginManager(ctx context.Context) *PluginManager {
 	return &PluginManager{
 		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
+		ComponentListerRegistry:            componentlister.NewComponentListerRegistry(ctx),
 		CredentialRepositoryRegistry:       credentialrepository.NewCredentialRepositoryRegistry(ctx),
 		InputRegistry:                      input.NewInputRepositoryRegistry(ctx),
 		DigestProcessorRegistry:            digestprocessor.NewDigestProcessorRegistry(ctx),
@@ -154,6 +157,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 
 	errs = errors.Join(errs,
 		pm.ComponentVersionRepositoryRegistry.Shutdown(ctx),
+		pm.ComponentListerRegistry.Shutdown(ctx),
 		pm.CredentialRepositoryRegistry.Shutdown(ctx),
 		pm.InputRegistry.Shutdown(ctx),
 		pm.DigestProcessorRegistry.Shutdown(ctx),
@@ -254,6 +258,13 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 			for _, typ := range typs {
 				slog.DebugContext(ctx, "adding component version repository plugin", "id", plugin.ID)
 				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, typ.Type); err != nil {
+					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+				}
+			}
+		case mtypes.ComponentListerPluginType:
+			for _, typ := range typs {
+				slog.DebugContext(ctx, "adding component lister plugin", "id", plugin.ID)
+				if err := pm.ComponentListerRegistry.AddPlugin(plugin, typ.Type); err != nil {
 					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 				}
 			}
