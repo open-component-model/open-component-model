@@ -150,7 +150,10 @@ func (t *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.Direct
 	}
 
 	// Determine children to build proper nesting tree
-	children := graph.GetNeighborsSorted(ctx, vertex)
+	children, err := graph.GetNeighborsSorted(ctx, vertex)
+	if err != nil {
+		return fmt.Errorf("failed to get sorted children of vertex %v: %w", vertex.ID, err)
+	}
 	hasChildren := len(children) > 0
 	nesting := buildNesting(t.style, ancestorsHasMore, isLast, hasChildren)
 	t.tableWriter.AppendRow(table.Row{nesting, row.Component, row.Version, row.Provider, row.Identity})
