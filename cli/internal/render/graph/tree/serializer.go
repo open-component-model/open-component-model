@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 
-	"ocm.software/ocm/api/ocm/plugin/descriptor"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -37,7 +36,7 @@ func defaultVertexSerializer[T cmp.Ordered]() VertexSerializer[T] {
 		}
 		component, ok := untypedComponent.(*descruntime.Descriptor)
 		if !ok {
-			return Row{}, fmt.Errorf("vertex %v has a value attribute of unexpected type %T, expected type %T", vertex.ID, untypedComponent, &descriptor.Descriptor{})
+			return Row{}, fmt.Errorf("vertex %v has a value attribute of unexpected type %T, expected type %T", vertex.ID, untypedComponent, &descruntime.Descriptor{})
 		}
 		return Row{
 			Component: component.Component.Name,
