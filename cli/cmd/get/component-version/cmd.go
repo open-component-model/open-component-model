@@ -87,7 +87,8 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
   static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
 	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
-	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
+	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
+	// cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
 	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
@@ -128,8 +129,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting semver-constraint flag failed: %w", err)
 	}
-	// TODO(fabianburth): add concurrency limit to the dag discovery and
-	//  processing logic
+	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
 	// concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
 	// if err != nil {
 	//	 return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
