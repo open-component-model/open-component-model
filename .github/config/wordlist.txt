@@ -538,3 +538,5 @@ checksums
 rc
 rcs
 pem
+superset
+dl
