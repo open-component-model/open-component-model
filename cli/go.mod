@@ -2,12 +2,6 @@ module ocm.software/open-component-model/cli
 
 go 1.25.1
 
-replace (
-	ocm.software/open-component-model/bindings/go/constructor => ../bindings/go/constructor
-	ocm.software/open-component-model/bindings/go/dag => ../bindings/go/dag
-	ocm.software/open-component-model/bindings/go/descriptor/runtime => ../bindings/go/descriptor/runtime
-)
-
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/jedib0t/go-pretty/v6 v6.6.8
@@ -20,7 +14,7 @@ require (
 	ocm.software/ocm v0.31.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251007133026-a1de8fc5798a
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251010080918-cf762d5f2c83
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
