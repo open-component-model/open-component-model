@@ -231,75 +231,66 @@ func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, roots [
 func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
 	// Initialize renderer based on the requested output format.
 	switch format {
-	case render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatYAML.String():
-		serializer := buildMachineFormatSerializer(format)
+	case render.OutputFormatJSON.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatJSON))
+		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case render.OutputFormatNDJSON.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatNDJSON))
+		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case render.OutputFormatYAML.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatYAML))
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTree.String():
 		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
 	case render.OutputFormatTable.String():
-		serializer := buildTableFormatSerializer()
+		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	default:
 		return nil, fmt.Errorf("invalid output format %q", format)
 	}
 }
 
-func buildMachineFormatSerializer(format string) list.ListSerializer[string] {
-	vertexSerializer := list.VertexSerializerFunc[string](func(vertex *dag.Vertex[string]) (any, error) {
+func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
+	untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
+	if !ok {
+		return nil, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
+	}
+	descriptor, ok := untypedDescriptor.(*descruntime.Descriptor)
+	if !ok {
+		return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, untypedDescriptor)
+	}
+	descriptorV2, err := descruntime.ConvertToV2(descriptorv2.Scheme, descriptor)
+	if err != nil {
+		return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
+	}
+	return descriptorV2, nil
+}
+
+func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	t := table.NewWriter()
+	t.SetOutputMirror(writer)
+	t.AppendHeader(table.Row{"Component", "Version", "Provider"})
+	for _, vertex := range vertices {
 		untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
 		if !ok {
-			return nil, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
+			return fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
 		}
 		descriptor, ok := untypedDescriptor.(*descruntime.Descriptor)
 		if !ok {
-			return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, untypedDescriptor)
+			return fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, descriptor)
 		}
-		descriptorV2, err := descruntime.ConvertToV2(descriptorv2.Scheme, descriptor)
-		if err != nil {
-			return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
-		}
-		return descriptorV2, nil
-	})
 
-	switch format {
-	case render.OutputFormatJSON.String():
-		return list.NewSerializer(list.WithVertexSerializer(vertexSerializer), list.WithOutputFormat[string](render.OutputFormatJSON))
-	case render.OutputFormatYAML.String():
-		return list.NewSerializer(list.WithVertexSerializer(vertexSerializer), list.WithOutputFormat[string](render.OutputFormatYAML))
-	case render.OutputFormatNDJSON.String():
-		return list.NewSerializer(list.WithVertexSerializer(vertexSerializer), list.WithOutputFormat[string](render.OutputFormatNDJSON))
-	default:
-		panic(fmt.Errorf("invalid machine output format %q", format)) // should not happen as checked before
+		t.AppendRow(table.Row{descriptor.Component.Name, descriptor.Component.Version, descriptor.Component.Provider.Name})
 	}
-}
-
-func buildTableFormatSerializer() list.ListSerializer[string] {
-	return list.ListSerializerFunc[string](func(writer io.Writer, vertices []*dag.Vertex[string]) error {
-		t := table.NewWriter()
-		t.SetOutputMirror(writer)
-		t.AppendHeader(table.Row{"Component", "Version", "Provider"})
-		for _, vertex := range vertices {
-			untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
-			if !ok {
-				return fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
-			}
-			descriptor, ok := untypedDescriptor.(*descruntime.Descriptor)
-			if !ok {
-				return fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, descriptor)
-			}
-
-			t.AppendRow(table.Row{descriptor.Component.Name, descriptor.Component.Version, descriptor.Component.Provider.Name})
-		}
-		t.SetColumnConfigs([]table.ColumnConfig{
-			{Number: 1, AutoMerge: true},
-			{Number: 3, AutoMerge: true},
-		})
-		style := table.StyleLight
-		style.Options.DrawBorder = false
-		t.SetStyle(style)
-		t.Render()
-		return nil
+	t.SetColumnConfigs([]table.ColumnConfig{
+		{Number: 1, AutoMerge: true},
+		{Number: 3, AutoMerge: true},
 	})
+	style := table.StyleLight
+	style.Options.DrawBorder = false
+	t.SetStyle(style)
+	t.Render()
+	return nil
 }
 
 type resolverAndDiscoverer struct {
