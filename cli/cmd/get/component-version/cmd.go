@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -90,7 +91,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
 	// cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
-	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
+	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels)")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
 
 	return cmd
@@ -323,7 +324,9 @@ func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntim
 			children[index] = reference.ToComponentIdentity().String()
 		}
 		r.depth++
+		slog.InfoContext(ctx, "discovering children", "component", parent.Component.ToIdentity().String(), "children", children, "depth", r.depth, "depth limit", r.recursive)
 		return children, nil
 	}
+	slog.InfoContext(ctx, "skipped discovering children, recursion limit reached", "component", parent.Component.ToIdentity().String(), "depth", r.depth, "depth limit", r.recursive)
 	return nil, nil
 }

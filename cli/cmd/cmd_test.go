@@ -208,7 +208,19 @@ COMPONENT                   │ VERSION │ PROVIDER
 // Test_Get_Component_Version_Formats_Recursive tests the different output formats for the get cv command
 func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 	// Setup test repository
+	leafaa := createTestDescriptor("ocm.software/leaf-a-a", "0.0.1")
 	leafa := createTestDescriptor("ocm.software/leaf-a", "0.0.1")
+	leafa.Component.References = []descriptor.Reference{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "leaf-a-a",
+					Version: leafaa.Component.Version,
+				},
+			},
+			Component: leafaa.Component.Name,
+		},
+	}
 	leafb := createTestDescriptor("ocm.software/leaf-b", "0.0.1")
 	root := createTestDescriptor("ocm.software/root", "0.0.1")
 	root.Component.References = []descriptor.Reference{
@@ -232,7 +244,7 @@ func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 		},
 	}
 
-	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, root, leafa, leafb)
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, root, leafa, leafb, leafaa)
 	require.NoError(t, err)
 
 	ref := compref.Ref{
@@ -251,8 +263,8 @@ func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 		expectedError  bool
 	}{
 		{
-			name: "Default Options (Table)",
-			args: []string{"get", "cv", path, "--recursive=-1"},
+			name: "Default Options (Table) with recursive=1",
+			args: []string{"get", "cv", path, "--recursive=1"},
 			expectedOutput: `
 COMPONENT           │ VERSION │ PROVIDER     
 ─────────────────────┼─────────┼──────────────
@@ -263,8 +275,8 @@ COMPONENT           │ VERSION │ PROVIDER
 			expectedError: false,
 		},
 		{
-			name: "YAML output",
-			args: []string{"get", "cv", path, "--output=yaml", "--recursive=-1"},
+			name: "YAML output with recursive=1",
+			args: []string{"get", "cv", path, "--output=yaml", "--recursive=1"},
 			expectedOutput: `
 - component:
     componentReferences:
@@ -291,7 +303,14 @@ COMPONENT           │ VERSION │ PROVIDER
   meta:
     schemaVersion: v2
 - component:
-    componentReferences: null
+    componentReferences:
+    - componentName: ocm.software/leaf-a-a
+      digest:
+        hashAlgorithm: ""
+        normalisationAlgorithm: ""
+        value: ""
+      name: leaf-a-a
+      version: 0.0.1
     name: ocm.software/leaf-a
     provider: ocm.software
     repositoryContexts: null
@@ -314,24 +333,34 @@ COMPONENT           │ VERSION │ PROVIDER
 			expectedError: false,
 		},
 		{
-			name:           "JSON output",
-			args:           []string{"get", "cv", path, "--output=json", "--recursive=-1"},
+			name:           "JSON output with recursive=1",
+			args:           []string{"get", "cv", path, "--output=json", "--recursive=1"},
 			expectedOutput: "", // JSON output is handled differently
 			expectedError:  false,
 		},
 		{
-			name:           "NDJSON output",
-			args:           []string{"get", "cv", path, "--output=ndjson", "--recursive=-1"},
+			name:           "NDJSON output with recursive=1",
+			args:           []string{"get", "cv", path, "--output=ndjson", "--recursive=1"},
 			expectedOutput: "", // JSON output is handled differently
 			expectedError:  false,
 		},
 		{
-			name: "tree output",
-			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
+			name: "tree output with recursive=1",
+			args: []string{"get", "cv", path, "--output=tree", "--recursive=1"},
 			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
  └─ ●     ocm.software/root    0.0.1    ocm.software  name=ocm.software/root,version=0.0.1   
     ├─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 
     └─    ocm.software/leaf-b  0.0.1    ocm.software  name=ocm.software/leaf-b,version=0.0.1`,
+			expectedError: false,
+		},
+		{
+			name: "tree output",
+			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
+			expectedOutput: `NESTING   COMPONENT              VERSION  PROVIDER      IDENTITY                                 
+ └─ ●      ocm.software/root      0.0.1    ocm.software  name=ocm.software/root,version=0.0.1     
+    ├─ ●   ocm.software/leaf-a    0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1   
+    │  └─  ocm.software/leaf-a-a  0.0.1    ocm.software  name=ocm.software/leaf-a-a,version=0.0.1 
+    └─     ocm.software/leaf-b    0.0.1    ocm.software  name=ocm.software/leaf-b,version=0.0.1`,
 			expectedError: false,
 		},
 	}
@@ -388,13 +417,24 @@ COMPONENT           │ VERSION │ PROVIDER
 				}
 				expectedLeafA := map[string]any{
 					"component": map[string]any{
-						"componentReferences": nil,
-						"name":                "ocm.software/leaf-a",
-						"provider":            "ocm.software",
-						"repositoryContexts":  nil,
-						"resources":           nil,
-						"sources":             nil,
-						"version":             "0.0.1",
+						"componentReferences": []any{
+							map[string]any{
+								"name":          "leaf-a-a",
+								"version":       "0.0.1",
+								"componentName": "ocm.software/leaf-a-a",
+								"digest": map[string]any{
+									"hashAlgorithm":          "",
+									"normalisationAlgorithm": "",
+									"value":                  "",
+								},
+							},
+						},
+						"name":               "ocm.software/leaf-a",
+						"provider":           "ocm.software",
+						"repositoryContexts": nil,
+						"resources":          nil,
+						"sources":            nil,
+						"version":            "0.0.1",
 					},
 					"meta": map[string]any{
 						"schemaVersion": "v2",
