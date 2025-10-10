@@ -12,7 +12,6 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -26,7 +25,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/repository"
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -373,8 +371,8 @@ type constructorProvider struct {
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
 	id := runtime.Identity{}
-	id[descruntime.IdentityAttributeName] = name
-	id[descruntime.IdentityAttributeVersion] = version
+	id[descriptor.IdentityAttributeName] = name
+	id[descriptor.IdentityAttributeVersion] = version
 	return prov.repositoryProvider.GetComponentVersionRepository(ctx, id)
 }
 

@@ -153,7 +153,6 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 
 	reference := args[0]
 
-	//nolint:staticcheck // no replacement for resolvers available yet
 	config := ocmContext.Configuration()
 	ref, err := compref.Parse(reference)
 	if err != nil {

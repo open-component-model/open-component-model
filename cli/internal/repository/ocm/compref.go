@@ -20,7 +20,8 @@ type compRefProvider struct {
 
 func newFromCompRef(componentReference string,
 	manager *manager.PluginManager,
-	graph credentials.GraphResolver, options ...compref.Option) (*compRefProvider, error) {
+	graph credentials.GraphResolver, options ...compref.Option,
+) (*compRefProvider, error) {
 	ref, err := compref.Parse(componentReference, options...)
 	if err != nil {
 		return nil, fmt.Errorf("parsing component reference: %w", err)

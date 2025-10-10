@@ -15,7 +15,6 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"sigs.k8s.io/yaml"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -23,6 +22,7 @@ import (
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
