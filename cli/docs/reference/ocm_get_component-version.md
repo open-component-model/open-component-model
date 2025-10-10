@@ -54,7 +54,6 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 ### Options
 
 ```
-      --concurrency-limit int      maximum amount of parallel requests to the repository for resolving component versions (default 4)
       --display-mode enum          display mode can be used in combination with --recursive
                                      static: print the output once the complete component graph is discovered
                                      live (experimental): continuously updates the output to represent the current discovery state of the component graph
@@ -63,7 +62,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
       --latest                     if set, only the latest version of the component is returned
   -o, --output enum                output format of the component descriptors
                                    (must be one of [json ndjson table tree yaml]) (default table)
-      --recursive int[=-1]         depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))
+      --recursive int[=-1]         depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels)
       --semver-constraint string   semantic version constraint restricting which versions to output (default "> 0.0.0-0")
 ```
 
