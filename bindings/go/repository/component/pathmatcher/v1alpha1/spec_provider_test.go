@@ -91,6 +91,22 @@ func Test_ResolverRepository_GetRepositorySpec(t *testing.T) {
 			},
 			shouldReturnRep: true,
 			err:             assert.NoError,
+		}, {
+			// glob component name pattern
+			name:      "glob pattern wildcard match",
+			component: "ocm.software/core/test",
+			repos: []*resolverspec.Resolver{
+				{
+					Repository:           nil,
+					ComponentNamePattern: "ocm.software/core/negative",
+				},
+				{
+					Repository:           &runtime.Raw{},
+					ComponentNamePattern: "*",
+				},
+			},
+			shouldReturnRep: true,
+			err:             assert.NoError,
 		},
 		{
 			// glob component name pattern no match
