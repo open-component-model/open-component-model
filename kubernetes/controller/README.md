@@ -17,6 +17,7 @@ You should be familiar with the following concepts:
 - [Kubernetes](https://kubernetes.io/) ecosystem
 - [kro](https://kro.run)
 - Kubernetes resource deployer such as [FluxCD](https://fluxcd.io/).
+- [Task](https://taskfile.dev/)
 
 ## Concept
 
@@ -146,13 +147,13 @@ To install the OCM K8s Toolkit into your running Kubernetes cluster, you can use
 ```console
 # In the ocm mono-repo root directory
 cd kubernetes/controller
-make deploy
+task deploy
 ```
 
 or
 
 ```console
-kubectl apply -k https://github.com/open-component-model/open-component-model/kubernetes/controller/config/default?ref=main
+kubectl apply -k "https://github.com/open-component-model/open-component-model/kubernetes/controller/config/default?ref=main"
 ```
 
 > [!IMPORTANT]

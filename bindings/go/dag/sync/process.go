@@ -37,7 +37,7 @@ func (d *GraphProcessor[K, V]) CurrentValue(key K) V {
 	var value V
 	_ = d.graph.WithReadLock(func(g *dag.DirectedAcyclicGraph[K]) error {
 		if v, ok := g.Vertices[key]; ok {
-			value, _ = v.Attributes[attributeValue].(V)
+			value, _ = v.Attributes[AttributeValue].(V)
 		}
 		return nil
 	})

@@ -170,13 +170,13 @@ git describe --tags --match "cli/v[0-9]*"
 
 * **Release Manager:** Orchestrates sprint releases, coordinates RC promotions, decides on emergency patches.  
 * **Maintainers:** Ensure component readiness, validate release quality (together with PO).  
-* **TSC (Technical Steering Committee):** Sign-off for high-risk changes and major decisions.
+* **TSC (Technical Steering Committee):** Approves major changes to release process governance (e.g., changes to the release branching model, tag immutability policy, or support policy).
 
 ### Decision Gates
 
 * **RC → Release Promotion:** Release Manager decision, with maintainer sign-off.
 * **Patch Approval:** Release Manager decision
-* **Major Policy Changes:** TSC approval for e.g., changes in support policy.
+* **Major Policy Changes:** TSC approval (e.g., changes in support policy, release branching, or tag immutability).
 
 ### Example Workflow: Sprint Cycle and Orchestrated Release Day
 

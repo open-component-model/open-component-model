@@ -144,6 +144,20 @@ type Reference struct {
 	Digest Digest `json:"-"`
 }
 
+func (r *Reference) ToComponentIdentity() runtime.Identity {
+	if r == nil {
+		return nil
+	}
+	m := make(runtime.Identity, 2)
+	if r.Component != "" {
+		m[IdentityAttributeName] = r.Component
+	}
+	if r.Version != "" {
+		m[IdentityAttributeVersion] = r.Version
+	}
+	return m
+}
+
 // SourceRef defines a reference to a source.
 // +k8s:deepcopy-gen=true
 type SourceRef struct {

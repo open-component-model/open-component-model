@@ -33,9 +33,9 @@ func (s DiscoveryState) String() string {
 
 // Attribute keys stored on each vertex.
 const (
-	attributeValue          = "dag/value"           // resolved value for the vertex
-	attributeDiscoveryState = "dag/discovery-state" // discovery state
-	attributeOrderIndex     = "dag/order-index"     // order of neighbor edge
+	AttributeValue          = "dag/value"           // resolved value for the vertex
+	AttributeDiscoveryState = "dag/discovery-state" // discovery state
+	AttributeOrderIndex     = "dag/order-index"     // order of neighbor edge
 )
 
 // Discovery states describe how far processing has gone for each vertex.
@@ -88,7 +88,7 @@ func (d *GraphDiscoverer[K, V]) CurrentEdges(key K) []K {
 		for k, edge := range v.Edges {
 			// Order edges by index if present.
 			// If not, we append them in the order they are returned from the iterator (not stable).
-			if idx, ok := edge[attributeOrderIndex]; ok {
+			if idx, ok := edge[AttributeOrderIndex]; ok {
 				edges[idx.(int)] = k
 			} else {
 				panic("edges without order index should never exist")
@@ -107,7 +107,7 @@ func (d *GraphDiscoverer[K, V]) CurrentValue(key K) V {
 		if !ok {
 			return nil
 		}
-		value, _ = v.Attributes[attributeValue].(V)
+		value, _ = v.Attributes[AttributeValue].(V)
 		return nil
 	})
 	return value
@@ -124,7 +124,7 @@ func (d *GraphDiscoverer[K, V]) CurrentState(key K) DiscoveryState {
 			state = DiscoveryStateUnknown
 			return nil
 		}
-		s, ok := v.Attributes[attributeDiscoveryState]
+		s, ok := v.Attributes[AttributeDiscoveryState]
 		if !ok {
 			panic("vertex without discovery state should never exist")
 		}
@@ -196,7 +196,7 @@ func (d *GraphDiscoverer[K, V]) discover(
 	// Add vertex in "discovering" state.
 	if err := d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
 		return d.AddVertex(id, map[string]any{
-			attributeDiscoveryState: DiscoveryStateDiscovering,
+			AttributeDiscoveryState: DiscoveryStateDiscovering,
 		})
 	}); err != nil {
 		return err
@@ -208,10 +208,10 @@ func (d *GraphDiscoverer[K, V]) discover(
 	// Update state after resolution.
 	if err := d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
 		if err != nil {
-			d.Vertices[id].Attributes[attributeDiscoveryState] = DiscoveryStateError
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateError
 		} else {
-			d.Vertices[id].Attributes[attributeDiscoveryState] = DiscoveryStateDiscovered
-			d.Vertices[id].Attributes[attributeValue] = value
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateDiscovered
+			d.Vertices[id].Attributes[AttributeValue] = value
 		}
 		return err
 	}); err != nil {
@@ -224,9 +224,9 @@ func (d *GraphDiscoverer[K, V]) discover(
 	// Update state after neighbor discovery.
 	if err := d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
 		if err != nil {
-			d.Vertices[id].Attributes[attributeDiscoveryState] = DiscoveryStateError
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateError
 		} else {
-			d.Vertices[id].Attributes[attributeValue] = value
+			d.Vertices[id].Attributes[AttributeValue] = value
 		}
 		return err
 	}); err != nil {
@@ -243,7 +243,7 @@ func (d *GraphDiscoverer[K, V]) discover(
 			// Add edge from current vertex to neighbor.
 			return d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
 				return d.AddEdge(id, neighbor, map[string]any{
-					attributeOrderIndex: index,
+					AttributeOrderIndex: index,
 				})
 			})
 		})
@@ -253,9 +253,9 @@ func (d *GraphDiscoverer[K, V]) discover(
 	// Finalize state.
 	return d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
 		if err != nil {
-			d.Vertices[id].Attributes[attributeDiscoveryState] = DiscoveryStateError
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateError
 		} else {
-			d.Vertices[id].Attributes[attributeDiscoveryState] = DiscoveryStateCompleted
+			d.Vertices[id].Attributes[AttributeDiscoveryState] = DiscoveryStateCompleted
 		}
 		return err
 	})
