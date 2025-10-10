@@ -54,7 +54,7 @@ func (d *resolverAndDiscoverer) Discover(ctx context.Context, component *Constru
 	case component.ExternalComponent != nil:
 		children := make([]string, len(component.ExternalComponent.Component.References))
 		for index, ref := range component.ExternalComponent.Component.References {
-			children[index] = ref.ToIdentity().String()
+			children[index] = ref.ToComponentIdentity().String()
 		}
 		return children, nil
 	}
