@@ -159,11 +159,11 @@ func (r *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 			}
 		}
 		if err := r.renderObjects(writer); err != nil {
-			return err
+			return fmt.Errorf("failed to render objects: %w", err)
 		}
 		return nil
 	}); err != nil {
-		return err
+		return fmt.Errorf("failed to traverse and render graph in read lock: %w", err)
 	}
 
 	return nil
