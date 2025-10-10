@@ -16,7 +16,7 @@ import (
 func GetNeighborsSorted[T cmp.Ordered](ctx context.Context, vertex *dag.Vertex[T]) []T {
 	var neighbors []T
 
-	for childId, _ := range vertex.Edges {
+	for childId := range vertex.Edges {
 		neighbors = append(neighbors, childId)
 	}
 

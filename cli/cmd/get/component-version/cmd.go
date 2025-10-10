@@ -9,15 +9,15 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/bindings/go/dag"
-	"ocm.software/open-component-model/bindings/go/repository"
 
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -130,10 +130,10 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 	// TODO(fabianburth): add concurrency limit to the dag discovery and
 	//  processing logic
-	//concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
-	//if err != nil {
-	//	return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
-	//}
+	// concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
+	// if err != nil {
+	//	 return fmt.Errorf("getting concurrency-limit flag failed: %w", err)
+	// }
 	latestOnly, err := cmd.Flags().GetBool(FlagLatest)
 	if err != nil {
 		return fmt.Errorf("getting latest flag failed: %w", err)
@@ -308,8 +308,10 @@ type resolverAndDiscoverer struct {
 	depth      int
 }
 
-var _ syncdag.Resolver[string, *descruntime.Descriptor] = (*resolverAndDiscoverer)(nil)
-var _ syncdag.Discoverer[string, *descruntime.Descriptor] = (*resolverAndDiscoverer)(nil)
+var (
+	_ syncdag.Resolver[string, *descruntime.Descriptor]   = (*resolverAndDiscoverer)(nil)
+	_ syncdag.Discoverer[string, *descruntime.Descriptor] = (*resolverAndDiscoverer)(nil)
+)
 
 func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descruntime.Descriptor, error) {
 	id, err := runtime.ParseIdentity(key)
