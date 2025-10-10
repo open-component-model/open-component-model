@@ -28,21 +28,19 @@ func (f VertexSerializerFunc[T]) Serialize(v *dag.Vertex[T]) (Row, error) {
 	return f(v)
 }
 
-func defaultVertexSerializer[T cmp.Ordered]() VertexSerializer[T] {
-	return VertexSerializerFunc[T](func(vertex *dag.Vertex[T]) (Row, error) {
-		untypedComponent, ok := vertex.Attributes[syncdag.AttributeValue]
-		if !ok {
-			return Row{}, fmt.Errorf("vertex %v does not have a %s attribute", vertex.ID, syncdag.AttributeValue)
-		}
-		component, ok := untypedComponent.(*descruntime.Descriptor)
-		if !ok {
-			return Row{}, fmt.Errorf("vertex %v has a value attribute of unexpected type %T, expected type %T", vertex.ID, untypedComponent, &descruntime.Descriptor{})
-		}
-		return Row{
-			Component: component.Component.Name,
-			Version:   component.Component.Version,
-			Provider:  component.Component.Provider.Name,
-			Identity:  component.Component.ToIdentity().String(),
-		}, nil
-	})
+func defaultVertexSerializer[T cmp.Ordered](vertex *dag.Vertex[T]) (Row, error) {
+	untypedComponent, ok := vertex.Attributes[syncdag.AttributeValue]
+	if !ok {
+		return Row{}, fmt.Errorf("vertex %v does not have a %s attribute", vertex.ID, syncdag.AttributeValue)
+	}
+	component, ok := untypedComponent.(*descruntime.Descriptor)
+	if !ok {
+		return Row{}, fmt.Errorf("vertex %v has a value attribute of unexpected type %T, expected type %T", vertex.ID, untypedComponent, &descruntime.Descriptor{})
+	}
+	return Row{
+		Component: component.Component.Name,
+		Version:   component.Component.Version,
+		Provider:  component.Component.Provider.Name,
+		Identity:  component.Component.ToIdentity().String(),
+	}, nil
 }
