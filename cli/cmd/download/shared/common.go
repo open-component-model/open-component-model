@@ -16,6 +16,7 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
@@ -43,13 +44,13 @@ func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Gr
 }
 
 // DownloadResourceData handles the actual data download from repository
-func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.GraphResolver, repo *ocm.ComponentRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
+func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.GraphResolver, component, version string, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
 	access := res.GetAccess()
 	var data blob.ReadOnlyBlob
 	var err error
 
 	if IsLocal(access) {
-		data, _, err = repo.GetLocalResource(ctx, identity)
+		data, _, err = ocm.GetLocalResource(ctx, identity, component, version, repo)
 	} else {
 		var plugin resource.Repository
 		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)

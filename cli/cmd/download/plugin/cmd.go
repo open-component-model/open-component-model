@@ -22,6 +22,7 @@ import (
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
+	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
@@ -73,6 +74,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 }
 
 func DownloadPlugin(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
 	pluginManager, credentialGraph, logger, err := shared.GetContextItems(cmd)
 	if err != nil {
 		return err
@@ -114,12 +116,21 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	reference := args[0]
-	repo, err := ocm.NewFromRef(cmd.Context(), pluginManager, credentialGraph, reference)
+	// we have a reference and parse it
+	ref, _ := compref.Parse(reference)
+	slog.DebugContext(ctx, "parsed component reference", "reference", reference, "parsed", ref)
+
+	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, nil, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(cmd.Context())
+	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), ref.Identity())
+	if err != nil {
+		return fmt.Errorf("could not access ocm repository: %w", err)
+	}
+
+	desc, err := repo.GetComponentVersion(cmd.Context(), ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
@@ -172,7 +183,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		slog.String("type", res.Type),
 		slog.Any("identity", res.ToIdentity()))
 
-	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, repo, res, resourceIdentity)
+	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, res.Name, res.Version, repo, res, resourceIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading plugin resource for identity %q failed: %w", resourceIdentity, err)
 	}
