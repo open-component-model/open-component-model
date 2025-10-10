@@ -143,7 +143,6 @@ tasks:
       - go work init
       - for: { var: GO_MODULES }
         cmd: 'go work use {{.ITEM}}'
-      - go work sync
 
   generate:
     desc: "Run all Code Generators in the project"

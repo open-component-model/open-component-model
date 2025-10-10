@@ -66,14 +66,16 @@ add component-version --repository oci::http://localhost:8080/my-repo --construc
 ### Options
 
 ```
-      --blob-cache-directory string              path to the blob cache directory (default ".ocm/cache")
-      --component-version-conflict-policy enum   policy to apply when a component version already exists in the repository
-                                                 (must be one of [abort-and-fail replace skip]) (default abort-and-fail)
-      --concurrency-limit int                    maximum number of component versions that can be constructed concurrently. (default 4)
-  -c, --constructor path                         path to the component constructor file (default component-constructor.yaml)
-  -h, --help                                     help for component-version
-  -r, --repository string                        repository ref (default "transport-archive")
-      --skip-reference-digest-processing         skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.
+      --blob-cache-directory string                   path to the blob cache directory (default ".ocm/cache")
+      --component-version-conflict-policy enum        policy to apply when a component version already exists in the repository
+                                                      (must be one of [abort-and-fail replace skip]) (default abort-and-fail)
+      --concurrency-limit int                         maximum number of component versions that can be constructed concurrently. (default 4)
+  -c, --constructor path                              path to the component constructor file (default component-constructor.yaml)
+      --external-component-version-copy-policy enum   policy to apply when a component reference to a component version outside of the constructor or target repository is encountered
+                                                      (must be one of [copy-or-fail skip]) (default skip)
+  -h, --help                                          help for component-version
+  -r, --repository string                             repository ref (default "transport-archive")
+      --skip-reference-digest-processing              skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.
 ```
 
 ### Options inherited from parent commands
