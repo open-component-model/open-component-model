@@ -65,7 +65,7 @@ The mission of SIG Runtime is to allow OCM components to be:
   - Manage releases: versioning, changelogs, upgrade guidance
 
 - **Patterns & Best Practices**
-  - Curate and update reference deployment patterns (Helm, Kustomize, Kro+Flux flows)
+  - Curate and update reference deployment patterns (Helm and Kustomize)
   - Provide tested blueprints for multi-environment delivery, signing, and verification pipelines
   - Publish operational hardening guides (RBAC, audit logging, secret management)
   - Incorporate adoption feedback into evolving best practices
