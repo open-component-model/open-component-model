@@ -3,8 +3,8 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
-	"path"
 
+	"github.com/gobwas/glob"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -41,13 +41,11 @@ func (r *SpecProvider) GetRepositorySpec(_ context.Context, componentIdentity ru
 	}
 
 	for index, resolver := range r.resolvers {
-		ok, err := path.Match(resolver.ComponentNamePattern, componentName)
+		g, err := glob.Compile(resolver.ComponentNamePattern)
 		if err != nil {
-			return nil, fmt.Errorf("failed to match component name %q against pattern %q in resolver index %d: %w", componentName, resolver.ComponentNamePattern, index, err)
+			return nil, fmt.Errorf("failed to compile glob pattern %q in resolver index %d: %w", resolver.ComponentNamePattern, index, err)
 		}
-		if ok {
-			// Found a matching resolver, return its repository specification.
-			// The caller is responsible for validating the specification.
+		if ok := g.Match(componentName); ok {
 			return resolver.Repository, nil
 		}
 	}
