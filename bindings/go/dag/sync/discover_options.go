@@ -14,7 +14,8 @@ import (
 //   - V: value type associated with each vertex (e.g., a struct or object).
 //
 // TODO(fabianburth): Add a recursion depth limit.
-// TODO(jakobmoellerdev): add queue/workerpool to introduce a discovery concurrency limit
+// TODO(jakobmoellerdev): add queue/workerpool to introduce a discovery
+// concurrency limit (https://github.com/open-component-model/ocm-project/issues/705)
 type GraphDiscovererOptions[K cmp.Ordered, V any] struct {
 	// Roots is the set of starting vertex keys for discovery.
 	// Discovery will begin from these vertices and expand recursively.

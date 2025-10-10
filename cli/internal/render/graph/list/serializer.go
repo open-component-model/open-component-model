@@ -8,7 +8,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/cli/internal/render"
 )
 
@@ -25,14 +25,14 @@ type Serializer[T cmp.Ordered] struct {
 
 type VertexSerializer[T cmp.Ordered] interface {
 	// Serialize converts a vertex to an object that can be serialized.
-	Serialize(vertex *syncdag.Vertex[T]) (any, error)
+	Serialize(vertex *dag.Vertex[T]) (any, error)
 }
 
 // VertexSerializerFunc is a function type that implements the VertexSerializer
 // interface.
-type VertexSerializerFunc[T cmp.Ordered] func(vertex *syncdag.Vertex[T]) (any, error)
+type VertexSerializerFunc[T cmp.Ordered] func(vertex *dag.Vertex[T]) (any, error)
 
-func (f VertexSerializerFunc[T]) Serialize(vertex *syncdag.Vertex[T]) (any, error) {
+func (f VertexSerializerFunc[T]) Serialize(vertex *dag.Vertex[T]) (any, error) {
 	return f(vertex)
 }
 
@@ -42,7 +42,7 @@ func NewSerializer[T cmp.Ordered](opts ...SerializerOption[T]) Serializer[T] {
 		opt(&serializer)
 	}
 	if serializer.VertexSerializer == nil {
-		serializer.VertexSerializer = VertexSerializerFunc[T](func(vertex *syncdag.Vertex[T]) (any, error) {
+		serializer.VertexSerializer = VertexSerializerFunc[T](func(vertex *dag.Vertex[T]) (any, error) {
 			return fmt.Sprintf("%v", vertex.ID), nil
 		})
 	}
@@ -52,7 +52,7 @@ func NewSerializer[T cmp.Ordered](opts ...SerializerOption[T]) Serializer[T] {
 	return serializer
 }
 
-func (s Serializer[T]) Serialize(writer io.Writer, vertices []*syncdag.Vertex[T]) error {
+func (s Serializer[T]) Serialize(writer io.Writer, vertices []*dag.Vertex[T]) error {
 	var list []any
 	for _, v := range vertices {
 		obj, err := s.VertexSerializer.Serialize(v)

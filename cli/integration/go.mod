@@ -16,7 +16,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251002101013-e0cc2f41d070
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251009073722-3db19b40ae7d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.9
 	ocm.software/open-component-model/bindings/go/plugin v0.0.7
@@ -104,9 +104,9 @@ require (
 	google.golang.org/grpc v1.75.1 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251007133026-a1de8fc5798a // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251010080918-cf762d5f2c83 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
-	ocm.software/open-component-model/bindings/go/dag v0.0.4 // indirect
+	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251002101013-e0cc2f41d070 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect

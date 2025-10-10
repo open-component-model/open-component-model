@@ -3,7 +3,7 @@ package tree
 import (
 	"cmp"
 
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/dag"
 )
 
 // WithVertexSerializer sets the VertexSerializer for the Renderer.
@@ -14,7 +14,7 @@ func WithVertexSerializer[T cmp.Ordered](serializer VertexSerializer[T]) Rendere
 }
 
 // WithVertexSerializerFunc sets the VertexSerializer based on a function.
-func WithVertexSerializerFunc[T cmp.Ordered](serializerFunc func(*syncdag.Vertex[T]) (Row, error)) RendererOption[T] {
+func WithVertexSerializerFunc[T cmp.Ordered](serializerFunc func(*dag.Vertex[T]) (Row, error)) RendererOption[T] {
 	return func(opts *RendererOptions[T]) {
 		opts.VertexSerializer = VertexSerializerFunc[T](serializerFunc)
 	}
