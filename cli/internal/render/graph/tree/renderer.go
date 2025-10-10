@@ -61,7 +61,7 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 	}
 
 	if options.VertexSerializer == nil {
-		options.VertexSerializer = defaultVertexSerializer[T]()
+		options.VertexSerializer = VertexSerializerFunc[T](defaultVertexSerializer[T])
 	}
 
 	if len(options.Roots) == 0 {
