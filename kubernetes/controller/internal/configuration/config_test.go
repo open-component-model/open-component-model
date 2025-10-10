@@ -347,20 +347,18 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 						Namespace: "default",
 					},
 					Data: map[string][]byte{
-						v1alpha1.OCMConfigKey: []byte(`
-							{
-								"type": "generic.config.ocm.software/v1",
-								"configurations": [
-							{
-								"type": "filesystem.config.ocm.software/v1alpha1",
-								"tempFolder": "/tmp/test"
-							},
-							{
-								"type": "whatever.config.ocm.software/v1alpha1",
-								"whatever": "whatever"
-							}
-						]
-					}`),
+						v1alpha1.OCMConfigKey: []byte(`{
+							"type": "generic.config.ocm.software/v1",
+							"configurations": [
+								{
+									"type": "filesystem.config.ocm.software/v1alpha1",
+									"tempFolder": "/tmp/test"
+								},
+								{
+									"type": "whatever.config.ocm.software/v1alpha1",
+									"whatever": "whatever"
+								}
+						]}`),
 					},
 				},
 				{
@@ -369,20 +367,18 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 						Namespace: "default",
 					},
 					Data: map[string][]byte{
-						v1alpha1.OCMConfigKey: []byte(`
-							{
-								"type": "generic.config.ocm.software/v1",
-								"configurations": [
-							{
-								"type": "whatever.config.ocm.software/v1alpha1",
-								"whatever": "whatever"
-							},
-							{
-								"type": "filesystem.config.ocm.software/v1alpha1",
-								"tempFolder": "/tmp/test"
-							}
-						]
-						}`),
+						v1alpha1.OCMConfigKey: []byte(`{
+							"type": "generic.config.ocm.software/v1",
+							"configurations": [
+								{
+									"type": "whatever.config.ocm.software/v1alpha1",
+									"whatever": "whatever"
+								},
+								{
+									"type": "filesystem.config.ocm.software/v1alpha1",
+									"tempFolder": "/tmp/test"
+								}
+						]}`),
 					},
 				},
 			},
