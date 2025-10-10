@@ -177,7 +177,10 @@ func (r *Renderer[T]) traverseGraph(ctx context.Context, lockedGraph *dag.Direct
 	r.vertices = append(r.vertices, vertex)
 
 	// Get children and sort them for stable output
-	children := graphutils.GetNeighborsSorted(ctx, vertex)
+	children, err := graphutils.GetNeighborsSorted(ctx, vertex)
+	if err != nil {
+		return fmt.Errorf("failed to get sorted children of vertex %v: %w", vertex.ID, err)
+	}
 
 	for _, child := range children {
 		if err := r.traverseGraph(ctx, lockedGraph, child); err != nil {
