@@ -63,8 +63,10 @@ func (p *processor) ProcessValue(ctx context.Context, component *ConstructorOrEx
 		if err := p.processExternalComponent(ctx, component.ExternalComponent); err != nil {
 			return fmt.Errorf("failed processing external component: %w", err)
 		}
+	default:
+		return fmt.Errorf("expected node value of type %T to have either a constructor component or an external component", component)
 	}
-	return fmt.Errorf("expected node value of type %T to have either a constructor component or an external component", component)
+	return nil
 }
 
 func (p *processor) processConstructorComponent(ctx context.Context, component *constructor.Component) error {

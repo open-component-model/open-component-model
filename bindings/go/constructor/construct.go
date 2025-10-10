@@ -32,11 +32,11 @@ var ErrShouldSkipConstruction = errors.New("should skip construction")
 type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in topological order.
-	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]descriptor.Descriptor, error)
+	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
 }
 
 // ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
-func ConstructDefault(ctx context.Context, constructor *constructor.ComponentConstructor, opts Options) ([]descriptor.Descriptor, error) {
+func ConstructDefault(ctx context.Context, constructor *constructor.ComponentConstructor, opts Options) ([]*descriptor.Descriptor, error) {
 	return NewDefaultConstructor(opts).Construct(ctx, constructor)
 }
 
@@ -68,7 +68,7 @@ type ConstructorOrExternalComponent struct {
 	ExternalComponent    *descriptor.Descriptor
 }
 
-func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]descriptor.Descriptor, error) {
+func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
 	logger := log.Base().With("operation", "constructComponent")
 
 	if c.opts.ResourceInputMethodProvider == nil {
@@ -93,13 +93,13 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 		return nil, fmt.Errorf("failed to constructComponent components from graph: %w", err)
 	}
 
-	constructedDescriptors := make([]descriptor.Descriptor, len(componentConstructor.Components))
+	constructedDescriptors := make([]*descriptor.Descriptor, len(componentConstructor.Components))
 	for index, component := range componentConstructor.Components {
 		desc, ok := processedDescriptors[component.ToIdentity().String()]
 		if !ok {
 			return nil, fmt.Errorf("component %s is expected to have been constructed but was not found in processed descriptors", component.ToIdentity())
 		}
-		constructedDescriptors[index] = *desc
+		constructedDescriptors[index] = desc
 	}
 	return constructedDescriptors, nil
 }
