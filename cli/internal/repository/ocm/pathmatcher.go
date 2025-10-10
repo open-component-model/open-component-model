@@ -26,7 +26,8 @@ func newFromConfigWithPathMatcher(
 	ctx context.Context,
 	manager *manager.PluginManager,
 	graph credentials.GraphResolver,
-	resolvers []*resolverspec.Resolver) (*resolverProvider, error) {
+	resolvers []*resolverspec.Resolver,
+) (*resolverProvider, error) {
 	if len(resolvers) == 0 {
 		return nil, fmt.Errorf("no resolvers configured")
 	}

@@ -27,7 +27,8 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 	credentialGraph credentials.GraphResolver,
 	config *genericv1.Config,
 	componentReference string,
-	options ...compref.Option) (ComponentVersionRepositoryProvider, error) {
+	options ...compref.Option,
+) (ComponentVersionRepositoryProvider, error) {
 	var (
 		//nolint:staticcheck // compatibility mode for deprecated resolvers
 		fallbackResolvers []*resolverruntime.Resolver
@@ -70,6 +71,7 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 
 		// add compref as first entry to fallback list if available to mimic legacy behavior
 		if ref != nil {
+			//nolint:staticcheck // compatibility mode for deprecated resolvers
 			var finalResolvers []*resolverruntime.Resolver
 			if ref.Repository != nil {
 				//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575

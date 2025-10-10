@@ -11,22 +11,24 @@ import (
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
-
 	//nolint:staticcheck // compatibility mode for deprecated resolvers
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type fallbackProvider struct {
-	manager   *manager.PluginManager
-	graph     credentials.GraphResolver
+	manager *manager.PluginManager
+	graph   credentials.GraphResolver
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	resolvers []*resolverruntime.Resolver
 }
 
 func newFromConfigWithFallback(
 	manager *manager.PluginManager,
 	graph credentials.GraphResolver,
-	resolvers []*resolverruntime.Resolver) *fallbackProvider {
+	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
+	resolvers []*resolverruntime.Resolver,
+) *fallbackProvider {
 	// TODO: add a fallback entry with wildcard * which is being injected by constructor as resolver
 	// set as MAX PRIO in this case
 	return &fallbackProvider{
