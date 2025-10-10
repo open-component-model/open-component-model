@@ -64,7 +64,7 @@ func (p *processor) ProcessValue(ctx context.Context, component *ConstructorOrEx
 			return fmt.Errorf("failed processing external component: %w", err)
 		}
 	}
-	return nil
+	return fmt.Errorf("expected node value of type %T to have either a constructor component or an external component", component)
 }
 
 func (p *processor) processConstructorComponent(ctx context.Context, component *constructor.Component) error {
@@ -80,6 +80,10 @@ func (p *processor) processConstructorComponent(ctx context.Context, component *
 		if err != nil {
 			return fmt.Errorf("missing dependency %s for component %s", id, component.ToIdentity().String())
 		}
+		// We use the `ToIdentity` here, because a component may have multiple
+		// references to the same component (so, multiple references may have
+		// the same component name and version, but different names and/or extra
+		// identities).
 		referencedComponents[ref.ToIdentity().String()] = refDescriptor
 	}
 	if p.constructor.opts.OnStartComponentConstruct != nil {
