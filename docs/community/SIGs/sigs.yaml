@@ -17,7 +17,7 @@ sigs:
       url: 
       notes: https://github.com/open-component-model/open-component-model/tree/main/community/docs/SIGs/Runtime/meeting-notes
     communication:
-      mailing_list:
+      mailing_list: https://lists.neonephos.org/g/open-component-model-sig-runtime
       slack:
     repositories:
       - https://github.com/open-component-model/open-component-model
