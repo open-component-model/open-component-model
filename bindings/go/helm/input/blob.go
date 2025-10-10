@@ -41,6 +41,7 @@ const (
 )
 
 const (
+	// DefaultHTTPTimeout
 	// The cost timeout references curl's default connection timeout.
 	// https://github.com/curl/curl/blob/master/lib/connect.h#L40C21-L40C21
 	// The helm commands are usually executed manually. Considering the acceptable waiting time, we reduced the entire request time to 120s.
@@ -431,7 +432,7 @@ func pushChartAndGenerateLayers(ctx context.Context, chart *ReadOnlyChart, targe
 			return nil, nil, nil, fmt.Errorf("failed to create and push helm chart provenance: %w", err)
 		}
 	}
-	return
+	return configLayer, chartLayer, provLayer, err
 }
 
 func pushConfigLayer(ctx context.Context, name, version string, target oras.Target) (_ *ociImageSpecV1.Descriptor, err error) {

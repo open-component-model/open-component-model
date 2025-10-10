@@ -7,9 +7,11 @@ import (
 	extractspecv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
@@ -31,19 +33,23 @@ func Register(
 	repository.MustAddToScheme(scheme)
 	access.MustAddToScheme(scheme)
 
-	manifests := inmemory.New()
-	layers := inmemory.New()
+	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(Creator), provider.WithTempDir(filesystemConfig.TempFolder))
 
-	cvRepoPlugin := ComponentVersionRepositoryPlugin{manifests: manifests, layers: layers, filesystemConfig: filesystemConfig}
-	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: manifests, layers: layers, filesystemConfig: filesystemConfig}
+	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: inmemory.New(), layers: inmemory.New(), filesystemConfig: filesystemConfig}
 	ociBlobTransformerPlugin := transformer.New(logger)
 
 	return errors.Join(
 		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 			scheme,
 			compverRegistry,
-			&cvRepoPlugin,
+			CachingComponentVersionRepositoryProvider,
 			&ociv1.Repository{},
+		),
+		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
+			scheme,
+			compverRegistry,
+			CachingComponentVersionRepositoryProvider,
+			&ctfv1.Repository{},
 		),
 		resource.RegisterInternalResourcePlugin(
 			scheme,
