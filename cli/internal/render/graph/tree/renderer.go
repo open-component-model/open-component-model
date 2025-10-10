@@ -118,7 +118,9 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 
 	if err := t.graph.WithReadLock(func(lockedGraph *dag.DirectedAcyclicGraph[T]) error {
 		slog.DebugContext(ctx, "locking graph for traversal", "roots", roots)
-		defer slog.DebugContext(ctx, "unlocking graph after traversal")
+		defer func() {
+			slog.DebugContext(ctx, "unlocking graph after traversal")
+		}()
 
 		for i, root := range roots {
 			isLast := i == len(roots)-1
