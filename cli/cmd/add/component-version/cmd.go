@@ -40,12 +40,13 @@ import (
 )
 
 const (
-	FlagConcurrencyLimit               = "concurrency-limit"
-	FlagRepositoryRef                  = "repository"
-	FlagComponentConstructorPath       = "constructor"
-	FlagBlobCacheDirectory             = "blob-cache-directory"
-	FlagComponentVersionConflictPolicy = "component-version-conflict-policy"
-	FlagSkipReferenceDigestProcessing  = "skip-reference-digest-processing"
+	FlagConcurrencyLimit                   = "concurrency-limit"
+	FlagRepositoryRef                      = "repository"
+	FlagComponentConstructorPath           = "constructor"
+	FlagBlobCacheDirectory                 = "blob-cache-directory"
+	FlagComponentVersionConflictPolicy     = "component-version-conflict-policy"
+	FlagExternalComponentVersionCopyPolicy = "external-component-version-copy-policy"
+	FlagSkipReferenceDigestProcessing      = "skip-reference-digest-processing"
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
@@ -58,6 +59,31 @@ const (
 	ComponentVersionConflictPolicySkip         ComponentVersionConflictPolicy = "skip"
 	ComponentVersionConflictPolicyReplace      ComponentVersionConflictPolicy = "replace"
 )
+
+type ExternalComponentVersionCopyPolicy string
+
+const (
+	ExternalComponentVersionCopyPolicyCopyOrFail ExternalComponentVersionCopyPolicy = "copy-or-fail"
+	ExternalComponentVersionCopyPolicySkip       ExternalComponentVersionCopyPolicy = "skip"
+)
+
+func (p ExternalComponentVersionCopyPolicy) ToConstructorPolicy() constructor.ExternalComponentVersionCopyPolicy {
+	switch p {
+	case ExternalComponentVersionCopyPolicyCopyOrFail:
+		return constructor.ExternalComponentVersionCopyPolicyCopyOrFail
+	case ExternalComponentVersionCopyPolicySkip:
+		return constructor.ExternalComponentVersionCopyPolicySkip
+	default:
+		return constructor.ExternalComponentVersionCopyPolicySkip
+	}
+}
+
+func ExternalComponentVersionCopyPolicies() []string {
+	return []string{
+		string(ExternalComponentVersionCopyPolicySkip),
+		string(ExternalComponentVersionCopyPolicyCopyOrFail),
+	}
+}
 
 func (p ComponentVersionConflictPolicy) ToConstructorConflictPolicy() constructor.ComponentVersionConflictPolicy {
 	switch p {
@@ -141,6 +167,7 @@ add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.y
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the component constructor file")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
+	enum.Var(cmd.Flags(), FlagExternalComponentVersionCopyPolicy, ExternalComponentVersionCopyPolicies(), "policy to apply when a component reference to a component version outside of the constructor or target repository is encountered")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
 
 	return cmd
@@ -199,6 +226,11 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component-version-conflict-policy flag failed: %w", err)
 	}
 
+	evCopyPolicy, err := enum.Get(cmd.Flags(), FlagExternalComponentVersionCopyPolicy)
+	if err != nil {
+		return fmt.Errorf("getting external-component-version-copy-policy flag failed: %w", err)
+	}
+
 	repoSpec, err := GetRepositorySpec(cmd)
 	if err != nil {
 		return fmt.Errorf("getting repository spec failed: %w", err)
@@ -253,6 +285,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		CredentialProvider:                  instance.graph,
 		ConcurrencyLimit:                    concurrencyLimit,
 		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
+		ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicy(evCopyPolicy).ToConstructorPolicy(),
 	}
 	if !skipReferenceDigestProcessing {
 		opts.ResourceDigestProcessorProvider = instance
