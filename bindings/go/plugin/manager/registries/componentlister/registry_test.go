@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/repository"
-
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -126,14 +124,14 @@ type mockComponentListerPlugin struct {
 	processCalled bool
 }
 
-//func (m *mockComponentListerPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructor.Resource) (identity runtime.Identity, err error) {
-//	m.credCalled = true
-//	return nil, nil
-//}
+func (m *mockComponentListerPlugin) GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (identity runtime.Identity, err error) {
+	m.credCalled = true
+	return nil, nil
+}
 
 func (m *mockComponentListerPlugin) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
 	m.processCalled = true
 	return nil
 }
 
-var _ repository.ComponentLister = (*mockComponentListerPlugin)(nil)
+var _ InternalComponentListerPluginContract = (*mockComponentListerPlugin)(nil)

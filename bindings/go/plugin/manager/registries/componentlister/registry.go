@@ -27,7 +27,7 @@ type constructedPlugin struct {
 func RegisterInternalComponentListerPlugin[T runtime.Typed](
 	scheme *runtime.Scheme,
 	r *ComponentListerRegistry,
-	plugin repository.ComponentLister,
+	plugin InternalComponentListerPluginContract,
 	proto T,
 ) error {
 	r.mu.Lock()
@@ -56,7 +56,7 @@ type ComponentListerRegistry struct {
 	mu                             sync.Mutex
 	registry                       map[runtime.Type]types.Plugin
 	constructedPlugins             map[string]*constructedPlugin // running plugins
-	internalComponentListerPlugins map[runtime.Type]repository.ComponentLister
+	internalComponentListerPlugins map[runtime.Type]InternalComponentListerPluginContract
 	scheme                         *runtime.Scheme
 }
 
@@ -149,45 +149,45 @@ loop:
 
 // GetComponentListerCredentialConsumerIdentity retrieves the consumer identity
 // for a component lister based on a given repository specification.
-// func (r *ComponentListerRegistry) GetComponentListerCredentialConsumerIdentity(ctx context.Context,
-//	repositorySpecification runtime.Typed,
-// ) (runtime.Identity, error) {
-//	r.mu.Lock()
-//	defer r.mu.Unlock()
-//
-//	// Check if this is an internal plugin first
-//	typ := repositorySpecification.GetType()
-//	if ok := r.scheme.IsRegistered(typ); ok {
-//		p, ok := r.internalComponentListerPlugins[typ]
-//		if !ok {
-//			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
-//		}
-//
-//		identity, err := p.GetComponentListerCredentialConsumerIdentity(ctx, repositorySpecification)
-//		if err != nil {
-//			return nil, fmt.Errorf("failed to get component version repository: %w", err)
-//		}
-//
-//		return identity, nil
-//	}
-//
-//	// For external plugins, get the plugin and ask for identity
-//	plugin, err := r.getPlugin(ctx, typ)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
-//	}
-//
-//	request := &v1.GetIdentityRequest[runtime.Typed]{
-//		Typ: repositorySpecification,
-//	}
-//
-//	result, err := plugin.GetIdentity(ctx, request)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to get identity: %w", err)
-//	}
-//
-//	return result.Identity, nil
-// }
+func (r *ComponentListerRegistry) GetComponentListerCredentialConsumerIdentity(ctx context.Context,
+	repositorySpecification runtime.Typed,
+) (runtime.Identity, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Check if this is an internal plugin first
+	typ := repositorySpecification.GetType()
+	if ok := r.scheme.IsRegistered(typ); ok {
+		p, ok := r.internalComponentListerPlugins[typ]
+		if !ok {
+			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
+		}
+
+		identity, err := p.GetComponentListerCredentialConsumerIdentity(ctx, repositorySpecification)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get component version repository: %w", err)
+		}
+
+		return identity, nil
+	}
+
+	// For external plugins, get the plugin and ask for identity
+	plugin, err := r.getPlugin(ctx, typ)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
+	}
+
+	request := &v1.GetIdentityRequest[runtime.Typed]{
+		Typ: repositorySpecification,
+	}
+
+	result, err := plugin.GetIdentity(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get identity: %w", err)
+	}
+
+	return result.Identity, nil
+}
 
 // GetComponentListerPlugin returns ComponentLister plugins for a specific type.
 func (r *ComponentListerRegistry) GetComponentListerPlugin(ctx context.Context,
@@ -242,6 +242,6 @@ func NewComponentListerRegistry(ctx context.Context) *ComponentListerRegistry {
 		registry:                       make(map[runtime.Type]types.Plugin),
 		constructedPlugins:             make(map[string]*constructedPlugin),
 		scheme:                         runtime.NewScheme(runtime.WithAllowUnknown()),
-		internalComponentListerPlugins: make(map[runtime.Type]repository.ComponentLister),
+		internalComponentListerPlugins: make(map[runtime.Type]InternalComponentListerPluginContract),
 	}
 }
