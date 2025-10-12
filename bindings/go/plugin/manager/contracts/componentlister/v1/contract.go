@@ -14,10 +14,12 @@ type IdentityProvider[T runtime.Typed] interface {
 	GetIdentity(ctx context.Context, typ *GetIdentityRequest[T]) (*GetIdentityResponse, error)
 }
 
-// ComponentListerPluginContract is a REST wrapper around the repository.ListComponents interface for communicating
-// with a plugin.
+// ComponentListerPluginContract defines plug-in API for contents listing on OCM repositories.
 type ComponentListerPluginContract[T runtime.Typed] interface {
 	contracts.PluginBase
 	IdentityProvider[T]
-	ListComponents(ctx context.Context, request *ListComponentsRequest[T], credentials map[string]string) ([]string, error)
+
+	// ListComponents is a single call to an implementing plugin.
+	// If pagination is supported, a single page of component names is returned.
+	ListComponents(ctx context.Context, request *ListComponentsRequest[T], credentials map[string]string) (*ListComponentsResponse, error)
 }

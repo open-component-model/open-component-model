@@ -16,7 +16,7 @@ import (
 // the plugin implementor.
 func ListComponentsHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 	request *v1.ListComponentsRequest[T],
-	credentials map[string]string) ([]string, error), scheme *runtime.Scheme, typ T,
+	credentials map[string]string) (*v1.ListComponentsResponse, error), scheme *runtime.Scheme, typ T,
 ) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		rawCredentials := []byte(request.Header.Get("Authorization"))

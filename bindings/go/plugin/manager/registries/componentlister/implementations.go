@@ -76,23 +76,24 @@ func (r *ComponentListerPlugin) GetIdentity(ctx context.Context, request *v1.Get
 	return &identity, nil
 }
 
-func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[runtime.Typed], credentials map[string]string) ([]string, error) {
+func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[runtime.Typed], credentials map[string]string) (*v1.ListComponentsResponse, error) {
+	response := &v1.ListComponentsResponse{}
+
 	// We know we only have this single schema for all endpoints which require validation.
 	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
-		return nil, err
+		return response, err
 	}
 
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
-		return nil, err
+		return response, err
 	}
 
-	var result []string
-	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ListComponents, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&result), plugins.WithHeader(credHeader)); err != nil {
+	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ListComponents, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to get component names from %s: %w", r.ID, err)
 	}
 
-	return result, nil
+	return response, nil
 }
 
 func (r *ComponentListerPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {

@@ -2,6 +2,7 @@ package componentlister
 
 import (
 	"context"
+	"fmt"
 
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -17,18 +18,32 @@ type componentListerPluginConverter struct {
 	scheme                  *runtime.Scheme
 }
 
+// ListComponents retrieves component names from the plug-in.
 func (r *componentListerPluginConverter) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
-	request := &v1.ListComponentsRequest[runtime.Typed]{
-		Repository: r.repositorySpecification,
-		Last:       last,
+	for {
+		request := &v1.ListComponentsRequest[runtime.Typed]{
+			Repository: r.repositorySpecification,
+			Last:       last,
+		}
+
+		response, err := r.externalPlugin.ListComponents(ctx, request, r.credentials)
+		if err != nil {
+			return fmt.Errorf("plug-in returned error: %w", err)
+		}
+
+		err = fn(response.List)
+		if err != nil {
+			return fmt.Errorf("callback func returned error: %w", err)
+		}
+
+		if response.Header == nil || response.Header.Last == "" || len(response.List) == 0 {
+			break
+		}
+
+		last = response.Header.Last
 	}
 
-	page, err := r.externalPlugin.ListComponents(ctx, request, r.credentials)
-	if err != nil {
-		return err
-	}
-
-	return fn(page)
+	return nil
 }
 
 func (r *ComponentListerRegistry) externalToComponentListerPluginConverter(plugin v1.ComponentListerPluginContract[runtime.Typed],

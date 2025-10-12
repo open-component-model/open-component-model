@@ -20,12 +20,12 @@ type mockPlugin struct {
 	contracts.EmptyBasePlugin
 }
 
-func (m *mockPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
-	return []string{}, nil
+func (m *mockPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) (*v1.ListComponentsResponse, error) {
+	return &v1.ListComponentsResponse{}, nil
 }
 
 func (m *mockPlugin) GetIdentity(ctx context.Context, typ *v1.GetIdentityRequest[*dummyv1.Repository]) (*v1.GetIdentityResponse, error) {
-	return nil, nil
+	panic("not implemented")
 }
 
 var _ v1.ComponentListerPluginContract[*dummyv1.Repository] = &mockPlugin{}

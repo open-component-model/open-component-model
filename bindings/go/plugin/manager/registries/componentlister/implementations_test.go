@@ -48,7 +48,8 @@ func TestListComponentsHandler(t *testing.T) {
 	// Setup test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == ListComponents && r.Method == http.MethodPost {
-			err := json.NewEncoder(w).Encode([]string{"test-component-1", "test-component-2"})
+			serverResponse := v1.ListComponentsResponse{List: []string{"test-component-1", "test-component-2"}}
+			err := json.NewEncoder(w).Encode(serverResponse)
 			require.NoError(t, err)
 			return
 		}
@@ -65,10 +66,10 @@ func TestListComponentsHandler(t *testing.T) {
 	}, server.URL, []byte(`{}`))
 
 	ctx := context.Background()
-	list, err := plugin.ListComponents(ctx, &v1.ListComponentsRequest[runtime.Typed]{
+	response, err := plugin.ListComponents(ctx, &v1.ListComponentsRequest[runtime.Typed]{
 		Repository: &dummyv1.Repository{},
 		Last:       "",
 	}, map[string]string{})
 	require.NoError(t, err)
-	require.Equal(t, []string{"test-component-1", "test-component-2"}, list)
+	require.Equal(t, []string{"test-component-1", "test-component-2"}, response.List)
 }

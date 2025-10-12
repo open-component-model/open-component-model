@@ -26,9 +26,24 @@ func (m *TestPlugin) Ping(_ context.Context) error {
 	return nil
 }
 
-func (m *TestPlugin) ListComponents(ctx context.Context, request *listerv1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) ([]string, error) {
+func (m *TestPlugin) ListComponents(ctx context.Context, request *listerv1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) (*listerv1.ListComponentsResponse, error) {
 	logger.DebugContext(ctx, "ListComponents", "request", request)
-	return []string{"test-component-1", "test-component-2"}, nil
+	page1 := []string{"test-component-1"}
+	page2 := []string{"test-component-2"}
+	response := &listerv1.ListComponentsResponse{}
+	var err error
+
+	switch request.Last {
+	case "":
+		response.List = page1
+		response.Header = &listerv1.ListComponentsResponseHeader{Last: page1[len(page1)-1]}
+	case page1[len(page1)-1]:
+		response.List = page2
+	default:
+		err = fmt.Errorf("unknown last: %q", request.Last)
+	}
+
+	return response, err
 }
 
 func (m *TestPlugin) GetIdentity(ctx context.Context, typ *listerv1.GetIdentityRequest[*dummyv1.Repository]) (*listerv1.GetIdentityResponse, error) {
