@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
@@ -297,6 +298,7 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 type resolverAndDiscoverer struct {
 	repository repository.ComponentVersionRepository
 	recursive  int
+	depthMu    sync.Mutex
 	depth      int
 }
 
@@ -318,6 +320,9 @@ func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descr
 }
 
 func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntime.Descriptor) ([]string, error) {
+	r.depthMu.Lock()
+	defer r.depthMu.Unlock()
+
 	if r.recursive == -1 || r.depth < r.recursive {
 		children := make([]string, len(parent.Component.References))
 		for index, reference := range parent.Component.References {
