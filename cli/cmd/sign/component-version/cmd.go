@@ -177,7 +177,9 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
 	}
 	config := ocmContext.Configuration()
-	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, reference)
+	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, reference,
+		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite),
+	)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
