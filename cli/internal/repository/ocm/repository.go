@@ -1,6 +1,3 @@
-// Package ocm provides functionality for interacting with OCM (Open Component Model) repositories.
-// It offers a high-level interface for managing component versions, handling credentials,
-// and performing repository operations through plugin-based implementations.
 package ocm
 
 import (
@@ -19,10 +16,16 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// ComponentVersionRepositoryProvider provides a [repository.ComponentVersionRepository] based on a given identity.
+// Implementations may use different strategies to resolve the repository, such as using component references,
+// configuration-based resolvers, or other mechanisms.
 type ComponentVersionRepositoryProvider interface {
 	GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error)
 }
 
+// Version resolves the version of a component.
+// If the version is empty, it retrieves the latest version from the repository.
+// If multiple versions are found when expecting only one, an error is returned.
 func Version(ctx context.Context, component, version string, repo repository.ComponentVersionRepository) (string, error) {
 	if version == "" {
 		versions, err := Versions(ctx, VersionOptions{LatestOnly: true}, component, version, repo)
@@ -40,6 +43,9 @@ func Version(ctx context.Context, component, version string, repo repository.Com
 	return version, nil
 }
 
+// GetComponentVersion retrieves the component version descriptor for a given component and version.
+// If the version is empty, it retrieves the latest version from the repository.
+// It returns an error if the component version cannot be found or if there are issues during retrieval.
 func GetComponentVersion(ctx context.Context, component, version string, repo repository.ComponentVersionRepository) (*descriptor.Descriptor, error) {
 	version, err := Version(ctx, component, version, repo)
 	if err != nil {
@@ -54,6 +60,9 @@ func GetComponentVersion(ctx context.Context, component, version string, repo re
 	return desc, nil
 }
 
+// GetLocalResource retrieves a local resource blob and its descriptor for a given component, version, and resource identity.
+// If the version is empty, it retrieves the latest version from the repository.
+// It returns an error if the resource cannot be found or if there are issues during retrieval.
 func GetLocalResource(ctx context.Context, identity runtime.Identity, component, version string, repo repository.ComponentVersionRepository) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
 	version, err := Version(ctx, component, version, repo)
 	if err != nil {

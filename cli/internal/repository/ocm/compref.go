@@ -12,12 +12,21 @@ import (
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
+// compRefProvider provides a [repository.ComponentVersionRepository] based on a component reference.
 type compRefProvider struct {
-	ref     *compref.Ref
+	// ref is the parsed component reference. It contains the repository information needed to access the
+	// [repository.ComponentVersionRepository].
+	ref *compref.Ref
+	// manager is the [manager.PluginManager] used to access the [repository.ComponentVersionRepository].
 	manager *manager.PluginManager
-	graph   credentials.GraphResolver
+	// graph is the [credentials.GraphResolver] used to resolve credentials for the repository.
+	// It can be nil, if no credential graph is available.
+	graph credentials.GraphResolver
 }
 
+// newFromCompRef creates a new compRefProvider based on the provided component reference string.
+// It uses the provided PluginManager to access the [repository.ComponentVersionRepository].
+// Optionally you can pass compref.Options to configure the parsing of the component reference.
 func newFromCompRef(componentReference string,
 	manager *manager.PluginManager,
 	graph credentials.GraphResolver, options ...compref.Option,
@@ -34,6 +43,9 @@ func newFromCompRef(componentReference string,
 	}, nil
 }
 
+// GetComponentVersionRepository returns a [repository.ComponentVersionRepository] based on the component reference.
+// It resolves any necessary credentials using the credential graph if available.
+// It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository].
 func (c compRefProvider) GetComponentVersionRepository(ctx context.Context, _ runtime.Identity) (repository.ComponentVersionRepository, error) {
 	var credMap map[string]string
 	consumerIdentity, err := c.manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, c.ref.Repository)

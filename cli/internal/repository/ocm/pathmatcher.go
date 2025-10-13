@@ -14,14 +14,25 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// resolverProvider provides a [repository.ComponentVersionRepository] based on a set of path matcher resolvers.
+// It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository] and a
+// [credentials.GraphResolver] to resolve credentials for the repository.
 type resolverProvider struct {
-	manager   *manager.PluginManager
-	graph     credentials.GraphResolver
-	resolvers []*resolverspec.Resolver
-	provider  *pathmatcher.SpecProvider
+	// manager is the [manager.PluginManager] used to access the [repository.ComponentVersionRepository].
+	manager *manager.PluginManager
+	// graph is the [credentials.GraphResolver] used to resolve credentials for the repository.
+	// It can be nil, if no credential graph is available.
+	graph credentials.GraphResolver
+	// provider is the [pathmatcher.SpecProvider] used to get the repository spec for a given identity.
+	// It is configured with a set of path matcher resolvers.
+	provider *pathmatcher.SpecProvider
 }
 
-// TODO
+// newFromConfigWithPathMatcher creates a new resolverProvider based on the provided configuration.
+// It uses the provided PluginManager to access the [repository.ComponentVersionRepository].
+// It uses the provided [credentials.GraphResolver] to resolve credentials for the repository.
+// The configuration is expected to contain a list of path matcher resolvers.
+// If no resolvers are configured, an error is returned.
 func newFromConfigWithPathMatcher(
 	ctx context.Context,
 	manager *manager.PluginManager,
@@ -32,18 +43,18 @@ func newFromConfigWithPathMatcher(
 		return nil, fmt.Errorf("no resolvers configured")
 	}
 
-	// TODO: add a fallback entry with wildcard * which is being injected by constructor as resolver
-	// set as MIN PRIO in this case
 	provider := pathmatcher.NewSpecProvider(ctx, resolvers)
 
 	return &resolverProvider{
-		manager:   manager,
-		graph:     graph,
-		resolvers: resolvers,
-		provider:  provider,
+		manager:  manager,
+		graph:    graph,
+		provider: provider,
 	}, nil
 }
 
+// GetComponentVersionRepository returns a [repository.ComponentVersionRepository] based on the path matcher resolvers.
+// It resolves any necessary credentials using the credential graph if available.
+// It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository].
 func (r *resolverProvider) GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error) {
 	repoSpec, err := r.provider.GetRepositorySpec(ctx, identity)
 	if err != nil {
@@ -70,6 +81,10 @@ func (r *resolverProvider) GetComponentVersionRepository(ctx context.Context, id
 	return repo, nil
 }
 
+// ResolversFromConfig extracts a list of resolvers from a generic configuration.
+// It filters the configuration for entries of type [resolverspec.Config] and aggregates
+// all resolvers defined in these entries into a single list.
+// If the filtering process fails, an error is returned.
 func ResolversFromConfig(config *genericv1.Config) ([]*resolverspec.Resolver, error) {
 	filtered, err := genericv1.FilterForType[*resolverspec.Config](resolverspec.Scheme, config)
 	if err != nil {

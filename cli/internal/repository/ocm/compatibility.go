@@ -16,12 +16,31 @@ import (
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-type proxyProvider struct {
+// combinedComponentVersionRepositoryProvider
+// This provider combines a component reference based provider with another provider.
+// If a component reference is provided, it will be used first to resolve the repository.
+// If the identity does not match the component reference, the other provider will be used.
+// The other provider will be created based on the [genericv1.Config] if provided.
+// Currently, we support two types of providers:
+// - Fallback resolvers (deprecated)
+// - Path matcher resolvers
+//
+// If both types are configured, an error will be returned.
+type combinedComponentVersionRepositoryProvider struct {
 	compRefProv *compRefProvider
 	provider    ComponentVersionRepositoryProvider
 }
 
-// NewComponentVersionRepositoryProvider TODO
+// NewComponentVersionRepositoryProvider creates a new ComponentVersionRepositoryProvider based on the provided
+// component reference and configuration.
+// If a componentReference is provided, it will be used to create a compRefProvider.
+// If a configuration is provided, it will be used to create either a fallback resolver provider (deprecated)
+// or a path matcher resolver provider.
+// If both types are configured, an error will be returned.
+// If neither a componentReference nor a configuration is provided, an error will be returned.
+// compref.Option options can be passed to configure the compRefProvider.
+// As a fallback, this constructor adds the compref as a fallback entry as both
+// resolverruntime.Resolver (lowest priority) and resolverspec.Resolver (highest priority) depending on the configuration type.
 func NewComponentVersionRepositoryProvider(ctx context.Context,
 	pluginManager *manager.PluginManager,
 	credentialGraph credentials.GraphResolver,
@@ -74,7 +93,7 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 			//nolint:staticcheck // compatibility mode for deprecated resolvers
 			var finalResolvers []*resolverruntime.Resolver
 			if ref.Repository != nil {
-				//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
+				//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 				finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
 					Repository: ref.Repository,
 					Priority:   math.MaxInt,
@@ -88,7 +107,6 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 	} else {
 		slog.DebugContext(ctx, "using path matcher resolvers", slog.Int("count", len(pathMatchers)))
 
-		// add compref as last entry to path matcher list if available as fallback
 		if ref != nil {
 			var finalResolvers []*resolverspec.Resolver
 			finalResolvers = append(finalResolvers, pathMatchers...)
@@ -114,13 +132,22 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 		}
 	}
 
-	return &proxyProvider{
+	if provider == nil && compRefProv == nil {
+		return nil, fmt.Errorf("neither component reference nor configuration provided")
+	}
+
+	return &combinedComponentVersionRepositoryProvider{
 		compRefProv: compRefProv,
 		provider:    provider,
 	}, nil
 }
 
-func (p proxyProvider) GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error) {
+// GetComponentVersionRepository implements the ComponentVersionRepositoryProvider interface.
+// It first checks if a component reference provider is available and if the identity matches the component reference.
+// If so, it uses the component reference provider to get the repository.
+// If not, it falls back to the other provider if available.
+// If neither provider can provide a repository for the given identity, an error is returned.
+func (p combinedComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error) {
 	if p.compRefProv != nil {
 		// check if the identity matches the component reference repository
 		if identity.Equal(p.compRefProv.ref.Identity()) {
