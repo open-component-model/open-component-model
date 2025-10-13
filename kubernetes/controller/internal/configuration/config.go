@@ -41,7 +41,7 @@ func GetConfigFromSecret(secret *corev1.Secret) (*genericv1.Config, error) {
 func GetConfigFromConfigMap(configMap *corev1.ConfigMap) (*genericv1.Config, error) {
 	data, ok := configMap.Data[v1alpha1.OCMConfigKey]
 	if !ok || len(data) == 0 {
-		return nil, errors.New("no ocm config found in secret")
+		return nil, errors.New("no ocm config found in configmap")
 	}
 
 	var cfg genericv1.Config
@@ -81,7 +81,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		return Configuration{}, nil
 	}
 
-	objects, err := gatherConfigurationObjects(ctx, k8sClient, ocmConfigs, namespace)
+	objects, err := getConfigurationObjects(ctx, k8sClient, ocmConfigs, namespace)
 	if err != nil {
 		return Configuration{}, err
 	}
@@ -121,7 +121,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 // gatherConfigurationObjects fetches the referenced Secrets/ConfigMaps from the cluster. It does so concurrently and by
 // preserving the order of the input list. The order of the input list is defined by the Spec defining the configuration
 // references.
-func gatherConfigurationObjects(ctx context.Context, k8sClient client.Reader, ocmConfigs []v1alpha1.OCMConfiguration, namespace string) ([]client.Object, error) {
+func getConfigurationObjects(ctx context.Context, k8sClient client.Reader, ocmConfigs []v1alpha1.OCMConfiguration, namespace string) ([]client.Object, error) {
 	// pre-allocate the output array to the same length as the input list for concurrent operations
 	objects := make([]client.Object, len(ocmConfigs))
 	fetchGroup, ctx := errgroup.WithContext(ctx)
