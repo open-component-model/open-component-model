@@ -2,7 +2,7 @@
 // repository specifications based on component name patterns.
 //
 // It implements a ComponentVersionRepositorySpecProvider that uses path pattern
-// matching (from Go's standard library) in combination with the
+// matching (from github.com/gobwas/glob) in combination with the
 // resolver config type to associate component names with
 // repository specifications. This allows flexible configuration of which
 // repository to use for resolving component versions, depending on the
