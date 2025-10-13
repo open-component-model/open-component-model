@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
@@ -66,6 +67,7 @@ func GetConfigFromObject(obj client.Object) (*genericv1.Config, error) {
 }
 
 // Configuration represents the flattened OCM configuration and adds the hash of the configuration data.
+// The hash is provided along with the configuration data for caching purposes.
 type Configuration struct {
 	Hash   []byte
 	Config *genericv1.Config
@@ -73,9 +75,8 @@ type Configuration struct {
 
 // LoadConfigurations loads OCM configurations from a list of OCMConfiguration references.
 // It fetches the referenced Secrets/ConfigMaps from the cluster and extracts their configuration into a flat map and
-// calculates the hash of the configuration data. This is provided along with the configuration data for caching purposes.
-// The object fetching happens concurrently, but Spec declaration order is preserved. Meaning, in whatever order the original
-// object declared the configuration, that order is preserved.
+// calculates the hash of the configuration data. The object fetching happens concurrently, but Spec declaration order
+// is preserved. Meaning, in whatever order the original object declared the configuration, that order is preserved.
 func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace string, ocmConfigs []v1alpha1.OCMConfiguration) (Configuration, error) {
 	if len(ocmConfigs) == 0 {
 		return Configuration{}, nil
@@ -122,9 +123,9 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 // preserving the order of the input list. The order of the input list is defined by the Spec defining the configuration
 // references.
 func getConfigurationObjects(ctx context.Context, k8sClient client.Reader, ocmConfigs []v1alpha1.OCMConfiguration, namespace string) ([]client.Object, error) {
-	// pre-allocate the output array to the same length as the input list for concurrent operations
-	objects := make([]client.Object, len(ocmConfigs))
 	fetchGroup, ctx := errgroup.WithContext(ctx)
+	m := make(map[int]client.Object)
+	loopLock := &sync.Mutex{}
 	for i, ocmConfig := range ocmConfigs {
 		ns := ocmConfig.Namespace
 		if ns == "" {
@@ -147,9 +148,9 @@ func getConfigurationObjects(ctx context.Context, k8sClient client.Reader, ocmCo
 				return fmt.Errorf("failed to get %s %s/%s: %w", ocmConfig.Kind, ns, ocmConfig.Name, err)
 			}
 
-			// set the exact location in which this object was found in the input list
-			// this operation is concurrent-safe since it's using a specific index.
-			objects[i] = obj
+			loopLock.Lock()
+			m[i] = obj
+			loopLock.Unlock()
 
 			return nil
 		})
@@ -157,6 +158,16 @@ func getConfigurationObjects(ctx context.Context, k8sClient client.Reader, ocmCo
 
 	if err := fetchGroup.Wait(); err != nil {
 		return nil, err
+	}
+
+	objects := make([]client.Object, 0, len(ocmConfigs))
+	for i := range ocmConfigs {
+		obj, ok := m[i]
+		if !ok {
+			return nil, fmt.Errorf("failed to get configuration object for index %d", i)
+		}
+
+		objects = append(objects, obj)
 	}
 
 	return objects, nil
