@@ -14,10 +14,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	plugincmd "ocm.software/open-component-model/cli/cmd/download/plugin"
@@ -58,9 +59,7 @@ func setupTestCommand(t *testing.T, resourceName, resourceVersion, output string
 	filesystemConfig := &filesystemv1alpha1.Config{}
 
 	// Register built-in plugins
-	if err := builtin.Register(pluginManager, filesystemConfig, slog.Default()); err != nil {
-		panic("failed to register builtin plugins: " + err.Error())
-	}
+	require.NoError(t, builtin.Register(pluginManager, filesystemConfig, slog.Default()))
 
 	// Create credential graph using proper initialization like in setup.go
 	opts := credentials.Options{
@@ -74,31 +73,25 @@ func setupTestCommand(t *testing.T, resourceName, resourceVersion, output string
 	}
 
 	user, password := getUserAndPasswordForTest(t)
-	credCfg := &credentialsRuntime.Config{
-		Repositories: []credentialsRuntime.RepositoryConfigEntry{
-			{
-				Repository: &runtime.Raw{
-					Type: runtime.Type{
-						Name:    "DockerConfig",
-						Version: "v1",
-					},
-					Data: []byte(fmt.Sprintf(`{
-							"auths": {
-								"ghcr.io": {
-									"username": "%s",
-									"password": "%s"
-								}
-							}
-						}`, user, password)),
-				},
-			},
-		},
-	}
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: ghcr.io
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %[1]q
+        password: %[2]q
+`, user, password)
 
-	credentialGraph, err := credentials.ToGraph(ctx, credCfg, opts)
-	if err != nil {
-		panic("failed to create credential graph: " + err.Error())
-	}
+	config := &cfgRuntime.Config{}
+	require.NoError(t, yaml.Unmarshal([]byte(cfg), config))
+	credentialGraph, err := credentials.ToGraph(ctx, config, opts)
+	require.NoError(t, err)
 
 	// Set up context
 	ctx = ocmctx.WithPluginManager(ctx, pluginManager)
