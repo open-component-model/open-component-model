@@ -62,7 +62,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
       --latest                     if set, only the latest version of the component is returned
   -o, --output enum                output format of the component descriptors
                                    (must be one of [json ndjson table tree yaml]) (default table)
-      --recursive int[=-1]         depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels)
+      --recursive int[=-1]         depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))
       --semver-constraint string   semantic version constraint restricting which versions to output (default "> 0.0.0-0")
 ```
 

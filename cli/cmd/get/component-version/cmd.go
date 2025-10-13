@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
@@ -92,7 +91,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
 	// cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
-	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels)")
+	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
 
 	return cmd
@@ -298,8 +297,6 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 type resolverAndDiscoverer struct {
 	repository repository.ComponentVersionRepository
 	recursive  int
-	depthMu    sync.Mutex
-	depth      int
 }
 
 var (
@@ -320,18 +317,25 @@ func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descr
 }
 
 func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntime.Descriptor) ([]string, error) {
-	r.depthMu.Lock()
-	defer r.depthMu.Unlock()
-
-	if r.recursive == -1 || r.depth < r.recursive {
+	// TODO(fabianburth): Recursion depth has to be implemented as option for
+	//  the dag discovery. Once that's implemented, we can pass the recursion
+	//  depth to the discovery and remove this check here (https://github.com/open-component-model/ocm-project/issues/706).
+	switch {
+	case r.recursive < -1:
+		return nil, fmt.Errorf("invalid recursion depth %d: must be -1 (unlimited) or >= 0", r.recursive)
+	case r.recursive == 0:
+		slog.InfoContext(ctx, "not discovering children, recursion depth 0", "component", parent.Component.ToIdentity().String())
+		return nil, nil
+	case r.recursive == -1:
+		// unlimited recursion
 		children := make([]string, len(parent.Component.References))
 		for index, reference := range parent.Component.References {
 			children[index] = reference.ToComponentIdentity().String()
 		}
-		r.depth++
-		slog.InfoContext(ctx, "discovering children", "component", parent.Component.ToIdentity().String(), "children", children, "depth", r.depth, "depth limit", r.recursive)
+		slog.InfoContext(ctx, "discovering children", "component", parent.Component.ToIdentity().String(), "children", children)
 		return children, nil
+	case r.recursive > 0:
+		return nil, fmt.Errorf("recursion depth > 0 not implemented yet")
 	}
-	slog.InfoContext(ctx, "skipped discovering children, recursion limit reached", "component", parent.Component.ToIdentity().String(), "depth", r.depth, "depth limit", r.recursive)
-	return nil, nil
+	return nil, fmt.Errorf("invalid recursion depth %d", r.recursive)
 }
