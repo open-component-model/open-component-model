@@ -308,7 +308,73 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 		equal      require.ComparisonAssertionFunc
 	}{
 		{
-			name:      "order of internal configs should not matter",
+			name:      "declared config order shouldn't produce the same result",
+			namespace: "default",
+			ocmConfigs: [][]v1alpha1.OCMConfiguration{
+				{
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-a",
+						},
+					},
+				},
+				{
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "Secret",
+							Name: "test-secret-b",
+						},
+					},
+				},
+			},
+			secrets: []*corev1.Secret{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret-a",
+						Namespace: "default",
+					},
+					Data: map[string][]byte{
+						v1alpha1.OCMConfigKey: []byte(`{
+							"type": "generic.config.ocm.software/v1",
+							"configurations": [
+								{
+									"type": "filesystem.config.ocm.software/v1alpha1",
+									"tempFolder": "/tmp/test"
+								},
+								{
+									"type": "whatever.config.ocm.software/v1alpha1",
+									"whatever": "whatever"
+								}
+						]}`),
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret-b",
+						Namespace: "default",
+					},
+					Data: map[string][]byte{
+						v1alpha1.OCMConfigKey: []byte(`{
+							"type": "generic.config.ocm.software/v1",
+							"configurations": [
+								{
+									"type": "whatever.config.ocm.software/v1alpha1",
+									"whatever": "whatever"
+								},
+								{
+									"type": "filesystem.config.ocm.software/v1alpha1",
+									"tempFolder": "/tmp/test"
+								}
+						]}`),
+					},
+				},
+			},
+			errorCheck: require.NoError,
+			equal:      require.NotEqual,
+		},
+		{
+			name:      "same order should produce the same result always",
 			namespace: "default",
 			ocmConfigs: [][]v1alpha1.OCMConfiguration{
 				{
