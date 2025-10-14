@@ -1108,7 +1108,7 @@ resources:
 		})
 	})
 
-	t.Run("construction with references", func(t *testing.T) {
+	t.Run("construction with references targeting fallback resolvers", func(t *testing.T) {
 		externalConstructorYAML := fmt.Sprintf(`
 name: ocm.software/external
 version: 1.0.0
@@ -1245,7 +1245,7 @@ resources:
 		), test.WithErrorOutput(logs))
 		r.NoError(err, "could not construct component version with working directory")
 
-		legacyResolverConfigYAML := fmt.Sprintf(`
+		resolverConfigYAML := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
 configurations:
 - type: resolvers.config.ocm.software
@@ -1256,8 +1256,8 @@ configurations:
     componentNamePattern: ocm.software/*
 `, externalArchiveFilePath)
 
-		legacyResolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-legacy-resolver.yaml")
-		r.NoError(os.WriteFile(legacyResolverConfigYAMLFilePath, []byte(legacyResolverConfigYAML), 0o600))
+		resolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-resolver.yaml")
+		r.NoError(os.WriteFile(resolverConfigYAMLFilePath, []byte(resolverConfigYAML), 0o600))
 
 		constructorYAML = fmt.Sprintf(`
 components:
@@ -1298,7 +1298,7 @@ components:
 			"--constructor", constructorYAMLFilePath,
 			"--repository", archiveFilePath,
 			"--working-directory", tmp,
-			"--config", legacyResolverConfigYAMLFilePath,
+			"--config", resolverConfigYAMLFilePath,
 			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
