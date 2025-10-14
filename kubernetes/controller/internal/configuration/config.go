@@ -77,21 +77,21 @@ type Configuration struct {
 // It fetches the referenced Secrets/ConfigMaps from the cluster and extracts their configuration into a flat map and
 // calculates the hash of the configuration data. The object fetching happens concurrently, but Spec declaration order
 // is preserved. Meaning, in whatever order the original object declared the configuration, that order is preserved.
-func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace string, ocmConfigs []v1alpha1.OCMConfiguration) (Configuration, error) {
+func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace string, ocmConfigs []v1alpha1.OCMConfiguration) (*Configuration, error) {
 	if len(ocmConfigs) == 0 {
-		return Configuration{}, nil
+		return nil, nil
 	}
 
 	objects, err := getConfigurationObjects(ctx, k8sClient, ocmConfigs, namespace)
 	if err != nil {
-		return Configuration{}, err
+		return nil, err
 	}
 
 	var configs []*genericv1.Config
 	for _, obj := range objects {
 		cfg, err := GetConfigFromObject(obj)
 		if err != nil {
-			return Configuration{}, err
+			return nil, err
 		}
 
 		if cfg == nil {
@@ -104,7 +104,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 	flattened := genericv1.FlatMap(configs...)
 	content, err := json.Marshal(flattened)
 	if err != nil {
-		return Configuration{}, err
+		return nil, err
 	}
 
 	hasher := sha256.New()
@@ -116,7 +116,7 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		Hash:   hash,
 	}
 
-	return result, nil
+	return &result, nil
 }
 
 // gatherConfigurationObjects fetches the referenced Secrets/ConfigMaps from the cluster. It does so concurrently and by
