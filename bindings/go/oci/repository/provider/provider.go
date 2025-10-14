@@ -184,9 +184,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 // to its corresponding object type in the scheme. It ensures that the type is set correctly
 func getConvertedTypedSpec(scheme *runtime.Scheme, repositorySpecification runtime.Typed) (runtime.Typed, error) {
 	repositorySpecification = repositorySpecification.DeepCopyTyped()
-	if _, err := scheme.DefaultType(repositorySpecification); err != nil {
-		return nil, fmt.Errorf("failed to ensure type for repository specification: %w", err)
-	}
+	_, _ = scheme.DefaultType(repositorySpecification)
 	obj, err := scheme.NewObject(repositorySpecification.GetType())
 	if err != nil {
 		return nil, err
