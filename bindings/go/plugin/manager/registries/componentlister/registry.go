@@ -198,7 +198,9 @@ func (r *ComponentListerRegistry) GetComponentListerPlugin(ctx context.Context,
 	defer r.mu.Unlock()
 
 	// look for an internal implementation that actually implements the interface
-	_, _ = r.scheme.DefaultType(repositorySpecification)
+	if _, err := r.scheme.DefaultType(repositorySpecification); err != nil {
+		return nil, fmt.Errorf("failed to default type for prototype %T: %w", repositorySpecification, err)
+	}
 	typ := repositorySpecification.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
 	if ok := r.scheme.IsRegistered(typ); ok {
