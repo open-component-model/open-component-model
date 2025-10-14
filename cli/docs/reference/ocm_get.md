@@ -64,5 +64,5 @@ ocm get {component-version|component-versions|cv|cvs} [flags]
 ### SEE ALSO
 
 * [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
-* [ocm get component-version]({{< relref "ocm_get_component-version.md" >}})	 - Get component version(s) from an OCM repository
+* [ocm get component-version]({{< relref "ocm_get_component-version.md" >}})	 - Get component version(s) from an OCM repositoryProvider
 

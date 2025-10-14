@@ -85,7 +85,7 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 	}
 
 	// only use fallback resolvers if we got them from config and there are no path matchers
-	if len(pathMatchers) == 0 {
+	if len(fallbackResolvers) > 0 {
 		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
 
 		// add compref as first entry to fallback list if available to mimic legacy behavior

@@ -39,10 +39,6 @@ func newFromConfigWithPathMatcher(
 	graph credentials.GraphResolver,
 	resolvers []*resolverspec.Resolver,
 ) (*resolverProvider, error) {
-	if len(resolvers) == 0 {
-		return nil, fmt.Errorf("no resolvers configured")
-	}
-
 	provider := pathmatcher.NewSpecProvider(ctx, resolvers)
 
 	return &resolverProvider{

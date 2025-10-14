@@ -375,6 +375,7 @@ replicationset
 repo
 repocpi
 repositoryimpl
+repositoryProvider
 repositoryspec
 repositoryurl
 reproducibility

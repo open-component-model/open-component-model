@@ -15,13 +15,13 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
-	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"sigs.k8s.io/yaml"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
