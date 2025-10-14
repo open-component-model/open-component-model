@@ -15,6 +15,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
+	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"sigs.k8s.io/yaml"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -79,6 +80,10 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	ocmContext := ocmctx.FromContext(ctx)
+	if ocmContext == nil {
+		return fmt.Errorf("no OCM context found")
+	}
 
 	resourceName, err := cmd.Flags().GetString(FlagResourceName)
 	if err != nil {
@@ -118,9 +123,10 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	reference := args[0]
 	// we have a reference and parse it
 	ref, _ := compref.Parse(reference)
+	config := ocmContext.Configuration()
 	slog.DebugContext(ctx, "parsed component reference", "reference", reference, "parsed", ref)
 
-	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, nil, reference)
+	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, reference)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
@@ -183,7 +189,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		slog.String("type", res.Type),
 		slog.Any("identity", res.ToIdentity()))
 
-	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, res.Name, res.Version, repo, res, resourceIdentity)
+	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, ref.Component, ref.Version, repo, res, resourceIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading plugin resource for identity %q failed: %w", resourceIdentity, err)
 	}

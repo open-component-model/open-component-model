@@ -9,7 +9,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
-
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
