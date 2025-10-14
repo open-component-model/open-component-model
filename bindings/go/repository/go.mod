@@ -3,6 +3,7 @@ module ocm.software/open-component-model/bindings/go/repository
 go 1.25.0
 
 require (
+	github.com/gobwas/glob v0.2.3
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.17.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9

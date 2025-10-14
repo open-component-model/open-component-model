@@ -4,12 +4,9 @@ import (
 	"cmp"
 	"fmt"
 
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-)
-
-const (
-	descriptorAttribute = "descriptor"
 )
 
 // Row represents a single rendered row
@@ -22,25 +19,28 @@ type Row struct {
 
 // VertexSerializer is an interface that defines a method to serialize a vertex.
 type VertexSerializer[T cmp.Ordered] interface {
-	Serialize(*syncdag.Vertex[T]) (Row, error)
+	Serialize(*dag.Vertex[T]) (Row, error)
 }
 
-type VertexSerializerFunc[T cmp.Ordered] func(*syncdag.Vertex[T]) (Row, error)
+type VertexSerializerFunc[T cmp.Ordered] func(*dag.Vertex[T]) (Row, error)
 
-func (f VertexSerializerFunc[T]) Serialize(v *syncdag.Vertex[T]) (Row, error) {
+func (f VertexSerializerFunc[T]) Serialize(v *dag.Vertex[T]) (Row, error) {
 	return f(v)
 }
 
-func defaultVertexSerializer[T cmp.Ordered]() VertexSerializer[T] {
-	return VertexSerializerFunc[T](func(vertex *syncdag.Vertex[T]) (Row, error) {
-		if d, ok := vertex.MustGetAttribute(descriptorAttribute).(*descruntime.Descriptor); ok {
-			return Row{
-				Component: d.Component.Name,
-				Version:   d.Component.Version,
-				Provider:  d.Component.Provider.Name,
-				Identity:  d.Component.ToIdentity().String(),
-			}, nil
-		}
-		return Row{}, fmt.Errorf("vertex %v does not have a descriptor attribute", vertex.ID)
-	})
+func defaultVertexSerializer[T cmp.Ordered](vertex *dag.Vertex[T]) (Row, error) {
+	untypedComponent, ok := vertex.Attributes[syncdag.AttributeValue]
+	if !ok {
+		return Row{}, fmt.Errorf("vertex %v does not have a %s attribute", vertex.ID, syncdag.AttributeValue)
+	}
+	component, ok := untypedComponent.(*descruntime.Descriptor)
+	if !ok {
+		return Row{}, fmt.Errorf("vertex %v has a value attribute of unexpected type %T, expected type %T", vertex.ID, untypedComponent, &descruntime.Descriptor{})
+	}
+	return Row{
+		Component: component.Component.Name,
+		Version:   component.Component.Version,
+		Provider:  component.Component.Provider.Name,
+		Identity:  component.Component.ToIdentity().String(),
+	}, nil
 }
