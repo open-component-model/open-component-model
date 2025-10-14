@@ -89,6 +89,9 @@ func GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions,
 	var descMu sync.Mutex
 
 	eg, ctx := errgroup.WithContext(ctx)
+	if opts.ConcurrencyLimit == 0 {
+		opts.ConcurrencyLimit = -1
+	}
 	eg.SetLimit(opts.ConcurrencyLimit)
 	for i, version := range versions {
 		eg.Go(func() error {
