@@ -440,6 +440,241 @@ COMPONENT           │ VERSION │ PROVIDER
 	}
 }
 
+// Test_Get_Component_Version_Formats_Recursive tests the different output formats for the get cv command
+func Test_Get_Component_Version_Formats_Recursive_With_Resolvers(t *testing.T) {
+	// Setup test repository
+	leafa := createTestDescriptor("ocm.software/leaf-a", "0.0.1")
+	leafb := createTestDescriptor("ocm.software/leaf-b", "0.0.1")
+	root := createTestDescriptor("ocm.software/root", "0.0.1")
+	root.Component.References = []descriptor.Reference{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "leaf-a",
+					Version: leafa.Component.Version,
+				},
+			},
+			Component: leafa.Component.Name,
+		},
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "leaf-b",
+					Version: leafb.Component.Version,
+				},
+			},
+			Component: leafb.Component.Name,
+		},
+	}
+
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, root, leafa, leafb)
+	require.NoError(t, err)
+
+	ref := compref.Ref{
+		Repository: &ctfv1.Repository{
+			Path: archivePath,
+		},
+		Component: root.Component.Name,
+		Version:   root.Component.Version,
+	}
+	path := ref.String()
+
+	tests := []struct {
+		name           string
+		args           []string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "Default Options (Table)",
+			args: []string{"get", "cv", path, "--recursive=-1"},
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root   │ 0.0.1   │ ocm.software 
+ ocm.software/leaf-a │ 0.0.1   │              
+ ocm.software/leaf-b │ 0.0.1   │
+`,
+			expectedError: false,
+		},
+		{
+			name: "YAML output",
+			args: []string{"get", "cv", path, "--output=yaml", "--recursive=-1"},
+			expectedOutput: `
+- component:
+    componentReferences:
+    - componentName: ocm.software/leaf-a
+      digest:
+        hashAlgorithm: ""
+        normalisationAlgorithm: ""
+        value: ""
+      name: leaf-a
+      version: 0.0.1
+    - componentName: ocm.software/leaf-b
+      digest:
+        hashAlgorithm: ""
+        normalisationAlgorithm: ""
+        value: ""
+      name: leaf-b
+      version: 0.0.1
+    name: ocm.software/root
+    provider: ocm.software
+    repositoryContexts: null
+    resources: null
+    sources: null
+    version: 0.0.1
+  meta:
+    schemaVersion: v2
+- component:
+    componentReferences: null
+    name: ocm.software/leaf-a
+    provider: ocm.software
+    repositoryContexts: null
+    resources: null
+    sources: null
+    version: 0.0.1
+  meta:
+    schemaVersion: v2
+- component:
+    componentReferences: null
+    name: ocm.software/leaf-b
+    provider: ocm.software
+    repositoryContexts: null
+    resources: null
+    sources: null
+    version: 0.0.1
+  meta:
+    schemaVersion: v2
+`,
+			expectedError: false,
+		},
+		{
+			name:           "JSON output",
+			args:           []string{"get", "cv", path, "--output=json", "--recursive=-1"},
+			expectedOutput: "", // JSON output is handled differently
+			expectedError:  false,
+		},
+		{
+			name:           "NDJSON output",
+			args:           []string{"get", "cv", path, "--output=ndjson", "--recursive=-1"},
+			expectedOutput: "", // JSON output is handled differently
+			expectedError:  false,
+		},
+		{
+			name: "tree output",
+			args: []string{"get", "cv", path, "--output=tree", "--recursive=-1"},
+			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
+ └─ ●     ocm.software/root    0.0.1    ocm.software  name=ocm.software/root,version=0.0.1   
+    ├─    ocm.software/leaf-a  0.0.1    ocm.software  name=ocm.software/leaf-a,version=0.0.1 
+    └─    ocm.software/leaf-b  0.0.1    ocm.software  name=ocm.software/leaf-b,version=0.0.1`,
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err = test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(result), test.WithErrorOutput(logs))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+			r.NoError(err, "failed to run command")
+
+			if slices.Contains(tt.args, "--output=json") || slices.Contains(tt.args, "--output=ndjson") {
+				// Handle JSON output separately
+				expectedRoot := map[string]any{
+					"component": map[string]any{
+						"componentReferences": []any{
+							map[string]any{
+								"name":          "leaf-a",
+								"version":       "0.0.1",
+								"componentName": "ocm.software/leaf-a",
+								"digest": map[string]any{
+									"hashAlgorithm":          "",
+									"normalisationAlgorithm": "",
+									"value":                  "",
+								},
+							},
+							map[string]any{
+								"name":          "leaf-b",
+								"version":       "0.0.1",
+								"componentName": "ocm.software/leaf-b",
+								"digest": map[string]any{
+									"hashAlgorithm":          "",
+									"normalisationAlgorithm": "",
+									"value":                  "",
+								},
+							},
+						},
+						"name":               "ocm.software/root",
+						"provider":           "ocm.software",
+						"repositoryContexts": nil,
+						"resources":          nil,
+						"sources":            nil,
+						"version":            "0.0.1",
+					},
+					"meta": map[string]any{
+						"schemaVersion": "v2",
+					},
+				}
+				expectedLeafA := map[string]any{
+					"component": map[string]any{
+						"componentReferences": nil,
+						"name":                "ocm.software/leaf-a",
+						"provider":            "ocm.software",
+						"repositoryContexts":  nil,
+						"resources":           nil,
+						"sources":             nil,
+						"version":             "0.0.1",
+					},
+					"meta": map[string]any{
+						"schemaVersion": "v2",
+					},
+				}
+				expectedLeafB := map[string]any{
+					"component": map[string]any{
+						"componentReferences": nil,
+						"name":                "ocm.software/leaf-b",
+						"provider":            "ocm.software",
+						"repositoryContexts":  nil,
+						"resources":           nil,
+						"sources":             nil,
+						"version":             "0.0.1",
+					},
+					"meta": map[string]any{
+						"schemaVersion": "v2",
+					},
+				}
+
+				var resultJSON any
+				decoder := json.NewDecoder(result)
+				switch {
+				case slices.Contains(tt.args, "--output=json"):
+					r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+					r.EqualValues([]any{expectedRoot, expectedLeafA, expectedLeafB}, resultJSON)
+				case slices.Contains(tt.args, "--output=ndjson"):
+					r.NoError(decoder.Decode(&resultJSON))
+					r.EqualValues(expectedRoot, resultJSON)
+					r.NoError(decoder.Decode(&resultJSON))
+					r.EqualValues(expectedLeafA, resultJSON)
+					r.NoError(decoder.Decode(&resultJSON))
+					r.EqualValues(expectedLeafB, resultJSON)
+				}
+			}
+
+			logEntries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(logEntries, "expected log entries to be present")
+
+			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+		})
+	}
+}
+
 // Test_List_Component_Version_Variations tests different variations of listing component versions
 func Test_List_Component_Version_Variations(t *testing.T) {
 	// Setup test repository with multiple component versions
@@ -905,6 +1140,120 @@ configurations:
   - repository:
       type: CommonTransportFormat/v1
       path: %[1]s
+`, externalArchiveFilePath)
+
+		legacyResolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-legacy-resolver.yaml")
+		r.NoError(os.WriteFile(legacyResolverConfigYAMLFilePath, []byte(legacyResolverConfigYAML), 0o600))
+
+		constructorYAML = fmt.Sprintf(`
+components:
+- name: ocm.software/a
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  resources:
+    - name: my-resource
+      type: blob
+      input:
+        type: utf8/v1
+        text: "I come from A"
+- name: ocm.software/b
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  componentReferences:
+    - name: b-to-a # internal reference
+      version: 1.0.0
+      componentName: ocm.software/a
+    - name: external
+      version: 1.0.0
+      componentName: ocm.software/external # from external repository
+  resources:
+    - name: my-resource
+      type: blob
+      input:
+        type: utf8/v1
+        text: "I come from B"
+`)
+
+		// Create a replacement test file to be added to the component version
+		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
+		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+		cmd, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorYAMLFilePath,
+			"--repository", archiveFilePath,
+			"--working-directory", tmp,
+			"--config", legacyResolverConfigYAMLFilePath,
+			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
+			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
+		), test.WithErrorOutput(logs))
+
+		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
+
+		r.NoError(err, "could not construct component version with working directory")
+
+		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+		r.NoError(err, "could not create test filesystem")
+		archive := ctf.NewFileSystemCTF(fs)
+		helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+		r.NoError(err, "could not create helper test repository")
+
+		for _, identity := range []runtime.Identity{{
+			descriptor.IdentityAttributeName:    "ocm.software/a",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}, {
+			descriptor.IdentityAttributeName:    "ocm.software/b",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}, {
+			descriptor.IdentityAttributeName:    "ocm.software/external",
+			descriptor.IdentityAttributeVersion: "1.0.0",
+		}} {
+			t.Run(identity.String(), func(t *testing.T) {
+				r := require.New(t)
+				_, err := helperRepo.GetComponentVersion(t.Context(),
+					identity[descriptor.IdentityAttributeName],
+					identity[descriptor.IdentityAttributeVersion],
+				)
+				r.NoError(err, "could not retrieve component version from test repository")
+			})
+		}
+
+	})
+
+	t.Run("construction with references with resolvers", func(t *testing.T) {
+		externalConstructorYAML := fmt.Sprintf(`
+name: ocm.software/external
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+- name: my-resource
+  type: blob
+  input:
+    type: utf8/v1
+    text: "I come from external!"
+`)
+		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
+		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
+		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
+
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", externalConstructorYAMLFilePath,
+			"--repository", externalArchiveFilePath,
+			"--working-directory", tmp,
+		), test.WithErrorOutput(logs))
+		r.NoError(err, "could not construct component version with working directory")
+
+		legacyResolverConfigYAML := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: resolvers.config.ocm.software
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      path: %[1]s
+    componentNamePattern: ocm.software/*
 `, externalArchiveFilePath)
 
 		legacyResolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-legacy-resolver.yaml")
