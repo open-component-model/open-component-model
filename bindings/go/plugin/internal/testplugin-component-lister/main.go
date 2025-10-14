@@ -11,6 +11,7 @@ import (
 	plugin "ocm.software/open-component-model/bindings/go/plugin/client/sdk"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	listerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
@@ -18,13 +19,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type TestPlugin struct{}
+type TestPlugin struct {
+	contracts.EmptyBasePlugin
+}
 
 var _ listerv1.ComponentListerPluginContract[*dummyv1.Repository] = (*TestPlugin)(nil)
-
-func (m *TestPlugin) Ping(_ context.Context) error {
-	return nil
-}
 
 func (m *TestPlugin) ListComponents(ctx context.Context, request *listerv1.ListComponentsRequest[*dummyv1.Repository], credentials map[string]string) (*listerv1.ListComponentsResponse, error) {
 	logger.DebugContext(ctx, "ListComponents", "request", request)
