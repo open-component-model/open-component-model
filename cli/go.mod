@@ -56,5 +56,7 @@ require (
 	golang.org/x/term v0.35.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20250915165427-710b0c881b3c // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251002101013-e0cc2f41d070 // indirect
 )
+
+replace ocm.software/open-component-model/bindings/go/plugin => ../bindings/go/plugin
