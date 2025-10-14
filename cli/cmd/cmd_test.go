@@ -1109,6 +1109,7 @@ resources:
 	})
 
 	t.Run("construction with references targeting fallback resolvers", func(t *testing.T) {
+		tmp := t.TempDir()
 		externalConstructorYAML := fmt.Sprintf(`
 name: ocm.software/external
 version: 1.0.0
@@ -1222,6 +1223,7 @@ components:
 	})
 
 	t.Run("construction with references targeting resolvers", func(t *testing.T) {
+		tmp := t.TempDir()
 		externalConstructorYAML := fmt.Sprintf(`
 name: ocm.software/external
 version: 1.0.0

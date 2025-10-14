@@ -130,9 +130,9 @@ configurations:
   resolvers:
   - repository:
       type: CommonTransportFormat/v1
-      hostname: ghcr.iod
+      hostname: ghcr.io
 - type: credentials.config.ocm.software
-  consumers:
+  consdumers:
   - identity:
       type: OCIRepository
       hostname: ghcr.io
