@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -76,7 +77,7 @@ func TestPluginFlow(t *testing.T) {
 		BaseUrl: "example.com/test-repository",
 	}
 	require.NoError(t, err)
-	retrievedListerPlugin, err := registry.GetComponentListerPlugin(ctx, spec, nil)
+	retrievedListerPlugin, err := registry.GetComponentLister(ctx, spec, nil)
 	require.NoError(t, err)
 
 	expectedList := []string{"test-component-1", "test-component-2"}
@@ -105,33 +106,36 @@ func TestRegisterInternalComponentListerPlugin(t *testing.T) {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	registry := NewComponentListerRegistry(ctx)
-	p := &mockComponentListerPlugin{}
+	p := &mockInternalPlugin{}
 	require.NoError(t, RegisterInternalComponentListerPlugin(scheme, registry, p, &dummyv1.Repository{}))
-	retrievedPlugin, err := registry.GetComponentListerPlugin(ctx, &dummyv1.Repository{}, nil)
+	retrievedLister, err := registry.GetComponentLister(ctx, &dummyv1.Repository{}, nil)
 	require.NoError(t, err)
-	require.Equal(t, p, retrievedPlugin)
-	result := []string{}
-	err = retrievedPlugin.ListComponents(ctx, "", func(names []string) error {
-		result = append(result, names...)
+	err = retrievedLister.ListComponents(ctx, "", func(names []string) error {
 		return nil
 	})
 	require.NoError(t, err)
-	require.True(t, p.processCalled)
+	require.True(t, retrievedLister.(*mockInternalLister).called)
 }
 
-type mockComponentListerPlugin struct {
-	credCalled    bool
-	processCalled bool
+type mockInternalPlugin struct{}
+
+var _ InternalComponentListerPluginContract = (*mockInternalPlugin)(nil)
+
+func (m *mockInternalPlugin) GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (identity runtime.Identity, err error) {
+	panic("not implemented")
 }
 
-func (m *mockComponentListerPlugin) GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (identity runtime.Identity, err error) {
-	m.credCalled = true
-	return nil, nil
+func (m *mockInternalPlugin) GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentLister, error) {
+	return &mockInternalLister{}, nil
 }
 
-func (m *mockComponentListerPlugin) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
-	m.processCalled = true
+type mockInternalLister struct {
+	called bool
+}
+
+var _ repository.ComponentLister = (*mockInternalLister)(nil)
+
+func (m *mockInternalLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
+	m.called = true
 	return nil
 }
-
-var _ InternalComponentListerPluginContract = (*mockComponentListerPlugin)(nil)

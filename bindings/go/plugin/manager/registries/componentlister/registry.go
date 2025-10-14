@@ -189,8 +189,8 @@ func (r *ComponentListerRegistry) GetComponentListerCredentialConsumerIdentity(c
 	return result.Identity, nil
 }
 
-// GetComponentListerPlugin returns ComponentLister plugins for a specific type.
-func (r *ComponentListerRegistry) GetComponentListerPlugin(ctx context.Context,
+// GetComponentLister returns ComponentLister for a specific repository type.
+func (r *ComponentListerRegistry) GetComponentLister(ctx context.Context,
 	repositorySpecification runtime.Typed,
 	credentials map[string]string,
 ) (repository.ComponentLister, error) {
@@ -209,7 +209,12 @@ func (r *ComponentListerRegistry) GetComponentListerPlugin(ctx context.Context,
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
 		}
 
-		return p, nil
+		lister, err := p.GetComponentLister(ctx, repositorySpecification, credentials)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get component lister: %w", err)
+		}
+
+		return lister, nil
 	}
 
 	plugin, err := r.getPlugin(ctx, typ)

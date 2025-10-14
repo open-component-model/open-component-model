@@ -8,7 +8,8 @@ import (
 )
 
 type InternalComponentListerPluginContract interface {
-	repository.ComponentLister
+	// GetComponentLister returns a component lister for the given repository specification.
+	GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (repository.ComponentLister, error)
 
 	// GetComponentListerCredentialConsumerIdentity retrieves an identity for the given specification that
 	// can be used to lookup credentials for the repository.
