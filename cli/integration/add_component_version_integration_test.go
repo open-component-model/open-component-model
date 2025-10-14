@@ -91,8 +91,8 @@ configurations:
   resolvers:
   - repository:
       type: OCIRepository/v1
-      hostname: %[1]s
-    componentNamePattern: *
+      baseUrl: http://%[1]s:%[2]s
+    componentNamePattern: "*"
 `,
 		},
 	}

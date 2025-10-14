@@ -119,7 +119,7 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 
 				finalResolvers = append(finalResolvers, &resolverspec.Resolver{
 					Repository:           &raw,
-					ComponentNamePattern: "**",
+					ComponentNamePattern: "*",
 				})
 			}
 
