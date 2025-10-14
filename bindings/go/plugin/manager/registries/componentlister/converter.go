@@ -3,6 +3,7 @@ package componentlister
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -36,7 +37,18 @@ func (r *componentListerPluginConverter) ListComponents(ctx context.Context, las
 			return fmt.Errorf("failed to list components, callback func returned error for list '%v': %w", response.List, err)
 		}
 
-		if response.Header == nil || response.Header.Last == "" || len(response.List) == 0 {
+		// Exit if returned header indicates that there are no more items to be returned.
+		if response.Header == nil || response.Header.Last == "" {
+			break
+		}
+
+		// Exit if it looks like we are in an infinite loop due to incorrect header.
+		if len(response.List) == 0 {
+			slog.DebugContext(ctx, "component list page returned by external plug-in is empty, but response header indicates more items", "header", response.Header)
+			break
+		}
+		if response.Header.Last == last {
+			slog.DebugContext(ctx, "same component list page has already been processed", "last", last)
 			break
 		}
 
