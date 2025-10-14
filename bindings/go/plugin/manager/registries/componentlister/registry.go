@@ -165,7 +165,7 @@ func (r *ComponentListerRegistry) GetComponentListerCredentialConsumerIdentity(c
 
 		identity, err := p.GetComponentListerCredentialConsumerIdentity(ctx, repositorySpecification)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get component version repository: %w", err)
+			return nil, fmt.Errorf("failed to get identity for the given specification '%+v': %w", repositorySpecification, err)
 		}
 
 		return identity, nil
