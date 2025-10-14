@@ -29,7 +29,7 @@ func ListComponentsHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 		// body contains encoded ListComponentsRequest.
 		body, err := plugins.DecodeJSONRequestBody[v1.ListComponentsRequest[T]](writer, request)
 		if err != nil {
-			plugins.NewError(fmt.Errorf("failed to marshal request body: %w", err), http.StatusInternalServerError).Write(writer)
+			plugins.NewError(fmt.Errorf("failed to unmarshal request body: %w", err), http.StatusInternalServerError).Write(writer)
 			return
 		}
 
