@@ -51,11 +51,6 @@ func (m *TestPlugin) GetIdentity(ctx context.Context, typ *listerv1.GetIdentityR
 	return nil, nil
 }
 
-// Config defines a configuration that this plugin requires.
-type Config struct {
-	MaximumNumberOfPotatoes string `json:"maximumNumberOfPotatoes"`
-}
-
 var logger *slog.Logger
 
 func main() {
@@ -111,16 +106,6 @@ func main() {
 	if conf.ID == "" {
 		logger.Error("plugin config has no ID")
 		os.Exit(1)
-	}
-
-	for _, raw := range conf.ConfigTypes {
-		pluginConfig := &Config{}
-		if err := json.Unmarshal(raw.Data, pluginConfig); err != nil {
-			logger.Error("failed to unmarshal plugin config", "error", err)
-			os.Exit(1)
-		}
-
-		logger.Info("configuration successfully marshaled", "maximumNumberOfPotatoes", pluginConfig.MaximumNumberOfPotatoes)
 	}
 
 	separateContext := context.Background()
