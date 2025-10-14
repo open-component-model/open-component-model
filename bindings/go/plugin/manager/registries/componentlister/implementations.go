@@ -90,7 +90,7 @@ func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *v1.
 	}
 
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, ListComponents, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
-		return nil, fmt.Errorf("failed to get component names from %s: %w", r.ID, err)
+		return nil, fmt.Errorf("failed to get component names from plug-in '%s' for request '%+v': %w", r.ID, *request, err)
 	}
 
 	return response, nil

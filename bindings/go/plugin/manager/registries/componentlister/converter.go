@@ -28,12 +28,12 @@ func (r *componentListerPluginConverter) ListComponents(ctx context.Context, las
 
 		response, err := r.externalPlugin.ListComponents(ctx, request, r.credentials)
 		if err != nil {
-			return fmt.Errorf("plug-in returned error: %w", err)
+			return err
 		}
 
 		err = fn(response.List)
 		if err != nil {
-			return fmt.Errorf("callback func returned error: %w", err)
+			return fmt.Errorf("failed to list components, callback func returned error for list '%v': %w", response.List, err)
 		}
 
 		if response.Header == nil || response.Header.Last == "" || len(response.List) == 0 {
