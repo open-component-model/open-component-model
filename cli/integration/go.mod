@@ -19,7 +19,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251009073722-3db19b40ae7d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.9
-	ocm.software/open-component-model/bindings/go/plugin v0.0.7
+	ocm.software/open-component-model/bindings/go/plugin v0.0.8
 	ocm.software/open-component-model/bindings/go/repository v0.0.2
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	ocm.software/open-component-model/cli v0.0.0-20250929111900-08cb1b0e7343
@@ -112,6 +112,6 @@ require (
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251002101013-e0cc2f41d070 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251007091609-0f6fd5aa0c28 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20250915165427-710b0c881b3c // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251002101013-e0cc2f41d070 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
