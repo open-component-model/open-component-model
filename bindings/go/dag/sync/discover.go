@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -155,7 +156,9 @@ func (d *GraphDiscoverer[K, V]) Discover(ctx context.Context) (retErr error) {
 	errGroup, errgroupCtx := errgroup.WithContext(ctx)
 	for _, root := range d.opts.Roots {
 		errGroup.Go(func() error {
-			return d.discover(errgroupCtx, root)
+			// create empty path for each root
+			path := make(map[K]bool)
+			return d.discover(errgroupCtx, root, path)
 		})
 	}
 
@@ -169,12 +172,18 @@ func (d *GraphDiscoverer[K, V]) Discover(ctx context.Context) (retErr error) {
 func (d *GraphDiscoverer[K, V]) discover(
 	ctx context.Context,
 	id K,
+	path map[K]bool,
 ) error {
 	// Early abort if context is cancelled.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
+	}
+
+	// if we have a match, error out
+	if path[id] {
+		return fmt.Errorf("cyclic dependency detected: vertex %v is already in the current discovery path", id)
 	}
 
 	// Setup done channel for this vertex.
@@ -192,6 +201,11 @@ func (d *GraphDiscoverer[K, V]) discover(
 			return nil
 		}
 	}
+
+	// add this vertex to the current discovery path
+	path[id] = true
+	// remove this vertex from the path when done (part of the backtracking)
+	defer delete(path, id)
 
 	// Add vertex in "discovering" state.
 	if err := d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
@@ -237,7 +251,10 @@ func (d *GraphDiscoverer[K, V]) discover(
 	errGroup, egctx := errgroup.WithContext(ctx)
 	for index, neighbor := range neighbors {
 		errGroup.Go(func() error {
-			if err := d.discover(egctx, neighbor); err != nil {
+			// create a copy for this particular neighbor
+			childPath := maps.Clone(path)
+
+			if err := d.discover(egctx, neighbor, childPath); err != nil {
 				return fmt.Errorf("failed to discover reference %v: %w", neighbor, err)
 			}
 			// Add edge from current vertex to neighbor.
