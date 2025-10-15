@@ -129,6 +129,51 @@ func TestDAGDiscovery(t *testing.T) {
 		r.Contains([]DiscoveryState{DiscoveryStateError, DiscoveryStateUnknown}, cState, "expected vertex C to be in error state, but got %s", cState)
 	})
 
+	t.Run("graph discovery fails in case of cyclic dependency", func(t *testing.T) {
+		ctx := t.Context()
+		r := require.New(t)
+		// Emulate an invalid external dependency graph. Here, the edge C -> D
+		// exists, but D is not found in the graph.
+		//    A
+		//   / \
+		//  B - B
+		graph := map[string][]string{
+			"A": {"B"},
+			"B": {"A"},
+		}
+		dag := NewGraphDiscoverer(&GraphDiscovererOptions[string, string]{
+			Roots: []string{"A"},
+			Resolver: ResolverFunc[string, string](func(ctx context.Context, key string) (value string, err error) {
+				if _, ok := graph[key]; !ok {
+					return "", fmt.Errorf("no node found with ID %s", key)
+				}
+				return key, nil
+			}),
+			Discoverer: DiscovererFunc[string, string](func(ctx context.Context, parent string) (children []string, err error) {
+				dep, ok := graph[parent]
+				if !ok {
+					return nil, fmt.Errorf("no node found with ID %s", parent)
+				}
+				var neighbors []string
+				for _, id := range dep {
+					neighbors = append(neighbors, id)
+				}
+				return neighbors, nil
+			}),
+		})
+
+		err := dag.Discover(ctx)
+		r.Error(err, "expected error due to missing node in the external graph, but got nil")
+
+		aState := dag.CurrentState("A")
+		r.Equal(DiscoveryStateError, aState, "expected vertex A to be in error state, but got %s", aState)
+
+		// because of discovers property to abort early, if 2 nodes on the layer are running in parallel,
+		// and one of them fails, the other one might be in an unknown state as it might not have yet been discovered.
+		bState := dag.CurrentState("B")
+		r.Contains([]DiscoveryState{DiscoveryStateError, DiscoveryStateUnknown}, bState, "expected vertex B to be in error state, but got %s", bState)
+	})
+
 	t.Run("graph discovery fails in discovery function", func(t *testing.T) {
 		ctx := t.Context()
 		r := require.New(t)
