@@ -2,7 +2,6 @@ package oci
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,6 +25,5 @@ func TestCTFComponentListerPluginRegistration(t *testing.T) {
 	ctfSpec := &ctfv1.Repository{Path: "/non/existing/path"}
 	_, err := registry.GetComponentLister(ctx, ctfSpec, nil)
 	require.Error(t, err)
-	expectedErr := "path does not exist: /non/existing/path"
-	require.Truef(t, strings.Contains(err.Error(), expectedErr), "returned error '%s' does not contain expected '%s'", err.Error(), expectedErr)
+	require.Contains(t, err.Error(), "path does not exist: /non/existing/path")
 }
