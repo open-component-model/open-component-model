@@ -243,12 +243,12 @@ ocm.software/open-component-model/bindings/go/input/file v0.0.1 h1:BIKycHjhhe1Vq
 ocm.software/open-component-model/bindings/go/input/file v0.0.1/go.mod h1:+YQ9j/FgfEVqiUn9hsO6lvG12lzV5M7lkY3hObNNuic=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251002101013-e0cc2f41d070 h1:L6jxuH6IaAqBENgfdrdmVvfwX3GWWSNEleOl1IJdI0A=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251002101013-e0cc2f41d070/go.mod h1:kITvqYxsvrIX/hMrqLjaoJQEGLHnfRkz4VRmSn+fmLk=
-ocm.software/open-component-model/bindings/go/oci v0.0.10-0.20251014091627-a729bb684e2c h1:SnXgyZFRwJ/Xr2NJaaEmR57YI/62tZcbdckVuT1odAU=
-ocm.software/open-component-model/bindings/go/oci v0.0.10-0.20251014091627-a729bb684e2c/go.mod h1:JdbeaXr9vxjwh3C/TlGtymTjuGxctfSus18Tp9HmW3Q=
+ocm.software/open-component-model/bindings/go/oci v0.0.10 h1:xeKTLskunmPDTcnhPVHg/ivEkZddOUdR9ebKc9jRdco=
+ocm.software/open-component-model/bindings/go/oci v0.0.10/go.mod h1:JdbeaXr9vxjwh3C/TlGtymTjuGxctfSus18Tp9HmW3Q=
 ocm.software/open-component-model/bindings/go/plugin v0.0.7 h1:3JsVNzrgbuzYscxwUW/XjmJ0j3Lfn8rEn1Ffn0jhjFE=
 ocm.software/open-component-model/bindings/go/plugin v0.0.7/go.mod h1:muDFGtg+43uZyD6ygKuH+mjYRaZ8hPoTunuFSrYpw7U=
-ocm.software/open-component-model/bindings/go/repository v0.0.3-0.20251010150833-98556df77617 h1:ubbBVkgiAgGQyCBtf0HFV/YsrOm0GmhQSH61y2JO0nA=
-ocm.software/open-component-model/bindings/go/repository v0.0.3-0.20251010150833-98556df77617/go.mod h1:LyfD9ouKjHF+ZWmVNDeGi7KVmcLti/wPQQB3Gx3QvE8=
+ocm.software/open-component-model/bindings/go/repository v0.0.3 h1:Enwxm8XldcsQYqG3P5vAY00Q2MRIdcG/XmWwj0vZjlY=
+ocm.software/open-component-model/bindings/go/repository v0.0.3/go.mod h1:LyfD9ouKjHF+ZWmVNDeGi7KVmcLti/wPQQB3Gx3QvE8=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251007091609-0f6fd5aa0c28 h1:r+IwQNmFh56bGEQAjGWmutQZYOlw/BHBgL2vTK2HhtI=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251007091609-0f6fd5aa0c28/go.mod h1:w/dFdrhyB3Rpd/fKVtzOqrbRkZfDyD18kX65tLx/RCQ=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2 h1:YA20enOxMsk4gDWF+Anltwkc616dXebfgPz/0Bl0EKE=
