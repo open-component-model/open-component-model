@@ -13,10 +13,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// CTFComponentListerPlugin is a built-in CLI plug-in that facilitates listing of OCM components stored in a CTF repository.
+// The plug-in implements the InternalComponentListerPluginContract interface.
 type CTFComponentListerPlugin struct{}
 
 var _ componentlister.InternalComponentListerPluginContract = (*CTFComponentListerPlugin)(nil)
 
+// GetComponentLister returns a component lister for the given CTF repository specification.
+// If the provided specification is not of type *ctfv1.Repository, an error is returned.
 func (l *CTFComponentListerPlugin) GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, _ map[string]string) (repository.ComponentLister, error) {
 	ctfRepoSpec, ok := repositorySpecification.(*ctfv1.Repository)
 	if !ok {
@@ -31,6 +35,8 @@ func (l *CTFComponentListerPlugin) GetComponentLister(ctx context.Context, repos
 	return ocictf.NewComponentLister(archive), nil
 }
 
+// GetComponentListerCredentialConsumerIdentity retrieves an identity for the given repository specification.
+// Since CTF repositories do not require credentials, this method always returns nil and an error indicating that credentials are not supported or needed.
 func (l *CTFComponentListerPlugin) GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	return nil, errors.New("CTF component lister does not support/need credentials")
 }
