@@ -80,16 +80,18 @@ We can generate the following transformation specification:
 
 ```yaml
 type: transformations.ocm/v1alpha1
-attributes:
-  componentIdentity:
-    name: github.com/acme.org/helloworld
-    version: 1.0.0
-  repositorySpec: 
-    type: ociRegistry
-    baseUrl: "ghcr.io"
-    subPath: "/open-component-model/target-ocm-repository"
 transformations: 
-  - type: resource.creator
+  - type: attribute
+    id: helloworld
+    componentIdentity:
+      name: github.com/acme.org/helloworld
+      version: 1.0.0
+    repositorySpec: 
+      type: ociRegistry
+      baseUrl: "ghcr.io"
+      subPath: "/open-component-model/target-ocm-repository"
+      
+  - type: attribute
     id: resourcecreator1
     resource:
       name: localtext
@@ -100,7 +102,7 @@ transformations:
         filePath: ./testdata/text.txt
     # output: <does not need output, as it is already fully specified - creator is a no-op>
     
-  - type: resource.creator
+  - type: attribute
     id: resourcecreator2
     resource:
       name: localociartifact
@@ -111,7 +113,7 @@ transformations:
         imageReference: ghcr.io/fabianburth/artifact:1.0.0
     # output: <does not need output, as it is already fully specified - creator is a no-op>
     
-  - type: resource.creator # maps to input type "file"
+  - type: attribute
     id: resourcecreator3
     resource:
       name: ociartifact
@@ -156,8 +158,8 @@ transformations:
     # the repository and the component have to match with the component 
     # to which the resource is added and the repository where the component 
     # is uploaded
-    repository: ${attributes.repositorySpec}
-    component: ${attributes.componentIdentity}
+    repository: ${helloworld.repositorySpec}
+    component: ${helloworld.componentIdentity}
     # output:
     #   resource:
     #     name: localtext
@@ -181,10 +183,10 @@ transformations:
     #       type: localblob
     #       localReference: <reference in target repo>
   
-  - type: create.componentversion/v1alpha1
+  - type: attribute
     id: createcomponentversion1
-    name: ${attributes.componentIdentity.name} 
-    version: ${attributes.componentIdentity.version}
+    name: ${helloworld.componentIdentity.name} 
+    version: ${helloworld.componentIdentity.version}
     provider:
       name: internal
     resources:
@@ -292,3 +294,13 @@ systems is even higher.
 - This would also be adopted for the transfer use case. Here, the component 
   to be uploaded at the target location would be created from scratch and filled
   with information from the original component descriptor through `cel` expressions.
+
+## Implementation
+
+### Plugin Registries
+The transformation specification will require:
+- `resource.downloader` and `resource.uploader` can reuse the resource 
+  repository plugin registry.
+- `local.resource.uploader` can reuse the component repository plugin registry.
+- `component downloader` and `component.uploader` can reuse the component 
+  repository plugin registry.
