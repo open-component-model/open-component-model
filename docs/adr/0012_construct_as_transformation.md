@@ -46,7 +46,7 @@ file.
 
 ### Example: OCM Transformation Specification
 
-Assume we call `ocm add cv --repository ghcr.io/fabianburth/target-ocm-repository` 
+Assume we call `ocm add cv --repository ghcr.io/open-component-model/target-ocm-repository` 
 with the following constructor file:
 
 ```yaml
@@ -56,134 +56,214 @@ components:
     provider:
       name: internal
     resources:
-      - name: testdata
+      - name: localtext
         type: blob
         relation: local
         input:
           type: file
           path: ./testdata/text.txt
+      - name: localociartifact
+        type: blob
+        relation: local
+        input:
+          type: ociArtifact
+          path: ghcr.io/fabianburth/artifact:1.0.0
+      - name: ociartifact
+        type: blob
+        relation: local
+        access:
+          type: ociArtifact
+          imageReference: ghcr.io/fabianburth/artifact:1.0.0
 ```
 
 We can generate the following transformation specification:
 
-#### Option 1)
-
 ```yaml
 type: transformations.ocm/v1alpha1
-transformations:
-  # component
-  - type: create.componentversion/v1alpha1
-    id: createcomponentversion1
+attributes:
+  componentIdentity:
     name: github.com/acme.org/helloworld
     version: 1.0.0
-    provider:
-      name: internal
-      
-  # resource
-  - type: create.resource/v1alpha1 # maps to a resource in a constructor file
-    id: createresource1
-    resource: # maps to the resource specification in a constructor file
-      name: testdata
+  repositorySpec: 
+    type: ociRegistry
+    baseUrl: "ghcr.io"
+    subPath: "/open-component-model/target-ocm-repository"
+transformations: 
+  - type: resource.creator
+    id: resourcecreator1
+    resource:
+      name: localtext
       type: blob
       relation: local
-  - type: downloader.blob.filesystem/v1alpha1 # maps to input type "file"
-    id: downloadblob1
-    filePath: ./testdata/text.txt # maps to input.path
-  - type: uploader.localblob.oci/v1alpha1 # maps to the access or input type
+      access:
+        type: file
+        filePath: ./testdata/text.txt
+    # output: <does not need output, as it is already fully specified - creator is a no-op>
+    
+  - type: resource.creator
+    id: resourcecreator2
+    resource:
+      name: localociartifact
+      type: blob
+      relation: local
+      access: 
+        type: ociArtifact 
+        imageReference: ghcr.io/fabianburth/artifact:1.0.0
+    # output: <does not need output, as it is already fully specified - creator is a no-op>
+    
+  - type: resource.creator # maps to input type "file"
+    id: resourcecreator3
+    resource:
+      name: ociartifact
+      type: blob
+      relation: local
+      access:
+        type: ociArtifact
+        imageReference: ghcr.io/fabianburth/artifact:1.0.0
+    # output: <does not need output, as it is already fully specified - creator is a no-op>
+    
+  - type: resource.downloader
+    id: downloadresource1
+    resource: ${resourcecreator1.resource} 
+    # output:
+    #   resource:
+    #     name: localtext
+    #     type: blob
+    #     relation: local
+    #     access:
+    #       type: file
+    #       filePath: ./testdata/text.txt
+    #     data: <binary data>
+    
+  - type: resource.downloader/v1alpha1 # maps to the access or input type
+    id: downloadresource2
+    resource: ${resourcecreator2.resource}
+    # output:
+    #   resource:
+    #     name: localociartifact
+    #     type: blob
+    #     relation: local
+    #     access:
+    #       type: ociArtifact
+    #       imageReference: ghcr.io/fabianburth/artifact:1.0.0
+    #     data: <binary data>
+    
+    # NO DOWNLOADER NEEDED FOR downloadresource3, WE WANT TO ADD IT BY REFERENCE
+    
+  - type: local.resource.uploader/v1alpha1
     id: uploadresource1
-    # maps to the target repository (for local blobs) or an input or access
-    # specification property
-    imageReference: ghcr.io/fabianburth/target-ocm-repository/github.com/acme.org/helloworld:1.0.0
-    resource: ${createresource1.outputs.spec}
-    data: ${downloadresource1.outputs.data}
+    resource: ${downloadresource1.resource}
+    # the repository and the component have to match with the component 
+    # to which the resource is added and the repository where the component 
+    # is uploaded
+    repository: ${attributes.repositorySpec}
+    component: ${attributes.componentIdentity}
+    # output:
+    #   resource:
+    #     name: localtext
+    #     type: blob
+    #     relation: local
+    #     access:
+    #       type: localblob
+    #       localReference: <reference in target repo>
 
-  # component
-  - type: merge.component/v1alpha1
-    id: merge
-    merge:
-      base: ${createcomponentversion1.outputs.descriptor} # maps to the created component version
-      patches: # maps to each resource in the constructor file
-        - ${uploadresource1.outputs.spec}
-  - type: uploader.component.oci/v1alpha1
-    imageReference: ${uploadresource1.imageReference} # maps to the target repository
-    componentDescriptor: ${merge.outputs.descriptor}
-```
-
-Compared to the transformation specification for transferring a component, this:
-- Replaces the download of the component with the creation of a new 
-  component version specification.
-  So, creating a component version from scratch can essentially be thought of as 
-  a special kind of download of a component version.
-- Replaces the download of blob data based on an ocm resource specification with
-  a download based on a particular download specification (in this case, a 
-  file path) AND the creation of a new resource specification.
-
-#### Option 2
-
-```yaml
-type: transformations.ocm/v1alpha1
-transformations:
-  # component
+  - type: local.resource.uploader/v1alpha1
+    id: uploadresource2
+    resource: ${downloadresource2.resource}
+    repository: ${attributes.repositorySpec}
+    component: ${attributes.componentIdentity}
+    # output:
+    #   resource:
+    #     name: localociartifact
+    #     type: blob
+    #     relation: local
+    #     access:
+    #       type: localblob
+    #       localReference: <reference in target repo>
+  
   - type: create.componentversion/v1alpha1
     id: createcomponentversion1
-    name: github.com/acme.org/helloworld
-    version: 1.0.0
+    name: ${attributes.componentIdentity.name} 
+    version: ${attributes.componentIdentity.version}
     provider:
       name: internal
     resources:
-    - name: testdata
-      type: blob
-      relation: local
-      input:
-        type: file
-        path: ./testdata/text.txt
-        
-  # resource
-  - type: downloader.resource.file/v1alpha1
-    id: downloadresource1
-    componentDescriptor: ${createcomponentversion1.outputs.descriptor}
-    resource:
-      name: testdata
-  - id: uploadresource1
-    imageReference: ghcr.io/fabianburth/target-ocm-repository/github.com/acme.org/helloworld:1.0.0
-    resource: ${downloadresource1.outputs.spec}
-    data: ${downloadresource1.outputs.data}
+      - ${uploadresource1.resource}
+      - ${uploadresource2.resource}
+      - ${resourcecreator3.resource} # add by reference, no upload needed
 
-  # component
-  - type: merge.component/v1alpha1
-    id: merge
-    merge:
-      base: ${createcomponentversion1.outputs.descriptor}
-      patches:
-        - ${uploadresource1.outputs.descriptor}
-  - type: uploader.component.oci/v1alpha1
-    imageReference: ${uploadresource1.imageReference}
-    componentDescriptor: ${merge.outputs.descriptor}
+  - type: component.uploader/v1alpha1
+    repository: ${attributes.repositorySpec}
+    componentDescriptor: ${createcomponentversion1.outputs.descriptor}
 ```
 
-Compared to option 1), this even strengthens idea of the component creation 
-being a special kind of download. Here, the following transformations are also
-equivalent to transfer and we do not require a separate resource creation 
-transformation.
+### Notes
+#### Plugin Type System
+- The `type` (such as `type: resource.creator`) in above specification can be 
+  used as *capability* and the `type` within the configuration (e.g. 
+  repository type, access type) can be used as *type* to get the plugins from 
+  our existing plugin system.
+- All types of a particular *capability* share a single common output schema.
 
-### Comparison of Options
-**Option 1)** 
-- offers a clearer separation of concerns. The creation of the component
-and resource specifications is clearly separated from the download and upload
-of data.
-- is more flexible, as it allows for adding new resource to existing component
-versions.
-- is more complex, as it requires more transformations.
+> [!WARNING]
+> The configuration schema of a particular *capability* has to be static, 
+> besides the `type`d fields. A plugin registry has to know where to find the 
+> `type` used to select the correct plugin. This is especially important for 
+> nested structures such as resource, since we cannot rely on initially 
+> unmarshalling the configuration into a `struct { type string }` to extract the
+> correct type. 
 
-**Option 2)**
-- is simpler, as it requires fewer transformations.
-- is closer to the current implementation of constructors.
-- to unify the code path, the transformations would have to be able to deal 
-  with a component constructor that allows input types (or some other concept 
-  of access types that are not allowed to be present in a descriptor that is
-  uploaded).
+**Advantages**
+- We have a single uniform plugin system.
+- *Capabilities* can define a schema of common fields all *types* have to 
+  provide.
 
-## Conclusion
+**Disadvantages**
+- Additional indirection adds complexity. We have to first select a plugin 
+  registry based on the *capability* and then select the actual plugin based 
+  on the *type*.
+- It is harder to introduce arbitrary plugins as a plugin registry for the
+  corresponding *capability* has to be available.
 
+**Conclusion** 
+- Generally, this additional layer of indirection adds 
+flexibility at the cost of complexity. This is especially visible in simple use 
+cases (capability with a single type). 
+- However, since we already have this 
+plugin system in place, the complexity of maintaining two different plugin 
+systems is even higher.
 
-## Links <!-- optional -->
+#### Atomic Unit in OCM
+- The atomic unit in ocm is **resource** NOT A PLAIN BLOB or ACCESS, kind of 
+  like the atomic unit in kubernetes are pods not containers.
+- While this takes the operations to a higher abstraction level, offering each
+  operation the ability to add or modify the metadata of a resource.
+
+> [!NOTE]
+> In ocm v1, several interfaces were built against plain blobs or access as 
+> the atomic unit. This lead to issues, as 
+> - several operations had to be performed twice (digest calculation of a blob) 
+>   or as the metadata could not be passed along.
+> - several extension points were not flexible enough (resource uploader could
+>   not provide the digest of the uploaded blob, as it only returned a blob)
+
+#### Static Typing
+- The example above shows the *outputs* of each transformation as comments. This
+  is purely for illustration purposes. Still, 
+- The transformation specification is statically typed. This means that
+  everything that we programmatically write into MUST be typed
+  (e.g. `repository: ${attributes.repositorySpec}`, here we have to be able to
+  match the type of `repositorySpec` with the expected type of `repository`).
+- This is required to enable static type analysis which will be important to
+  avoid problems in complex graphs.
+
+## Comparison with Transformation ADR
+- Instead of expecting a component descriptor as a starting point for all 
+  operations that is consecutively modified and then merged (to detect 
+  conflicts), we declaritively create a new component descriptor to be uploaded 
+  with the resources created in the previous operations.
+- This simplifies the operations, as we do not have to deal with 
+  merging and conflict detection.
+- This would also be adopted for the transfer use case. Here, the component 
+  to be uploaded at the target location would be created from scratch and filled
+  with information from the original component descriptor through `cel` expressions.
