@@ -22,7 +22,7 @@ func TestCTFComponentListerPluginRegistration(t *testing.T) {
 	require.NoError(t, componentlister.RegisterInternalComponentListerPlugin(scheme, registry, p, &ctfv1.Repository{}))
 
 	// Smoke test: try to retrieve a lister for a non-existing CTF repo.
-	// We expect "path does not exist" error, meaning that the plug-in was found and tied to read the CTF.
+	// We expect "path does not exist" error, meaning that the plug-in was found and tried to read the CTF.
 	ctfSpec := &ctfv1.Repository{Path: "/non/existing/path"}
 	_, err := registry.GetComponentLister(ctx, ctfSpec, nil)
 	require.Error(t, err)
