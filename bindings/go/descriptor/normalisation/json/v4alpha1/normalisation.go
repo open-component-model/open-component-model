@@ -130,21 +130,17 @@ func (m algo) Normalise(cd *descruntime.Descriptor) ([]byte, error) {
 // Parameters:
 //   - d: The v2 descriptor to set defaults for
 func DefaultComponent(d *v2.Descriptor) {
-	component := d.Component
-	if component.RepositoryContexts == nil {
-		component.RepositoryContexts = make([]*runtime.Raw, 0)
+	if d.Component.RepositoryContexts == nil {
+		d.Component.RepositoryContexts = make([]*runtime.Raw, 0)
 	}
-	if component.References == nil {
-		component.References = make([]v2.Reference, 0)
+	if d.Component.References == nil {
+		d.Component.References = make([]v2.Reference, 0)
 	}
-	if component.Sources == nil {
-		component.Sources = make([]v2.Source, 0)
+	if d.Component.Sources == nil {
+		d.Component.Sources = make([]v2.Source, 0)
 	}
-	if component.References == nil {
-		component.References = make([]v2.Reference, 0)
-	}
-	if component.Resources == nil {
-		component.Resources = make([]v2.Resource, 0)
+	if d.Component.Resources == nil {
+		d.Component.Resources = make([]v2.Resource, 0)
 	}
 }
 
