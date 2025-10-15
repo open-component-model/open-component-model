@@ -24,8 +24,9 @@ func Test_Integration_AddComponentVersion_OCIRepository(t *testing.T) {
 	user := "ocm"
 
 	cases := []struct {
-		name string
-		cfg  string
+		name     string
+		cfg      string
+		external bool
 	}{
 		{
 			name: "targeting defaults",
@@ -94,6 +95,7 @@ configurations:
       baseUrl: http://%[1]s:%[2]s
     componentNamePattern: "*"
 `,
+			external: true,
 		},
 	}
 
@@ -133,7 +135,28 @@ configurations:
 				componentVersion := "v1.0.0"
 
 				// Create constructor file
-				constructorContent := fmt.Sprintf(`
+				var constructorContent string
+
+				if tc.external {
+					constructorContent = fmt.Sprintf(`
+- name: %[1]s
+  version: %[2]s
+  provider:
+    name: ocm.software
+  componentReferences:
+    - name: external
+      version: %[2]s
+      componentName: %[1]s
+  resources:
+  - name: test-resource
+    version: v1.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello, World from OCI registry!"
+`, componentName, componentVersion)
+				} else {
+					constructorContent = fmt.Sprintf(`
 components:
 - name: %s
   version: %s
@@ -147,6 +170,7 @@ components:
       type: utf8
       text: "Hello, World from OCI registry!"
 `, componentName, componentVersion)
+				}
 
 				constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 				r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))

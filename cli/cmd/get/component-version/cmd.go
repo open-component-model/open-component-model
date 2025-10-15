@@ -41,19 +41,19 @@ func New() *cobra.Command {
 		Use:        "component-version {reference}",
 		Aliases:    []string{"cv", "component-versions", "cvs", "componentversion", "componentversions", "component", "components", "comp", "comps", "c"},
 		SuggestFor: []string{"version", "versions"},
-		Short:      "Get component version(s) from an OCM repositoryProvider",
+		Short:      "Get component version(s) from an OCM repository",
 		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
-		Long: fmt.Sprintf(`Get component version(s) from an OCM repositoryProvider.
+		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
 
 The format of a component reference is:
-	[type::]{repositoryProvider}/[valid-prefix]/{component}[:version]
+	[type::]{repository}/[valid-prefix]/{component}[:version]
 
 For valid prefixes {%[1]s|none} are available. If <none> is used, it defaults to %[1]q. This is because by default,
-OCM components are stored within a specific sub-repositoryProvider.
+OCM components are stored within a specific sub-repository.
 
 For known types, currently only {%[2]s} are supported, which can be shortened to {%[3]s} respectively for convenience.
 
-If no type is given, the repositoryProvider path is interpreted based on introspection and heuristics.
+If no type is given, the repository path is interpreted based on introspection and heuristics.
 `,
 			compref.DefaultPrefix,
 			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
@@ -87,7 +87,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
   live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
 	cmd.Flags().String(FlagSemverConstraint, "> 0.0.0-0", "semantic version constraint restricting which versions to output")
 	// TODO(fabianburth): add concurrency limit to the dag discovery (https://github.com/open-component-model/ocm-project/issues/705)
-	// cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repositoryProvider for resolving component versions")
+	// cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
 	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
@@ -156,7 +156,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 
 	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), ref.Identity())
 	if err != nil {
-		return fmt.Errorf("could not access ocm repositoryProvider: %w", err)
+		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
 	descs, err := ocm.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{

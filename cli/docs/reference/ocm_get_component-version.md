@@ -1,6 +1,6 @@
 ---
 title: ocm get component-version
-description: Get component version(s) from an OCM repositoryProvider.
+description: Get component version(s) from an OCM repository.
 suppressTitle: true
 toc: true
 sidebar:
@@ -9,21 +9,21 @@ sidebar:
 
 ## ocm get component-version
 
-Get component version(s) from an OCM repositoryProvider
+Get component version(s) from an OCM repository
 
 ### Synopsis
 
-Get component version(s) from an OCM repositoryProvider.
+Get component version(s) from an OCM repository.
 
 The format of a component reference is:
-	[type::]{repositoryProvider}/[valid-prefix]/{component}[:version]
+	[type::]{repository}/[valid-prefix]/{component}[:version]
 
 For valid prefixes {component-descriptors|none} are available. If <none> is used, it defaults to "component-descriptors". This is because by default,
-OCM components are stored within a specific sub-repositoryProvider.
+OCM components are stored within a specific sub-repository.
 
 For known types, currently only {OCIRepository|CommonTransportFormat} are supported, which can be shortened to {OCI|oci|CTF|ctf} respectively for convenience.
 
-If no type is given, the repositoryProvider path is interpreted based on introspection and heuristics.
+If no type is given, the repository path is interpreted based on introspection and heuristics.
 
 
 ```
