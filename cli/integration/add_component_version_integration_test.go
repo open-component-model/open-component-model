@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -70,6 +71,7 @@ configurations:
       type: OCIRepository
       hostname: %[1]q
 `,
+			external: true,
 		},
 		{
 			name: "targeting resolvers",
@@ -139,6 +141,7 @@ configurations:
 
 				if tc.external {
 					constructorContent = fmt.Sprintf(`
+components:
 - name: %[1]s
   version: %[2]s
   provider:
@@ -146,7 +149,7 @@ configurations:
   componentReferences:
     - name: external
       version: %[2]s
-      componentName: %[1]s
+      componentName: %[1]s-external
   resources:
   - name: test-resource
     version: v1.0.0
@@ -154,6 +157,17 @@ configurations:
     input:
       type: utf8
       text: "Hello, World from OCI registry!"
+- name: %[1]s-external
+  version: %[2]s
+  provider:
+    name: ocm.software
+  resources:
+  - name: test-resource-2
+    version: v1.0.0
+    type: plainText
+    input:
+      type: utf8
+      text: "Hello, World from external registry!"
 `, componentName, componentVersion)
 				} else {
 					constructorContent = fmt.Sprintf(`
@@ -185,10 +199,12 @@ components:
 					"--config", cfgPath,
 				})
 
-				r.NoError(addCMD.ExecuteContext(t.Context()), "add component-version should succeed with OCI registry")
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
+				r.NoError(addCMD.ExecuteContext(ctx), "add component-version should succeed with OCI registry")
 
 				// Verify the component version was added by attempting to retrieve it
-				desc, err := repo.GetComponentVersion(t.Context(), componentName, componentVersion)
+				desc, err := repo.GetComponentVersion(ctx, componentName, componentVersion)
 				r.NoError(err, "should be able to retrieve the added component version")
 				r.Equal(componentName, desc.Component.Name)
 				r.Equal(componentVersion, desc.Component.Version)
@@ -196,6 +212,18 @@ components:
 				r.Len(desc.Component.Resources, 1)
 				r.Equal("test-resource", desc.Component.Resources[0].Name)
 				r.Equal("v1.0.0", desc.Component.Resources[0].Version)
+
+				if tc.external {
+					componentNameExternal := fmt.Sprintf("%s-external", componentName)
+					descExternal, err := repo.GetComponentVersion(ctx, componentNameExternal, componentVersion)
+					r.NoError(err, "should be able to retrieve the added component version")
+					r.Equal(componentNameExternal, descExternal.Component.Name)
+					r.Equal(componentVersion, descExternal.Component.Version)
+					r.Equal("ocm.software", descExternal.Component.Provider.Name)
+					r.Len(descExternal.Component.Resources, 1)
+					r.Equal("test-resource-2", descExternal.Component.Resources[0].Name)
+					r.Equal("v1.0.0", descExternal.Component.Resources[0].Version)
+				}
 			})
 
 			t.Run("add component-version with explicit OCI type prefix", func(t *testing.T) {
