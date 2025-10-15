@@ -74,6 +74,10 @@ components:
         access:
           type: ociArtifact
           imageReference: ghcr.io/fabianburth/artifact:1.0.0
+    componentReferences:
+      name: ref
+      version: 1.0.0
+      componentName: github.com/acme.org/helloworld-ref
 ```
 
 We can generate the following transformation specification:
@@ -182,7 +186,29 @@ transformations:
     #     access:
     #       type: localblob
     #       localReference: <reference in target repo>
+
+
+  - type: attribute
+    id: helloworld-ref
+    componentIdentity:
+      name: github.com/acme.org/helloworld-ref
+      version: 1.0.0
+    repositorySpec:
+      type: ociRegistry
+      baseUrl: "ghcr.io"
+      subPath: "/open-component-model/target-ocm-repository"
+
+  - type: component.download
+    id: downloadcomponentversion2
+    component: ${helloworld-ref.componentIdentity}
+    # output: < component descriptor >
   
+  - type: component.digest/v1alpha1
+    id: digestcomponentversion2
+    componentDescriptor: ${downloadcomponentversion2.output}
+    # output:
+    #   digest: sha256:<hash>
+    
   - type: attribute
     id: createcomponentversion1
     name: ${helloworld.componentIdentity.name} 
@@ -193,8 +219,14 @@ transformations:
       - ${uploadresource1.resource}
       - ${uploadresource2.resource}
       - ${resourcecreator3.resource} # add by reference, no upload needed
+    componentReferences:
+      - name: ref
+        version: ${downloadcomponentversion2.output.version}
+        componentName: ${downloadcomponentversion2.output.name}
+        digest: ${digestcomponentversion2.output.digest}
 
   - type: component.uploader/v1alpha1
+    id: uploadcomponentversion1
     repository: ${attributes.repositorySpec}
     componentDescriptor: ${createcomponentversion1.outputs.descriptor}
 ```
@@ -304,3 +336,35 @@ The transformation specification will require:
 - `local.resource.uploader` can reuse the component repository plugin registry.
 - `component downloader` and `component.uploader` can reuse the component 
   repository plugin registry.
+
+### Transformation Processing
+1. **Parse the component constructor file.**
+2. **Process Resources and Sources**  
+   For each component version, the constructor handles all resources and sources:
+
+  - **Input Method Specified**  
+    If an input method is defined for resources:
+    - If it returns `ResourceInputMethodResult.ProcessedBlobData`, the constructor uploads the local blob to the target OCM repository.
+      (if this is the case, the resource is automatically marked as `by value`)
+    - If it returns `ResourceInputMethodResult.ProcessedResource`, the constructor applies the resource directly to the component descriptor candidate.
+      (if this is the case, the resource is automatically marked as `by reference`)
+      _Note: The input method must be registered in the constructor library._
+      _Sources are processed in the same way with `SourceInputMethodResult._
+
+  - **Access Specified**  
+    If an access method is defined, it is applied directly to the component descriptor candidate. However, it can
+    be explicitly interpreted as `by value` or `by reference`.
+
+  - **"By Value" Resources / Sources**  
+    If the resource is marked to be processed "by value":
+    - The constructor downloads the resource (if not already available as a `localBlob`).
+    - It is then stored in the component version as a `localBlob`.
+    - The local blob is uploaded using the OCM repository's capabilities.
+
+  - **"By Reference" Resources**
+    If the resource is marked to be processed "by reference":
+    - The constructor checks if the resource has a digest set.
+    - If not, it attempts to find a digest provider for the resource type.
+    - If found, the digest provider is called with the resource, and the digest information is set on the resource.
+      _Note: Sources do not have digest information and will not get processed like this._
+
