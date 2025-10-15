@@ -198,7 +198,30 @@ transformations:
 ```
 
 ### Notes
-#### Plugin Type System
+
+#### Mapping From Constructor to Transformation Specification
+
+**Input and Access Types**
+- **Input types** (as used in constructors) are mapped to a combination of
+  `resource.creator`, `resource.downloader` and `local.resource.uploader`
+  OR `resource.uploader` (e.g. `helm` input with specified `repository`)
+  transformations.
+  - In the `resource.creator` transformation, the `input` field is mapped
+    to a corresponding access type (e.g. `file`, `ociArtifact`).
+- **Access types** (as used in component constructors) depend on whether
+  they are marked as `byValue` or `byReference`.
+  - **byValue** access types are mapped to a combination of
+    `resource.creator`, `resource.downloader` and `local.resource.uploader`
+    (emphasis on **local**) transformations.
+  - **byReference** access types are mapped to a single
+    `resource.creator` transformation.
+
+**Conclusion**
+- The current `input type` implementation need to be broken up into:
+  - additional `access types` (for `file`, `dir`, ...)
+  - `resource.uploader` transformations (for `helm`)
+
+#### Plugin Type System Reuse
 - The `type` (such as `type: resource.creator`) in above specification can be 
   used as *capability* and the `type` within the configuration (e.g. 
   repository type, access type) can be used as *type* to get the plugins from 
@@ -233,7 +256,7 @@ cases (capability with a single type).
 plugin system in place, the complexity of maintaining two different plugin 
 systems is even higher.
 
-#### Atomic Unit in OCM
+#### Resource as Atomic Unit in OCM
 - The atomic unit in ocm is **resource** NOT A PLAIN BLOB or ACCESS, kind of 
   like the atomic unit in kubernetes are pods not containers.
 - While this takes the operations to a higher abstraction level, offering each
@@ -241,7 +264,7 @@ systems is even higher.
 
 > [!NOTE]
 > In ocm v1, several interfaces were built against plain blobs or access as 
-> the atomic unit. This lead to issues, as 
+> the atomic unit. This led to issues, as 
 > - several operations had to be performed twice (digest calculation of a blob) 
 >   or as the metadata could not be passed along.
 > - several extension points were not flexible enough (resource uploader could
@@ -249,12 +272,14 @@ systems is even higher.
 
 #### Static Typing
 - The example above shows the *outputs* of each transformation as comments. This
-  is purely for illustration purposes. Still, 
+  is purely for illustration purposes. In the actual implementation, every
+  capability has to define a static output schema (kind of like kubernetes 
+  resource status).
 - The transformation specification is statically typed. This means that
   everything that we programmatically write into MUST be typed
   (e.g. `repository: ${attributes.repositorySpec}`, here we have to be able to
   match the type of `repositorySpec` with the expected type of `repository`).
-- This is required to enable static type analysis which will be important to
+- This is required to enable static type analysis, which will be important to
   avoid problems in complex graphs.
 
 ## Comparison with Transformation ADR
