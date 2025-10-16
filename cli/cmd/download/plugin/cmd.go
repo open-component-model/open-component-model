@@ -122,11 +122,14 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 
 	reference := args[0]
 	// we have a reference and parse it
-	ref, _ := compref.Parse(reference)
+	ref, err := compref.Parse(reference)
+	if err != nil {
+		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
+	}
 	config := ocmContext.Configuration()
 	slog.DebugContext(ctx, "parsed component reference", "reference", reference, "parsed", ref)
 
-	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, reference)
+	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, ref)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}

@@ -172,14 +172,12 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool(FlagDryRun)
 
 	reference := args[0]
-	ref, err := compref.Parse(reference)
+	ref, err := compref.Parse(reference, compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
 	if err != nil {
 		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
 	}
 	config := ocmContext.Configuration()
-	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, reference,
-		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite),
-	)
+	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, ref)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}

@@ -26,16 +26,10 @@ type compRefProvider struct {
 
 // newFromCompRef creates a new compRefProvider based on the provided component reference string.
 // It uses the provided PluginManager to access the [repository.ComponentVersionRepository].
-// Optionally you can pass compref.Options to configure the parsing of the component reference.
-func newFromCompRef(componentReference string,
+func newFromCompRef(ref *compref.Ref,
 	manager *manager.PluginManager,
-	graph credentials.GraphResolver, options ...compref.Option,
+	graph credentials.GraphResolver,
 ) (*compRefProvider, error) {
-	ref, err := compref.Parse(componentReference, options...)
-	if err != nil {
-		return nil, fmt.Errorf("parsing component reference: %w", err)
-	}
-
 	return &compRefProvider{
 		ref:     ref,
 		manager: manager,

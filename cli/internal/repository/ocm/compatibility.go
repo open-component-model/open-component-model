@@ -45,8 +45,7 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 	pluginManager *manager.PluginManager,
 	credentialGraph credentials.GraphResolver,
 	config *genericv1.Config,
-	componentReference string,
-	options ...compref.Option,
+	ref *compref.Ref,
 ) (ComponentVersionRepositoryProvider, error) {
 	var (
 		//nolint:staticcheck // compatibility mode for deprecated resolvers
@@ -57,13 +56,8 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 		err               error
 	)
 
-	var ref *compref.Ref
-	if componentReference != "" {
-		ref, err = compref.Parse(componentReference)
-		if err != nil {
-			return nil, fmt.Errorf("parsing component reference failed: %w", err)
-		}
-		compRefProv, err = newFromCompRef(componentReference, pluginManager, credentialGraph, options...)
+	if ref != nil {
+		compRefProv, err = newFromCompRef(ref, pluginManager, credentialGraph)
 		if err != nil {
 			return nil, fmt.Errorf("parsing component reference failed: %w", err)
 		}
@@ -84,7 +78,7 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 		return nil, fmt.Errorf("both path matcher and fallback resolvers are configured, only one type is allowed")
 	}
 
-	// only use fallback resolvers if we got them from config and there are no path matchers
+	// only use fallback resolvers if we got them from config - they must explicitly be set
 	if len(fallbackResolvers) > 0 {
 		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
 
