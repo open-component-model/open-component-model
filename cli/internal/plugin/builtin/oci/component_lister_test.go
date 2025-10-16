@@ -13,7 +13,7 @@ import (
 
 func TestCTFComponentListerPluginRegistration(t *testing.T) {
 	// Setup.
-	ctx := context.Background()
+	ctx := t.Context()
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	registry := componentlister.NewComponentListerRegistry(ctx)
