@@ -237,9 +237,9 @@ transformations:
 
 **Input and Access Types**
 - **Input types** (as used in constructors) are mapped to a combination of
-  `resource.creator`, `resource.downloader` and `local.resource.uploader`
-  OR `resource.uploader` (e.g. `helm` input with specified `repository`)
-  transformations.
+  `resource.creator`, `resource.downloader` and `local.resource.uploader` 
+  (*By Value*) OR `resource.uploader` (e.g. `helm` input with specified 
+  `repository`) (*By Reference*) transformations.
   - In the `resource.creator` transformation, the `input` field is mapped
     to a corresponding access type (e.g. `file`, `ociArtifact`).
 - **Access types** (as used in component constructors) depend on whether
@@ -344,27 +344,63 @@ The transformation specification will require:
 
   - **Input Method Specified**  
     If an input method is defined for resources:
-    - If it returns `ResourceInputMethodResult.ProcessedBlobData`, the constructor uploads the local blob to the target OCM repository.
+    - If it would have returned `ResourceInputMethodResult.ProcessedBlobData`, 
+      it is mapped to:
+      - `resource.creator` (with the input access type)
+      - `resource.downloader`
+      - `local.resource.uploader`
       (if this is the case, the resource is automatically marked as `by value`)
+    - If it would have returned `ResourceInputMethodResult.ProcessedAccess`,
+      it is mapped to:
+      - `resource.creator` (with the input access type)
+      - `resource.downloader`
+      - `resource.uploader`
+      (if this is the case, the resource is automatically marked as `by reference`)
     - If it returns `ResourceInputMethodResult.ProcessedResource`, the constructor applies the resource directly to the component descriptor candidate.
       (if this is the case, the resource is automatically marked as `by reference`)
-      _Note: The input method must be registered in the constructor library._
       _Sources are processed in the same way with `SourceInputMethodResult._
 
-  - **Access Specified**  
-    If an access method is defined, it is applied directly to the component descriptor candidate. However, it can
-    be explicitly interpreted as `by value` or `by reference`.
+  - **Access Method Specified**  
+    For access methods, the mapping depends on whether the resource is marked 
+    as `by value` or `by reference`:
 
-  - **"By Value" Resources / Sources**  
-    If the resource is marked to be processed "by value":
-    - The constructor downloads the resource (if not already available as a `localBlob`).
-    - It is then stored in the component version as a `localBlob`.
-    - The local blob is uploaded using the OCM repository's capabilities.
+    - **"By Value" Resources / Sources**  
+      If the resource is marked to be processed "by value", it is mapped to:
+      - `resource.creator` (with the access type)
+      - `resource.downloader`
+      - `local.resource.uploader`
 
-  - **"By Reference" Resources**
-    If the resource is marked to be processed "by reference":
-    - The constructor checks if the resource has a digest set.
-    - If not, it attempts to find a digest provider for the resource type.
-    - If found, the digest provider is called with the resource, and the digest information is set on the resource.
-      _Note: Sources do not have digest information and will not get processed like this._
+    - **"By Reference" Resources**
+      If the resource is marked to be processed "by reference", it is mapped to:
+      - `resource.creator` (with the access type)
+      - (conditional) `resource.digester` - here, the mapping function has to 
+        check, if the resource has a digest set. If not, it has to add a 
+        `resource.digester` transformation.
+      - (no uploader needed, as the resource is added by reference)
+        _Note: Sources do not have digest information and will not get processed like this._
 
+  - **Component Reference Specified**
+    For component references, the behavior depends on:
+    - whether the referenced component is part of the constructor file itself or 
+      whether it is an external component stored in an ocm repository.
+      - **Internal Component Reference**
+        If the referenced component is part of the constructor file itself, it 
+        is mapped to:
+        - `component.digester` (to calculate the digest of the referenced component)
+      - **External Component Reference**
+        If the referenced component is an external component stored in an ocm 
+        repository, it is mapped to:
+        - `component.downloader`
+        - `component.digester`
+        - depending on whether `--recursive` is set:
+          - If `--recursive` is set, the referenced component is also added to 
+            the target repository. Therefore, it is mapped to:
+            - `component.uploader`
+          - If `--recursive` is NOT set, the referenced component is only added 
+            by reference. Therefore, no `component.uploader` transformation is 
+            needed.
+
+ The result of the last transformation step (so, currently, either a 
+ `digester` of `uploader` is used to declaratively create the component 
+ version). This then has to be uploaded with a `component.uploader` 
+ transformation.
