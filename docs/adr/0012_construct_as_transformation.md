@@ -329,13 +329,20 @@ systems is even higher.
 
 ## Implementation
 
+### Input to Access Types
+
+As mentioned above, there will no longer be an implementation for each input 
+type. Instead, we want new `access types` (e.g. `file`, `dir`, ...) and 
+`uploaders`.
+
 ### Plugin Registries
-The transformation specification will require:
-- `resource.downloader` and `resource.uploader` can reuse the resource 
-  repository plugin registry.
-- `local.resource.uploader` can reuse the component repository plugin registry.
-- `component downloader` and `component.uploader` can reuse the component 
-  repository plugin registry.
+
+To keep the complexity in check, we assume the transformation implementation 
+is aware of the available *capabilities*, their interfaces and their 
+types (or rather, schemas). This means, new *capabilities* can only be added by 
+extending the code.
+
+So, the logic will be heavily inspired by the current construct implementation.
 
 ### Transformation Processing
 1. **Parse the component constructor file.**
