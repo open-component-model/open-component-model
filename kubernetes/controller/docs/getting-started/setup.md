@@ -86,14 +86,15 @@ kro                  kro-86d5b5b5bd-6gmvr                         1/1     Runnin
 To install the OCM K8s, you can use one of the following commands:
 
 ```bash
-# In the ocm-k8s-toolkit/ repository
-make deploy
+# In the ocm mono-repo root directory
+cd kubernetes/controller
+task deploy
 ```
 
 or
 
 ```bash
-kubectl apply -k https://ocm.software/open-component-model/kubernetes/controller/config/default?ref=main
+kubectl apply -k "https://github.com/open-component-model/open-component-model/kubernetes/controller/config/default?ref=main"
 ```
 
 If the OCM K8s Toolkit controllers are installed correctly, you should see some similar output when running the
