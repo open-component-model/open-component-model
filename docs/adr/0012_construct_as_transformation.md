@@ -243,11 +243,11 @@ transformations:
   - In the `resource.creator` transformation, the `input` field is mapped
     to a corresponding access type (e.g. `file`, `ociArtifact`).
 - **Access types** (as used in component constructors) depend on whether
-  they are marked as `byValue` or `byReference`.
-  - **byValue** access types are mapped to a combination of
+  they are marked as `by value` or `by reference`.
+  - **by value** access types are mapped to a combination of
     `resource.creator`, `resource.downloader` and `local.resource.uploader`
     (emphasis on **local**) transformations.
-  - **byReference** access types are mapped to a single
+  - **by reference** access types are mapped to a single
     `resource.creator` transformation.
 
 **Conclusion**
@@ -256,19 +256,11 @@ transformations:
   - `resource.uploader` transformations (for `helm`)
 
 #### Plugin Type System Reuse
-- The `type` (such as `type: resource.creator`) in above specification can be 
-  used as *capability* and the `type` within the configuration (e.g. 
-  repository type, access type) can be used as *type* to get the plugins from 
-  our existing plugin system.
+- The transformation specification implementation is aware of the supported 
+  capabilities. So, depending on the *capability* (such as `type: resource.
+  downloader`), the implementation will use the corresponding *Provider* (e.
+  g. resource repository provider).
 - All types of a particular *capability* share a single common output schema.
-
-> [!WARNING]
-> The configuration schema of a particular *capability* has to be static, 
-> besides the `type`d fields. A plugin registry has to know where to find the 
-> `type` used to select the correct plugin. This is especially important for 
-> nested structures such as resource, since we cannot rely on initially 
-> unmarshalling the configuration into a `struct { type string }` to extract the
-> correct type. 
 
 **Advantages**
 - We have a single uniform plugin system.
@@ -319,7 +311,7 @@ systems is even higher.
 ## Comparison with Transformation ADR
 - Instead of expecting a component descriptor as a starting point for all 
   operations that is consecutively modified and then merged (to detect 
-  conflicts), we declaritively create a new component descriptor to be uploaded 
+  conflicts), we create a new component descriptor to be uploaded 
   with the resources created in the previous operations.
 - This simplifies the operations, as we do not have to deal with 
   merging and conflict detection.
@@ -408,6 +400,6 @@ So, the logic will be heavily inspired by the current construct implementation.
             needed.
 
  The result of the last transformation step (so, currently, either a 
- `digester` of `uploader` is used to declaratively create the component 
+ `digester` of `uploader` is used to create the component 
  version). This then has to be uploaded with a `component.uploader` 
  transformation.
