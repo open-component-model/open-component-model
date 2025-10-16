@@ -37,7 +37,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20250915165427-710b0c881b3c
 	ocm.software/open-component-model/bindings/go/oci v0.0.7
 	ocm.software/open-component-model/bindings/go/plugin v0.0.7
-	ocm.software/open-component-model/bindings/go/repository v0.0.0-20250915165427-710b0c881b3c
+	ocm.software/open-component-model/bindings/go/repository v0.0.1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
