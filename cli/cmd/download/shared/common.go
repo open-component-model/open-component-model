@@ -20,7 +20,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/log"
-	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
 // GetContextItems extracts common dependencies from cobra command
@@ -50,7 +49,7 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 	var err error
 
 	if IsLocal(access) {
-		data, _, err = ocm.GetLocalResource(ctx, identity, component, version, repo)
+		data, _, err = repo.GetLocalResource(ctx, component, version, identity)
 	} else {
 		var plugin resource.Repository
 		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)

@@ -10,7 +10,6 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -23,55 +22,6 @@ type ComponentVersionRepositoryProvider interface {
 	GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error)
 }
 
-// Version resolves the version of a component.
-// If the version is empty, it retrieves the latest version from the repository.
-// If multiple versions are found when expecting only one, an error is returned.
-func Version(ctx context.Context, component, version string, repo repository.ComponentVersionRepository) (string, error) {
-	if version == "" {
-		versions, err := Versions(ctx, VersionOptions{LatestOnly: true}, component, version, repo)
-		if err != nil {
-			return "", fmt.Errorf("getting component versions failed: %w", err)
-		}
-		if len(versions) == 0 {
-			return "", fmt.Errorf("no versions found for component %q", component)
-		}
-		if len(versions) > 1 {
-			return "", fmt.Errorf("multiple versions found for component %q, expected only one: %v", component, versions)
-		}
-		version = versions[0]
-	}
-	return version, nil
-}
-
-// GetComponentVersion retrieves the component version descriptor for a given component and version.
-// If the version is empty, it retrieves the latest version from the repository.
-// It returns an error if the component version cannot be found or if there are issues during retrieval.
-func GetComponentVersion(ctx context.Context, component, version string, repo repository.ComponentVersionRepository) (*descriptor.Descriptor, error) {
-	version, err := Version(ctx, component, version, repo)
-	if err != nil {
-		return nil, fmt.Errorf("getting component version failed: %w", err)
-	}
-
-	desc, err := repo.GetComponentVersion(ctx, component, version)
-	if err != nil {
-		return nil, fmt.Errorf("getting component descriptor for %q failed: %w", component, err)
-	}
-
-	return desc, nil
-}
-
-// GetLocalResource retrieves a local resource blob and its descriptor for a given component, version, and resource identity.
-// If the version is empty, it retrieves the latest version from the repository.
-// It returns an error if the resource cannot be found or if there are issues during retrieval.
-func GetLocalResource(ctx context.Context, identity runtime.Identity, component, version string, repo repository.ComponentVersionRepository) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	version, err := Version(ctx, component, version, repo)
-	if err != nil {
-		return nil, nil, fmt.Errorf("getting component version failed: %w", err)
-	}
-
-	return repo.GetLocalResource(ctx, component, version, identity)
-}
-
 // GetComponentVersionsOptions configures how component versions are retrieved.
 type GetComponentVersionsOptions struct {
 	VersionOptions
@@ -81,7 +31,15 @@ type GetComponentVersionsOptions struct {
 // GetComponentVersions retrieves component version descriptors based on the provided options.
 // It supports concurrent retrieval of multiple versions with a configurable limit.
 func GetComponentVersions(ctx context.Context, opts GetComponentVersionsOptions, component, version string, repo repository.ComponentVersionRepository) ([]*descriptor.Descriptor, error) {
-	versions, err := Versions(ctx, opts.VersionOptions, component, version, repo)
+	var (
+		versions []string
+		err      error
+	)
+	if version != "" {
+		versions = append(versions, version)
+	} else {
+		versions, err = VersionsWithFiltering(ctx, component, repo, opts.VersionOptions)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("getting component versions failed: %w", err)
 	}
@@ -137,13 +95,9 @@ type VersionOptions struct {
 	LatestOnly       bool   // If true, only return the latest version
 }
 
-// Versions retrieve available versions for the component based on the provided options.
+// VersionsWithFiltering retrieve available versions for the component based on the provided options.
 // It supports filtering by semantic version constraints and retrieving only the latest version.
-func Versions(ctx context.Context, opts VersionOptions, component, version string, repo repository.ComponentVersionRepository) ([]string, error) {
-	if version != "" {
-		return []string{version}, nil
-	}
-
+func VersionsWithFiltering(ctx context.Context, component string, repo repository.ComponentVersionRepository, opts VersionOptions) ([]string, error) {
 	versions, err := repo.ListComponentVersions(ctx, component)
 	if err != nil {
 		return nil, fmt.Errorf("listing component versions failed: %w", err)

@@ -168,7 +168,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	desc, err := ocm.GetComponentVersion(ctx, ref.Component, ref.Version, repo)
+	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
