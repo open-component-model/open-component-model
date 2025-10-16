@@ -19,12 +19,14 @@ type CTFComponentListerPlugin struct{}
 
 var _ componentlister.InternalComponentListerPluginContract = (*CTFComponentListerPlugin)(nil)
 
+var ErrWrongUsage = errors.New("wrong usage of CTF component lister plugin")
+
 // GetComponentLister returns a component lister for the given CTF repository specification.
 // If the provided specification is not of type *ctfv1.Repository, an error is returned.
 func (l *CTFComponentListerPlugin) GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, _ map[string]string) (repository.ComponentLister, error) {
 	ctfRepoSpec, ok := repositorySpecification.(*ctfv1.Repository)
 	if !ok {
-		return nil, fmt.Errorf("not a CTF repository specification: %T", repositorySpecification)
+		return nil, errors.Join(ErrWrongUsage, fmt.Errorf("not a CTF repository type: %T", repositorySpecification))
 	}
 
 	archive, err := ctf.OpenCTFFromOSPath(ctfRepoSpec.Path, ctf.O_RDONLY)
@@ -38,5 +40,5 @@ func (l *CTFComponentListerPlugin) GetComponentLister(ctx context.Context, repos
 // GetComponentListerCredentialConsumerIdentity retrieves an identity for the given repository specification.
 // Since CTF repositories do not require credentials, this method always returns nil and an error indicating that credentials are not supported or needed.
 func (l *CTFComponentListerPlugin) GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	return nil, errors.New("CTF component lister does not support/need credentials")
+	return nil, errors.Join(ErrWrongUsage, errors.New("credentials not supported"))
 }
