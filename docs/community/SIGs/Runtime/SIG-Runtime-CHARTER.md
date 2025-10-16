@@ -1,7 +1,7 @@
 # SIG Runtime — Charter
 
 **Status:** Proposed  
-**Last updated:** 2025-10-10
+**Last updated:** 2025-10-16
 
 ## Mission & Scope
 
@@ -108,22 +108,22 @@ The mission of SIG Runtime is to allow OCM components to be:
 
 ### Roles
 
-- **Chair(s)** — TBD  
+- **Chair** — Jakob Möller (SAP) - @jakobmoellerdev
   Provide administrative leadership, schedule and run meetings, ensure process adherence, and represent the SIG to the TSC.
 
-- **Tech Lead(s)** — TBD  
+- **Tech Lead** — Fabian Burth (SAP) - @fabianburth
   Define technical direction, approve designs and roadmaps, and act as final reviewers for architectural changes.
 
 - **Maintainers**  
-  Defined in repository `CODEOWNERS`; responsible for code quality, reviews, and releases.
+  Defined in repository [`CODEOWNERS`](https://github.com/open-component-model/open-component-model/blob/main/.github/CODEOWNERS); responsible for code quality, reviews, and releases.
 
 - **Contributors**  
   Any community member following the Code of Conduct and contribution guidelines.
 
 ### Membership & Voting
 
-- **Voting members:** Chair(s), Tech Lead(s), and designated maintainers of SIG-owned code.
-- **Becoming a voting member:** Nomination by an existing voting member and confirmation at a public SIG meeting.
+- **Voting members:** Chair, Tech Lead, and designated maintainers of SIG-owned code.
+- **Becoming an additional voting member:** Nomination by an existing voting member and confirmation at a public SIG meeting.
 
 ### Meetings
 
