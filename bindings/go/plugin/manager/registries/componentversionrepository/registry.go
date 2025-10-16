@@ -145,6 +145,7 @@ func (r *RepositoryRegistry) GetComponentVersionRepositoryCredentialConsumerIden
 	defer r.mu.RUnlock()
 
 	// Check if this is an internal plugin first
+	_, _ = r.scheme.DefaultType(repositorySpecification)
 	typ := repositorySpecification.GetType()
 	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalComponentVersionRepositoryPlugins[typ]
