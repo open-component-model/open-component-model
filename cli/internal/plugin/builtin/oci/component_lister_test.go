@@ -38,7 +38,7 @@ func TestCTFComponentListerPlugin_CredentialConsumerIdentity(t *testing.T) {
 	p := &CTFComponentListerPlugin{}
 	require.NoError(t, componentlister.RegisterInternalComponentListerPlugin(scheme, registry, p, &ctfv1.Repository{}))
 
-	// Credentials not suphandleported. An error expected.
+	// Credentials not supported. An error expected.
 	ctfSpec := &ctfv1.Repository{}
 	id, err := registry.GetComponentListerCredentialConsumerIdentity(t.Context(), ctfSpec)
 	require.Nil(t, id)
