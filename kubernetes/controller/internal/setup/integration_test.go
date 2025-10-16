@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
@@ -68,17 +67,7 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
-	pm, err := setup.NewPluginManager(ctx, cfg.Config, setup.PluginManagerOptions{
-		Locations:   []string{"/tmp/ocm-plugins"},
-		IdleTimeout: 5 * time.Minute,
-		Logger:      logger,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, pm)
-	defer func() {
-		_ = setup.ShutdownPluginManager(ctx, pm, logger)
-	}()
-
+	pm := manager.NewPluginManager(t.Context())
 	registerOCIPlugin(t, pm, "test", "v1.0.0")
 
 	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
@@ -262,6 +251,7 @@ func registerOCIPlugin(t *testing.T, pm *manager.PluginManager, component, versi
 		cvRepoPlugin,
 		&ociv1.Repository{},
 	)
+
 	require.NoError(t, err)
 }
 
