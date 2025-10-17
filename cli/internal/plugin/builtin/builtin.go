@@ -24,6 +24,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
 		manager.BlobTransformerRegistry,
+		manager.ComponentListerRegistry,
 		filesystemConfig,
 		logger,
 	); err != nil {

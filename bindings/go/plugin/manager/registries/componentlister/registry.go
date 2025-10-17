@@ -156,6 +156,7 @@ func (r *ComponentListerRegistry) GetComponentListerCredentialConsumerIdentity(c
 	defer r.mu.Unlock()
 
 	// Check if this is an internal plugin first
+	_, _ = r.scheme.DefaultType(repositorySpecification)
 	typ := repositorySpecification.GetType()
 	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internalComponentListerPlugins[typ]
