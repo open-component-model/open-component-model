@@ -29,7 +29,7 @@ type resolverProvider struct {
 	provider *pathmatcher.SpecProvider
 }
 
-// GetComponentVersionRepository returns a [repository.ComponentVersionRepository] based on the path matcher resolvers.
+// GetComponentVersionRepositoryForComponent returns a [repository.ComponentVersionRepository] based on the path matcher resolvers.
 // It resolves any necessary credentials using the credential graph if available.
 // It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository].
 func (r *resolverProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {

@@ -31,7 +31,7 @@ type fallbackProvider struct {
 	resolvers []*resolverruntime.Resolver
 }
 
-// GetComponentVersionRepository returns a [repository.ComponentVersionRepository] based on the fallback resolvers.
+// GetComponentVersionRepositoryForComponent returns a [repository.ComponentVersionRepository] based on the fallback resolvers.
 // It uses the [repoProvider.PluginManager] to access the [repository.ComponentVersionRepository].
 // It uses the [credentials.GraphResolver] to resolve credentials for the repository.
 // This implementation is solely provided to support backward compatibility for existing configurations.
