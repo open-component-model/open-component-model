@@ -138,34 +138,53 @@ func proxyOCIStoreWithIndex(ociStore *CloseableReadOnlyStore, opts *CopyOCILayou
 }
 
 func proxyOCIStoreWithManifest(ctx context.Context, ociStore *CloseableReadOnlyStore, opts *CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, content.ReadOnlyStorage, error) {
-	manifestDesc := ociStore.Index.Manifests[0]
-	manifestRawStream, err := ociStore.Fetch(ctx, manifestDesc)
+	topLevelDesc := ociStore.Index.Manifests[0]
+	descStream, err := ociStore.Fetch(ctx, topLevelDesc)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 	}
-	manifestRaw, err := content.ReadAll(manifestRawStream, manifestDesc)
+	descRaw, err := content.ReadAll(descStream, topLevelDesc)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read manifest: %w", err)
 	}
-	var manifest ociImageSpecV1.Manifest
-	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
-	}
-	if err := opts.MutateParentFunc(&manifestDesc); err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate manifest descriptor before copy: %w", err)
-	}
-	opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-		if content.Equal(desc, manifestDesc) {
-			return append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), nil
+
+	switch topLevelDesc.MediaType {
+	case ociImageSpecV1.MediaTypeImageManifest:
+		var manifest ociImageSpecV1.Manifest
+		if err := json.Unmarshal(descRaw, &manifest); err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 		}
-		return content.Successors(ctx, ociStore, desc)
+		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate manifest descriptor before copy: %w", err)
+		}
+		opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+			if content.Equal(desc, topLevelDesc) {
+				return append([]ociImageSpecV1.Descriptor{manifest.Config}, manifest.Layers...), nil
+			}
+			return content.Successors(ctx, ociStore, desc)
+		}
+	case ociImageSpecV1.MediaTypeImageIndex:
+		var index ociImageSpecV1.Index
+		if err := json.Unmarshal(descRaw, &index); err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to unmarshal index: %w", err)
+		}
+		if err := opts.MutateParentFunc(&topLevelDesc); err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to mutate index descriptor before copy: %w", err)
+		}
+		opts.FindSuccessors = func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+			if content.Equal(desc, topLevelDesc) {
+				return index.Manifests, nil
+			}
+			return content.Successors(ctx, ociStore, desc)
+		}
 	}
+
 	proxy := &descriptorStoreProxy{
-		raw:             manifestRaw,
-		desc:            manifestDesc,
+		raw:             descRaw,
+		desc:            topLevelDesc,
 		ReadOnlyStorage: ociStore,
 	}
-	return manifestDesc, proxy, nil
+	return topLevelDesc, proxy, nil
 }
 
 type descriptorStoreProxy struct {
