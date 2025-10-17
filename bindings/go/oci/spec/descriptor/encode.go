@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"time"
 
 	"sigs.k8s.io/yaml"
 
@@ -35,21 +36,18 @@ func SingleFileEncodeDescriptor(scheme *runtime.Scheme, desc *descriptor.Descrip
 	case MediaTypeLegacyComponentDescriptorTar,
 		mediaTypeLegacy2ComponentDescriptorTar,
 		mediaTypeLegacy3ComponentDescriptorTar:
-		content, err := yaml.Marshal(v2desc)
-		if err != nil {
-			return nil, fmt.Errorf("unable to marshal descriptor for tar: %w", err)
-		}
-
 		var tarBuf bytes.Buffer
 		tw := tar.NewWriter(&tarBuf)
 		defer func() {
 			err = errors.Join(err, tw.Close())
 		}()
 
+		// emulates https://github.com/open-component-model/ocm/blob/329ee5cc31a73b2c777d9f19bba24f70c0e9cb2a/api/ocm/extensions/repositories/genericocireg/state.go#L196
 		if err := tw.WriteHeader(&tar.Header{
-			Name: LegacyComponentDescriptorTarFileName,
-			Mode: 0o644,
-			Size: int64(len(content)),
+			Typeflag: tar.TypeReg,
+			Name:     LegacyComponentDescriptorTarFileName,
+			ModTime:  time.Date(2022, 1, 1, 0, 0, 0, 0, time.UTC),
+			Size:     int64(len(content)),
 		}); err != nil {
 			return nil, fmt.Errorf("unable to write tar header: %w", err)
 		}
