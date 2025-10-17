@@ -31,7 +31,6 @@ type resolverProvider struct {
 
 // GetComponentVersionRepositoryForComponent returns a [repository.ComponentVersionRepository] based on the path matcher resolvers.
 // It resolves any necessary credentials using the credential graph if available.
-// It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository].
 func (r *resolverProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
 	repoSpec, err := r.provider.GetRepositorySpec(ctx, runtime.Identity{
 		descruntime.IdentityAttributeName:    component,

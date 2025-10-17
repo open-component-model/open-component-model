@@ -16,8 +16,6 @@ import (
 
 // fallbackProvider provides a [repository.ComponentVersionRepository] based on a set of fallback resolvers.
 // This is a deprecated mechanism and will be replaced by path matcher based resolvers in the future.
-// It uses the [repoProvider.PluginManager] to access the [repository.ComponentVersionRepository] and a
-// [credentials.GraphResolver] to resolve credentials for the repository.
 // This implementation is solely provided to support backward compatibility for existing configurations.
 type fallbackProvider struct {
 	// repoProvider is the repository.ComponentVersionRepositoryForComponentProvider used to
@@ -32,8 +30,6 @@ type fallbackProvider struct {
 }
 
 // GetComponentVersionRepositoryForComponent returns a [repository.ComponentVersionRepository] based on the fallback resolvers.
-// It uses the [repoProvider.PluginManager] to access the [repository.ComponentVersionRepository].
-// It uses the [credentials.GraphResolver] to resolve credentials for the repository.
 // This implementation is solely provided to support backward compatibility for existing configurations.
 //
 //nolint:staticcheck // kept for backward compatibility, use resolvers instead
