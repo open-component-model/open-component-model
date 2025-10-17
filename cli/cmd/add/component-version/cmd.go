@@ -15,7 +15,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
@@ -26,8 +25,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/repository"
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	v1 "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -201,9 +198,15 @@ func persistentPreRunE(cmd *cobra.Command, _ []string) error {
 }
 
 func AddComponentVersion(cmd *cobra.Command, _ []string) error {
+	ctx := cmd.Context()
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not retrieve plugin manager from context")
+	}
+
+	ocmContext := ocmctx.FromContext(ctx)
+	if ocmContext == nil {
+		return fmt.Errorf("no OCM context found")
 	}
 
 	credentialGraph := ocmctx.FromContext(cmd.Context()).CredentialGraph()
@@ -253,27 +256,17 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	var resolvers []*resolverruntime.Resolver
-	if config != nil {
-		resolvers, err = ocm.ResolversFromConfig(config)
-		if err != nil {
-			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
-		}
-	}
-
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	fallback, err := v1.NewFallbackRepository(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, resolvers)
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, nil)
 	if err != nil {
-		return fmt.Errorf("creating fallback repository failed: %w", err)
+		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
 	instance := &constructorProvider{
-		cache:          cacheDir,
-		targetRepoSpec: repoSpec,
-		fallbackRepo:   fallback,
-		pluginManager:  pluginManager,
-		graph:          credentialGraph,
+		cache:              cacheDir,
+		targetRepoSpec:     repoSpec,
+		repositoryProvider: repoProvider,
+		pluginManager:      pluginManager,
+		graph:              credentialGraph,
 	}
 
 	opts := constructor.Options{
@@ -369,16 +362,18 @@ var (
 )
 
 type constructorProvider struct {
-	cache          string
-	targetRepoSpec runtime.Typed
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	fallbackRepo  *v1.FallbackRepository
-	pluginManager *manager.PluginManager
-	graph         credentials.GraphResolver
+	cache              string
+	targetRepoSpec     runtime.Typed
+	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
+	pluginManager      *manager.PluginManager
+	graph              credentials.GraphResolver
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
-	return prov.fallbackRepo, nil
+	if prov.repositoryProvider == nil {
+		return nil, fmt.Errorf("cannot fetch external component version %s:%s repository provider configured", name, version)
+	}
+	return prov.repositoryProvider.GetComponentVersionRepositoryForComponent(ctx, name, version)
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {
