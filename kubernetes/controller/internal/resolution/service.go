@@ -58,7 +58,7 @@ func NewResolver(client client.Reader, logger logr.Logger, pm *manager.PluginMan
 	return &Resolver{
 		client:      client,
 		logger:      logger,
-		cache:       make(map[string]*ResolveResult),
+		cache:       NewInMemoryCache(),
 		pm:          pm,
 		sf:          &singleflight.Group{},
 		lookupQueue: make(chan *lookupRequest, opts.QueueSize),
@@ -86,7 +86,7 @@ type Resolver struct {
 	sf     *singleflight.Group
 	opts   ResolverOptions
 
-	cache       map[string]*ResolveResult
+	cache       Cache
 	lookupQueue chan *lookupRequest
 	inProgress  map[string]struct{} // tracks keys currently being resolved
 }
@@ -122,22 +122,15 @@ func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOpt
 	}
 
 	// check cache (fast path)
-	r.mu.RLock()
-	if cached, ok := r.cache[key.String()]; ok {
-		r.mu.RUnlock()
-
+	if cached, ok := r.cache.Get(key.String()); ok {
 		// check the result and if it's an error, return that immediately and delete the result.
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.Error != nil {
-			r.mu.Lock()
-			delete(r.cache, key.String())
-			r.mu.Unlock()
-
+			r.cache.Delete(key.String())
 			return nil, cached.Error
 		}
 		return cached, nil
 	}
-	r.mu.RUnlock()
 
 	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 
@@ -183,12 +176,13 @@ func (r *Resolver) validateOptions(opts *ResolveOptions) error {
 func (r *Resolver) singleFlightFn(ctx context.Context, opts *ResolveOptions, key cacheKey, cfg *configuration.Configuration) func() (any, error) {
 	return func() (any, error) {
 		// check cache (another goroutine may have populated it) while getting here however unlikely
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if cached, ok := r.cache[key.String()]; ok {
+		if cached, ok := r.cache.Get(key.String()); ok {
 			CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 			return cached, nil
 		}
+
+		r.mu.Lock()
+		defer r.mu.Unlock()
 
 		if _, inProgress := r.inProgress[key.String()]; inProgress {
 			return nil, ErrResolutionInProgress

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	kmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
@@ -123,4 +124,46 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 	}
 
 	return key, nil
+}
+
+// Cache defines the interface for component version resolution caching.
+type Cache interface {
+	Get(key string) (*ResolveResult, bool)
+	Set(key string, result *ResolveResult)
+	Delete(key string)
+}
+
+// InMemoryCache implements Cache using a simple in-memory map.
+type InMemoryCache struct {
+	mu    sync.RWMutex
+	store map[string]*ResolveResult
+}
+
+// NewInMemoryCache creates a new in-memory cache.
+func NewInMemoryCache() *InMemoryCache {
+	return &InMemoryCache{
+		store: make(map[string]*ResolveResult),
+	}
+}
+
+// Get retrieves a result from the cache.
+func (c *InMemoryCache) Get(key string) (*ResolveResult, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	result, ok := c.store[key]
+	return result, ok
+}
+
+// Set stores a result in the cache.
+func (c *InMemoryCache) Set(key string, result *ResolveResult) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.store[key] = result
+}
+
+// Delete removes a result from the cache.
+func (c *InMemoryCache) Delete(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.store, key)
 }

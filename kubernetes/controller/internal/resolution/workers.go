@@ -69,21 +69,21 @@ func (r *Resolver) worker(ctx context.Context, id int) {
 
 			ResolutionDurationHistogram.WithLabelValues(req.opts.Component, req.opts.Version).Observe(duration)
 
-			r.mu.Lock()
 			if err != nil {
 				logger.Error(err, "failed to resolve component version", "component", req.opts.Component, "version", req.opts.Version, "duration", duration)
-				r.cache[req.key.String()] = &ResolveResult{
+				r.cache.Set(req.key.String(), &ResolveResult{
 					Error: err,
 					Metadata: ResolveMetadata{
 						ResolvedAt: time.Now(),
 						ConfigHash: req.cfg.Hash,
 					},
-				}
+				})
 			} else {
-				r.cache[req.key.String()] = result
+				r.cache.Set(req.key.String(), result)
 				logger.V(1).Info("cached component version", "component", req.opts.Component, "version", req.opts.Version, "duration", duration)
 			}
 
+			r.mu.Lock()
 			delete(r.inProgress, req.key.String())
 			InProgressGauge.Set(float64(len(r.inProgress)))
 			r.mu.Unlock()
