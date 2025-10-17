@@ -12,14 +12,13 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ComponentVersionRepositoryProvider provides a [repository.ComponentVersionRepository] based on a given identity.
+// ComponentVersionRepositoryForComponentProvider provides a [repository.ComponentVersionRepository] based on a given identity.
 // Implementations may use different strategies to resolve the repository, such as using component references,
 // configuration-based resolvers, or other mechanisms.
-type ComponentVersionRepositoryProvider interface {
-	GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error)
+type ComponentVersionRepositoryForComponentProvider interface {
+	GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error)
 }
 
 // GetComponentVersionsOptions configures how component versions are retrieved.

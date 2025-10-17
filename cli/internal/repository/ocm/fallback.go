@@ -9,21 +9,20 @@ import (
 	resolverv1 "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // fallbackProvider provides a [repository.ComponentVersionRepository] based on a set of fallback resolvers.
 // This is a deprecated mechanism and will be replaced by path matcher based resolvers in the future.
-// It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository] and a
+// It uses the [repoProvider.PluginManager] to access the [repository.ComponentVersionRepository] and a
 // [credentials.GraphResolver] to resolve credentials for the repository.
 // This implementation is solely provided to support backward compatibility for existing configurations.
 type fallbackProvider struct {
-	// manager is the [manager.PluginManager] used to access the [repository.ComponentVersionRepository].
-	manager *manager.PluginManager
+	// repoProvider is the repository.ComponentVersionRepositoryForComponentProvider used to
+	// get the repositories based on the repository specs in the resolvers.
+	repoProvider repository.ComponentVersionRepositoryProvider
 	// graph is the [credentials.GraphResolver] used to resolve credentials for the repository.
 	// It can be nil, if no credential graph is available.
 	graph credentials.GraphResolver
@@ -32,33 +31,15 @@ type fallbackProvider struct {
 	resolvers []*resolverruntime.Resolver
 }
 
-// newFromConfigWithFallback creates a new fallbackProvider based on the provided configuration.
-// It uses the provided PluginManager to access the [repository.ComponentVersionRepository].
-// It uses the provided [credentials.GraphResolver] to resolve credentials for the repository.
-// The configuration is expected to contain a list of fallback resolvers.
-// This implementation is solely provided to support backward compatibility for existing configurations.
-func newFromConfigWithFallback(
-	manager *manager.PluginManager,
-	graph credentials.GraphResolver,
-	//nolint:staticcheck // kept for backward compatibility, use resolvers instead
-	resolvers []*resolverruntime.Resolver,
-) *fallbackProvider {
-	return &fallbackProvider{
-		manager:   manager,
-		graph:     graph,
-		resolvers: resolvers,
-	}
-}
-
 // GetComponentVersionRepository returns a [repository.ComponentVersionRepository] based on the fallback resolvers.
-// It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository].
+// It uses the [repoProvider.PluginManager] to access the [repository.ComponentVersionRepository].
 // It uses the [credentials.GraphResolver] to resolve credentials for the repository.
 // This implementation is solely provided to support backward compatibility for existing configurations.
 //
 //nolint:staticcheck // kept for backward compatibility, use resolvers instead
-func (f *fallbackProvider) GetComponentVersionRepository(ctx context.Context, _ runtime.Identity) (repository.ComponentVersionRepository, error) {
+func (f *fallbackProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
 	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	fallbackRepo, err := fallback.NewFallbackRepository(ctx, f.manager.ComponentVersionRepositoryRegistry, f.graph, f.resolvers)
+	fallbackRepo, err := fallback.NewFallbackRepository(ctx, f.repoProvider, f.graph, f.resolvers)
 	if err != nil {
 		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
 	}

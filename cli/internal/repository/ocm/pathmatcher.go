@@ -8,7 +8,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -18,8 +18,9 @@ import (
 // It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository] and a
 // [credentials.GraphResolver] to resolve credentials for the repository.
 type resolverProvider struct {
-	// manager is the [manager.PluginManager] used to access the [repository.ComponentVersionRepository].
-	manager *manager.PluginManager
+	// repoProvider is the repository.ComponentVersionRepositoryForComponentProvider used to
+	// get the repositories based on the repository specs in the resolvers.
+	repoProvider repository.ComponentVersionRepositoryProvider
 	// graph is the [credentials.GraphResolver] used to resolve credentials for the repository.
 	// It can be nil, if no credential graph is available.
 	graph credentials.GraphResolver
@@ -28,37 +29,20 @@ type resolverProvider struct {
 	provider *pathmatcher.SpecProvider
 }
 
-// newFromConfigWithPathMatcher creates a new resolverProvider based on the provided configuration.
-// It uses the provided PluginManager to access the [repository.ComponentVersionRepository].
-// It uses the provided [credentials.GraphResolver] to resolve credentials for the repository.
-// The configuration is expected to contain a list of path matcher resolvers.
-// If no resolvers are configured, an error is returned.
-func newFromConfigWithPathMatcher(
-	ctx context.Context,
-	manager *manager.PluginManager,
-	graph credentials.GraphResolver,
-	resolvers []*resolverspec.Resolver,
-) (*resolverProvider, error) {
-	provider := pathmatcher.NewSpecProvider(ctx, resolvers)
-
-	return &resolverProvider{
-		manager:  manager,
-		graph:    graph,
-		provider: provider,
-	}, nil
-}
-
 // GetComponentVersionRepository returns a [repository.ComponentVersionRepository] based on the path matcher resolvers.
 // It resolves any necessary credentials using the credential graph if available.
 // It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository].
-func (r *resolverProvider) GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error) {
-	repoSpec, err := r.provider.GetRepositorySpec(ctx, identity)
+func (r *resolverProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
+	repoSpec, err := r.provider.GetRepositorySpec(ctx, runtime.Identity{
+		descruntime.IdentityAttributeName:    component,
+		descruntime.IdentityAttributeVersion: version,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("getting repository spec for identity %q failed: %w", identity, err)
+		return nil, fmt.Errorf("getting repository spec for component %s:%s failed: %w", component, version, err)
 	}
 
 	var credMap map[string]string
-	consumerIdentity, err := r.manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
+	consumerIdentity, err := r.repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repoSpec)
 	if err == nil {
 		if r.graph != nil {
 			if credMap, err = r.graph.Resolve(ctx, consumerIdentity); err != nil {
@@ -69,7 +53,7 @@ func (r *resolverProvider) GetComponentVersionRepository(ctx context.Context, id
 		slog.WarnContext(ctx, "could not get credential consumer identity for component version repository", "repository", repoSpec, "error", err)
 	}
 
-	repo, err := r.manager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, repoSpec, credMap)
+	repo, err := r.repoProvider.GetComponentVersionRepository(ctx, repoSpec, credMap)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for %q failed: %w", repoSpec, err)
 	}

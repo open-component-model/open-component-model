@@ -152,12 +152,12 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 	slog.DebugContext(cmd.Context(), "parsed component reference", "reference", reference, "parsed", ref)
 
-	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, ref)
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
-	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), ref.Identity())
+	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(cmd.Context(), ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
@@ -186,7 +186,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repoProvider ocm.ComponentVersionRepositoryProvider, roots []string, format string, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, repoProvider ocm.ComponentVersionRepositoryForComponentProvider, roots []string, format string, mode string, recursive int) error {
 	resAndDis := resolverAndDiscoverer{
 		repositoryProvider: repoProvider,
 		recursive:          recursive,
@@ -299,7 +299,7 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 }
 
 type resolverAndDiscoverer struct {
-	repositoryProvider ocm.ComponentVersionRepositoryProvider
+	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
 	recursive          int
 }
 
@@ -313,11 +313,12 @@ func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descr
 	if err != nil {
 		return nil, fmt.Errorf("parsing identity %q failed: %w", key, err)
 	}
-	repo, err := r.repositoryProvider.GetComponentVersionRepository(ctx, id)
+	component, version := id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]
+	repo, err := r.repositoryProvider.GetComponentVersionRepositoryForComponent(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
 	}
-	desc, err := repo.GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
+	desc, err := repo.GetComponentVersion(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
 	}
