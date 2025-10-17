@@ -1,0 +1,298 @@
+name: Create CLI Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to cut to, must match regex releases/v0.[0-9]+"
+        required: true
+        type: string
+      dry_run:
+        description: "Perform dry run without pushing tags"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  release-cli:
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    environment:
+      name: ocm-release
+    env:
+      REGISTRY: ghcr.io
+      COMPONENT_PATH: cli
+    name: Create Release Candidate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: ${{ env.COMPONENT_PATH }}
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute new RC version
+        id: compute
+        uses: actions/github-script@v8
+        env:
+          BRANCH: ${{ github.event.inputs.branch }}
+          COMPONENT_PATH: ${{ env.COMPONENT_PATH }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { execSync } = require("child_process");
+            const fs = require("fs");
+            const branch = process.env.BRANCH;
+            const path = process.env.COMPONENT_PATH || ".";
+            const prefix = `${path}/v`;
+
+            if (!fs.existsSync(`${path}/go.mod`)) {
+              core.setFailed(`No go.mod found in ${path}`);
+              return;
+            }
+
+            const branchMatch = branch.match(/^releases\/v(0\.\d+)/);
+            if (!branchMatch) {
+              core.setFailed(`Branch '${branch}' missing base version`);
+              return;
+            }
+            const baseVersion = branchMatch[1];
+
+            const run = (cmd) => {
+              try { return execSync(cmd).toString().trim(); } catch { return ""; }
+            };
+
+            // fix: remove refs/tags/ prefix from patterns
+            const latestStable = run(`git tag --list '${prefix}${baseVersion}.*' | grep -v '-' | sort -V | tail -n1`);
+            const latestRC = run(`git tag --list '${prefix}${baseVersion}.*-rc.*' | sort -V | tail -n1`);
+
+            let version = latestStable ? latestStable.replace(prefix, "").replace(/^v/, "") : `${baseVersion}.0`;
+            const [major, minor, patchRaw] = version.split(".").map(x => parseInt(x, 10));
+            let [maj, min, pat] = [major, minor, patchRaw];
+            let bump = "none";
+            let rc = 1;
+
+            if (latestStable && (!latestRC || run(`printf '%s\n%s\n' '${latestStable}' '${latestRC}' | sort -V | tail -n1`) === latestStable)) {
+              bump = "patch";
+              pat++;
+              rc = 1;
+              core.info(`Last tag was stable (${latestStable}), bumping patch.`);
+            } else if (latestRC) {
+              const rcMatch = latestRC.match(/-rc\.(\d+)$/);
+              if (rcMatch) rc = parseInt(rcMatch[1]) + 1;
+              core.info(`Continuing RC sequence after ${latestRC}.`);
+            } else {
+              core.info("No previous tags found, starting with .0.");
+              bump = "none";
+              pat = 0;
+              rc = 1;
+            }
+
+            const base = `${maj}.${min}.${pat}`;
+            const newVersion = `${base}-rc.${rc}`;
+            const newTag = `${prefix}${newVersion}`;
+
+            core.setOutput("new_tag", newTag);
+            core.setOutput("new_version", newVersion);
+            core.setOutput("base_version", base);
+            core.info(`🆕 Next RC tag: ${newTag}`);
+            core.info(`🔧 Build version (without RC): ${base}`);
+
+      - name: Generate changelog with git-cliff
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        env:
+          TAG: ${{ steps.compute.outputs.new_tag }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          config: ${{ env.COMPONENT_PATH }}/cliff.toml
+          args: |
+            --include-path "${{ env.COMPONENT_PATH }}/**" \
+            --tag "${{ env.TAG }}" \
+            -o "$RUNNER_TEMP/CHANGELOG.md" \
+            --use-branch-tags \
+            --latest
+
+      - name: Summarize changelog
+        id: summarize
+        uses: actions/github-script@v8
+        env:
+          CHANGELOG_FILE: ${{ runner.temp }}/CHANGELOG.md
+          TAG: ${{ steps.compute.outputs.new_tag }}
+        with:
+          script: |
+            const fs = require("fs");
+            const log = fs.existsSync(process.env.CHANGELOG_FILE)
+              ? fs.readFileSync(process.env.CHANGELOG_FILE, "utf8").trim()
+              : "No changelog.";
+            const encoded = Buffer.from(log).toString("base64");
+            core.setOutput("changelog_b64", encoded);
+            await core.summary.addRaw(log).write();
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and verify CTF
+        run: |
+          task cli:generate/ctf VERSION=${{ steps.compute.outputs.base_version }}
+          task cli:verify/ctf
+
+      - name: Generate artifact attestation for binaries
+        uses: actions/attest-build-provenance@v3
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          subject-path: ${{ env.COMPONENT_PATH }}/tmp/bin/ocm-*
+
+      - id: committer
+        name: Determine Committer used for pushing Tag
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        run: |
+          echo "name=${{ github.actor }}" >> "$GITHUB_OUTPUT" 
+          echo "email=${{ github.actor }}@users.noreply.github.com" >> "$GITHUB_OUTPUT"
+      - name: Setup git config
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        run: | 
+          git config --global user.name "${{ steps.committer.outputs.name }}" 
+          git config --global user.email "${{ steps.committer.outputs.email }}"
+
+      - name: Create and push RC tag
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        id: tag
+        uses: actions/github-script@v8
+        env:
+          TAG: ${{ steps.compute.outputs.new_tag }}
+          CHANGELOG_B64: ${{ steps.summarize.outputs.changelog_b64 }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { execSync } = require("child_process");
+            const tag = process.env.TAG;
+            const msg = Buffer.from(process.env.CHANGELOG_B64, "base64").toString("utf8");
+            try { execSync(`git rev-parse "refs/tags/${tag}"`); core.info(`Tag ${tag} exists`); core.setOutput("pushed","false"); return; } catch {}
+            require("fs").writeFileSync(".tagmsg", msg);
+            execSync(`git tag -a "${tag}" -F .tagmsg`);
+            execSync(`git push origin "refs/tags/${tag}"`);
+            core.setOutput("pushed","true");
+            core.info(`✅ Created RC tag ${tag}`);
+
+      - name: Create GitHub prerelease
+        id: create_release
+        if: ${{ steps.tag.outputs.pushed == 'true' }}
+        uses: actions/github-script@v8
+        env:
+          TAG: ${{ steps.compute.outputs.new_tag }}
+          CHANGELOG_B64: ${{ steps.summarize.outputs.changelog_b64 }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = process.env.TAG;
+            const body = Buffer.from(process.env.CHANGELOG_B64, "base64").toString("utf8");
+            const res = await github.rest.repos.createRelease({
+              owner, repo, tag_name: tag,
+              name: `CLI ${tag.split("/")[1]}`,
+              body, prerelease: true
+            });
+            core.setOutput("upload_url", res.data.upload_url);
+      - name: Upload CLI artifacts
+        if: ${{ steps.create_release.outputs.upload_url }}
+        uses: actions/github-script@v8
+        env:
+          UPLOAD_URL: ${{ steps.create_release.outputs.upload_url }}
+          ARTIFACTS: ${{ env.COMPONENT_PATH }}/tmp/bin,${{ env.COMPONENT_PATH }}/tmp/oci/cli.tar
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+      
+            const items = process.env.ARTIFACTS.split(",").map(d => d.trim()).filter(Boolean);
+            const template = process.env.UPLOAD_URL;
+      
+            const uploadFile = async (file) => {
+              if (!fs.existsSync(file)) {
+                core.info(`File ${file} not found, skipping.`);
+                return;
+              }
+              if (fs.lstatSync(file).isSymbolicLink()) {
+                core.info(`Skipping symlink ${file}`);
+                return;
+              }
+      
+              const name = path.basename(file);
+              const data = fs.readFileSync(file);
+              const uploadUrl = template.replace("{?name,label}", `?name=${encodeURIComponent(name)}`);
+      
+              core.info(`Uploading ${file} → ${uploadUrl}`);
+      
+              await github.request({
+                method: "POST",
+                url: uploadUrl,
+                headers: {
+                  "content-type": "application/octet-stream",
+                  "content-length": data.length,
+                },
+                data,
+              });
+      
+              core.info(`Uploaded ${file}`);
+            };
+      
+            for (const item of items) {
+              if (!fs.existsSync(item)) {
+                core.info(`Path ${item} does not exist, skipping.`);
+                continue;
+              }
+      
+              const stat = fs.lstatSync(item);
+              if (stat.isDirectory()) {
+                const files = fs.readdirSync(item);
+                for (const f of files) {
+                  await uploadFile(path.join(item, f));
+                }
+              } else if (stat.isFile()) {
+                await uploadFile(item);
+              } else {
+                core.info(`Skipping ${item}, not a file or directory.`);
+              }
+            }
+
+      - name: Setup ORAS
+        if: ${{ steps.tag.outputs.pushed == 'true' }}
+        uses: oras-project/setup-oras@v1
+      - name: Log in to GHCR
+        if: ${{ steps.tag.outputs.pushed == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ steps.committer.outputs.name }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push OCI layout to GHCR
+        id: push-oci-layout
+        if: ${{ steps.tag.outputs.pushed == 'true' }}
+        run: |
+          oras cp \
+            --from-oci-layout "${{ github.workspace }}/${{ env.COMPONENT_PATH }}/tmp/oci/cli.tar:${{ steps.compute.outputs.base_version }}" \
+            "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}"
+          echo "digest=$(oras resolve "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli:${{ steps.compute.outputs.new_version }}")" >> "$GITHUB_OUTPUT"
+
+      - name: Generate artifact attestation for OCI Image
+        uses: actions/attest-build-provenance@v3
+        continue-on-error: true
+        with:
+          subject-digest: ${{ steps.push-oci-layout.outputs.digest }}
+          subject-name: "${{ env.REGISTRY }}/${{ github.repository_owner }}/cli"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          push-to-registry: true
