@@ -8,6 +8,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
@@ -51,7 +52,11 @@ func newFromConfigWithPathMatcher(
 // GetComponentVersionRepository returns a [repository.ComponentVersionRepository] based on the path matcher resolvers.
 // It resolves any necessary credentials using the credential graph if available.
 // It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository].
-func (r *resolverProvider) GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error) {
+func (r *resolverProvider) GetComponentVersionRepository(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
+	identity := runtime.Identity{
+		descruntime.IdentityAttributeName:    component,
+		descruntime.IdentityAttributeVersion: version,
+	}
 	repoSpec, err := r.provider.GetRepositorySpec(ctx, identity)
 	if err != nil {
 		return nil, fmt.Errorf("getting repository spec for identity %q failed: %w", identity, err)

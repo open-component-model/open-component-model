@@ -13,7 +13,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 	fallback "ocm.software/open-component-model/bindings/go/repository/component/fallback/v1"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // fallbackProvider provides a [repository.ComponentVersionRepository] based on a set of fallback resolvers.
@@ -56,7 +55,7 @@ func newFromConfigWithFallback(
 // This implementation is solely provided to support backward compatibility for existing configurations.
 //
 //nolint:staticcheck // kept for backward compatibility, use resolvers instead
-func (f *fallbackProvider) GetComponentVersionRepository(ctx context.Context, _ runtime.Identity) (repository.ComponentVersionRepository, error) {
+func (f *fallbackProvider) GetComponentVersionRepository(ctx context.Context, _, _ string) (repository.ComponentVersionRepository, error) {
 	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
 	fallbackRepo, err := fallback.NewFallbackRepository(ctx, f.manager.ComponentVersionRepositoryRegistry, f.graph, f.resolvers)
 	if err != nil {

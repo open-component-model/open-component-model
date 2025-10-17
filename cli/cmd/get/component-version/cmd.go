@@ -157,7 +157,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
-	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), ref.Identity())
+	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
@@ -313,7 +313,14 @@ func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descr
 	if err != nil {
 		return nil, fmt.Errorf("parsing identity %q failed: %w", key, err)
 	}
-	repo, err := r.repositoryProvider.GetComponentVersionRepository(ctx, id)
+	componentName, ok := id[descruntime.IdentityAttributeName]
+	if !ok {
+		return nil, fmt.Errorf("identity %q has no %q attribute", key, descruntime.IdentityAttributeName)
+	}
+	// optional version for repository selection
+	componentVersion := id[descruntime.IdentityAttributeVersion]
+
+	repo, err := r.repositoryProvider.GetComponentVersionRepository(ctx, componentName, componentVersion)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
 	}

@@ -163,7 +163,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), ref.Identity())
+	repo, err := repoProvider.GetComponentVersionRepository(cmd.Context(), ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}

@@ -370,10 +370,7 @@ type constructorProvider struct {
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
-	id := runtime.Identity{}
-	id[descriptor.IdentityAttributeName] = name
-	id[descriptor.IdentityAttributeVersion] = version
-	return prov.repositoryProvider.GetComponentVersionRepository(ctx, id)
+	return prov.repositoryProvider.GetComponentVersionRepository(ctx, name, version)
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {

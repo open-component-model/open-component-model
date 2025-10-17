@@ -11,25 +11,9 @@ import (
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
-
-// combinedComponentVersionRepositoryProvider
-// This provider combines a component reference based provider with another provider.
-// If a component reference is provided, it will be used first to resolve the repository.
-// If the identity does not match the component reference, the other provider will be used.
-// The other provider will be created based on the [genericv1.Config] if provided.
-// Currently, we support two types of providers:
-// - Fallback resolvers (deprecated)
-// - Path matcher resolvers
-//
-// If both types are configured, an error will be returned.
-type combinedComponentVersionRepositoryProvider struct {
-	compRefProv *compRefProvider
-	provider    ComponentVersionRepositoryProvider
-}
 
 // NewComponentVersionRepositoryProvider creates a new ComponentVersionRepositoryProvider based on the provided
 // component reference and configuration.
@@ -50,17 +34,9 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 		//nolint:staticcheck // compatibility mode for deprecated resolvers
 		fallbackResolvers []*resolverruntime.Resolver
 		pathMatchers      []*resolverspec.Resolver
-		compRefProv       *compRefProvider
 		provider          ComponentVersionRepositoryProvider
 		err               error
 	)
-
-	if ref != nil {
-		compRefProv, err = newFromCompRef(ref, pluginManager, credentialGraph)
-		if err != nil {
-			return nil, fmt.Errorf("parsing component reference failed: %w", err)
-		}
-	}
 
 	if config != nil {
 		pathMatchers, err = ResolversFromConfig(config)
@@ -110,6 +86,13 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 					return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
 				}
 
+				compRefResolver := &resolverspec.Resolver{
+					Repository:           &raw,
+					ComponentNamePattern: ref.Component,
+				}
+				// add to index 0 to have the highest priority
+				finalResolvers = append([]*resolverspec.Resolver{compRefResolver}, finalResolvers...)
+
 				finalResolvers = append(finalResolvers, &resolverspec.Resolver{
 					Repository:           &raw,
 					ComponentNamePattern: "*",
@@ -125,32 +108,9 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 		}
 	}
 
-	if provider == nil && compRefProv == nil {
-		return nil, fmt.Errorf("neither component reference nor configuration provided")
+	if provider == nil {
+		return nil, fmt.Errorf("no provider configured")
 	}
 
-	return &combinedComponentVersionRepositoryProvider{
-		compRefProv: compRefProv,
-		provider:    provider,
-	}, nil
-}
-
-// GetComponentVersionRepository implements the ComponentVersionRepositoryProvider interface.
-// It first checks if a component reference provider is available and if the identity matches the component reference.
-// If so, it uses the component reference provider to get the repository.
-// If not, it falls back to the other provider if available.
-// If neither provider can provide a repository for the given identity, an error is returned.
-func (p combinedComponentVersionRepositoryProvider) GetComponentVersionRepository(ctx context.Context, identity runtime.Identity) (repository.ComponentVersionRepository, error) {
-	if p.compRefProv != nil {
-		// check if the identity matches the component reference repository
-		if identity.Equal(p.compRefProv.ref.Identity()) {
-			return p.compRefProv.GetComponentVersionRepository(ctx, identity)
-		}
-	}
-
-	if p.provider != nil {
-		return p.provider.GetComponentVersionRepository(ctx, identity)
-	}
-
-	return nil, fmt.Errorf("no component version repository found for identity %q", identity.String())
+	return provider, nil
 }
