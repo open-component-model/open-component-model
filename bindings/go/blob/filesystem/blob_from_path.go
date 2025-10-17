@@ -1,4 +1,4 @@
-package blob
+package filesystem
 
 import (
 	"archive/tar"
@@ -9,23 +9,24 @@ import (
 	"os"
 	"path/filepath"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
 // DefaultTarMediaType is used as blob media type, if the MediaType field is not set in the DirOptions.
 const DefaultTarMediaType = "application/x-tar"
 
-// DirOptions contains options for creating a blob from a directory.
+// DirOptions contains options for creating a blob from a path.
 // This is very similar to v1.Dir specification in the input/dir package.
 type DirOptions struct {
-	MediaType    string
-	Compress     bool
-	PreserveDir  bool
-	Reproducible bool
-	ExcludeFiles []string
-	IncludeFiles []string
+	MediaType    string   // Media type of the resulting blob. If empty, DefaultTarMediaType is used.
+	Compress     bool     // Compress resulting blob using gzip.
+	PreserveDir  bool     // Add parent directory to the tar archive.
+	Reproducible bool     // Create a reproducible tar archive (fixed timestamps, uid/gid etc).
+	ExcludeFiles []string // List of files to exclude (glob patterns).
+	IncludeFiles []string // List of files to include (glob patterns).
+	WorkingDir   string   // Working directory to ensure the path is within.
 }
 
 // mediaType returns the media type to be used for the blob.
@@ -46,7 +47,7 @@ func (o *DirOptions) mediaType() string {
 // The function returns an error if the file path is empty, the specified path is outside the working directory
 // or if there are issues reading the directory.
 
-func GetBlobFromDir(ctx context.Context, path string, workingDirectory string, opt DirOptions) (ReadOnlyBlob, error) {
+func GetBlobFromPath(ctx context.Context, path string, workingDirectory string, opt DirOptions) (blob.ReadOnlyBlob, error) {
 
 	// Validate the input path
 	if path == "" {
@@ -59,7 +60,7 @@ func GetBlobFromDir(ctx context.Context, path string, workingDirectory string, o
 	}
 
 	// Ensure the path is within the working directory
-	if _, err := filesystem.EnsurePathInWorkingDirectory(path, workingDirectory); err != nil {
+	if _, err := EnsurePathInWorkingDirectory(path, workingDirectory); err != nil {
 		return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", path, workingDirectory, err)
 	}
 
@@ -73,7 +74,7 @@ func GetBlobFromDir(ctx context.Context, path string, workingDirectory string, o
 	}
 
 	// Create a virtual filesystem rooted at the base directory.
-	fs, err := filesystem.NewFS(base, os.O_RDONLY)
+	fsys, err := NewFS(base, os.O_RDONLY)
 	if err != nil {
 		return nil, fmt.Errorf("error creating virtual filesystem for path %q: %w", base, err)
 	}
@@ -93,11 +94,11 @@ func GetBlobFromDir(ctx context.Context, path string, workingDirectory string, o
 			_ = pw.CloseWithError(err)
 		}()
 
-		err = createTarFromDir(ctx, fs, sub, &opt, tw)
+		err = createTarFromPath(ctx, fsys, sub, &opt, tw)
 	}()
 
 	// Create a ReadOnlyBlob from the TAR archive.
-	var dirBlob ReadOnlyBlob = direct.New(pr, direct.WithMediaType(opt.mediaType()))
+	var dirBlob blob.ReadOnlyBlob = direct.New(pr, direct.WithMediaType(opt.mediaType()))
 
 	// If requested, compress blob (using gzip).
 	if opt.Compress {
@@ -109,6 +110,7 @@ func GetBlobFromDir(ctx context.Context, path string, workingDirectory string, o
 }
 
 // GetBlobFromDir
-func createTarFromDir(ctx context.Context, fs filesystem.FileSystem, dir string, opt *DirOptions, tw *tar.Writer) error {
+func createTarFromPath(ctx context.Context, fs FileSystem, dir string, opt *DirOptions, tw *tar.Writer) error {
 
+	return nil
 }
