@@ -10,12 +10,13 @@ import (
 	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository"
+	pathmatcher "ocm.software/open-component-model/bindings/go/repository/component/pathmatcher/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-// NewComponentVersionRepositoryProvider creates a new ComponentVersionRepositoryProvider based on the provided
+// NewComponentVersionRepositoryForComponentProvider creates a new ComponentVersionRepositoryForComponentProvider based on the provided
 // component reference and configuration.
 // If a compref.Ref is provided, it will be used to create a compRefProvider.
 // If a genericv1.Config is provided, it will be used to create either a fallback resolver provider (deprecated)
@@ -24,17 +25,17 @@ import (
 // If neither a componentReference nor a configuration is provided, an error will be returned.
 // As a fallback, this constructor adds the compref as a fallback entry as both
 // resolverruntime.Resolver (lowest priority) and resolverspec.Resolver (highest priority) depending on the configuration type.
-func NewComponentVersionRepositoryProvider(ctx context.Context,
-	pluginManager *manager.PluginManager,
+// CAREFUL: may return nil
+func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
+	repoProvider repository.ComponentVersionRepositoryProvider,
 	credentialGraph credentials.GraphResolver,
 	config *genericv1.Config,
 	ref *compref.Ref,
-) (ComponentVersionRepositoryProvider, error) {
+) (ComponentVersionRepositoryForComponentProvider, error) {
 	var (
 		//nolint:staticcheck // compatibility mode for deprecated resolvers
 		fallbackResolvers []*resolverruntime.Resolver
 		pathMatchers      []*resolverspec.Resolver
-		provider          ComponentVersionRepositoryProvider
 		err               error
 	)
 
@@ -49,12 +50,33 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 		}
 	}
 
-	if len(pathMatchers) > 0 && len(fallbackResolvers) > 0 {
+	switch {
+	case len(pathMatchers) > 0 && len(fallbackResolvers) > 0:
 		return nil, fmt.Errorf("both path matcher and fallback resolvers are configured, only one type is allowed")
-	}
+	case len(pathMatchers) == 0 && len(fallbackResolvers) == 0 && ref != nil:
+		slog.InfoContext(ctx, "no resolvers configured, using component reference as resolver")
 
-	// only use fallback resolvers if we got them from config - they must explicitly be set
-	if len(fallbackResolvers) > 0 {
+		if ref.Repository == nil {
+			return nil, fmt.Errorf("component reference does not contain repository information")
+		}
+
+		raw := runtime.Raw{}
+		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+		if err := scheme.Convert(ref.Repository, &raw); err != nil {
+			return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
+		}
+
+		return &resolverProvider{
+			repoProvider: repoProvider,
+			graph:        credentialGraph,
+			provider: pathmatcher.NewSpecProvider(ctx, []*resolverspec.Resolver{
+				{
+					Repository:           &raw,
+					ComponentNamePattern: "*",
+				},
+			}),
+		}, nil
+	case len(fallbackResolvers) > 0:
 		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
 
 		// add compref as first entry to fallback list if available to mimic legacy behavior
@@ -72,8 +94,12 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 			fallbackResolvers = finalResolvers
 		}
 
-		provider = newFromConfigWithFallback(pluginManager, credentialGraph, fallbackResolvers)
-	} else {
+		return &fallbackProvider{
+			repoProvider: repoProvider,
+			graph:        credentialGraph,
+			resolvers:    fallbackResolvers,
+		}, nil
+	case len(pathMatchers) > 0:
 		slog.DebugContext(ctx, "using path matcher resolvers", slog.Int("count", len(pathMatchers)))
 
 		if ref != nil {
@@ -102,15 +128,11 @@ func NewComponentVersionRepositoryProvider(ctx context.Context,
 			pathMatchers = finalResolvers
 		}
 
-		provider, err = newFromConfigWithPathMatcher(ctx, pluginManager, credentialGraph, pathMatchers)
-		if err != nil {
-			return nil, fmt.Errorf("creating path matcher provider failed: %w", err)
-		}
+		return &resolverProvider{
+			repoProvider: repoProvider,
+			graph:        credentialGraph,
+			provider:     pathmatcher.NewSpecProvider(ctx, pathMatchers),
+		}, nil
 	}
-
-	if provider == nil {
-		return nil, fmt.Errorf("no provider configured")
-	}
-
-	return provider, nil
+	return nil, nil
 }

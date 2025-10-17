@@ -256,7 +256,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
-	repoProvider, err := ocm.NewComponentVersionRepositoryProvider(cmd.Context(), pluginManager, credentialGraph, config, nil)
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, nil)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
@@ -364,13 +364,13 @@ var (
 type constructorProvider struct {
 	cache              string
 	targetRepoSpec     runtime.Typed
-	repositoryProvider ocm.ComponentVersionRepositoryProvider
+	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
 	pluginManager      *manager.PluginManager
 	graph              credentials.GraphResolver
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
-	return prov.repositoryProvider.GetComponentVersionRepository(ctx, name, version)
+	return prov.repositoryProvider.GetComponentVersionRepositoryForComponent(ctx, name, version)
 }
 
 func (prov *constructorProvider) GetDigestProcessor(ctx context.Context, resource *descriptor.Resource) (constructor.ResourceDigestProcessor, error) {
