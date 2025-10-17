@@ -16,6 +16,7 @@ const (
 	Bootstrap            = "bootstrap.yaml"
 	Rgd                  = "rgd.yaml"
 	Instance             = "instance.yaml"
+	K8sManifest			  	 = "k8s-manifest.yaml"
 	PublicKey            = "ocm.software.pub"
 	PrivateKey           = "ocm.software"
 )
@@ -29,7 +30,7 @@ var _ = Describe("controller", func() {
 				continue
 			}
 
-			reqFiles := []string{ComponentConstructor, Bootstrap, Rgd, Instance}
+			reqFiles := []string{ComponentConstructor, Bootstrap}
 
 			It("should deploy the example "+example.Name(), func(ctx SpecContext) {
 
