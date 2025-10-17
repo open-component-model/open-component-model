@@ -38,43 +38,52 @@ func (o *DirOptions) mediaType() string {
 	return o.MediaType
 }
 
-// GetBlobFromDir creates a blob from a directory using the provided options.
+// GetBlobFromPath creates a blob from a path using the provided options.
 //
-// It reads a directory from the filesystem based on specified include and exclude filters.
-// All files (and if configured the parent directory) are added to a TAR archive, which is then added to a blob
+// It reads a path from the filesystem and offers include and exclude filters.
+// Matching files are added to a TAR archive, and if configured also the parent directory.
 // If configured, the final blob gets compressed using gzip.
 //
 // The function returns an error if the file path is empty, the specified path is outside the working directory
 // or if there are issues reading the directory.
 
-func GetBlobFromPath(ctx context.Context, path string, workingDirectory string, opt DirOptions) (blob.ReadOnlyBlob, error) {
+func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
 
 	// Validate the input path
 	if path == "" {
 		return nil, fmt.Errorf("path must not be empty")
 	}
 
-	// Validate the working directory
-	if workingDirectory == "" {
-		return nil, fmt.Errorf("workingDirectory must not be empty")
+	// Ensure the path is within the working directory if specified
+	if opt.WorkingDir != "" {
+		if _, err := EnsurePathInWorkingDirectory(path, opt.WorkingDir); err != nil {
+			return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", path, opt.WorkingDir, err)
+		}
 	}
 
-	// Ensure the path is within the working directory
-	if _, err := EnsurePathInWorkingDirectory(path, workingDirectory); err != nil {
-		return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", path, workingDirectory, err)
+	// Check if path is a directory or just a single file
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("error stating path %q: %w", path, err)
 	}
 
-	// Prepare the virtual filesystem.
-	// If PreserveDir is set, adjust base and sub path to also include the parent directory.
 	base := path
 	sub := "."
-	if opt.PreserveDir {
+
+	// Directory handling
+	if fileInfo.IsDir() {
+		// If PreserveDir is set, adjust base and sub path to also include the parent directory.
+		if opt.PreserveDir {
+			base = filepath.Dir(path)
+			sub = filepath.Base(path)
+		}
+	} else {
+		// File handling
 		base = filepath.Dir(path)
-		sub = filepath.Base(path)
 	}
 
 	// Create a virtual filesystem rooted at the base directory.
-	fsys, err := NewFS(base, os.O_RDONLY)
+	fsystem, err := NewFS(base, os.O_RDONLY)
 	if err != nil {
 		return nil, fmt.Errorf("error creating virtual filesystem for path %q: %w", base, err)
 	}
@@ -82,35 +91,39 @@ func GetBlobFromPath(ctx context.Context, path string, workingDirectory string, 
 	// Create a TAR archive from the directory contents.
 	// We use a pipe and a goroutine to create the TAR.
 	pr, pw := io.Pipe()
+
 	go func() {
 		tw := tar.NewWriter(pw)
-		var err error
 
+		// use local gerr to capture errors from tar creation
+		var gerr error
+
+		// take care to close the tar writer and capture any error
 		defer func() {
-			if r := recover(); r != nil {
-				err = fmt.Errorf("panic during creation of tar from dir %q: %v", path, r)
-			}
-			err = errors.Join(err, tw.Close())
-			_ = pw.CloseWithError(err)
+			gerr = errors.Join(gerr, tw.Close())
 		}()
 
-		err = createTarFromPath(ctx, fsys, sub, &opt, tw)
+		// take care to close the pipe writer and hand over all errors
+		defer func() {
+			_ = pw.CloseWithError(gerr)
+		}()
+
+		gerr = createTarFromPath(ctx, fsystem, sub, &opt, tw)
 	}()
 
 	// Create a ReadOnlyBlob from the TAR archive.
-	var dirBlob blob.ReadOnlyBlob = direct.New(pr, direct.WithMediaType(opt.mediaType()))
+	var tarBlob blob.ReadOnlyBlob = direct.New(pr, direct.WithMediaType(opt.mediaType()))
 
 	// If requested, compress blob (using gzip).
 	if opt.Compress {
-		dirBlob = compression.Compress(dirBlob)
+		tarBlob = compression.Compress(tarBlob)
 	}
 
-	return dirBlob, nil
-
+	return tarBlob, nil
 }
 
-// GetBlobFromDir
-func createTarFromPath(ctx context.Context, fs FileSystem, dir string, opt *DirOptions, tw *tar.Writer) error {
+// createTarFromPath creates a TAR archive from the contents of the specified path.
+func createTarFromPath(ctx context.Context, fs FileSystem, path string, opt *DirOptions, tw *tar.Writer) error {
 
 	return nil
 }
