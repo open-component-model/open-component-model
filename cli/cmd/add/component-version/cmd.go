@@ -370,6 +370,9 @@ type constructorProvider struct {
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
+	if prov.repositoryProvider == nil {
+		return nil, fmt.Errorf("cannot fetch external component version %s:%s repository provider configured", name, version)
+	}
 	return prov.repositoryProvider.GetComponentVersionRepositoryForComponent(ctx, name, version)
 }
 
