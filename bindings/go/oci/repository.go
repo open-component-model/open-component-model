@@ -79,6 +79,10 @@ type Repository struct {
 
 	// logger is the logger used for OCI operations.
 	logger *slog.Logger
+
+	// the media type of the descriptor encoding used for component versions.
+	// this is used to determine the media type of the component descriptor when adding new component versions.
+	descriptorEncodingMediaType string
 }
 
 // AddComponentVersion adds a new component version to the repository.
@@ -101,6 +105,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		AdditionalDescriptorManifests: repo.localArtifactManifestCache.Get(reference),
 		AdditionalLayers:              repo.localArtifactLayerCache.Get(reference),
 		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
+		DescriptorEncodingMediaType:   repo.descriptorEncodingMediaType,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
