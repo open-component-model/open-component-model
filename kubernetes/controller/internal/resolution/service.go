@@ -135,7 +135,9 @@ func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOpt
 	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 
 	// singleflight deduplicates concurrent requests for the same key
-	v, err, shared := r.sf.Do(key.String(), r.singleFlightFn(ctx, opts, key, cfg))
+	v, err, shared := r.sf.Do(key.String(), func() (any, error) {
+		return r.enqueueResolution(ctx, opts, key, cfg)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -173,40 +175,38 @@ func (r *Resolver) validateOptions(opts *ResolveOptions) error {
 	return nil
 }
 
-func (r *Resolver) singleFlightFn(ctx context.Context, opts *ResolveOptions, key cacheKey, cfg *configuration.Configuration) func() (any, error) {
-	return func() (any, error) {
-		// check cache (another goroutine may have populated it) while getting here however unlikely
-		if cached, ok := r.cache.Get(key.String()); ok {
-			CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
-			return cached, nil
-		}
+func (r *Resolver) enqueueResolution(ctx context.Context, opts *ResolveOptions, key cacheKey, cfg *configuration.Configuration) (*ResolveResult, error) {
+	// check cache (another goroutine may have populated it) while getting here however unlikely
+	if cached, ok := r.cache.Get(key.String()); ok {
+		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
+		return cached, nil
+	}
 
-		r.mu.Lock()
-		defer r.mu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-		if _, inProgress := r.inProgress[key.String()]; inProgress {
-			return nil, ErrResolutionInProgress
-		}
+	if _, inProgress := r.inProgress[key.String()]; inProgress {
+		return nil, ErrResolutionInProgress
+	}
 
-		r.inProgress[key.String()] = struct{}{}
+	r.inProgress[key.String()] = struct{}{}
+	InProgressGauge.Set(float64(len(r.inProgress)))
+
+	select {
+	case r.lookupQueue <- &lookupRequest{
+		ctx:  ctx,
+		opts: opts,
+		cfg:  cfg,
+		key:  key,
+	}:
+		QueueSizeGauge.Set(float64(len(r.lookupQueue)))
+		r.logger.V(1).Info("enqueued lookup request", "component", opts.Component, "version", opts.Version)
+		return nil, ErrResolutionInProgress
+	default:
+		// TODO: what should happen if the queue is full?
+		delete(r.inProgress, key.String())
 		InProgressGauge.Set(float64(len(r.inProgress)))
-
-		select {
-		case r.lookupQueue <- &lookupRequest{
-			ctx:  ctx,
-			opts: opts,
-			cfg:  cfg,
-			key:  key,
-		}:
-			QueueSizeGauge.Set(float64(len(r.lookupQueue)))
-			r.logger.V(1).Info("enqueued lookup request", "component", opts.Component, "version", opts.Version)
-			return nil, ErrResolutionInProgress
-		default:
-			// TODO: what should happen if the queue is full?
-			delete(r.inProgress, key.String())
-			InProgressGauge.Set(float64(len(r.inProgress)))
-			return nil, fmt.Errorf("lookup queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
-		}
+		return nil, fmt.Errorf("lookup queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
 	}
 }
 

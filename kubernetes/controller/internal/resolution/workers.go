@@ -31,19 +31,23 @@ func (r *Resolver) workerWithRecovery(ctx context.Context, id int) {
 			return
 		default:
 			// run worker with panic recovery
+			panicked := false
 			func() {
 				defer func() {
 					if rec := recover(); rec != nil {
 						logger.Error(fmt.Errorf("worker panic: %v", rec), "worker panicked, restarting")
-						// let the worker restart
+						panicked = true
 					}
 				}()
 
 				r.worker(ctx, id)
 			}()
 
-			// worker exited normally (context cancelled)
-			return
+			// worker exited normally (context cancelled), stop the loop
+			if !panicked {
+				return
+			}
+			// if panicked, loop continues to restart worker
 		}
 	}
 }
