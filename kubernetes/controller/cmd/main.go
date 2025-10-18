@@ -31,6 +31,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/plugins"
 )
 
 var (
@@ -140,6 +141,12 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	pm := plugins.NewPluginManager(plugins.DefaultPluginManagerOptions())
+	if err := mgr.Add(pm); err != nil {
+		setupLog.Error(err, "unable to add plugin manager")
 		os.Exit(1)
 	}
 
