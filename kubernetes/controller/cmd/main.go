@@ -151,14 +151,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	resolver := resolution.NewResolver(mgr.GetClient(), setupLog, pm.PluginManager(), resolution.ResolverOptions{
-		WorkerCount: 10,
-		QueueSize:   100,
+	// Create worker pool with its own dependencies
+	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+		WorkerCount:   10,
+		QueueSize:     100,
+		Logger:        setupLog,
+		Client:        mgr.GetClient(),
+		PluginManager: pm.PluginManager(),
 	})
-	if err := mgr.Add(resolver); err != nil {
-		setupLog.Error(err, "unable to add plugin manager")
+	if err := mgr.Add(workerPool); err != nil {
+		setupLog.Error(err, "unable to add worker pool")
 		os.Exit(1)
 	}
+
+	// resolver will be used in the controller
+	_ = resolution.NewResolver(mgr.GetClient(), setupLog, workerPool)
 
 	var eventsRecorder *events.Recorder
 	if eventsRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, "ocm-k8s-toolkit"); err != nil {
