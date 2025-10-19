@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/resolution"
 )
 
 var (
@@ -146,6 +147,15 @@ func main() {
 
 	pm := plugins.NewPluginManager(plugins.DefaultPluginManagerOptions())
 	if err := mgr.Add(pm); err != nil {
+		setupLog.Error(err, "unable to add plugin manager")
+		os.Exit(1)
+	}
+
+	resolver := resolution.NewResolver(mgr.GetClient(), setupLog, pm.PluginManager(), resolution.ResolverOptions{
+		WorkerCount: 10,
+		QueueSize:   100,
+	})
+	if err := mgr.Add(resolver); err != nil {
 		setupLog.Error(err, "unable to add plugin manager")
 		os.Exit(1)
 	}

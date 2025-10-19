@@ -58,8 +58,7 @@ func (r *Resolver) resultCollector(ctx context.Context, workerChannels []chan *R
 
 			// mark the work as done in the progress tracker
 			r.inProgress.Delete(res.key)
-			//InProgressGauge.Set(float64(len(r.inProgress)))
-		default:
+			// InProgressGauge.Set(float64(len(r.inProgress)))
 		}
 	}
 }
@@ -103,7 +102,6 @@ func (r *Resolver) startWorker(ctx context.Context, id int) chan *Result {
 					result: result,
 					err:    err,
 				}
-			default:
 			}
 		}
 	}()

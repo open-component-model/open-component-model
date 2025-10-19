@@ -89,9 +89,8 @@ type Resolver struct {
 	client client.Reader
 	logger logr.Logger
 	pm     *manager.PluginManager
-	//mu     sync.RWMutex
-	sf   *singleflight.Group
-	opts ResolverOptions
+	sf     *singleflight.Group
+	opts   ResolverOptions
 
 	cache       Cache
 	lookupQueue chan *lookupRequest
@@ -211,7 +210,6 @@ func (r *Resolver) enqueueResolution(ctx context.Context, opts ResolveOptions, k
 		// The worker, once finished, will remove this task from the inProgress queue.
 		// Like in a restaurant, an order is placed, and the cook, when done with the food, marks the food as completed.
 		r.inProgress.Store(key, true)
-		//InProgressGauge.Set(float64(len(r.inProgress.))) // need to think about how to track this or maybe just drop it
 
 		// return a known error so the controller can requeue after a while and try to get a result that time.
 		return nil, ErrResolutionInProgress
