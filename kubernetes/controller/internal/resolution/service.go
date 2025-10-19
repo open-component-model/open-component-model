@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/singleflight"
@@ -63,48 +62,43 @@ func NewResolver(client client.Reader, logger logr.Logger, pm *manager.PluginMan
 		sf:          &singleflight.Group{},
 		lookupQueue: make(chan *lookupRequest, opts.QueueSize),
 		opts:        opts,
-		inProgress:  make(map[string]struct{}),
+		inProgress:  sync.Map{},
 	}
 }
 
-// lookupRequest contains all the relevant information for a lookup provided to a worker.
-// TODO: Need to figure out how to update a result once it's in the cache with an Error.
+// lookupRequest contains all the relevant information for a lookup provided to a doWork.
 type lookupRequest struct {
+	// this is the request context. The worker has its own context, however, it needs to stop
+	// the current work if the request cancelled the context. But it mustn't stop itself.
 	ctx  context.Context
-	opts *ResolveOptions
-	cfg  *configuration.Configuration
-	key  cacheKey
+	opts ResolveOptions
+	cfg  configuration.Configuration
+	key  string
 }
 
-// Resolver provides implementation for component version resolution using a worker pool. The async resolution
+// Result contains the result of a resolution including any errors that might have occurred.
+type Result struct {
+	key    string
+	result *ResolveResult
+	err    error
+}
+
+// Resolver provides implementation for component version resolution using a doWork pool. The async resolution
 // is none blocking so the controller can return once the resolution is done.
 type Resolver struct {
 	client client.Reader
 	logger logr.Logger
 	pm     *manager.PluginManager
-	mu     sync.RWMutex
-	sf     *singleflight.Group
-	opts   ResolverOptions
+	//mu     sync.RWMutex
+	sf   *singleflight.Group
+	opts ResolverOptions
 
 	cache       Cache
 	lookupQueue chan *lookupRequest
-	inProgress  map[string]struct{} // tracks keys currently being resolved
+	inProgress  sync.Map // tracks keys currently being resolved
 }
 
 // ResolveComponentVersion resolves a component version with deduplication and async queuing.
-//
-// Flow:
-// 1. Check cache hit: return immediately (check for Error field in result)
-// 2. Check cache miss: increment cache miss metric
-// 3. Use singleflight to deduplicate concurrent requests for the same cache key
-//   - Only ONE goroutine per unique key enters the singleflight function
-//   - All other concurrent requests for the same key wait and share the result
-//     4. Inside singleflight (winner goroutine):
-//     a. Double-check cache (may have been populated by previous winner)
-//     b. Check if already in progress (enqueued by previous winner)
-//   - Mark as in-progress
-//   - Enqueue to worker pool queue → return ErrResolutionInProgress
-//   - Workers resolve in background and update cache (including errors)
 func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOptions) (*ResolveResult, error) {
 	if err := r.validateOptions(opts); err != nil {
 		return nil, err
@@ -121,22 +115,23 @@ func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOpt
 		return nil, fmt.Errorf("failed to build cache key: %w", err)
 	}
 
+	// TODO: The cache needs a TTL.
 	// check cache (fast path)
-	if cached, ok := r.cache.Get(key.String()); ok {
+	if cached, ok := r.cache.Get(key); ok {
 		// check the result and if it's an error, return that immediately and delete the result.
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
-		if cached.Error != nil {
-			r.cache.Delete(key.String())
-			return nil, cached.Error
+		if cached.err != nil {
+			r.cache.Delete(key)
+			return nil, cached.err
 		}
-		return cached, nil
+		return cached.result, nil
 	}
 
 	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 
 	// singleflight deduplicates concurrent requests for the same key
-	v, err, shared := r.sf.Do(key.String(), func() (any, error) {
-		return r.enqueueResolution(ctx, opts, key, cfg)
+	v, err, shared := r.sf.Do(key, func() (any, error) {
+		return r.enqueueResolution(ctx, *opts, key, *cfg)
 	})
 	if err != nil {
 		return nil, err
@@ -175,37 +170,52 @@ func (r *Resolver) validateOptions(opts *ResolveOptions) error {
 	return nil
 }
 
-func (r *Resolver) enqueueResolution(ctx context.Context, opts *ResolveOptions, key cacheKey, cfg *configuration.Configuration) (*ResolveResult, error) {
-	// check cache (another goroutine may have populated it) while getting here however unlikely
-	if cached, ok := r.cache.Get(key.String()); ok {
+func (r *Resolver) enqueueResolution(ctx context.Context, opts ResolveOptions, key string, cfg configuration.Configuration) (*ResolveResult, error) {
+	// Check cache (another goroutine may have populated it) while getting here however unlikely
+	if cached, ok := r.cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
-		return cached, nil
+		if cached.err != nil {
+			r.cache.Delete(key)
+			return nil, cached.err
+		}
+
+		return cached.result, nil
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, inProgress := r.inProgress[key.String()]; inProgress {
+	// Check if already in progress... it might be a long-running process and was requested rapidly again
+	// in that case, we don't want to enqueue the task again. The reconciler will have to requeue, wait, and
+	// try for the result again.
+	if _, inProgress := r.inProgress.Load(key); inProgress {
 		return nil, ErrResolutionInProgress
 	}
 
-	r.inProgress[key.String()] = struct{}{}
-	InProgressGauge.Set(float64(len(r.inProgress)))
+	// Deep copy the repository spec to avoid concurrent write/read races during hashing.
+	// The worker will mutate the spec (SetType during resolve), while other goroutines may read it in (buildCacheKey)
+	optsCopy := opts
+	optsCopy.RepositorySpec = opts.RepositorySpec.DeepCopyTyped()
 
+	// Try to enqueue the request
 	select {
 	case r.lookupQueue <- &lookupRequest{
 		ctx:  ctx,
-		opts: opts,
+		opts: optsCopy,
 		cfg:  cfg,
 		key:  key,
 	}:
 		QueueSizeGauge.Set(float64(len(r.lookupQueue)))
 		r.logger.V(1).Info("enqueued lookup request", "component", opts.Component, "version", opts.Version)
+
+		// Mark as in progress ONLY after it has been successfully enqueued, otherwise we would need to remove it.
+		// Since we are in-flight, de-duplications for the same config should happen so the queue
+		// should only have one item in it even if it was called with the same config twice.
+		// The worker, once finished, will remove this task from the inProgress queue.
+		// Like in a restaurant, an order is placed, and the cook, when done with the food, marks the food as completed.
+		r.inProgress.Store(key, true)
+		//InProgressGauge.Set(float64(len(r.inProgress.))) // need to think about how to track this or maybe just drop it
+
+		// return a known error so the controller can requeue after a while and try to get a result that time.
 		return nil, ErrResolutionInProgress
 	default:
-		// TODO: what should happen if the queue is full?
-		delete(r.inProgress, key.String())
-		InProgressGauge.Set(float64(len(r.inProgress)))
 		return nil, fmt.Errorf("lookup queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
 	}
 }
@@ -243,10 +253,7 @@ func (r *Resolver) resolve(ctx context.Context, opts *ResolveOptions, cfg *confi
 	result := &ResolveResult{
 		Descriptor: descriptor,
 		Repository: repo,
-		Metadata: ResolveMetadata{
-			ResolvedAt: time.Now(),
-			ConfigHash: cfg.Hash,
-		},
+		ConfigHash: cfg.Hash,
 	}
 
 	return result, nil

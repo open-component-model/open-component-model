@@ -91,7 +91,7 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 			return false
 		}
 		resolvedResult = result
-		return result.Error == nil
+		return result != nil
 	}, 2*time.Second, 50*time.Millisecond, "resolution should complete")
 
 	require.NotNil(t, resolvedResult)
@@ -99,8 +99,8 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 	assert.NotNil(t, resolvedResult.Repository)
 	assert.Equal(t, "test-component", resolvedResult.Descriptor.Component.Name)
 	assert.Equal(t, "v1.0.0", resolvedResult.Descriptor.Component.Version)
-	assert.NotZero(t, resolvedResult.Metadata.ResolvedAt)
-	assert.NotEmpty(t, resolvedResult.Metadata.ConfigHash)
+	assert.NotZero(t, resolvedResult)
+	assert.NotEmpty(t, resolvedResult.ConfigHash)
 }
 
 func TestResolveComponentVersion_CacheHit(t *testing.T) {
@@ -164,7 +164,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 			return false
 		}
 		result1 = result
-		return result.Error == nil
+		return result != nil
 	}, 2*time.Second, 50*time.Millisecond, "resolution should complete")
 
 	require.NotNil(t, result1)
@@ -172,16 +172,15 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 	result2, err := env.Resolver.ResolveComponentVersion(ctx, opts)
 	require.NoError(t, err)
 	require.NotNil(t, result2)
-	assert.Nil(t, result2.Error)
 
 	// Results should be identical (same pointer from cache)
 	assert.Equal(t, result1.Descriptor.Component.Name, result2.Descriptor.Component.Name)
 	assert.Equal(t, result1.Descriptor.Component.Version, result2.Descriptor.Component.Version)
-	assert.Equal(t, result1.Metadata.ConfigHash, result2.Metadata.ConfigHash)
+	assert.Equal(t, result1.ConfigHash, result2.ConfigHash)
 }
 
 func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := logr.Discard()
 
 	configMap1 := &corev1.ConfigMap{
@@ -260,7 +259,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 			return false
 		}
 		result1 = result
-		return result.Error == nil
+		return result != nil
 	}, 2*time.Second, 50*time.Millisecond, "first resolution should complete")
 
 	require.NotNil(t, result1)
@@ -290,13 +289,13 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 			return false
 		}
 		result2 = result
-		return result.Error == nil
+		return result != nil
 	}, 2*time.Second, 50*time.Millisecond, "second resolution should complete")
 
 	require.NotNil(t, result2)
 
 	// Config hashes should be different
-	assert.NotEqual(t, result1.Metadata.ConfigHash, result2.Metadata.ConfigHash)
+	assert.NotEqual(t, result1.ConfigHash, result2.ConfigHash)
 }
 
 func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
@@ -485,7 +484,7 @@ func TestResolveComponentVersionSingleflight(t *testing.T) {
 			return false
 		}
 		finalResult = result
-		return result.Error == nil
+		return result != nil
 	}, 2*time.Second, 50*time.Millisecond, "resolution should complete")
 
 	require.NotNil(t, finalResult)
@@ -494,7 +493,6 @@ func TestResolveComponentVersionSingleflight(t *testing.T) {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		assert.Nil(t, result.Error)
 		assert.Equal(t, finalResult.Descriptor.Component.Name, result.Descriptor.Component.Name)
 		assert.Equal(t, finalResult.Descriptor.Component.Version, result.Descriptor.Component.Version)
 	}

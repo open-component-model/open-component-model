@@ -2,6 +2,7 @@ package resolution
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -64,7 +65,7 @@ var CacheShareCounterTotal = metrics.MustRegisterCounterVec(
 	"ocm_system",
 	"ocm_controller",
 	CacheShareCounterLabel,
-	"Number of times a cache chare occurred.",
+	"Number of times a cache share occurred.",
 	"component", "version",
 )
 
@@ -95,59 +96,42 @@ var ResolutionDurationHistogram = metrics.MustRegisterHistogramVec(
 	"component", "version",
 )
 
-type cacheKey struct {
-	configHash string
-	repoHash   string
-	component  string
-	version    string
-}
-
-func (k cacheKey) String() string {
-	return fmt.Sprintf("%s:%s:%s:%s", k.configHash, k.repoHash, k.component, k.version)
-}
-
-func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (cacheKey, error) {
+func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)
 	if err != nil {
-		return cacheKey{}, fmt.Errorf("failed to marshal repository spec: %w", err)
+		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
 	}
 
 	hasher := sha256.New()
+	hasher.Write(configHash)
 	hasher.Write(repoJSON)
-	repoHash := hasher.Sum(nil)
-
-	key := cacheKey{
-		configHash: fmt.Sprintf("%x", configHash),
-		repoHash:   fmt.Sprintf("%x", repoHash),
-		component:  component,
-		version:    version,
-	}
-
-	return key, nil
+	hasher.Write([]byte(component))
+	hasher.Write([]byte(version))
+	return hex.EncodeToString(hasher.Sum(nil)), err
 }
 
 // Cache defines the interface for component version resolution caching.
 type Cache interface {
-	Get(key string) (*ResolveResult, bool)
-	Set(key string, result *ResolveResult)
+	Get(key string) (*Result, bool)
+	Set(key string, result *Result)
 	Delete(key string)
 }
 
 // InMemoryCache implements Cache using a simple in-memory map.
 type InMemoryCache struct {
 	mu    sync.RWMutex
-	store map[string]*ResolveResult
+	store map[string]*Result
 }
 
 // NewInMemoryCache creates a new in-memory cache.
 func NewInMemoryCache() *InMemoryCache {
 	return &InMemoryCache{
-		store: make(map[string]*ResolveResult),
+		store: make(map[string]*Result),
 	}
 }
 
 // Get retrieves a result from the cache.
-func (c *InMemoryCache) Get(key string) (*ResolveResult, bool) {
+func (c *InMemoryCache) Get(key string) (*Result, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	result, ok := c.store[key]
@@ -155,7 +139,7 @@ func (c *InMemoryCache) Get(key string) (*ResolveResult, bool) {
 }
 
 // Set stores a result in the cache.
-func (c *InMemoryCache) Set(key string, result *ResolveResult) {
+func (c *InMemoryCache) Set(key string, result *Result) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.store[key] = result
