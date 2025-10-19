@@ -176,7 +176,7 @@ func (wp *WorkerPool) startWorker(ctx context.Context, id int) chan *Result {
 
 	go func() {
 		defer close(resultChan)
-		defer logger.V(1).Info("worker stopped")
+		defer logger.V(1).Info("worker stopped", "id", id)
 
 		for {
 			select {
