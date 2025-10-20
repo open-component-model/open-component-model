@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
@@ -60,36 +62,54 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 			return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", path, opt.WorkingDir, err)
 		}
 	}
+	// Create a TAR stream from the specified path
+	reader, err := createTarStream(ctx, path, &opt)
+	if err != nil {
+		return nil, fmt.Errorf("error creating tar stream from path %q: %w", path, err)
+	}
 
-	// Check if path is a directory or just a single file
-	fileInfo, err := os.Stat(path)
+	// Create a ReadOnlyBlob from the TAR archive.
+	var tarBlob blob.ReadOnlyBlob = direct.New(reader, direct.WithMediaType(opt.mediaType()))
+	if opt.Compress {
+		tarBlob = compression.Compress(tarBlob)
+	}
+	return tarBlob, nil
+}
+
+// createTarStream creates a TAR archive from the contents of the specified path, either a directory or a single file.
+func createTarStream(ctx context.Context, path string, opt *DirOptions) (io.Reader, error) {
+
+	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("error stating path %q: %w", path, err)
 	}
 
-	base := path
-	sub := "."
+	var baseDir, subPath string
 
-	// Directory handling
-	if fileInfo.IsDir() {
-		// If PreserveDir is set, adjust base and sub path to also include the parent directory.
-		if opt.PreserveDir {
-			base = filepath.Dir(path)
-			sub = filepath.Base(path)
+	// Directory case
+	if fi.IsDir() {
+		if !opt.PreserveDir {
+			baseDir = path
+			subPath = "."
+			// add parent directory if PreserveDir is set
+		} else {
+			baseDir = filepath.Dir(path)
+			subPath = filepath.Base(path)
 		}
+		// Single file case
 	} else {
-		// File handling
-		base = filepath.Dir(path)
+		baseDir = filepath.Dir(path)
+		subPath = filepath.Base(path)
 	}
 
 	// Create a virtual filesystem rooted at the base directory.
-	fsystem, err := NewFS(base, os.O_RDONLY)
+	fileSystem, err := NewFS(baseDir, os.O_RDONLY)
 	if err != nil {
-		return nil, fmt.Errorf("error creating virtual filesystem for path %q: %w", base, err)
+		return nil, fmt.Errorf("error creating virtual filesystem for path %q: %w", baseDir, err)
 	}
 
 	// Create a TAR archive from the directory contents.
-	// We use a pipe and a goroutine to create the TAR.
+	// We differentiate between directory and single file cases.
 	pr, pw := io.Pipe()
 
 	go func() {
@@ -98,32 +118,83 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 		// use local gerr to capture errors from tar creation
 		var gerr error
 
-		// take care to close the tar writer and capture any error
-		defer func() {
-			gerr = errors.Join(gerr, tw.Close())
-		}()
+		// take care to close tar writer and pipe and capture any error
+		defer func() { gerr = errors.Join(gerr, tw.Close()) }()
+		defer func() { _ = pw.CloseWithError(gerr) }()
 
-		// take care to close the pipe writer and hand over all errors
-		defer func() {
-			_ = pw.CloseWithError(gerr)
-		}()
-
-		gerr = createTarFromPath(ctx, fsystem, sub, &opt, tw)
+		if fi.IsDir() {
+			gerr = createTarFromDir(ctx, fileSystem, subPath, opt, tw)
+		} else {
+			gerr = createTarFromSingleFile(ctx, fileSystem, subPath, opt, tw)
+		}
 	}()
-
-	// Create a ReadOnlyBlob from the TAR archive.
-	var tarBlob blob.ReadOnlyBlob = direct.New(pr, direct.WithMediaType(opt.mediaType()))
-
-	// If requested, compress blob (using gzip).
-	if opt.Compress {
-		tarBlob = compression.Compress(tarBlob)
-	}
-
-	return tarBlob, nil
+	return pr, nil
 }
 
-// createTarFromPath creates a TAR archive from the contents of the specified path.
-func createTarFromPath(ctx context.Context, fs FileSystem, path string, opt *DirOptions, tw *tar.Writer) error {
+// createTarFromDir writes the contents of a directory to the TAR archive.
+func createTarFromDir(ctx context.Context, fsystem FileSystem, subPath string, opt *DirOptions, tw *tar.Writer) error {
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled while processing directory %q: %w", subPath, ctx.Err())
+	default:
+	}
+	return nil
+}
+
+// createTarFromSingleFile writes a single file to the TAR archive.
+func createTarFromSingleFile(ctx context.Context, fileSystem FileSystem, subPath string, opt *DirOptions, tw *tar.Writer) error {
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled while processing single file %q: %w", subPath, ctx.Err())
+	default:
+	}
+	fi, err := fs.Stat(fileSystem, subPath)
+	if err != nil {
+		return fmt.Errorf("error stating file %q: %w", subPath, err)
+	}
+
+	// Create the TAR header for the file.
+	header, err := createTarHeader(fi, "", opt.Reproducible)
+	if err != nil {
+		return fmt.Errorf("error creating tar header for file %q: %w", subPath, err)
+	}
+	// Use relative path instead of base name of file.
+	header.Name = subPath
+
+	// Write the header to the TAR writer.
+	if err := tw.WriteHeader(header); err != nil {
+		return fmt.Errorf("error writing tar header for file %q: %w", subPath, err)
+	}
+
+	// Open the file for reading.
+	fr, err := fileSystem.Open(subPath)
+	if err != nil {
+		return fmt.Errorf("error opening file %q for reading: %w", subPath, err)
+	}
+	defer func() { err = errors.Join(err, fr.Close()) }()
+
+	// Copy the file content to the TAR writer.
+	if _, err := io.Copy(tw, fr); err != nil {
+		return fmt.Errorf("error copying content of file %q to tar: %w", subPath, err)
+	}
 
 	return nil
+}
+
+// createTarHeader creates a TAR header from the given FileInfo.
+// If reproducible is true, it normalizes the header for reproducibility.
+func createTarHeader(fi fs.FileInfo, linkTarget string, reproducible bool) (*tar.Header, error) {
+	h, err := tar.FileInfoHeader(fi, linkTarget)
+	if err != nil {
+		return nil, fmt.Errorf("error creating tar header for file %q: %w", fi.Name(), err)
+	}
+	if reproducible {
+		h.ModTime = time.Unix(0, 0)
+		h.AccessTime = time.Unix(0, 0)
+		h.ChangeTime = time.Unix(0, 0)
+		h.Uid, h.Gid = 0, 0
+		h.Uname, h.Gname = "", ""
+		h.Mode = h.Mode &^ 0o700 // remove all sticky bits and just keep permission bits
+	}
+	return h, nil
 }
