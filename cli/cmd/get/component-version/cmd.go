@@ -17,6 +17,7 @@ import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -42,7 +43,7 @@ func New() *cobra.Command {
 		Aliases:    []string{"cv", "component-versions", "cvs", "componentversion", "componentversions", "component", "components", "comp", "comps", "c"},
 		SuggestFor: []string{"version", "versions"},
 		Short:      "Get component version(s) from an OCM repository",
-		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
+		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentOrRepositoryAsFirstPositional),
 		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
 
 The format of a component reference is:
@@ -95,22 +96,107 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 	return cmd
 }
 
-func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
+func ComponentOrRepositoryAsFirstPositional(_ *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing component reference as first positional argument")
 	}
-	if _, err := compref.Parse(args[0]); err != nil {
-		return fmt.Errorf("parsing component reference from first position argument %q failed: %w", args[0], err)
+	var compErr, repoErr error
+	if _, compErr = compref.Parse(args[0]); compErr == nil {
+		return nil
 	}
-	return nil
+	if _, repoErr = compref.ParseRepository(args[0]); repoErr == nil {
+		return nil
+	}
+	return fmt.Errorf("first position argument %q must be either a component reference or repository reference: %w", args[0], errors.Join(compErr, repoErr))
 }
 
 func GetComponentVersion(cmd *cobra.Command, args []string) error {
+	var compErr error
+	var refs []*compref.Ref
+
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not retrieve plugin manager from context")
 	}
 
+	reference := args[0]
+
+	// We have a reference, check if it is a component reference.
+	compRef, compErr := compref.Parse(reference)
+	if compErr != nil {
+		// If not a component reference, check if it is a repository reference.
+		repository, repoErr := compref.ParseRepository(args[0])
+		if repoErr != nil {
+			return fmt.Errorf("first position argument %q must be either a component reference or repository reference: %w", reference, errors.Join(compErr, repoErr))
+		}
+		slog.DebugContext(cmd.Context(), "parsed repository reference", "reference", reference, "parsed", repository)
+
+		// It is a repository reference. get the list of components there.
+		componentRefs, err := getComponentsForRepository(cmd.Context(), pluginManager, repository)
+		if err != nil {
+			return err
+		}
+		if len(componentRefs) == 0 {
+			return fmt.Errorf("no components found for repository %q", repository)
+		}
+
+		refs = append(refs, componentRefs...)
+	} else {
+		slog.DebugContext(cmd.Context(), "parsed component reference", "reference", reference, "parsed", compRef)
+		// It is a component reference, process it just as in the times before listing.
+		refs = append(refs, compRef)
+	}
+
+	for _, ref := range refs {
+		if err := getSingleReference(cmd, pluginManager, ref); err != nil {
+			return fmt.Errorf("getting component version for reference %q failed: %w", reference, err)
+		}
+	}
+
+	return nil
+}
+
+func getComponentsForRepository(ctx context.Context, pluginManager *manager.PluginManager, repository runtime.Typed) ([]*compref.Ref, error) {
+	// TODO: git rid of this type check.
+	// To generalize the call to GetComponentLister(), we need to somehow have credentials at this point.
+	_, ok := repository.(*ctfv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("component listing in repositories of type %T not supported", repository)
+	}
+
+	lister, err := pluginManager.ComponentListerRegistry.GetComponentLister(ctx, repository, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not get component lister for repository %+v: %w", repository, err)
+	}
+
+	var componentNames []string
+	err = lister.ListComponents(ctx, "", func(names []string) error {
+		componentNames = append(componentNames, names...)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not list components in repository %+v: %w", repository, err)
+	}
+
+	var refs []*compref.Ref
+	for _, name := range componentNames {
+		ref := &compref.Ref{
+			Repository: repository,
+			Component:  name,
+		}
+		switch repository.(type) {
+		case *ociv1.Repository:
+			ref.Type = runtime.NewVersionedType(ociv1.Type, ociv1.Version).String()
+		case *ctfv1.Repository:
+			ref.Type = runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String()
+		}
+		refs = append(refs, ref)
+	}
+
+	return refs, nil
+}
+
+func getSingleReference(cmd *cobra.Command, pluginManager *manager.PluginManager, ref *compref.Ref) error {
 	credentialGraph := ocmctx.FromContext(cmd.Context()).CredentialGraph()
 	if credentialGraph == nil {
 		return fmt.Errorf("could not retrieve credential graph from context")
@@ -142,15 +228,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
 
-	reference := args[0]
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
-
-	// we have a reference and parse it
-	ref, err := compref.Parse(reference)
-	if err != nil {
-		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
-	}
-	slog.DebugContext(cmd.Context(), "parsed component reference", "reference", reference, "parsed", ref)
 
 	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
 	if err != nil {
@@ -183,6 +261,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
+
 	return nil
 }
 
