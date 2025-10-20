@@ -153,13 +153,13 @@ env:
       baseUrl: ghcr.io
       subPath: /open-component-model/target-ocm-repository
 transformations: 
-  # resource.creator is no-op. It is NOT an env because its config has a 
+  # resource.creator is no-op. It is NOT an env because its input has a 
   # type (resource) that can be statically validated, and it may contain cel
   # expressions that create dependencies and have to be evaluated at process 
   # time.
   - type: resource.creator
     id: createresource1
-    config:
+    input:
       resource:
         name: localtext
         type: blob
@@ -173,7 +173,7 @@ transformations:
   # method to read the data from the specified location.
   - type: resource.downloader
     id: downloadresource1
-    config:
+    input:
       resource: ${createresource1.resource} 
     # output:
     #   resource:
@@ -189,7 +189,7 @@ transformations:
   # resource method to add the resource data to the specified target repository.
   - type: local.resource.uploader
     id: uploadresource1
-    config:
+    input:
       resource: ${downloadresource1.resource}
       # the repository and the component have to match with the component 
       # to which the resource is added and the repository where the component 
@@ -208,12 +208,13 @@ transformations:
   # component.creator is similar to resource.creator - it is a no-op. 
   - type: component.creator
     id: createcomponentversion1
-    name: ${env.helloworldenv.componentIdentity.name} 
-    version: ${env.helloworldev.componentIdentity.version}
-    provider:
-      name: internal
-    resources:
-      - ${uploadresource1.resource}
+    input:
+      name: ${env.helloworldenv.componentIdentity.name} 
+      version: ${env.helloworldev.componentIdentity.version}
+      provider:
+        name: internal
+      resources:
+        - ${uploadresource1.resource}
     # output:
     #   descriptor:
     #     meta: ...
@@ -224,8 +225,9 @@ transformations:
   # target repository.
   - type: component.uploader
     id: uploadcomponentversion1
-    repository: ${env.helloworldenv.repositorySpec}
-    componentDescriptor: ${createcomponentversion1.outputs.descriptor}
+    input:
+      repository: ${env.helloworldenv.repositorySpec}
+      componentDescriptor: ${createcomponentversion1.outputs.descriptor}
 ```
 
 ### Graph Representation
