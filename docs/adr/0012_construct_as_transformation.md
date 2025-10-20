@@ -124,97 +124,57 @@ graph TD
 ```
 
 
-### Transformation Specification
+## Transformation Specification
 
-Assume we call 
-```
-ocm add cv --repository ghcr.io/open-component-model/target-ocm-repository` 
---constructor ./constructor.yaml
-```
-with `./constructor.yaml` being the following constructor file:
+The following code snippet outlines a sample transformation specification.
+It is not intended to be complete. It is brief, contains explanatory comments 
+and serves to illustrate the general structure and concept of transformations.
 
+Detailed samples for specific use cases are provided in [Mapping From 
+Constructor to Transformation Specification](#mapping-constructor-file-to-transformation-specification) 
+and in [Mapping From Transfer to Transformation Specification](#mapping-from-transfer-to-transformation-specification).
+
+**Conceptual Example: Constructing a Component Version with a Local File Resource**
 ```yaml
-components:
-  - name: github.com/acme.org/helloworld
-    version: 1.0.0
-    provider:
-      name: internal
-    resources:
-      - name: localtext
-        type: blob
-        relation: local
-        input:
-          type: file
-          path: ./testdata/text.txt
-      - name: localociartifact
-        type: blob
-        relation: local
-        input:
-          type: ociArtifact
-          path: ghcr.io/fabianburth/artifact:1.0.0
-      - name: ociartifact
-        type: blob
-        relation: local
-        access:
-          type: ociArtifact
-          imageReference: ghcr.io/fabianburth/artifact:1.0.0
-    componentReferences:
-      name: ref
-      version: 1.0.0
-      componentName: github.com/acme.org/helloworld-ref
-```
-
-We can generate the following transformation specification:
-
-```yaml
-type: transformations.ocm/v1alpha1
-transformations: 
-  - type: attribute
-    id: helloworld
+type: transformations.ocm.config.software/v1alpha1
+# env is an initial environment context. It can specify variables for static
+# information that is used throughout the transformation specification.
+env:
+  # We define id`s here, instead of making componentIdentity and repositorySpec
+  # top-level fields, to allow defining componentIdentity and repositorySpec for
+  # multiple different components in the same transformation specification 
+  # without collision. 
+  - id: helloworldenv
     componentIdentity:
       name: github.com/acme.org/helloworld
       version: 1.0.0
     repositorySpec: 
       type: ociRegistry
-      baseUrl: "ghcr.io"
-      subPath: "/open-component-model/target-ocm-repository"
-      
-  - type: attribute
-    id: resourcecreator1
-    resource:
-      name: localtext
-      type: blob
-      relation: local
-      access:
-        type: file
-        filePath: ./testdata/text.txt
+      baseUrl: ghcr.io
+      subPath: /open-component-model/target-ocm-repository
+transformations: 
+  # resource.creator is no-op. It is NOT an env because its config has a 
+  # type (resource) that can be statically validated, and it may contain cel
+  # expressions that create dependencies and have to be evaluated at process 
+  # time.
+  - type: resource.creator
+    id: createresource1
+    config:
+      resource:
+        name: localtext
+        type: blob
+        relation: local
+        access:
+          type: file
+          filePath: ./testdata/text.txt
     # output: <does not need output, as it is already fully specified - creator is a no-op>
     
-  - type: attribute
-    id: resourcecreator2
-    resource:
-      name: localociartifact
-      type: blob
-      relation: local
-      access: 
-        type: ociArtifact 
-        imageReference: ghcr.io/fabianburth/artifact:1.0.0
-    # output: <does not need output, as it is already fully specified - creator is a no-op>
-    
-  - type: attribute
-    id: resourcecreator3
-    resource:
-      name: ociartifact
-      type: blob
-      relation: local
-      access:
-        type: ociArtifact
-        imageReference: ghcr.io/fabianburth/artifact:1.0.0
-    # output: <does not need output, as it is already fully specified - creator is a no-op>
-    
+  # resource.downloader calls the resource repository's download resource 
+  # method to read the data from the specified location.
   - type: resource.downloader
     id: downloadresource1
-    resource: ${resourcecreator1.resource} 
+    config:
+      resource: ${createresource1.resource} 
     # output:
     #   resource:
     #     name: localtext
@@ -225,29 +185,17 @@ transformations:
     #       filePath: ./testdata/text.txt
     #     data: <binary data>
     
-  - type: resource.downloader/v1alpha1 # maps to the access or input type
-    id: downloadresource2
-    resource: ${resourcecreator2.resource}
-    # output:
-    #   resource:
-    #     name: localociartifact
-    #     type: blob
-    #     relation: local
-    #     access:
-    #       type: ociArtifact
-    #       imageReference: ghcr.io/fabianburth/artifact:1.0.0
-    #     data: <binary data>
-    
-    # NO DOWNLOADER NEEDED FOR downloadresource3, WE WANT TO ADD IT BY REFERENCE
-    
-  - type: local.resource.uploader/v1alpha1
+  # local.resource.uploader calls the local resource repository's add local 
+  # resource method to add the resource data to the specified target repository.
+  - type: local.resource.uploader
     id: uploadresource1
-    resource: ${downloadresource1.resource}
-    # the repository and the component have to match with the component 
-    # to which the resource is added and the repository where the component 
-    # is uploaded
-    repository: ${helloworld.repositorySpec}
-    component: ${helloworld.componentIdentity}
+    config:
+      resource: ${downloadresource1.resource}
+      # the repository and the component have to match with the component 
+      # to which the resource is added and the repository where the component 
+      # is uploaded
+      repository: ${env.helloworldenv.repositorySpec}
+      component: ${env.helloworldenv.componentIdentity}
     # output:
     #   resource:
     #     name: localtext
@@ -256,64 +204,74 @@ transformations:
     #     access:
     #       type: localblob
     #       localReference: <reference in target repo>
-
-  - type: local.resource.uploader/v1alpha1
-    id: uploadresource2
-    resource: ${downloadresource2.resource}
-    repository: ${attributes.repositorySpec}
-    component: ${attributes.componentIdentity}
-    # output:
-    #   resource:
-    #     name: localociartifact
-    #     type: blob
-    #     relation: local
-    #     access:
-    #       type: localblob
-    #       localReference: <reference in target repo>
-
-
-  - type: attribute
-    id: helloworld-ref
-    componentIdentity:
-      name: github.com/acme.org/helloworld-ref
-      version: 1.0.0
-    repositorySpec:
-      type: ociRegistry
-      baseUrl: "ghcr.io"
-      subPath: "/open-component-model/target-ocm-repository"
-
-  - type: component.download
-    id: downloadcomponentversion2
-    component: ${helloworld-ref.componentIdentity}
-    # output: < component descriptor >
-  
-  - type: component.digest/v1alpha1
-    id: digestcomponentversion2
-    componentDescriptor: ${downloadcomponentversion2.output}
-    # output:
-    #   digest: sha256:<hash>
     
-  - type: attribute
+  # component.creator is similar to resource.creator - it is a no-op. 
+  - type: component.creator
     id: createcomponentversion1
-    name: ${helloworld.componentIdentity.name} 
-    version: ${helloworld.componentIdentity.version}
+    name: ${env.helloworldenv.componentIdentity.name} 
+    version: ${env.helloworldev.componentIdentity.version}
     provider:
       name: internal
     resources:
       - ${uploadresource1.resource}
-      - ${uploadresource2.resource}
-      - ${resourcecreator3.resource} # add by reference, no upload needed
-    componentReferences:
-      - name: ref
-        version: ${downloadcomponentversion2.output.version}
-        componentName: ${downloadcomponentversion2.output.name}
-        digest: ${digestcomponentversion2.output.digest}
+    # output:
+    #   descriptor:
+    #     meta: ...
+    #     component: ...
 
-  - type: component.uploader/v1alpha1
+  # component.uploader calls the component repository's add component version 
+  # method to add the component version created in the previous step to the 
+  # target repository.
+  - type: component.uploader
     id: uploadcomponentversion1
-    repository: ${attributes.repositorySpec}
+    repository: ${env.helloworldenv.repositorySpec}
     componentDescriptor: ${createcomponentversion1.outputs.descriptor}
 ```
+
+### Graph Representation
+
+```mermaid
+graph TD
+  subgraph env
+    A[helloworldenv]
+  end
+  subgraph transformations
+    B[createresource1]
+    C[downloadresource1]
+    D[uploadresource1]
+    E[createcomponentversion1]
+    F[uploadcomponentversion1]
+  end
+  B --> C
+  A --> D
+  C --> D
+  A --> E
+  D --> E
+  A --> F
+  E --> F
+``` 
+
+> [!NOTE]
+> 
+> An intuitive idea is to NOT define the `componentIdentity` and the 
+> `repositorySpec` in an `env` section and rather define them in place in the
+> (1) `component.creator` and `component.uploader` transformations or 
+> alternatively in the (2) `local.resource.uploader`.
+> 
+> 1) Defining them in the `component.creator` and `component.uploader` and 
+>    creating a cel dependency from `local.resource.uploader` to
+>    `component.creator` would create a cycle in the graph, as 
+>    `component.creator` depends on `local.resource.uploader` for the resource 
+>    specification.
+> 2) Defining them in the `local.resource.uploader` and creating a cel 
+>    dependency from `component.creator` to `local.resource.uploader` 
+>    technically work, as `component.creator` depends on 
+>    `local.resource.uploader` anyway. However, to consistently avoid cycles, 
+>    the generation step would have to understand the whole graph topology in 
+>    order to determine in which step to define those variables. Even then, this 
+>    might add unnecessary dependencies that could be avoided by defining them 
+>    in an `env` section.
+
 
 ### Notes
 
@@ -338,6 +296,8 @@ transformations:
 - The current `input type` implementation need to be broken up into:
   - additional `access types` (for `file`, `dir`, ...)
   - `resource.uploader` transformations (for `helm`)
+
+#### Mapping From Transfer to Transformation Specification
 
 #### Plugin Type System Reuse
 - The transformation specification implementation is aware of the supported 
