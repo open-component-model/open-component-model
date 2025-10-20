@@ -49,7 +49,7 @@ func (m *PluginManager) Start(ctx context.Context) error {
 
 	m.pm = pm
 
-	// TODO: Add context lock.
+	<-ctx.Done() // block until context is done ( expected by the manager )
 
 	return nil
 }

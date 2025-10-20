@@ -1,11 +1,13 @@
 package resolution
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	kmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
@@ -110,6 +112,14 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 	return hex.EncodeToString(hasher.Sum(nil)), err
 }
 
+// Result contains the result of a resolution including any errors that might have occurred.
+type Result struct {
+	key      string
+	result   *ResolveResult
+	err      error
+	createAt time.Time
+}
+
 // Cache defines the interface for component version resolution caching.
 type Cache interface {
 	Get(key string) (*Result, bool)
@@ -121,11 +131,18 @@ type Cache interface {
 type InMemoryCache struct {
 	mu    sync.RWMutex
 	store map[string]*Result
+	ttl   time.Duration
 }
 
+var defaultTTL = time.Second * 30
+
 // NewInMemoryCache creates a new in-memory cache.
-func NewInMemoryCache() *InMemoryCache {
+func NewInMemoryCache(ttl time.Duration) *InMemoryCache {
+	if ttl == 0 {
+		ttl = defaultTTL
+	}
 	return &InMemoryCache{
+		ttl:   ttl,
 		store: make(map[string]*Result),
 	}
 }
@@ -150,4 +167,35 @@ func (c *InMemoryCache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.store, key)
+}
+
+func (c *InMemoryCache) CleanUp() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// delete all expired keys
+	for _, result := range c.store {
+		if result.createAt.Add(c.ttl).Before(time.Now()) {
+			c.Delete(result.key)
+		}
+	}
+}
+
+func (c *InMemoryCache) Start(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+
+	go func() {
+		for {
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C: // every x minutes, check for cleanup.
+				c.CleanUp()
+			}
+		}
+	}()
+
+	<-ctx.Done() // block until context is canceled
 }

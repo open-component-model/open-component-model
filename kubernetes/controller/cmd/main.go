@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"time"
 
 	// to ensure that exec-entrypoint and run can make use of them.
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -151,6 +152,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	cache := resolution.NewInMemoryCache(time.Second * 30)
+	if err := mgr.Add(cache); err != nil {
+		setupLog.Error(err, "unable to add cache")
+		os.Exit(1)
+	}
+
 	// Create worker pool with its own dependencies
 	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		WorkerCount:   10,
@@ -158,6 +165,7 @@ func main() {
 		Logger:        setupLog,
 		Client:        mgr.GetClient(),
 		PluginManager: pm.PluginManager(),
+		Cache:         cache,
 	})
 	if err := mgr.Add(workerPool); err != nil {
 		setupLog.Error(err, "unable to add worker pool")

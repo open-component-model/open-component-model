@@ -39,6 +39,8 @@ type WorkerPoolOptions struct {
 	Client client.Reader
 	// PluginManager for OCM operations.
 	PluginManager *manager.PluginManager
+	// Cache for caching.
+	Cache Cache
 }
 
 // WorkerPool manages a pool of workers that process work items concurrently.
@@ -49,13 +51,6 @@ type WorkerPool struct {
 	cache      Cache
 	sf         *singleflight.Group
 	logger     logr.Logger
-}
-
-// Result contains the result of a resolution including any errors that might have occurred.
-type Result struct {
-	key    string
-	result *ResolveResult
-	err    error
 }
 
 // NewWorkerPool creates a new worker pool.
@@ -76,7 +71,7 @@ func NewWorkerPool(opts WorkerPoolOptions) *WorkerPool {
 		opts:       opts,
 		workQueue:  make(chan *WorkItem, opts.QueueSize),
 		inProgress: sync.Map{},
-		cache:      NewInMemoryCache(),
+		cache:      opts.Cache,
 		sf:         &singleflight.Group{},
 		logger:     opts.Logger,
 	}
@@ -237,9 +232,10 @@ func (wp *WorkerPool) startWorker(ctx context.Context, id int) chan *Result {
 
 				// Send result to worker's dedicated result channel
 				resultChan <- &Result{
-					key:    item.Key,
-					result: result,
-					err:    err,
+					key:      item.Key,
+					result:   result,
+					err:      err,
+					createAt: time.Now(),
 				}
 			}
 		}
