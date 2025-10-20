@@ -319,8 +319,8 @@ require (
 	github.com/sigstore/fulcio v1.7.1 // indirect
 	github.com/sigstore/protobuf-specs v0.5.0 // indirect
 	github.com/sigstore/rekor v1.4.2 // indirect
-	github.com/sigstore/rekor-tiles v0.1.11 // indirect
-	github.com/sigstore/sigstore v1.9.6-0.20251007084510-03d481d3b6fc // indirect
+	github.com/sigstore/rekor-tiles v0.99.1 // indirect
+	github.com/sigstore/sigstore v1.9.6-0.20251017153808-5089bd7668f3 // indirect
 	github.com/sigstore/sigstore-go v1.1.2 // indirect
 	github.com/sigstore/timestamp-authority v1.2.9 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
