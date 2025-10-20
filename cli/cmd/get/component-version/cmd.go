@@ -11,14 +11,12 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -147,45 +145,51 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	reference := args[0]
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
-	//nolint:staticcheck // no replacement for resolvers available yet (https://github.com/open-component-model/ocm-project/issues/575)
-	var resolvers []*resolverruntime.Resolver
-	if config != nil {
-		resolvers, err = ocm.ResolversFromConfig(config)
-		if err != nil {
-			return fmt.Errorf("getting resolvers from configuration failed: %w", err)
-		}
-	}
-	repo, err := ocm.NewFromRefWithFallbackRepo(cmd.Context(), pluginManager, credentialGraph, resolvers, reference)
+	// we have a reference and parse it
+	ref, err := compref.Parse(reference)
 	if err != nil {
-		return fmt.Errorf("could not initialize ocm repository: %w", err)
+		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
+	}
+	slog.DebugContext(cmd.Context(), "parsed component reference", "reference", reference, "parsed", ref)
+
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
-	versions, err := repo.Versions(cmd.Context(), ocm.VersionOptions{
-		SemverConstraint: constraint,
-		LatestOnly:       latestOnly,
-	})
+	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(cmd.Context(), ref.Component, ref.Version)
+	if err != nil {
+		return fmt.Errorf("could not access ocm repository: %w", err)
+	}
+
+	descs, err := ocm.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
+		VersionOptions: ocm.VersionOptions{
+			SemverConstraint: constraint,
+			LatestOnly:       latestOnly,
+		},
+	}, ref.Component, ref.Version, repo)
 	if err != nil {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
-	roots := make([]string, 0, len(versions))
-	for _, version := range versions {
+	roots := make([]string, 0, len(descs))
+	for _, desc := range descs {
 		identity := runtime.Identity{
-			descruntime.IdentityAttributeName:    repo.ComponentReference().Component,
-			descruntime.IdentityAttributeVersion: version,
+			descruntime.IdentityAttributeName:    desc.Component.Name,
+			descruntime.IdentityAttributeVersion: desc.Component.Version,
 		}.String()
 		roots = append(roots, identity)
 	}
 
-	if err := renderComponents(cmd, repo, roots, output, displayMode, recursive); err != nil {
+	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repo *ocm.ComponentRepository, roots []string, format string, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, repoProvider ocm.ComponentVersionRepositoryForComponentProvider, roots []string, format string, mode string, recursive int) error {
 	resAndDis := resolverAndDiscoverer{
-		repository: repo.ComponentVersionRepository(),
-		recursive:  recursive,
+		repositoryProvider: repoProvider,
+		recursive:          recursive,
 	}
 	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *descruntime.Descriptor]{
 		Roots:      roots,
@@ -295,8 +299,8 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 }
 
 type resolverAndDiscoverer struct {
-	repository repository.ComponentVersionRepository
-	recursive  int
+	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
+	recursive          int
 }
 
 var (
@@ -309,7 +313,12 @@ func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descr
 	if err != nil {
 		return nil, fmt.Errorf("parsing identity %q failed: %w", key, err)
 	}
-	desc, err := r.repository.GetComponentVersion(ctx, id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion])
+	component, version := id[descruntime.IdentityAttributeName], id[descruntime.IdentityAttributeVersion]
+	repo, err := r.repositoryProvider.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	if err != nil {
+		return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
+	}
+	desc, err := repo.GetComponentVersion(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
 	}

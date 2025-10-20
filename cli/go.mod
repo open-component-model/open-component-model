@@ -13,20 +13,20 @@ require (
 	golang.org/x/sys v0.36.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251010080918-cf762d5f2c83
+	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251017132044-0548a0ad422b
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251002101013-e0cc2f41d070
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251009073722-3db19b40ae7d
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251017132044-0548a0ad422b
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251017132044-0548a0ad422b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251002101013-e0cc2f41d070
-	ocm.software/open-component-model/bindings/go/oci v0.0.9
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251017132044-0548a0ad422b
+	ocm.software/open-component-model/bindings/go/oci v0.0.10
 	ocm.software/open-component-model/bindings/go/plugin v0.0.9
-	ocm.software/open-component-model/bindings/go/repository v0.0.2
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251007091609-0f6fd5aa0c28
+	ocm.software/open-component-model/bindings/go/repository v0.0.3
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251017132044-0548a0ad422b
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
@@ -40,6 +40,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
@@ -56,5 +57,5 @@ require (
 	golang.org/x/term v0.35.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251002101013-e0cc2f41d070 // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251017132044-0548a0ad422b // indirect
 )
