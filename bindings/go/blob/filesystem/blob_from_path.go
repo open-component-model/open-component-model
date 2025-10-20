@@ -46,8 +46,13 @@ func (o *DirOptions) mediaType() string {
 // Matching files are added to a TAR archive, and if configured also the parent directory.
 // If configured, the final blob gets compressed using gzip.
 //
+// Note on pattern option semantics: include/exclude patterns are matched using
+// `filepath.Match` against the full entry path.
+// No additional globbing extensions (like `**`) are performed.
+// Exclude patterns take precedence over include patterns.
+//
 // The function returns an error if the file path is empty, the specified path is outside the working directory
-// or if there are issues reading the directory.
+// or if there are issues accessing the directory.
 
 func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
 
@@ -132,16 +137,91 @@ func createTarStream(ctx context.Context, path string, opt *DirOptions) (io.Read
 }
 
 // createTarFromDir writes the contents of a directory to the TAR archive.
-func createTarFromDir(ctx context.Context, fsystem FileSystem, subPath string, opt *DirOptions, tw *tar.Writer) error {
+// subPath is the relative path within the virtual filesystem.
+func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string, opt *DirOptions, tw *tar.Writer) error {
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("context cancelled while processing directory %q: %w", subPath, ctx.Err())
 	default:
 	}
+
+	dirEntries, err := fileSystem.ReadDir(subPath)
+	if err != nil {
+		return fmt.Errorf("error reading directory %q: %w", subPath, err)
+	}
+
+	for _, entry := range dirEntries {
+		ei, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("error getting file info for entry %q in directory %q: %w", entry.Name(), subPath, err)
+		}
+
+		// fail early for symlinks
+		if (ei.Mode() & fs.ModeSymlink) != 0 {
+			return fmt.Errorf("symlinks are not supported: found symlink %q in directory %q", entry.Name(), subPath)
+		}
+
+		// reconstruct the full path of the entry
+		entryPath := filepath.Join(subPath, entry.Name())
+		// Check if path is included based on include/exclude patterns from options.
+		ok, err := isPathIncluded(entryPath, opt.IncludeFiles, opt.ExcludeFiles)
+		if err != nil {
+			return fmt.Errorf("error checking inclusion of entry %q in directory %q: %w", entry.Name(), subPath, err)
+		}
+		if !ok {
+			continue
+		}
+
+		// Create TAR header for the entry.
+		header, err := createTarHeader(ei, "", opt.Reproducible)
+		if err != nil {
+			return fmt.Errorf("error creating tar header for entry %q in directory %q: %w", entry.Name(), subPath, err)
+		}
+		// Set header name to the relative path of the entry with respect to the base directory,
+		// to preserve the subfolder structure in the tar archive.
+		header.Name = entryPath
+
+		switch {
+		case ei.IsDir():
+			// Write header to TAR, then recurse into directory.
+			if err := tw.WriteHeader(header); err != nil {
+				return fmt.Errorf("error writing tar header for directory %q: %w", entryPath, err)
+			}
+			if err := createTarFromDir(ctx, fileSystem, entryPath, opt, tw); err != nil {
+				return fmt.Errorf("error creating tar entry %q in directory %q: %w", entryPath, subPath, err)
+			}
+
+		case ei.Mode().IsRegular():
+			// Write header to TAR.
+			if err := tw.WriteHeader(header); err != nil {
+				return fmt.Errorf("error writing tar header for file %q: %w", entryPath, err)
+			}
+
+			// Open file for reading.
+			fr, err := fileSystem.Open(entryPath)
+			if err != nil {
+				return fmt.Errorf("error opening file %q for reading: %w", entryPath, err)
+			}
+
+			// Copy file content to TAR. Close immediately after copy; do not defer in loop.
+			var copyErr error
+			_, copyErr = io.Copy(tw, fr)
+			if closeErr := fr.Close(); closeErr != nil {
+				copyErr = errors.Join(copyErr, fmt.Errorf("error closing file %q: %w", entryPath, closeErr))
+			}
+			if copyErr != nil {
+				return fmt.Errorf("error copying content of file %q to tar: %w", entryPath, copyErr)
+			}
+
+		default:
+			return fmt.Errorf("unsupported file type %s for entry %q in directory %q", ei.Mode().String(), entry.Name(), subPath)
+		}
+	}
 	return nil
 }
 
 // createTarFromSingleFile writes a single file to the TAR archive.
+// subPath is the relative path within the virtual filesystem.
 func createTarFromSingleFile(ctx context.Context, fileSystem FileSystem, subPath string, opt *DirOptions, tw *tar.Writer) error {
 	select {
 	case <-ctx.Done():
@@ -179,6 +259,41 @@ func createTarFromSingleFile(ctx context.Context, fileSystem FileSystem, subPath
 	}
 
 	return nil
+}
+
+// isPathIncluded checks if a given path should be included based on include and exclude patterns.
+// Simple pattern matching using filepath.Match is used. This means patterns are matched against the entire path, no globbing.
+// Exclude patterns take precedence over include patterns.
+func isPathIncluded(path string, includePatterns, excludePatterns []string) (bool, error) {
+	// Check exclude patterns first, they have precedence.
+	for _, pattern := range excludePatterns {
+		ok, err := filepath.Match(pattern, path)
+		if err != nil {
+			return false, fmt.Errorf("error matching exclude pattern %q with path %q: %w", pattern, path, err)
+		}
+		if ok {
+			return false, nil
+		}
+	}
+
+	// If no include patterns are specified, include by default.
+	if len(includePatterns) == 0 {
+		return true, nil
+	}
+
+	// Check include patterns.
+	for _, pattern := range includePatterns {
+		ok, err := filepath.Match(pattern, path)
+		if err != nil {
+			return false, fmt.Errorf("error matching include pattern %q with path %q: %w", pattern, path, err)
+		}
+		if ok {
+			return true, nil
+		}
+	}
+
+	// If include patterns are specified but none matched, exclude the path.
+	return false, nil
 }
 
 // createTarHeader creates a TAR header from the given FileInfo.

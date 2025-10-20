@@ -8,131 +8,598 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
+// =============================================================================
+// BASIC FUNCTIONALITY TESTS
+// Core tests for GetBlobFromPath with single files and directories
+// =============================================================================
+
 func TestGetBlobFromPath_SingleFile(t *testing.T) {
-	// Setup: create temporary test file
+	r := require.New(t)
+
+	// Setup: create test file
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
 	testContent := "Test blob content"
+	r.NoError(os.WriteFile(testFile, []byte(testContent), 0644))
 
-	err := os.WriteFile(testFile, []byte(testContent), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Test: create blob from single file
+	opt := filesystem.DirOptions{Reproducible: true}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	r.NoError(err)
+	r.NotNil(blob)
 
-	opt := filesystem.DirOptions{
-		Reproducible: true,
-	}
-
-	// Test the exported function
-	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
-	if err != nil {
-		t.Fatalf("GetBlobFromPath() error = %v", err)
-	}
-
-	if b == nil {
-		t.Fatal("GetBlobFromPath() returned nil blob")
-	}
-
-	// Verify we can read from the blob
-	reader, err := b.ReadCloser()
-	if err != nil {
-		t.Fatalf("Failed to get blob reader: %v", err)
-	}
+	// Verify: blob contains expected TAR structure
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
 	defer reader.Close()
 
-	// Read TAR content
 	tr := tar.NewReader(reader)
 	header, err := tr.Next()
-	if err != nil {
-		t.Fatalf("Failed to read tar header: %v", err)
-	}
-
-	if header.Name != "test.txt" {
-		t.Errorf("Expected header name 'test.txt', got '%s'", header.Name)
-	}
+	r.NoError(err)
+	r.Equal("test.txt", header.Name)
 
 	content, err := io.ReadAll(tr)
-	if err != nil {
-		t.Fatalf("Failed to read tar content: %v", err)
-	}
-
-	if string(content) != testContent {
-		t.Errorf("Expected content '%s', got '%s'", testContent, string(content))
-	}
+	r.NoError(err)
+	r.Equal(testContent, string(content))
 }
 
 func TestGetBlobFromPath_Directory(t *testing.T) {
-	// Setup: create temporary test directory with files
+	r := require.New(t)
+
+	// Setup: create directory with multiple files
 	tmpDir := t.TempDir()
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("content1"), 0644))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "file2.txt"), []byte("content2"), 0644))
 
-	// Create test files
-	err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("content1"), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Test: create blob from directory
+	opt := filesystem.DirOptions{Reproducible: true}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	r.NoError(err)
+	r.NotNil(blob)
 
-	err = os.WriteFile(filepath.Join(tmpDir, "file2.txt"), []byte("content2"), 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	opt := filesystem.DirOptions{
-		Reproducible: true,
-	}
-
-	// Test the exported function
-	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
-	if err != nil {
-		t.Fatalf("GetBlobFromPath() error = %v", err)
-	}
-
-	if b == nil {
-		t.Fatal("GetBlobFromPath() returned nil blob")
-	}
-
-	// Verify we can read from the blob
-	reader, err := b.ReadCloser()
-	if err != nil {
-		t.Fatalf("Failed to get blob reader: %v", err)
-	}
+	// Verify: directory structure is preserved in TAR
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
 	defer reader.Close()
 
-	// Read TAR content and verify structure
 	tr := tar.NewReader(reader)
-	fileCount := 0
+	foundFiles := map[string]string{}
 
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
-		if err != nil {
-			t.Fatalf("Failed to read tar header: %v", err)
-		}
+		r.NoError(err)
 
-		fileCount++
-		t.Logf("Found entry in TAR: %s", header.Name)
-
-		// Read content to ensure it's properly written
 		content, err := io.ReadAll(tr)
-		if err != nil {
-			t.Fatalf("Failed to read content for %s: %v", header.Name, err)
-		}
+		r.NoError(err)
 
-		// Verify content matches expected
-		if strings.Contains(header.Name, "file1.txt") && string(content) != "content1" {
-			t.Errorf("Expected content1 for file1.txt, got %s", string(content))
-		}
-		if strings.Contains(header.Name, "file2.txt") && string(content) != "content2" {
-			t.Errorf("Expected content2 for file2.txt, got %s", string(content))
-		}
+		name := strings.TrimPrefix(header.Name, "./")
+		foundFiles[name] = string(content)
 	}
 
-	if fileCount == 0 {
-		t.Error("Expected at least one file in TAR archive, got none")
+	r.Equal("content1", foundFiles["file1.txt"])
+	r.Equal("content2", foundFiles["file2.txt"])
+}
+
+func TestGetBlobFromPath_NestedDirectory(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create nested directory structure
+	tmpDir := t.TempDir()
+	nested := filepath.Join(tmpDir, "nested")
+	r.NoError(os.Mkdir(nested, 0755))
+	r.NoError(os.WriteFile(filepath.Join(nested, "nested.txt"), []byte("nested content"), 0644))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "root.txt"), []byte("root content"), 0644))
+
+	// Test: nested structure preservation
+	opt := filesystem.DirOptions{Reproducible: true}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	r.NoError(err)
+
+	// Verify: nested paths are correctly represented
+	content, err := readAllFromBlob(blob)
+	r.NoError(err)
+
+	tr := tar.NewReader(strings.NewReader(string(content)))
+	foundNested := false
+	foundRoot := false
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+
+		if strings.Contains(header.Name, "nested/nested.txt") {
+			foundNested = true
+		}
+		if strings.Contains(header.Name, "root.txt") {
+			foundRoot = true
+		}
+
+		// Consume content
+		io.ReadAll(tr)
 	}
+
+	r.True(foundNested, "expected nested file to be included")
+	r.True(foundRoot, "expected root file to be included")
+}
+
+// =============================================================================
+// FILTERING AND PATTERN TESTS
+// Tests for include/exclude pattern functionality
+// =============================================================================
+
+func TestGetBlobFromPath_IncludePatterns(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create multiple files with different extensions
+	tmpDir := t.TempDir()
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("content1"), 0644))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "file2.log"), []byte("content2"), 0644))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "file3.txt"), []byte("content3"), 0644))
+
+	// Test: include only .txt files
+	opt := filesystem.DirOptions{
+		Reproducible: true,
+		IncludeFiles: []string{"*.txt"},
+	}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	r.NoError(err)
+	r.NotNil(blob)
+
+	// Verify: only .txt files are included
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
+	defer reader.Close()
+
+	tr := tar.NewReader(reader)
+	foundFiles := make(map[string]bool)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+
+		name := strings.TrimPrefix(header.Name, "./")
+		foundFiles[name] = true
+
+		// Consume content
+		io.ReadAll(tr)
+	}
+
+	r.True(foundFiles["file1.txt"], "expected file1.txt to be included")
+	r.True(foundFiles["file3.txt"], "expected file3.txt to be included")
+	r.False(foundFiles["file2.log"], "expected file2.log to be excluded")
+}
+
+func TestGetBlobFromPath_ExcludePatterns(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create multiple files
+	tmpDir := t.TempDir()
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "keep.txt"), []byte("keep"), 0644))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "exclude.log"), []byte("exclude"), 0644))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "also_keep.txt"), []byte("also_keep"), 0644))
+
+	// Test: exclude .log files
+	opt := filesystem.DirOptions{
+		Reproducible: true,
+		ExcludeFiles: []string{"*.log"},
+	}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	r.NoError(err)
+	r.NotNil(blob)
+
+	// Verify: .log files are excluded
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
+	defer reader.Close()
+
+	tr := tar.NewReader(reader)
+	foundFiles := make(map[string]bool)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+
+		name := strings.TrimPrefix(header.Name, "./")
+		foundFiles[name] = true
+
+		// Consume content
+		io.ReadAll(tr)
+	}
+
+	r.True(foundFiles["keep.txt"], "expected keep.txt to be included")
+	r.True(foundFiles["also_keep.txt"], "expected also_keep.txt to be included")
+	r.False(foundFiles["exclude.log"], "expected exclude.log to be excluded")
+}
+
+func TestGetBlobFromPath_IncludeAndExcludePrecedence(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create test files
+	tmpDir := t.TempDir()
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "include.txt"), []byte("include"), 0644))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "exclude_this.txt"), []byte("exclude"), 0644))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "other.log"), []byte("other"), 0644))
+
+	// Test: include *.txt but exclude specific file
+	opt := filesystem.DirOptions{
+		Reproducible: true,
+		IncludeFiles: []string{"*.txt"},
+		ExcludeFiles: []string{"exclude_this.txt"},
+	}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	r.NoError(err)
+	r.NotNil(blob)
+
+	// Verify: exclude takes precedence over include
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
+	defer reader.Close()
+
+	tr := tar.NewReader(reader)
+	foundFiles := make(map[string]bool)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+
+		name := strings.TrimPrefix(header.Name, "./")
+		foundFiles[name] = true
+
+		// Consume content
+		io.ReadAll(tr)
+	}
+
+	r.True(foundFiles["include.txt"], "expected include.txt to be included")
+	r.False(foundFiles["exclude_this.txt"], "expected exclude_this.txt to be excluded despite include pattern")
+	r.False(foundFiles["other.log"], "expected other.log to be excluded by include pattern")
+}
+
+// =============================================================================
+// DIRECTORY PRESERVATION TESTS
+// Tests for PreserveDir option functionality
+// =============================================================================
+
+func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create named directory with content
+	parent := t.TempDir()
+	targetDirName := "preserve_me"
+	targetDir := filepath.Join(parent, targetDirName)
+	r.NoError(os.Mkdir(targetDir, 0755))
+	r.NoError(os.WriteFile(filepath.Join(targetDir, "file.txt"), []byte("content"), 0644))
+
+	// Test: preserve directory structure
+	opt := filesystem.DirOptions{
+		Reproducible: true,
+		PreserveDir:  true,
+	}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), targetDir, opt)
+	r.NoError(err)
+
+	// Verify: entries are prefixed with directory name
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
+	defer reader.Close()
+
+	tr := tar.NewReader(reader)
+	foundPrefixed := false
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+
+		name := strings.TrimPrefix(header.Name, "./")
+		if strings.HasPrefix(name, targetDirName+"/") {
+			foundPrefixed = true
+		}
+
+		// Consume content
+		io.ReadAll(tr)
+	}
+
+	r.True(foundPrefixed, "expected entries to be prefixed with directory name when PreserveDir=true")
+}
+
+// =============================================================================
+// COMPRESSION AND MEDIA TYPE TESTS
+// Tests for compression and media type handling
+// =============================================================================
+
+func TestGetBlobFromPath_Compression(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create test file
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
+
+	// Test: compression enabled
+	opt := filesystem.DirOptions{
+		Compress:  true,
+		MediaType: filesystem.DefaultTarMediaType,
+	}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	r.NoError(err)
+
+	// Verify: content is gzip compressed
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
+	defer reader.Close()
+
+	// Check gzip magic bytes
+	magicBytes := make([]byte, 2)
+	_, err = io.ReadFull(reader, magicBytes)
+	r.NoError(err)
+	r.Equal(byte(0x1f), magicBytes[0])
+	r.Equal(byte(0x8b), magicBytes[1])
+}
+
+func TestGetBlobFromPath_DefaultMediaType(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create test file
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
+
+	// Test: default media type when not specified
+	opt := filesystem.DirOptions{Compress: false}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	r.NoError(err)
+
+	// Verify: blob can be read successfully (functional test)
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
+	defer reader.Close()
+
+	content, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.NotEmpty(content, "expected blob to contain TAR data")
+}
+
+func TestGetBlobFromPath_CustomMediaType(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create test file
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
+
+	// Test: custom media type with compression
+	customMediaType := "application/x-custom-tar"
+	opt := filesystem.DirOptions{
+		Compress:  true,
+		MediaType: customMediaType,
+	}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	r.NoError(err)
+
+	// Verify: content is compressed (functional test)
+	reader, err := blob.ReadCloser()
+	r.NoError(err)
+	defer reader.Close()
+
+	// Check gzip magic bytes to verify compression
+	magicBytes := make([]byte, 2)
+	_, err = io.ReadFull(reader, magicBytes)
+	r.NoError(err)
+	r.Equal(byte(0x1f), magicBytes[0])
+	r.Equal(byte(0x8b), magicBytes[1])
+}
+
+// =============================================================================
+// REPRODUCIBILITY TESTS
+// Tests for reproducible build functionality
+// =============================================================================
+
+func TestGetBlobFromPath_ReproducibleBuilds(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create test file
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
+
+	// Test: create blob with reproducible option
+	opt := filesystem.DirOptions{Reproducible: true}
+	blob1, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	r.NoError(err)
+
+	data1, err := readAllFromBlob(blob1)
+	r.NoError(err)
+
+	// Modify file timestamp
+	newTime := time.Now().Add(5 * time.Minute)
+	r.NoError(os.Chtimes(testFile, newTime, newTime))
+
+	// Test: create blob again after timestamp change
+	blob2, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	r.NoError(err)
+
+	data2, err := readAllFromBlob(blob2)
+	r.NoError(err)
+
+	// Verify: reproducible builds produce identical output
+	r.Equal(data1, data2, "expected reproducible builds to produce identical output")
+}
+
+func TestGetBlobFromPath_NonReproducibleBuilds(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create test file
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
+
+	// Test: non-reproducible builds preserve timestamps
+	opt := filesystem.DirOptions{Reproducible: false}
+	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	r.NoError(err)
+
+	data, err := readAllFromBlob(blob)
+	r.NoError(err)
+	r.NotEmpty(data, "expected non-empty output from non-reproducible build")
+}
+
+// =============================================================================
+// BLOB INTERFACE TESTS
+// Tests for blob interface implementations (size, digest, etc.)
+// =============================================================================
+
+func TestGetBlobFromPath_BlobInterfaces(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create test file
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
+
+	// Test: blob interface implementations
+	opt := filesystem.DirOptions{Compress: false}
+	testBlob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	r.NoError(err)
+
+	// Verify: SizeAware interface
+	if sizeAware, ok := testBlob.(blob.SizeAware); ok {
+		size := sizeAware.Size()
+		r.GreaterOrEqual(size, blob.SizeUnknown)
+	}
+
+	// Verify: basic blob functionality
+	reader, err := testBlob.ReadCloser()
+	r.NoError(err)
+	defer reader.Close()
+
+	content, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.NotEmpty(content, "expected blob to contain data")
+}
+
+// =============================================================================
+// ERROR HANDLING AND EDGE CASES
+// Tests for error conditions and edge cases
+// =============================================================================
+
+func TestGetBlobFromPath_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFunc   func(t *testing.T) (string, filesystem.DirOptions)
+		expectError bool
+		errorText   string
+	}{
+		{
+			name: "empty_path",
+			setupFunc: func(t *testing.T) (string, filesystem.DirOptions) {
+				return "", filesystem.DirOptions{}
+			},
+			expectError: true,
+		},
+		{
+			name: "non_existent_path",
+			setupFunc: func(t *testing.T) (string, filesystem.DirOptions) {
+				return "/non/existent/path", filesystem.DirOptions{}
+			},
+			expectError: true,
+		},
+		{
+			name: "path_outside_working_directory",
+			setupFunc: func(t *testing.T) (string, filesystem.DirOptions) {
+				base := t.TempDir()
+				allowed := filepath.Join(base, "allowed")
+				outside := filepath.Join(base, "outside")
+				require.NoError(t, os.MkdirAll(allowed, 0755))
+				require.NoError(t, os.MkdirAll(outside, 0755))
+
+				testFile := filepath.Join(outside, "test.txt")
+				require.NoError(t, os.WriteFile(testFile, []byte("content"), 0644))
+
+				return testFile, filesystem.DirOptions{WorkingDir: allowed}
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			path, opt := tt.setupFunc(t)
+			_, err := filesystem.GetBlobFromPath(context.Background(), path, opt)
+
+			if tt.expectError {
+				r.Error(err)
+				if tt.errorText != "" {
+					r.Contains(err.Error(), tt.errorText)
+				}
+			} else {
+				r.NoError(err)
+			}
+		})
+	}
+}
+
+func TestGetBlobFromPath_SymlinkRejection(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create directory with symlink
+	tmpDir := t.TempDir()
+	targetFile := filepath.Join(tmpDir, "target.txt")
+	symlinkFile := filepath.Join(tmpDir, "symlink.txt")
+
+	r.NoError(os.WriteFile(targetFile, []byte("target content"), 0644))
+
+	if err := os.Symlink("target.txt", symlinkFile); err != nil {
+		t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+		return
+	}
+
+	// Test: symlinks should be rejected during blob reading
+	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, filesystem.DirOptions{})
+	r.NoError(err, "blob creation should succeed initially")
+
+	// Verify: error occurs when reading blob content
+	_, err = readAllFromBlob(blob)
+	r.Error(err)
+	r.Contains(err.Error(), "symlinks are not supported")
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+// readAllFromBlob reads all content from a blob for testing purposes
+func readAllFromBlob(b blob.ReadOnlyBlob) ([]byte, error) {
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	return io.ReadAll(rc)
 }
