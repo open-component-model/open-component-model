@@ -83,6 +83,7 @@ func NewWorkerPool(opts WorkerPoolOptions) *WorkerPool {
 }
 
 // Start begins the worker pool and result collector.
+// This method blocks until the context is cancelled to implement graceful shutdown.
 func (wp *WorkerPool) Start(ctx context.Context) error {
 	wp.logger.Info("starting worker pool", "workers", wp.opts.WorkerCount, "queueSize", wp.opts.QueueSize)
 
@@ -92,8 +93,24 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 		workerChannels = append(workerChannels, wp.startWorker(ctx, i))
 	}
 
-	go wp.resultCollector(ctx, workerChannels)
+	// Start result collector (fan-in the worker channels later)
+	collectorDone := make(chan struct{})
+	go func() {
+		wp.resultCollector(ctx, workerChannels)
+		close(collectorDone)
+	}()
 
+	// block until context is done to implement proper runnable.
+	<-ctx.Done()
+	wp.logger.Info("worker pool shutting down, draining queue")
+
+	// close work queue to signal workers to stop
+	close(wp.workQueue)
+
+	// wait for all workers to finish and result collector to stop
+	<-collectorDone
+
+	wp.logger.Info("worker pool shutdown complete")
 	return nil
 }
 
@@ -115,6 +132,12 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 	v, err, shared := wp.sf.Do(key, func() (any, error) {
 		return wp.enqueueResolution(ctx, opts, key, cfg)
 	})
+
+	// Forget the key AFTER all singleflight waiters have received the result
+	// This ensures that concurrent callers waiting in sf.Do() can check cache
+	// before the key is forgotten
+	defer wp.sf.Forget(key)
+
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +206,12 @@ func (wp *WorkerPool) startWorker(ctx context.Context, id int) chan *Result {
 			case <-ctx.Done():
 				logger.V(1).Info("worker stopped due to context cancellation")
 				return
-			case item := <-wp.workQueue:
+			case item, ok := <-wp.workQueue:
+				if !ok {
+					logger.V(1).Info("work queue closed, worker exiting")
+					return
+				}
+
 				QueueSizeGauge.Set(float64(len(wp.workQueue)))
 
 				logger.V(1).Info("processing work item", "key", item.Key)
@@ -239,7 +267,7 @@ func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan
 	}
 
 	go func() {
-		// Close the merged channel when all workers exit
+		// once all workers are done, we clean up the mergeResults channel
 		wg.Wait()
 		close(mergedResults)
 	}()
@@ -255,13 +283,10 @@ func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan
 				return
 			}
 
-			// Store result in cache
+			// store result in cache
 			wp.cache.Set(res.key, res)
 
-			// Clear singleflight to prevent memory leak
-			wp.sf.Forget(res.key)
-
-			// Mark work as done
+			// mark as done. singleflight is cleared in Resolve.
 			wp.inProgress.Delete(res.key)
 		}
 	}

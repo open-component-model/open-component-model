@@ -47,6 +47,10 @@ func (m *PluginManager) Start(ctx context.Context) error {
 		}
 	}
 
+	m.pm = pm
+
+	// TODO: Add context lock.
+
 	return nil
 }
 
@@ -69,7 +73,6 @@ func (m *PluginManager) PluginManager() *manager.PluginManager {
 
 // NewPluginManager creates and initializes a plugin manager with the given configuration.
 // It registers plugins from the configured locations and built-in plugins.
-// TODO: If this ever needs configuration from internal, we have a problem. :D
 func NewPluginManager(opts PluginManagerOptions) *PluginManager {
 	if opts.Logger.GetSink() == nil {
 		opts.Logger = logr.Discard()

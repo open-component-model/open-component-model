@@ -541,14 +541,21 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Log
 
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		PluginManager: pm,
+		Logger:        logger,
+		Client:        k8sClient,
 	})
 	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 
-	err = wp.Start(ctx)
-	require.NoError(t, err)
+	// Start worker pool in background since Start() blocks for graceful shutdown
+	go func() {
+		_ = wp.Start(ctx)
+	}()
+	
+	// Give workers a moment to initialize
+	time.Sleep(50 * time.Millisecond)
 
 	return &testEnvironment{
 		Resolver:      resolver,

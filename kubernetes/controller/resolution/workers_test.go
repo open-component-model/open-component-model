@@ -91,8 +91,7 @@ func TestWorkerPool_StartAndStop(t *testing.T) {
 		Logger:      logger,
 	})
 
-	err := wp.Start(ctx)
-	require.NoError(t, err)
+	go func() { _ = wp.Start(ctx) }()
 
 	// Give workers time to start
 	time.Sleep(100 * time.Millisecond)
@@ -306,8 +305,7 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Singleflight(t *testing.T)
 	wpCtx, wpCancel := context.WithCancel(t.Context())
 	t.Cleanup(wpCancel)
 
-	err = wp.Start(wpCtx)
-	require.NoError(t, err)
+	go func() { _ = wp.Start(wpCtx) }()
 
 	const numConcurrent = 50
 	var wg sync.WaitGroup
@@ -425,8 +423,7 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	wpCtx, wpCancel := context.WithCancel(t.Context())
 	t.Cleanup(wpCancel)
 
-	err = wp.Start(wpCtx)
-	require.NoError(t, err)
+	go func() { _ = wp.Start(wpCtx) }()
 
 	// Try to enqueue more items than the queue can hold
 	var queueFullCount atomic.Int32
@@ -859,6 +856,7 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		PluginManager: pm,
 		Logger:        logger,
+		Client:        k8sClient,
 	})
 	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
@@ -868,8 +866,13 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 		_ = pm.Shutdown(ctx)
 	})
 
-	err = wp.Start(ctx)
-	require.NoError(t, err)
+	// Start worker pool in background since Start() blocks for graceful shutdown
+	go func() {
+		_ = wp.Start(ctx)
+	}()
+	
+	// Give workers a moment to initialize
+	time.Sleep(50 * time.Millisecond)
 
 	return resolver
 }
