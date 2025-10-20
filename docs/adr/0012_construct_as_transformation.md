@@ -11,11 +11,34 @@
 
 ## Context and Problem Statement
 
-Initially, the transformation specification was primarily designed for the 
-requirements of **transferring of components and their resources**. However, 
-we noticed a big overlap with the requirements of **component constructors**.
+The original transformation specification proposed in the
+[transformation ADR](0005_transformation.md) was primarily designed 
+for the requirements of **transferring of components and their resources**. 
+However, we noticed a significant overlap of the **transfer requirements** with 
+the **component constructors** requirements. A detailed comparison of shared 
+requirements is provided in [Requirements](#requirements).
 
-### Requirements
+This ADR proposes a unified solution for transferring and constructing 
+component versions. The goal behind this unification is:
+
+- **Maintainability**: By having a unified engine / unified code paths for both 
+  use cases, we reduce code duplication and maintenance efforts. It is also 
+  easier to keep both use cases in sync with new features and bug fixes.
+- **Extensibility**: The transformation specification is designed to be 
+  extensible. By reusing it for component construction, we gain flexibility 
+  to extend the component construction capabilities.
+
+
+## Requirements
+
+The table below list the requirements shared by the **transfer** and 
+**constructor** use cases.
+
+This serves as:
+- a rationale for unifying transfer and constructor under a single 
+  implementation
+
+### Shared Requirements of Transfer and Constructor Requirements
 
 | Requirement                    | Transfer                                                                                      | Constructor                                                                                               |
 |--------------------------------|-----------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
@@ -29,9 +52,9 @@ we noticed a big overlap with the requirements of **component constructors**.
 
 ### Conclusion
 
-The functional requirements of both use cases are almost identical.
+The functional requirements of both use cases are almost identical. The 
+difference between the use cases is currently the **user interface**:
 
-The difference between the use cases is currently the **interface**:
 - for **ocm transfer component**, the plan is to offer a backwards compatible 
   high-level command (`ocm transfer component`) that generates the 
   transformation specification based on the provided parameters.
@@ -40,14 +63,75 @@ The difference between the use cases is currently the **interface**:
 
 ## Solution Proposal
 
-To keep the current user experience and enable an easy transition to ocm v2, we 
-propose to ALSO generate a transformation specification based on the constructor
-file.
+**Unified Engine**:
+We propose to specify a **unified transformation specification** and 
+implement a corresponding **unified transformation engine** 
+that is powerful enough to model both, **transfer** and **construct**.
 
-### Example: OCM Transformation Specification
+**Distinct User Interfaces**:
+We propose to keep the existing distinct **user interfaces** of transfer and 
+construct. 
 
-Assume we call `ocm add cv --repository ghcr.io/open-component-model/target-ocm-repository` 
-with the following constructor file:
+- **transfer**: `ocm transfer component ...` with the parameters 
+  determining the transfer behavior specified on the command line as option.
+- **construct**: `ocm add component ...` with the parameters 
+  determining the construction behavior specified in the constructor file.
+
+**Intermediate Mapping Layer**:
+Both commands will generate a transformation specification based on their 
+respective input parameters (command line options or constructor file). 
+
+**The proposed solution will not affect the user interfaces**.
+
+**Additional Command**: We also propose to add a command and options that 
+allow to 
+directly interact with and execute a transformation specification file:
+
+- `ocm transform --file <transformation-spec.yaml>`: 
+  This command will directly take a transformation specification file and 
+  execute it using the unified transformation engine.
+- `--dry-run` option for `ocm transfer component` and 
+  `ocm add component` commands to output the generated transformation 
+  specification without executing it.
+
+### High-Level Solution Diagram
+
+```mermaid
+graph TD
+  subgraph Distinct User Interfaces
+    A[constructor file]
+    B[ocm add component command]
+    E[ocm transfer component command]
+  end
+  subgraph Mapping Layer
+    C([map construct to transformations])
+    F([map transfer to transformations])
+  end
+  subgraph Unified Engine
+    D[transformation specification]
+    G[transformation engine]
+    H[ocm transform command]
+  end
+  A --> B
+  B --> C
+  E --> F
+  C --> D
+  F --> D
+  D -- without dry run --> G
+  D --> H
+  H --> G
+  D -- modify --> D
+```
+
+
+### Transformation Specification
+
+Assume we call 
+```
+ocm add cv --repository ghcr.io/open-component-model/target-ocm-repository` 
+--constructor ./constructor.yaml
+```
+with `./constructor.yaml` being the following constructor file:
 
 ```yaml
 components:
