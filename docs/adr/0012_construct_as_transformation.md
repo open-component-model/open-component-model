@@ -334,9 +334,45 @@ is aware of the available *capabilities*, their interfaces and their
 types (or rather, schemas). This means, new *capabilities* can only be added by 
 extending the code.
 
+### Program Flow
 So, the logic will be heavily inspired by the current construct implementation.
+The overall flow will roughly be as follows:
 
-### Transformation Processing
+**1. Discover**
+- Discover loops over the entries in the (already parsed) transformation 
+  specification go struct. We do 2 iterations:
+  - **First Iteration**
+    - For each item in the `transformations` list:
+      - We create a vertex with the transformation `id` as the vertex `id`.
+  - **Second Iteration**
+    - For each item in the `transformations` list:
+      - We parse the cel expressions in the transformation `config` (without 
+        evaluating them yet). 
+      - We add edges based on the cel expressions in the `config` (add edge 
+        always does a cycle check). Here, we can error if the vertex with 
+        the `id` referenced in the cel expression does not exist because of 
+        the first iteration.
+      - We unmarshal the `config` into its corresponding go type. As 
+        mentioned above, we do not want an additional registry level. So, we 
+        do a switch case on the transformation `type` and perform the 
+        unmarshalling. Doing this here, instead of during process time,
+        allows us to error early if the config is invalid.
+      - We add the transformation with the unmarshalled `config` as an 
+        attribute to the vertex.
+
+**2. Process**
+- Process loops over the graph in topological order. For each vertex:
+  - We get the transformation with the typed `config` from the vertex attribute.
+  - We evaluate all cel expressions in the `config`, using the outputs of 
+    the predecessor vertices as input.
+  - We do another switch case statement on the transformation type to call the
+    corresponding transformation logic, passing in the `config`.
+  - We store the processed transformations with their outputs in the vertex 
+    as an attribute (can be used for rendering) and additionally in a map with
+    the vertex `id` as key (can be used for cel expression evaluation of 
+    successor vertices).
+
+### Mapping Constructor File to Transformation Specification
 1. **Parse the component constructor file.**
 2. **Process Resources and Sources**  
    For each component version, the constructor handles all resources and sources:
