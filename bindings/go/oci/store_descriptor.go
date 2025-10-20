@@ -18,9 +18,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
-	descriptor2 "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
+	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
-	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -31,6 +30,7 @@ type AddDescriptorOptions struct {
 	AdditionalDescriptorManifests []ociImageSpecV1.Descriptor
 	AdditionalLayers              []ociImageSpecV1.Descriptor
 	ReferrerTrackingPolicy        ReferrerTrackingPolicy
+	DescriptorEncodingMediaType   string
 }
 
 // AddDescriptorToStore uploads a component descriptor to any given Store.
@@ -52,14 +52,22 @@ func AddDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 		})
 	}
 
+	descriptorMediaType := opts.DescriptorEncodingMediaType
+	if descriptorMediaType == "" {
+		// Default to JSON if no media type is provided, as this is the defacto canonical standard format
+		// used when integrating with OCI usually.
+		descriptorMediaType = ocidescriptor.MediaTypeComponentDescriptorJSON
+	}
+
 	// Encode and upload the descriptor
-	descriptorEncoding, descriptorBuffer, err := tar.SingleFileTAREncodeV2Descriptor(opts.Scheme, descriptor)
+	descriptorBuffer, err := ocidescriptor.SingleFileEncodeDescriptor(opts.Scheme, descriptor, descriptorMediaType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode descriptor: %w", err)
 	}
+
 	descriptorBytes := descriptorBuffer.Bytes()
 	descriptorOCIDescriptor := ociImageSpecV1.Descriptor{
-		MediaType: descriptor2.MediaTypeComponentDescriptorV2 + descriptorEncoding,
+		MediaType: descriptorMediaType,
 		Digest:    digest.FromBytes(descriptorBytes),
 		Size:      int64(len(descriptorBytes)),
 	}
@@ -95,7 +103,7 @@ func AddDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 		Versioned: specs.Versioned{
 			SchemaVersion: 2,
 		},
-		ArtifactType: descriptor2.MediaTypeComponentDescriptorV2,
+		ArtifactType: ocidescriptor.MediaTypeComponentDescriptorV2,
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
 		Config:       componentConfigDescriptor,
 		Annotations: map[string]string{
@@ -214,7 +222,7 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 		_ = descriptorRaw.Close()
 	}()
 
-	desc, err := tar.SingleFileTARDecodeV2Descriptor(descriptorRaw)
+	desc, err := ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, cfg.ComponentDescriptorLayer.MediaType)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
 	}
