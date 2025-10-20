@@ -134,7 +134,8 @@ Detailed samples for specific use cases are provided in [Mapping From
 Constructor to Transformation Specification](#mapping-constructor-file-to-transformation-specification) 
 and in [Mapping From Transfer to Transformation Specification](#mapping-from-transfer-to-transformation-specification).
 
-**Conceptual Example: Constructing a Component Version with a Local File Resource**
+### Conceptual Example: Constructing a Component Version with a Local File Resource
+
 ```yaml
 type: transformations.ocm.config.software/v1alpha1
 # env is an initial environment context. It can specify variables for static
@@ -230,7 +231,10 @@ transformations:
       componentDescriptor: ${createcomponentversion1.outputs.descriptor}
 ```
 
-### Graph Representation
+### Graph Topology
+
+The specification in [Conceptual Example](#conceptual-example-constructing-a-component-version-with-a-local-file-resource)
+results in the graph topology illustrated below.
 
 ```mermaid
 graph TD
