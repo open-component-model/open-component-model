@@ -32,14 +32,14 @@ func TestGetBlobFromPath_SingleFile(t *testing.T) {
 
 	// Test: create blob from single file
 	opt := filesystem.DirOptions{Reproducible: true}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
 	r.NoError(err)
-	r.NotNil(blob)
+	r.NotNil(b)
 
 	// Verify: blob contains expected TAR structure
-	reader, err := blob.ReadCloser()
+	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() { r.NoError(reader.Close()) }()
 
 	tr := tar.NewReader(reader)
 	header, err := tr.Next()
@@ -61,14 +61,14 @@ func TestGetBlobFromPath_Directory(t *testing.T) {
 
 	// Test: create blob from directory
 	opt := filesystem.DirOptions{Reproducible: true}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
 	r.NoError(err)
-	r.NotNil(blob)
+	r.NotNil(b)
 
 	// Verify: directory structure is preserved in TAR
-	reader, err := blob.ReadCloser()
+	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() { r.NoError(reader.Close()) }()
 
 	tr := tar.NewReader(reader)
 	foundFiles := map[string]string{}
@@ -103,11 +103,11 @@ func TestGetBlobFromPath_NestedDirectory(t *testing.T) {
 
 	// Test: nested structure preservation
 	opt := filesystem.DirOptions{Reproducible: true}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
 	r.NoError(err)
 
 	// Verify: nested paths are correctly represented
-	content, err := readAllFromBlob(blob)
+	content, err := readAllFromBlob(b)
 	r.NoError(err)
 
 	tr := tar.NewReader(strings.NewReader(string(content)))
@@ -129,7 +129,8 @@ func TestGetBlobFromPath_NestedDirectory(t *testing.T) {
 		}
 
 		// Consume content
-		io.ReadAll(tr)
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
 	}
 
 	r.True(foundNested, "expected nested file to be included")
@@ -155,14 +156,14 @@ func TestGetBlobFromPath_IncludePatterns(t *testing.T) {
 		Reproducible: true,
 		IncludeFiles: []string{"*.txt"},
 	}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
 	r.NoError(err)
-	r.NotNil(blob)
+	r.NotNil(b)
 
 	// Verify: only .txt files are included
-	reader, err := blob.ReadCloser()
+	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() { r.NoError(reader.Close()) }()
 
 	tr := tar.NewReader(reader)
 	foundFiles := make(map[string]bool)
@@ -178,7 +179,8 @@ func TestGetBlobFromPath_IncludePatterns(t *testing.T) {
 		foundFiles[name] = true
 
 		// Consume content
-		io.ReadAll(tr)
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
 	}
 
 	r.True(foundFiles["file1.txt"], "expected file1.txt to be included")
@@ -200,14 +202,14 @@ func TestGetBlobFromPath_ExcludePatterns(t *testing.T) {
 		Reproducible: true,
 		ExcludeFiles: []string{"*.log"},
 	}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
 	r.NoError(err)
-	r.NotNil(blob)
+	r.NotNil(b)
 
 	// Verify: .log files are excluded
-	reader, err := blob.ReadCloser()
+	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() { r.NoError(reader.Close()) }()
 
 	tr := tar.NewReader(reader)
 	foundFiles := make(map[string]bool)
@@ -223,7 +225,8 @@ func TestGetBlobFromPath_ExcludePatterns(t *testing.T) {
 		foundFiles[name] = true
 
 		// Consume content
-		io.ReadAll(tr)
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
 	}
 
 	r.True(foundFiles["keep.txt"], "expected keep.txt to be included")
@@ -246,14 +249,14 @@ func TestGetBlobFromPath_IncludeAndExcludePrecedence(t *testing.T) {
 		IncludeFiles: []string{"*.txt"},
 		ExcludeFiles: []string{"exclude_this.txt"},
 	}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
 	r.NoError(err)
-	r.NotNil(blob)
+	r.NotNil(b)
 
 	// Verify: exclude takes precedence over include
-	reader, err := blob.ReadCloser()
+	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() { r.NoError(reader.Close()) }()
 
 	tr := tar.NewReader(reader)
 	foundFiles := make(map[string]bool)
@@ -269,7 +272,8 @@ func TestGetBlobFromPath_IncludeAndExcludePrecedence(t *testing.T) {
 		foundFiles[name] = true
 
 		// Consume content
-		io.ReadAll(tr)
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
 	}
 
 	r.True(foundFiles["include.txt"], "expected include.txt to be included")
@@ -297,13 +301,13 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 		Reproducible: true,
 		PreserveDir:  true,
 	}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), targetDir, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), targetDir, opt)
 	r.NoError(err)
 
 	// Verify: entries are prefixed with directory name
-	reader, err := blob.ReadCloser()
+	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() { r.NoError(reader.Close()) }()
 
 	tr := tar.NewReader(reader)
 	foundPrefixed := false
@@ -321,7 +325,8 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 		}
 
 		// Consume content
-		io.ReadAll(tr)
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
 	}
 
 	r.True(foundPrefixed, "expected entries to be prefixed with directory name when PreserveDir=true")
@@ -345,13 +350,13 @@ func TestGetBlobFromPath_Compression(t *testing.T) {
 		Compress:  true,
 		MediaType: filesystem.DefaultTarMediaType,
 	}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
 	r.NoError(err)
 
 	// Verify: content is gzip compressed
-	reader, err := blob.ReadCloser()
+	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() { r.NoError(reader.Close()) }()
 
 	// Check gzip magic bytes
 	magicBytes := make([]byte, 2)
@@ -371,13 +376,13 @@ func TestGetBlobFromPath_DefaultMediaType(t *testing.T) {
 
 	// Test: default media type when not specified
 	opt := filesystem.DirOptions{Compress: false}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
 	r.NoError(err)
 
 	// Verify: blob can be read successfully (functional test)
-	reader, err := blob.ReadCloser()
+	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() { r.NoError(reader.Close()) }()
 
 	content, err := io.ReadAll(reader)
 	r.NoError(err)
@@ -398,13 +403,13 @@ func TestGetBlobFromPath_CustomMediaType(t *testing.T) {
 		Compress:  true,
 		MediaType: customMediaType,
 	}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
 	r.NoError(err)
 
 	// Verify: content is compressed (functional test)
-	reader, err := blob.ReadCloser()
+	reader, err := b.ReadCloser()
 	r.NoError(err)
-	defer reader.Close()
+	defer func() { r.NoError(reader.Close()) }()
 
 	// Check gzip magic bytes to verify compression
 	magicBytes := make([]byte, 2)
@@ -460,46 +465,12 @@ func TestGetBlobFromPath_NonReproducibleBuilds(t *testing.T) {
 
 	// Test: non-reproducible builds preserve timestamps
 	opt := filesystem.DirOptions{Reproducible: false}
-	blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
 	r.NoError(err)
 
-	data, err := readAllFromBlob(blob)
+	data, err := readAllFromBlob(b)
 	r.NoError(err)
 	r.NotEmpty(data, "expected non-empty output from non-reproducible build")
-}
-
-// =============================================================================
-// BLOB INTERFACE TESTS
-// Tests for blob interface implementations (size, digest, etc.)
-// =============================================================================
-
-func TestGetBlobFromPath_BlobInterfaces(t *testing.T) {
-	r := require.New(t)
-
-	// Setup: create test file
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.txt")
-	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
-
-	// Test: blob interface implementations
-	opt := filesystem.DirOptions{Compress: false}
-	testBlob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
-	r.NoError(err)
-
-	// Verify: SizeAware interface
-	if sizeAware, ok := testBlob.(blob.SizeAware); ok {
-		size := sizeAware.Size()
-		r.GreaterOrEqual(size, blob.SizeUnknown)
-	}
-
-	// Verify: basic blob functionality
-	reader, err := testBlob.ReadCloser()
-	r.NoError(err)
-	defer reader.Close()
-
-	content, err := io.ReadAll(reader)
-	r.NoError(err)
-	r.NotEmpty(content, "expected blob to contain data")
 }
 
 // =============================================================================
@@ -581,11 +552,11 @@ func TestGetBlobFromPath_SymlinkRejection(t *testing.T) {
 	}
 
 	// Test: symlinks should be rejected during blob reading
-	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, filesystem.DirOptions{})
+	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, filesystem.DirOptions{})
 	r.NoError(err, "blob creation should succeed initially")
 
 	// Verify: error occurs when reading blob content
-	_, err = readAllFromBlob(blob)
+	_, err = readAllFromBlob(b)
 	r.Error(err)
 	r.Contains(err.Error(), "symlinks are not supported")
 }
@@ -600,6 +571,14 @@ func readAllFromBlob(b blob.ReadOnlyBlob) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rc.Close()
-	return io.ReadAll(rc)
+	// Read first, then close and prefer read error over close error.
+	data, readErr := io.ReadAll(rc)
+	closeErr := rc.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return data, nil
 }

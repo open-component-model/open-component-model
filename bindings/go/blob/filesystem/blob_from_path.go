@@ -55,7 +55,6 @@ func (o *DirOptions) mediaType() string {
 // or if there are issues accessing the directory.
 
 func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
-
 	// Validate the input path
 	if path == "" {
 		return nil, fmt.Errorf("path must not be empty")
@@ -83,7 +82,6 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 
 // createTarStream creates a TAR archive from the contents of the specified path, either a directory or a single file.
 func createTarStream(ctx context.Context, path string, opt *DirOptions) (io.Reader, error) {
-
 	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("error stating path %q: %w", path, err)
@@ -309,7 +307,7 @@ func createTarHeader(fi fs.FileInfo, linkTarget string, reproducible bool) (*tar
 		h.ChangeTime = time.Unix(0, 0)
 		h.Uid, h.Gid = 0, 0
 		h.Uname, h.Gname = "", ""
-		h.Mode = h.Mode &^ 0o700 // remove all sticky bits and just keep permission bits
+		h.Mode &= 0o777 // remove all but permission bits
 	}
 	return h, nil
 }
