@@ -8,10 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/internal/render"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -33,7 +32,6 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
-	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
 const (
@@ -44,6 +42,9 @@ const (
 	FlagComponentVersionConflictPolicy     = "component-version-conflict-policy"
 	FlagExternalComponentVersionCopyPolicy = "external-component-version-copy-policy"
 	FlagSkipReferenceDigestProcessing      = "skip-reference-digest-processing"
+	FlagOutput                             = "output"
+	FlagDisplayMode                        = "display-mode"
+	FlagRecursive                          = "recursive"
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
@@ -254,6 +255,21 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
+	output, err := enum.Get(cmd.Flags(), FlagOutput)
+	if err != nil {
+		return fmt.Errorf("getting output flag failed: %w", err)
+	}
+
+	displayMode, err := enum.Get(cmd.Flags(), FlagDisplayMode)
+	if err != nil {
+		return fmt.Errorf("getting display-mode flag failed: %w", err)
+	}
+
+	recursive, err := cmd.Flags().GetInt(FlagRecursive)
+	if err != nil {
+		return fmt.Errorf("getting recursive flag failed: %w", err)
+	}
+
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
 	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, nil)
@@ -284,13 +300,23 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		opts.ResourceDigestProcessorProvider = instance
 	}
 
-	opts, stop, err := registerConstructorProgressTracker(cmd, opts)
+	descs, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
 	if err != nil {
-		return fmt.Errorf("registering constructor progress tracker failed: %w", err)
+		return fmt.Errorf("constructor default failed: %w", err)
 	}
-	defer stop()
 
-	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
+	roots := make([]string, 0, len(descs))
+	for _, desc := range descs {
+		identity := runtime.Identity{
+			descriptor.IdentityAttributeName:    desc.Component.Name,
+			descriptor.IdentityAttributeVersion: desc.Component.Version,
+		}.String()
+		roots = append(roots, identity)
+	}
+
+	if err := render.RenderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+		return fmt.Errorf("rendering components failed: %w", err)
+	}
 
 	return err
 }
@@ -422,108 +448,4 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 	}
 
 	return prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
-}
-
-func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.Options) (opts constructor.Options, stop func(), err error) {
-	format, err := enum.Get(cmd.Flags(), log.FormatFlagName)
-	if err != nil {
-		return opts, nil, fmt.Errorf("failed to get the log format from the command flag: %w", err)
-	}
-
-	switch format {
-	case log.FormatText:
-		pw := progress.NewWriter()
-		pw.SetOutputWriter(cmd.OutOrStdout())
-		pw.SetUpdateFrequency(100 * time.Millisecond)
-		pw.SetAutoStop(false)
-		var trackers ocmsync.Map[string, *progress.Tracker]
-		options.OnStartComponentConstruct = func(_ context.Context, component *constructorruntime.Component) error {
-			key := component.Name + "/" + component.Version
-			tracker := &progress.Tracker{
-				Message: "component " + key,
-				Total:   1,
-				Units: progress.Units{
-					Formatter: func(value int64) string {
-						base := fmt.Sprintf("%d component version", value)
-						if value > 1 {
-							base += "s"
-						}
-						return base
-					},
-				},
-			}
-			trackers.Store(key, tracker)
-			pw.AppendTracker(tracker)
-			return nil
-		}
-		options.OnEndComponentConstruct = func(_ context.Context, descriptor *descriptor.Descriptor, err error) error {
-			if err != nil {
-				return nil
-			}
-			key := descriptor.Component.Name + "/" + descriptor.Component.Version
-			tracker, ok := trackers.Load(key)
-			if !ok {
-				return fmt.Errorf("tracker for component %q not found", key)
-			}
-			tracker.UpdateMessage(tracker.Message + " constructed")
-			tracker.Increment(1)
-			tracker.MarkAsDone()
-			return nil
-		}
-		// TODO(jakobmoellerdev): Add Resource and Source tracking in more detail so we can track those as well.
-		go func() {
-			// this is the actual blocking loop
-			pw.Render()
-		}()
-
-		// Stop function to Poll for the progress writer to finish rendering
-		// and to ensure that all renderings are complete before returning.
-		// Bound to the command context to ensure it stops when the command is done and can
-		// be cancelled.
-		stop := func() {
-			pw.Stop()
-		wait:
-			for {
-				select {
-				case <-cmd.Context().Done():
-					return
-				default:
-					if !pw.IsRenderInProgress() {
-						break wait
-					}
-				}
-			}
-		}
-
-		return options, stop, nil
-	case log.FormatJSON:
-		logger, err := log.GetBaseLogger(cmd)
-		if err != nil {
-			return opts, nil, fmt.Errorf("could not retrieve logger: %w", err)
-		}
-		logger = logger.With("realm", "cli")
-		options.OnStartComponentConstruct = func(ctx context.Context, component *constructorruntime.Component) error {
-			logger.InfoContext(ctx, "starting component construction",
-				"component", component.Name,
-				"version", component.Version,
-			)
-			return nil
-		}
-		options.OnEndComponentConstruct = func(ctx context.Context, descriptor *descriptor.Descriptor, err error) error {
-			if err != nil {
-				logger.ErrorContext(ctx, "component construction failed",
-					"error", err,
-				)
-			} else {
-				logger.InfoContext(ctx, "component construction completed",
-					"component", descriptor.Component.Name,
-					"version", descriptor.Component.Version,
-				)
-			}
-			return nil
-		}
-		return options, func() {}, nil
-	}
-
-	return opts, nil, fmt.Errorf("unknown log format to track component construction: %q", format)
 }
