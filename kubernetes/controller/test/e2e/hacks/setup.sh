@@ -101,8 +101,4 @@ kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m |
 flux install || exit 1
 
 # Install kro operators
-kroVersion=$(curl -sL \
-    https://api.github.com/repos/kro-run/kro/releases/latest | \
-    jq -r '.tag_name | ltrimstr("v")'
-  )
-helm install kro oci://ghcr.io/kro-run/kro/kro --namespace kro --create-namespace --version="${kroVersion}" || exit 1
+helm install kro oci://ghcr.io/kro-run/kro/kro --namespace kro --create-namespace --version=0.4.1 || exit 1
