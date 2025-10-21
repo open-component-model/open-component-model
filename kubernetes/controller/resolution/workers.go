@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"golang.org/x/sync/singleflight"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -45,12 +44,10 @@ type WorkerPoolOptions struct {
 
 // WorkerPool manages a pool of workers that process work items concurrently.
 type WorkerPool struct {
-	opts       WorkerPoolOptions
-	workQueue  chan *WorkItem
-	inProgress sync.Map
-	cache      Cache
-	sf         *singleflight.Group
-	logger     logr.Logger
+	opts      WorkerPoolOptions
+	workQueue chan *WorkItem
+	cache     Cache
+	logger    logr.Logger
 }
 
 // NewWorkerPool creates a new worker pool.
@@ -68,12 +65,10 @@ func NewWorkerPool(opts WorkerPoolOptions) *WorkerPool {
 	}
 
 	return &WorkerPool{
-		opts:       opts,
-		workQueue:  make(chan *WorkItem, opts.QueueSize),
-		inProgress: sync.Map{},
-		cache:      opts.Cache,
-		sf:         &singleflight.Group{},
-		logger:     opts.Logger,
+		opts:      opts,
+		workQueue: make(chan *WorkItem, opts.QueueSize),
+		cache:     opts.Cache,
+		logger:    opts.Logger,
 	}
 }
 
@@ -109,63 +104,19 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	return nil
 }
 
-// Resolve resolves a component version with caching, deduplication, and async queuing.
+// Resolve resolves a component version with caching and async queuing.
 func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptions, cfg *configuration.Configuration) (*ResolveResult, error) {
-	// check cache (fast path)
+	// Check cache first (fast path)
 	if cached, ok := wp.cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.err != nil {
-			wp.cache.Delete(key)
+			// Don't delete failed results from cache - let TTL handle it
 			return nil, cached.err
 		}
 		return cached.result, nil
 	}
 
 	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
-
-	// Singleflight deduplicates concurrent requests for the same key
-	v, err, shared := wp.sf.Do(key, func() (any, error) {
-		return wp.enqueueResolution(ctx, opts, key, cfg)
-	})
-
-	// Forget the key AFTER all singleflight waiters have received the result
-	// This ensures that concurrent callers waiting in sf.Do() can check cache
-	// before the key is forgotten
-	defer wp.sf.Forget(key)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if shared {
-		CacheShareCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
-	}
-
-	// This is unlikely as we always return an error or a result, but nevertheless...
-	if v == nil {
-		return nil, ErrResolutionInProgress
-	}
-
-	result := v.(*ResolveResult)
-	return result, nil
-}
-
-// enqueueResolution enqueues a resolution request to the worker pool.
-func (wp *WorkerPool) enqueueResolution(ctx context.Context, opts ResolveOptions, key string, cfg *configuration.Configuration) (*ResolveResult, error) {
-	// Check cache (another goroutine may have populated it)
-	if cached, ok := wp.cache.Get(key); ok {
-		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
-		if cached.err != nil {
-			wp.cache.Delete(key)
-			return nil, cached.err
-		}
-		return cached.result, nil
-	}
-
-	// Check if already in progress
-	if _, inProgress := wp.inProgress.Load(key); inProgress {
-		return nil, ErrResolutionInProgress
-	}
 
 	// Try to enqueue the request (opts already has a deep-copied RepositorySpec from Resolver)
 	workItem := &WorkItem{
@@ -177,7 +128,6 @@ func (wp *WorkerPool) enqueueResolution(ctx context.Context, opts ResolveOptions
 
 	select {
 	case wp.workQueue <- workItem:
-		wp.inProgress.Store(key, true)
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
 		wp.logger.V(1).Info("enqueued resolution request", "component", opts.Component, "version", opts.Version)
 		return nil, ErrResolutionInProgress
@@ -281,9 +231,6 @@ func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan
 
 			// store result in cache
 			wp.cache.Set(res.key, res)
-
-			// mark as done. singleflight is cleared in Resolve.
-			wp.inProgress.Delete(res.key)
 		}
 	}
 }

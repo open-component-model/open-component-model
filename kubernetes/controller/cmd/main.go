@@ -152,8 +152,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	cache := resolution.NewInMemoryCache(time.Second * 30)
-	if err := mgr.Add(cache); err != nil {
+	resolverCache := resolution.NewInMemoryCache(time.Second * 30)
+	if err := mgr.Add(resolverCache); err != nil {
 		setupLog.Error(err, "unable to add cache")
 		os.Exit(1)
 	}
@@ -165,7 +165,7 @@ func main() {
 		Logger:        setupLog,
 		Client:        mgr.GetClient(),
 		PluginManager: pm.PluginManager(),
-		Cache:         cache,
+		Cache:         resolverCache,
 	})
 	if err := mgr.Add(workerPool); err != nil {
 		setupLog.Error(err, "unable to add worker pool")

@@ -309,7 +309,10 @@ func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{})
+	cache := resolution.NewInMemoryCache(30 * time.Second)
+	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+		Cache: cache,
+	})
 
 	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
@@ -374,8 +377,10 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
+	cache := resolution.NewInMemoryCache(30 * time.Second)
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		Client: k8sClient,
+		Cache:  cache,
 	})
 	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
@@ -539,10 +544,12 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Log
 	)
 	require.NoError(t, err)
 
+	cache := resolution.NewInMemoryCache(30 * time.Second)
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		PluginManager: pm,
 		Logger:        logger,
 		Client:        k8sClient,
+		Cache:         cache,
 	})
 	resolver := resolution.NewResolver(k8sClient, logger, wp)
 

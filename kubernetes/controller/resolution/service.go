@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/singleflight"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
@@ -29,6 +30,7 @@ func NewResolver(client client.Reader, logger logr.Logger, workerPool *WorkerPoo
 		client:     client,
 		logger:     logger,
 		workerPool: workerPool,
+		sf:         &singleflight.Group{},
 	}
 
 	return resolver
@@ -40,6 +42,7 @@ type Resolver struct {
 	client     client.Reader
 	logger     logr.Logger
 	workerPool *WorkerPool
+	sf         *singleflight.Group
 }
 
 // ResolveComponentVersion resolves a component version with deduplication and async queuing.
@@ -64,7 +67,26 @@ func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOpt
 		return nil, fmt.Errorf("failed to build cache key: %w", err)
 	}
 
-	return r.workerPool.Resolve(ctx, key, optsCopy, cfg)
+	// Singleflight ensures only one goroutine enqueues/checks for a given key.
+	// Duplicate callers wait here until the first caller completes.
+	v, err, shared := r.sf.Do(key, func() (any, error) {
+		return r.workerPool.Resolve(ctx, key, optsCopy, cfg)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if shared {
+		CacheShareCounterTotal.WithLabelValues(optsCopy.Component, optsCopy.Version).Inc()
+	}
+
+	// v will be nil if we got ErrResolutionInProgress
+	if v == nil {
+		return nil, ErrResolutionInProgress
+	}
+
+	result := v.(*ResolveResult)
+	return result, nil
 }
 
 func (r *Resolver) validateOptions(opts *ResolveOptions) error {

@@ -181,13 +181,12 @@ func (c *InMemoryCache) CleanUp() {
 	}
 }
 
-func (c *InMemoryCache) Start(ctx context.Context) {
+func (c *InMemoryCache) Start(ctx context.Context) error {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 
 	go func() {
 		for {
-
 			select {
 			case <-ctx.Done():
 				return
@@ -198,4 +197,6 @@ func (c *InMemoryCache) Start(ctx context.Context) {
 	}()
 
 	<-ctx.Done() // block until context is canceled
+
+	return nil
 }
