@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/internal/render/descs"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -153,7 +154,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	descs, err := ocm.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
+	descriptors, err := ocm.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
 		VersionOptions: ocm.VersionOptions{
 			SemverConstraint: constraint,
 			LatestOnly:       latestOnly,
@@ -163,8 +164,8 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component reference and versions failed: %w", err)
 	}
 
-	roots := make([]string, 0, len(descs))
-	for _, desc := range descs {
+	roots := make([]string, 0, len(descriptors))
+	for _, desc := range descriptors {
 		identity := runtime.Identity{
 			descruntime.IdentityAttributeName:    desc.Component.Name,
 			descruntime.IdentityAttributeVersion: desc.Component.Version,
@@ -172,7 +173,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		roots = append(roots, identity)
 	}
 
-	if err := render.RenderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	if err := descs.RenderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 	return nil

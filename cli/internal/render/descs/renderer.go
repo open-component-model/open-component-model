@@ -1,4 +1,4 @@
-package render
+package descs
 
 import (
 	"fmt"
@@ -15,6 +15,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/render/graph/list"
 	"ocm.software/open-component-model/cli/internal/render/graph/tree"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
@@ -36,20 +37,20 @@ func RenderComponents(cmd *cobra.Command, repoProvider ocm.ComponentVersionRepos
 	}
 
 	switch mode {
-	case StaticRenderMode:
+	case render.StaticRenderMode:
 		// Start traversing the graph from the root vertices (the initially resolved
 		// component versions).
 		err := discoverer.Discover(cmd.Context())
 		if err != nil {
 			return fmt.Errorf("traversing component version graph failed: %w", err)
 		}
-		if err := RenderOnce(cmd.Context(), renderer, WithWriter(cmd.OutOrStdout())); err != nil {
+		if err := render.RenderOnce(cmd.Context(), renderer, render.WithWriter(cmd.OutOrStdout())); err != nil {
 			return err
 		}
-	case LiveRenderMode:
+	case render.LiveRenderMode:
 		// Start the render loop.
 		renderCtx, cancel := context.WithCancel(cmd.Context())
-		wait := RunRenderLoop(renderCtx, renderer, WithRenderOptions(WithWriter(cmd.OutOrStdout())))
+		wait := render.RunRenderLoop(renderCtx, renderer, render.WithRenderOptions(render.WithWriter(cmd.OutOrStdout())))
 		// Start traversing the graph from the root vertices (the initially resolved
 		// component versions).
 		// The render loop is running concurrently and regularly displays the current
@@ -67,21 +68,21 @@ func RenderComponents(cmd *cobra.Command, repoProvider ocm.ComponentVersionRepos
 	return nil
 }
 
-func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string) (Renderer, error) {
+func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
 	// Initialize renderer based on the requested output format.
 	switch format {
-	case OutputFormatJSON.String():
-		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](OutputFormatJSON))
+	case render.OutputFormatJSON.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatJSON))
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
-	case OutputFormatNDJSON.String():
-		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](OutputFormatNDJSON))
+	case render.OutputFormatNDJSON.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatNDJSON))
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
-	case OutputFormatYAML.String():
-		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](OutputFormatYAML))
+	case render.OutputFormatYAML.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatYAML))
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
-	case OutputFormatTree.String():
+	case render.OutputFormatTree.String():
 		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
-	case OutputFormatTable.String():
+	case render.OutputFormatTable.String():
 		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	default:

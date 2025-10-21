@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"ocm.software/open-component-model/cli/internal/render"
+	"ocm.software/open-component-model/cli/internal/render/descs"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -167,6 +168,12 @@ add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.y
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
 	enum.Var(cmd.Flags(), FlagExternalComponentVersionCopyPolicy, ExternalComponentVersionCopyPolicies(), "policy to apply when a component reference to a component version outside of the constructor or target repository is encountered")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
+	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `display mode can be used in combination with --recursive
+  static: print the output once the complete component graph is discovered
+  live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
+	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
+	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
 
 	return cmd
 }
@@ -300,13 +307,13 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		opts.ResourceDigestProcessorProvider = instance
 	}
 
-	descs, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
+	descriptors, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
 	if err != nil {
 		return fmt.Errorf("constructor default failed: %w", err)
 	}
 
-	roots := make([]string, 0, len(descs))
-	for _, desc := range descs {
+	roots := make([]string, 0, len(descriptors))
+	for _, desc := range descriptors {
 		identity := runtime.Identity{
 			descriptor.IdentityAttributeName:    desc.Component.Name,
 			descriptor.IdentityAttributeVersion: desc.Component.Version,
@@ -314,7 +321,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		roots = append(roots, identity)
 	}
 
-	if err := render.RenderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	if err := descs.RenderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("rendering components failed: %w", err)
 	}
 
