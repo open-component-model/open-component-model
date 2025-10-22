@@ -189,18 +189,14 @@ func (s *repository) resolve(ctx context.Context, reference string) (ociImageSpe
 
 	repo := s.repo
 
-	// if we do not have a pure digest, we need to parse the reference
-	// loosely because it could be that registry/repository information is prefixed to the actual reference.
-	if _, err := digest.Parse(reference); err != nil {
-		ref, err := looseref.ParseReference(reference)
-		if err != nil {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid reference %q: %w", reference, err)
-		}
-		if ref.ValidateReferenceAsDigest() == nil {
-			reference = ref.Reference.Reference
-		} else if ref.ValidateReferenceAsTag() == nil {
-			reference = ref.Tag
-		}
+	ref, err := looseref.ParseReference(reference)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid reference %q: %w", reference, err)
+	}
+	if ref.ValidateReferenceAsDigest() == nil {
+		reference = ref.Reference.Reference
+	} else if ref.ValidateReferenceAsTag() == nil {
+		reference = ref.Tag
 	}
 
 	for _, artifact := range idx.GetArtifacts() {
