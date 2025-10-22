@@ -134,6 +134,9 @@ func (m *ContextCache) GetSession(opts *GetSessionOptions) (ocm.Context, ocm.Ses
 	if opts == nil {
 		return nil, nil, fmt.Errorf("opts is nil")
 	}
+	if opts.RepositorySpecification == nil {
+		return nil, nil, fmt.Errorf("repository spec is nil")
+	}
 	m.retrievalLock.Lock()
 	defer m.retrievalLock.Unlock()
 

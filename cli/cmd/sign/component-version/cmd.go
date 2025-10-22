@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	resolverruntime "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -172,23 +171,23 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool(FlagForce)
 	dryRun, _ := cmd.Flags().GetBool(FlagDryRun)
 
-	ref := args[0]
-	var resolvers []*resolverruntime.Resolver //nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
-	if cfg := ocmContext.Configuration(); cfg != nil {
-		if resolvers, err = ocm.ResolversFromConfig(cfg); err != nil {
-			return fmt.Errorf("resolvers from configuration failed: %w", err)
-		}
-	}
-
-	repo, err := ocm.NewFromRefWithFallbackRepo(
-		ctx, pluginManager, credentialGraph, resolvers, ref,
-		compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite),
-	)
+	reference := args[0]
+	ref, err := compref.Parse(reference, compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
 	if err != nil {
-		return fmt.Errorf("initializing repository failed: %w", err)
+		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
+	}
+	config := ocmContext.Configuration()
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
 
-	desc, err := repo.GetComponentVersion(ctx)
+	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(cmd.Context(), ref.Component, ref.Version)
+	if err != nil {
+		return fmt.Errorf("could not access ocm repository: %w", err)
+	}
+
+	desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
@@ -266,7 +265,7 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 		desc.Signatures = append(desc.Signatures, out)
 	}
 
-	if err := repo.ComponentVersionRepository().AddComponentVersion(ctx, desc); err != nil {
+	if err := repo.AddComponentVersion(ctx, desc); err != nil {
 		return fmt.Errorf("updating component version failed: %w", err)
 	}
 
