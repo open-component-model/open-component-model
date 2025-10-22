@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/input/dir"
 	v1 "ocm.software/open-component-model/bindings/go/input/dir/spec/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -61,7 +63,7 @@ func TestGetV1DirBlob_Symlinks(t *testing.T) {
 	// Expect an error on read, as symlinks are not supported yet.
 	_, err = io.ReadAll(reader)
 	r.Error(err)
-	r.Contains(err.Error(), "symlinks not supported")
+	r.Contains(err.Error(), "symlinks are not supported")
 }
 
 func TestGetV1DirBlob_Reproducibility(t *testing.T) {
@@ -358,7 +360,7 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 					expectedType := tt.mediaType
 					if expectedType == "" {
 						// If media type isn't set in the spec, expect the default.
-						expectedType = dir.DEFAULT_TAR_MIME_TYPE
+						expectedType = filesystem.DefaultTarMediaType
 					}
 					expectedType += "+gzip"
 					r.True(known)
@@ -371,7 +373,7 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 					expectedType := tt.mediaType
 					if expectedType == "" {
 						// If media type isn't set in the spec, expect the default.
-						expectedType = dir.DEFAULT_TAR_MIME_TYPE
+						expectedType = filesystem.DefaultTarMediaType
 					}
 					r.True(known)
 					r.Equal(expectedType, actualType)
@@ -493,4 +495,60 @@ func extractFileFromTar(tarData []byte, fileName string) ([]byte, error) {
 
 	// File not found.
 	return nil, fmt.Errorf("file '%s' not found in tar archive", fileName)
+}
+
+// Integration test: ensure filesystem.GetBlobFromPath and dir.GetV1DirBlob produce identical blobs for the same path.
+// use option "Reproducible: true" to ensure byte-equivalence.
+func TestGetBlobFromPath_Integration(t *testing.T) {
+	r := require.New(t)
+	ctx := context.Background()
+
+	// Setup temporary test directory with tiny files
+	tmpDir := t.TempDir()
+	r.NoError(os.MkdirAll(filepath.Join(tmpDir, "sub"), 0o755))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "a.txt"), []byte("a"), 0o644))
+	r.NoError(os.WriteFile(filepath.Join(tmpDir, "sub", "b.txt"), []byte("b"), 0o644))
+
+	// Test new function GetBlobFromPath directly
+	fsOptions := filesystem.DirOptions{
+		Reproducible: true,
+		Compress:     false,
+	}
+	fsBlob, err := filesystem.GetBlobFromPath(ctx, tmpDir, fsOptions)
+	r.NoError(err)
+	r.NotNil(fsBlob)
+
+	// Read blob created by GetBlobFromPath
+	fsReader, err := fsBlob.ReadCloser()
+	r.NoError(err)
+	fsData, err := io.ReadAll(fsReader)
+	closeErr := fsReader.Close()
+	if err != nil {
+		r.NoError(err)
+	}
+	r.NoError(closeErr)
+
+	// Test v1.Dir function using GetV1DirBlob wrapper (should produce same result)
+	dirSpec := v1.Dir{
+		Type:         runtime.NewUnversionedType(v1.Type),
+		Path:         tmpDir,
+		Reproducible: true,
+		Compress:     false,
+	}
+	v1Blob, err := dir.GetV1DirBlob(ctx, dirSpec, "")
+	r.NoError(err)
+	r.NotNil(v1Blob)
+
+	// Read blob created by GetV1DirBlob wrapper
+	v1Reader, err := v1Blob.ReadCloser()
+	r.NoError(err)
+	v1Data, err := io.ReadAll(v1Reader)
+	v1CloseErr := v1Reader.Close()
+	if err != nil {
+		r.NoError(err)
+	}
+	r.NoError(v1CloseErr)
+
+	// Compare results
+	r.Equal(fsData, v1Data, "filesystem and v1.Dir functions should produce identical results")
 }

@@ -125,6 +125,14 @@ func createTarStream(ctx context.Context, path string, opt *DirOptions) (io.Read
 		defer func() { gerr = errors.Join(gerr, tw.Close()) }()
 		defer func() { _ = pw.CloseWithError(gerr) }()
 
+		// If context is already done, abort early.
+		select {
+		case <-ctx.Done():
+			gerr = fmt.Errorf("context cancelled while preparing tar for path %q: %w", path, ctx.Err())
+			return
+		default:
+		}
+
 		if fi.IsDir() {
 			gerr = createTarFromDir(ctx, fileSystem, subPath, opt, tw)
 		} else {
@@ -149,6 +157,13 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 	}
 
 	for _, entry := range dirEntries {
+		// Periodically check context during long-running directory walks.
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while processing directory %q: %w", subPath, ctx.Err())
+		default:
+		}
+
 		ei, err := entry.Info()
 		if err != nil {
 			return fmt.Errorf("error getting file info for entry %q in directory %q: %w", entry.Name(), subPath, err)
@@ -201,6 +216,14 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 				return fmt.Errorf("error opening file %q for reading: %w", entryPath, err)
 			}
 
+			// Check context before performing the copy (could be long-running for large files).
+			select {
+			case <-ctx.Done():
+				_ = fr.Close()
+				return fmt.Errorf("context cancelled while processing file %q in directory %q: %w", entryPath, subPath, ctx.Err())
+			default:
+			}
+
 			// Copy file content to TAR. Close immediately after copy; do not defer in loop.
 			var copyErr error
 			_, copyErr = io.Copy(tw, fr)
@@ -250,6 +273,13 @@ func createTarFromSingleFile(ctx context.Context, fileSystem FileSystem, subPath
 		return fmt.Errorf("error opening file %q for reading: %w", subPath, err)
 	}
 	defer func() { err = errors.Join(err, fr.Close()) }()
+
+	// Check context before performing the copy (could be long-running for large files).
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context cancelled while processing single file %q: %w", subPath, ctx.Err())
+	default:
+	}
 
 	// Copy the file content to the TAR writer.
 	if _, err := io.Copy(tw, fr); err != nil {
