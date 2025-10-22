@@ -66,7 +66,7 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 
 	// Ensure the path is within the working directory if specified
 	if opt.WorkingDir != "" {
-		if _, err := EnsurePathInWorkingDirectory(path, opt.WorkingDir); err != nil {
+		if _, err := ensurePathInWorkingDirectory(path, opt.WorkingDir); err != nil {
 			return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", path, opt.WorkingDir, err)
 		}
 	}
@@ -85,25 +85,20 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 }
 
 // createTarStream creates a TAR archive from the contents of the specified path, either a directory or a single file.
-func createTarStream(ctx context.Context, path string, opt *DirOptions) (io.Reader, error) {
+func createTarStream(ctx context.Context, path string, opt *DirOptions) (io.ReadCloser, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
-		return nil, fmt.Errorf("error stating path %q: %w", path, err)
+		return nil, fmt.Errorf("error trying to get FileInfo for path %q: %w", path, err)
 	}
 
 	var baseDir, subPath string
 
-	// Directory case
-	if fi.IsDir() {
-		if !opt.PreserveDir {
-			baseDir = path
-			subPath = "."
-			// add parent directory if PreserveDir is set
-		} else {
-			baseDir = filepath.Dir(path)
-			subPath = filepath.Base(path)
-		}
-		// Single file case
+	// Determine base directory and subpath based on PreserveDir option.
+	if !opt.PreserveDir {
+		baseDir = path
+		subPath = "."
+		// add parent directory if PreserveDir is set
+		// use  for single file case
 	} else {
 		baseDir = filepath.Dir(path)
 		subPath = filepath.Base(path)
@@ -121,26 +116,35 @@ func createTarStream(ctx context.Context, path string, opt *DirOptions) (io.Read
 
 	go func() {
 		tw := tar.NewWriter(pw)
-
-		// use local gerr to capture errors from tar creation
+		//
 		var gerr error
 
-		// take care to close tar writer and pipe and capture any error
-		defer func() { gerr = errors.Join(gerr, tw.Close()) }()
-		defer func() { _ = pw.CloseWithError(gerr) }()
+		defer func() {
+			// close tar writer and combine errors
+			if cerr := tw.Close(); cerr != nil {
+				if gerr == nil {
+					gerr = cerr
+				} else {
+					gerr = errors.Join(gerr, cerr)
+
+				}
+			}
+			// Close pipe with combined error (if any, otherwise nil -> io.EOF
+			_ = pw.CloseWithError(gerr)
+		}()
 
 		// If context is already done, abort early.
 		select {
 		case <-ctx.Done():
-			gerr = fmt.Errorf("context cancelled while preparing tar for path %q: %w", path, ctx.Err())
+			err = fmt.Errorf("context cancelled while preparing tar for path %q: %w", path, ctx.Err())
 			return
 		default:
 		}
 
 		if fi.IsDir() {
-			gerr = createTarFromDir(ctx, fileSystem, subPath, opt, tw)
+			err = createTarFromDir(ctx, fileSystem, subPath, opt, tw)
 		} else {
-			gerr = createTarFromSingleFile(ctx, fileSystem, subPath, opt, tw)
+			err = createTarFromSingleFile(ctx, fileSystem, subPath, opt, tw)
 		}
 	}()
 	return pr, nil
@@ -181,11 +185,10 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 		// reconstruct the full path of the entry
 		entryPath := filepath.Join(subPath, entry.Name())
 		// Check if path is included based on include/exclude patterns from options.
-		ok, err := isPathIncluded(entryPath, opt.IncludeFiles, opt.ExcludeFiles)
-		if err != nil {
+
+		if ok, err := isPathIncluded(entryPath, opt.IncludeFiles, opt.ExcludeFiles); err != nil {
 			return fmt.Errorf("error checking inclusion of entry %q in directory %q: %w", entry.Name(), subPath, err)
-		}
-		if !ok {
+		} else if !ok {
 			continue
 		}
 
@@ -247,7 +250,7 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 
 // createTarFromSingleFile writes a single file to the TAR archive.
 // subPath is the relative path within the virtual filesystem.
-func createTarFromSingleFile(ctx context.Context, fileSystem FileSystem, subPath string, opt *DirOptions, tw *tar.Writer) error {
+func createTarFromSingleFile(ctx context.Context, fileSystem FileSystem, subPath string, opt *DirOptions, tw *tar.Writer) (err error) {
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("context cancelled while processing single file %q: %w", subPath, ctx.Err())
@@ -276,7 +279,16 @@ func createTarFromSingleFile(ctx context.Context, fileSystem FileSystem, subPath
 	if err != nil {
 		return fmt.Errorf("error opening file %q for reading: %w", subPath, err)
 	}
-	defer func() { err = errors.Join(err, fr.Close()) }()
+	defer func() {
+		if cerr := fr.Close(); cerr != nil {
+			closeErr := fmt.Errorf("error closing file %q: %w", subPath, cerr)
+			if err == nil {
+				err = closeErr
+			} else {
+				err = errors.Join(err, closeErr)
+			}
+		}
+	}()
 
 	// Check context before performing the copy (could be long-running for large files).
 	select {
@@ -299,11 +311,9 @@ func createTarFromSingleFile(ctx context.Context, fileSystem FileSystem, subPath
 func isPathIncluded(path string, includePatterns, excludePatterns []string) (bool, error) {
 	// Check exclude patterns first, they have precedence.
 	for _, pattern := range excludePatterns {
-		ok, err := filepath.Match(pattern, path)
-		if err != nil {
+		if ok, err := filepath.Match(pattern, path); err != nil {
 			return false, fmt.Errorf("error matching exclude pattern %q with path %q: %w", pattern, path, err)
-		}
-		if ok {
+		} else if ok {
 			return false, nil
 		}
 	}
@@ -315,11 +325,9 @@ func isPathIncluded(path string, includePatterns, excludePatterns []string) (boo
 
 	// Check include patterns.
 	for _, pattern := range includePatterns {
-		ok, err := filepath.Match(pattern, path)
-		if err != nil {
+		if ok, err := filepath.Match(pattern, path); err != nil {
 			return false, fmt.Errorf("error matching include pattern %q with path %q: %w", pattern, path, err)
-		}
-		if ok {
+		} else if ok {
 			return true, nil
 		}
 	}
