@@ -41,10 +41,14 @@ func (o *DirOptions) mediaType() string {
 }
 
 // GetBlobFromPath creates a blob from a path using the provided options.
+// It reads a path, which can either a single file or directory from the filesystem
+// and performs additional actions based on options if requested:
 //
-// It reads a path from the filesystem and offers include and exclude filters.
-// Matching files are added to a TAR archive, and if configured also the parent directory.
-// If configured, the final blob gets compressed using gzip.
+// - preserves the directory structure
+// - adds gzip compression to the resulting blob
+// - makes the output reproducible by normalizing file attributes
+// - includes or excludes specific files based on patterns
+// - checks if the directory is within the working directory
 //
 // Note on pattern option semantics: include/exclude patterns are matched using
 // `filepath.Match` against the full entry path.
