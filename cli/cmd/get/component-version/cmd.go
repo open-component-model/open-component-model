@@ -10,16 +10,16 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -422,9 +422,9 @@ func processRepositoryReference(cmd *cobra.Command,
 	}
 	slog.InfoContext(ctx, "components versions", "roots", roots)
 
-	//if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	// if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 	//	return fmt.Errorf("failed to render components recursively: %w", err)
-	//}
+	// }
 
 	return nil
 }
