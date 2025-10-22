@@ -305,10 +305,12 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 }
 
 func determineConnectionType(ctx context.Context) (mtypes.ConnectionType, error) {
+	// if we can't create a temp folder ( for example we are in a scratch container ) we default to TCP
 	tmp, err := os.MkdirTemp("", "")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temporary directory: %w", err)
+		return mtypes.TCP, nil
 	}
+
 	defer func() {
 		_ = os.RemoveAll(tmp)
 	}()
