@@ -279,10 +279,15 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
+	repositoryRef, err := cmd.Flags().GetString(FlagRepositoryRef)
+	if err != nil {
+		return fmt.Errorf("getting repository reference flag failed: %w", err)
+	}
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
+	ref, err := compref.ParseRepository(repositoryRef, compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
 
-	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, nil)
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, nil, []ocm.Options{{RepoRef: ref}}...)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
@@ -318,6 +323,9 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	defer stop()
 
 	descriptors, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
+	if err != nil {
+		return fmt.Errorf("constructing component versions failed: %w", err)
+	}
 	roots := make([]string, 0, len(descriptors))
 	for _, desc := range descriptors {
 		identity := runtime.Identity{
