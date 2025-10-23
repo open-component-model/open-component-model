@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
 	"ocm.software/open-component-model/cli/internal/render"
 	"ocm.software/open-component-model/cli/internal/render/descs"
@@ -33,6 +35,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
+	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
 const (
@@ -272,7 +275,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting display-mode flag failed: %w", err)
 	}
 
-	recursive, err := cmd.Flags().GetInt(FlagRecursive)
+	_, err = cmd.Flags().GetInt(FlagRecursive)
 	if err != nil {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
@@ -307,11 +310,14 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		opts.ResourceDigestProcessorProvider = instance
 	}
 
-	descriptors, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
+	// old impl will be removed once we get roots to work without panics
+	opts, stop, err := registerConstructorProgressTracker(cmd, opts)
 	if err != nil {
-		return fmt.Errorf("constructor default failed: %w", err)
+		return fmt.Errorf("registering constructor progress tracker failed: %w", err)
 	}
+	defer stop()
 
+	descriptors, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
 	roots := make([]string, 0, len(descriptors))
 	for _, desc := range descriptors {
 		identity := runtime.Identity{
@@ -321,11 +327,10 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		roots = append(roots, identity)
 	}
 
-	if err := descs.RenderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
-		return fmt.Errorf("rendering components failed: %w", err)
+	if err := descs.RenderComponents(cmd, repoProvider, roots, output, displayMode, 0); err != nil {
+		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
-
-	return err
+	return nil
 }
 
 func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
@@ -455,4 +460,108 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 	}
 
 	return prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
+}
+
+func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.Options) (opts constructor.Options, stop func(), err error) {
+	format, err := enum.Get(cmd.Flags(), log.FormatFlagName)
+	if err != nil {
+		return opts, nil, fmt.Errorf("failed to get the log format from the command flag: %w", err)
+	}
+
+	switch format {
+	case log.FormatText:
+		pw := progress.NewWriter()
+		pw.SetOutputWriter(cmd.OutOrStdout())
+		pw.SetUpdateFrequency(100 * time.Millisecond)
+		pw.SetAutoStop(false)
+		var trackers ocmsync.Map[string, *progress.Tracker]
+		options.OnStartComponentConstruct = func(_ context.Context, component *constructorruntime.Component) error {
+			key := component.Name + "/" + component.Version
+			tracker := &progress.Tracker{
+				Message: "component " + key,
+				Total:   1,
+				Units: progress.Units{
+					Formatter: func(value int64) string {
+						base := fmt.Sprintf("%d component version", value)
+						if value > 1 {
+							base += "s"
+						}
+						return base
+					},
+				},
+			}
+			trackers.Store(key, tracker)
+			pw.AppendTracker(tracker)
+			return nil
+		}
+		options.OnEndComponentConstruct = func(_ context.Context, descriptor *descriptor.Descriptor, err error) error {
+			if err != nil {
+				return nil
+			}
+			key := descriptor.Component.Name + "/" + descriptor.Component.Version
+			tracker, ok := trackers.Load(key)
+			if !ok {
+				return fmt.Errorf("tracker for component %q not found", key)
+			}
+			tracker.UpdateMessage(tracker.Message + " constructed")
+			tracker.Increment(1)
+			tracker.MarkAsDone()
+			return nil
+		}
+		// TODO(jakobmoellerdev): Add Resource and Source tracking in more detail so we can track those as well.
+		go func() {
+			// this is the actual blocking loop
+			pw.Render()
+		}()
+
+		// Stop function to Poll for the progress writer to finish rendering
+		// and to ensure that all renderings are complete before returning.
+		// Bound to the command context to ensure it stops when the command is done and can
+		// be cancelled.
+		stop := func() {
+			pw.Stop()
+		wait:
+			for {
+				select {
+				case <-cmd.Context().Done():
+					return
+				default:
+					if !pw.IsRenderInProgress() {
+						break wait
+					}
+				}
+			}
+		}
+
+		return options, stop, nil
+	case log.FormatJSON:
+		logger, err := log.GetBaseLogger(cmd)
+		if err != nil {
+			return opts, nil, fmt.Errorf("could not retrieve logger: %w", err)
+		}
+		logger = logger.With("realm", "cli")
+		options.OnStartComponentConstruct = func(ctx context.Context, component *constructorruntime.Component) error {
+			logger.InfoContext(ctx, "starting component construction",
+				"component", component.Name,
+				"version", component.Version,
+			)
+			return nil
+		}
+		options.OnEndComponentConstruct = func(ctx context.Context, descriptor *descriptor.Descriptor, err error) error {
+			if err != nil {
+				logger.ErrorContext(ctx, "component construction failed",
+					"error", err,
+				)
+			} else {
+				logger.InfoContext(ctx, "component construction completed",
+					"component", descriptor.Component.Name,
+					"version", descriptor.Component.Version,
+				)
+			}
+			return nil
+		}
+		return options, func() {}, nil
+	}
+
+	return opts, nil, fmt.Errorf("unknown log format to track component construction: %q", format)
 }
