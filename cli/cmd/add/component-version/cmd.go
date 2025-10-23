@@ -275,7 +275,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting display-mode flag failed: %w", err)
 	}
 
-	_, err = cmd.Flags().GetInt(FlagRecursive)
+	recursive, err := cmd.Flags().GetInt(FlagRecursive)
 	if err != nil {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
@@ -327,7 +327,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		roots = append(roots, identity)
 	}
 
-	if err := descs.RenderComponents(cmd, repoProvider, roots, output, displayMode, 0); err != nil {
+	if err := descs.RenderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 	return nil
