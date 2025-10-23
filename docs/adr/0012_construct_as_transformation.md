@@ -131,8 +131,7 @@ It is not intended to be complete. It is brief, contains explanatory comments
 and serves to illustrate the general structure and concept of transformations.
 
 Detailed samples for specific use cases are provided in [Mapping From 
-Constructor to Transformation Specification](#mapping-constructor-file-to-transformation-specification) 
-and in [Mapping From Transfer to Transformation Specification](#mapping-from-transfer-to-transformation-specification).
+Constructor to Transformation Specification](#mapping-constructor-file-to-transformation-specification).
 
 ### Conceptual Example: Constructing a Component Version with a Local File Resource
 
@@ -145,58 +144,53 @@ env:
   # top-level fields, to allow defining componentIdentity and repositorySpec for
   # multiple different components in the same transformation specification 
   # without collision. 
-  - id: helloworldenv
+  - id: example
     componentIdentity:
-      name: github.com/acme.org/helloworld
+      name: ocm.software/example
       version: 1.0.0
     repositorySpec: 
       type: ociRegistry
       baseUrl: ghcr.io
       subPath: /open-component-model/target-ocm-repository
 transformations: 
-  # resource.creator is no-op. It is NOT an env because its input has a 
-  # type (resource) that can be statically validated, and it may contain cel
-  # expressions that create dependencies and have to be evaluated at process 
-  # time.
+  # resource.creator calls the current input implementations to get the data
+  # blob and either localblob access OR external access which can be used by
+  # the resource.uploader as target location.
   - type: resource.creator
     id: createresource1
-    input:
+    spec:
       resource:
         name: localtext
         type: blob
         relation: local
-        access:
+        input:
           type: file
           filePath: ./testdata/text.txt
-    # output: <does not need output, as it is already fully specified - creator is a no-op>
+      # output:
+      #   resource:
+      #     name: localtext
+      #     type: blob
+      #     relation: local
+      #     access:
+      #       type: localblob
+      #       localReference: sha256:<hash>
+      #     data: <binary data>
     
-  # resource.downloader calls the resource repository's download resource 
-  # method to read the data from the specified location.
-  - type: resource.downloader
-    id: downloadresource1
-    input:
-      resource: ${createresource1.resource} 
-    # output:
-    #   resource:
-    #     name: localtext
-    #     type: blob
-    #     relation: local
-    #     access:
-    #       type: file
-    #       filePath: ./testdata/text.txt
-    #     data: <binary data>
-    
-  # local.resource.uploader calls the local resource repository's add local 
-  # resource method to add the resource data to the specified target repository.
-  - type: local.resource.uploader
+  # resource.uploader calls either a resource repository's upload resource 
+  # method or a local resource repository's add local resource method, depending
+  # on the access type.
+  # If `spec.resource.access.type == localblob`, the spec has to contain the
+  # components as whose localblob the blob has to be uploaded and the repository
+  # where the component will also be uploaded to.
+  - type: resource.uploader
     id: uploadresource1
-    input:
-      resource: ${downloadresource1.resource}
+    spec:
       # the repository and the component have to match with the component 
       # to which the resource is added and the repository where the component 
       # is uploaded
-      repository: ${env.helloworldenv.repositorySpec}
-      component: ${env.helloworldenv.componentIdentity}
+      repository: ${env.example.repositorySpec}
+      component: ${env.example.componentIdentity}
+      resource: ${downloadresource1.output.resource}
     # output:
     #   resource:
     #     name: localtext
@@ -206,16 +200,15 @@ transformations:
     #       type: localblob
     #       localReference: <reference in target repo>
     
-  # component.creator is similar to resource.creator - it is a no-op. 
   - type: component.creator
     id: createcomponentversion1
-    input:
-      name: ${env.helloworldenv.componentIdentity.name} 
-      version: ${env.helloworldev.componentIdentity.version}
+    spec:
+      name: ${env.example.componentIdentity.name} 
+      version: ${env.example.componentIdentity.version}
       provider:
         name: internal
       resources:
-        - ${uploadresource1.resource}
+        - ${uploadresource1.output.resource}
     # output:
     #   descriptor:
     #     meta: ...
@@ -226,8 +219,8 @@ transformations:
   # target repository.
   - type: component.uploader
     id: uploadcomponentversion1
-    input:
-      repository: ${env.helloworldenv.repositorySpec}
+    spec:
+      repository: ${env.example.repositorySpec}
       componentDescriptor: ${createcomponentversion1.outputs.descriptor}
 ```
 
@@ -243,14 +236,12 @@ graph TD
   end
   subgraph transformations
     B[createresource1]
-    C[downloadresource1]
     D[uploadresource1]
     E[createcomponentversion1]
     F[uploadcomponentversion1]
   end
-  B --> C
+  B --> D
   A --> D
-  C --> D
   A --> E
   D --> E
   A --> F
@@ -262,48 +253,358 @@ graph TD
 > An intuitive idea is to NOT define the `componentIdentity` and the 
 > `repositorySpec` in an `env` section and rather define them in place in the
 > (1) `component.creator` and `component.uploader` transformations or 
-> alternatively in the (2) `local.resource.uploader`.
+> alternatively in the (2) `resource.uploader`.
 > 
 > 1) Defining them in the `component.creator` and `component.uploader` and 
->    creating a cel dependency from `local.resource.uploader` to
+>    creating a cel dependency from `resource.uploader` to
 >    `component.creator` would create a cycle in the graph, as 
->    `component.creator` depends on `local.resource.uploader` for the resource 
+>    `component.creator` depends on `resource.uploader` for the resource 
 >    specification.
-> 2) Defining them in the `local.resource.uploader` and creating a cel 
->    dependency from `component.creator` to `local.resource.uploader` 
->    technically work, as `component.creator` depends on 
->    `local.resource.uploader` anyway. However, to consistently avoid cycles, 
+> 2) Defining them in the `resource.uploader` and creating a cel 
+>    dependency from `component.creator` to `resource.uploader` 
+>    technically works, as `component.creator` depends on 
+>    `resource.uploader` anyway. However, to consistently avoid cycles, 
 >    the generation step would have to understand the whole graph topology in 
 >    order to determine in which step to define those variables. Even then, this 
 >    might add unnecessary dependencies that could be avoided by defining them 
 >    in an `env` section.
 
 
-### Notes
+## Mapping From Constructor to Transformation Specification
 
-#### Mapping From Constructor to Transformation Specification
+This section lists the use cases currently available in the **constructor**. 
+This corresponds to the list provided in the constructor ADR. It provides 
+examples of how these **constructor** use cases can be mapped to the 
+**transformation specification**.
 
-**Input and Access Types**
-- **Input types** (as used in constructors) are mapped to a combination of
-  `resource.creator`, `resource.downloader` and `local.resource.uploader` 
-  (*By Value*) OR `resource.uploader` (e.g. `helm` input with specified 
-  `repository`) (*By Reference*) transformations.
-  - In the `resource.creator` transformation, the `input` field is mapped
-    to a corresponding access type (e.g. `file`, `ociArtifact`).
-- **Access types** (as used in component constructors) depend on whether
-  they are marked as `by value` or `by reference`.
-  - **by value** access types are mapped to a combination of
-    `resource.creator`, `resource.downloader` and `local.resource.uploader`
-    (emphasis on **local**) transformations.
-  - **by reference** access types are mapped to a single
-    `resource.creator` transformation.
+**Input Types**
+- **By Value**: `resource.creator` and 
+  `resource.uploader`. 
+  
+  **Constructor**:
+  ```yaml
+  components:
+  - name: ocm.software/example/input/byvalue
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    resources:
+    - name: mychart
+      type: helmChart
+      input:
+        type: helm
+        path: ./podinfo
+  ```
+  
+  **Transformation Specification**
+  ```yaml
+  type: transformations.ocm.config.software/v1alpha1
+  # ...
+  transformations:
+  - type: resource.creator
+    id: createresource1
+    spec:
+      resource:
+        name: mychart
+        type: helmChart
+        relation: local
+        input:
+          type: helm
+          filePath: ./podinfo
+    # output:
+    #   resource:
+    #     name: mychart
+    #     type: helmChart
+    #     relation: local
+    #     access:
+    #       type: helm
+    #       localReference: sha256:<hash>
+    #     data: <binary data>
+  
+  - type: resource.uploader
+    id: uploadresource1
+    spec:
+      repository: ${env.byvalue.repositorySpec}
+      component: ${env.byvalue.componentIdentity}
+      resource: ${downloadresource1.output.resource}
+    # output:
+    #   resource:
+    #     name: mychart
+    #     type: helmChart
+    #     relation: local
+    #     access:
+    #       type: helm
+    #       localReference: sha256:<hash>
+  
+  # ...
+  ```
+  
+- **By Reference**: `resource.creator` and 
+  `resource.uploader`.
 
-**Conclusion**
-- The current `input type` implementation need to be broken up into:
-  - additional `access types` (for `file`, `dir`, ...)
-  - `resource.uploader` transformations (for `helm`)
+  **Constructor**
+  ```yaml
+  components:
+  - name: ocm.software/example/input/byreference
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    resources:
+    - name: mychart
+      type: helmChart
+      input:
+        type: helm
+        path: ./podinfo
+        repository: ghcr.io/open-component-model/podinfo:1.0.0
+  ```
+  
+  **Transformation Specification**
+  ```yaml
+  type: transformations.ocm.config.software/v1alpha1
+  # ...
+  transformations:
+  - type: resource.creator
+    id: createresource1
+    spec:
+      resource:
+        name: mychart
+        type: helmChart
+        relation: local
+        input:
+          type: file
+          filePath: ./podinfo.tgz
+          repository: ghcr.io/open-component-model/podinfo:1.0.0
+    # output:
+    #   resource:
+    #     name: mychart
+    #     type: helmChart
+    #     relation: local
+    #     access:
+    #       type: ociRegistry
+    #       imageReference: ghcr.io/open-component-model/podinfo:1.0.0
+    #     blob: <binary data>
+  
+  - type: resource.uploader
+    id: uploadresource1
+    spec:
+      resource: ${createresource1.output.resource}
+    # output:
+    #   resource:
+    #     name: mychart
+    #     type: helmChart
+    #     relation: local
+    #     access:
+    #       type: ociRegistry
+    #       imageReference: ghcr.io/open-component-model/podinfo:1.0.0
+  
+   # ...
+   ```
 
-#### Mapping From Transfer to Transformation Specification
+**Access Types**
+- **By Value**: `resource.creator` and `resource.uploader`
+  
+  **Constructor**
+  ```yaml
+  components:
+  - name: ocm.software/example/access/byvalue
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    resources:
+    - name: mychart
+      type: helmChart
+      relation: local
+      copyPolicy: byValue
+      access:
+        type: ociRegistry
+        imageReference: ghcr.io/open-component-model/podinfo:1.0.0
+  ```
+  
+  **Transformation Specification**
+  ```yaml
+  type: transformations.ocm.config.software/v1alpha1
+  # ...
+  transformations:
+  - type: resource.creator
+    id: createresource1
+    spec:
+      resource:
+        name: mychart
+        type: helmChart
+        relation: local
+        copyPolicy: byValue
+        access:
+          type: ociRegistry
+          imageReference: ghcr.io/open-component-model/podinfo:1.0.0
+    # output:
+    #   resource:
+    #     name: mychart
+    #     type: helmChart
+    #     relation: local
+    #     access:
+    #       type: localblob
+    #       localReference: sha256:<hash>
+    #     blob: <binary data>
+  
+  - type: resource.uploader
+    id: uploadresource1
+    spec:
+      resource: ${createresource1.output.resource}
+    # output:
+    #   resource:
+    #     name: mychart
+    #     type: helmChart
+    #     relation: local
+    #     access:
+    #       type: localblob
+    #       imageReference: sha256:<hash>
+  
+   # ...
+   ```
+  
+- **By Reference**: `resource creator`
+
+  **Constructor**
+  ```yaml
+  components:
+  - name: ocm.software/example/access/byreference
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    resources:
+    - name: mychart
+      type: helmChart
+      relation: local
+      copyPolicy: byReference
+      access:
+        type: ociRegistry
+        imageReference: ghcr.io/open-component-model/podinfo:1.0.0
+  ```
+
+  **Transformation Specification**
+  ```yaml
+  type: transformations.ocm.config.software/v1alpha1
+  # ...
+  transformations:
+  - type: resource.creator
+    id: createresource1
+    spec:
+      resource:
+        name: mychart
+        type: helmChart
+        relation: local
+        copyPolicy: byReference
+        access:
+          type: ociRegistry
+          imageReference: ghcr.io/open-component-model/podinfo:1.0.0
+    # output:
+    #   resource:
+    #     name: mychart
+    #     type: helmChart
+    #     relation: local
+    #     access:
+    #       type: ociRegistry
+    #       imageReference: ghcr.io/open-component-model/podinfo:1.0.0
+  
+    # <no uploader needed here, can be added to the component just like this>
+  
+   # ...
+   ```
+
+**Component References**
+
+**Constructor**
+```yaml
+components:
+- name: ocm.software/example/references/root
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  componentReferences:
+    - name: leaf
+      componentName: ocm.software/example/references/leaf
+      version: 1.0.0
+- name: ocm.software/example/references/leaf
+  version: 1.0.0
+  provider:
+    name: ocm.software
+```
+
+**Transformation Specification**
+```yaml
+type: transformations.ocm.config.software/v1alpha1
+env:
+  - id: root
+    componentIdentity:
+      name: ocm.software/example/references/root
+      version: 1.0.0
+  - id: common
+    repositorySpec:
+      type: ociRegistry
+      baseUrl: ghcr.io
+      subPath: /open-component-model/target-ocm-repository
+transformations: 
+  - type: component.creator
+    id: createcomponentversion1
+    spec:
+      name: ocm.software/example/references/leaf
+      version: 1.0.0
+      provider:
+        name: ocm.software
+    # output:
+    #   descriptor:
+    #     meta: ...
+    #     component: ...
+  
+  - type: component.uploader
+    id: uploadcomponentversion1
+    spec:
+      repository: ${env.common.repositorySpec}
+      componentDescriptor: ${createcomponentversion1.output.descriptor}
+    # output:
+    #   descriptor:
+    #     meta: ...
+    #     component: ...
+    
+  - type: component.digester
+    id: digestcomponentversion1
+    spec:
+      descriptor: ${createcomponentversion.output.descriptor}
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v4
+    # output:
+    #   digest:
+    #     hashAlgorithm: SHA-256
+    #     normalisationAlgorithm: jsonNormalisation/v4
+    #     value: <hash>
+  
+  - type: component.creator
+    id: createcomponentversion2
+    spec:
+      name: ocm.software/example/references/root
+      version: 1.0.0
+      provider:
+        name: ocm.software
+      componentReferences:
+        - name: leaf
+          componentName: ${uploadcomponentversion1.output.descriptor.name}
+          version: ${uploadcomponentversion1.output.descriptor.version}
+          digest: ${digestcomponentversion1.output.digest}
+    # output:
+    #   descriptor:
+    #     meta: ...
+    #     component: ...
+
+  - type: component.uploader
+    id: uploadcomponentversion2
+    spec:
+      repository: ${env.common.repositorySpec}
+      componentDescriptor: ${createcomponentversion2.outputs.descriptor}
+    # output:
+    #   descriptor:
+    #     meta: ...
+    #     component: ...
+```
 
 #### Plugin Type System Reuse
 - The transformation specification implementation is aware of the supported 
