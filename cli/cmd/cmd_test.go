@@ -661,6 +661,88 @@ COMPONENT           │ VERSION │ PROVIDER
 	}
 }
 
+// Test_Get_Component_Version_CTF_Dir tests the call to `ocm get cv <ctf_dir>` command.
+// The command has to list all component versions contained in the CTF folder.
+func Test_Get_Component_Version_CTF_Dir(t *testing.T) {
+	roota := createTestDescriptor("ocm.software/root-a", "0.0.1")
+	rootb := createTestDescriptor("ocm.software/root-b", "0.0.2")
+
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, roota, rootb)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		args           []string
+		configYAML     string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "get cv from CTF dir - default",
+			args: []string{"get", "cv", archivePath},
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root-a │ 0.0.1   │ ocm.software 
+ ocm.software/root-b │ 0.0.2   │`,
+			expectedError: false,
+		},
+		{
+			// The resolver configuration in the configYAML points to a non-existing path.
+			// Therefore, the command would fail to find the components when doing rendering,
+			// if there were no dynamically added resolvers, that take precedence over the config file.
+			name: "get cv from CTF dir - override resolvers from config",
+			args: []string{"get", "cv", archivePath},
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: resolvers.config.ocm.software
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      path: /does/not/exist
+    componentNamePattern: ocm.software/*`,
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root-a │ 0.0.1   │ ocm.software 
+ ocm.software/root-b │ 0.0.2   │`,
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			args := tt.args
+
+			if tt.configYAML != "" {
+				tmp := t.TempDir()
+				configYAMLFilePath := filepath.Join(tmp, "config-with-resolver.yaml")
+				r.NoError(os.WriteFile(configYAMLFilePath, []byte(tt.configYAML), 0o600))
+				args = append(args, "--config", configYAMLFilePath)
+			}
+
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err = test.OCM(t, test.WithArgs(args...), test.WithOutput(result), test.WithErrorOutput(logs))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+
+			r.NoError(err, "failed to run command")
+
+			logEntries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(logEntries, "expected log entries to be present")
+
+			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
+		})
+	}
+}
+
 func Test_Add_Component_Version(t *testing.T) {
 	r := require.New(t)
 	logs := test.NewJSONLogReader()
@@ -984,7 +1066,6 @@ components:
 				r.NoError(err, "could not retrieve component version from test repository")
 			})
 		}
-
 	})
 
 	t.Run("construction with references targeting resolvers", func(t *testing.T) {
@@ -1099,7 +1180,6 @@ components:
 				r.NoError(err, "could not retrieve component version from test repository")
 			})
 		}
-
 	})
 }
 
@@ -1253,7 +1333,6 @@ configurations:
 		test.WithOutput(logs),
 	)
 	r.NoError(err, "failed to verify component version")
-
 }
 
 func mustKey(t *testing.T) *rsa.PrivateKey {

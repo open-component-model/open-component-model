@@ -228,11 +228,11 @@ func AnotherComponentVersionRepositoryForComponentProvider(ctx context.Context,
 			}
 
 			componentMatchers := make([]*resolverspec.Resolver, 0, len(componentNames))
-			for index, componentName := range componentNames {
-				componentMatchers[index] = &resolverspec.Resolver{
+			for _, componentName := range componentNames {
+				componentMatchers = append(componentMatchers, &resolverspec.Resolver{
 					Repository:           &raw,
 					ComponentNamePattern: componentName,
-				}
+				})
 			}
 
 			// add to index 0 to have the highest priority
