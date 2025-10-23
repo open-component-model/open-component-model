@@ -133,6 +133,11 @@ and serves to illustrate the general structure and concept of transformations.
 Detailed samples for specific use cases are provided in [Mapping From 
 Constructor to Transformation Specification](#mapping-constructor-file-to-transformation-specification).
 
+The sample shows the exemplary `output` as a comment under each transformation.
+This is purely for illustration purposes. In reality, each transformation 
+exposes a `specification` and an `output` schema against which the 
+transformations can be programmed.
+
 ### Conceptual Example: Constructing a Component Version with a Local File Resource
 
 ```yaml
@@ -180,8 +185,8 @@ transformations:
   # method or a local resource repository's add local resource method, depending
   # on the access type.
   # If `spec.resource.access.type == localblob`, the spec has to contain the
-  # components as whose localblob the blob has to be uploaded and the repository
-  # where the component will also be uploaded to.
+  # component's identity as whose localblob the blob has to be uploaded and the 
+  # repository where the component will also be uploaded to.
   - type: resource.uploader
     id: uploadresource1
     spec:
@@ -220,7 +225,7 @@ transformations:
   - type: component.uploader
     id: uploadcomponentversion1
     spec:
-      repository: ${env.example.repositorySpec}
+      repositorySpec: ${env.example.repositorySpec}
       componentDescriptor: ${createcomponentversion1.outputs.descriptor}
 ```
 
@@ -512,6 +517,8 @@ examples of how these **constructor** use cases can be mapped to the
    ```
 
 **Component References**
+- **Internal Component Reference** (referenced component is also part of the 
+  constructor):
 
 **Constructor**
 ```yaml
@@ -521,7 +528,7 @@ components:
   provider:
     name: ocm.software
   componentReferences:
-    - name: leaf
+    - name: internal-leaf
       componentName: ocm.software/example/references/leaf
       version: 1.0.0
 - name: ocm.software/example/references/leaf
@@ -534,10 +541,6 @@ components:
 ```yaml
 type: transformations.ocm.config.software/v1alpha1
 env:
-  - id: root
-    componentIdentity:
-      name: ocm.software/example/references/root
-      version: 1.0.0
   - id: common
     repositorySpec:
       type: ociRegistry
@@ -598,7 +601,7 @@ transformations:
   - type: component.uploader
     id: uploadcomponentversion2
     spec:
-      repository: ${env.common.repositorySpec}
+      repositorySpec: ${env.common.repositorySpec}
       componentDescriptor: ${createcomponentversion2.outputs.descriptor}
     # output:
     #   descriptor:
@@ -606,12 +609,156 @@ transformations:
     #     component: ...
 ```
 
-#### Plugin Type System Reuse
+- **External Component Reference** (referenced component already exist in a ocm 
+  repository):
+
+**Constructor**
+```yaml
+components:
+- name: ocm.software/example/references/root
+  version: 1.0.0
+  provider:
+    name: ocm.software
+  componentReferences:
+    - name: external-leaf
+      componentName: ocm.software/example/references/leaf
+      version: 1.0.0
+```
+
+**Transformation Specification**
+```yaml
+type: transformations.ocm.config.software/v1alpha1
+transformations: 
+  - type: component.downloader
+    id: downloadcomponentversion1
+    spec:
+      repositorySpec:
+        type: ociRegistry
+        baseUrl: ghcr.io
+        subPath: /open-component-model/external-ocm-repository
+      component: ocm.software/example/references/leaf
+      version: 1.0.0
+    # output:
+    #   descriptor:
+    #     meta: ...
+    #     component: ...
+  
+  - type: component.verifier
+    id: verifycomponentversion1
+    spec:
+      signature: ${downloadcomponentversion1}
+    # output:
+    #   descriptor:
+    #     meta: ...
+    #     component: ...
+    
+  - type: component.digester
+    id: digestcomponentversion1
+    spec:
+      descriptor: ${verifycomponentversion.output.descriptor}
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v4
+    # output:
+    #   digest:
+    #     hashAlgorithm: SHA-256
+    #     normalisationAlgorithm: jsonNormalisation/v4
+    #     value: <hash>
+  
+  - type: component.creator
+    id: createcomponentversion2
+    spec:
+      name: ocm.software/example/references/root
+      version: 1.0.0
+      provider:
+        name: ocm.software
+      componentReferences:
+        - name: leaf
+          componentName: ${verifycomponentversion1.output.descriptor.name}
+          version: ${verifycomponentversion1.output.descriptor.version}
+          digest: ${digestcomponentversion1.output.digest}
+    # output:
+    #   descriptor:
+    #     meta: ...
+    #     component: ...
+
+  - type: component.uploader
+    id: uploadcomponentversion2
+    spec:
+      repositorySpec:
+        type: ociRegistry
+        baseUrl: ghcr.io
+        subPath: /open-component-model/target-ocm-repository
+      componentDescriptor: ${createcomponentversion2.outputs.descriptor}
+    # output:
+    #   descriptor:
+    #     meta: ...
+    #     component: ...
+```
+
+## Resource as Atomic Unit in OCM
+- The atomic unit in ocm is **resource** NOT A PLAIN BLOB or ACCESS, kind of
+  like the atomic unit in kubernetes are pods not containers.
+- While this takes the operations to a higher abstraction level, offering each
+  operation the ability to add or modify the metadata of a resource.
+
+> [!NOTE]
+> In ocm v1, several interfaces were built against plain blobs or access as
+> the atomic unit. This led to issues, as
+> - several operations had to be performed twice (digest calculation of a blob)
+>   or as the metadata could not be passed along.
+> - several extension points were not flexible enough (resource uploader could
+>   not provide the digest of the uploaded blob, as it only returned a blob)
+
+
+## Integration with Plugin System
 - The transformation specification implementation is aware of the supported 
   capabilities. So, depending on the *capability* (such as `type: resource.
-  downloader`), the implementation will use the corresponding *Provider* (e.
-  g. resource repository provider).
-- All types of a particular *capability* share a single common output schema.
+  uploader`), the implementation will use the corresponding *Provider* 
+  API (e.g. `ResourcePluginProvider`).
+  ```go
+  func (t *Transformer) ProcessTransformation(transformation 
+  Transformation) 
+  (any, err) {
+    switch transformation.type:
+    case "resource.uploader":
+      var resource Resource
+      err := yaml.Unmarshal(transformation.spec, &resource)
+      if err != nil {
+        return nil, err
+      }
+      resource := transformation.spec.resource
+      switch resource.access.type:
+      case "localblob":
+      default:
+       resourceUploader := t.resourcePluginProvider.GetResourcePlugin(access)
+       if err := resourceUploader.UploadResource(transformation); err != nil {
+         return nil, err
+       }
+  }
+  ```
+  
+- For a *capability* (such as `resource.uploader`), all its types share a 
+  common`spec` schema. The `type` information has to be contained in this 
+  common portion.
+  ```yaml
+  - type: resource.uploader
+    id: uploadresource1
+    spec:
+      # <may have additional spec properties>
+      resource:
+        name: <name>
+        version: <version>
+        relation: <relation>
+        access:
+          type: <type>
+          # <may have varying access properties>
+  ```
+
+> [!NOTE] Look back at the initial conceptual example. There, we combine both,
+> localblob upload and remote resource upload by saying:
+> > If `spec.resource.access.type == localblob`, the spec has to contain the
+> > component's identity as whose localblob the blob has to be uploaded and the
+> > repository where the component will also be uploaded to.
 
 **Advantages**
 - We have a single uniform plugin system.
@@ -633,24 +780,10 @@ cases (capability with a single type).
 plugin system in place, the complexity of maintaining two different plugin 
 systems is even higher.
 
-#### Resource as Atomic Unit in OCM
-- The atomic unit in ocm is **resource** NOT A PLAIN BLOB or ACCESS, kind of 
-  like the atomic unit in kubernetes are pods not containers.
-- While this takes the operations to a higher abstraction level, offering each
-  operation the ability to add or modify the metadata of a resource.
-
-> [!NOTE]
-> In ocm v1, several interfaces were built against plain blobs or access as 
-> the atomic unit. This led to issues, as 
-> - several operations had to be performed twice (digest calculation of a blob) 
->   or as the metadata could not be passed along.
-> - several extension points were not flexible enough (resource uploader could
->   not provide the digest of the uploaded blob, as it only returned a blob)
-
-#### Static Typing
+## Static Type Analysis
 - The example above shows the *outputs* of each transformation as comments. This
   is purely for illustration purposes. In the actual implementation, every
-  capability has to define a static output schema (kind of like kubernetes 
+  capability has to define a static output schema (kind of like kubernetes
   resource status).
 - The transformation specification is statically typed. This means that
   everything that we programmatically write into MUST be typed
@@ -669,14 +802,6 @@ systems is even higher.
 - This would also be adopted for the transfer use case. Here, the component 
   to be uploaded at the target location would be created from scratch and filled
   with information from the original component descriptor through `cel` expressions.
-
-## Implementation
-
-### Input to Access Types
-
-As mentioned above, there will no longer be an implementation for each input 
-type. Instead, we want new `access types` (e.g. `file`, `dir`, ...) and 
-`uploaders`.
 
 ### Plugin Registries
 
