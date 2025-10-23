@@ -20,7 +20,7 @@ for cmd in "${cmds[@]}"; do
 done
 
 ## Check that there is not a kind cluster already running
-if kind get clusters | grep -q kind; then
+if kind get clusters | grep -q "^kind$"; then
   echo "A kind cluster is already running. Please delete it before running this script."
   exit 1
 fi
