@@ -97,18 +97,6 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 			}
 			finalResolvers = append(finalResolvers, fallbackResolvers...)
 			fallbackResolvers = finalResolvers
-		} else if options != nil && options[0].RepoRef != nil {
-			var finalResolvers []*resolverruntime.Resolver
-			finalResolvers = append(finalResolvers, fallbackResolvers...)
-
-			finalResolvers = append([]*resolverruntime.Resolver{
-				{
-					Repository: options[0].RepoRef,
-					Priority:   math.MaxInt,
-				},
-			}, finalResolvers...)
-
-			fallbackResolvers = finalResolvers
 		}
 
 		return &fallbackProvider{

@@ -51,7 +51,6 @@ const (
 	FlagSkipReferenceDigestProcessing      = "skip-reference-digest-processing"
 	FlagOutput                             = "output"
 	FlagDisplayMode                        = "display-mode"
-	FlagRecursive                          = "recursive"
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
@@ -178,8 +177,6 @@ add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.y
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `display mode can be used in combination with --recursive
   static: print the output once the complete component graph is discovered
   live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
-	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
-	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
 
 	return cmd
 }
@@ -278,10 +275,6 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting display-mode flag failed: %w", err)
 	}
 
-	recursive, err := cmd.Flags().GetInt(FlagRecursive)
-	if err != nil {
-		return fmt.Errorf("getting recursive flag failed: %w", err)
-	}
 	repositoryRef, err := cmd.Flags().GetString(FlagRepositoryRef)
 	if err != nil {
 		return fmt.Errorf("getting repository reference flag failed: %w", err)
@@ -318,7 +311,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		opts.ResourceDigestProcessorProvider = instance
 	}
 
-	descriptors, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
+	descriptors, graph, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
 	if err != nil {
 		return fmt.Errorf("constructing component versions failed: %w", err)
 	}
@@ -331,7 +324,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		roots = append(roots, identity)
 	}
 
-	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+	if err := renderComponents(cmd, graph, roots, output, displayMode); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 	return nil
@@ -466,45 +459,23 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 	return prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
 }
 
-func renderComponents(cmd *cobra.Command, repoProvider ocm.ComponentVersionRepositoryForComponentProvider, roots []string, format string, mode string, recursive int) error {
-	resAndDis := resolverAndDiscoverer{
-		repositoryProvider: repoProvider,
-		recursive:          recursive,
-	}
-	discoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *descriptor.Descriptor]{
-		Roots:      roots,
-		Resolver:   &resAndDis,
-		Discoverer: &resAndDis,
-	})
-	renderer, err := buildRenderer(cmd.Context(), discoverer.Graph(), roots, format)
+func renderComponents(cmd *cobra.Command, graph *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string, mode string) error {
+	renderer, err := buildRenderer(cmd.Context(), graph, roots, format)
 	if err != nil {
 		return fmt.Errorf("building renderer failed: %w", err)
 	}
 
 	switch mode {
 	case render.StaticRenderMode:
-		// Start traversing the graph from the root vertices (the initially resolved
-		// component versions).
-		err := discoverer.Discover(cmd.Context())
-		if err != nil {
-			return fmt.Errorf("traversing component version graph failed: %w", err)
-		}
 		if err := render.RenderOnce(cmd.Context(), renderer, render.WithWriter(cmd.OutOrStdout())); err != nil {
 			return err
 		}
 	case render.LiveRenderMode:
 		// Start the render loop.
 		renderCtx, cancel := context.WithCancel(cmd.Context())
+		defer cancel()
+
 		wait := render.RunRenderLoop(renderCtx, renderer, render.WithRenderOptions(render.WithWriter(cmd.OutOrStdout())))
-		// Start traversing the graph from the root vertices (the initially resolved
-		// component versions).
-		// The render loop is running concurrently and regularly displays the current
-		// state of the graph.
-		err := discoverer.Discover(cmd.Context())
-		cancel()
-		if err != nil {
-			return fmt.Errorf("traversing component version graph failed: %w", err)
-		}
 
 		if err := wait(); !errors.Is(err, context.Canceled) {
 			return fmt.Errorf("rendering component version graph failed: %w", err)
@@ -536,15 +507,16 @@ func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[
 }
 
 func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
-	untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
+	untypedDescriptorConstructorComponent, ok := vertex.Attributes[syncdag.AttributeValue]
 	if !ok {
 		return nil, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
 	}
-	desc, ok := untypedDescriptor.(*descriptor.Descriptor)
+	comp, ok := untypedDescriptorConstructorComponent.(*constructor.ConstructorOrExternalComponent)
 	if !ok {
-		return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descriptor.Descriptor{}, untypedDescriptor)
+		return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &constructor.ConstructorOrExternalComponent{}, comp.ConstructorComponent)
 	}
-	descriptorV2, err := descriptor.ConvertToV2(descriptorv2.Scheme, desc)
+
+	descriptorV2, err := descriptor.ConvertToV2(descriptorv2.Scheme, comp.ExternalComponent)
 	if err != nil {
 		return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
 	}
@@ -556,16 +528,21 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 	t.SetOutputMirror(writer)
 	t.AppendHeader(table.Row{"Component", "Version", "Provider"})
 	for _, vertex := range vertices {
-		untypedDescriptor, ok := vertex.Attributes[syncdag.AttributeValue]
+		untypedDescriptorConstructorComponent, ok := vertex.Attributes[syncdag.AttributeValue]
 		if !ok {
 			return fmt.Errorf("vertex %s has no %s attribute", vertex.ID, syncdag.AttributeValue)
 		}
-		desc, ok := untypedDescriptor.(*descriptor.Descriptor)
+		comp, ok := untypedDescriptorConstructorComponent.(*constructor.ConstructorOrExternalComponent)
 		if !ok {
-			return fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descriptor.Descriptor{}, desc)
+			return fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &constructor.ConstructorOrExternalComponent{}, comp.ConstructorComponent)
 		}
 
-		t.AppendRow(table.Row{desc.Component.Name, desc.Component.Version, desc.Component.Provider.Name})
+		if comp.ExternalComponent != nil {
+			t.AppendRow(table.Row{comp.ExternalComponent.Component.Name, comp.ExternalComponent.Component.Version, comp.ExternalComponent.Component.Provider.Name})
+			continue
+		} else {
+			t.AppendRow(table.Row{comp.ConstructorComponent.Name, comp.ConstructorComponent.Version, comp.ConstructorComponent.Provider.Name})
+		}
 	}
 	t.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, AutoMerge: true},
@@ -576,55 +553,4 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 	t.SetStyle(style)
 	t.Render()
 	return nil
-}
-
-type resolverAndDiscoverer struct {
-	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
-	recursive          int
-}
-
-var (
-	_ syncdag.Resolver[string, *descriptor.Descriptor]   = (*resolverAndDiscoverer)(nil)
-	_ syncdag.Discoverer[string, *descriptor.Descriptor] = (*resolverAndDiscoverer)(nil)
-)
-
-func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descriptor.Descriptor, error) {
-	id, err := runtime.ParseIdentity(key)
-	if err != nil {
-		return nil, fmt.Errorf("parsing identity %q failed: %w", key, err)
-	}
-	component, version := id[descriptor.IdentityAttributeName], id[descriptor.IdentityAttributeVersion]
-	repo, err := r.repositoryProvider.GetComponentVersionRepositoryForComponent(ctx, component, version)
-	if err != nil {
-		return nil, fmt.Errorf("getting component version repository for identity %q failed: %w", id, err)
-	}
-	desc, err := repo.GetComponentVersion(ctx, component, version)
-	if err != nil {
-		return nil, fmt.Errorf("getting component version for identity %q failed: %w", id, err)
-	}
-	return desc, nil
-}
-
-func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descriptor.Descriptor) ([]string, error) {
-	// TODO(fabianburth): Recursion depth has to be implemented as option for
-	//  the dag discovery. Once that's implemented, we can pass the recursion
-	//  depth to the discovery and remove this check here (https://github.com/open-component-model/ocm-project/issues/706).
-	switch {
-	case r.recursive < -1:
-		return nil, fmt.Errorf("invalid recursion depth %d: must be -1 (unlimited) or >= 0", r.recursive)
-	case r.recursive == 0:
-		slog.InfoContext(ctx, "not discovering children, recursion depth 0", "component", parent.Component.ToIdentity().String())
-		return nil, nil
-	case r.recursive == -1:
-		// unlimited recursion
-		children := make([]string, len(parent.Component.References))
-		for index, reference := range parent.Component.References {
-			children[index] = reference.ToComponentIdentity().String()
-		}
-		slog.InfoContext(ctx, "discovering children", "component", parent.Component.ToIdentity().String(), "children", children)
-		return children, nil
-	case r.recursive > 0:
-		return nil, fmt.Errorf("recursion depth > 0 not implemented yet")
-	}
-	return nil, fmt.Errorf("invalid recursion depth %d", r.recursive)
 }
