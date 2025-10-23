@@ -145,7 +145,7 @@ var (
 
 func (r *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*descruntime.Descriptor, error) {
 	if r.repositoryProvider == nil {
-		return nil, nil
+		return nil, fmt.Errorf("repository provider is not initialized")
 	}
 
 	id, err := runtime.ParseIdentity(key)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -204,6 +205,10 @@ func (d *GraphDiscoverer[K, V]) discover(
 
 	// Resolve the vertex value.
 	value, err := d.opts.Resolver.Resolve(ctx, id)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to resolve vertex", "id", id, "error", err)
+		return err
+	}
 
 	// Update state after resolution.
 	if err := d.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[K]) error {
