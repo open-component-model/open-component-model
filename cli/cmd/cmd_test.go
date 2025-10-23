@@ -689,10 +689,11 @@ resources:
 	archiveFilePath := filepath.Join(tmp, "transport-archive")
 
 	t.Run("base construction", func(t *testing.T) {
+		result := new(bytes.Buffer)
 		_, err := test.OCM(t, test.WithArgs("add", "cv",
 			"--constructor", constructorYAMLFilePath,
 			"--repository", archiveFilePath,
-		), test.WithErrorOutput(logs))
+		), test.WithErrorOutput(logs), test.WithOutput(result))
 
 		r.NoError(err, "could not construct component version")
 
@@ -700,20 +701,10 @@ resources:
 		r.NoError(err, "failed to list log entries")
 		r.NotEmpty(entries, "expected log entries to be present")
 
-		// TODO: add other log checks
-		//expected := []string{
-		//	"starting component construction",
-		//	"component construction completed",
-		//}
-		//for _, entry := range entries {
-		//	if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
-		//		require.Contains(t, expected, entry.Msg)
-		//		expected = slices.DeleteFunc(expected, func(s string) bool {
-		//			return s == entry.Msg
-		//		})
-		//	}
-		//}
-		//r.Empty(expected, "expected logs should all have been matched within the CLI realm")
+		r.EqualValues(strings.TrimSpace(`COMPONENT                │ VERSION │ PROVIDER     
+──────────────────────────┼─────────┼──────────────
+ ocm.software/examples-01 │ 1.0.0   │ ocm.software 
+`), strings.TrimSpace(result.String()), "expected table output")
 
 		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
 		r.NoError(err, "could not create test filesystem")
@@ -746,28 +737,10 @@ resources:
 
 			r.Error(err, "expected error on adding existing component version")
 			r.Contains(err.Error(), "already exists in target repository", "expected error message about existing component version")
-
-			entries, err := logs.List()
-			r.NoError(err, "failed to list log entries")
-			r.NotEmpty(entries, "expected log entries to be present")
-
-			//TODO: add other log checks
-			//expected := []string{
-			//	"starting component construction",
-			//	"component construction failed",
-			//}
-			//for _, entry := range entries {
-			//	if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
-			//		require.Contains(t, expected, entry.Msg)
-			//		expected = slices.DeleteFunc(expected, func(s string) bool {
-			//			return s == entry.Msg
-			//		})
-			//	}
-			//}
-			//r.Empty(expected, "expected logs should all have been matched matched within the CLI realm")
 		})
 
 		t.Run("expect success on replace strategy", func(t *testing.T) {
+			results := new(bytes.Buffer)
 			constructorYAML = fmt.Sprintf(`
 name: ocm.software/examples-01
 version: 1.0.0
@@ -792,7 +765,7 @@ resources:
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
 				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
-			), test.WithErrorOutput(logs))
+			), test.WithErrorOutput(logs), test.WithOutput(results))
 
 			r.NoError(err, "could not construct component version", "replace strategy should allow an existing component version to be replaced")
 
@@ -800,20 +773,10 @@ resources:
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(entries, "expected log entries to be present")
 
-			//TODO: add other log checks
-			//expected := []string{
-			//	"starting component construction",
-			//	"component construction completed",
-			//}
-			//for _, entry := range entries {
-			//	if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
-			//		require.Contains(t, expected, entry.Msg)
-			//		expected = slices.DeleteFunc(expected, func(s string) bool {
-			//			return s == entry.Msg
-			//		})
-			//	}
-			//}
-			//r.Empty(expected, "expected logs should all have been matched matched within the CLI realm")
+			r.EqualValues(strings.TrimSpace(`COMPONENT                │ VERSION │ PROVIDER     
+──────────────────────────┼─────────┼──────────────
+ ocm.software/examples-01 │ 1.0.0   │ ocm.software 
+`), strings.TrimSpace(result.String()), "expected table output")
 
 			desc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/examples-01", "1.0.0")
 			r.NoError(err, "could not retrieve component version from test repository")
@@ -844,6 +807,7 @@ resources:
 		})
 
 		t.Run("base construction with working-directory should not fail if resources are in working-directory", func(t *testing.T) {
+			result := new(bytes.Buffer)
 			constructorYAML = fmt.Sprintf(`
 name: ocm.software/examples-01
 version: 1.0.0
@@ -868,11 +832,16 @@ resources:
 				"--repository", archiveFilePath,
 				"--working-directory", tmp,
 				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
-			), test.WithErrorOutput(logs))
+			), test.WithErrorOutput(logs), test.WithOutput(result))
 
 			r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
 
 			r.NoError(err, "could not construct component version with working directory")
+
+			r.EqualValues(strings.TrimSpace(`COMPONENT                │ VERSION │ PROVIDER     
+──────────────────────────┼─────────┼──────────────
+ ocm.software/examples-01 │ 1.0.0   │ ocm.software 
+`), strings.TrimSpace(result.String()), "expected table output")
 		})
 	})
 
@@ -893,13 +862,18 @@ resources:
 		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
 		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
 		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
-
+		result := new(bytes.Buffer)
 		_, err := test.OCM(t, test.WithArgs("add", "cv",
 			"--constructor", externalConstructorYAMLFilePath,
 			"--repository", externalArchiveFilePath,
 			"--working-directory", tmp,
-		), test.WithErrorOutput(logs))
+		), test.WithErrorOutput(logs), test.WithOutput(result))
 		r.NoError(err, "could not construct component version with working directory")
+
+		r.EqualValues(strings.TrimSpace(`COMPONENT             │ VERSION │ PROVIDER     
+───────────────────────┼─────────┼──────────────
+ ocm.software/external │ 1.0.0   │ ocm.software 
+`), strings.TrimSpace(result.String()), "expected table output")
 
 		legacyResolverConfigYAML := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
@@ -949,6 +923,8 @@ components:
 		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
 		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
 
+		result = new(bytes.Buffer)
+
 		cmd, err := test.OCM(t, test.WithArgs("add", "cv",
 			"--constructor", constructorYAMLFilePath,
 			"--repository", archiveFilePath,
@@ -956,7 +932,7 @@ components:
 			"--config", legacyResolverConfigYAMLFilePath,
 			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
-		), test.WithErrorOutput(logs))
+		), test.WithErrorOutput(logs), test.WithOutput(result))
 
 		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
 
@@ -988,6 +964,13 @@ components:
 			})
 		}
 
+		r.EqualValues(strings.TrimSpace(`COMPONENT             │ VERSION │ PROVIDER     
+───────────────────────┼─────────┼──────────────
+ ocm.software/a        │ 1.0.0   │ ocm.software 
+ ocm.software/b        │ 1.0.0   │              
+ ocm.software/a        │ 1.0.0   │              
+ ocm.software/external │ 1.0.0   │              
+`), strings.TrimSpace(result.String()), "expected table output")
 	})
 
 	t.Run("construction with references targeting resolvers", func(t *testing.T) {
@@ -1004,6 +987,7 @@ resources:
     type: utf8/v1
     text: "I come from external!"
 `)
+		result := new(bytes.Buffer)
 		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
 		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
 		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
@@ -1012,8 +996,13 @@ resources:
 			"--constructor", externalConstructorYAMLFilePath,
 			"--repository", externalArchiveFilePath,
 			"--working-directory", tmp,
-		), test.WithErrorOutput(logs))
+		), test.WithErrorOutput(logs), test.WithOutput(result))
 		r.NoError(err, "could not construct component version with working directory")
+
+		r.EqualValues(strings.TrimSpace(`COMPONENT             │ VERSION │ PROVIDER     
+───────────────────────┼─────────┼──────────────
+ ocm.software/external │ 1.0.0   │ ocm.software 
+`), strings.TrimSpace(result.String()), "expected table output")
 
 		resolverConfigYAML := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
@@ -1063,7 +1052,7 @@ components:
 		// Create a replacement test file to be added to the component version
 		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
 		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
-
+		result = new(bytes.Buffer)
 		cmd, err := test.OCM(t, test.WithArgs("add", "cv",
 			"--constructor", constructorYAMLFilePath,
 			"--repository", archiveFilePath,
@@ -1071,7 +1060,7 @@ components:
 			"--config", resolverConfigYAMLFilePath,
 			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
-		), test.WithErrorOutput(logs))
+		), test.WithErrorOutput(logs), test.WithOutput(result))
 
 		r.Equal(ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, tmp, "expected working directory to be set in ocm context automatically")
 
@@ -1102,6 +1091,14 @@ components:
 				r.NoError(err, "could not retrieve component version from test repository")
 			})
 		}
+
+		r.EqualValues(strings.TrimSpace(`COMPONENT             │ VERSION │ PROVIDER     
+───────────────────────┼─────────┼──────────────
+ ocm.software/a        │ 1.0.0   │ ocm.software 
+ ocm.software/b        │ 1.0.0   │              
+ ocm.software/a        │ 1.0.0   │              
+ ocm.software/external │ 1.0.0   │              
+`), strings.TrimSpace(result.String()), "expected table output")
 
 	})
 }
