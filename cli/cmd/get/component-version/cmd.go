@@ -430,6 +430,9 @@ func processRepositoryReference(cmd *cobra.Command,
 		config,
 		repository,
 		componentNames)
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+	}
 
 	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
