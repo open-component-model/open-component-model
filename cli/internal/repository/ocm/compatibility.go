@@ -136,3 +136,121 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	}
 	return nil, nil
 }
+
+// AnotherComponentVersionRepositoryForComponentProvider is very similar to the above
+// NewComponentVersionRepositoryForComponentProvider. The key differences is that this function does not create
+// a high priority resolver for a single compref.Ref. It does so for a slice of components, which are located
+// in the same repository.
+// TODO(ikahandamirov): can these two functions be combined into one???
+func AnotherComponentVersionRepositoryForComponentProvider(ctx context.Context,
+	repoProvider repository.ComponentVersionRepositoryProvider,
+	credentialGraph credentials.GraphResolver,
+	config *genericv1.Config,
+	repository runtime.Typed,
+	componentNames []string,
+) (ComponentVersionRepositoryForComponentProvider, error) {
+	var (
+		//nolint:staticcheck // compatibility mode for deprecated resolvers
+		fallbackResolvers []*resolverruntime.Resolver
+		pathMatchers      []*resolverspec.Resolver
+		err               error
+	)
+
+	if config != nil {
+		pathMatchers, err = ResolversFromConfig(config)
+		if err != nil {
+			return nil, fmt.Errorf("getting path matchers from configuration failed: %w", err)
+		}
+		fallbackResolvers, err = FallbackResolversFromConfig(config)
+		if err != nil {
+			return nil, fmt.Errorf("getting resolvers from configuration failed: %w", err)
+		}
+	}
+
+	switch {
+	case len(pathMatchers) > 0 && len(fallbackResolvers) > 0:
+		return nil, fmt.Errorf("both path matcher and fallback resolvers are configured, only one type is allowed")
+	case len(pathMatchers) == 0 && len(fallbackResolvers) == 0:
+		slog.InfoContext(ctx, "no resolvers configured, using component reference as resolver")
+
+		if repository == nil {
+			return nil, fmt.Errorf("component reference does not contain repository information")
+		}
+
+		raw := runtime.Raw{}
+		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+		if err := scheme.Convert(repository, &raw); err != nil {
+			return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
+		}
+
+		return &resolverProvider{
+			repoProvider: repoProvider,
+			graph:        credentialGraph,
+			provider: pathmatcher.NewSpecProvider(ctx, []*resolverspec.Resolver{
+				{
+					Repository:           &raw,
+					ComponentNamePattern: "*",
+				},
+			}),
+		}, nil
+	case len(fallbackResolvers) > 0:
+		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
+
+		// add compref as first entry to fallback list if available to mimic legacy behavior
+		//nolint:staticcheck // compatibility mode for deprecated resolvers
+		var finalResolvers []*resolverruntime.Resolver
+		if repository != nil {
+			//nolint:staticcheck // kept for backward compatibility, use resolvers instead
+			finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
+				Repository: repository,
+				Priority:   math.MaxInt,
+			})
+		}
+		finalResolvers = append(finalResolvers, fallbackResolvers...)
+		fallbackResolvers = finalResolvers
+
+		return &fallbackProvider{
+			repoProvider: repoProvider,
+			graph:        credentialGraph,
+			resolvers:    fallbackResolvers,
+		}, nil
+	case len(pathMatchers) > 0:
+		slog.DebugContext(ctx, "using path matcher resolvers", slog.Int("count", len(pathMatchers)))
+
+		if repository != nil {
+			var finalResolvers []*resolverspec.Resolver
+			finalResolvers = append(finalResolvers, pathMatchers...)
+
+			raw := runtime.Raw{}
+			scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+			if err := scheme.Convert(repository, &raw); err != nil {
+				return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
+			}
+
+			componentMatchers := make([]*resolverspec.Resolver, 0, len(componentNames))
+			for index, componentName := range componentNames {
+				componentMatchers[index] = &resolverspec.Resolver{
+					Repository:           &raw,
+					ComponentNamePattern: componentName,
+				}
+			}
+
+			// add to index 0 to have the highest priority
+			finalResolvers = append(componentMatchers, finalResolvers...)
+
+			finalResolvers = append(finalResolvers, &resolverspec.Resolver{
+				Repository:           &raw,
+				ComponentNamePattern: "*",
+			})
+
+			pathMatchers = finalResolvers
+		}
+
+		return &resolverProvider{
+			repoProvider: repoProvider,
+			graph:        credentialGraph,
+			provider:     pathmatcher.NewSpecProvider(ctx, pathMatchers),
+		}, nil
+	}
+	return nil, nil
+}

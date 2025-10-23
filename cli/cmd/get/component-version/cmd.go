@@ -390,6 +390,7 @@ func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntim
 	return nil, fmt.Errorf("invalid recursion depth %d", r.recursive)
 }
 
+// Params holds the values of the flags for the `get cv` command.
 type Params struct {
 	output      string
 	displayMode string
@@ -398,37 +399,47 @@ type Params struct {
 	recursive   int
 }
 
+// processRepositoryReference implements the logic for the `get cv <ref>` command, where <ref> is a repository reference.
 func processRepositoryReference(cmd *cobra.Command,
 	pluginManager *manager.PluginManager,
 	credentialGraph credentials.GraphResolver,
 	config *genericv1.Config,
 	params Params,
-	repoRef runtime.Typed,
+	repository runtime.Typed,
 ) error {
-	// recursive := params.recursive
-	// output := params.output
-	// displayMode := params.displayMode
+	recursive := params.recursive
+	output := params.output
+	displayMode := params.displayMode
 	ctx := cmd.Context()
 
-	componentNames, err := listComponentsFromRepository(cmd.Context(), pluginManager, repoRef, credentialGraph)
+	componentNames, err := listComponentsFromRepository(cmd.Context(), pluginManager, repository, credentialGraph)
 	if err != nil {
-		return fmt.Errorf("could not list components in repository %v: %w", repoRef, err)
+		return fmt.Errorf("could not list components in repository %v: %w", repository, err)
 	}
-	slog.InfoContext(ctx, "listed components from repository", "repository", repoRef, "components", componentNames)
+	slog.InfoContext(ctx, "listed components from repository", "repository", repository, "components", componentNames)
 
-	roots, err := getIDsForComponentsFromRepository(ctx, pluginManager, repoRef, componentNames, params, credentialGraph)
+	roots, err := getIDsForComponentsFromRepository(ctx, pluginManager, repository, componentNames, params, credentialGraph)
 	if err != nil {
-		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repoRef, err)
+		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
 	}
 	slog.InfoContext(ctx, "components versions", "roots", roots)
 
-	// if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
-	//	return fmt.Errorf("failed to render components recursively: %w", err)
-	// }
+	repoProvider, err := ocm.AnotherComponentVersionRepositoryForComponentProvider(ctx,
+		pluginManager.ComponentVersionRepositoryRegistry,
+		credentialGraph,
+		config,
+		repository,
+		componentNames)
+
+	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+		return fmt.Errorf("failed to render components recursively: %w", err)
+	}
 
 	return nil
 }
 
+// listComponentsFromRepository lists component names from a given repository using the component lister interface.
+// Currently only CTF repositories are supported.
 func listComponentsFromRepository(ctx context.Context,
 	pluginManager *manager.PluginManager,
 	repository runtime.Typed,
@@ -457,6 +468,8 @@ func listComponentsFromRepository(ctx context.Context,
 	return componentNames, nil
 }
 
+// getIDsForComponentsFromRepository gets versions for given component names and returns a list of component
+// identities. All components are located in the same repository.
 func getIDsForComponentsFromRepository(ctx context.Context,
 	pluginManager *manager.PluginManager,
 	repository runtime.Typed,
