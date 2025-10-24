@@ -5,12 +5,14 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"time"
 
 	// to ensure that exec-entrypoint and run can make use of them.
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -31,6 +33,8 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 )
 
 var (
@@ -142,6 +146,33 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	pm := plugins.NewPluginManager(plugins.DefaultPluginManagerOptions())
+	if err := mgr.Add(pm); err != nil {
+		setupLog.Error(err, "unable to add plugin manager")
+		os.Exit(1)
+	}
+
+	const unlimited = 0
+	ttl := time.Second * 30
+	resolverCache := expirable.NewLRU[string, *resolution.Result](unlimited, nil, ttl)
+
+	// Create worker pool with its own dependencies
+	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+		WorkerCount:   10,
+		QueueSize:     100,
+		Logger:        setupLog,
+		Client:        mgr.GetClient(),
+		PluginManager: pm, // plugin manager is passed in here as the manager is started with the controller manager
+		Cache:         resolverCache,
+	})
+	if err := mgr.Add(workerPool); err != nil {
+		setupLog.Error(err, "unable to add worker pool")
+		os.Exit(1)
+	}
+
+	// resolver will be used in the controller
+	_ = resolution.NewResolver(mgr.GetClient(), setupLog, workerPool)
 
 	var eventsRecorder *events.Recorder
 	if eventsRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, "ocm-k8s-toolkit"); err != nil {
