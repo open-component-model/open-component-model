@@ -15,7 +15,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251017132044-0548a0ad422b
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/oci v0.0.10
+	ocm.software/open-component-model/bindings/go/oci v0.0.11
 	ocm.software/open-component-model/bindings/go/repository v0.0.3
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	ocm.software/open-component-model/cli v0.0.0-20251017132044-0548a0ad422b

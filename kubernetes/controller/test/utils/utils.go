@@ -73,6 +73,20 @@ func WaitForResource(ctx context.Context, condition, timeout string, resource ..
 	return err
 }
 
+func MakeServiceAccountClusterAdmin(ctx context.Context, serviceAccountNamespace string, serviceAccountName string) error {
+	cmdArgs := []string{"create", "clusterrolebinding", fmt.Sprintf("%s-admin", serviceAccountName), "--clusterrole=cluster-admin", "--serviceaccount=" + serviceAccountNamespace + ":" + serviceAccountName}
+	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
+	_, err := Run(cmd)
+	return err
+}
+
+func DeleteServiceAccountClusterAdmin(ctx context.Context, serviceAccountName string) error {
+	cmdArgs := []string{"delete", "clusterrolebinding", fmt.Sprintf("%s-admin", serviceAccountName), "--ignore-not-found=true"}
+	cmd := exec.CommandContext(ctx, "kubectl", cmdArgs...)
+	_, err := Run(cmd)
+	return err
+}
+
 // PrepareOCMComponent creates an OCM component from a component-constructor file.
 // After creating the OCM component, the component is transferred to imageRegistry.
 func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, imageRegistry, signingKey string) error {
