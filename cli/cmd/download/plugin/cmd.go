@@ -129,7 +129,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	config := ocmContext.Configuration()
 	slog.DebugContext(ctx, "parsed component reference", "reference", reference, "parsed", ref)
 
-	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, ocm.RepositorySources{Config: config, CompRef: ref})
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}

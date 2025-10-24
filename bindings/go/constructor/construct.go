@@ -32,11 +32,11 @@ var ErrShouldSkipConstruction = errors.New("should skip construction")
 type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in topological order.
-	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
+	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) (*syncdag.SyncedDirectedAcyclicGraph[string], error)
 }
 
 // ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
-func ConstructDefault(ctx context.Context, constructor *constructor.ComponentConstructor, opts Options) ([]*descriptor.Descriptor, error) {
+func ConstructDefault(ctx context.Context, constructor *constructor.ComponentConstructor, opts Options) (*syncdag.SyncedDirectedAcyclicGraph[string], error) {
 	return NewDefaultConstructor(opts).Construct(ctx, constructor)
 }
 
@@ -68,7 +68,7 @@ type ConstructorOrExternalComponent struct {
 	ExternalComponent    *descriptor.Descriptor
 }
 
-func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) (*syncdag.SyncedDirectedAcyclicGraph[string], error) {
 	logger := log.Base().With("operation", "constructComponent")
 
 	if c.opts.ResourceInputMethodProvider == nil {
@@ -84,24 +84,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 		return nil, nil
 	}
 
-	graph, err := c.discover(ctx, componentConstructor)
-	if err != nil {
-		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
-	}
-	processedDescriptors, err := c.construct(ctx, graph)
-	if err != nil {
-		return nil, fmt.Errorf("failed to constructComponent components from graph: %w", err)
-	}
-
-	constructedDescriptors := make([]*descriptor.Descriptor, len(componentConstructor.Components))
-	for index, component := range componentConstructor.Components {
-		desc, ok := processedDescriptors[component.ToIdentity().String()]
-		if !ok {
-			return nil, fmt.Errorf("component %s is expected to have been constructed but was not found in processed descriptors", component.ToIdentity())
-		}
-		constructedDescriptors[index] = desc
-	}
-	return constructedDescriptors, nil
+	return c.discover(ctx, componentConstructor)
 }
 
 func (c *DefaultConstructor) discover(ctx context.Context, componentConstructor *constructor.ComponentConstructor) (*syncdag.SyncedDirectedAcyclicGraph[string], error) {
@@ -423,7 +406,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 }
 
 func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
-	repository, err := c.opts.GetResourceRepository(ctx, resource)
+	repo, err := c.opts.GetResourceRepository(ctx, resource)
 	if err != nil {
 		return nil, err
 	}
@@ -433,13 +416,13 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 	// best effort to resolve credentials for by value resource download.
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
-	if identity, err := repository.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.CredentialProvider, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
 		}
 	}
 
-	data, err := repository.DownloadResource(ctx, converted, creds)
+	data, err := repo.DownloadResource(ctx, converted, creds)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}

@@ -127,7 +127,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
 	}
-	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, nil, ref)
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, ocm.RepositorySources{CompRef: ref})
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
