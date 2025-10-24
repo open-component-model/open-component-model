@@ -12,12 +12,6 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/bindings/go/dag"
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/cli/internal/render"
-	"ocm.software/open-component-model/cli/internal/render/graph/list"
-	"ocm.software/open-component-model/cli/internal/render/graph/tree"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -25,7 +19,10 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/dag"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -38,6 +35,9 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
+	"ocm.software/open-component-model/cli/internal/render"
+	"ocm.software/open-component-model/cli/internal/render/graph/list"
+	"ocm.software/open-component-model/cli/internal/render/graph/tree"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
 )
 
@@ -282,6 +282,9 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 	ref, err := compref.ParseRepository(repositoryRef, compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
+	if err != nil {
+		return fmt.Errorf("parsing repository reference %q failed: %w", repositoryRef, err)
+	}
 
 	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, ocm.RepositorySources{RepoRef: ref, Config: config})
 	if err != nil {

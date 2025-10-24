@@ -119,6 +119,7 @@ func createPathMatchersResolvers(ctx context.Context, repoProvider repository.Co
 	}, nil
 }
 
+//nolint:staticcheck // compatibility mode for deprecated resolvers
 func createFallbackResolvers(fallbackResolvers []*resolverruntime.Resolver, repoProvider repository.ComponentVersionRepositoryProvider, credentialGraph credentials.GraphResolver, repoSources RepositorySources) (ComponentVersionRepositoryForComponentProvider, error) {
 	// add compref as first entry to fallback list if available to mimic legacy behavior
 	if repoSources.CompRef != nil && repoSources.CompRef.Repository != nil {
@@ -134,8 +135,10 @@ func createFallbackResolvers(fallbackResolvers []*resolverruntime.Resolver, repo
 		finalResolvers = append(finalResolvers, fallbackResolvers...)
 		fallbackResolvers = finalResolvers
 	} else if repoSources.RepoRef != nil {
+		//nolint:staticcheck // compatibility mode for deprecated resolvers
 		var finalResolvers []*resolverruntime.Resolver
 		finalResolvers = append(finalResolvers, fallbackResolvers...)
+		//nolint:staticcheck // compatibility mode for deprecated resolvers
 		finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
 			Repository: repoSources.RepoRef,
 			Priority:   math.MaxInt,
