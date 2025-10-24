@@ -229,12 +229,12 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	descs, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	require.Len(t, descs, 1)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -270,7 +270,7 @@ func TestConstructWithResourceAccess(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -351,7 +351,7 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -420,7 +420,7 @@ func TestConstructWithResourceByValue(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -478,7 +478,7 @@ func TestConstructWithResourceDigest(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -527,7 +527,7 @@ func TestConstructWithInvalidInputMethod(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := constructorInstance.Construct(t.Context(), constructor)
+	_, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no input method resolvable for input specification of type")
 }
@@ -573,7 +573,7 @@ func TestConstructWithMissingAccess(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := constructorInstance.Construct(t.Context(), constructor)
+	_, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "after the input method was processed, no access was present in the resource")
 }
@@ -629,7 +629,7 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := constructorInstance.Construct(t.Context(), constructor)
+	_, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error resolving credentials for resource input method")
 }
@@ -669,7 +669,7 @@ func TestConstructWithResourceByValueFailure(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := constructorInstance.Construct(t.Context(), constructor)
+	_, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error downloading resource")
 }
@@ -754,7 +754,7 @@ components:
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), converted)
+	descriptors, _, err := constructorInstance.Construct(t.Context(), converted)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 

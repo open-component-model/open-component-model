@@ -290,12 +290,12 @@ components:
 		}
 		constructorInstance := NewDefaultConstructor(opts)
 
-		descriptors, err := constructorInstance.Construct(t.Context(), converted)
+		descs, _, err := constructorInstance.Construct(t.Context(), converted)
 		require.NoError(t, err)
-		require.Len(t, descriptors, 3)
+		require.Len(t, descs, 3)
 
 		descMap := make(map[string]*descriptor.Descriptor)
-		for _, d := range descriptors {
+		for _, d := range descs {
 			descMap[d.Component.Name] = d
 		}
 		runAssertions(t, descMap)
@@ -317,7 +317,7 @@ components:
 		}
 		constructorInstance := NewDefaultConstructor(opts)
 
-		descriptors, err := constructorInstance.Construct(t.Context(), converted)
+		descriptors, _, err := constructorInstance.Construct(t.Context(), converted)
 		require.NoError(t, err)
 		require.Len(t, descriptors, 3)
 
@@ -578,7 +578,7 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 				compConstructor.Components[i] = *comp
 			}
 
-			descriptors, err := constructor.Construct(t.Context(), compConstructor)
+			descriptors, _, err := constructor.Construct(t.Context(), compConstructor)
 
 			if tt.expectError {
 				assert.Error(t, err)

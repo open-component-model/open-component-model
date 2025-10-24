@@ -187,9 +187,9 @@ func TestConstructionCallbacks(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(context.Background(), constructor)
+	descs, _, err := constructorInstance.Construct(context.Background(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	require.Len(t, descs, 1)
 
 	// Verify all callbacks were called
 	assert.True(t, tracker.startComponentCalled, "OnStartComponentConstruct should have been called")

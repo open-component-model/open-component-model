@@ -128,7 +128,7 @@ func TestConstructWithSourceInputMethod(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), constructor)
+	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -169,7 +169,7 @@ func TestConstructWithSourceAccess(t *testing.T) {
 	instance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := instance.Construct(t.Context(), constructor)
+	descriptors, _, err := instance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -248,7 +248,7 @@ func TestConstructWithSourceCredentialResolution(t *testing.T) {
 	}
 
 	// Process the constructor
-	descriptors, err := ConstructDefault(t.Context(), constructor, opts)
+	descriptors, _, err := ConstructDefault(t.Context(), constructor, opts)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -311,7 +311,7 @@ func TestConstructWithSourceBlob(t *testing.T) {
 	ctor := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := ctor.Construct(t.Context(), constructor)
+	descriptors, _, err := ctor.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
@@ -353,7 +353,7 @@ func TestConstructWithInvalidSourceInputMethodType(t *testing.T) {
 	ctor := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := ctor.Construct(t.Context(), constructor)
+	_, _, err := ctor.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no input method resolvable for input specification of type")
 }
@@ -398,7 +398,7 @@ func TestConstructWithSourceMissingAccess(t *testing.T) {
 	ctor := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := ctor.Construct(t.Context(), constructor)
+	_, _, err := ctor.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "after the input method was processed, no access was present in the source")
 }
@@ -453,7 +453,7 @@ func TestConstructWithSourceCredentialResolutionError(t *testing.T) {
 	ctor := NewDefaultConstructor(opts)
 
 	// Process the constructor and expect an error
-	_, err := ctor.Construct(t.Context(), constructor)
+	_, _, err := ctor.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error resolving credentials for source input method")
 }
@@ -536,7 +536,7 @@ components:
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(t.Context(), converted)
+	descriptors, _, err := constructorInstance.Construct(t.Context(), converted)
 	require.NoError(t, err)
 	require.Len(t, descriptors, 1)
 
