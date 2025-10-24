@@ -15,9 +15,7 @@ RUN go mod download
 COPY cmd/main.go cmd/main.go
 COPY api/ api/
 COPY internal/ internal/
-COPY plugins/ plugins/
 COPY metrics/ metrics/
-COPY resolution/ resolution/
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command

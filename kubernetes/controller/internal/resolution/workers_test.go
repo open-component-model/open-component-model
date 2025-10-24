@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	resolution2 "ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -28,11 +29,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/resolution"
 )
 
 func TestWorkerPool_NewWorkerPool_DefaultValues(t *testing.T) {
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{})
+	wp := resolution2.NewWorkerPool(resolution2.WorkerPoolOptions{})
 
 	require.NotNil(t, wp)
 }
@@ -40,7 +40,7 @@ func TestWorkerPool_NewWorkerPool_DefaultValues(t *testing.T) {
 func TestWorkerPool_NewWorkerPool_CustomValues(t *testing.T) {
 	logger := logr.Discard()
 
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	wp := resolution2.NewWorkerPool(resolution2.WorkerPoolOptions{
 		WorkerCount: 5,
 		QueueSize:   50,
 		Logger:      logger,
@@ -85,7 +85,7 @@ func TestWorkerPool_StartAndStop(t *testing.T) {
 	fakeLogger := &FakeLogger{}
 	logger := logr.New(fakeLogger)
 
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	wp := resolution2.NewWorkerPool(resolution2.WorkerPoolOptions{
 		WorkerCount: 3,
 		QueueSize:   10,
 		Logger:      logger,
@@ -138,7 +138,7 @@ func TestWorkerPool_SingleResolution(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	opts := &resolution.ResolveOptions{
+	opts := &resolution2.ResolveOptions{
 		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 		Component:      "single-component",
 		Version:        "v1.0.0",
@@ -155,7 +155,7 @@ func TestWorkerPool_SingleResolution(t *testing.T) {
 
 	result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
 	assert.Nil(t, result)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+	assert.True(t, errors.Is(err, resolution2.ErrResolutionInProgress))
 
 	assert.Eventually(t, func() bool {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
@@ -195,14 +195,14 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(numComponents)
 
-	results := make([]atomic.Pointer[resolution.ResolveResult], numComponents)
+	results := make([]atomic.Pointer[resolution2.ResolveResult], numComponents)
 	errs := make([]atomic.Pointer[error], numComponents)
 
 	for i := 0; i < numComponents; i++ {
 		go func() {
 			defer wg.Done()
 
-			opts := &resolution.ResolveOptions{
+			opts := &resolution2.ResolveOptions{
 				RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 				Component:      fmt.Sprintf("component-%d", i),
 				Version:        "v1.0.0",
@@ -219,12 +219,12 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 
 			// First call should return in-progress
 			result, err := resolver.ResolveComponentVersion(ctx, opts)
-			if result == nil && errors.Is(err, resolution.ErrResolutionInProgress) {
+			if result == nil && errors.Is(err, resolution2.ErrResolutionInProgress) {
 				// Poll until resolution completes
 				for j := 0; j < 40; j++ {
 					time.Sleep(50 * time.Millisecond)
 					result, err = resolver.ResolveComponentVersion(ctx, opts)
-					if result != nil || (err != nil && !errors.Is(err, resolution.ErrResolutionInProgress)) {
+					if result != nil || (err != nil && !errors.Is(err, resolution2.ErrResolutionInProgress)) {
 						break
 					}
 				}
@@ -294,15 +294,15 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Singleflight(t *testing.T)
 	)
 	require.NoError(t, err)
 
-	cache := resolution.NewInMemoryCache(30 * time.Second)
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	cache := resolution2.NewInMemoryCache(30 * time.Second)
+	wp := resolution2.NewWorkerPool(resolution2.WorkerPoolOptions{
 		WorkerCount:   5,
 		QueueSize:     100,
 		PluginManager: pm,
 		Logger:        logger,
 		Cache:         cache,
 	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp)
+	resolver := resolution2.NewResolver(k8sClient, logger, wp)
 
 	wpCtx, wpCancel := context.WithCancel(t.Context())
 	t.Cleanup(wpCancel)
@@ -313,7 +313,7 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Singleflight(t *testing.T)
 	var wg sync.WaitGroup
 	wg.Add(numConcurrent)
 
-	results := make([]atomic.Pointer[resolution.ResolveResult], numConcurrent)
+	results := make([]atomic.Pointer[resolution2.ResolveResult], numConcurrent)
 	errs := make([]atomic.Pointer[error], numConcurrent)
 
 	// Fire off concurrent requests for the same component
@@ -321,7 +321,7 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Singleflight(t *testing.T)
 		go func() {
 			defer wg.Done()
 
-			opts := &resolution.ResolveOptions{
+			opts := &resolution2.ResolveOptions{
 				RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 				Component:      "shared-component",
 				Version:        "v1.0.0",
@@ -337,11 +337,11 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Singleflight(t *testing.T)
 			}
 
 			result, err := resolver.ResolveComponentVersion(ctx, opts)
-			if result == nil && errors.Is(err, resolution.ErrResolutionInProgress) {
+			if result == nil && errors.Is(err, resolution2.ErrResolutionInProgress) {
 				for range 40 {
 					time.Sleep(50 * time.Millisecond)
 					result, err = resolver.ResolveComponentVersion(ctx, opts)
-					if result != nil || (err != nil && !errors.Is(err, resolution.ErrResolutionInProgress)) {
+					if result != nil || (err != nil && !errors.Is(err, resolution2.ErrResolutionInProgress)) {
 						break
 					}
 				}
@@ -418,15 +418,15 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	cache := resolution.NewInMemoryCache(30 * time.Second)
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	cache := resolution2.NewInMemoryCache(30 * time.Second)
+	wp := resolution2.NewWorkerPool(resolution2.WorkerPoolOptions{
 		WorkerCount:   1, // Only 1 worker
 		QueueSize:     2, // Very small queue
 		PluginManager: pm,
 		Logger:        logger,
 		Cache:         cache,
 	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp)
+	resolver := resolution2.NewResolver(k8sClient, logger, wp)
 
 	wpCtx, wpCancel := context.WithCancel(t.Context())
 	t.Cleanup(wpCancel)
@@ -437,7 +437,7 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	var queueFullCount atomic.Int32
 
 	for i := range 10 {
-		opts := &resolution.ResolveOptions{
+		opts := &resolution2.ResolveOptions{
 			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 			Component:      fmt.Sprintf("component-%d", i),
 			Version:        "v1.0.0",
@@ -453,7 +453,7 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 		}
 
 		_, err := resolver.ResolveComponentVersion(ctx, opts)
-		if err != nil && !errors.Is(err, resolution.ErrResolutionInProgress) {
+		if err != nil && !errors.Is(err, resolution2.ErrResolutionInProgress) {
 			if err.Error() == fmt.Sprintf("lookup queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
 				queueFullCount.Add(1)
 			}
@@ -492,7 +492,7 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 
 	env := setupTestEnvironment(t, k8sClient, logger)
 
-	opts := &resolution.ResolveOptions{
+	opts := &resolution2.ResolveOptions{
 		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 		Component:      "cancel-component",
 		Version:        "v1.0.0",
@@ -510,7 +510,7 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 	// Start resolution
 	result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
 	assert.Nil(t, result)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+	assert.True(t, errors.Is(err, resolution2.ErrResolutionInProgress))
 
 	// Cancel context immediately
 	cancel()
@@ -557,9 +557,9 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(versions) * numConcurrent)
 
-	results := make(map[string][]atomic.Pointer[resolution.ResolveResult])
+	results := make(map[string][]atomic.Pointer[resolution2.ResolveResult])
 	for _, v := range versions {
-		results[v] = make([]atomic.Pointer[resolution.ResolveResult], numConcurrent)
+		results[v] = make([]atomic.Pointer[resolution2.ResolveResult], numConcurrent)
 	}
 
 	for _, version := range versions {
@@ -567,7 +567,7 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 			go func() {
 				defer wg.Done()
 
-				opts := &resolution.ResolveOptions{
+				opts := &resolution2.ResolveOptions{
 					RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 					Component:      "multi-version-component",
 					Version:        version,
@@ -583,11 +583,11 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 				}
 
 				result, err := resolver.ResolveComponentVersion(ctx, opts)
-				if result == nil && errors.Is(err, resolution.ErrResolutionInProgress) {
+				if result == nil && errors.Is(err, resolution2.ErrResolutionInProgress) {
 					for range 40 {
 						time.Sleep(50 * time.Millisecond)
 						result, err = resolver.ResolveComponentVersion(ctx, opts)
-						if result != nil || (err != nil && !errors.Is(err, resolution.ErrResolutionInProgress)) {
+						if result != nil || (err != nil && !errors.Is(err, resolution2.ErrResolutionInProgress)) {
 							break
 						}
 					}
@@ -661,7 +661,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	opts1 := &resolution.ResolveOptions{
+	opts1 := &resolution2.ResolveOptions{
 		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 		Component:      "cache-test",
 		Version:        "v1.0.0",
@@ -677,9 +677,9 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 	}
 
 	// First resolution with config-1
-	var result1 *resolution.ResolveResult
+	var result1 *resolution2.ResolveResult
 	_, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+	assert.True(t, errors.Is(err, resolution2.ErrResolutionInProgress))
 
 	assert.Eventually(t, func() bool {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
@@ -693,7 +693,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 	require.NotNil(t, result1)
 	hash1 := result1.ConfigHash
 
-	opts2 := &resolution.ResolveOptions{
+	opts2 := &resolution2.ResolveOptions{
 		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 		Component:      "cache-test",
 		Version:        "v1.0.0",
@@ -709,9 +709,9 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 	}
 
 	// Second resolution with config-2 (different config = cache miss)
-	var result2 *resolution.ResolveResult
+	var result2 *resolution2.ResolveResult
 	_, err = env.Resolver.ResolveComponentVersion(ctx, opts2)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+	assert.True(t, errors.Is(err, resolution2.ErrResolutionInProgress))
 
 	assert.Eventually(t, func() bool {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts2)
@@ -846,7 +846,7 @@ func (p *dynamicOCIPlugin) GetComponentVersionRepository(
 }
 
 // setupDynamicTestEnvironment creates a test environment with dynamic plugin that returns requested component/version
-func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Logger) resolution.ComponentVersionResolver {
+func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Logger) resolution2.ComponentVersionResolver {
 	t.Helper()
 
 	ocmScheme := ocmruntime.NewScheme()
@@ -861,14 +861,14 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 	)
 	require.NoError(t, err)
 
-	cache := resolution.NewInMemoryCache(30 * time.Second)
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	cache := resolution2.NewInMemoryCache(30 * time.Second)
+	wp := resolution2.NewWorkerPool(resolution2.WorkerPoolOptions{
 		PluginManager: pm,
 		Logger:        logger,
 		Client:        k8sClient,
 		Cache:         cache,
 	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp)
+	resolver := resolution2.NewResolver(k8sClient, logger, wp)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(func() {
@@ -880,7 +880,7 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 	go func() {
 		_ = wp.Start(ctx)
 	}()
-	
+
 	// Give workers a moment to initialize
 	time.Sleep(50 * time.Millisecond)
 
