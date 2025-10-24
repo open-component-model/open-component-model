@@ -37,50 +37,61 @@ const (
 	InProgressGaugeLabel = "in_progress"
 	// ResolutionDurationHistogramLabel tracks the duration of component version resolutions.
 	ResolutionDurationHistogramLabel = "resolution_duration_seconds"
+	// MetricsNamespace defines the namespace of all the resolution metrics.
+	MetricsNamespace = "ocm_system"
+	// OcmComponent is the name of the component registering for these metrics.
+	OcmComponent = "ocm_k8s_toolkit"
+)
+
+const (
+	// ComponentLabel is the name of the label for the passed in component's name.
+	ComponentLabel = "component"
+	// VersionLabel is the name of the label for the passed in component's version.
+	VersionLabel = "version"
 )
 
 // CacheMissCounterTotal counts the number of times a cache miss occurred.
 // [component, version].
 var CacheMissCounterTotal = metrics.MustRegisterCounterVec(
-	"ocm_system",
-	"ocm_controller",
+	MetricsNamespace,
+	OcmComponent,
 	CacheMissCounterLabel,
 	"Number of times a cache miss occurred.",
-	"component", "version",
+	ComponentLabel, VersionLabel,
 )
 
 // CacheHitCounterTotal counts the number of times a cache hit occurred.
 // [component, version].
 var CacheHitCounterTotal = metrics.MustRegisterCounterVec(
-	"ocm_system",
-	"ocm_controller",
+	MetricsNamespace,
+	OcmComponent,
 	CacheHitCounterLabel,
 	"Number of times a cache hit occurred.",
-	"component", "version",
+	ComponentLabel, VersionLabel,
 )
 
 // CacheShareCounterTotal counts the number of times a cache share occurred.
 // [component, version].
 var CacheShareCounterTotal = metrics.MustRegisterCounterVec(
-	"ocm_system",
-	"ocm_controller",
+	MetricsNamespace,
+	OcmComponent,
 	CacheShareCounterLabel,
 	"Number of times a cache share occurred.",
-	"component", "version",
+	ComponentLabel, VersionLabel,
 )
 
 // QueueSizeGauge tracks the current size of the lookup queue.
 var QueueSizeGauge = metrics.MustRegisterGauge(
-	"ocm_system",
-	"ocm_controller",
+	MetricsNamespace,
+	OcmComponent,
 	QueueSizeGaugeLabel,
 	"Current size of the component version lookup queue.",
 )
 
 // InProgressGauge tracks the number of resolutions currently in progress.
 var InProgressGauge = metrics.MustRegisterGauge(
-	"ocm_system",
-	"ocm_controller",
+	MetricsNamespace,
+	OcmComponent,
 	InProgressGaugeLabel,
 	"Number of component version resolutions currently in progress.",
 )
@@ -88,12 +99,12 @@ var InProgressGauge = metrics.MustRegisterGauge(
 // ResolutionDurationHistogram tracks the duration of component version resolutions.
 // [component, version].
 var ResolutionDurationHistogram = metrics.MustRegisterHistogramVec(
-	"ocm_system",
-	"ocm_controller",
+	MetricsNamespace,
+	OcmComponent,
 	ResolutionDurationHistogramLabel,
 	"Duration of component version resolutions in seconds.",
 	[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
-	"component", "version",
+	ComponentLabel, VersionLabel,
 )
 
 func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {

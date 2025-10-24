@@ -118,7 +118,6 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 
 	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 
-	// Try to enqueue the request (opts already has a deep-copied RepositorySpec from Resolver)
 	workItem := &WorkItem{
 		Context: ctx,
 		Key:     key,
@@ -127,6 +126,7 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 	}
 
 	select {
+	// Try to enqueue the request. If it fails, we return a queue full error so the reconciler can try again later.
 	case wp.workQueue <- workItem:
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
 		wp.logger.V(1).Info("enqueued resolution request", "component", opts.Component, "version", opts.Version)
