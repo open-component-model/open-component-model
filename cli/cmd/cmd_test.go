@@ -591,14 +591,12 @@ func Test_List_Component_Version_Variations_Recursive(t *testing.T) {
 		{
 			name: "Default Options (Table) - all versions",
 			args: []string{"get", "cv", path, "--recursive=-1"},
-			expectedOutput: `
-COMPONENT           │ VERSION │ PROVIDER     
+			expectedOutput: ` COMPONENT           │ VERSION │ PROVIDER     
 ─────────────────────┼─────────┼──────────────
  ocm.software/root   │ 0.0.2   │ ocm.software 
  ocm.software/leaf-a │ 0.0.1   │              
  ocm.software/root   │ 0.0.1   │              
- ocm.software/leaf-a │ 0.0.1   │              
- ocm.software/leaf-b │ 0.0.1   │
+ ocm.software/leaf-b │ 0.0.1   │              
 `,
 			expectedError: false,
 		},
@@ -964,11 +962,10 @@ components:
 			})
 		}
 
-		r.EqualValues(strings.TrimSpace(`COMPONENT             │ VERSION │ PROVIDER     
+		r.EqualValues(strings.TrimSpace(` COMPONENT             │ VERSION │ PROVIDER     
 ───────────────────────┼─────────┼──────────────
  ocm.software/a        │ 1.0.0   │ ocm.software 
  ocm.software/b        │ 1.0.0   │              
- ocm.software/a        │ 1.0.0   │              
  ocm.software/external │ 1.0.0   │              
 `), strings.TrimSpace(result.String()), "expected table output")
 	})
@@ -1096,7 +1093,6 @@ components:
 ───────────────────────┼─────────┼──────────────
  ocm.software/a        │ 1.0.0   │ ocm.software 
  ocm.software/b        │ 1.0.0   │              
- ocm.software/a        │ 1.0.0   │              
  ocm.software/external │ 1.0.0   │              
 `), strings.TrimSpace(result.String()), "expected table output")
 

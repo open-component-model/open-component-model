@@ -272,6 +272,8 @@ func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
 }
 
 func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	compSet := make(map[string]struct{})
+
 	t := table.NewWriter()
 	t.SetOutputMirror(writer)
 	t.AppendHeader(table.Row{"Component", "Version", "Provider"})
@@ -284,6 +286,12 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 		if !ok {
 			return fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, syncdag.AttributeValue, &descruntime.Descriptor{}, descriptor)
 		}
+
+		key := fmt.Sprintf("%s:%s@%s", descriptor.Component.Name, descriptor.Component.Version, descriptor.Component.Provider.Name)
+		if _, exists := compSet[key]; exists {
+			continue
+		}
+		compSet[key] = struct{}{}
 
 		t.AppendRow(table.Row{descriptor.Component.Name, descriptor.Component.Version, descriptor.Component.Provider.Name})
 	}

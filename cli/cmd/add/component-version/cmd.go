@@ -524,6 +524,8 @@ func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
 }
 
 func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	compSet := make(map[string]struct{})
+
 	t := table.NewWriter()
 	t.SetOutputMirror(writer)
 	t.AppendHeader(table.Row{"Component", "Version", "Provider"})
@@ -538,9 +540,21 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 		}
 
 		if comp.ExternalComponent != nil {
+			// deduplicate external components
+			key := fmt.Sprintf("%s:%s@%s", comp.ExternalComponent.Component.Name, comp.ExternalComponent.Component.Version, comp.ExternalComponent.Component.Provider.Name)
+			if _, exists := compSet[key]; exists {
+				continue
+			}
+			compSet[key] = struct{}{}
 			t.AppendRow(table.Row{comp.ExternalComponent.Component.Name, comp.ExternalComponent.Component.Version, comp.ExternalComponent.Component.Provider.Name})
 			continue
 		} else {
+			// deduplicate constructed components
+			key := fmt.Sprintf("%s:%s@%s", comp.ConstructorComponent.Name, comp.ConstructorComponent.Version, comp.ConstructorComponent.Provider.Name)
+			if _, exists := compSet[key]; exists {
+				continue
+			}
+			compSet[key] = struct{}{}
 			t.AppendRow(table.Row{comp.ConstructorComponent.Name, comp.ConstructorComponent.Version, comp.ConstructorComponent.Provider.Name})
 		}
 	}
