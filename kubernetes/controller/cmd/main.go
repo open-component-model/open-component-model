@@ -163,7 +163,7 @@ func main() {
 		QueueSize:     100,
 		Logger:        setupLog,
 		Client:        mgr.GetClient(),
-		PluginManager: pm.PluginManager(),
+		PluginManager: pm, // plugin manager is passed in here as the manager is started with the controller manager
 		Cache:         resolverCache,
 	})
 	if err := mgr.Add(workerPool); err != nil {

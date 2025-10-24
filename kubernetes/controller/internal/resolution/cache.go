@@ -10,7 +10,7 @@ import (
 	kmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/metrics"
+	"ocm.software/open-component-model/kubernetes/controller/internal/metrics"
 )
 
 func init() {

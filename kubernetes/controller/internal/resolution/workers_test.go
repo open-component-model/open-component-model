@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -297,11 +298,13 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Singleflight(t *testing.T)
 
 	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		WorkerCount:   5,
-		QueueSize:     100,
-		PluginManager: pm,
-		Logger:        logger,
-		Cache:         cache,
+		WorkerCount: 5,
+		QueueSize:   100,
+		PluginManager: &plugins.PluginManager{
+			PluginManager: pm,
+		},
+		Logger: logger,
+		Cache:  cache,
 	})
 	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
@@ -404,7 +407,7 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	slowPlugin := &slowOCIPlugin{
 		component: "slow-component",
 		version:   "v1.0.0",
-		delay:     1 * time.Second,
+		delay:     5 * time.Second,
 	}
 
 	ocmScheme := ocmruntime.NewScheme()
@@ -419,13 +422,15 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
+	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		WorkerCount:   1, // Only 1 worker
-		QueueSize:     2, // Very small queue
-		PluginManager: pm,
-		Logger:        logger,
-		Cache:         cache,
+		WorkerCount: 1, // Only 1 worker
+		QueueSize:   2, // Very small queue
+		PluginManager: &plugins.PluginManager{
+			PluginManager: pm,
+		},
+		Logger: logger,
+		Cache:  cache,
 	})
 	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
@@ -434,32 +439,44 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 
 	go func() { _ = wp.Start(wpCtx) }()
 
-	// Try to enqueue more items than the queue can hold
+	// Give workers time to start
+	time.Sleep(100 * time.Millisecond)
+
+	// Try to enqueue more items than the queue can hold - fire concurrently
 	var queueFullCount atomic.Int32
+	var wg sync.WaitGroup
+	wg.Add(10)
 
 	for i := range 10 {
-		opts := &resolution.ResolveOptions{
-			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-			Component:      fmt.Sprintf("component-%d", i),
-			Version:        "v1.0.0",
-			OCMConfigurations: []v1alpha1.OCMConfiguration{
-				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-						Kind: "ConfigMap",
-						Name: "ocm-config",
+		go func() {
+			defer wg.Done()
+
+			opts := &resolution.ResolveOptions{
+				RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+				Component:      fmt.Sprintf("component-%d", i),
+				Version:        "v1.0.0",
+				OCMConfigurations: []v1alpha1.OCMConfiguration{
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							Kind: "ConfigMap",
+							Name: "ocm-config",
+						},
 					},
 				},
-			},
-			Namespace: "default",
-		}
-
-		_, err := resolver.ResolveComponentVersion(ctx, opts)
-		if err != nil && !errors.Is(err, resolution.ErrResolutionInProgress) {
-			if err.Error() == fmt.Sprintf("lookup queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
-				queueFullCount.Add(1)
+				Namespace: "default",
 			}
-		}
+
+			_, err := resolver.ResolveComponentVersion(ctx, opts)
+			if err != nil && !errors.Is(err, resolution.ErrResolutionInProgress) {
+				// Check for queue full error using contains since component name varies
+				if err.Error() == fmt.Sprintf("failed to resolve component version: lookup queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
+					queueFullCount.Add(1)
+				}
+			}
+		}()
 	}
+
+	wg.Wait()
 
 	// At least some requests should have been rejected due to full queue
 	assert.Greater(t, queueFullCount.Load(), int32(0), "expected some requests to fail due to full queue")
@@ -864,10 +881,12 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 
 	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		PluginManager: pm,
-		Logger:        logger,
-		Client:        k8sClient,
-		Cache:         cache,
+		PluginManager: &plugins.PluginManager{
+			PluginManager: pm,
+		},
+		Logger: logger,
+		Client: k8sClient,
+		Cache:  cache,
 	})
 	resolver := resolution.NewResolver(k8sClient, logger, wp)
 

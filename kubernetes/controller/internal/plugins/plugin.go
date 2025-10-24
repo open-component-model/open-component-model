@@ -27,27 +27,27 @@ func DefaultPluginManagerOptions() PluginManagerOptions {
 }
 
 type PluginManager struct {
-	logger      logr.Logger
-	locations   []string
-	idleTimeout time.Duration
-	pm          *manager.PluginManager
+	IdleTimeout   time.Duration
+	Logger        logr.Logger
+	Locations     []string
+	PluginManager *manager.PluginManager
 }
 
 func (m *PluginManager) Start(ctx context.Context) error {
 	pm := manager.NewPluginManager(ctx)
-	for _, location := range m.locations {
+	for _, location := range m.Locations {
 		err := pm.RegisterPlugins(ctx, location,
-			manager.WithIdleTimeout(m.idleTimeout),
+			manager.WithIdleTimeout(m.IdleTimeout),
 		)
 		if err != nil {
 			// Log but don't fail - plugins are optional
-			m.logger.V(1).Info("failed to register plugins from location",
+			m.Logger.V(1).Info("failed to register plugins from location",
 				"location", location,
 				"error", err.Error())
 		}
 	}
 
-	m.pm = pm
+	m.PluginManager = pm
 
 	<-ctx.Done() // block until context is done ( expected by the manager )
 
@@ -55,32 +55,28 @@ func (m *PluginManager) Start(ctx context.Context) error {
 }
 
 func (m *PluginManager) Shutdown(ctx context.Context) error {
-	if m.pm == nil {
+	if m.PluginManager == nil {
 		return nil
 	}
 
-	if err := m.pm.Shutdown(ctx); err != nil {
-		m.logger.Error(err, "failed to shutdown plugin manager")
+	if err := m.PluginManager.Shutdown(ctx); err != nil {
+		m.Logger.Error(err, "failed to shutdown plugin manager")
 		return fmt.Errorf("plugin manager shutdown failed: %w", err)
 	}
 
 	return nil
 }
 
-func (m *PluginManager) PluginManager() *manager.PluginManager {
-	return m.pm
-}
-
 // NewPluginManager creates and initializes a plugin manager with the given configuration.
-// It registers plugins from the configured locations and built-in plugins.
+// It registers plugins from the configured Locations and built-in plugins.
 func NewPluginManager(opts PluginManagerOptions) *PluginManager {
 	if opts.Logger.GetSink() == nil {
 		opts.Logger = logr.Discard()
 	}
 
 	return &PluginManager{
-		logger:      logr.Logger{},
-		locations:   opts.Locations,
-		idleTimeout: opts.IdleTimeout,
+		Logger:      opts.Logger,
+		Locations:   opts.Locations,
+		IdleTimeout: opts.IdleTimeout,
 	}
 }

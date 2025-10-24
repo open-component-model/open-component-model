@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -545,12 +546,14 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Log
 	)
 	require.NoError(t, err)
 
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
+	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		PluginManager: pm,
-		Logger:        logger,
-		Client:        k8sClient,
-		Cache:         cache,
+		PluginManager: &plugins.PluginManager{
+			PluginManager: pm,
+		},
+		Logger: logger,
+		Client: k8sClient,
+		Cache:  cache,
 	})
 	resolver := resolution.NewResolver(k8sClient, logger, wp)
 

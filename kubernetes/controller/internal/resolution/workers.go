@@ -10,8 +10,8 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 )
 
@@ -38,7 +38,7 @@ type WorkerPoolOptions struct {
 	// Client for Kubernetes API access.
 	Client client.Reader
 	// PluginManager for OCM operations.
-	PluginManager *manager.PluginManager
+	PluginManager *plugins.PluginManager
 	// Cache for caching.
 	Cache *expirable.LRU[string, *Result]
 }
@@ -237,8 +237,13 @@ func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan
 
 // resolve performs the actual component version resolution.
 func (wp *WorkerPool) resolve(ctx context.Context, opts *ResolveOptions, cfg *configuration.Configuration) (*ResolveResult, error) {
+	pm := wp.opts.PluginManager.PluginManager
+	if pm == nil {
+		return nil, fmt.Errorf("plugin manager is nil")
+	}
+
 	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
-		PluginManager: wp.opts.PluginManager,
+		PluginManager: pm,
 		Logger:        wp.logger,
 	})
 	if err != nil {
@@ -246,7 +251,7 @@ func (wp *WorkerPool) resolve(ctx context.Context, opts *ResolveOptions, cfg *co
 	}
 
 	repo, err := setup.NewRepository(ctx, opts.RepositorySpec, setup.RepositoryOptions{
-		PluginManager:   wp.opts.PluginManager,
+		PluginManager:   pm,
 		CredentialGraph: credGraph,
 		Logger:          wp.logger,
 	})

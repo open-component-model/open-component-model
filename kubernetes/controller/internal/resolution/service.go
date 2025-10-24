@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/singleflight"
@@ -53,8 +54,14 @@ func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOpt
 
 	// Deep copy the repository spec early to avoid races during hashing/marshaling.
 	// Workers may mutate the spec (SetType during resolve), so we need our own copy.
-	optsCopy := *opts
-	optsCopy.RepositorySpec = opts.RepositorySpec.DeepCopyTyped()
+	// Full deep copy to prevent pointer shares.
+	optsCopy := ResolveOptions{
+		RepositorySpec:    opts.RepositorySpec.DeepCopyTyped(),
+		Component:         opts.Component,
+		Version:           opts.Version,
+		OCMConfigurations: slices.Clone(opts.OCMConfigurations),
+		Namespace:         opts.Namespace,
+	}
 
 	// Load OCM configurations
 	cfg, err := configuration.LoadConfigurations(ctx, r.client, optsCopy.Namespace, optsCopy.OCMConfigurations)
@@ -69,15 +76,23 @@ func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOpt
 
 	// Singleflight ensures only one goroutine enqueues/checks for a given key.
 	// Duplicate callers wait here until the first caller completes.
-	v, err, shared := r.sf.Do(key, func() (any, error) {
+	var v any
+	singleFlightResult := r.sf.DoChan(key, func() (any, error) {
 		return r.workerPool.Resolve(ctx, key, optsCopy, cfg)
 	})
-	if err != nil {
-		return nil, err
-	}
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("context was cancelled during singleflight resolve call: %w", ctx.Err())
+	case res := <-singleFlightResult:
+		if res.Err != nil {
+			return nil, fmt.Errorf("failed to resolve component version: %w", res.Err)
+		}
 
-	if shared {
-		CacheShareCounterTotal.WithLabelValues(optsCopy.Component, optsCopy.Version).Inc()
+		if res.Shared {
+			CacheShareCounterTotal.WithLabelValues(optsCopy.Component, optsCopy.Version).Inc()
+		}
+
+		v = res.Val
 	}
 
 	// v will be nil if we got ErrResolutionInProgress
@@ -85,7 +100,12 @@ func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOpt
 		return nil, ErrResolutionInProgress
 	}
 
-	result := v.(*ResolveResult)
+	result, ok := v.(*ResolveResult)
+	if !ok {
+		// Not possible, but defensive programming.
+		return nil, fmt.Errorf("failed to convert result to *ResolveResult, was: %T", v)
+	}
+
 	return result, nil
 }
 
