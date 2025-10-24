@@ -61,103 +61,115 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	case len(pathMatchers) == 0 && len(fallbackResolvers) == 0 && repoSources.CompRef != nil:
 		slog.InfoContext(ctx, "no resolvers configured, using component reference as resolver")
 
-		if repoSources.CompRef.Repository == nil {
-			return nil, fmt.Errorf("component reference does not contain repository information")
-		}
+		return createCompRefResolvers(ctx, repoProvider, credentialGraph, repoSources)
+	case len(fallbackResolvers) > 0:
+		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
 
+		return createFallbackResolvers(fallbackResolvers, repoProvider, credentialGraph, repoSources)
+	default:
+		slog.DebugContext(ctx, "using path matcher resolvers")
+
+		return createPathMatchersResolvers(ctx, repoProvider, credentialGraph, pathMatchers, repoSources)
+	}
+}
+
+func createPathMatchersResolvers(ctx context.Context, repoProvider repository.ComponentVersionRepositoryProvider, credentialGraph credentials.GraphResolver, pathMatchers []*resolverspec.Resolver, repoSources RepositorySources) (ComponentVersionRepositoryForComponentProvider, error) {
+	if repoSources.CompRef != nil && repoSources.CompRef.Repository != nil {
+		var finalResolvers []*resolverspec.Resolver
+		finalResolvers = append(finalResolvers, pathMatchers...)
 		raw := runtime.Raw{}
 		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
 		if err := scheme.Convert(repoSources.CompRef.Repository, &raw); err != nil {
 			return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
 		}
 
-		return &resolverProvider{
-			repoProvider: repoProvider,
-			graph:        credentialGraph,
-			provider: pathmatcher.NewSpecProvider(ctx, []*resolverspec.Resolver{
-				{
-					Repository:           &raw,
-					ComponentNamePattern: "*",
-				},
-			}),
-		}, nil
-	case len(fallbackResolvers) > 0:
-		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
+		compRefResolver := &resolverspec.Resolver{
+			Repository:           &raw,
+			ComponentNamePattern: repoSources.CompRef.Component,
+		}
+		// add to index 0 to have the highest priority
+		finalResolvers = append([]*resolverspec.Resolver{compRefResolver}, finalResolvers...)
 
-		// add compref as first entry to fallback list if available to mimic legacy behavior
-		if repoSources.CompRef != nil && repoSources.CompRef.Repository != nil {
-			//nolint:staticcheck // compatibility mode for deprecated resolvers
-			var finalResolvers []*resolverruntime.Resolver
-			if repoSources.CompRef.Repository != nil {
-				//nolint:staticcheck // kept for backward compatibility, use resolvers instead
-				finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
-					Repository: repoSources.CompRef.Repository,
-					Priority:   math.MaxInt,
-				})
-			}
-			finalResolvers = append(finalResolvers, fallbackResolvers...)
-			fallbackResolvers = finalResolvers
-		} else if repoSources.RepoRef != nil {
-			var finalResolvers []*resolverruntime.Resolver
-			finalResolvers = append(finalResolvers, fallbackResolvers...)
+		pathMatchers = finalResolvers
+	} else if repoSources.RepoRef != nil {
+		var finalResolvers []*resolverspec.Resolver
+		finalResolvers = append(finalResolvers, pathMatchers...)
+
+		raw := runtime.Raw{}
+		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+		if err := scheme.Convert(repoSources.RepoRef, &raw); err != nil {
+			return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
+		}
+		finalResolvers = append(finalResolvers, &resolverspec.Resolver{
+			Repository:           &raw,
+			ComponentNamePattern: "*",
+		})
+
+		pathMatchers = finalResolvers
+	}
+
+	if len(pathMatchers) == 0 {
+		return nil, fmt.Errorf("no path matcher resolvers configured")
+	}
+
+	return &resolverProvider{
+		repoProvider: repoProvider,
+		graph:        credentialGraph,
+		provider:     pathmatcher.NewSpecProvider(ctx, pathMatchers),
+	}, nil
+}
+
+func createFallbackResolvers(fallbackResolvers []*resolverruntime.Resolver, repoProvider repository.ComponentVersionRepositoryProvider, credentialGraph credentials.GraphResolver, repoSources RepositorySources) (ComponentVersionRepositoryForComponentProvider, error) {
+	// add compref as first entry to fallback list if available to mimic legacy behavior
+	if repoSources.CompRef != nil && repoSources.CompRef.Repository != nil {
+		//nolint:staticcheck // compatibility mode for deprecated resolvers
+		var finalResolvers []*resolverruntime.Resolver
+		if repoSources.CompRef.Repository != nil {
+			//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 			finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
-				Repository: repoSources.RepoRef,
+				Repository: repoSources.CompRef.Repository,
 				Priority:   math.MaxInt,
 			})
-
-			fallbackResolvers = finalResolvers
 		}
+		finalResolvers = append(finalResolvers, fallbackResolvers...)
+		fallbackResolvers = finalResolvers
+	} else if repoSources.RepoRef != nil {
+		var finalResolvers []*resolverruntime.Resolver
+		finalResolvers = append(finalResolvers, fallbackResolvers...)
+		finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
+			Repository: repoSources.RepoRef,
+			Priority:   math.MaxInt,
+		})
 
-		return &fallbackProvider{
-			repoProvider: repoProvider,
-			graph:        credentialGraph,
-			resolvers:    fallbackResolvers,
-		}, nil
-	default:
-		slog.DebugContext(ctx, "using path matcher resolvers")
+		fallbackResolvers = finalResolvers
+	}
 
-		if repoSources.CompRef != nil && repoSources.CompRef.Repository != nil {
-			var finalResolvers []*resolverspec.Resolver
-			finalResolvers = append(finalResolvers, pathMatchers...)
-			raw := runtime.Raw{}
-			scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-			if err := scheme.Convert(repoSources.CompRef.Repository, &raw); err != nil {
-				return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
-			}
+	return &fallbackProvider{
+		repoProvider: repoProvider,
+		graph:        credentialGraph,
+		resolvers:    fallbackResolvers,
+	}, nil
+}
 
-			compRefResolver := &resolverspec.Resolver{
-				Repository:           &raw,
-				ComponentNamePattern: repoSources.CompRef.Component,
-			}
-			// add to index 0 to have the highest priority
-			finalResolvers = append([]*resolverspec.Resolver{compRefResolver}, finalResolvers...)
+func createCompRefResolvers(ctx context.Context, repoProvider repository.ComponentVersionRepositoryProvider, credentialGraph credentials.GraphResolver, repoSources RepositorySources) (ComponentVersionRepositoryForComponentProvider, error) {
+	if repoSources.CompRef.Repository == nil {
+		return nil, fmt.Errorf("component reference does not contain repository information")
+	}
 
-			pathMatchers = finalResolvers
-		} else if repoSources.RepoRef != nil {
-			var finalResolvers []*resolverspec.Resolver
-			finalResolvers = append(finalResolvers, pathMatchers...)
+	raw := runtime.Raw{}
+	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
+	if err := scheme.Convert(repoSources.CompRef.Repository, &raw); err != nil {
+		return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
+	}
 
-			raw := runtime.Raw{}
-			scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-			if err := scheme.Convert(repoSources.RepoRef, &raw); err != nil {
-				return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
-			}
-			finalResolvers = append(finalResolvers, &resolverspec.Resolver{
+	return &resolverProvider{
+		repoProvider: repoProvider,
+		graph:        credentialGraph,
+		provider: pathmatcher.NewSpecProvider(ctx, []*resolverspec.Resolver{
+			{
 				Repository:           &raw,
 				ComponentNamePattern: "*",
-			})
-
-			pathMatchers = finalResolvers
-		}
-
-		if len(pathMatchers) == 0 {
-			return nil, fmt.Errorf("no path matcher resolvers configured")
-		}
-
-		return &resolverProvider{
-			repoProvider: repoProvider,
-			graph:        credentialGraph,
-			provider:     pathmatcher.NewSpecProvider(ctx, pathMatchers),
-		}, nil
-	}
+			},
+		}),
+	}, nil
 }
