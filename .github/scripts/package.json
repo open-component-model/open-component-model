@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "devDependencies": {
+    "@actions/github-script": "github:actions/github-script"
+  }
+}
