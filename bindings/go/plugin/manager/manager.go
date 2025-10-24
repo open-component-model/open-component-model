@@ -234,7 +234,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 	// Create a command that can then be managed.
 	pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint:gosec // G204 does not apply
 	pluginCmd.Cancel = func() error {
-		slog.Info("killing plugin process because the parent context is cancelled", "id", plugin.ID)
+		slog.InfoContext(ctx, "killing plugin process because the parent context is cancelled", "id", plugin.ID)
 		return pluginCmd.Process.Kill()
 	}
 
@@ -308,6 +308,7 @@ func determineConnectionType(ctx context.Context) (mtypes.ConnectionType, error)
 	// if we can't create a temp folder ( for example we are in a scratch container ) we default to TCP
 	tmp, err := os.MkdirTemp("", "")
 	if err != nil {
+		slog.DebugContext(ctx, "failed to create temporary folder, falling back to TCP connection", "err", err.Error())
 		return mtypes.TCP, nil
 	}
 
