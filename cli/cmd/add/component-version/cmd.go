@@ -314,17 +314,17 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		opts.ResourceDigestProcessorProvider = instance
 	}
 
-	descriptors, graph, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
+	graph, err := constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
 	if err != nil {
 		return fmt.Errorf("constructing component versions failed: %w", err)
 	}
-	roots := make([]string, 0, len(descriptors))
-	for _, desc := range descriptors {
-		identity := runtime.Identity{
-			descriptor.IdentityAttributeName:    desc.Component.Name,
-			descriptor.IdentityAttributeVersion: desc.Component.Version,
-		}.String()
-		roots = append(roots, identity)
+	var roots []string
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots = d.Roots()
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("retrieving roots of component version graph failed: %w", err)
 	}
 
 	if err := renderComponents(cmd, graph, roots, output, displayMode); err != nil {
