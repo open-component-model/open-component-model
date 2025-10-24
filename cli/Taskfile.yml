@@ -9,7 +9,7 @@ vars:
   NAME: cli
   DEFAULT_VERSION:
     sh: |
-      echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)$(git diff --quiet || echo '+dirty')"
+      echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)"
   VERSION: '{{ .VERSION | default .DEFAULT_VERSION }}'
   COMPONENT_CONSTRUCTOR_FILE: "{{ .TASKFILE_DIR }}/tmp/component-constructor.yaml"
   CTF_LOCATION: '{{ .TASKFILE_DIR }}/tmp/transport-archive'
@@ -79,19 +79,18 @@ tasks:
           --tag ghcr.io/open-component-model/cli:{{ .VERSION }} \
           --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
           -f ./Containerfile .
-#      - |
-#        mkdir -p {{ .TASKFILE_DIR }}/tmp/resources
-#        cat > {{ .TASKFILE_DIR }}/tmp/resources/ocm-multi-arch-container-image.yaml <<EOF
-#        - name: image
-#          type: ociImage
-#          version: {{ .VERSION }}
-#          relation: local
-#          input:
-#            type: file
-#            # TODO(jakobmoellerdev): fixup oci support for importing first level index
-#            # mediaType: application/vnd.ocm.software.oci.layout.v1+tar
-#            path: {{ .TASKFILE_DIR }}/tmp/oci/cli.tar
-#        EOF
+      - |
+        mkdir -p {{ .TASKFILE_DIR }}/tmp/resources
+        cat > {{ .TASKFILE_DIR }}/tmp/resources/ocm-multi-arch-container-image.yaml <<EOF
+        - name: image
+          type: ociImage
+          version: {{ .VERSION }}
+          relation: local
+          input:
+            type: file
+            mediaType: application/vnd.ocm.software.oci.layout.v1+tar
+            path: {{ .TASKFILE_DIR }}/tmp/oci/cli.tar
+        EOF
 
   build:target:
     desc: "Build CLI for a specific GOOS/GOARCH target"
