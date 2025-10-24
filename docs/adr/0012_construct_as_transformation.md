@@ -646,7 +646,7 @@ transformations:
   - type: component.verifier
     id: verifycomponentversion1
     spec:
-      signature: ${downloadcomponentversion1}
+      signature: ${downloadcomponentversion1.output.descriptor}
     # output:
     #   descriptor:
     #     meta: ...
@@ -694,6 +694,78 @@ transformations:
     #     meta: ...
     #     component: ...
 ```
+
+So, based on the current constructors logic, the cases map as follows:
+
+1. **Parse the component constructor file.**
+2. **Process Resources and Sources**  
+   For each component version, the constructor handles all resources and sources:
+
+- **Input Method Specified**  
+  If an input method is defined for resources:
+  - If it would have returned `ResourceInputMethodResult.ProcessedBlobData`,
+    it is mapped to:
+    - `resource.creator` with the input type and with creator returning a
+      localblob access
+    - `resource.uploader`
+      (if this is the case, the resource is automatically marked as `by value`)
+  - If it would have returned `ResourceInputMethodResult.ProcessedAccess`,
+    it is mapped to:
+    - `resource.creator` with the input type and with creator returning a
+      remote access (such as `ociArtifact`)
+    - `resource.uploader`
+      (if this is the case, the resource is automatically marked as `by reference`)
+  - If it returns `ResourceInputMethodResult.ProcessedResource`, the
+    constructor applies the resource directly to the component descriptor
+    candidate.
+    (if this is the case, the resource is automatically marked as `by reference`)
+    _Sources are processed in the same way with `SourceInputMethodResult._
+
+- **Access Method Specified**  
+  For access methods, the mapping depends on whether the resource is marked
+  as `by value` or `by reference`:
+
+  - **"By Value" Resources / Sources**  
+    If the resource is marked to be processed "by value", it is mapped to:
+    - `resource.creator` with the access type and with creator returning a
+      localblob access
+    - `resource.uploader`
+
+  - **"By Reference" Resources**
+    If the resource is marked to be processed "by reference", it is mapped to:
+    - `resource.creator` (with the access type)
+    - (conditional) `resource.digester` - here, the mapping function has to
+      check, if the resource has a digest set. If not, it has to add a
+      `resource.digester` transformation.
+    - (no uploader needed, as the resource is added by reference)
+      _Note: Sources do not have digest information and will not get processed like this._
+
+- **Component Reference Specified**
+  For component references, the behavior depends on:
+  - whether the referenced component is part of the constructor file itself or
+    whether it is an external component stored in an ocm repository.
+    - **Internal Component Reference**
+      If the referenced component is part of the constructor file itself, it
+      is mapped to:
+      - `component.digester` (to calculate the digest of the referenced component)
+    - **External Component Reference**
+      If the referenced component is an external component stored in an ocm
+      repository, it is mapped to:
+      - `component.downloader`
+      - `component.verifier`
+      - `component.digester`
+      - depending on whether `--recursive` is set:
+        - If `--recursive` is set, the referenced component is also added to
+          the target repository. Therefore, it is mapped to:
+          - `component.uploader`
+        - If `--recursive` is NOT set, the referenced component is only added
+          by reference. Therefore, no `component.uploader` transformation is
+          needed.
+
+The result of the last transformation step (so, currently, either a
+`digester`, `verifier` of `uploader` is used to create the component
+version). This then has to be uploaded with a `component.uploader`
+transformation.
 
 ## Resource as Atomic Unit in OCM
 - The atomic unit in ocm is **resource** NOT A PLAIN BLOB or ACCESS, kind of
@@ -781,6 +853,14 @@ plugin system in place, the complexity of maintaining two different plugin
 systems is even higher.
 
 ## Static Type Analysis
+- Each external plugin provides a JSON schema. In the current plugin system, 
+  this allows validating the HTTP request and HTTP response data.
+- These JSON schemas are the basis for allowing us to implement static type
+  analysis on the transformation specification.
+
+We can leverage the CEL language to implement this static type analysis.
+
+
 - The example above shows the *outputs* of each transformation as comments. This
   is purely for illustration purposes. In the actual implementation, every
   capability has to define a static output schema (kind of like kubernetes
@@ -792,27 +872,7 @@ systems is even higher.
 - This is required to enable static type analysis, which will be important to
   avoid problems in complex graphs.
 
-## Comparison with Transformation ADR
-- Instead of expecting a component descriptor as a starting point for all 
-  operations that is consecutively modified and then merged (to detect 
-  conflicts), we create a new component descriptor to be uploaded 
-  with the resources created in the previous operations.
-- This simplifies the operations, as we do not have to deal with 
-  merging and conflict detection.
-- This would also be adopted for the transfer use case. Here, the component 
-  to be uploaded at the target location would be created from scratch and filled
-  with information from the original component descriptor through `cel` expressions.
-
-### Plugin Registries
-
-To keep the complexity in check, we assume the transformation implementation 
-is aware of the available *capabilities*, their interfaces and their 
-types (or rather, schemas). This means, new *capabilities* can only be added by 
-extending the code.
-
 ### Program Flow
-So, the logic will be heavily inspired by the current construct implementation.
-The overall flow will roughly be as follows:
 
 **1. Discover**
 - Discover loops over the entries in the (already parsed) transformation 
@@ -848,70 +908,14 @@ The overall flow will roughly be as follows:
     the vertex `id` as key (can be used for cel expression evaluation of 
     successor vertices).
 
-### Mapping Constructor File to Transformation Specification
-1. **Parse the component constructor file.**
-2. **Process Resources and Sources**  
-   For each component version, the constructor handles all resources and sources:
+## Comparison with Transformation ADR
 
-  - **Input Method Specified**  
-    If an input method is defined for resources:
-    - If it would have returned `ResourceInputMethodResult.ProcessedBlobData`, 
-      it is mapped to:
-      - `resource.creator` (with the input access type)
-      - `resource.downloader`
-      - `local.resource.uploader`
-      (if this is the case, the resource is automatically marked as `by value`)
-    - If it would have returned `ResourceInputMethodResult.ProcessedAccess`,
-      it is mapped to:
-      - `resource.creator` (with the input access type)
-      - `resource.downloader`
-      - `resource.uploader`
-      (if this is the case, the resource is automatically marked as `by reference`)
-    - If it returns `ResourceInputMethodResult.ProcessedResource`, the constructor applies the resource directly to the component descriptor candidate.
-      (if this is the case, the resource is automatically marked as `by reference`)
-      _Sources are processed in the same way with `SourceInputMethodResult._
-
-  - **Access Method Specified**  
-    For access methods, the mapping depends on whether the resource is marked 
-    as `by value` or `by reference`:
-
-    - **"By Value" Resources / Sources**  
-      If the resource is marked to be processed "by value", it is mapped to:
-      - `resource.creator` (with the access type)
-      - `resource.downloader`
-      - `local.resource.uploader`
-
-    - **"By Reference" Resources**
-      If the resource is marked to be processed "by reference", it is mapped to:
-      - `resource.creator` (with the access type)
-      - (conditional) `resource.digester` - here, the mapping function has to 
-        check, if the resource has a digest set. If not, it has to add a 
-        `resource.digester` transformation.
-      - (no uploader needed, as the resource is added by reference)
-        _Note: Sources do not have digest information and will not get processed like this._
-
-  - **Component Reference Specified**
-    For component references, the behavior depends on:
-    - whether the referenced component is part of the constructor file itself or 
-      whether it is an external component stored in an ocm repository.
-      - **Internal Component Reference**
-        If the referenced component is part of the constructor file itself, it 
-        is mapped to:
-        - `component.digester` (to calculate the digest of the referenced component)
-      - **External Component Reference**
-        If the referenced component is an external component stored in an ocm 
-        repository, it is mapped to:
-        - `component.downloader`
-        - `component.digester`
-        - depending on whether `--recursive` is set:
-          - If `--recursive` is set, the referenced component is also added to 
-            the target repository. Therefore, it is mapped to:
-            - `component.uploader`
-          - If `--recursive` is NOT set, the referenced component is only added 
-            by reference. Therefore, no `component.uploader` transformation is 
-            needed.
-
- The result of the last transformation step (so, currently, either a 
- `digester` of `uploader` is used to create the component 
- version). This then has to be uploaded with a `component.uploader` 
- transformation.
+- Instead of expecting a component descriptor as a starting point for all
+  operations that is consecutively modified and then merged (to detect
+  conflicts), we create a new component descriptor to be uploaded
+  with the resources created in the previous operations.
+- This simplifies the operations, as we do not have to deal with
+  merging and conflict detection.
+- This would also be adopted for the transfer use case. Here, the component
+  to be uploaded at the target location would be created from scratch and filled
+  with information from the original component descriptor through `cel` expressions.
