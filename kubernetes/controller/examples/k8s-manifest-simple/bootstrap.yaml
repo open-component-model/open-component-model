@@ -1,0 +1,43 @@
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: k8s-manifest-simple-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: k8s-manifest-simple-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/k8s-manifest-simple
+  repositoryRef:
+    name: k8s-manifest-simple-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: k8s-manifest-simple-resource
+spec:
+  componentRef:
+    name: k8s-manifest-simple-component
+  resource:
+    byReference:
+      resource:
+        name: k8s-manifest-resource
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: k8s-manifest-simple-deployer
+spec:
+  resourceRef:
+    name: k8s-manifest-simple-resource
+    namespace: default

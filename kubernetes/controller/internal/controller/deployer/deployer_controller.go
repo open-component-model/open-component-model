@@ -268,6 +268,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
 	}
+	if resource.Status.Resource == nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceIsNotAvailable, "resource is empty in status")
+
+		return ctrl.Result{}, fmt.Errorf("failed to get ready resource: %w", err)
+	}
 
 	// Download the resource
 	key := resource.Status.Resource.Digest

@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	"ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -54,6 +55,9 @@ type RepositoryOptions struct {
 
 	// TempDir is the default temporary filesystem folder for any temporary cached data
 	TempDir string
+
+	// DescriptorEncodingMediaType is the media type of the descriptor encoding used for component versions.
+	DescriptorEncodingMediaType string
 }
 
 // ReferrerTrackingPolicy defines how OCI referrers are used in the repository.
@@ -123,6 +127,13 @@ func WithReferrerTrackingPolicy(policy ReferrerTrackingPolicy) RepositoryOption 
 	}
 }
 
+// WithDescriptorEncodingMediaType sets the media type used for encoding component versions.
+func WithDescriptorEncodingMediaType(mediaType string) RepositoryOption {
+	return func(o *RepositoryOptions) {
+		o.DescriptorEncodingMediaType = mediaType
+	}
+}
+
 // WithLogger sets the logger for the repository.
 func WithLogger(logger *slog.Logger) RepositoryOption {
 	return func(o *RepositoryOptions) {
@@ -167,6 +178,10 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 		options.Logger = slog.Default()
 	}
 
+	if options.DescriptorEncodingMediaType == "" {
+		options.DescriptorEncodingMediaType = descriptor.MediaTypeComponentDescriptorJSON
+	}
+
 	if options.ResourceCopyOptions == nil {
 		options.ResourceCopyOptions = &oras.CopyOptions{
 			CopyGraphOptions: oras.CopyGraphOptions{
@@ -188,13 +203,14 @@ func NewRepository(opts ...RepositoryOption) (*Repository, error) {
 	}
 
 	return &Repository{
-		scheme:                     options.Scheme,
-		localArtifactManifestCache: options.LocalManifestCache,
-		localArtifactLayerCache:    options.LocalLayerCache,
-		resolver:                   options.Resolver,
-		creatorAnnotation:          options.Creator,
-		resourceCopyOptions:        *options.ResourceCopyOptions,
-		referrerTrackingPolicy:     options.ReferrerTrackingPolicy,
-		logger:                     options.Logger,
+		scheme:                      options.Scheme,
+		localArtifactManifestCache:  options.LocalManifestCache,
+		localArtifactLayerCache:     options.LocalLayerCache,
+		resolver:                    options.Resolver,
+		creatorAnnotation:           options.Creator,
+		resourceCopyOptions:         *options.ResourceCopyOptions,
+		referrerTrackingPolicy:      options.ReferrerTrackingPolicy,
+		descriptorEncodingMediaType: options.DescriptorEncodingMediaType,
+		logger:                      options.Logger,
 	}, nil
 }
