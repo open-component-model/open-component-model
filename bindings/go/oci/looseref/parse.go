@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
 	"oras.land/oras-go/v2/errdef"
 	oras "oras.land/oras-go/v2/registry"
 )
@@ -68,6 +69,64 @@ func (r LooseReference) ValidateReferenceAsTag() error {
 	return nil
 }
 
+// ValidateTagAsDigest validates that the Tag field contains a valid digest.
+func (r LooseReference) ValidateTagAsDigest() error {
+	if _, err := digest.Parse(r.Tag); err != nil {
+		return fmt.Errorf("%w: invalid digest %q", errdef.ErrInvalidReference, r.Tag)
+	}
+	return nil
+}
+
+// hasDigestAlgorithmPrefix checks if the path starts with a known digest algorithm prefix.
+// Supported algorithms are sha256 and sha512.
+func hasDigestAlgorithmPrefix(path string) bool {
+	return strings.HasPrefix(path, "sha256:") || strings.HasPrefix(path, "sha512:")
+}
+
+// validateReference validates the components of a LooseReference.
+// It validates the registry, repository, and reference (tag or digest) according to the OCI spec.
+func validateReference(ref LooseReference) error {
+	// Validate the registry component
+	if len(ref.Registry) > 0 {
+		if err := ref.ValidateRegistry(); err != nil {
+			return err
+		}
+	}
+
+	// Validate repository (skip for tag-only references)
+	isTagOnly := len(ref.Repository) == 0 && len(ref.Reference.Reference) == 0 && len(ref.Tag) > 0
+	if !isTagOnly {
+		if err := ref.ValidateRepository(); err != nil {
+			return err
+		}
+	}
+
+	// Validate reference as digest
+	if ref.Reference.Reference != "" {
+		// Digest present -> validate as digest
+		if err := ref.ValidateReferenceAsDigest(); err != nil {
+			return err
+		}
+	}
+
+	if ref.Tag != "" {
+		// Tag present -> validate as tag or digest
+		if hasDigestAlgorithmPrefix(ref.Tag) {
+			// Tag is a digest
+			if err := ref.ValidateTagAsDigest(); err != nil {
+				return err
+			}
+		} else {
+			// Otherwise validate as regular tag
+			if err := ref.ValidateReferenceAsTag(); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // ParseReference parses a string (artifact) into an `artifact reference`.
 // Corresponding cryptographic hash implementations are required to be imported
 // as specified by https://pkg.go.dev/github.com/opencontainers/go-digest#readme-usage
@@ -110,9 +169,14 @@ func ParseReference(artifact string) (LooseReference, error) {
 		if strings.LastIndex(path, ":") != index {
 			return LooseReference{}, errdef.ErrInvalidReference
 		}
-		// Case: Only tag is present; Valid Form C
-		repository = path[:index]
-		tag = path[index+1:]
+
+		// Special case: treat digest algorithm prefixes (e.g., "sha256:abc", "sha512:xyz") without registry as tag-only reference
+		if len(parts) == 1 && hasDigestAlgorithmPrefix(path) {
+			tag = path
+		} else {
+			repository = path[:index]
+			tag = path[index+1:]
+		}
 	} else {
 		// Case: No tag or digest; Valid Form D or E
 		repository = path
@@ -127,27 +191,8 @@ func ParseReference(artifact string) (LooseReference, error) {
 		Tag: tag,
 	}
 
-	if len(registry) > 0 {
-		// Validate the registry component
-		if err := ref.ValidateRegistry(); err != nil {
-			return LooseReference{}, err
-		}
-	}
-
-	// Validate the repository component
-	if err := ref.ValidateRepository(); err != nil {
+	if err := validateReference(ref); err != nil {
 		return LooseReference{}, err
-	}
-
-	// If a reference (tag or digest) is present, validate it
-	if len(ref.Reference.Reference) > 0 {
-		validator := ref.ValidateReferenceAsDigest
-		if len(tag) > 0 && len(reference) == 0 {
-			validator = ref.ValidateReferenceAsTag
-		}
-		if err := validator(); err != nil {
-			return LooseReference{}, err
-		}
 	}
 
 	return ref, nil
