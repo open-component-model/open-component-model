@@ -12,6 +12,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -152,11 +153,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	resolverCache := resolution.NewInMemoryCache(time.Second * 30)
-	if err := mgr.Add(resolverCache); err != nil {
-		setupLog.Error(err, "unable to add cache")
-		os.Exit(1)
-	}
+	const unlimited = 0
+	ttl := time.Second * 30
+	resolverCache := expirable.NewLRU[string, *resolution.Result](unlimited, nil, ttl)
 
 	// Create worker pool with its own dependencies
 	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{

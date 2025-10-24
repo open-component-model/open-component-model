@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -39,14 +40,14 @@ type WorkerPoolOptions struct {
 	// PluginManager for OCM operations.
 	PluginManager *manager.PluginManager
 	// Cache for caching.
-	Cache Cache
+	Cache *expirable.LRU[string, *Result]
 }
 
 // WorkerPool manages a pool of workers that process work items concurrently.
 type WorkerPool struct {
 	opts      WorkerPoolOptions
 	workQueue chan *WorkItem
-	cache     Cache
+	cache     *expirable.LRU[string, *Result]
 	logger    logr.Logger
 }
 
@@ -110,7 +111,6 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 	if cached, ok := wp.cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.err != nil {
-			// Don't delete failed results from cache - let TTL handle it
 			return nil, cached.err
 		}
 		return cached.result, nil
@@ -230,7 +230,7 @@ func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan
 			}
 
 			// store result in cache
-			wp.cache.Set(res.key, res)
+			wp.cache.Add(res.key, res)
 		}
 	}
 }

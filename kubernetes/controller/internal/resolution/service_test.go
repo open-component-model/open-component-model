@@ -10,12 +10,12 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	resolution2 "ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -27,6 +27,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 )
 
 func TestResolveComponentVersion_Success(t *testing.T) {
@@ -65,7 +66,7 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 		BaseUrl: "localhost:5000/test",
 	}
 
-	opts := &resolution2.ResolveOptions{
+	opts := &resolution.ResolveOptions{
 		RepositorySpec: repoSpec,
 		Component:      "test-component",
 		Version:        "v1.0.0",
@@ -82,9 +83,9 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 
 	result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
 	assert.Nil(t, result)
-	assert.True(t, errors.Is(err, resolution2.ErrResolutionInProgress), "expected in-progress error on first call")
+	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "expected in-progress error on first call")
 
-	var resolvedResult *resolution2.ResolveResult
+	var resolvedResult *resolution.ResolveResult
 	assert.Eventually(t, func() bool {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
 		if err != nil {
@@ -139,7 +140,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 		BaseUrl: "localhost:5000/test",
 	}
 
-	opts := &resolution2.ResolveOptions{
+	opts := &resolution.ResolveOptions{
 		RepositorySpec: repoSpec,
 		Component:      "test-component",
 		Version:        "v1.0.0",
@@ -156,7 +157,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 
 	result1, err := env.Resolver.ResolveComponentVersion(ctx, opts)
 	assert.Nil(t, result1)
-	assert.True(t, errors.Is(err, resolution2.ErrResolutionInProgress), "first call should be in progress")
+	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "first call should be in progress")
 
 	assert.Eventually(t, func() bool {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
@@ -234,7 +235,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 	}
 
 	// First call with config1
-	opts1 := &resolution2.ResolveOptions{
+	opts1 := &resolution.ResolveOptions{
 		RepositorySpec: repoSpec,
 		Component:      "test-component",
 		Version:        "v1.0.0",
@@ -251,7 +252,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 
 	result1, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
 	assert.Nil(t, result1)
-	assert.True(t, errors.Is(err, resolution2.ErrResolutionInProgress))
+	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
 
 	assert.Eventually(t, func() bool {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
@@ -264,7 +265,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 
 	require.NotNil(t, result1)
 
-	opts2 := &resolution2.ResolveOptions{
+	opts2 := &resolution.ResolveOptions{
 		RepositorySpec: repoSpec,
 		Component:      "test-component",
 		Version:        "v1.0.0",
@@ -281,7 +282,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 
 	result2, err := env.Resolver.ResolveComponentVersion(ctx, opts2)
 	assert.Nil(t, result2)
-	assert.True(t, errors.Is(err, resolution2.ErrResolutionInProgress))
+	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
 
 	assert.Eventually(t, func() bool {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts2)
@@ -309,12 +310,12 @@ func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	cache := resolution2.NewInMemoryCache(30 * time.Second)
-	wp := resolution2.NewWorkerPool(resolution2.WorkerPoolOptions{
+	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
+	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		Cache: cache,
 	})
 
-	resolver := resolution2.NewResolver(k8sClient, logger, wp)
+	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
 	repoSpec := &ociv1.Repository{
 		BaseUrl: "localhost:5000/test",
@@ -322,7 +323,7 @@ func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		opts    *resolution2.ResolveOptions
+		opts    *resolution.ResolveOptions
 		wantErr string
 	}{
 		{
@@ -332,7 +333,7 @@ func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
 		},
 		{
 			name: "missing repository spec",
-			opts: &resolution2.ResolveOptions{
+			opts: &resolution.ResolveOptions{
 				Component: "test",
 				Version:   "v1.0.0",
 			},
@@ -340,7 +341,7 @@ func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
 		},
 		{
 			name: "missing component name",
-			opts: &resolution2.ResolveOptions{
+			opts: &resolution.ResolveOptions{
 				RepositorySpec: repoSpec,
 				Version:        "v1.0.0",
 			},
@@ -348,7 +349,7 @@ func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
 		},
 		{
 			name: "missing version",
-			opts: &resolution2.ResolveOptions{
+			opts: &resolution.ResolveOptions{
 				RepositorySpec: repoSpec,
 				Component:      "test",
 			},
@@ -377,18 +378,18 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	cache := resolution2.NewInMemoryCache(30 * time.Second)
-	wp := resolution2.NewWorkerPool(resolution2.WorkerPoolOptions{
+	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
+	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		Client: k8sClient,
 		Cache:  cache,
 	})
-	resolver := resolution2.NewResolver(k8sClient, logger, wp)
+	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
 	repoSpec := &ociv1.Repository{
 		BaseUrl: "localhost:5000/test",
 	}
 
-	opts := &resolution2.ResolveOptions{
+	opts := &resolution.ResolveOptions{
 		RepositorySpec: repoSpec,
 		Component:      "test-component",
 		Version:        "v1.0.0",
@@ -444,7 +445,7 @@ func TestResolveComponentVersionSingleflight(t *testing.T) {
 		BaseUrl: "localhost:5000/test",
 	}
 
-	opts := &resolution2.ResolveOptions{
+	opts := &resolution.ResolveOptions{
 		RepositorySpec: repoSpec,
 		Component:      "test-component",
 		Version:        "v1.0.0",
@@ -460,7 +461,7 @@ func TestResolveComponentVersionSingleflight(t *testing.T) {
 	}
 
 	const numGoroutines = 10
-	results := make([]*resolution2.ResolveResult, numGoroutines)
+	results := make([]*resolution.ResolveResult, numGoroutines)
 	errs := make([]error, numGoroutines)
 
 	var wg sync.WaitGroup
@@ -480,14 +481,14 @@ func TestResolveComponentVersionSingleflight(t *testing.T) {
 
 	inProgressCount := 0
 	for i := range numGoroutines {
-		if errors.Is(errs[i], resolution2.ErrResolutionInProgress) {
+		if errors.Is(errs[i], resolution.ErrResolutionInProgress) {
 			inProgressCount++
 		}
 	}
 
 	assert.Greater(t, inProgressCount, 0, "singleflight should cause some goroutines to get in-progress")
 
-	var finalResult *resolution2.ResolveResult
+	var finalResult *resolution.ResolveResult
 	assert.Eventually(t, func() bool {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
 		if err != nil {
@@ -510,7 +511,7 @@ func TestResolveComponentVersionSingleflight(t *testing.T) {
 
 // testEnvironment holds the test infrastructure including resolver and plugin manager.
 type testEnvironment struct {
-	Resolver      resolution2.ComponentVersionResolver
+	Resolver      resolution.ComponentVersionResolver
 	PluginManager *manager.PluginManager
 }
 
@@ -544,14 +545,14 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Log
 	)
 	require.NoError(t, err)
 
-	cache := resolution2.NewInMemoryCache(30 * time.Second)
-	wp := resolution2.NewWorkerPool(resolution2.WorkerPoolOptions{
+	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
+	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		PluginManager: pm,
 		Logger:        logger,
 		Client:        k8sClient,
 		Cache:         cache,
 	})
-	resolver := resolution2.NewResolver(k8sClient, logger, wp)
+	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
