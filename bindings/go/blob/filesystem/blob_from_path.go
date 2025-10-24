@@ -16,28 +16,22 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 )
 
-// DefaultTarMediaType is used as blob media type, if the MediaType field is not set in the DirOptions.
+// DefaultTarMediaType is used as blob media type for directories.
 const DefaultTarMediaType = "application/x-tar"
 
-// DirOptions contains options for creating a blob from a path.
-// This is very similar to v1.Dir specification in the input/dir package.
-type DirOptions struct {
-	MediaType    string   // Media type of the resulting blob. If empty, DefaultTarMediaType is used.
-	Compress     bool     // Compress resulting blob using gzip.
-	PreserveDir  bool     // Add parent directory to the tar archive.
-	Reproducible bool     // Create a reproducible tar archive (fixed timestamps, uid/gid etc).
-	ExcludeFiles []string // List of files to exclude (glob patterns).
-	IncludeFiles []string // List of files to include (glob patterns).
-	WorkingDir   string   // Working directory to ensure the path is within.
-}
+// DefaultRawMediaType is used as blob media type for single files.
+const DefaultRawMediaType = "application/octet-stream"
 
-// mediaType returns the media type to be used for the blob.
-// If MediaType is not set, it returns the DefaultTarMediaType.
-func (o *DirOptions) mediaType() string {
-	if o.MediaType == "" {
-		return DefaultTarMediaType
-	}
-	return o.MediaType
+// DirOptions contains options for creating a blob from a path.
+// This supports both directories (TAR archives) and single files (raw blobs).
+type DirOptions struct {
+	MediaType    string   // Media type of the resulting blob. If empty, DefaultTarMediaType (directories) or DefaultRawMediaType (single files) is used.
+	Compress     bool     // Compress resulting blob using gzip.
+	PreserveDir  bool     // Add parent directory to the tar archive (directories only).
+	Reproducible bool     // Create a reproducible tar archive (directories only).
+	ExcludeFiles []string // List of files to exclude (glob patterns, directories only).
+	IncludeFiles []string // List of files to include (glob patterns, directories only).
+	WorkingDir   string   // Working directory to ensure the path is within.
 }
 
 // GetBlobFromPath creates a blob from a path using the provided options.
@@ -66,243 +60,178 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 
 	// Ensure the path is within the working directory if specified
 	if opt.WorkingDir != "" {
-		if _, err := ensurePathInWorkingDirectory(path, opt.WorkingDir); err != nil {
+		if _, err := EnsurePathInWorkingDirectory(path, opt.WorkingDir); err != nil {
 			return nil, fmt.Errorf("error ensuring path %q in working directory %q: %w", path, opt.WorkingDir, err)
 		}
 	}
-	// Create a TAR stream from the specified path
-	reader, err := createTarStream(ctx, path, &opt)
+
+	// Get file info to determine if it's a directory or single file
+	fi, err := os.Stat(path)
 	if err != nil {
-		return nil, fmt.Errorf("error creating tar stream from path %q: %w", path, err)
+		return nil, fmt.Errorf("error trying to get FileInfo for path %q: %w", path, err)
 	}
 
-	// Create a ReadOnlyBlob from the TAR archive.
-	var tarBlob blob.ReadOnlyBlob = direct.New(reader, direct.WithMediaType(opt.mediaType()))
+	// Route to appropriate handler based on file type
+	switch {
+	case fi.IsDir():
+		return createDirectoryBlob(ctx, path, opt)
+	case fi.Mode().IsRegular():
+		// Validate that include/exclude patterns are not used for single files
+		if len(opt.IncludeFiles) > 0 || len(opt.ExcludeFiles) > 0 {
+			return nil, fmt.Errorf("include/exclude patterns are not supported for single files")
+		}
+		return createSingleFileBlob(path, opt)
+	default:
+		return nil, fmt.Errorf("unsupported file type %s for path %q", fi.Mode().String(), path)
+	}
+}
+
+// createDirectoryBlob creates a TAR blob from a directory.
+func createDirectoryBlob(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
+	var baseDir, subPath string
+
+	// Determine base directory and subpath based on PreserveDir option
+	if !opt.PreserveDir {
+		baseDir = path
+		subPath = "."
+	} else {
+		baseDir = filepath.Dir(path)
+		subPath = filepath.Base(path)
+	}
+
+	// Create a virtual filesystem rooted at the base directory
+	fileSystem, err := NewFS(baseDir, os.O_RDONLY)
+	if err != nil {
+		return nil, fmt.Errorf("error creating virtual filesystem for path %q: %w", baseDir, err)
+	}
+
+	// Create a pipe for streaming TAR data
+	pr, pw := io.Pipe()
+
+	go func() {
+		tw := tar.NewWriter(pw)
+		var gerr error
+
+		defer func() {
+			// Close tar writer first and combine errors
+			if cerr := tw.Close(); cerr != nil {
+				if gerr == nil {
+					gerr = cerr
+				} else {
+					gerr = errors.Join(gerr, cerr)
+				}
+			}
+			// Close pipe with combined error (if any, otherwise nil -> io.EOF)
+			_ = pw.CloseWithError(gerr)
+		}()
+
+		// Create TAR from directory using fs.WalkDir for deterministic ordering
+		gerr = createTarFromDirectory(ctx, fileSystem, subPath, opt, tw)
+	}()
+
+	// Determine media type
+	mediaType := opt.MediaType
+	if mediaType == "" {
+		mediaType = DefaultTarMediaType
+	}
+
+	// Create blob from TAR stream
+	var tarBlob blob.ReadOnlyBlob = direct.New(pr, direct.WithMediaType(mediaType))
 	if opt.Compress {
 		tarBlob = compression.Compress(tarBlob)
 	}
 	return tarBlob, nil
 }
 
-// createTarStream creates a TAR archive from the contents of the specified path, either a directory or a single file.
-func createTarStream(ctx context.Context, path string, opt *DirOptions) (io.ReadCloser, error) {
-	fi, err := os.Stat(path)
+// createSingleFileBlob creates a raw blob from a single file.
+func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
+	// Open the file for reading
+	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("error trying to get FileInfo for path %q: %w", path, err)
+		return nil, fmt.Errorf("error opening file %q: %w", path, err)
 	}
 
-	var baseDir, subPath string
-
-	// Determine base directory and subpath based on PreserveDir option.
-	if !opt.PreserveDir {
-		baseDir = path
-		subPath = "."
-		// add parent directory if PreserveDir is set
-		// use  for single file case
-	} else {
-		baseDir = filepath.Dir(path)
-		subPath = filepath.Base(path)
+	// Determine media type
+	mediaType := opt.MediaType
+	if mediaType == "" {
+		mediaType = DefaultRawMediaType
 	}
 
-	// Create a virtual filesystem rooted at the base directory.
-	fileSystem, err := NewFS(baseDir, os.O_RDONLY)
-	if err != nil {
-		return nil, fmt.Errorf("error creating virtual filesystem for path %q: %w", baseDir, err)
+	// Create blob from file
+	var fileBlob blob.ReadOnlyBlob = direct.New(file, direct.WithMediaType(mediaType))
+	if opt.Compress {
+		fileBlob = compression.Compress(fileBlob)
 	}
-
-	// Create a TAR archive from the directory contents.
-	// We differentiate between directory and single file cases.
-	pr, pw := io.Pipe()
-
-	go func() {
-		tw := tar.NewWriter(pw)
-		//
-		var gerr error
-
-		defer func() {
-			// close tar writer and combine errors
-			if cerr := tw.Close(); cerr != nil {
-				if gerr == nil {
-					gerr = cerr
-				} else {
-					gerr = errors.Join(gerr, cerr)
-
-				}
-			}
-			// Close pipe with combined error (if any, otherwise nil -> io.EOF
-			_ = pw.CloseWithError(gerr)
-		}()
-
-		// If context is already done, abort early.
-		select {
-		case <-ctx.Done():
-			err = fmt.Errorf("context cancelled while preparing tar for path %q: %w", path, ctx.Err())
-			return
-		default:
-		}
-
-		if fi.IsDir() {
-			err = createTarFromDir(ctx, fileSystem, subPath, opt, tw)
-		} else {
-			err = createTarFromSingleFile(ctx, fileSystem, subPath, opt, tw)
-		}
-	}()
-	return pr, nil
+	return fileBlob, nil
 }
 
-// createTarFromDir writes the contents of a directory to the TAR archive.
-// subPath is the relative path within the virtual filesystem.
-func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string, opt *DirOptions, tw *tar.Writer) error {
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("context cancelled while processing directory %q: %w", subPath, ctx.Err())
-	default:
-	}
+// createTarFromDirectory writes the contents of a directory to the TAR archive using fs.WalkDir for deterministic ordering.
+func createTarFromDirectory(ctx context.Context, fileSystem FileSystem, subPath string, opt DirOptions, tw *tar.Writer) error {
+	return fs.WalkDir(fileSystem, subPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("error walking directory at path %q: %w", path, err)
+		}
 
-	dirEntries, err := fileSystem.ReadDir(subPath)
-	if err != nil {
-		return fmt.Errorf("error reading directory %q: %w", subPath, err)
-	}
-
-	for _, entry := range dirEntries {
-		// Periodically check context during long-running directory walks.
+		// Check context before processing each entry
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("context cancelled while processing directory %q: %w", subPath, ctx.Err())
+			return fmt.Errorf("context cancelled while processing path %q: %w", path, ctx.Err())
 		default:
 		}
 
-		ei, err := entry.Info()
+		fi, err := d.Info()
 		if err != nil {
-			return fmt.Errorf("error getting file info for entry %q in directory %q: %w", entry.Name(), subPath, err)
+			return fmt.Errorf("error getting file info for entry %q: %w", path, err)
 		}
 
-		// fail early for symlinks
-		if (ei.Mode() & fs.ModeSymlink) != 0 {
-			return fmt.Errorf("symlinks are not supported: found symlink %q in directory %q", entry.Name(), subPath)
+		// Fail early for symlinks
+		if (fi.Mode() & fs.ModeSymlink) != 0 {
+			return fmt.Errorf("symlinks are not supported: found symlink %q", path)
 		}
 
-		// reconstruct the full path of the entry
-		entryPath := filepath.Join(subPath, entry.Name())
-		// Check if path is included based on include/exclude patterns from options.
-
-		if ok, err := isPathIncluded(entryPath, opt.IncludeFiles, opt.ExcludeFiles); err != nil {
-			return fmt.Errorf("error checking inclusion of entry %q in directory %q: %w", entry.Name(), subPath, err)
+		// Check if path is included based on include/exclude patterns
+		if ok, err := isPathIncluded(path, opt.IncludeFiles, opt.ExcludeFiles); err != nil {
+			return fmt.Errorf("error checking inclusion of path %q: %w", path, err)
 		} else if !ok {
-			continue
+			return nil
 		}
 
-		// Create TAR header for the entry.
-		header, err := createTarHeader(ei, "", opt.Reproducible)
+		// Create TAR header for the entry
+		header, err := createTarHeader(fi, "", opt.Reproducible)
 		if err != nil {
-			return fmt.Errorf("error creating tar header for entry %q in directory %q: %w", entry.Name(), subPath, err)
+			return fmt.Errorf("error creating tar header for path %q: %w", path, err)
 		}
-		// Set header name to the relative path of the entry with respect to the base directory,
-		// to preserve the subfolder structure in the tar archive.
-		header.Name = entryPath
 
-		switch {
-		case ei.IsDir():
-			// Write header to TAR, then recurse into directory.
-			if err := tw.WriteHeader(header); err != nil {
-				return fmt.Errorf("error writing tar header for directory %q: %w", entryPath, err)
-			}
-			if err := createTarFromDir(ctx, fileSystem, entryPath, opt, tw); err != nil {
-				return fmt.Errorf("error creating tar entry %q in directory %q: %w", entryPath, subPath, err)
-			}
+		// Use cross-platform path separators for TAR archive
+		header.Name = filepath.ToSlash(path)
 
-		case ei.Mode().IsRegular():
-			// Write header to TAR.
-			if err := tw.WriteHeader(header); err != nil {
-				return fmt.Errorf("error writing tar header for file %q: %w", entryPath, err)
-			}
+		// Write header to TAR
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("error writing tar header for path %q: %w", path, err)
+		}
 
-			// Open file for reading.
-			fr, err := fileSystem.Open(entryPath)
+		// For regular files, copy content to TAR
+		if fi.Mode().IsRegular() {
+			fr, err := fileSystem.Open(path)
 			if err != nil {
-				return fmt.Errorf("error opening file %q for reading: %w", entryPath, err)
+				return fmt.Errorf("error opening file %q for reading: %w", path, err)
 			}
+			defer fr.Close()
 
-			// Check context before performing the copy (could be long-running for large files).
+			// Check context before potentially long file copy
 			select {
 			case <-ctx.Done():
-				_ = fr.Close()
-				return fmt.Errorf("context cancelled while processing file %q in directory %q: %w", entryPath, subPath, ctx.Err())
+				return fmt.Errorf("context cancelled while copying file %q: %w", path, ctx.Err())
 			default:
 			}
 
-			// Copy file content to TAR. Close immediately after copy; do not defer in loop.
-			var copyErr error
-			_, copyErr = io.Copy(tw, fr)
-			if closeErr := fr.Close(); closeErr != nil {
-				copyErr = errors.Join(copyErr, fmt.Errorf("error closing file %q: %w", entryPath, closeErr))
-			}
-			if copyErr != nil {
-				return fmt.Errorf("error copying content of file %q to tar: %w", entryPath, copyErr)
-			}
-
-		default:
-			return fmt.Errorf("unsupported file type %s for entry %q in directory %q", ei.Mode().String(), entry.Name(), subPath)
-		}
-	}
-	return nil
-}
-
-// createTarFromSingleFile writes a single file to the TAR archive.
-// subPath is the relative path within the virtual filesystem.
-func createTarFromSingleFile(ctx context.Context, fileSystem FileSystem, subPath string, opt *DirOptions, tw *tar.Writer) (err error) {
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("context cancelled while processing single file %q: %w", subPath, ctx.Err())
-	default:
-	}
-	fi, err := fs.Stat(fileSystem, subPath)
-	if err != nil {
-		return fmt.Errorf("error stating file %q: %w", subPath, err)
-	}
-
-	// Create the TAR header for the file.
-	header, err := createTarHeader(fi, "", opt.Reproducible)
-	if err != nil {
-		return fmt.Errorf("error creating tar header for file %q: %w", subPath, err)
-	}
-	// Use relative path instead of base name of file.
-	header.Name = subPath
-
-	// Write the header to the TAR writer.
-	if err := tw.WriteHeader(header); err != nil {
-		return fmt.Errorf("error writing tar header for file %q: %w", subPath, err)
-	}
-
-	// Open the file for reading.
-	fr, err := fileSystem.Open(subPath)
-	if err != nil {
-		return fmt.Errorf("error opening file %q for reading: %w", subPath, err)
-	}
-	defer func() {
-		if cerr := fr.Close(); cerr != nil {
-			closeErr := fmt.Errorf("error closing file %q: %w", subPath, cerr)
-			if err == nil {
-				err = closeErr
-			} else {
-				err = errors.Join(err, closeErr)
+			if _, err := io.Copy(tw, fr); err != nil {
+				return fmt.Errorf("error copying content of file %q to tar: %w", path, err)
 			}
 		}
-	}()
 
-	// Check context before performing the copy (could be long-running for large files).
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("context cancelled while processing single file %q: %w", subPath, ctx.Err())
-	default:
-	}
-
-	// Copy the file content to the TAR writer.
-	if _, err := io.Copy(tw, fr); err != nil {
-		return fmt.Errorf("error copying content of file %q to tar: %w", subPath, err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // isPathIncluded checks if a given path should be included based on include and exclude patterns.
