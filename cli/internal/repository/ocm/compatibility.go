@@ -16,7 +16,9 @@ import (
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-type Options struct {
+type RepositorySources struct {
+	Config  *genericv1.Config
+	CompRef *compref.Ref
 	RepoRef runtime.Typed
 }
 
@@ -33,9 +35,7 @@ type Options struct {
 func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	repoProvider repository.ComponentVersionRepositoryProvider,
 	credentialGraph credentials.GraphResolver,
-	config *genericv1.Config,
-	ref *compref.Ref,
-	options ...Options,
+	repoSources RepositorySources,
 ) (ComponentVersionRepositoryForComponentProvider, error) {
 	var (
 		//nolint:staticcheck // compatibility mode for deprecated resolvers
@@ -44,12 +44,12 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 		err               error
 	)
 
-	if config != nil {
-		pathMatchers, err = ResolversFromConfig(config)
+	if repoSources.Config != nil {
+		pathMatchers, err = ResolversFromConfig(repoSources.Config)
 		if err != nil {
 			return nil, fmt.Errorf("getting path matchers from configuration failed: %w", err)
 		}
-		fallbackResolvers, err = FallbackResolversFromConfig(config)
+		fallbackResolvers, err = FallbackResolversFromConfig(repoSources.Config)
 		if err != nil {
 			return nil, fmt.Errorf("getting resolvers from configuration failed: %w", err)
 		}
@@ -58,16 +58,16 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	switch {
 	case len(pathMatchers) > 0 && len(fallbackResolvers) > 0:
 		return nil, fmt.Errorf("both path matcher and fallback resolvers are configured, only one type is allowed")
-	case len(pathMatchers) == 0 && len(fallbackResolvers) == 0 && ref != nil:
+	case len(pathMatchers) == 0 && len(fallbackResolvers) == 0 && repoSources.CompRef != nil:
 		slog.InfoContext(ctx, "no resolvers configured, using component reference as resolver")
 
-		if ref.Repository == nil {
+		if repoSources.CompRef.Repository == nil {
 			return nil, fmt.Errorf("component reference does not contain repository information")
 		}
 
 		raw := runtime.Raw{}
 		scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-		if err := scheme.Convert(ref.Repository, &raw); err != nil {
+		if err := scheme.Convert(repoSources.CompRef.Repository, &raw); err != nil {
 			return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
 		}
 
@@ -85,17 +85,26 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 		slog.WarnContext(ctx, "using deprecated fallback resolvers, consider switching to path matcher resolvers")
 
 		// add compref as first entry to fallback list if available to mimic legacy behavior
-		if ref != nil && ref.Repository != nil {
+		if repoSources.CompRef != nil && repoSources.CompRef.Repository != nil {
 			//nolint:staticcheck // compatibility mode for deprecated resolvers
 			var finalResolvers []*resolverruntime.Resolver
-			if ref.Repository != nil {
+			if repoSources.CompRef.Repository != nil {
 				//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 				finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
-					Repository: ref.Repository,
+					Repository: repoSources.CompRef.Repository,
 					Priority:   math.MaxInt,
 				})
 			}
 			finalResolvers = append(finalResolvers, fallbackResolvers...)
+			fallbackResolvers = finalResolvers
+		} else if repoSources.RepoRef != nil {
+			var finalResolvers []*resolverruntime.Resolver
+			finalResolvers = append(finalResolvers, fallbackResolvers...)
+			finalResolvers = append(finalResolvers, &resolverruntime.Resolver{
+				Repository: repoSources.RepoRef,
+				Priority:   math.MaxInt,
+			})
+
 			fallbackResolvers = finalResolvers
 		}
 
@@ -107,30 +116,30 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	default:
 		slog.DebugContext(ctx, "using path matcher resolvers")
 
-		if ref != nil && ref.Repository != nil {
+		if repoSources.CompRef != nil && repoSources.CompRef.Repository != nil {
 			var finalResolvers []*resolverspec.Resolver
 			finalResolvers = append(finalResolvers, pathMatchers...)
 			raw := runtime.Raw{}
 			scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-			if err := scheme.Convert(ref.Repository, &raw); err != nil {
+			if err := scheme.Convert(repoSources.CompRef.Repository, &raw); err != nil {
 				return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
 			}
 
 			compRefResolver := &resolverspec.Resolver{
 				Repository:           &raw,
-				ComponentNamePattern: ref.Component,
+				ComponentNamePattern: repoSources.CompRef.Component,
 			}
 			// add to index 0 to have the highest priority
 			finalResolvers = append([]*resolverspec.Resolver{compRefResolver}, finalResolvers...)
 
 			pathMatchers = finalResolvers
-		} else if options != nil && options[0].RepoRef != nil {
+		} else if repoSources.RepoRef != nil {
 			var finalResolvers []*resolverspec.Resolver
 			finalResolvers = append(finalResolvers, pathMatchers...)
 
 			raw := runtime.Raw{}
 			scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-			if err := scheme.Convert(options[0].RepoRef, &raw); err != nil {
+			if err := scheme.Convert(repoSources.RepoRef, &raw); err != nil {
 				return nil, fmt.Errorf("converting repository spec to raw failed: %w", err)
 			}
 			finalResolvers = append(finalResolvers, &resolverspec.Resolver{

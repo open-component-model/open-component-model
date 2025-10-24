@@ -283,7 +283,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 	ref, err := compref.ParseRepository(repositoryRef, compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
 
-	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, nil, []ocm.Options{{RepoRef: ref}}...)
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, ocm.RepositorySources{RepoRef: ref, Config: config})
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
