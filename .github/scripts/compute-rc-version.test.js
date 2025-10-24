@@ -1,8 +1,6 @@
 import assert from "assert";
 import {computeNextVersions, isStableNewer, parseBranch, parseVersion,} from "./compute-rc-version.js";
 
-const noopRun = () => "";
-
 // ----------------------------------------------------------
 // parseVersion tests
 // ----------------------------------------------------------
@@ -27,39 +25,46 @@ assert.throws(() => parseBranch("releases/1.0"), /Invalid branch/);
 // ----------------------------------------------------------
 
 // 1. New RC from a stable version (patch bumps)
-const v1 = computeNextVersions("0.1", "cli/v0.1.0", "", noopRun);
+const v1 = computeNextVersions("0.1", "cli/v0.1.0", "");
 assert.deepStrictEqual(v1, {
     baseVersion: "0.1.1",
     rcVersion: "0.1.1-rc.1",
-});
+}, "RC version should be bumped when starting from a stable version");
 
 // 2. New RC from existing RC (RC increments)
-const v2 = computeNextVersions("0.1", "cli/v0.1.1", "cli/v0.1.1-rc.4", noopRun);
+const v2 = computeNextVersions("0.1", "cli/v0.1.1", "cli/v0.1.1-rc.4");
 assert.deepStrictEqual(v2, {
     baseVersion: "0.1.1",
     rcVersion: "0.1.1-rc.5",
-});
+}, "RC version should be incremented when starting from an existing RC");
 
 // 3. No stable tag (starting fresh)
-const v3 = computeNextVersions("0.2", "", "", noopRun);
+const v3 = computeNextVersions("0.2", "", "");
 assert.deepStrictEqual(v3, {
     baseVersion: "0.2.0",
     rcVersion: "0.2.0-rc.1",
-});
+}, "RC version should be bumped and base version should start with 0 when starting without a tag");
 
 // 4. Stable newer than RC (patch bump)
-const v4 = computeNextVersions("0.1", "cli/v0.1.2", "cli/v0.1.1-rc.7", noopRun);
+const v4 = computeNextVersions("0.1", "cli/v0.1.2", "cli/v0.1.1-rc.7");
 assert.deepStrictEqual(v4, {
     baseVersion: "0.1.3",
     rcVersion: "0.1.3-rc.1",
-});
+}, "latest stable should bump patch and start new RC sequence");
 
-// 5. RC newer than stable (RC increment)
-const v5 = computeNextVersions("0.1", "cli/v0.1.2", "cli/v0.1.3-rc.9", noopRun);
+// 5. RC newer than stable (RC increment with new base version)
+const v5 = computeNextVersions("0.1", "cli/v0.1.2", "cli/v0.1.3-rc.9");
 assert.deepStrictEqual(v5, {
     baseVersion: "0.1.2",
-    rcVersion: "0.1.2-rc.10",
-});
+    rcVersion: "0.1.3-rc.10",
+}, "RC should be incremented and base version should be bumped when last RC is newer than last stable");
+
+// 6. Malformed tag causes bump
+const v6 = computeNextVersions("0.1", "cli/v0.1.1", "cli/v0.1.1-rc.");
+assert.deepStrictEqual(v6, {
+    baseVersion: "0.1.2",
+    rcVersion: "0.1.2-rc.1",
+}, "Should default to bump when malformed tag is discovered");
 
 // ----------------------------------------------------------
 // isStableNewer tests
