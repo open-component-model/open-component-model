@@ -290,7 +290,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	}
 	defer stop()
 
-	_, _, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
+	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
 
 	return err
 }
