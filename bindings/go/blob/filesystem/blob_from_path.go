@@ -241,7 +241,6 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 
 		// For regular files, copy content
 		if fi.Mode().IsRegular() {
-
 			fr, err := fileSystem.Open(path)
 			if err != nil {
 				return fmt.Errorf("error opening file %q for reading: %w", path, err)
