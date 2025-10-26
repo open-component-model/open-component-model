@@ -60,3 +60,19 @@ func (u *Raw) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
+
+// defaultUnsafeConverter is a global permissive converter for unknown types.
+// It is a permissive converter that ignores type registration.
+var defaultUnsafeConverter Converter = NewScheme(WithAllowUnknown())
+
+// AsRaw returns a new Raw representation of any Typed object.
+// It panics if the object is not properly Typed or cannot be converted.
+func AsRaw(typed Typed) *Raw {
+	target := &Raw{}
+	if raw, ok := typed.(*Raw); ok {
+		raw.DeepCopyInto(target)
+	} else if err := defaultUnsafeConverter.Convert(typed, target); err != nil {
+		panic(fmt.Errorf("failed to convert access to runtime.Raw via default conversion: %w", err))
+	}
+	return target
+}

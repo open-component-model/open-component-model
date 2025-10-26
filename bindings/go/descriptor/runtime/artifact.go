@@ -16,8 +16,11 @@ type Artifact interface {
 	GetElementMeta() ElementMeta
 	// GetType returns the type of the artifact
 	GetType() string
+	SetType(string)
 	// GetAccess returns the access information
 	GetAccess() runtime.Typed
+	// SetAccess sets the access information
+	SetAccess(runtime.Typed)
 }
 
 func (s *Source) GetElementMeta() ElementMeta {
@@ -28,8 +31,16 @@ func (s *Source) GetType() string {
 	return s.Type
 }
 
+func (s *Source) SetType(t string) {
+	s.Type = t
+}
+
 func (s *Source) GetAccess() runtime.Typed {
 	return s.Access
+}
+
+func (s *Source) SetAccess(access runtime.Typed) {
+	s.Access = access
 }
 
 func (r *Resource) GetElementMeta() ElementMeta {
@@ -40,6 +51,14 @@ func (r *Resource) GetType() string {
 	return r.Type
 }
 
+func (r *Resource) SetType(t string) {
+	r.Type = t
+}
+
 func (r *Resource) GetAccess() runtime.Typed {
 	return r.Access
+}
+
+func (r *Resource) SetAccess(access runtime.Typed) {
+	r.Access = access
 }
