@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/dag"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -536,12 +537,13 @@ components:
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, _, err := constructorInstance.Construct(t.Context(), converted)
+	descs, graph, err := constructorInstance.Construct(t.Context(), converted)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	require.Len(t, descs, 1)
+	require.NotNil(t, graph)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
 	assert.Equal(t, "v1.0.0", desc.Component.Version)
 	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
@@ -570,4 +572,13 @@ components:
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedSources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
+
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		assert.Equal(t, 1, len(d.Vertices))
+
+		roots := d.Roots()
+		require.Len(t, roots, 1)
+		return nil
+	})
+	require.NoError(t, err)
 }

@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/dag"
+	"ocm.software/open-component-model/bindings/go/dag/sync"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -229,9 +231,10 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descs, _, err := constructorInstance.Construct(t.Context(), constructor)
+	descs, graph, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
 	require.Len(t, descs, 1)
+	require.NotNil(t, graph)
 
 	// Verify the results
 	desc := descs[0]
@@ -246,6 +249,15 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedLocalResources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
+
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestConstructWithResourceAccess(t *testing.T) {
@@ -270,12 +282,13 @@ func TestConstructWithResourceAccess(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
+	descs, graph, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	require.Len(t, descs, 1)
+	require.NotNil(t, graph)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -293,6 +306,15 @@ func TestConstructWithResourceAccess(t *testing.T) {
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedLocalResources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
+
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestConstructWithCredentialResolution(t *testing.T) {
@@ -351,12 +373,13 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
+	descs, graph, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	require.Len(t, descs, 1)
+	require.NotNil(t, graph)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -377,6 +400,15 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 
 	// Verify the credential provider was called
 	assert.Equal(t, mockCredProvider.called["mock/v1"], 1)
+
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestConstructWithResourceByValue(t *testing.T) {
@@ -420,12 +452,12 @@ func TestConstructWithResourceByValue(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
+	descs, graph, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	require.Len(t, descs, 1)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -438,6 +470,15 @@ func TestConstructWithResourceByValue(t *testing.T) {
 	// Verify the repository was called correctly
 	assert.Len(t, mockTargetRepo.addedLocalResources, 1)
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
+
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestConstructWithResourceDigest(t *testing.T) {
@@ -478,12 +519,13 @@ func TestConstructWithResourceDigest(t *testing.T) {
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
+	descs, graph, err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	require.Len(t, descs, 1)
+	require.NotNil(t, graph)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	verifyBasicComponent(t, desc)
 
 	// Verify the resource was processed correctly
@@ -502,6 +544,15 @@ func TestConstructWithResourceDigest(t *testing.T) {
 	// Verify the repository was called correctly
 	assert.Len(t, mockTargetRepo.addedLocalResources, 0)
 	assert.Len(t, mockTargetRepo.addedVersions, 1)
+
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestConstructWithInvalidInputMethod(t *testing.T) {
@@ -754,12 +805,13 @@ components:
 	constructorInstance := NewDefaultConstructor(opts)
 
 	// Process the constructor
-	descriptors, _, err := constructorInstance.Construct(t.Context(), converted)
+	descs, graph, err := constructorInstance.Construct(t.Context(), converted)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	require.Len(t, descs, 1)
+	require.NotNil(t, graph)
 
 	// Verify the results
-	desc := descriptors[0]
+	desc := descs[0]
 	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
 	assert.Equal(t, "v1.0.0", desc.Component.Version)
 	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
@@ -788,4 +840,28 @@ components:
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedLocalResources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
+
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
+
+		verts := d.Vertices
+		assert.Len(t, verts, 1)
+
+		val := verts[root].Attributes[sync.AttributeValue]
+		assert.NotNil(t, val)
+		comp, _ := val.(*ConstructorOrExternalComponent)
+		assert.NotNil(t, comp)
+
+		res := comp.ConstructorComponent.Resources
+		assert.Len(t, res, 2)
+
+		assert.Equal(t, "test-resource-1", res[0].Name)
+		assert.Equal(t, "test-resource-2", res[1].Name)
+
+		return nil
+	})
+	assert.NoError(t, err)
 }

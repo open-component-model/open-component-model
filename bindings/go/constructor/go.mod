@@ -9,8 +9,8 @@ require (
 	golang.org/x/sync v0.17.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251017132044-0548a0ad422b
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251017132044-0548a0ad422b
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251024100521-a7be1bf5ce0d
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251024100521-a7be1bf5ce0d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/oci v0.0.8
 	ocm.software/open-component-model/bindings/go/repository v0.0.1
