@@ -68,6 +68,10 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 	require.NotNil(t, cfg)
 
 	pm := manager.NewPluginManager(t.Context())
+	t.Cleanup(func() {
+		require.NoError(t, pm.Shutdown(t.Context()))
+	})
+
 	registerOCIPlugin(t, pm, "test", "v1.0.0")
 
 	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{

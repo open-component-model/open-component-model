@@ -126,13 +126,17 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 	}
 
 	select {
-	// Try to enqueue the request. If it fails, we return a queue full error so the reconciler can try again later.
+	// Try to enqueue the request. If the queue is full we send back a full queue response, otherwise, an unknown error.
 	case wp.workQueue <- workItem:
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
 		wp.logger.V(1).Info("enqueued resolution request", "component", opts.Component, "version", opts.Version)
 		return nil, ErrResolutionInProgress
 	default:
-		return nil, fmt.Errorf("lookup queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
+		if len(wp.workQueue) == wp.opts.QueueSize {
+			return nil, fmt.Errorf("lookup queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
+		}
+
+		return nil, fmt.Errorf("failed to enqueue resolution request for %s:%s; queue is not full but unresponsive", opts.Component, opts.Version)
 	}
 }
 
@@ -142,56 +146,61 @@ func (wp *WorkerPool) startWorker(ctx context.Context, id int) chan *Result {
 	resultChan := make(chan *Result)
 	logger := wp.logger.WithValues("worker", id)
 
-	go func() {
-		defer close(resultChan)
-		defer logger.V(1).Info("worker stopped", "id", id)
-
-		for {
-			select {
-			case <-ctx.Done():
-				logger.V(1).Info("worker stopped due to context cancellation")
-				return
-			case item, ok := <-wp.workQueue:
-				if !ok {
-					logger.V(1).Info("work queue closed, worker exiting")
-					return
-				}
-
-				QueueSizeGauge.Set(float64(len(wp.workQueue)))
-
-				logger.V(1).Info("processing work item", "key", item.Key)
-
-				start := time.Now()
-				result, err := wp.resolve(item.Context, &item.Opts, item.Cfg)
-				duration := time.Since(start).Seconds()
-
-				// Track metrics
-				ResolutionDurationHistogram.WithLabelValues(item.Opts.Component, item.Opts.Version).Observe(duration)
-
-				if err != nil {
-					logger.Error(err, "failed to process work item",
-						"component", item.Opts.Component,
-						"version", item.Opts.Version,
-						"duration", duration)
-				} else {
-					logger.V(1).Info("processed work item",
-						"component", item.Opts.Component,
-						"version", item.Opts.Version,
-						"duration", duration)
-				}
-
-				// Send result to worker's dedicated result channel
-				resultChan <- &Result{
-					key:      item.Key,
-					result:   result,
-					err:      err,
-					createAt: time.Now(),
-				}
-			}
-		}
-	}()
+	// create a worker for the created channel and return immediately with the channel
+	go wp.createWorkerForChannel(ctx, logger, resultChan, id)
 
 	return resultChan
+}
+
+// createWorkerForChannel starts the main worker loop for a provided result channel. This function is now the owner
+// of the channel and will close it once it's finished.
+func (wp *WorkerPool) createWorkerForChannel(ctx context.Context, logger logr.Logger, resultChan chan *Result, id int) {
+	defer close(resultChan)
+	defer logger.V(1).Info("worker stopped", "id", id)
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.V(1).Info("worker stopped due to context cancellation", "id", id)
+			return
+		case item, ok := <-wp.workQueue:
+			if !ok {
+				logger.V(1).Info("work queue closed, worker exiting", "id", id)
+				return
+			}
+
+			QueueSizeGauge.Set(float64(len(wp.workQueue)))
+
+			logger.V(1).Info("processing work item", "key", item.Key, "id", id)
+
+			start := time.Now()
+			result, err := wp.resolve(item.Context, &item.Opts, item.Cfg)
+			duration := time.Since(start).Seconds()
+
+			// Track metrics
+			ResolutionDurationHistogram.WithLabelValues(item.Opts.Component, item.Opts.Version).Observe(duration)
+
+			if err != nil {
+				logger.Error(err, "failed to process work item",
+					"component", item.Opts.Component,
+					"version", item.Opts.Version,
+					"duration", duration, "id", id)
+			} else {
+				logger.V(1).Info("processed work item",
+					"component", item.Opts.Component,
+					"version", item.Opts.Version,
+					"duration", duration, "id", id)
+			}
+
+			// Send result to worker's dedicated result channel
+			resultChan <- &Result{
+				key:      item.Key,
+				result:   result,
+				err:      err,
+				createAt: time.Now(),
+			}
+		}
+	}
 }
 
 // resultCollector processes results from multiple worker channels and updates the cache.
@@ -205,9 +214,13 @@ func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan
 	wg.Add(len(workerChannels))
 	for _, ch := range workerChannels {
 		go func() {
+			// Start feeding channel values into the mergedResult until the channel is closed.
+			// Ranging over a channel runs indefinitely until the channel sends a close back.
 			for res := range ch {
 				mergedResults <- res
 			}
+
+			// Once the worker channel is closed this worker has quit its job, so we are done.
 			wg.Done()
 		}()
 	}
@@ -249,6 +262,7 @@ func (wp *WorkerPool) resolve(ctx context.Context, opts *ResolveOptions, cfg *co
 	if err != nil {
 		return nil, fmt.Errorf("failed to create credential graph: %w", err)
 	}
+	wp.logger.V(1).Info("resolved credential graph")
 
 	repo, err := setup.NewRepository(ctx, opts.RepositorySpec, setup.RepositoryOptions{
 		PluginManager:   pm,
@@ -258,11 +272,13 @@ func (wp *WorkerPool) resolve(ctx context.Context, opts *ResolveOptions, cfg *co
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}
+	wp.logger.V(1).Info("new repository created")
 
 	descriptor, err := repo.GetComponentVersion(ctx, opts.Component, opts.Version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get component version %s:%s: %w", opts.Component, opts.Version, err)
 	}
+	wp.logger.V(1).Info("resolved component version", "component", opts.Component, "version", opts.Version, "descriptor", descriptor)
 
 	result := &ResolveResult{
 		Descriptor: descriptor,

@@ -26,6 +26,7 @@ func DefaultPluginManagerOptions() PluginManagerOptions {
 	}
 }
 
+// PluginManager contains settings for the plugin manager.
 type PluginManager struct {
 	IdleTimeout   time.Duration
 	Logger        logr.Logger
@@ -33,6 +34,8 @@ type PluginManager struct {
 	PluginManager *manager.PluginManager
 }
 
+// Start will start the plugin manager with the given configuration. Start will BLOCK until the
+// context is cancelled. It's designed to be called by the controller manager.
 func (m *PluginManager) Start(ctx context.Context) error {
 	pm := manager.NewPluginManager(ctx)
 	for _, location := range m.Locations {
@@ -51,7 +54,8 @@ func (m *PluginManager) Start(ctx context.Context) error {
 
 	<-ctx.Done() // block until context is done ( expected by the manager )
 
-	return nil
+	// We use context background here because the Start context has been cancelled.
+	return pm.Shutdown(context.Background())
 }
 
 func (m *PluginManager) Shutdown(ctx context.Context) error {
