@@ -62,6 +62,14 @@ func NewGraphDiscoverer[K cmp.Ordered, V any](opts *GraphDiscovererOptions[K, V]
 	}
 }
 
+func NewGraphDiscovererWithGraph[K cmp.Ordered, V any](graph *SyncedDirectedAcyclicGraph[K], opts *GraphDiscovererOptions[K, V]) *GraphDiscoverer[K, V] {
+	return &GraphDiscoverer[K, V]{
+		graph:   graph,
+		doneMap: &sync.Map{},
+		opts:    opts,
+	}
+}
+
 // GraphDiscoverer orchestrates concurrent graph discovery.
 // - graph: the shared DAG being built
 // - doneMap: ensures each vertex is processed exactly once
