@@ -184,27 +184,27 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
-	github.com/go-openapi/analysis v0.23.0 // indirect
+	github.com/go-openapi/analysis v0.24.0 // indirect
 	github.com/go-openapi/errors v0.22.3 // indirect
 	github.com/go-openapi/jsonpointer v0.22.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.2 // indirect
-	github.com/go-openapi/loads v0.22.0 // indirect
-	github.com/go-openapi/runtime v0.28.0 // indirect
-	github.com/go-openapi/spec v0.21.0 // indirect
-	github.com/go-openapi/strfmt v0.23.0 // indirect
-	github.com/go-openapi/swag v0.24.1 // indirect
-	github.com/go-openapi/swag/cmdutils v0.24.0 // indirect
-	github.com/go-openapi/swag/conv v0.24.0 // indirect
-	github.com/go-openapi/swag/fileutils v0.24.0 // indirect
+	github.com/go-openapi/loads v0.23.1 // indirect
+	github.com/go-openapi/runtime v0.29.0 // indirect
+	github.com/go-openapi/spec v0.22.0 // indirect
+	github.com/go-openapi/strfmt v0.24.0 // indirect
+	github.com/go-openapi/swag v0.25.1 // indirect
+	github.com/go-openapi/swag/cmdutils v0.25.1 // indirect
+	github.com/go-openapi/swag/conv v0.25.1 // indirect
+	github.com/go-openapi/swag/fileutils v0.25.1 // indirect
 	github.com/go-openapi/swag/jsonname v0.25.1 // indirect
-	github.com/go-openapi/swag/jsonutils v0.24.0 // indirect
-	github.com/go-openapi/swag/loading v0.24.0 // indirect
-	github.com/go-openapi/swag/mangling v0.24.0 // indirect
-	github.com/go-openapi/swag/netutils v0.24.0 // indirect
-	github.com/go-openapi/swag/stringutils v0.24.0 // indirect
-	github.com/go-openapi/swag/typeutils v0.24.0 // indirect
-	github.com/go-openapi/swag/yamlutils v0.24.0 // indirect
-	github.com/go-openapi/validate v0.24.0 // indirect
+	github.com/go-openapi/swag/jsonutils v0.25.1 // indirect
+	github.com/go-openapi/swag/loading v0.25.1 // indirect
+	github.com/go-openapi/swag/mangling v0.25.1 // indirect
+	github.com/go-openapi/swag/netutils v0.25.1 // indirect
+	github.com/go-openapi/swag/stringutils v0.25.1 // indirect
+	github.com/go-openapi/swag/typeutils v0.25.1 // indirect
+	github.com/go-openapi/swag/yamlutils v0.25.1 // indirect
+	github.com/go-openapi/validate v0.25.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/go-test/deep v1.1.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
@@ -247,7 +247,6 @@ require (
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jedisct1/go-minisign v0.0.0-20241212093149-d2f9f49435c7 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
-	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
@@ -294,7 +293,6 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runtime-spec v1.2.1 // indirect
-	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
