@@ -413,6 +413,34 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	}
 
 	logger.Debug("resource processed successfully")
+
+	// update resource in graph
+	if err := c.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		for _, vert := range d.Vertices {
+			vertVal, ok := vert.Attributes[syncdag.AttributeValue]
+			if !ok {
+				return fmt.Errorf("missing graph vertex attribute")
+			}
+			compOrExt, ok := vertVal.(*ConstructorOrExternalComponent)
+			if !ok {
+				return fmt.Errorf("unexpected type in graph vertex attribute")
+			}
+
+			// check if this is the correct vertex
+			if compOrExt.ConstructorComponent.ObjectMeta.Name == component && compOrExt.ConstructorComponent.ObjectMeta.Version == version {
+				for j, graphRes := range compOrExt.ConstructorComponent.Resources {
+					if graphRes.ToIdentity().String() == resource.ToIdentity().String() {
+						compOrExt.ConstructorComponent.Resources[j] = *constructor.ConvertFromDescriptorResource(res)
+					}
+				}
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("error updating resource in graph: %w", err)
+	}
+
 	return res, nil
 }
 
