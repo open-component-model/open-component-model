@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
@@ -32,179 +32,173 @@ import (
 )
 
 func TestResolveComponentVersion_Success(t *testing.T) {
-	ctx := context.Background()
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx := context.Background()
+		logger := logr.Discard()
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap).
+			Build()
 
-	env := setupTestEnvironment(t, k8sClient, logger)
-	t.Cleanup(func() {
-		err := env.Close(ctx)
-		require.NoError(t, err)
-	})
+		env := setupTestEnvironment(t, k8sClient, logger)
+		t.Cleanup(func() {
+			err := env.Close(ctx)
+			require.NoError(t, err)
+		})
 
-	repoSpec := &ociv1.Repository{
-		BaseUrl: "localhost:5000/test",
-	}
+		repoSpec := &ociv1.Repository{
+			BaseUrl: "localhost:5000/test",
+		}
 
-	opts := &resolution.ResolveOptions{
-		RepositorySpec: repoSpec,
-		Component:      "test-component",
-		Version:        "v1.0.0",
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config",
+		opts := &resolution.ResolveOptions{
+			RepositorySpec: repoSpec,
+			Component:      "test-component",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config",
+					},
 				},
 			},
-		},
-		Namespace: "default",
-	}
-
-	result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-	assert.Nil(t, result)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "expected in-progress error on first call")
-
-	var resolvedResult *resolution.ResolveResult
-	assert.Eventually(t, func() bool {
-		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-		if err != nil {
-			return false
+			Namespace: "default",
 		}
-		resolvedResult = result
-		return result != nil
-	}, 2*time.Second, 50*time.Millisecond, "resolution should complete")
 
-	require.NotNil(t, resolvedResult)
-	assert.NotNil(t, resolvedResult.Descriptor)
-	assert.NotNil(t, resolvedResult.Repository)
-	assert.Equal(t, "test-component", resolvedResult.Descriptor.Component.Name)
-	assert.Equal(t, "v1.0.0", resolvedResult.Descriptor.Component.Version)
-	assert.NotZero(t, resolvedResult)
-	assert.NotEmpty(t, resolvedResult.ConfigHash)
+		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
+		assert.Nil(t, result)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "expected in-progress error on first call")
+
+		synctest.Wait()
+
+		resolvedResult, err := env.Resolver.ResolveComponentVersion(ctx, opts)
+		require.NoError(t, err)
+		require.NotNil(t, resolvedResult)
+		assert.NotNil(t, resolvedResult.Descriptor)
+		assert.NotNil(t, resolvedResult.Repository)
+		assert.Equal(t, "test-component", resolvedResult.Descriptor.Component.Name)
+		assert.Equal(t, "v1.0.0", resolvedResult.Descriptor.Component.Version)
+		assert.NotZero(t, resolvedResult)
+		assert.NotEmpty(t, resolvedResult.ConfigHash)
+	})
 }
 
 func TestResolveComponentVersion_CacheHit(t *testing.T) {
-	ctx := context.Background()
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx := context.Background()
+		logger := logr.Discard()
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap).
+			Build()
 
-	env := setupTestEnvironment(t, k8sClient, logger)
-	t.Cleanup(func() {
-		err := env.Close(ctx)
-		require.NoError(t, err)
-	})
+		env := setupTestEnvironment(t, k8sClient, logger)
+		t.Cleanup(func() {
+			err := env.Close(ctx)
+			require.NoError(t, err)
+		})
 
-	repoSpec := &ociv1.Repository{
-		BaseUrl: "localhost:5000/test",
-	}
+		repoSpec := &ociv1.Repository{
+			BaseUrl: "localhost:5000/test",
+		}
 
-	opts := &resolution.ResolveOptions{
-		RepositorySpec: repoSpec,
-		Component:      "test-component",
-		Version:        "v1.0.0",
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config",
+		opts := &resolution.ResolveOptions{
+			RepositorySpec: repoSpec,
+			Component:      "test-component",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config",
+					},
 				},
 			},
-		},
-		Namespace: "default",
-	}
-
-	result1, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-	assert.Nil(t, result1)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "first call should be in progress")
-
-	assert.Eventually(t, func() bool {
-		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-		if err != nil {
-			return false
+			Namespace: "default",
 		}
-		result1 = result
-		return result != nil
-	}, 2*time.Second, 50*time.Millisecond, "resolution should complete")
 
-	require.NotNil(t, result1)
+		result1, err := env.Resolver.ResolveComponentVersion(ctx, opts)
+		assert.Nil(t, result1)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress), "first call should be in progress")
 
-	result2, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-	require.NoError(t, err)
-	require.NotNil(t, result2)
+		synctest.Wait()
 
-	// Results should be identical (same pointer from cache)
-	assert.Equal(t, result1.Descriptor.Component.Name, result2.Descriptor.Component.Name)
-	assert.Equal(t, result1.Descriptor.Component.Version, result2.Descriptor.Component.Version)
-	assert.Equal(t, result1.ConfigHash, result2.ConfigHash)
+		result1, err = env.Resolver.ResolveComponentVersion(ctx, opts)
+		require.NoError(t, err)
+		require.NotNil(t, result1)
+
+		result2, err := env.Resolver.ResolveComponentVersion(ctx, opts)
+		require.NoError(t, err)
+		require.NotNil(t, result2)
+
+		// Results should be identical (same pointer from cache)
+		assert.Equal(t, result1.Descriptor.Component.Name, result2.Descriptor.Component.Name)
+		assert.Equal(t, result1.Descriptor.Component.Version, result2.Descriptor.Component.Version)
+		assert.Equal(t, result1.ConfigHash, result2.ConfigHash)
+	})
 }
 
 func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
-	ctx := t.Context()
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		logger := logr.Discard()
 
-	configMap1 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config-1",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap1 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config-1",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	configMap2 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config-2",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap2 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config-2",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
@@ -213,91 +207,82 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 					}
 				]
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap1, configMap2).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap1, configMap2).
+			Build()
 
-	env := setupTestEnvironment(t, k8sClient, logger)
-	t.Cleanup(func() {
-		err := env.Close(ctx)
+		env := setupTestEnvironment(t, k8sClient, logger)
+		t.Cleanup(func() {
+			err := env.Close(ctx)
+			require.NoError(t, err)
+		})
+
+		repoSpec := &ociv1.Repository{
+			BaseUrl: "localhost:5000/test",
+		}
+
+		// First call with config1
+		opts1 := &resolution.ResolveOptions{
+			RepositorySpec: repoSpec,
+			Component:      "test-component",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config-1",
+					},
+				},
+			},
+			Namespace: "default",
+		}
+
+		result1, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
+		assert.Nil(t, result1)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+
+		synctest.Wait()
+
+		result1, err = env.Resolver.ResolveComponentVersion(ctx, opts1)
 		require.NoError(t, err)
+		require.NotNil(t, result1)
+
+		opts2 := &resolution.ResolveOptions{
+			RepositorySpec: repoSpec,
+			Component:      "test-component",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config-2",
+					},
+				},
+			},
+			Namespace: "default",
+		}
+
+		result2, err := env.Resolver.ResolveComponentVersion(ctx, opts2)
+		assert.Nil(t, result2)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+
+		synctest.Wait()
+
+		result2, err = env.Resolver.ResolveComponentVersion(ctx, opts2)
+		require.NoError(t, err)
+		require.NotNil(t, result2)
+
+		// Config hashes should be different
+		assert.NotEqual(t, result1.ConfigHash, result2.ConfigHash)
 	})
-
-	repoSpec := &ociv1.Repository{
-		BaseUrl: "localhost:5000/test",
-	}
-
-	// First call with config1
-	opts1 := &resolution.ResolveOptions{
-		RepositorySpec: repoSpec,
-		Component:      "test-component",
-		Version:        "v1.0.0",
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config-1",
-				},
-			},
-		},
-		Namespace: "default",
-	}
-
-	result1, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
-	assert.Nil(t, result1)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
-
-	assert.Eventually(t, func() bool {
-		result, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
-		if err != nil {
-			return false
-		}
-		result1 = result
-		return result != nil
-	}, 2*time.Second, 50*time.Millisecond, "first resolution should complete")
-
-	require.NotNil(t, result1)
-
-	opts2 := &resolution.ResolveOptions{
-		RepositorySpec: repoSpec,
-		Component:      "test-component",
-		Version:        "v1.0.0",
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config-2",
-				},
-			},
-		},
-		Namespace: "default",
-	}
-
-	result2, err := env.Resolver.ResolveComponentVersion(ctx, opts2)
-	assert.Nil(t, result2)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
-
-	assert.Eventually(t, func() bool {
-		result, err := env.Resolver.ResolveComponentVersion(ctx, opts2)
-		if err != nil {
-			return false
-		}
-		result2 = result
-		return result != nil
-	}, 2*time.Second, 50*time.Millisecond, "second resolution should complete")
-
-	require.NotNil(t, result2)
-
-	// Config hashes should be different
-	assert.NotEqual(t, result1.ConfigHash, result2.ConfigHash)
 }
 
 func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
@@ -311,7 +296,8 @@ func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
+	// Use TTL=0 to avoid background ticker goroutine
+	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		Cache: cache,
 	})
@@ -379,7 +365,8 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
+	// Use TTL=0 to avoid background ticker goroutine
+	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		Client: k8sClient,
 		Cache:  cache,
@@ -411,103 +398,99 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 }
 
 func TestResolveComponentVersionSingleflight(t *testing.T) {
-	ctx := context.Background()
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx := context.Background()
+		logger := logr.Discard()
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap).
+			Build()
 
-	env := setupTestEnvironment(t, k8sClient, logger)
-	t.Cleanup(func() {
-		err := env.Close(ctx)
-		require.NoError(t, err)
-	})
+		env := setupTestEnvironment(t, k8sClient, logger)
+		t.Cleanup(func() {
+			err := env.Close(ctx)
+			require.NoError(t, err)
+		})
 
-	repoSpec := &ociv1.Repository{
-		BaseUrl: "localhost:5000/test",
-	}
+		repoSpec := &ociv1.Repository{
+			BaseUrl: "localhost:5000/test",
+		}
 
-	opts := &resolution.ResolveOptions{
-		RepositorySpec: repoSpec,
-		Component:      "test-component",
-		Version:        "v1.0.0",
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config",
+		opts := &resolution.ResolveOptions{
+			RepositorySpec: repoSpec,
+			Component:      "test-component",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config",
+					},
 				},
 			},
-		},
-		Namespace: "default",
-	}
-
-	const numGoroutines = 10
-	results := make([]*resolution.ResolveResult, numGoroutines)
-	errs := make([]error, numGoroutines)
-
-	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
-
-	// Fire off concurrent requests
-	for i := 0; i < numGoroutines; i++ {
-		go func(idx int) {
-			defer wg.Done()
-			result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-			results[idx] = result
-			errs[idx] = err
-		}(i)
-	}
-
-	wg.Wait()
-
-	inProgressCount := 0
-	for i := range numGoroutines {
-		if errors.Is(errs[i], resolution.ErrResolutionInProgress) {
-			inProgressCount++
+			Namespace: "default",
 		}
-	}
 
-	assert.Greater(t, inProgressCount, 0, "singleflight should cause some goroutines to get in-progress")
+		const numGoroutines = 10
+		results := make([]*resolution.ResolveResult, numGoroutines)
+		errs := make([]error, numGoroutines)
 
-	var finalResult *resolution.ResolveResult
-	assert.Eventually(t, func() bool {
-		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-		if err != nil {
-			return false
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+
+		// Fire off concurrent requests
+		for i := 0; i < numGoroutines; i++ {
+			go func(idx int) {
+				defer wg.Done()
+				result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
+				results[idx] = result
+				errs[idx] = err
+			}(i)
 		}
-		finalResult = result
-		return result != nil
-	}, 2*time.Second, 50*time.Millisecond, "resolution should complete")
 
-	require.NotNil(t, finalResult)
+		wg.Wait()
 
-	for range numGoroutines {
-		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
+		inProgressCount := 0
+		for i := range numGoroutines {
+			if errors.Is(errs[i], resolution.ErrResolutionInProgress) {
+				inProgressCount++
+			}
+		}
+
+		assert.Greater(t, inProgressCount, 0, "singleflight should cause some goroutines to get in-progress")
+
+		synctest.Wait()
+
+		finalResult, err := env.Resolver.ResolveComponentVersion(ctx, opts)
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.Equal(t, finalResult.Descriptor.Component.Name, result.Descriptor.Component.Name)
-		assert.Equal(t, finalResult.Descriptor.Component.Version, result.Descriptor.Component.Version)
-	}
+		require.NotNil(t, finalResult)
+
+		for range numGoroutines {
+			result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, finalResult.Descriptor.Component.Name, result.Descriptor.Component.Name)
+			assert.Equal(t, finalResult.Descriptor.Component.Version, result.Descriptor.Component.Version)
+		}
+	})
 }
 
 // testEnvironment holds the test infrastructure including resolver and plugin manager.
@@ -564,9 +547,6 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Log
 	go func() {
 		_ = wp.Start(ctx)
 	}()
-
-	// Give workers a moment to initialize
-	time.Sleep(50 * time.Millisecond)
 
 	return &testEnvironment{
 		Resolver:      resolver,

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -82,303 +83,297 @@ func (logger *FakeLogger) GetLog() string {
 var _ logr.LogSink = &FakeLogger{}
 
 func TestWorkerPool_StartAndStop(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	fakeLogger := &FakeLogger{}
-	logger := logr.New(fakeLogger)
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		fakeLogger := &FakeLogger{}
+		logger := logr.New(fakeLogger)
 
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		WorkerCount: 3,
-		QueueSize:   10,
-		Logger:      logger,
+		wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+			WorkerCount: 3,
+			QueueSize:   10,
+			Logger:      logger,
+		})
+
+		go func() { _ = wp.Start(ctx) }()
+
+		// Wait for workers to start
+		synctest.Wait()
+
+		// Cancel context to stop workers
+		cancel()
+
+		// Wait for workers to stop
+		synctest.Wait()
+
+		// See if the worker quit
+		assert.Contains(t, fakeLogger.GetLog(), "worker stopped")
 	})
-
-	go func() { _ = wp.Start(ctx) }()
-
-	// Give workers time to start
-	time.Sleep(100 * time.Millisecond)
-
-	// Cancel context to stop workers
-	cancel()
-
-	// Give workers time to stop
-	time.Sleep(100 * time.Millisecond)
-
-	// See if the worker quit
-	assert.Contains(t, fakeLogger.GetLog(), "worker stopped")
 }
 
 func TestWorkerPool_SingleResolution(t *testing.T) {
-	ctx := context.Background()
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		logger := logr.Discard()
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap).
+			Build()
 
-	env := setupTestEnvironment(t, k8sClient, logger)
-	t.Cleanup(func() {
-		err := env.Close(ctx)
-		require.NoError(t, err)
-	})
+		env := setupTestEnvironment(t, k8sClient, logger)
+		t.Cleanup(func() {
+			err := env.Close(ctx)
+			require.NoError(t, err)
+		})
 
-	opts := &resolution.ResolveOptions{
-		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-		Component:      "single-component",
-		Version:        "v1.0.0",
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config",
+		opts := &resolution.ResolveOptions{
+			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+			Component:      "single-component",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config",
+					},
 				},
 			},
-		},
-		Namespace: "default",
-	}
+			Namespace: "default",
+		}
 
-	result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-	assert.Nil(t, result)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
-
-	assert.Eventually(t, func() bool {
 		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-		return err == nil && result != nil
-	}, 2*time.Second, 50*time.Millisecond)
+		assert.Nil(t, result)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+
+		// Wait for all goroutines to become durably blocked (resolution complete)
+		synctest.Wait()
+
+		result, err = env.Resolver.ResolveComponentVersion(ctx, opts)
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+	})
 }
 
 func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
-	ctx := context.Background()
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		logger := logr.Discard()
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap).
+			Build()
 
-	resolver := setupDynamicTestEnvironment(t, k8sClient, logger)
+		resolver := setupDynamicTestEnvironment(t, k8sClient, logger)
 
-	const numComponents = 20
-	var wg sync.WaitGroup
-	wg.Add(numComponents)
-
-	results := make([]atomic.Pointer[resolution.ResolveResult], numComponents)
-	errs := make([]atomic.Pointer[error], numComponents)
-
-	for i := 0; i < numComponents; i++ {
-		go func() {
-			defer wg.Done()
-
-			opts := &resolution.ResolveOptions{
-				RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-				Component:      fmt.Sprintf("component-%d", i),
-				Version:        "v1.0.0",
-				OCMConfigurations: []v1alpha1.OCMConfiguration{
-					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-							Kind: "ConfigMap",
-							Name: "ocm-config",
-						},
+		const numComponents = 20
+		results := make([]atomic.Pointer[resolution.ResolveResult], numComponents)
+		errs := make([]atomic.Pointer[error], numComponents)
+		opts := &resolution.ResolveOptions{
+			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+			Component:      "", // set in the iteration
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config",
 					},
 				},
-				Namespace: "default",
-			}
+			},
+			Namespace: "default",
+		}
 
-			// First call should return in-progress
-			result, err := resolver.ResolveComponentVersion(ctx, opts)
-			if result == nil && errors.Is(err, resolution.ErrResolutionInProgress) {
-				// Poll until resolution completes
-				for j := 0; j < 40; j++ {
-					time.Sleep(50 * time.Millisecond)
-					result, err = resolver.ResolveComponentVersion(ctx, opts)
-					if result != nil || (err != nil && !errors.Is(err, resolution.ErrResolutionInProgress)) {
-						break
-					}
+		for i := range numComponents {
+			go func() {
+				o := *opts
+				o.Component = fmt.Sprintf("component-%d", i)
+				result, err := resolver.ResolveComponentVersion(ctx, &o)
+				results[i].Store(result)
+				if err != nil {
+					errs[i].Store(&err)
 				}
+			}()
+		}
+
+		// Wait for all resolutions to complete
+		t.Logf("Starting %d components", numComponents)
+		synctest.Wait()
+		t.Log("wait finished")
+
+		// Verify all resolutions completed successfully
+		for i := range numComponents {
+			result := results[i].Load()
+			if result == nil {
+				// Try one more time after synctest.Wait
+				opts.Component = fmt.Sprintf("component-%d", i)
+				result, _ = resolver.ResolveComponentVersion(ctx, opts)
 			}
-
-			results[i].Store(result)
-			if err != nil {
-				errs[i].Store(&err)
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	// Verify all resolutions completed successfully
-	for i := 0; i < numComponents; i++ {
-		result := results[i].Load()
-		require.NotNil(t, result, "component-%d should have a result", i)
-		assert.Equal(t, fmt.Sprintf("component-%d", i), result.Descriptor.Component.Name)
-		assert.Equal(t, "v1.0.0", result.Descriptor.Component.Version)
-	}
+			require.NotNil(t, result, "component-%d should have a result", i)
+			assert.Equal(t, fmt.Sprintf("component-%d", i), result.Descriptor.Component.Name)
+			assert.Equal(t, "v1.0.0", result.Descriptor.Component.Version)
+		}
+	})
 }
 
 func TestWorkerPool_ParallelResolutions_SameComponent_Singleflight(t *testing.T) {
-	ctx := context.Background()
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		logger := logr.Discard()
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap).
+			Build()
 
-	// Use a mock plugin that tracks call count
-	var callCount atomic.Int32
-	countingPlugin := &countingOCIPlugin{
-		component: "shared-component",
-		version:   "v1.0.0",
-		callCount: &callCount,
-	}
+		// Use a mock plugin that tracks call count
+		var callCount atomic.Int32
+		countingPlugin := &countingOCIPlugin{
+			component: "shared-component",
+			version:   "v1.0.0",
+			callCount: &callCount,
+		}
 
-	ocmScheme := ocmruntime.NewScheme()
-	ocirepository.MustAddToScheme(ocmScheme)
+		ocmScheme := ocmruntime.NewScheme()
+		ocirepository.MustAddToScheme(ocmScheme)
 
-	pm := manager.NewPluginManager(t.Context())
-	err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-		ocmScheme,
-		pm.ComponentVersionRepositoryRegistry,
-		countingPlugin,
-		&ociv1.Repository{},
-	)
-	require.NoError(t, err)
+		pm := manager.NewPluginManager(t.Context())
+		err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
+			ocmScheme,
+			pm.ComponentVersionRepositoryRegistry,
+			countingPlugin,
+			&ociv1.Repository{},
+		)
+		require.NoError(t, err)
 
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		WorkerCount: 5,
-		QueueSize:   100,
-		PluginManager: &plugins.PluginManager{
-			PluginManager: pm,
-		},
-		Logger: logger,
-		Cache:  cache,
-	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp)
+		// Use TTL=0 to avoid background ticker goroutine that causes synctest deadlock
+		cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
+		wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+			WorkerCount: 5,
+			QueueSize:   100,
+			PluginManager: &plugins.PluginManager{
+				PluginManager: pm,
+			},
+			Logger: logger,
+			Cache:  cache,
+		})
+		resolver := resolution.NewResolver(k8sClient, logger, wp)
 
-	wpCtx, wpCancel := context.WithCancel(t.Context())
-	t.Cleanup(wpCancel)
+		wpCtx, wpCancel := context.WithCancel(t.Context())
+		t.Cleanup(wpCancel)
 
-	go func() { _ = wp.Start(wpCtx) }()
+		go func() { _ = wp.Start(wpCtx) }()
 
-	const numConcurrent = 50
-	var wg sync.WaitGroup
-	wg.Add(numConcurrent)
+		const numConcurrent = 50
+		results := make([]atomic.Pointer[resolution.ResolveResult], numConcurrent)
+		errs := make([]atomic.Pointer[error], numConcurrent)
 
-	results := make([]atomic.Pointer[resolution.ResolveResult], numConcurrent)
-	errs := make([]atomic.Pointer[error], numConcurrent)
-
-	// Fire off concurrent requests for the same component
-	for i := range numConcurrent {
-		go func() {
-			defer wg.Done()
-
-			opts := &resolution.ResolveOptions{
-				RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-				Component:      "shared-component",
-				Version:        "v1.0.0",
-				OCMConfigurations: []v1alpha1.OCMConfiguration{
-					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-							Kind: "ConfigMap",
-							Name: "ocm-config",
-						},
+		opts := &resolution.ResolveOptions{
+			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+			Component:      "shared-component",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config",
 					},
 				},
-				Namespace: "default",
-			}
+			},
+			Namespace: "default",
+		}
 
-			result, err := resolver.ResolveComponentVersion(ctx, opts)
-			if result == nil && errors.Is(err, resolution.ErrResolutionInProgress) {
-				for range 40 {
-					time.Sleep(50 * time.Millisecond)
-					result, err = resolver.ResolveComponentVersion(ctx, opts)
-					if result != nil || (err != nil && !errors.Is(err, resolution.ErrResolutionInProgress)) {
-						break
-					}
+		// Fire off concurrent requests for the same component
+		for i := range numConcurrent {
+			go func() {
+				result, err := resolver.ResolveComponentVersion(ctx, opts)
+				results[i].Store(result)
+				if err != nil {
+					errs[i].Store(&err)
 				}
+			}()
+		}
+
+		t.Log("before synctest wait")
+		// Wait for resolution to complete
+		synctest.Wait()
+		t.Log("after synctest wait")
+
+		// Verify all requests got the result
+		for i := range numConcurrent {
+			result := results[i].Load()
+			if result == nil {
+				// refetch things after synctest wait is done
+				result, err = resolver.ResolveComponentVersion(ctx, opts)
+				require.NoError(t, err)
 			}
+			require.NotNil(t, result, "request %d should have a result", i)
+			assert.Equal(t, "shared-component", result.Descriptor.Component.Name)
+		}
 
-			results[i].Store(result)
-			if err != nil {
-				errs[i].Store(&err)
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	// Verify all requests got the same result
-	for i := range numConcurrent {
-		result := results[i].Load()
-		require.NotNil(t, result, "request %d should have a result", i)
-		assert.Equal(t, "shared-component", result.Descriptor.Component.Name)
-	}
-
-	// Singleflight prevents duplicate enqueues on the initial burst of requests.
-	// However, callers poll after getting ErrResolutionInProgress, and if they
-	// retry before the cache is populated, they might trigger another resolution.
-	// With 50 concurrent goroutines polling, we expect significantly fewer calls
-	// than 50, ideally just 1-2 but allowing some slack for timing.
-	calls := callCount.Load()
-	assert.LessOrEqual(t, calls, int32(15), "singleflight should reduce duplicate resolutions (got %d calls)", calls)
-	t.Logf("Plugin was called %d times (singleflight deduplication working)", calls)
+		// Singleflight should significantly reduce the number of plugin calls
+		calls := callCount.Load()
+		assert.Equal(t, calls, int32(1), "singleflight should reduce duplicate resolutions (got %d calls)", calls)
+		t.Logf("Plugin was called %d times (singleflight deduplication working)", calls)
+	})
 }
 
 func TestWorkerPool_QueueFull(t *testing.T) {
-	ctx := context.Background()
+	// Note: This test uses real time.Sleep and is NOT wrapped in synctest.Test
+	// because it tests queue overflow behavior with a slow plugin that blocks workers.
+	ctx := t.Context()
 	logger := logr.Discard()
 
 	configMap := &corev1.ConfigMap{
@@ -447,26 +442,27 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(10)
 
+	opts := &resolution.ResolveOptions{
+		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+		Component:      "", // set during the for loop
+		Version:        "v1.0.0",
+		OCMConfigurations: []v1alpha1.OCMConfiguration{
+			{
+				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					Kind: "ConfigMap",
+					Name: "ocm-config",
+				},
+			},
+		},
+		Namespace: "default",
+	}
+
 	for i := range 10 {
 		go func() {
 			defer wg.Done()
-
-			opts := &resolution.ResolveOptions{
-				RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-				Component:      fmt.Sprintf("component-%d", i),
-				Version:        "v1.0.0",
-				OCMConfigurations: []v1alpha1.OCMConfiguration{
-					{
-						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-							Kind: "ConfigMap",
-							Name: "ocm-config",
-						},
-					},
-				},
-				Namespace: "default",
-			}
-
-			_, err := resolver.ResolveComponentVersion(ctx, opts)
+			o := *opts
+			o.Component = fmt.Sprintf("component-%d", i)
+			_, err := resolver.ResolveComponentVersion(ctx, &o)
 			if err != nil && !errors.Is(err, resolution.ErrResolutionInProgress) {
 				// Check for queue full error using contains since component name varies
 				if err.Error() == fmt.Sprintf("failed to resolve component version: lookup queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
@@ -483,176 +479,177 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 }
 
 func TestWorkerPool_ContextCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		logger := logr.Discard()
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap).
+			Build()
 
-	env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, logger)
 
-	opts := &resolution.ResolveOptions{
-		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-		Component:      "cancel-component",
-		Version:        "v1.0.0",
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config",
+		opts := &resolution.ResolveOptions{
+			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+			Component:      "cancel-component",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config",
+					},
 				},
 			},
-		},
-		Namespace: "default",
-	}
+			Namespace: "default",
+		}
 
-	// Start resolution
-	result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-	assert.Nil(t, result)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+		// Start resolution
+		result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
+		assert.Nil(t, result)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
 
-	// Cancel context immediately
-	cancel()
+		// Cancel context immediately
+		cancel()
 
-	// Close environment (stops worker pool)
-	err = env.Close(ctx)
-	require.NoError(t, err)
+		// Close environment (stops worker pool)
+		err = env.Close(ctx)
+		require.NoError(t, err)
 
-	// Give workers time to stop
-	time.Sleep(200 * time.Millisecond)
+		// Wait for workers to stop
+		synctest.Wait()
+	})
 }
 
 func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
-	ctx := context.Background()
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		logger := logr.Discard()
 
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap).
+			Build()
 
-	resolver := setupDynamicTestEnvironment(t, k8sClient, logger)
+		resolver := setupDynamicTestEnvironment(t, k8sClient, logger)
 
-	versions := []string{"v1.0.0", "v1.1.0", "v1.2.0", "v2.0.0"}
-	const numConcurrent = 10
+		versions := []string{"v1.0.0", "v1.1.0", "v1.2.0", "v2.0.0"}
+		const numConcurrent = 10
 
-	var wg sync.WaitGroup
-	wg.Add(len(versions) * numConcurrent)
-
-	results := make(map[string][]atomic.Pointer[resolution.ResolveResult])
-	for _, v := range versions {
-		results[v] = make([]atomic.Pointer[resolution.ResolveResult], numConcurrent)
-	}
-
-	for _, version := range versions {
-		for i := range numConcurrent {
-			go func() {
-				defer wg.Done()
-
-				opts := &resolution.ResolveOptions{
-					RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-					Component:      "multi-version-component",
-					Version:        version,
-					OCMConfigurations: []v1alpha1.OCMConfiguration{
-						{
-							NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-								Kind: "ConfigMap",
-								Name: "ocm-config",
-							},
-						},
+		results := make(map[string][]atomic.Pointer[resolution.ResolveResult])
+		for _, v := range versions {
+			results[v] = make([]atomic.Pointer[resolution.ResolveResult], numConcurrent)
+		}
+		opts := &resolution.ResolveOptions{
+			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+			Component:      "multi-version-component",
+			Version:        "", // set during the loops
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config",
 					},
-					Namespace: "default",
-				}
-
-				result, err := resolver.ResolveComponentVersion(ctx, opts)
-				if result == nil && errors.Is(err, resolution.ErrResolutionInProgress) {
-					for range 40 {
-						time.Sleep(50 * time.Millisecond)
-						result, err = resolver.ResolveComponentVersion(ctx, opts)
-						if result != nil || (err != nil && !errors.Is(err, resolution.ErrResolutionInProgress)) {
-							break
-						}
-					}
-				}
-
-				results[version][i].Store(result)
-			}()
+				},
+			},
+			Namespace: "default",
 		}
-	}
 
-	wg.Wait()
-
-	// Verify all versions resolved correctly
-	for _, version := range versions {
-		for i := range numConcurrent {
-			result := results[version][i].Load()
-			require.NotNil(t, result, "version %s, request %d should have a result", version, i)
-			assert.Equal(t, "multi-version-component", result.Descriptor.Component.Name)
-			assert.Equal(t, version, result.Descriptor.Component.Version)
+		for _, version := range versions {
+			for i := range numConcurrent {
+				go func() {
+					o := *opts
+					o.Version = version
+					result, _ := resolver.ResolveComponentVersion(ctx, &o)
+					results[version][i].Store(result)
+				}()
+			}
 		}
-	}
+
+		t.Log("before the synctest.Wait call")
+		// Wait for all resolutions to complete
+		synctest.Wait()
+		t.Log("after the synctest.Wait call")
+
+		// Verify all versions resolved correctly
+		for _, version := range versions {
+			for i := range numConcurrent {
+				result := results[version][i].Load()
+				if result == nil {
+					// refetch values after sync wait is done for all go routines
+					opts.Version = version
+					var err error
+					result, err = resolver.ResolveComponentVersion(ctx, opts)
+					require.NoError(t, err)
+				}
+				require.NotNil(t, result, "version %s, request %d should have a result", version, i)
+				assert.Equal(t, "multi-version-component", result.Descriptor.Component.Name)
+				assert.Equal(t, version, result.Descriptor.Component.Version)
+			}
+		}
+	})
 }
 
 func TestWorkerPool_CacheInvalidation(t *testing.T) {
-	ctx := context.Background()
-	logger := logr.Discard()
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		logger := logr.Discard()
 
-	configMap1 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config-1",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap1 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config-1",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": []
 			}`,
-		},
-	}
+			},
+		}
 
-	configMap2 := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ocm-config-2",
-			Namespace: "default",
-		},
-		Data: map[string]string{
-			".ocmconfig": `{
+		configMap2 := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "ocm-config-2",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				".ocmconfig": `{
 				"type": "generic.config.ocm.software/v1",
 				"configurations": [
 					{
@@ -661,90 +658,79 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 					}
 				]
 			}`,
-		},
-	}
+			},
+		}
 
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, v1alpha1.AddToScheme(scheme))
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, v1alpha1.AddToScheme(scheme))
 
-	k8sClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(configMap1, configMap2).
-		Build()
+		k8sClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(configMap1, configMap2).
+			Build()
 
-	env := setupTestEnvironment(t, k8sClient, logger)
-	t.Cleanup(func() {
-		err := env.Close(ctx)
+		env := setupTestEnvironment(t, k8sClient, logger)
+		t.Cleanup(func() {
+			err := env.Close(ctx)
+			require.NoError(t, err)
+		})
+
+		opts1 := &resolution.ResolveOptions{
+			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+			Component:      "cache-test",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config-1",
+					},
+				},
+			},
+			Namespace: "default",
+		}
+
+		// First resolution with config-1
+		_, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+
+		synctest.Wait()
+
+		result1, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
 		require.NoError(t, err)
+		require.NotNil(t, result1)
+		hash1 := result1.ConfigHash
+
+		opts2 := &resolution.ResolveOptions{
+			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+			Component:      "cache-test",
+			Version:        "v1.0.0",
+			OCMConfigurations: []v1alpha1.OCMConfiguration{
+				{
+					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+						Kind: "ConfigMap",
+						Name: "ocm-config-2",
+					},
+				},
+			},
+			Namespace: "default",
+		}
+
+		// Second resolution with config-2 (different config = cache miss)
+		_, err = env.Resolver.ResolveComponentVersion(ctx, opts2)
+		assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
+
+		synctest.Wait()
+
+		result2, err := env.Resolver.ResolveComponentVersion(ctx, opts2)
+		require.NoError(t, err)
+		require.NotNil(t, result2)
+		hash2 := result2.ConfigHash
+
+		// Different configs should produce different cache keys
+		assert.NotEqual(t, hash1, hash2)
 	})
-
-	opts1 := &resolution.ResolveOptions{
-		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-		Component:      "cache-test",
-		Version:        "v1.0.0",
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config-1",
-				},
-			},
-		},
-		Namespace: "default",
-	}
-
-	// First resolution with config-1
-	var result1 *resolution.ResolveResult
-	_, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
-
-	assert.Eventually(t, func() bool {
-		result, err := env.Resolver.ResolveComponentVersion(ctx, opts1)
-		if err == nil && result != nil {
-			result1 = result
-			return true
-		}
-		return false
-	}, 2*time.Second, 50*time.Millisecond)
-
-	require.NotNil(t, result1)
-	hash1 := result1.ConfigHash
-
-	opts2 := &resolution.ResolveOptions{
-		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-		Component:      "cache-test",
-		Version:        "v1.0.0",
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config-2",
-				},
-			},
-		},
-		Namespace: "default",
-	}
-
-	// Second resolution with config-2 (different config = cache miss)
-	var result2 *resolution.ResolveResult
-	_, err = env.Resolver.ResolveComponentVersion(ctx, opts2)
-	assert.True(t, errors.Is(err, resolution.ErrResolutionInProgress))
-
-	assert.Eventually(t, func() bool {
-		result, err := env.Resolver.ResolveComponentVersion(ctx, opts2)
-		if err == nil && result != nil {
-			result2 = result
-			return true
-		}
-		return false
-	}, 2*time.Second, 50*time.Millisecond)
-
-	require.NotNil(t, result2)
-	hash2 := result2.ConfigHash
-
-	// Different configs should produce different cache keys
-	assert.NotEqual(t, hash1, hash2)
 }
 
 // countingOCIPlugin tracks how many times GetComponentVersionRepository is called
@@ -778,7 +764,6 @@ func (p *countingOCIPlugin) GetComponentVersionRepository(
 	_ map[string]string,
 ) (repository.ComponentVersionRepository, error) {
 	p.callCount.Add(1)
-	time.Sleep(100 * time.Millisecond) // Simulate some work
 	return &dynamicMockRepository{}, nil
 }
 
@@ -879,7 +864,8 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 	)
 	require.NoError(t, err)
 
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 30*time.Second)
+	// Use TTL=0 to avoid background ticker goroutine that causes synctest deadlock
+	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
 	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
 		PluginManager: &plugins.PluginManager{
 			PluginManager: pm,
@@ -900,9 +886,6 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 	go func() {
 		_ = wp.Start(ctx)
 	}()
-
-	// Give workers a moment to initialize
-	time.Sleep(50 * time.Millisecond)
 
 	return resolver
 }

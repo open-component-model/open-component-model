@@ -18,11 +18,11 @@ type PluginManagerOptions struct {
 }
 
 // DefaultPluginManagerOptions returns default options for plugin manager setup.
-func DefaultPluginManagerOptions() PluginManagerOptions {
+func DefaultPluginManagerOptions(log logr.Logger) PluginManagerOptions {
 	return PluginManagerOptions{
 		Locations:   []string{}, // TODO: Set up temp?
 		IdleTimeout: time.Hour,
-		Logger:      logr.Discard(),
+		Logger:      log,
 	}
 }
 

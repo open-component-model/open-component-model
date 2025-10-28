@@ -153,14 +153,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	pm := plugins.NewPluginManager(plugins.DefaultPluginManagerOptions())
+	pm := plugins.NewPluginManager(plugins.DefaultPluginManagerOptions(setupLog))
 	if err := mgr.Add(pm); err != nil {
 		setupLog.Error(err, "unable to add plugin manager")
 		os.Exit(1)
 	}
 
 	const unlimited = 0
-	ttl := time.Second * 30
+	ttl := time.Minute * 30
 	resolverCache := expirable.NewLRU[string, *resolution.Result](unlimited, nil, ttl)
 
 	// Create worker pool with its own dependencies

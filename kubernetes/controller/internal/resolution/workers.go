@@ -45,10 +45,8 @@ type WorkerPoolOptions struct {
 
 // WorkerPool manages a pool of workers that process work items concurrently.
 type WorkerPool struct {
-	opts      WorkerPoolOptions
+	WorkerPoolOptions
 	workQueue chan *WorkItem
-	cache     *expirable.LRU[string, *Result]
-	logger    logr.Logger
 }
 
 // NewWorkerPool creates a new worker pool.
@@ -66,21 +64,19 @@ func NewWorkerPool(opts WorkerPoolOptions) *WorkerPool {
 	}
 
 	return &WorkerPool{
-		opts:      opts,
-		workQueue: make(chan *WorkItem, opts.QueueSize),
-		cache:     opts.Cache,
-		logger:    opts.Logger,
+		WorkerPoolOptions: opts,
+		workQueue:         make(chan *WorkItem, opts.QueueSize),
 	}
 }
 
 // Start begins the worker pool and result collector.
 // This method blocks until the context is cancelled to implement graceful shutdown.
 func (wp *WorkerPool) Start(ctx context.Context) error {
-	wp.logger.Info("starting worker pool", "workers", wp.opts.WorkerCount, "queueSize", wp.opts.QueueSize)
+	wp.Logger.Info("starting worker pool", "workers", wp.WorkerCount, "queueSize", wp.QueueSize)
 
 	// Start workers and collect their result channels (fan-out)
-	workerChannels := make([]chan *Result, 0, wp.opts.WorkerCount)
-	for i := range wp.opts.WorkerCount {
+	workerChannels := make([]chan *Result, 0, wp.WorkerCount)
+	for i := range wp.WorkerCount {
 		workerChannels = append(workerChannels, wp.startWorker(ctx, i))
 	}
 
@@ -93,7 +89,7 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 
 	// block until context is done to implement proper runnable.
 	<-ctx.Done()
-	wp.logger.Info("worker pool shutting down, draining queue")
+	wp.Logger.Info("worker pool shutting down, draining queue")
 
 	// close work queue to signal workers to stop
 	close(wp.workQueue)
@@ -101,14 +97,14 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	// wait for all workers to finish and result collector to stop
 	<-collectorDone
 
-	wp.logger.Info("worker pool shutdown complete")
+	wp.Logger.Info("worker pool shutdown complete")
 	return nil
 }
 
 // Resolve resolves a component version with caching and async queuing.
 func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptions, cfg *configuration.Configuration) (*ResolveResult, error) {
 	// Check cache first (fast path)
-	if cached, ok := wp.cache.Get(key); ok {
+	if cached, ok := wp.Cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.err != nil {
 			return nil, cached.err
@@ -129,10 +125,10 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 	// Try to enqueue the request. If the queue is full we send back a full queue response, otherwise, an unknown error.
 	case wp.workQueue <- workItem:
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
-		wp.logger.V(1).Info("enqueued resolution request", "component", opts.Component, "version", opts.Version)
+		wp.Logger.V(1).Info("enqueued resolution request", "component", opts.Component, "version", opts.Version)
 		return nil, ErrResolutionInProgress
 	default:
-		if len(wp.workQueue) == wp.opts.QueueSize {
+		if len(wp.workQueue) == wp.QueueSize {
 			return nil, fmt.Errorf("lookup queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
 		}
 
@@ -144,7 +140,7 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 // Returns the channel that the worker will send results to.
 func (wp *WorkerPool) startWorker(ctx context.Context, id int) chan *Result {
 	resultChan := make(chan *Result)
-	logger := wp.logger.WithValues("worker", id)
+	logger := wp.Logger.WithValues("worker", id)
 
 	// create a worker for the created channel and return immediately with the channel
 	go wp.createWorkerForChannel(ctx, logger, resultChan, id)
@@ -205,7 +201,7 @@ func (wp *WorkerPool) createWorkerForChannel(ctx context.Context, logger logr.Lo
 
 // resultCollector processes results from multiple worker channels and updates the cache.
 func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan *Result) {
-	logger := wp.logger.WithValues("component", "result-collector")
+	logger := wp.Logger.WithValues("component", "result-collector")
 	logger.V(1).Info("result collector started", "workerCount", len(workerChannels))
 
 	// Merge all worker channels into a single channel (fan-in)
@@ -242,43 +238,45 @@ func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan
 				return
 			}
 
+			// Fucking InProgress.
+
 			// store result in cache
-			wp.cache.Add(res.key, res)
+			wp.Cache.Add(res.key, res)
 		}
 	}
 }
 
 // resolve performs the actual component version resolution.
 func (wp *WorkerPool) resolve(ctx context.Context, opts *ResolveOptions, cfg *configuration.Configuration) (*ResolveResult, error) {
-	pm := wp.opts.PluginManager.PluginManager
+	pm := wp.PluginManager.PluginManager
 	if pm == nil {
 		return nil, fmt.Errorf("plugin manager is nil")
 	}
 
 	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 		PluginManager: pm,
-		Logger:        wp.logger,
+		Logger:        wp.Logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create credential graph: %w", err)
 	}
-	wp.logger.V(1).Info("resolved credential graph")
+	wp.Logger.V(1).Info("resolved credential graph")
 
 	repo, err := setup.NewRepository(ctx, opts.RepositorySpec, setup.RepositoryOptions{
 		PluginManager:   pm,
 		CredentialGraph: credGraph,
-		Logger:          wp.logger,
+		Logger:          wp.Logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}
-	wp.logger.V(1).Info("new repository created")
+	wp.Logger.V(1).Info("new repository created")
 
 	descriptor, err := repo.GetComponentVersion(ctx, opts.Component, opts.Version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get component version %s:%s: %w", opts.Component, opts.Version, err)
 	}
-	wp.logger.V(1).Info("resolved component version", "component", opts.Component, "version", opts.Version, "descriptor", descriptor)
+	wp.Logger.V(1).Info("resolved component version", "component", opts.Component, "version", opts.Version, "descriptor", descriptor)
 
 	result := &ResolveResult{
 		Descriptor: descriptor,
