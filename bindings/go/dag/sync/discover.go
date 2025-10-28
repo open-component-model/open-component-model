@@ -55,8 +55,12 @@ const (
 // NewGraphDiscoverer constructs a discoverer instance with its own
 // concurrency-safe DAG and per-vertex "done" channels.
 func NewGraphDiscoverer[K cmp.Ordered, V any](opts *GraphDiscovererOptions[K, V]) *GraphDiscoverer[K, V] {
+	graph := opts.Graph
+	if graph == nil {
+		graph = NewSyncedDirectedAcyclicGraph[K]()
+	}
 	return &GraphDiscoverer[K, V]{
-		graph:   NewSyncedDirectedAcyclicGraph[K](),
+		graph:   graph,
 		doneMap: &sync.Map{},
 		opts:    opts,
 	}
