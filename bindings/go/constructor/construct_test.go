@@ -5,8 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sort"
-	"strings"
+	"slices"
 	"sync"
 	"testing"
 
@@ -252,6 +251,37 @@ components:
 	}
 	require.NoError(t, externalRepo.AddComponentVersion(t.Context(), externalDescriptor))
 
+	runAssertions := func(t *testing.T, descMap map[string]*descriptor.Descriptor) {
+		t.Helper()
+
+		// ocm.software/test-component
+		desc := descMap["ocm.software/test-component"]
+		require.NotNil(t, desc)
+		assert.Equal(t, "test-provider", desc.Component.Provider.Name)
+		assert.Len(t, desc.Component.Resources, 1)
+		assert.Len(t, desc.Component.Sources, 1)
+		assert.Equal(t, "application/json", desc.Component.Resources[0].Access.(*v2.LocalBlob).MediaType)
+		assert.Equal(t, "application/octet-stream", desc.Component.Sources[0].Access.(*v2.LocalBlob).MediaType)
+
+		// ocm.software/test-component-ref-a
+		descA := descMap["ocm.software/test-component-ref-a"]
+		require.NotNil(t, descA)
+		assert.Equal(t, "test-provider", descA.Component.Provider.Name)
+		assert.Len(t, descA.Component.Resources, 1)
+		assert.Len(t, descA.Component.Sources, 1)
+		assert.Equal(t, "application/json", descA.Component.Resources[0].Access.(*v2.LocalBlob).MediaType)
+		assert.Equal(t, "application/octet-stream", descA.Component.Sources[0].Access.(*v2.LocalBlob).MediaType)
+
+		// ocm.software/test-component-ref-b
+		descB := descMap["ocm.software/test-component-ref-b"]
+		require.NotNil(t, descB)
+		assert.Equal(t, "test-provider", descB.Component.Provider.Name)
+		assert.Len(t, descB.Component.Resources, 1)
+		assert.Len(t, descB.Component.Sources, 1)
+		assert.Equal(t, "application/json", descB.Component.Resources[0].Access.(*v2.LocalBlob).MediaType)
+		assert.Equal(t, "application/octet-stream", descB.Component.Sources[0].Access.(*v2.LocalBlob).MediaType)
+	}
+
 	t.Run("with external references", func(t *testing.T) {
 		mockRepo := newMockTargetRepository()
 		opts := Options{
@@ -261,72 +291,24 @@ components:
 			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
 			ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicyCopyOrFail,
 		}
-
 		graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 		constructorInstance := NewDefaultConstructor(graph, opts)
 
 		err := constructorInstance.Construct(t.Context(), converted)
 		require.NoError(t, err)
+		descs := collectDescriptors(t, graph)
+		require.Len(t, descs, 4)
 
-		err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-			roots := d.Roots()
-			assert.Len(t, roots, 1)
-			root := roots[0]
+		descMap := make(map[string]*descriptor.Descriptor)
+		for _, d := range descs {
+			descMap[d.Component.Name] = d
+		}
+		runAssertions(t, descMap)
 
-			assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
-
-			assert.Len(t, d.Roots(), 1)
-			verts := d.Vertices
-			assert.Len(t, verts, 4)
-
-			compMap := make(map[string]*ConstructorOrExternalComponent)
-			for id, v := range verts {
-				compMap[id] = v.Attributes[syncdag.AttributeValue].(*ConstructorOrExternalComponent)
-			}
-
-			findInMap := func(name string) *ConstructorOrExternalComponent {
-				for key, val := range compMap {
-					if key == name {
-						return val
-					}
-					if strings.HasPrefix(key, "name="+name+",") {
-						return val
-					}
-				}
-
-				return nil
-			}
-
-			// ocm.software/test-component
-			compOrExt := findInMap("ocm.software/test-component")
-			require.NotNil(t, compOrExt)
-			assert.Equal(t, "test-provider", compOrExt.ConstructorComponent.Provider.Name)
-			assert.Len(t, compOrExt.ConstructorComponent.Resources, 1)
-			assert.Len(t, compOrExt.ConstructorComponent.Sources, 1)
-			assert.Equal(t, "application/json", compOrExt.ConstructorComponent.Resources[0].Access.(*v2.LocalBlob).MediaType)
-			assert.Equal(t, "application/octet-stream", compOrExt.ConstructorComponent.Sources[0].Access.(*v2.LocalBlob).MediaType)
-
-			// ocm.software/test-component-ref-a
-			vertA := findInMap("ocm.software/test-component-ref-a")
-			require.NotNil(t, vertA)
-			assert.Equal(t, "test-provider", vertA.ConstructorComponent.Provider.Name)
-			assert.Len(t, vertA.ConstructorComponent.Resources, 1)
-			assert.Len(t, vertA.ConstructorComponent.Sources, 1)
-			assert.Equal(t, "application/json", vertA.ConstructorComponent.Resources[0].Access.(*v2.LocalBlob).MediaType)
-			assert.Equal(t, "application/octet-stream", vertA.ConstructorComponent.Sources[0].Access.(*v2.LocalBlob).MediaType)
-
-			// ocm.software/test-component-ref-b
-			vertB := findInMap("ocm.software/test-component-ref-b")
-			require.NotNil(t, vertB)
-			assert.Equal(t, "test-provider", vertB.ConstructorComponent.Provider.Name)
-			assert.Len(t, vertB.ConstructorComponent.Resources, 1)
-			assert.Len(t, vertB.ConstructorComponent.Sources, 1)
-			assert.Equal(t, "application/json", vertB.ConstructorComponent.Resources[0].Access.(*v2.LocalBlob).MediaType)
-			assert.Equal(t, "application/octet-stream", vertB.ConstructorComponent.Sources[0].Access.(*v2.LocalBlob).MediaType)
-
-			return nil
-		})
-		require.NoError(t, err)
+		uploaded, err := mockRepo.GetComponentVersion(t.Context(), externalDescriptor.Component.Name, externalDescriptor.Component.Version)
+		require.NoError(t, err, "external reference should have been uploaded")
+		require.NotNil(t, uploaded)
+		assert.Equal(t, externalDescriptor, uploaded)
 	})
 
 	t.Run("skip external references", func(t *testing.T) {
@@ -343,46 +325,17 @@ components:
 
 		err := constructorInstance.Construct(t.Context(), converted)
 		require.NoError(t, err)
+		descs := collectDescriptors(t, graph)
+		require.Len(t, descs, 4)
 
-		err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-			roots := d.Roots()
-			assert.Len(t, roots, 1)
-			root := roots[0]
+		descMap := make(map[string]*descriptor.Descriptor)
+		for _, d := range descs {
+			descMap[d.Component.Name] = d
+		}
+		runAssertions(t, descMap)
 
-			assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
-
-			// 		descMap := make(map[string]*descriptor.Descriptor)
-			//		for _, d := range descriptors {
-			//			descMap[d.Component.Name] = d
-			//		}
-			//		runAssertions(t, descMap)
-			//
-			//		_, err = mockRepo.GetComponentVersion(t.Context(), externalDescriptor.Component.Name, externalDescriptor.Component.Version)
-			//		assert.Error(t, err, "external component should not be uploaded when SkipExternalReferences is true")
-
-			verts := d.Vertices
-			assert.Len(t, verts, 1)
-
-			val := verts[root].Attributes[syncdag.AttributeValue]
-			assert.NotNil(t, val)
-			comp, _ := val.(*ConstructorOrExternalComponent)
-			assert.NotNil(t, comp)
-
-			res := comp.ConstructorComponent.Resources
-			assert.Len(t, res, 2)
-
-			assert.Equal(t, "test-resource-1", res[0].Name)
-			assert.Equal(t, "v1.0.0", res[0].Version)
-			assert.Equal(t, descriptor.LocalRelation, res[0].Relation)
-			assert.NotNil(t, res[0].Access)
-
-			// // Verify the access specification
-			access, ok := res[0].Access.(*v2.LocalBlob)
-			require.True(t, ok, "Access should be of type LocalBlob")
-			assert.Equal(t, "application/octet-stream", access.MediaType)
-			return nil
-		})
-		require.NoError(t, err)
+		_, err = mockRepo.GetComponentVersion(t.Context(), externalDescriptor.Component.Name, externalDescriptor.Component.Version)
+		assert.Error(t, err, "external component should not be uploaded when SkipExternalReferences is true")
 	})
 }
 
@@ -630,49 +583,62 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			for i, comp := range tt.components {
 				compConstructor.Components[i] = *comp
 			}
+
 			graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 			constructorInstance := NewDefaultConstructor(graph, opts)
 
 			err := constructorInstance.Construct(t.Context(), compConstructor)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				descs := collectDescriptors(t, graph)
+				assert.NoError(t, err)
+				if len(tt.components) > 0 {
+					assert.Len(t, descs, len(tt.components))
 
-			err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-				roots := d.Roots()
-
-				if tt.expectError {
-					assert.Error(t, err)
-				} else {
-					assert.NoError(t, err)
-					if len(tt.components) > 0 {
-						assert.Len(t, roots, len(tt.components))
-
-						// sort roots for consistent comparison
-						sort.Strings(roots)
-
-						for i, component := range tt.components {
-							root := roots[i]
-							if component.Version == "" {
-								assert.Equal(t, fmt.Sprintf("name=%s", component.Name), root)
-							} else {
-								assert.Equal(t, fmt.Sprintf("name=%s,version=%s", component.Name, component.Version), root)
-							}
+					// sort by name and version
+					slices.SortFunc(descs, func(a, b *descriptor.Descriptor) int {
+						if a.Component.Name == b.Component.Name {
+							return bytes.Compare([]byte(a.Component.Version), []byte(b.Component.Version))
 						}
-					} else {
-						assert.Empty(t, roots)
+						return bytes.Compare([]byte(a.Component.Name), []byte(b.Component.Name))
+					})
+
+					for i, component := range tt.components {
+						assert.Equal(t, component.Name, descs[i].Component.Name)
+						assert.Equal(t, component.Version, descs[i].Component.Version)
 					}
+				} else {
+					assert.Empty(t, descs)
 				}
+			}
 
-				if tt.expectReplaced || tt.existing && tt.policy == ComponentVersionConflictSkip {
-					for _, component := range tt.components {
-						desc, err := repo.GetComponentVersion(t.Context(), component.Name, component.Version)
-						require.NoError(t, err)
-						assert.NotNil(t, desc)
-					}
+			if tt.expectReplaced || tt.existing && tt.policy == ComponentVersionConflictSkip {
+				for _, component := range tt.components {
+					desc, err := repo.GetComponentVersion(t.Context(), component.Name, component.Version)
+					require.NoError(t, err)
+					assert.NotNil(t, desc)
 				}
-
-				return nil
-			})
-			require.NoError(t, err)
-
+			}
 		})
 	}
+}
+
+func collectDescriptors(t *testing.T, graph *syncdag.SyncedDirectedAcyclicGraph[string]) []*descriptor.Descriptor {
+	var descs []*descriptor.Descriptor
+	_ = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		for id, vert := range d.Vertices {
+			val, ok := vert.Attributes[AttributeDescriptor]
+			if !ok {
+				t.Fatalf("no attributes found for vertex %s", id)
+			}
+			desc, ok := val.(*descriptor.Descriptor)
+			if !ok {
+				t.Fatalf("attribute value for vertex %s is not of type *descriptor.Descriptor", id)
+			}
+			descs = append(descs, desc)
+		}
+		return nil
+	})
+	return descs
 }

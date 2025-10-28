@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
@@ -21,34 +21,57 @@ type processor struct {
 }
 
 type descriptors struct {
-	mu sync.RWMutex
-	// descriptors use the same key as the DAG, i.e. the component identity
-	// string. Since ProcessValue is guaranteed to be called at most once for
-	// each node, this is safe.
-	descriptors map[string]*descriptor.Descriptor
-}
-
-func (c *descriptors) store(_ context.Context, descriptor *descriptor.Descriptor) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	id := descriptor.Component.ToIdentity().String()
-	if _, ok := c.descriptors[id]; ok {
-		return fmt.Errorf("descriptor for %s has already been processed", id)
-	}
-	c.descriptors[id] = descriptor
-	return nil
+	// descriptors TODO
+	graph *syncdag.SyncedDirectedAcyclicGraph[string]
 }
 
 func (c *descriptors) load(_ context.Context, id string) (*descriptor.Descriptor, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	var vert *dag.Vertex[string]
+	if err := c.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		if v, ok := d.Vertices[id]; !ok {
+			return fmt.Errorf("descriptor for %s not found in DAG", id)
+		} else {
+			vert = v
+		}
 
-	desc, ok := c.descriptors[id]
-	if !ok {
-		return nil, fmt.Errorf("descriptor for %s not found", id)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to access DAG: %w", err)
 	}
+
+	val, ok := vert.Attributes[AttributeDescriptor]
+	if !ok {
+		return nil, fmt.Errorf("no attributes found for vertex %s", id)
+	}
+	desc, ok := val.(*descriptor.Descriptor)
+	if !ok {
+		return nil, fmt.Errorf("attribute value for vertex %s is not of type *descriptor.Descriptor", id)
+	}
+
 	return desc, nil
+}
+
+func (c *descriptors) store(_ context.Context, descriptor *descriptor.Descriptor) error {
+	id := descriptor.Component.ToIdentity().String()
+
+	err := c.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		var vert *dag.Vertex[string]
+		if v, ok := d.Vertices[id]; !ok {
+			return fmt.Errorf("descriptor for %s not found in DAG", id)
+		} else {
+			vert = v
+		}
+		if _, ok := vert.Attributes[AttributeDescriptor]; ok {
+			return fmt.Errorf("descriptor for %s has already been processed", id)
+		}
+
+		// add descriptor as attribute value
+		vert.Attributes[AttributeDescriptor] = descriptor
+
+		return nil
+	})
+
+	return err
 }
 
 var _ syncdag.Processor[*ConstructorOrExternalComponent] = (*processor)(nil)

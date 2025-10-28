@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -185,20 +184,15 @@ func TestConstructionCallbacks(t *testing.T) {
 			},
 		},
 	}
+
 	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 	constructorInstance := NewDefaultConstructor(graph, opts)
 
 	// Process the constructor
 	err := constructorInstance.Construct(context.Background(), constructor)
 	require.NoError(t, err)
-	
-	var roots []string
-	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		roots = d.Roots()
-		return nil
-	})
-	require.NoError(t, err)
-	require.Len(t, roots, 1)
+	descs := collectDescriptors(t, graph)
+	require.Len(t, descs, 1)
 
 	// Verify all callbacks were called
 	assert.True(t, tracker.startComponentCalled, "OnStartComponentConstruct should have been called")

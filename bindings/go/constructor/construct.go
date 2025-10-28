@@ -29,6 +29,8 @@ import (
 // e.g. because the component version already exists in the target repository.
 var ErrShouldSkipConstruction = errors.New("should skip construction")
 
+const AttributeDescriptor string = "constructor/descriptor"
+
 type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in topological order.
@@ -89,7 +91,7 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 	if err != nil {
 		return fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
-	_, err = c.construct(ctx)
+	err = c.construct(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to constructComponent components from graph: %w", err)
 	}
@@ -119,7 +121,7 @@ func (c *DefaultConstructor) discover(ctx context.Context, componentConstructor 
 	return nil
 }
 
-func (c *DefaultConstructor) construct(ctx context.Context) (map[string]*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) construct(ctx context.Context) error {
 	var (
 		reversedGraph *dag.DirectedAcyclicGraph[string]
 		err           error
@@ -130,14 +132,13 @@ func (c *DefaultConstructor) construct(ctx context.Context) (map[string]*descrip
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		return err
 	}
 
 	proc := processor{
 		constructor: c,
 		processedDescriptors: descriptors{
-			mu:          sync.RWMutex{},
-			descriptors: make(map[string]*descriptor.Descriptor),
+			graph: c.graph,
 		},
 	}
 
@@ -148,10 +149,10 @@ func (c *DefaultConstructor) construct(ctx context.Context) (map[string]*descrip
 	})
 	slog.DebugContext(ctx, "starting processing of discovered component graph")
 	if err := graphProcessor.Process(ctx); err != nil {
-		return nil, fmt.Errorf("failed to process component constructor graph: %w", err)
+		return fmt.Errorf("failed to process component constructor graph: %w", err)
 	}
 	slog.DebugContext(ctx, "component construction completed successfully")
-	return proc.processedDescriptors.descriptors, nil
+	return nil
 }
 
 func NewDefaultConstructor(graph *syncdag.SyncedDirectedAcyclicGraph[string], opts Options) Constructor {
@@ -413,33 +414,6 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	}
 
 	logger.Debug("resource processed successfully")
-
-	// update resource in graph
-	if err := c.graph.WithWriteLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		for _, vert := range d.Vertices {
-			vertVal, ok := vert.Attributes[syncdag.AttributeValue]
-			if !ok {
-				return fmt.Errorf("missing graph vertex attribute")
-			}
-			compOrExt, ok := vertVal.(*ConstructorOrExternalComponent)
-			if !ok {
-				return fmt.Errorf("unexpected type in graph vertex attribute")
-			}
-
-			// check if this is the correct vertex
-			if compOrExt.ConstructorComponent.ObjectMeta.Name == component && compOrExt.ConstructorComponent.ObjectMeta.Version == version {
-				for j, graphRes := range compOrExt.ConstructorComponent.Resources {
-					if graphRes.ToIdentity().String() == resource.ToIdentity().String() {
-						compOrExt.ConstructorComponent.Resources[j] = *constructor.ConvertFromDescriptorResource(res)
-					}
-				}
-			}
-		}
-
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("error updating resource in graph: %w", err)
-	}
 
 	return res, nil
 }
