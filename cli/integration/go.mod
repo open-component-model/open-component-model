@@ -111,7 +111,7 @@ require (
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251024100521-a7be1bf5ce0d // indirect
-	ocm.software/open-component-model/bindings/go/plugin v0.0.9 // indirect
+	ocm.software/open-component-model/bindings/go/plugin v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251024100521-a7be1bf5ce0d // indirect
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251024100521-a7be1bf5ce0d // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
