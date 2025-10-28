@@ -251,7 +251,7 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 	})
 }
 
-func TestWorkerPool_ParallelResolutions_SameComponent_Singleflight(t *testing.T) {
+func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		logger := logr.Discard()
@@ -363,10 +363,9 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Singleflight(t *testing.T)
 			assert.Equal(t, "shared-component", result.Descriptor.Component.Name)
 		}
 
-		// Singleflight should significantly reduce the number of plugin calls
 		calls := callCount.Load()
-		assert.Equal(t, calls, int32(1), "singleflight should reduce duplicate resolutions (got %d calls)", calls)
-		t.Logf("Plugin was called %d times (singleflight deduplication working)", calls)
+		assert.Equal(t, calls, int32(1), "inProgress tracking should allow only a single call to the plugin (got %d calls)", calls)
+		t.Logf("plugin was called %d times (inProgress deduplication working)", calls)
 	})
 }
 
@@ -464,8 +463,7 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 			o.Component = fmt.Sprintf("component-%d", i)
 			_, err := resolver.ResolveComponentVersion(ctx, &o)
 			if err != nil && !errors.Is(err, resolution.ErrResolutionInProgress) {
-				// Check for queue full error using contains since component name varies
-				if err.Error() == fmt.Sprintf("failed to resolve component version: lookup queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
+				if err.Error() == fmt.Sprintf("lookup queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
 					queueFullCount.Add(1)
 				}
 			}
@@ -474,8 +472,11 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 
 	wg.Wait()
 
-	// At least some requests should have been rejected due to full queue
-	assert.Greater(t, queueFullCount.Load(), int32(0), "expected some requests to fail due to full queue")
+	// 10 different components, queue size 2, and 1 worker:
+	// - 1 worker picks up first item
+	// - 2 items are queued
+	// - 3 can be accepted, so 7 should fail with queue full
+	assert.GreaterOrEqual(t, queueFullCount.Load(), int32(7), "expected at least 7 requests to fail due to full queue (got %d)", queueFullCount.Load())
 }
 
 func TestWorkerPool_ContextCancellation(t *testing.T) {

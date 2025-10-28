@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/go-logr/logr"
-	"golang.org/x/sync/singleflight"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
@@ -31,7 +30,6 @@ func NewResolver(client client.Reader, logger logr.Logger, workerPool *WorkerPoo
 		client:     client,
 		logger:     logger,
 		workerPool: workerPool,
-		sf:         &singleflight.Group{},
 	}
 
 	return resolver
@@ -43,7 +41,6 @@ type Resolver struct {
 	client     client.Reader
 	logger     logr.Logger
 	workerPool *WorkerPool
-	sf         *singleflight.Group
 }
 
 // ResolveComponentVersion resolves a component version with deduplication and async queuing.
@@ -74,39 +71,7 @@ func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOpt
 		return nil, fmt.Errorf("failed to build cache key: %w", err)
 	}
 
-	// Singleflight ensures only one goroutine enqueues/checks for a given key.
-	// Duplicate callers wait here until the first caller completes.
-	var v any
-	singleFlightResult := r.sf.DoChan(key, func() (any, error) {
-		return r.workerPool.Resolve(ctx, key, optsCopy, cfg)
-	})
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("context was cancelled during singleflight resolve call: %w", ctx.Err())
-	case res := <-singleFlightResult:
-		if res.Err != nil {
-			return nil, fmt.Errorf("failed to resolve component version: %w", res.Err)
-		}
-
-		if res.Shared {
-			CacheShareCounterTotal.WithLabelValues(optsCopy.Component, optsCopy.Version).Inc()
-		}
-
-		v = res.Val
-	}
-
-	// v will be nil if we got ErrResolutionInProgress
-	if v == nil {
-		return nil, ErrResolutionInProgress
-	}
-
-	result, ok := v.(*ResolveResult)
-	if !ok {
-		// Not possible, but defensive programming.
-		return nil, fmt.Errorf("failed to convert result to *ResolveResult, was: %T", v)
-	}
-
-	return result, nil
+	return r.workerPool.Resolve(ctx, key, optsCopy, cfg)
 }
 
 func (r *Resolver) validateOptions(opts *ResolveOptions) error {

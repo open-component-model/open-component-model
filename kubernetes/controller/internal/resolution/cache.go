@@ -16,7 +16,6 @@ import (
 func init() {
 	kmetrics.Registry.MustRegister(
 		CacheMissCounterTotal,
-		CacheShareCounterTotal,
 		CacheHitCounterTotal,
 		QueueSizeGauge,
 		InProgressGauge,
@@ -29,8 +28,6 @@ const (
 	CacheMissCounterLabel = "cache_miss"
 	// CacheHitCounterLabel tracks how many cache hits happened.
 	CacheHitCounterLabel = "cache_hit"
-	// CacheShareCounterLabel tracks how many cache share de-duplications happened with singleflight.
-	CacheShareCounterLabel = "cache_share"
 	// QueueSizeGaugeLabel tracks the current size of the lookup queue.
 	QueueSizeGaugeLabel = "queue_size"
 	// InProgressGaugeLabel tracks the number of resolutions currently in progress.
@@ -67,16 +64,6 @@ var CacheHitCounterTotal = metrics.MustRegisterCounterVec(
 	OcmComponent,
 	CacheHitCounterLabel,
 	"Number of times a cache hit occurred.",
-	ComponentLabel, VersionLabel,
-)
-
-// CacheShareCounterTotal counts the number of times a cache share occurred.
-// [component, version].
-var CacheShareCounterTotal = metrics.MustRegisterCounterVec(
-	MetricsNamespace,
-	OcmComponent,
-	CacheShareCounterLabel,
-	"Number of times a cache share occurred.",
 	ComponentLabel, VersionLabel,
 )
 

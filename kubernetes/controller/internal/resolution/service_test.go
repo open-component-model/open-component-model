@@ -397,7 +397,7 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to load OCM configurations")
 }
 
-func TestResolveComponentVersionSingleflight(t *testing.T) {
+func TestResolveComponentVersionDeduplication(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := context.Background()
 		logger := logr.Discard()
@@ -469,13 +469,22 @@ func TestResolveComponentVersionSingleflight(t *testing.T) {
 		wg.Wait()
 
 		inProgressCount := 0
+		successCount := 0
 		for i := range numGoroutines {
 			if errors.Is(errs[i], resolution.ErrResolutionInProgress) {
 				inProgressCount++
+			} else if errs[i] == nil {
+				successCount++
 			}
 		}
 
-		assert.Greater(t, inProgressCount, 0, "singleflight should cause some goroutines to get in-progress")
+		// With inProgress tracking, the first request will enqueue work.
+		// Remaining requests should either:
+		// - See it's in progress and get ErrResolutionInProgress, OR
+		// - Come after completion and get cached result
+		// We verify deduplication worked by checking all either succeeded or got in-progress
+		assert.Equal(t, inProgressCount+successCount, numGoroutines, "all requests should either succeed or get in-progress")
+		assert.Greater(t, inProgressCount, 0, "at least some goroutines should get in-progress before completion")
 
 		synctest.Wait()
 

@@ -46,7 +46,8 @@ type WorkerPoolOptions struct {
 // WorkerPool manages a pool of workers that process work items concurrently.
 type WorkerPool struct {
 	WorkerPoolOptions
-	workQueue chan *WorkItem
+	workQueue  chan *WorkItem
+	inProgress sync.Map // map[string]struct{} - tracks keys currently being processed
 }
 
 // NewWorkerPool creates a new worker pool.
@@ -114,6 +115,15 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 
 	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 
+	// Check if already in progress - if so, don't enqueue again
+	if _, exists := wp.inProgress.LoadOrStore(key, struct{}{}); exists {
+		wp.Logger.V(1).Info("resolution already in progress", "component", opts.Component, "version", opts.Version)
+		return nil, ErrResolutionInProgress
+	}
+
+	// Track in-progress count
+	InProgressGauge.Inc()
+
 	workItem := &WorkItem{
 		Context: ctx,
 		Key:     key,
@@ -128,6 +138,9 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 		wp.Logger.V(1).Info("enqueued resolution request", "component", opts.Component, "version", opts.Version)
 		return nil, ErrResolutionInProgress
 	default:
+		// Failed to enqueue - remove from inProgress and decrement gauge
+		wp.inProgress.Delete(key)
+		InProgressGauge.Dec()
 		if len(wp.workQueue) == wp.QueueSize {
 			return nil, fmt.Errorf("lookup queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
 		}
@@ -238,10 +251,12 @@ func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan
 				return
 			}
 
-			// Fucking InProgress.
-
 			// store result in cache
 			wp.Cache.Add(res.key, res)
+			
+			// remove from inProgress map now that result is cached and decrement gauge
+			wp.inProgress.Delete(res.key)
+			InProgressGauge.Dec()
 		}
 	}
 }
