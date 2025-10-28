@@ -1,5 +1,11 @@
+# Use multi-stage builds to copy certs from a minimal base image.
+# Alpine uses the Mozilla CA bundle which contains a maximum number of trusted CAs.
+FROM --platform=$BUILDPLATFORM alpine@sha256:765942a4039992336de8dd5db680586e1a206607dd06170ff0a37267a9e01958 AS certs
+RUN apk add --no-cache ca-certificates-bundle
+
 FROM scratch
 ARG TARGETOS
 ARG TARGETARCH
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY tmp/bin/ocm-${TARGETOS}-${TARGETARCH} /ocm
 ENTRYPOINT ["/ocm"]

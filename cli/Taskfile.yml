@@ -75,7 +75,7 @@ tasks:
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/oci
         {{ .IMAGE_TOOL }} buildx build \
-          --platform linux/amd64,linux/arm64,windows/amd64,windows/arm64,darwin/amd64,darwin/arm64 \
+          --platform linux/amd64,linux/arm64 \
           --tag ghcr.io/open-component-model/cli:{{ .VERSION }} \
           --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
           -f ./Containerfile .
