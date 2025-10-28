@@ -19,7 +19,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -31,26 +30,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 )
-
-func TestWorkerPool_NewWorkerPool_DefaultValues(t *testing.T) {
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{})
-
-	require.NotNil(t, wp)
-}
-
-func TestWorkerPool_NewWorkerPool_CustomValues(t *testing.T) {
-	logger := logr.Discard()
-
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		WorkerCount: 5,
-		QueueSize:   50,
-		Logger:      logger,
-	})
-
-	require.NotNil(t, wp)
-}
 
 type FakeLogger struct {
 	mu sync.Mutex
@@ -463,7 +445,7 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 			o.Component = fmt.Sprintf("component-%d", i)
 			_, err := resolver.ResolveComponentVersion(ctx, &o)
 			if err != nil && !errors.Is(err, resolution.ErrResolutionInProgress) {
-				if err.Error() == fmt.Sprintf("lookup queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
+				if err.Error() == fmt.Sprintf("work queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
 					queueFullCount.Add(1)
 				}
 			}

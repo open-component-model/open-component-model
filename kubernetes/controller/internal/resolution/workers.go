@@ -46,8 +46,9 @@ type WorkerPoolOptions struct {
 // WorkerPool manages a pool of workers that process work items concurrently.
 type WorkerPool struct {
 	WorkerPoolOptions
-	workQueue  chan *WorkItem
-	inProgress sync.Map // map[string]struct{} - tracks keys currently being processed
+	workQueue   chan *WorkItem
+	inProgress  sync.Map // map[string]struct{} - tracks keys currently being processed
+	workersDone sync.WaitGroup
 }
 
 // NewWorkerPool creates a new worker pool.
@@ -70,33 +71,25 @@ func NewWorkerPool(opts WorkerPoolOptions) *WorkerPool {
 	}
 }
 
-// Start begins the worker pool and result collector.
+// Start begins the worker pool.
 // This method blocks until the context is cancelled to implement graceful shutdown.
 func (wp *WorkerPool) Start(ctx context.Context) error {
 	wp.Logger.Info("starting worker pool", "workers", wp.WorkerCount, "queueSize", wp.QueueSize)
 
-	// Start workers and collect their result channels (fan-out)
-	workerChannels := make([]chan *Result, 0, wp.WorkerCount)
 	for i := range wp.WorkerCount {
-		workerChannels = append(workerChannels, wp.startWorker(ctx, i))
+		wp.workersDone.Add(1)
+		go wp.worker(ctx, i)
 	}
 
-	// Start result collector (fan-in the worker channels later)
-	collectorDone := make(chan struct{})
-	go func() {
-		wp.resultCollector(ctx, workerChannels)
-		close(collectorDone)
-	}()
-
-	// block until context is done to implement proper runnable.
+	// wait for context cancellation
 	<-ctx.Done()
 	wp.Logger.Info("worker pool shutting down, draining queue")
 
 	// close work queue to signal workers to stop
 	close(wp.workQueue)
 
-	// wait for all workers to finish and result collector to stop
-	<-collectorDone
+	// wait for all workers to finish
+	wp.workersDone.Wait()
 
 	wp.Logger.Info("worker pool shutdown complete")
 	return nil
@@ -104,7 +97,6 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 
 // Resolve resolves a component version with caching and async queuing.
 func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptions, cfg *configuration.Configuration) (*ResolveResult, error) {
-	// Check cache first (fast path)
 	if cached, ok := wp.Cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.err != nil {
@@ -115,13 +107,11 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 
 	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 
-	// Check if already in progress - if so, don't enqueue again
 	if _, exists := wp.inProgress.LoadOrStore(key, struct{}{}); exists {
 		wp.Logger.V(1).Info("resolution already in progress", "component", opts.Component, "version", opts.Version)
 		return nil, ErrResolutionInProgress
 	}
 
-	// Track in-progress count
 	InProgressGauge.Inc()
 
 	workItem := &WorkItem{
@@ -132,55 +122,45 @@ func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptio
 	}
 
 	select {
-	// Try to enqueue the request. If the queue is full we send back a full queue response, otherwise, an unknown error.
 	case wp.workQueue <- workItem:
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
 		wp.Logger.V(1).Info("enqueued resolution request", "component", opts.Component, "version", opts.Version)
 		return nil, ErrResolutionInProgress
 	default:
-		// Failed to enqueue - remove from inProgress and decrement gauge
+		// failed, decrement in-progress and decrement the gauge.
 		wp.inProgress.Delete(key)
 		InProgressGauge.Dec()
 		if len(wp.workQueue) == wp.QueueSize {
-			return nil, fmt.Errorf("lookup queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
+			return nil, fmt.Errorf("work queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
 		}
 
-		return nil, fmt.Errorf("failed to enqueue resolution request for %s:%s; queue is not full but unresponsive", opts.Component, opts.Version)
+		return nil, fmt.Errorf("failed to enqueue resolution request for %s:%s", opts.Component, opts.Version)
 	}
 }
 
-// startWorker creates a worker's result channel and starts the worker in a goroutine.
-// Returns the channel that the worker will send results to.
-func (wp *WorkerPool) startWorker(ctx context.Context, id int) chan *Result {
-	resultChan := make(chan *Result)
+// worker is the main worker loop that processes work items and updates the cache directly.
+func (wp *WorkerPool) worker(ctx context.Context, id int) {
+	defer wp.workersDone.Done()
 	logger := wp.Logger.WithValues("worker", id)
-
-	// create a worker for the created channel and return immediately with the channel
-	go wp.createWorkerForChannel(ctx, logger, resultChan, id)
-
-	return resultChan
-}
-
-// createWorkerForChannel starts the main worker loop for a provided result channel. This function is now the owner
-// of the channel and will close it once it's finished.
-func (wp *WorkerPool) createWorkerForChannel(ctx context.Context, logger logr.Logger, resultChan chan *Result, id int) {
-	defer close(resultChan)
-	defer logger.V(1).Info("worker stopped", "id", id)
+	logger.V(1).Info("worker started")
+	defer logger.V(1).Info("worker stopped")
 
 	for {
 		select {
 		case <-ctx.Done():
-			logger.V(1).Info("worker stopped due to context cancellation", "id", id)
+			logger.V(1).Info("worker stopped due to context cancellation")
 			return
 		case item, ok := <-wp.workQueue:
 			if !ok {
-				logger.V(1).Info("work queue closed, worker exiting", "id", id)
+				// the channel was closed; most likely the controller is shutting down and
+				// the starting context was cancelled which closes the worker queue.
+				logger.V(1).Info("work queue closed, worker exiting")
 				return
 			}
 
 			QueueSizeGauge.Set(float64(len(wp.workQueue)))
 
-			logger.V(1).Info("processing work item", "key", item.Key, "id", id)
+			logger.V(1).Info("processing work item", "key", item.Key)
 
 			start := time.Now()
 			result, err := wp.resolve(item.Context, &item.Opts, item.Cfg)
@@ -193,69 +173,21 @@ func (wp *WorkerPool) createWorkerForChannel(ctx context.Context, logger logr.Lo
 				logger.Error(err, "failed to process work item",
 					"component", item.Opts.Component,
 					"version", item.Opts.Version,
-					"duration", duration, "id", id)
+					"duration", duration)
 			} else {
 				logger.V(1).Info("processed work item",
 					"component", item.Opts.Component,
 					"version", item.Opts.Version,
-					"duration", duration, "id", id)
+					"duration", duration)
 			}
 
-			// Send result to worker's dedicated result channel
-			resultChan <- &Result{
-				key:      item.Key,
-				result:   result,
-				err:      err,
-				createAt: time.Now(),
-			}
-		}
-	}
-}
+			wp.Cache.Add(item.Key, &Result{
+				result: result,
+				err:    err,
+			})
 
-// resultCollector processes results from multiple worker channels and updates the cache.
-func (wp *WorkerPool) resultCollector(ctx context.Context, workerChannels []chan *Result) {
-	logger := wp.Logger.WithValues("component", "result-collector")
-	logger.V(1).Info("result collector started", "workerCount", len(workerChannels))
-
-	// Merge all worker channels into a single channel (fan-in)
-	mergedResults := make(chan *Result)
-	wg := &sync.WaitGroup{}
-	wg.Add(len(workerChannels))
-	for _, ch := range workerChannels {
-		go func() {
-			// Start feeding channel values into the mergedResult until the channel is closed.
-			// Ranging over a channel runs indefinitely until the channel sends a close back.
-			for res := range ch {
-				mergedResults <- res
-			}
-
-			// Once the worker channel is closed this worker has quit its job, so we are done.
-			wg.Done()
-		}()
-	}
-
-	go func() {
-		// once all workers are done, we clean up the mergeResults channel
-		wg.Wait()
-		close(mergedResults)
-	}()
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.V(1).Info("result collector stopped")
-			return
-		case res, ok := <-mergedResults:
-			if !ok {
-				logger.V(1).Info("all workers exited, result collector stopping")
-				return
-			}
-
-			// store result in cache
-			wp.Cache.Add(res.key, res)
-			
-			// remove from inProgress map now that result is cached and decrement gauge
-			wp.inProgress.Delete(res.key)
+			// we are done, remove in-progress
+			wp.inProgress.Delete(item.Key)
 			InProgressGauge.Dec()
 		}
 	}

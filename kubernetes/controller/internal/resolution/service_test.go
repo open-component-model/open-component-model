@@ -457,13 +457,13 @@ func TestResolveComponentVersionDeduplication(t *testing.T) {
 		wg.Add(numGoroutines)
 
 		// Fire off concurrent requests
-		for i := 0; i < numGoroutines; i++ {
-			go func(idx int) {
+		for i := range numGoroutines {
+			go func() {
 				defer wg.Done()
 				result, err := env.Resolver.ResolveComponentVersion(ctx, opts)
-				results[idx] = result
-				errs[idx] = err
-			}(i)
+				results[i] = result
+				errs[i] = err
+			}()
 		}
 
 		wg.Wait()

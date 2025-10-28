@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	kmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
@@ -110,8 +109,6 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 
 // Result contains the result of a resolution including any errors that might have occurred.
 type Result struct {
-	key      string
-	result   *ResolveResult
-	err      error
-	createAt time.Time
+	result *ResolveResult
+	err    error
 }
