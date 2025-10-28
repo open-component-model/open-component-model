@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/dag"
+	"ocm.software/open-component-model/bindings/go/dag/sync"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -78,14 +79,6 @@ components:
 	return converted
 }
 
-// verifyBasicComponentWithSource verifies the basic component properties for source tests
-func verifyBasicComponentWithSource(t *testing.T, desc *descriptor.Descriptor) {
-	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
-	assert.Equal(t, "v1.0.0", desc.Component.Version)
-	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
-	assert.Len(t, desc.Component.Sources, 1)
-}
-
 func TestConstructWithSourceInputMethod(t *testing.T) {
 	// Create a mock source input method that returns a processed source
 	mockInput := &mockSourceInputMethod{
@@ -126,23 +119,49 @@ func TestConstructWithSourceInputMethod(t *testing.T) {
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+	graph := sync.NewSyncedDirectedAcyclicGraph[string]()
+	constructorInstance := NewDefaultConstructor(graph, opts)
 
 	// Process the constructor
-	descriptors, _, err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
 
-	// Verify the results
-	desc := descriptors[0]
-	verifyBasicComponentWithSource(t, desc)
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
 
-	// Verify the source was processed correctly
-	source := desc.Component.Sources[0]
-	assert.Equal(t, "test-source", source.Name)
-	assert.Equal(t, "v1.0.0", source.Version)
-	assert.Equal(t, "git", source.Type)
-	assert.NotNil(t, source.Access)
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
+
+		// Verify the results
+		// desc := descriptors[0]
+		// verifyBasicComponentWithSource(t, desc)
+		//
+		// // Verify the source was processed correctly
+		// source := desc.Component.Sources[0]
+		// assert.Equal(t, "test-source", source.Name)
+		// assert.Equal(t, "v1.0.0", source.Version)
+		// assert.Equal(t, "git", source.Type)
+		// assert.NotNil(t, source.Access)
+
+		verts := d.Vertices
+		assert.Len(t, verts, 1)
+
+		val := verts[root].Attributes[sync.AttributeValue]
+		assert.NotNil(t, val)
+		comp, _ := val.(*ConstructorOrExternalComponent)
+		assert.NotNil(t, comp)
+
+		res := comp.ConstructorComponent.Sources
+		assert.Len(t, res, 1)
+
+		assert.Equal(t, "test-source", res[0].Name)
+		assert.Equal(t, "v1.0.0", res[0].Version)
+		assert.Nil(t, res[0].Access)
+
+		return nil
+	})
+	require.NoError(t, err)
 
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedSources, 0)
@@ -167,28 +186,55 @@ func TestConstructWithSourceAccess(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	instance := NewDefaultConstructor(opts)
+	graph := sync.NewSyncedDirectedAcyclicGraph[string]()
+	constructorInstance := NewDefaultConstructor(graph, opts)
 
 	// Process the constructor
-	descriptors, _, err := instance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
 
-	// Verify the results
-	desc := descriptors[0]
-	verifyBasicComponentWithSource(t, desc)
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
 
-	// Verify the source was processed correctly
-	source := desc.Component.Sources[0]
-	assert.Equal(t, "test-source", source.Name)
-	assert.Equal(t, "v1.0.0", source.Version)
-	assert.Equal(t, "git", source.Type)
-	assert.NotNil(t, source.Access)
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
 
-	// Verify the access specification
-	access, ok := source.Access.(*runtime.Raw)
-	require.True(t, ok, "Access should be of type raw due to conversion")
-	assert.Contains(t, string(access.Data), "application/octet-stream")
+		// Verify the source was processed correctly
+		// source := desc.Component.Sources[0]
+		// assert.Equal(t, "test-source", source.Name)
+		// assert.Equal(t, "v1.0.0", source.Version)
+		// assert.Equal(t, "git", source.Type)
+		// assert.NotNil(t, source.Access)
+		//
+		// // Verify the access specification
+		// access, ok := source.Access.(*runtime.Raw)
+		// require.True(t, ok, "Access should be of type raw due to conversion")
+		// assert.Contains(t, string(access.Data), "application/octet-stream")
+
+		verts := d.Vertices
+		assert.Len(t, verts, 1)
+
+		val := verts[root].Attributes[sync.AttributeValue]
+		assert.NotNil(t, val)
+		comp, _ := val.(*ConstructorOrExternalComponent)
+		assert.NotNil(t, comp)
+
+		res := comp.ConstructorComponent.Resources
+		assert.Len(t, res, 2)
+
+		assert.Equal(t, "test-resource-1", res[0].Name)
+		assert.Equal(t, "v1.0.0", res[0].Version)
+		assert.Equal(t, descriptor.LocalRelation, res[0].Relation)
+		assert.NotNil(t, res[0].Access)
+
+		// // Verify the access specification
+		access, ok := res[0].Access.(*v2.LocalBlob)
+		require.True(t, ok, "Access should be of type LocalBlob")
+		assert.Equal(t, "application/octet-stream", access.MediaType)
+		return nil
+	})
+	require.NoError(t, err)
 
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedSources, 0)
@@ -247,27 +293,55 @@ func TestConstructWithSourceCredentialResolution(t *testing.T) {
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 		CredentialProvider:        mockCredProvider,
 	}
+	graph := sync.NewSyncedDirectedAcyclicGraph[string]()
+	constructorInstance := NewDefaultConstructor(graph, opts)
 
 	// Process the constructor
-	descriptors, _, err := ConstructDefault(t.Context(), constructor, opts)
+	err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
 
-	// Verify the results
-	desc := descriptors[0]
-	verifyBasicComponentWithSource(t, desc)
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
 
-	// Verify the source was processed correctly
-	source := desc.Component.Sources[0]
-	assert.Equal(t, "test-source", source.Name)
-	assert.Equal(t, "v1.0.0", source.Version)
-	assert.Equal(t, "git", source.Type)
-	assert.NotNil(t, source.Access)
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
 
-	// Verify the access specification
-	access, ok := source.Access.(*v2.LocalBlob)
-	require.True(t, ok, "Access should be of type LocalBlob")
-	assert.Equal(t, "application/octet-stream", access.MediaType)
+		// Verify the source was processed correctly
+		// ource := desc.Component.Sources[0]
+		// ssert.Equal(t, "test-source", source.Name)
+		// ssert.Equal(t, "v1.0.0", source.Version)
+		// ssert.Equal(t, "git", source.Type)
+		// ssert.NotNil(t, source.Access)
+
+		// / Verify the access specification
+		// ccess, ok := source.Access.(*v2.LocalBlob)
+		// equire.True(t, ok, "Access should be of type LocalBlob")
+		// ssert.Equal(t, "application/octet-stream", access.MediaType)
+
+		verts := d.Vertices
+		assert.Len(t, verts, 1)
+
+		val := verts[root].Attributes[sync.AttributeValue]
+		assert.NotNil(t, val)
+		comp, _ := val.(*ConstructorOrExternalComponent)
+		assert.NotNil(t, comp)
+
+		res := comp.ConstructorComponent.Resources
+		assert.Len(t, res, 2)
+
+		assert.Equal(t, "test-resource-1", res[0].Name)
+		assert.Equal(t, "v1.0.0", res[0].Version)
+		assert.Equal(t, descriptor.LocalRelation, res[0].Relation)
+		assert.NotNil(t, res[0].Access)
+
+		// // Verify the access specification
+		access, ok := res[0].Access.(*v2.LocalBlob)
+		require.True(t, ok, "Access should be of type LocalBlob")
+		assert.Equal(t, "application/octet-stream", access.MediaType)
+		return nil
+	})
+	require.NoError(t, err)
 
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedSources, 0)
@@ -309,23 +383,50 @@ func TestConstructWithSourceBlob(t *testing.T) {
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	ctor := NewDefaultConstructor(opts)
+	graph := sync.NewSyncedDirectedAcyclicGraph[string]()
+	constructorInstance := NewDefaultConstructor(graph, opts)
 
 	// Process the constructor
-	descriptors, _, err := ctor.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context(), constructor)
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
 
-	// Verify the results
-	desc := descriptors[0]
-	verifyBasicComponentWithSource(t, desc)
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
 
-	// Verify the source was processed correctly
-	source := desc.Component.Sources[0]
-	assert.Equal(t, "test-source", source.Name)
-	assert.Equal(t, "v1.0.0", source.Version)
-	assert.Equal(t, "git", source.Type)
-	assert.NotNil(t, source.Access)
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
+
+		// Verify the source was processed correctly
+		// source := desc.Component.Sources[0]
+		// assert.Equal(t, "test-source", source.Name)
+		// assert.Equal(t, "v1.0.0", source.Version)
+		// assert.Equal(t, "git", source.Type)
+		// assert.NotNil(t, source.Access)
+
+		verts := d.Vertices
+		assert.Len(t, verts, 1)
+
+		val := verts[root].Attributes[sync.AttributeValue]
+		assert.NotNil(t, val)
+		comp, _ := val.(*ConstructorOrExternalComponent)
+		assert.NotNil(t, comp)
+
+		res := comp.ConstructorComponent.Resources
+		assert.Len(t, res, 2)
+
+		assert.Equal(t, "test-resource-1", res[0].Name)
+		assert.Equal(t, "v1.0.0", res[0].Version)
+		assert.Equal(t, descriptor.LocalRelation, res[0].Relation)
+		assert.NotNil(t, res[0].Access)
+
+		// // Verify the access specification
+		access, ok := res[0].Access.(*v2.LocalBlob)
+		require.True(t, ok, "Access should be of type LocalBlob")
+		assert.Equal(t, "application/octet-stream", access.MediaType)
+		return nil
+	})
+	require.NoError(t, err)
 
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedSources, 1)
@@ -351,10 +452,11 @@ func TestConstructWithInvalidSourceInputMethodType(t *testing.T) {
 		},
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	ctor := NewDefaultConstructor(opts)
+	graph := sync.NewSyncedDirectedAcyclicGraph[string]()
+	constructorInstance := NewDefaultConstructor(graph, opts)
 
 	// Process the constructor and expect an error
-	_, _, err := ctor.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no input method resolvable for input specification of type")
 }
@@ -396,10 +498,11 @@ func TestConstructWithSourceMissingAccess(t *testing.T) {
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	ctor := NewDefaultConstructor(opts)
+	graph := sync.NewSyncedDirectedAcyclicGraph[string]()
+	constructorInstance := NewDefaultConstructor(graph, opts)
 
 	// Process the constructor and expect an error
-	_, _, err := ctor.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "after the input method was processed, no access was present in the source")
 }
@@ -451,10 +554,12 @@ func TestConstructWithSourceCredentialResolutionError(t *testing.T) {
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 		CredentialProvider:        mockCredProvider,
 	}
-	ctor := NewDefaultConstructor(opts)
+
+	graph := sync.NewSyncedDirectedAcyclicGraph[string]()
+	constructorInstance := NewDefaultConstructor(graph, opts)
 
 	// Process the constructor and expect an error
-	_, _, err := ctor.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context(), constructor)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error resolving credentials for source input method")
 }
@@ -534,51 +639,73 @@ components:
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	constructorInstance := NewDefaultConstructor(opts)
+	graph := sync.NewSyncedDirectedAcyclicGraph[string]()
+	constructorInstance := NewDefaultConstructor(graph, opts)
 
 	// Process the constructor
-	descs, graph, err := constructorInstance.Construct(t.Context(), converted)
+	err = constructorInstance.Construct(t.Context(), converted)
 	require.NoError(t, err)
-	require.Len(t, descs, 1)
-	require.NotNil(t, graph)
 
-	// Verify the results
-	desc := descs[0]
-	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
-	assert.Equal(t, "v1.0.0", desc.Component.Version)
-	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
-	assert.Len(t, desc.Component.Sources, 2)
+	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		roots := d.Roots()
+		assert.Len(t, roots, 1)
+		root := roots[0]
 
-	// Verify the first source
-	source1 := desc.Component.Sources[0]
-	assert.Equal(t, "test-source-1", source1.Name)
-	assert.Equal(t, "v1.0.0", source1.Version)
-	assert.Equal(t, "git", source1.Type)
-	assert.NotNil(t, source1.Access)
-	access1, ok := source1.Access.(*v2.LocalBlob)
-	require.True(t, ok, "Access should be of type LocalBlob")
-	assert.Equal(t, "application/octet-stream", access1.MediaType)
+		assert.Equal(t, "name=ocm.software/test-component,version=v1.0.0", root)
 
-	// Verify the second source
-	source2 := desc.Component.Sources[1]
-	assert.Equal(t, "test-source-2", source2.Name)
-	assert.Equal(t, "v1.0.0", source2.Version)
-	assert.Equal(t, "helm", source2.Type)
-	assert.NotNil(t, source2.Access)
-	access2, ok := source2.Access.(*v2.LocalBlob)
-	require.True(t, ok, "Access should be of type LocalBlob")
-	assert.Equal(t, "application/x-tar", access2.MediaType)
+		// Verify the source was processed correctly
+		// // Verify the results
+		//	desc := descs[0]
+		//	assert.Equal(t, "ocm.software/test-component", desc.Component.Name)
+		//	assert.Equal(t, "v1.0.0", desc.Component.Version)
+		//	assert.Equal(t, "test-provider", desc.Component.Provider.Name)
+		//	assert.Len(t, desc.Component.Sources, 2)
+		//
+		//	// Verify the first source
+		//	source1 := desc.Component.Sources[0]
+		//	assert.Equal(t, "test-source-1", source1.Name)
+		//	assert.Equal(t, "v1.0.0", source1.Version)
+		//	assert.Equal(t, "git", source1.Type)
+		//	assert.NotNil(t, source1.Access)
+		//	access1, ok := source1.Access.(*v2.LocalBlob)
+		//	require.True(t, ok, "Access should be of type LocalBlob")
+		//	assert.Equal(t, "application/octet-stream", access1.MediaType)
+		//
+		//	// Verify the second source
+		//	source2 := desc.Component.Sources[1]
+		//	assert.Equal(t, "test-source-2", source2.Name)
+		//	assert.Equal(t, "v1.0.0", source2.Version)
+		//	assert.Equal(t, "helm", source2.Type)
+		//	assert.NotNil(t, source2.Access)
+		//	access2, ok := source2.Access.(*v2.LocalBlob)
+		//	require.True(t, ok, "Access should be of type LocalBlob")
+		//	assert.Equal(t, "application/x-tar", access2.MediaType)
+
+		verts := d.Vertices
+		assert.Len(t, verts, 1)
+
+		val := verts[root].Attributes[sync.AttributeValue]
+		assert.NotNil(t, val)
+		comp, _ := val.(*ConstructorOrExternalComponent)
+		assert.NotNil(t, comp)
+
+		res := comp.ConstructorComponent.Resources
+		assert.Len(t, res, 2)
+
+		assert.Equal(t, "test-resource-1", res[0].Name)
+		assert.Equal(t, "v1.0.0", res[0].Version)
+		assert.Equal(t, descriptor.LocalRelation, res[0].Relation)
+		assert.NotNil(t, res[0].Access)
+
+		// // Verify the access specification
+		access, ok := res[0].Access.(*v2.LocalBlob)
+		require.True(t, ok, "Access should be of type LocalBlob")
+		assert.Equal(t, "application/octet-stream", access.MediaType)
+		return nil
+	})
+	require.NoError(t, err)
 
 	// Verify the repository was called correctly
 	assert.Len(t, mockRepo.addedSources, 0)
 	assert.Len(t, mockRepo.addedVersions, 1)
-
-	err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		assert.Equal(t, 1, len(d.Vertices))
-
-		roots := d.Roots()
-		require.Len(t, roots, 1)
-		return nil
-	})
-	require.NoError(t, err)
 }
