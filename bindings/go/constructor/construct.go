@@ -108,8 +108,9 @@ func (c *DefaultConstructor) discover(ctx context.Context, componentConstructor 
 		componentConstructor:                componentConstructor,
 		externalComponentRepositoryProvider: c.opts.ExternalComponentRepositoryProvider,
 	}
-	graphDiscoverer := syncdag.NewGraphDiscovererWithGraph(c.graph, &syncdag.GraphDiscovererOptions[string, *ConstructorOrExternalComponent]{
+	graphDiscoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *ConstructorOrExternalComponent]{
 		Roots:      roots,
+		Graph:      c.graph,
 		Resolver:   &resAndDis,
 		Discoverer: &resAndDis,
 	})
