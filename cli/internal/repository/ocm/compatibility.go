@@ -16,7 +16,7 @@ import (
 	"ocm.software/open-component-model/cli/internal/reference/compref"
 )
 
-// newComponentVersionRepositoryForComponentProviderInternal is the unified implementation for creating a
+// NewComponentVersionRepositoryForComponentProviderWithPattern is the unified implementation for creating a
 // ComponentVersionRepositoryForComponentProvider. It handles both single component references and multiple
 // component patterns.
 //
@@ -32,7 +32,7 @@ import (
 //  2. Fallback resolvers (deprecated) - priority-based resolution
 //
 // Returns an error if both resolver types are configured, or if no repository and no resolvers are provided.
-func newComponentVersionRepositoryForComponentProviderInternal(ctx context.Context,
+func NewComponentVersionRepositoryForComponentProviderWithPattern(ctx context.Context,
 	repoProvider repository.ComponentVersionRepositoryProvider,
 	credentialGraph credentials.GraphResolver,
 	config *genericv1.Config,
@@ -173,30 +173,7 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 		}
 	}
 
-	return newComponentVersionRepositoryForComponentProviderInternal(
-		ctx,
-		repoProvider,
-		credentialGraph,
-		config,
-		repository,
-		componentPatterns,
-	)
-}
-
-// NewComponentVersionRepositoryForComponentProviderWithPatterns creates a ComponentVersionRepositoryForComponentProvider
-// for a repository with specific component name patterns. This is useful when you have a repository reference
-// and want to create high-priority resolvers for specific components.
-//
-// This is a convenience wrapper around newComponentVersionRepositoryForComponentProviderInternal for cases where
-// you have a repository and component patterns directly, rather than a compref.Ref.
-func NewComponentVersionRepositoryForComponentProviderWithPatterns(ctx context.Context,
-	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.GraphResolver,
-	config *genericv1.Config,
-	repository runtime.Typed,
-	componentPatterns []string,
-) (ComponentVersionRepositoryForComponentProvider, error) {
-	return newComponentVersionRepositoryForComponentProviderInternal(
+	return NewComponentVersionRepositoryForComponentProviderWithPattern(
 		ctx,
 		repoProvider,
 		credentialGraph,
