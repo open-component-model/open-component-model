@@ -39,7 +39,7 @@ type Constructor interface {
 	// GetGraph returns the internal graph used during construction.
 	// It can be used to inspect the relationships between components.
 	// Construct must be called to ensure the graph is populated.
-	// TODO: this is temporary and needs to be replaced with proper abstraction
+	// TODO: https://github.com/open-component-model/ocm-project/issues/736 this is temporary and needs to be replaced with proper abstraction
 	GetGraph() *syncdag.SyncedDirectedAcyclicGraph[string]
 }
 
@@ -48,8 +48,8 @@ type DefaultConstructor struct {
 	componentDigestCache   map[string]*descriptor.Digest
 	discoverer             *syncdag.GraphDiscoverer[string, *ConstructorOrExternalComponent]
 	constructor            *constructor.ComponentConstructor
-
-	opts Options
+	constructMutex         sync.Mutex
+	opts                   Options
 }
 
 var _ Constructor = (*DefaultConstructor)(nil)
@@ -74,6 +74,18 @@ type ConstructorOrExternalComponent struct {
 }
 
 func (c *DefaultConstructor) Construct(ctx context.Context) error {
+	c.constructMutex.Lock()
+	defer c.constructMutex.Unlock()
+
+	if err := c.discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		if len(d.Vertices) > 0 {
+			return fmt.Errorf("component constructor graph has already been constructed")
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	logger := log.Base().With("operation", "constructComponent")
 
 	if c.opts.ResourceInputMethodProvider == nil {
