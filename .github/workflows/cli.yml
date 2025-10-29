@@ -15,7 +15,7 @@ on:
     branches:
       - main
     paths:
-      - 'cli/v**'
+      - 'cli/**'
       - '.github/workflows/cli.yml'
   workflow_call:
     inputs:
