@@ -21,7 +21,12 @@ type processor struct {
 }
 
 type descriptors struct {
-	// descriptors TODO
+	// graph is the DAG containing the components to be processed.
+	// It needs to have the full topology already discovered.
+	// The processor will add the constructed/uploaded component descriptors as
+	// attributes to the corresponding vertices in the DAG. The key used for
+	// storing the descriptor is AttributeDescriptor.
+	// The original data of the graph is of type *ConstructorOrExternalComponent and will stay unchanged.
 	graph *syncdag.SyncedDirectedAcyclicGraph[string]
 }
 

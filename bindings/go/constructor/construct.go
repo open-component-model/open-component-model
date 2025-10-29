@@ -38,6 +38,8 @@ type Constructor interface {
 }
 
 // ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
+// It requires a graph to be provided.
+// The constructed descriptors can be accessed from the graph's vertex attributes with AttributeDescriptor.
 func ConstructDefault(ctx context.Context, constructor *constructor.ComponentConstructor, graph *syncdag.SyncedDirectedAcyclicGraph[string], opts Options) error {
 	return NewDefaultConstructor(graph, opts).Construct(ctx, constructor)
 }
