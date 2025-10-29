@@ -490,24 +490,20 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 		return nil, fmt.Errorf("could not get component version repository for reference %+v", repository)
 	}
 
-	var cvs []string
-	for _, name := range componentNames {
-		versions, err := ocm.VersionsWithFiltering(ctx, name, repo, ocm.VersionOptions{
-			SemverConstraint: constraint,
-			LatestOnly:       latestOnly,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("getting component reference and versions failed: %w", err)
-		}
-
-		for _, ver := range versions {
-			identity := runtime.Identity{
-				descruntime.IdentityAttributeName:    name,
-				descruntime.IdentityAttributeVersion: ver,
-			}.String()
-			cvs = append(cvs, identity)
-		}
+	descriptors, err := ocm.ListComponentVersions(ctx, repo,
+		ocm.WithComponentNames(componentNames),
+		ocm.WithSemverConstraint(constraint),
+		ocm.WithLatestOnly(latestOnly),
+		ocm.WithSort(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("listing component versions failed: %w", err)
 	}
 
-	return cvs, nil
+	identities := make([]string, 0, len(descriptors))
+	for _, desc := range descriptors {
+		identities = append(identities, desc.Component.ToIdentity().String())
+	}
+
+	return identities, nil
 }
