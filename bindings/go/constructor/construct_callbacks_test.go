@@ -6,8 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
-
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -185,11 +183,11 @@ func TestConstructionCallbacks(t *testing.T) {
 		},
 	}
 
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
-
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
+	
 	// Process the constructor
-	err := constructorInstance.Construct(context.Background(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.Len(t, descs, 1)

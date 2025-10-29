@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -126,11 +125,11 @@ func TestConstructWithSourceInputMethod(t *testing.T) {
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.Len(t, descs, 1)
@@ -169,11 +168,11 @@ func TestConstructWithSourceAccess(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.NoError(t, err)
@@ -254,11 +253,11 @@ func TestConstructWithSourceCredentialResolution(t *testing.T) {
 	}
 
 	// Process the constructor
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.Len(t, descs, 1)
@@ -319,11 +318,11 @@ func TestConstructWithSourceBlob(t *testing.T) {
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.Len(t, descs, 1)
@@ -363,11 +362,11 @@ func TestConstructWithInvalidSourceInputMethodType(t *testing.T) {
 		},
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	ctor := NewDefaultConstructor(graph, opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	err := ctor.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no input method resolvable for input specification of type")
 }
@@ -409,11 +408,11 @@ func TestConstructWithSourceMissingAccess(t *testing.T) {
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	ctor := NewDefaultConstructor(graph, opts)
+
+	ctor := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	err := ctor.Construct(t.Context(), constructor)
+	err := ctor.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "after the input method was processed, no access was present in the source")
 }
@@ -465,11 +464,11 @@ func TestConstructWithSourceCredentialResolutionError(t *testing.T) {
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 		CredentialProvider:        mockCredProvider,
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	ctor := NewDefaultConstructor(graph, opts)
+
+	ctor := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	err := ctor.Construct(t.Context(), constructor)
+	err := ctor.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error resolving credentials for source input method")
 }
@@ -549,11 +548,12 @@ components:
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+	
+	constructorInstance := NewDefaultConstructor(converted, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err = constructorInstance.Construct(t.Context(), converted)
+	err = constructorInstance.Construct(t.Context())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.NoError(t, err)

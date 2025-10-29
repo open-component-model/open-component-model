@@ -291,10 +291,10 @@ components:
 			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
 			ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicyCopyOrFail,
 		}
-		graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-		constructorInstance := NewDefaultConstructor(graph, opts)
+		constructorInstance := NewDefaultConstructor(converted, opts)
+		graph := constructorInstance.GetGraph()
 
-		err := constructorInstance.Construct(t.Context(), converted)
+		err := constructorInstance.Construct(t.Context())
 		require.NoError(t, err)
 		descs := collectDescriptors(t, graph)
 		require.Len(t, descs, 4)
@@ -320,10 +320,11 @@ components:
 			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
 			ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicySkip,
 		}
-		graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-		constructorInstance := NewDefaultConstructor(graph, opts)
 
-		err := constructorInstance.Construct(t.Context(), converted)
+		constructorInstance := NewDefaultConstructor(converted, opts)
+		graph := constructorInstance.GetGraph()
+
+		err := constructorInstance.Construct(t.Context())
 		require.NoError(t, err)
 		descs := collectDescriptors(t, graph)
 		require.Len(t, descs, 4)
@@ -584,10 +585,10 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 				compConstructor.Components[i] = *comp
 			}
 
-			graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-			constructorInstance := NewDefaultConstructor(graph, opts)
+			constructorInstance := NewDefaultConstructor(compConstructor, opts)
+			graph := constructorInstance.GetGraph()
 
-			err := constructorInstance.Construct(t.Context(), compConstructor)
+			err := constructorInstance.Construct(t.Context())
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {

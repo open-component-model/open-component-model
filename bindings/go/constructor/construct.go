@@ -158,6 +158,8 @@ func NewDefaultConstructor(constructor *constructor.ComponentConstructor, opts O
 	}
 }
 
+// buildDiscoverer creates a graph discoverer for the component constructor.
+// It sets up the roots of the graph based on the components in the constructor
 func buildDiscoverer(componentConstructor *constructor.ComponentConstructor, opts Options) *syncdag.GraphDiscoverer[string, *ConstructorOrExternalComponent] {
 	roots := make([]string, len(componentConstructor.Components))
 	for index, comp := range componentConstructor.Components {

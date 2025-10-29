@@ -227,11 +227,11 @@ func TestConstructWithMockInputMethod(t *testing.T) {
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err := constructorInstance.Construct(context.Background(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.NoError(t, err)
@@ -271,11 +271,12 @@ func TestConstructWithResourceAccess(t *testing.T) {
 	opts := Options{
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err := constructorInstance.Construct(context.Background(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.NoError(t, err)
@@ -355,11 +356,12 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 		CredentialProvider:          mockCredProvider,
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err := constructorInstance.Construct(context.Background(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.NoError(t, err)
@@ -427,11 +429,12 @@ func TestConstructWithResourceByValue(t *testing.T) {
 		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceRepositoryProvider: mockRepoProvider,
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err := constructorInstance.Construct(context.Background(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.NoError(t, err)
@@ -488,11 +491,12 @@ func TestConstructWithResourceDigest(t *testing.T) {
 		TargetRepositoryProvider:        &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceDigestProcessorProvider: mockDigestProvider,
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
 
 	// Process the constructor
-	err := constructorInstance.Construct(context.Background(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.NoError(t, err)
@@ -540,11 +544,11 @@ func TestConstructWithInvalidInputMethod(t *testing.T) {
 		},
 		TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no input method resolvable for input specification of type")
 }
@@ -587,11 +591,10 @@ func TestConstructWithMissingAccess(t *testing.T) {
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "after the input method was processed, no access was present in the resource")
 }
@@ -644,11 +647,11 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 		CredentialProvider:          mockCredProvider,
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+
+	constructorInstance := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error resolving credentials for resource input method")
 }
@@ -685,11 +688,10 @@ func TestConstructWithResourceByValueFailure(t *testing.T) {
 		TargetRepositoryProvider:   &mockTargetRepositoryProvider{repo: mockTargetRepo},
 		ResourceRepositoryProvider: mockRepoProvider,
 	}
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+	constructorInstance := NewDefaultConstructor(constructor, opts)
 
 	// Process the constructor and expect an error
-	err := constructorInstance.Construct(t.Context(), constructor)
+	err := constructorInstance.Construct(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error downloading resource")
 }
@@ -772,10 +774,11 @@ components:
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
 	}
 	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	constructorInstance := NewDefaultConstructor(graph, opts)
+	constructorInstance := NewDefaultConstructor(converted, opts)
+	graph = constructorInstance.GetGraph()
 
 	// Process the constructor
-	err = constructorInstance.Construct(context.Background(), converted)
+	err = constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
 	descs := collectDescriptors(t, graph)
 	require.Len(t, descs, 1)
