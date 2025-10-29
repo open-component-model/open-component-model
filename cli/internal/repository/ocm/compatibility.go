@@ -153,7 +153,7 @@ func NewComponentVersionRepositoryForComponentProviderWithPattern(ctx context.Co
 // If a compref.Ref is provided, it will be used to create a compRefProvider.
 // If a genericv1.Config is provided, it will be used to create either a fallback resolver provider (deprecated)
 // or a path matcher resolver provider.
-// If both types are configured, an error will be returned.
+// If both config types are configured at the same time, an error will be returned.
 // If neither a componentReference nor a configuration is provided, an error will be returned.
 // As a fallback, this constructor adds the compref as a fallback entry as both
 // resolverruntime.Resolver (lowest priority) and resolverspec.Resolver (highest priority) depending on the configuration type.
