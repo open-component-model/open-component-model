@@ -425,7 +425,7 @@ func processRepositoryReference(cmd *cobra.Command,
 	slog.DebugContext(ctx, "components versions", "roots", roots)
 
 	// Create a component reference wrapper for the repository to use the standard provider function
-	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProviderWithPatterns(ctx,
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProviderWithPattern(ctx,
 		pluginManager.ComponentVersionRepositoryRegistry,
 		credentialGraph,
 		config,
