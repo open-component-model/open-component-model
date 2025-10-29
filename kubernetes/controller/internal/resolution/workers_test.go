@@ -184,8 +184,8 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 		resolver := setupDynamicTestEnvironment(t, k8sClient, logger)
 
 		const numComponents = 20
-		results := make([]atomic.Pointer[resolution.ResolveResult], numComponents)
-		errs := make([]atomic.Pointer[error], numComponents)
+		results := make([]*resolution.ResolveResult, numComponents)
+		errs := make([]error, numComponents)
 		opts := &resolution.ResolveOptions{
 			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 			Component:      "", // set in the iteration
@@ -206,9 +206,9 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 				o := *opts
 				o.Component = fmt.Sprintf("component-%d", i)
 				result, err := resolver.ResolveComponentVersion(ctx, &o)
-				results[i].Store(result)
+				results[i] = result
 				if err != nil {
-					errs[i].Store(&err)
+					errs[i] = err
 				}
 			}()
 		}
@@ -220,7 +220,7 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 
 		// Verify all resolutions completed successfully
 		for i := range numComponents {
-			result := results[i].Load()
+			result := results[i]
 			if result == nil {
 				// Try one more time after synctest.Wait
 				opts.Component = fmt.Sprintf("component-%d", i)
@@ -299,8 +299,8 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 		go func() { _ = wp.Start(wpCtx) }()
 
 		const numConcurrent = 50
-		results := make([]atomic.Pointer[resolution.ResolveResult], numConcurrent)
-		errs := make([]atomic.Pointer[error], numConcurrent)
+		results := make([]*resolution.ResolveResult, numConcurrent)
+		errs := make([]error, numConcurrent)
 
 		opts := &resolution.ResolveOptions{
 			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
@@ -321,9 +321,9 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 		for i := range numConcurrent {
 			go func() {
 				result, err := resolver.ResolveComponentVersion(ctx, opts)
-				results[i].Store(result)
+				results[i] = result
 				if err != nil {
-					errs[i].Store(&err)
+					errs[i] = err
 				}
 			}()
 		}
@@ -335,7 +335,7 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 
 		// Verify all requests got the result
 		for i := range numConcurrent {
-			result := results[i].Load()
+			result := results[i]
 			if result == nil {
 				// refetch things after synctest wait is done
 				result, err = resolver.ResolveComponentVersion(ctx, opts)
@@ -554,9 +554,9 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 		versions := []string{"v1.0.0", "v1.1.0", "v1.2.0", "v2.0.0"}
 		const numConcurrent = 10
 
-		results := make(map[string][]atomic.Pointer[resolution.ResolveResult])
+		results := make(map[string][]*resolution.ResolveResult)
 		for _, v := range versions {
-			results[v] = make([]atomic.Pointer[resolution.ResolveResult], numConcurrent)
+			results[v] = make([]*resolution.ResolveResult, numConcurrent)
 		}
 		opts := &resolution.ResolveOptions{
 			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
@@ -579,7 +579,7 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 					o := *opts
 					o.Version = version
 					result, _ := resolver.ResolveComponentVersion(ctx, &o)
-					results[version][i].Store(result)
+					results[version][i] = result
 				}()
 			}
 		}
@@ -592,7 +592,7 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 		// Verify all versions resolved correctly
 		for _, version := range versions {
 			for i := range numConcurrent {
-				result := results[version][i].Load()
+				result := results[version][i]
 				if result == nil {
 					// refetch values after sync wait is done for all go routines
 					opts.Version = version
