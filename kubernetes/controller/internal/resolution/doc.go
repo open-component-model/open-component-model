@@ -25,6 +25,7 @@
 //
 //	Compute key = SHA-256(Canonical(config) + Canonical(repoSpec) + componentName + version)
 //
+// Canonical in this context means that the same hash is generated for the same config/repoSpec ALWAYS.
 // Once the cache key has been created and a result is stored the cache has a TTL of ( default ) 30 minutes. Once the
 // TTL hits, results are cleared by a separate go routine.
 // The process and the service are described by ADR docs/adr/0009_controller_v2_lib_migration.md.

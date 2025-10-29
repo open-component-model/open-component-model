@@ -524,7 +524,7 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Log
 	scheme := ocmruntime.NewScheme()
 	ocirepository.MustAddToScheme(scheme)
 
-	cvRepoPlugin := &mockOCIPlugin{
+	cvRepoPlugin := &mockPlugin{
 		component: "test-component",
 		version:   "v1.0.0",
 	}
@@ -563,13 +563,15 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Log
 	}
 }
 
-// mockOCIPlugin is a minimal OCI repository plugin for testing.
-type mockOCIPlugin struct {
+// mockPlugin is a minimal OCI repository plugin for testing.
+// It implements both the plugin interface and the repository interface.
+type mockPlugin struct {
+	repository.ComponentVersionRepository
 	component string
 	version   string
 }
 
-func (p *mockOCIPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
+func (p *mockPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
 	_ context.Context,
 	repositorySpecification ocmruntime.Typed,
 ) (ocmruntime.Identity, error) {
@@ -587,31 +589,23 @@ func (p *mockOCIPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
 	return identity, nil
 }
 
-func (p *mockOCIPlugin) GetComponentVersionRepository(
+func (p *mockPlugin) GetComponentVersionRepository(
 	_ context.Context,
 	_ ocmruntime.Typed,
 	_ map[string]string,
 ) (repository.ComponentVersionRepository, error) {
-	return &mockRepository{
-		component: p.component,
-		version:   p.version,
-	}, nil
+	// Return the plugin itself as it implements the repository interface
+	return p, nil
 }
 
-// mockRepository is a minimal repository implementation for testing.
-type mockRepository struct {
-	repository.ComponentVersionRepository
-	component string
-	version   string
-}
-
-func (m *mockRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+// GetComponentVersion implements repository.ComponentVersionRepository
+func (p *mockPlugin) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
 	return &descriptor.Descriptor{
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
 				ObjectMeta: descriptor.ObjectMeta{
-					Name:    m.component,
-					Version: m.version,
+					Name:    p.component,
+					Version: p.version,
 				},
 			},
 		},

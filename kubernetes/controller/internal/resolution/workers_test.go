@@ -62,7 +62,7 @@ func (logger *FakeLogger) GetLog() string {
 	return logger.infoBuffer.String()
 }
 
-var _ logr.LogSink = &FakeLogger{}
+var _ logr.LogSink = (*FakeLogger)(nil)
 
 func TestWorkerPool_StartAndStop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -260,12 +260,12 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 			WithObjects(configMap).
 			Build()
 
-		// Use a mock plugin that tracks call count
+		// Use a plugin that tracks call count
 		var callCount atomic.Int32
-		countingPlugin := &countingOCIPlugin{
-			component: "shared-component",
-			version:   "v1.0.0",
-			callCount: &callCount,
+		plugin := &configurablePlugin{
+			BeforeGetRepositoryFn: func() {
+				callCount.Add(1)
+			},
 		}
 
 		ocmScheme := ocmruntime.NewScheme()
@@ -275,7 +275,7 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 		err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 			ocmScheme,
 			pm.ComponentVersionRepositoryRegistry,
-			countingPlugin,
+			plugin,
 			&ociv1.Repository{},
 		)
 		require.NoError(t, err)
@@ -380,10 +380,10 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 		Build()
 
 	// Use a slow plugin to fill the queue
-	slowPlugin := &slowOCIPlugin{
-		component: "slow-component",
-		version:   "v1.0.0",
-		delay:     5 * time.Second,
+	plugin := &configurablePlugin{
+		BeforeGetRepositoryFn: func() {
+			time.Sleep(5 * time.Second)
+		},
 	}
 
 	ocmScheme := ocmruntime.NewScheme()
@@ -393,7 +393,7 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		ocmScheme,
 		pm.ComponentVersionRepositoryRegistry,
-		slowPlugin,
+		plugin,
 		&ociv1.Repository{},
 	)
 	require.NoError(t, err)
@@ -716,80 +716,50 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 	})
 }
 
-// countingOCIPlugin tracks how many times GetComponentVersionRepository is called
-type countingOCIPlugin struct {
-	component string
-	version   string
-	callCount *atomic.Int32
-}
-
-func (p *countingOCIPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
-	_ context.Context,
-	repositorySpecification ocmruntime.Typed,
-) (ocmruntime.Identity, error) {
-	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
-	if !ok {
-		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
-	}
-
-	identity, err := ocmruntime.ParseURLToIdentity(ociRepoSpec.BaseUrl)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
-	}
-	identity.SetType(ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version))
-
-	return identity, nil
-}
-
-func (p *countingOCIPlugin) GetComponentVersionRepository(
-	_ context.Context,
-	_ ocmruntime.Typed,
-	_ map[string]string,
-) (repository.ComponentVersionRepository, error) {
-	p.callCount.Add(1)
-	return &dynamicMockRepository{}, nil
-}
-
-// slowOCIPlugin simulates a slow repository operation
-type slowOCIPlugin struct {
-	component string
-	version   string
-	delay     time.Duration
-}
-
-func (p *slowOCIPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
-	_ context.Context,
-	repositorySpecification ocmruntime.Typed,
-) (ocmruntime.Identity, error) {
-	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
-	if !ok {
-		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
-	}
-
-	identity, err := ocmruntime.ParseURLToIdentity(ociRepoSpec.BaseUrl)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
-	}
-	identity.SetType(ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version))
-
-	return identity, nil
-}
-
-func (p *slowOCIPlugin) GetComponentVersionRepository(
-	_ context.Context,
-	_ ocmruntime.Typed,
-	_ map[string]string,
-) (repository.ComponentVersionRepository, error) {
-	time.Sleep(p.delay)
-	return &dynamicMockRepository{}, nil
-}
-
-// dynamicMockRepository returns the requested component/version dynamically
-type dynamicMockRepository struct {
+// configurablePlugin is a flexible mock plugin for testing that allows customizing behavior.
+type configurablePlugin struct {
 	repository.ComponentVersionRepository
+	GetComponentVersionFn func(ctx context.Context, component, version string) (*descriptor.Descriptor, error)
+	BeforeGetRepositoryFn func()
 }
 
-func (m *dynamicMockRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+func (p *configurablePlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
+	_ context.Context,
+	repositorySpecification ocmruntime.Typed,
+) (ocmruntime.Identity, error) {
+	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
+	}
+
+	identity, err := ocmruntime.ParseURLToIdentity(ociRepoSpec.BaseUrl)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
+	}
+	identity.SetType(ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version))
+
+	return identity, nil
+}
+
+func (p *configurablePlugin) GetComponentVersionRepository(
+	_ context.Context,
+	_ ocmruntime.Typed,
+	_ map[string]string,
+) (repository.ComponentVersionRepository, error) {
+	if p.BeforeGetRepositoryFn != nil {
+		p.BeforeGetRepositoryFn()
+	}
+
+	return p, nil
+}
+
+// GetComponentVersion implements repository.ComponentVersionRepository
+func (p *configurablePlugin) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+	if p.GetComponentVersionFn != nil {
+		return p.GetComponentVersionFn(ctx, component, version)
+	}
+
+	// Default behavior: return requested component/version dynamically
 	return &descriptor.Descriptor{
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{
@@ -800,35 +770,6 @@ func (m *dynamicMockRepository) GetComponentVersion(ctx context.Context, compone
 			},
 		},
 	}, nil
-}
-
-// dynamicOCIPlugin returns dynamic component/version values based on the request
-type dynamicOCIPlugin struct{}
-
-func (p *dynamicOCIPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
-	_ context.Context,
-	repositorySpecification ocmruntime.Typed,
-) (ocmruntime.Identity, error) {
-	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
-	if !ok {
-		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
-	}
-
-	identity, err := ocmruntime.ParseURLToIdentity(ociRepoSpec.BaseUrl)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
-	}
-	identity.SetType(ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version))
-
-	return identity, nil
-}
-
-func (p *dynamicOCIPlugin) GetComponentVersionRepository(
-	_ context.Context,
-	_ ocmruntime.Typed,
-	_ map[string]string,
-) (repository.ComponentVersionRepository, error) {
-	return &dynamicMockRepository{}, nil
 }
 
 // setupDynamicTestEnvironment creates a test environment with dynamic plugin that returns requested component/version
@@ -842,7 +783,7 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 	err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		ocmScheme,
 		pm.ComponentVersionRepositoryRegistry,
-		&dynamicOCIPlugin{},
+		&configurablePlugin{},
 		&ociv1.Repository{},
 	)
 	require.NoError(t, err)
