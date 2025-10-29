@@ -30,11 +30,6 @@ type GraphDiscovererOptions[K cmp.Ordered, V any] struct {
 	// This controls how the graph is expanded once a vertex is resolved.
 	// Must be concurrency-safe.
 	Discoverer Discoverer[K, V]
-
-	// Graph is an optional pre-existing DAG to use for discovery.
-	// If not provided, a new empty DAG will be created.
-	// This allows sharing or inspecting the graph outside the discoverer.
-	Graph *SyncedDirectedAcyclicGraph[K]
 }
 
 // Resolver defines how to resolve a vertex key into its value.
