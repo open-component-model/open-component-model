@@ -34,20 +34,20 @@ const AttributeDescriptor string = "constructor/descriptor"
 type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in topological order.
-	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) error
-}
+	Construct(ctx context.Context) error
 
-// ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
-// It requires a graph to be provided.
-// The constructed descriptors can be accessed from the graph's vertex attributes with AttributeDescriptor.
-func ConstructDefault(ctx context.Context, constructor *constructor.ComponentConstructor, graph *syncdag.SyncedDirectedAcyclicGraph[string], opts Options) error {
-	return NewDefaultConstructor(graph, opts).Construct(ctx, constructor)
+	// GetGraph returns the internal graph used during construction.
+	// It can be used to inspect the relationships between components.
+	// Construct must be called to ensure the graph is populated.
+	// TODO: this is temporary and needs to replaces with proper abstraction
+	GetGraph() *syncdag.SyncedDirectedAcyclicGraph[string]
 }
 
 type DefaultConstructor struct {
 	componentDigestCacheMu sync.Mutex
 	componentDigestCache   map[string]*descriptor.Digest
-	graph                  *syncdag.SyncedDirectedAcyclicGraph[string]
+	discoverer             *syncdag.GraphDiscoverer[string, *ConstructorOrExternalComponent]
+	constructor            *constructor.ComponentConstructor
 
 	opts Options
 }
@@ -73,7 +73,7 @@ type ConstructorOrExternalComponent struct {
 	ExternalComponent    *descriptor.Descriptor
 }
 
-func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) error {
+func (c *DefaultConstructor) Construct(ctx context.Context) error {
 	logger := log.Base().With("operation", "constructComponent")
 
 	if c.opts.ResourceInputMethodProvider == nil {
@@ -85,11 +85,11 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 		c.opts.SourceInputMethodProvider = DefaultInputMethodRegistry
 	}
 
-	if len(componentConstructor.Components) == 0 {
+	if len(c.constructor.Components) == 0 {
 		return nil
 	}
 
-	err := c.discover(ctx, componentConstructor)
+	err := c.discover(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
@@ -101,23 +101,13 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 	return nil
 }
 
-func (c *DefaultConstructor) discover(ctx context.Context, componentConstructor *constructor.ComponentConstructor) error {
-	roots := make([]string, len(componentConstructor.Components))
-	for index, component := range componentConstructor.Components {
-		roots[index] = component.ToIdentity().String()
-	}
-	resAndDis := resolverAndDiscoverer{
-		componentConstructor:                componentConstructor,
-		externalComponentRepositoryProvider: c.opts.ExternalComponentRepositoryProvider,
-	}
-	graphDiscoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *ConstructorOrExternalComponent]{
-		Roots:      roots,
-		Graph:      c.graph,
-		Resolver:   &resAndDis,
-		Discoverer: &resAndDis,
-	})
-	slog.DebugContext(ctx, "starting discovery based on components in constructor", "components", roots)
-	if err := graphDiscoverer.Discover(ctx); err != nil {
+func (c *DefaultConstructor) GetGraph() *syncdag.SyncedDirectedAcyclicGraph[string] {
+	return c.discoverer.Graph()
+}
+
+func (c *DefaultConstructor) discover(ctx context.Context) error {
+	slog.DebugContext(ctx, "starting discovery based on components in constructor")
+	if err := c.discoverer.Discover(ctx); err != nil {
 		return fmt.Errorf("failed to discover components: %w", err)
 	}
 	slog.DebugContext(ctx, "component reference discovery completed successfully")
@@ -129,7 +119,7 @@ func (c *DefaultConstructor) construct(ctx context.Context) error {
 		reversedGraph *dag.DirectedAcyclicGraph[string]
 		err           error
 	)
-	if err = c.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+	if err = c.discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		if reversedGraph, err = d.Reverse(); err != nil {
 			return fmt.Errorf("failed to reverse graph: %w", err)
 		}
@@ -141,7 +131,7 @@ func (c *DefaultConstructor) construct(ctx context.Context) error {
 	proc := processor{
 		constructor: c,
 		processedDescriptors: descriptors{
-			graph: c.graph,
+			graph: c.discoverer.Graph(),
 		},
 	}
 
@@ -158,12 +148,31 @@ func (c *DefaultConstructor) construct(ctx context.Context) error {
 	return nil
 }
 
-func NewDefaultConstructor(graph *syncdag.SyncedDirectedAcyclicGraph[string], opts Options) Constructor {
+func NewDefaultConstructor(constructor *constructor.ComponentConstructor, opts Options) Constructor {
+	discoverer := buildDiscoverer(constructor, opts)
 	return &DefaultConstructor{
 		componentDigestCache: make(map[string]*descriptor.Digest),
-		graph:                graph,
+		constructor:          constructor,
+		discoverer:           discoverer,
 		opts:                 opts,
 	}
+}
+
+func buildDiscoverer(componentConstructor *constructor.ComponentConstructor, opts Options) *syncdag.GraphDiscoverer[string, *ConstructorOrExternalComponent] {
+	roots := make([]string, len(componentConstructor.Components))
+	for index, comp := range componentConstructor.Components {
+		roots[index] = comp.ToIdentity().String()
+	}
+	resAndDis := resolverAndDiscoverer{
+		componentConstructor:                componentConstructor,
+		externalComponentRepositoryProvider: opts.ExternalComponentRepositoryProvider,
+	}
+	graphDiscoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *ConstructorOrExternalComponent]{
+		Roots:      roots,
+		Resolver:   &resAndDis,
+		Discoverer: &resAndDis,
+	})
+	return graphDiscoverer
 }
 
 // constructComponent creates a single component descriptor from a component specification.
