@@ -18,10 +18,6 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
-replace (
-	ocm.software/open-component-model/bindings/go/dag => ../dag
-)
-
 require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
