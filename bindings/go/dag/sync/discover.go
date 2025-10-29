@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -59,6 +60,7 @@ func NewGraphDiscoverer[K cmp.Ordered, V any](opts *GraphDiscovererOptions[K, V]
 	if graph == nil {
 		graph = NewSyncedDirectedAcyclicGraph[K]()
 	}
+
 	return &GraphDiscoverer[K, V]{
 		graph:   graph,
 		doneMap: &sync.Map{},
@@ -151,6 +153,13 @@ func (d *GraphDiscoverer[K, V]) Discover(ctx context.Context) (retErr error) {
 			retErr = errors.Join(retErr, fmt.Errorf("discovery panicked: %v", r))
 		}
 	}()
+
+	_ = d.graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[K]) error {
+		if len(d.Vertices) > 0 {
+			slog.Warn("discovery called with pre-populated graph")
+		}
+		return nil
+	})
 
 	if len(d.opts.Roots) == 0 {
 		return fmt.Errorf("no roots provided and no roots found in the dag, cannot discover")
