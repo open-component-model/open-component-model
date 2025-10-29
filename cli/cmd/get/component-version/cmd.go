@@ -412,17 +412,17 @@ func processRepositoryReference(cmd *cobra.Command,
 	displayMode := params.displayMode
 	ctx := cmd.Context()
 
-	componentNames, err := listComponentsFromRepository(cmd.Context(), pluginManager, repository, credentialGraph)
+	componentNames, err := listComponentsFromRepository(ctx, pluginManager, repository, credentialGraph)
 	if err != nil {
 		return fmt.Errorf("could not list components in repository %v: %w", repository, err)
 	}
-	slog.InfoContext(ctx, "listed components from repository", "repository", repository, "components", componentNames)
+	slog.DebugContext(ctx, "listed components from repository", "repository", repository, "components", componentNames)
 
 	roots, err := getIDsForComponentsFromRepository(ctx, pluginManager, repository, componentNames, params, credentialGraph)
 	if err != nil {
 		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
 	}
-	slog.InfoContext(ctx, "components versions", "roots", roots)
+	slog.DebugContext(ctx, "components versions", "roots", roots)
 
 	// Create a component reference wrapper for the repository to use the standard provider function
 	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProviderWithPatterns(ctx,
