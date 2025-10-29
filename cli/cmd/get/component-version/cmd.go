@@ -45,7 +45,7 @@ func New() *cobra.Command {
 		Aliases:    []string{"cv", "component-versions", "cvs", "componentversion", "componentversions", "component", "components", "comp", "comps", "c"},
 		SuggestFor: []string{"version", "versions"},
 		Short:      "Get component version(s) from an OCM repository",
-		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentOrRepositoryReferenceAsFirstPositional),
+		Args:       cobra.MatchAll(cobra.ExactArgs(1), componentOrRepositoryReferenceAsFirstPositional),
 		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
 
 The format of a component reference is:
@@ -98,7 +98,7 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 	return cmd
 }
 
-func ComponentOrRepositoryReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
+func componentOrRepositoryReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing component reference as first positional argument")
 	}
