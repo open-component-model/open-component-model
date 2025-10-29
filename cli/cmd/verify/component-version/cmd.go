@@ -158,7 +158,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
 	}
-	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, ocm.RepositorySources{Config: config, CompRef: ref})
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
