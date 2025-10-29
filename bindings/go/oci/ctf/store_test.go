@@ -207,7 +207,6 @@ func TestTag(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := t.Context()
-	reference := "test-tag"
 	content := "test"
 	blob := inmemory.New(strings.NewReader(content))
 	digestStr, known := blob.Digest()
@@ -218,15 +217,31 @@ func TestTag(t *testing.T) {
 		Digest: digest.Digest(digestStr),
 	}
 
-	t.Run("successful tag", func(t *testing.T) {
-		err := store.Tag(ctx, desc, reference)
-		assert.NoError(t, err)
+	tests := []struct {
+		name      string
+		reference string
+	}{
+		{
+			name:      "simple tag",
+			reference: "test-tag",
+		},
+		{
+			name:      "tag as digest",
+			reference: desc.Digest.String(),
+		},
+	}
 
-		// Verify the tag was created by resolving it
-		resolvedDesc, err := store.Resolve(ctx, reference)
-		assert.NoError(t, err)
-		assert.Equal(t, desc.Digest, resolvedDesc.Digest)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := store.Tag(ctx, desc, tt.reference)
+			assert.NoError(t, err)
+
+			// Verify the tag was created by resolving it
+			resolvedDesc, err := store.Resolve(ctx, tt.reference)
+			assert.NoError(t, err)
+			assert.Equal(t, desc.Digest, resolvedDesc.Digest)
+		})
+	}
 }
 
 func TestFetchReference(t *testing.T) {

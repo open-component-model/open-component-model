@@ -39,7 +39,7 @@ type Constructor interface {
 	// GetGraph returns the internal graph used during construction.
 	// It can be used to inspect the relationships between components.
 	// Construct must be called to ensure the graph is populated.
-	// TODO: this is temporary and needs to replaces with proper abstraction
+	// TODO: this is temporary and needs to be replaced with proper abstraction
 	GetGraph() *syncdag.SyncedDirectedAcyclicGraph[string]
 }
 

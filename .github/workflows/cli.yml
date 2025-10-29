@@ -15,7 +15,7 @@ on:
     branches:
       - main
     paths:
-      - 'cli/v**'
+      - 'cli/**'
       - '.github/workflows/cli.yml'
   workflow_call:
     inputs:
@@ -84,7 +84,7 @@ jobs:
       # Compute VERSION from env.REF
       - name: Compute VERSION
         id: version
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const ref = process.env.REF;
@@ -115,7 +115,7 @@ jobs:
       # Attest built binaries with provenance metadata, but only if we're not on a PR
       - name: Attest binaries
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
@@ -124,7 +124,7 @@ jobs:
       - name: Determine if this is a push-eligible branch
         if: ${{ github.event_name != 'pull_request' }}
         id: branch-check
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             core.setOutput(
@@ -137,7 +137,7 @@ jobs:
       # Upload CLI binaries and OCI layout only if branch is eligible for push
       - name: Upload Artifacts
         if: ${{ steps.branch-check.outputs.should_push_oci_image }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
@@ -161,7 +161,7 @@ jobs:
     steps:
       # Retrieve artifacts produced by the build job
       - name: Download build artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: ${{ env.ARTIFACT_NAME }}
 
@@ -174,14 +174,14 @@ jobs:
 
       # Setup ORAS CLI for pushing OCI artifacts from OCI layouts.
       - name: Setup ORAS
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
       # use discovered tag from layout
       - name: Set TAG
         run: echo "TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -210,7 +210,7 @@ jobs:
         id: digest
         run: echo "digest=$(oras resolve ${TARGET_REPO}:${TAG})" >> "$GITHUB_OUTPUT"
       - name: Attest OCI image
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.digest.outputs.digest }}
