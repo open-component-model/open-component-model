@@ -78,6 +78,20 @@ const (
 	ExternalRelation ResourceRelation = "external"
 )
 
+// Artifact defines a common interface for both Source and Resource types.
+// It provides methods to access common metadata and properties.
+type Artifact interface {
+	// GetElementMeta returns the element metadata
+	GetElementMeta() ElementMeta
+	// GetType returns the type of the artifact
+	GetType() string
+	SetType(string)
+	// GetAccess returns the access information
+	GetAccess() runtime.Typed
+	// SetAccess sets the access information
+	SetAccess(runtime.Typed)
+}
+
 // A Resource is a delivery artifact, intended for deployment into a runtime environment, or describing additional content,
 // relevant for a deployment mechanism.
 // For example, installation procedures or meta-model descriptions controlling orchestration and/or deployment mechanisms.
@@ -102,6 +116,30 @@ type Resource struct {
 	CreationTime *Timestamp `json:"creationTime,omitempty"`
 }
 
+func (r *Resource) SetAccess(typed runtime.Typed) {
+	r.Access = runtime.AsRaw(typed)
+}
+
+func (r *Resource) GetAccess() runtime.Typed {
+	return r.Access
+}
+
+func (r *Resource) GetType() string {
+	return r.Type
+}
+
+func (r *Resource) SetType(t string) {
+	r.Type = t
+}
+
+func (r *Resource) GetElementMeta() ElementMeta {
+	return r.ElementMeta
+}
+
+func (r *Resource) SetElementMeta(m ElementMeta) {
+	r.ElementMeta = m
+}
+
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
 // Source elements do not have specific additional formal attributes.
 // See https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#sources
@@ -110,6 +148,30 @@ type Source struct {
 	ElementMeta `json:",inline"`
 	Type        string       `json:"type"`
 	Access      *runtime.Raw `json:"access"`
+}
+
+func (s *Source) SetAccess(typed runtime.Typed) {
+	s.Access = runtime.AsRaw(typed)
+}
+
+func (s *Source) GetAccess() runtime.Typed {
+	return s.Access
+}
+
+func (s *Source) GetType() string {
+	return s.Type
+}
+
+func (s *Source) SetType(t string) {
+	s.Type = t
+}
+
+func (s *Source) GetElementMeta() ElementMeta {
+	return s.ElementMeta
+}
+
+func (s *Source) SetElementMeta(m ElementMeta) {
+	s.ElementMeta = m
 }
 
 // Reference describes the reference to another component in the registry.

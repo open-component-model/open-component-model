@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -198,7 +199,7 @@ func (r *Scheme) MustRegister(prototype Typed, version string) {
 	r.MustRegisterWithAlias(prototype, NewVersionedType(t.Name(), version))
 }
 
-func (r *Scheme) TypeForPrototype(prototype any) (Type, error) {
+func (r *Scheme) TypeForPrototype(prototype Typed) (Type, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -310,7 +311,11 @@ func (r *Scheme) DefaultType(typed Typed) (updated bool, err error) {
 	return false, nil
 }
 
-// Convert transforms one Typed object into another. Both 'from' and 'into' must be non-nil pointers.
+func (r *Scheme) Convert(from Typed, into Typed) error {
+	return convert(from, into, r, r.allowUnknown)
+}
+
+// convert transforms one Typed object into another. Both 'from' and 'into' must be non-nil pointers.
 //
 // Special Cases:
 //   - Raw → Raw: performs a deep copy of the underlying []byte data.
@@ -323,8 +328,7 @@ func (r *Scheme) DefaultType(typed Typed) (updated bool, err error) {
 //   - Either argument is nil.
 //   - A type is not registered in the Scheme (for Raw conversions).
 //   - A reflection-based assignment fails due to type mismatch.
-func (r *Scheme) Convert(from Typed, into Typed) error {
-	// Check for nil arguments.
+func convert(from Typed, into Typed, resolver TypeResolver, allowUnknown bool) error {
 	if from == nil || into == nil {
 		return fmt.Errorf("both 'from' and 'into' must be non-nil")
 	}
@@ -333,8 +337,8 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 	if from.GetType().IsEmpty() {
 		// avoid mutating the original object
 		from = from.DeepCopyTyped()
-		typ, err := r.TypeForPrototype(from)
-		if err != nil && !r.allowUnknown {
+		typ, err := resolver.TypeForPrototype(from)
+		if err != nil && !allowUnknown {
 			return fmt.Errorf("cannot convert from unregistered type: %w", err)
 		}
 		from.SetType(typ)
@@ -350,10 +354,14 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		}
 
 		// Raw → Typed: Unmarshal the Raw.Data into the target.
-		if !r.IsRegistered(fromType) && !r.allowUnknown {
+		if !resolver.IsRegistered(fromType) && !allowUnknown {
 			return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
 		}
-		if err := json.Unmarshal(rawFrom.Data, into); err != nil {
+
+		dec := json.NewDecoder(bytes.NewReader(rawFrom.Data))
+		dec.DisallowUnknownFields() // Reject unknown JSON fields to stay safe from bad input.
+
+		if err := dec.Decode(into); err != nil {
 			return fmt.Errorf("failed to unmarshal from raw: %w", err)
 		}
 		return nil
@@ -361,7 +369,7 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 
 	// Case 2: Typed -> Raw
 	if rawInto, ok := into.(*Raw); ok {
-		if !r.IsRegistered(fromType) && !r.allowUnknown {
+		if !resolver.IsRegistered(fromType) && !allowUnknown {
 			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
 		}
 		data, err := json.Marshal(from)
@@ -377,7 +385,7 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 		return nil
 	}
 
-	// Case 3: Generic Typed -> Typed conversion using reflection.
+	// Case 3: Typed → Typed via reflection and deep copy.
 	intoVal := reflect.ValueOf(into)
 	if intoVal.Kind() != reflect.Ptr || intoVal.IsNil() {
 		return fmt.Errorf("'into' must be a non-nil pointer")
@@ -393,4 +401,13 @@ func (r *Scheme) Convert(from Typed, into Typed) error {
 	}
 	intoElem.Set(copiedVal)
 	return nil
+}
+
+type TypeResolver interface {
+	TypeForPrototype(prototype Typed) (Type, error)
+	IsRegistered(typ Type) bool
+}
+
+type Converter interface {
+	Convert(from Typed, into Typed) error
 }
