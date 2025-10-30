@@ -92,7 +92,6 @@ func createSimplePathMatcherProvider(
 	credentialGraph credentials.GraphResolver,
 	repository runtime.Typed,
 ) (ComponentVersionRepositoryForComponentProvider, error) {
-
 	raw := runtime.Raw{}
 	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
 	if err := scheme.Convert(repository, &raw); err != nil {
@@ -149,7 +148,6 @@ func createPathMatcherProvider(
 	componentPatterns []string,
 	pathMatchers []*resolverspec.Resolver,
 ) (ComponentVersionRepositoryForComponentProvider, error) {
-
 	if repository != nil {
 		var finalResolvers []*resolverspec.Resolver
 		finalResolvers = append(finalResolvers, pathMatchers...)
@@ -252,6 +250,5 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	config *genericv1.Config,
 	ref *compref.Ref,
 ) (ComponentVersionRepositoryForComponentProvider, error) {
-
 	return NewComponentRepositoryProvider(ctx, repoProvider, credentialGraph, WithConfig(config), WithComponentRef(ref))
 }
