@@ -2,15 +2,15 @@ package componentversion
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/jedib0t/go-pretty/v6/progress"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
@@ -19,7 +19,10 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/dag"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -32,8 +35,10 @@ import (
 	"ocm.software/open-component-model/cli/internal/flags/file"
 	"ocm.software/open-component-model/cli/internal/flags/log"
 	"ocm.software/open-component-model/cli/internal/reference/compref"
+	"ocm.software/open-component-model/cli/internal/render"
+	"ocm.software/open-component-model/cli/internal/render/graph/list"
+	"ocm.software/open-component-model/cli/internal/render/graph/tree"
 	"ocm.software/open-component-model/cli/internal/repository/ocm"
-	ocmsync "ocm.software/open-component-model/cli/internal/sync"
 )
 
 const (
@@ -44,6 +49,8 @@ const (
 	FlagComponentVersionConflictPolicy     = "component-version-conflict-policy"
 	FlagExternalComponentVersionCopyPolicy = "external-component-version-copy-policy"
 	FlagSkipReferenceDigestProcessing      = "skip-reference-digest-processing"
+	FlagOutput                             = "output"
+	FlagDisplayMode                        = "display-mode"
 
 	DefaultComponentConstructorBaseName = "component-constructor"
 	LegacyDefaultArchiveName            = "transport-archive"
@@ -166,6 +173,10 @@ add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.y
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
 	enum.Var(cmd.Flags(), FlagExternalComponentVersionCopyPolicy, ExternalComponentVersionCopyPolicies(), "policy to apply when a component reference to a component version outside of the constructor or target repository is encountered")
 	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
+	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `display mode can be used in combination with --recursive
+  static: print the output once the complete component graph is discovered
+  live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
 
 	return cmd
 }
@@ -254,9 +265,32 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting component constructor failed: %w", err)
 	}
 
-	config := ocmctx.FromContext(cmd.Context()).Configuration()
+	output, err := enum.Get(cmd.Flags(), FlagOutput)
+	if err != nil {
+		return fmt.Errorf("getting output flag failed: %w", err)
+	}
 
-	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, nil)
+	displayMode, err := enum.Get(cmd.Flags(), FlagDisplayMode)
+	if err != nil {
+		return fmt.Errorf("getting display-mode flag failed: %w", err)
+	}
+
+	repositoryRef, err := cmd.Flags().GetString(FlagRepositoryRef)
+	if err != nil {
+		return fmt.Errorf("getting repository reference flag failed: %w", err)
+	}
+
+	config := ocmctx.FromContext(cmd.Context()).Configuration()
+	ref, err := compref.ParseRepository(repositoryRef, compref.WithCTFAccessMode(ctfv1.AccessModeReadWrite))
+	if err != nil {
+		return fmt.Errorf("parsing repository reference %q failed: %w", repositoryRef, err)
+	}
+
+	repoProvider, err := ocm.NewComponentRepositoryProvider(cmd.Context(),
+		pluginManager.ComponentVersionRepositoryRegistry,
+		credentialGraph,
+		ocm.WithRepository(ref), ocm.WithConfig(config),
+	)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repository: %w", err)
 	}
@@ -284,15 +318,11 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		opts.ResourceDigestProcessorProvider = instance
 	}
 
-	opts, stop, err := registerConstructorProgressTracker(cmd, opts)
-	if err != nil {
-		return fmt.Errorf("registering constructor progress tracker failed: %w", err)
+	constr := constructor.NewDefaultConstructor(constructorSpec, opts)
+	if err := renderComponents(cmd, constr, output, displayMode); err != nil {
+		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
-	defer stop()
-
-	_, err = constructor.ConstructDefault(cmd.Context(), constructorSpec, opts)
-
-	return err
+	return nil
 }
 
 func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
@@ -424,106 +454,140 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 	return prov.pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, prov.targetRepoSpec, creds)
 }
 
-func registerConstructorProgressTracker(cmd *cobra.Command, options constructor.Options) (opts constructor.Options, stop func(), err error) {
-	format, err := enum.Get(cmd.Flags(), log.FormatFlagName)
-	if err != nil {
-		return opts, nil, fmt.Errorf("failed to get the log format from the command flag: %w", err)
-	}
-
-	switch format {
-	case log.FormatText:
-		pw := progress.NewWriter()
-		pw.SetOutputWriter(cmd.OutOrStdout())
-		pw.SetUpdateFrequency(100 * time.Millisecond)
-		pw.SetAutoStop(false)
-		var trackers ocmsync.Map[string, *progress.Tracker]
-		options.OnStartComponentConstruct = func(_ context.Context, component *constructorruntime.Component) error {
-			key := component.Name + "/" + component.Version
-			tracker := &progress.Tracker{
-				Message: "component " + key,
-				Total:   1,
-				Units: progress.Units{
-					Formatter: func(value int64) string {
-						base := fmt.Sprintf("%d component version", value)
-						if value > 1 {
-							base += "s"
-						}
-						return base
-					},
-				},
-			}
-			trackers.Store(key, tracker)
-			pw.AppendTracker(tracker)
-			return nil
-		}
-		options.OnEndComponentConstruct = func(_ context.Context, descriptor *descriptor.Descriptor, err error) error {
-			if err != nil {
-				return nil
-			}
-			key := descriptor.Component.Name + "/" + descriptor.Component.Version
-			tracker, ok := trackers.Load(key)
-			if !ok {
-				return fmt.Errorf("tracker for component %q not found", key)
-			}
-			tracker.UpdateMessage(tracker.Message + " constructed")
-			tracker.Increment(1)
-			tracker.MarkAsDone()
-			return nil
-		}
-		// TODO(jakobmoellerdev): Add Resource and Source tracking in more detail so we can track those as well.
-		go func() {
-			// this is the actual blocking loop
-			pw.Render()
-		}()
-
-		// Stop function to Poll for the progress writer to finish rendering
-		// and to ensure that all renderings are complete before returning.
-		// Bound to the command context to ensure it stops when the command is done and can
-		// be cancelled.
-		stop := func() {
-			pw.Stop()
-		wait:
-			for {
-				select {
-				case <-cmd.Context().Done():
-					return
-				default:
-					if !pw.IsRenderInProgress() {
-						break wait
-					}
-				}
-			}
-		}
-
-		return options, stop, nil
-	case log.FormatJSON:
-		logger, err := log.GetBaseLogger(cmd)
+func renderComponents(cmd *cobra.Command, constr constructor.Constructor, format string, mode string) error {
+	switch mode {
+	case render.StaticRenderMode:
+		graph := constr.GetGraph()
+		err := constr.Construct(cmd.Context())
 		if err != nil {
-			return opts, nil, fmt.Errorf("could not retrieve logger: %w", err)
+			return fmt.Errorf("constructing component versions failed: %w", err)
 		}
-		logger = logger.With("realm", "cli")
-		options.OnStartComponentConstruct = func(ctx context.Context, component *constructorruntime.Component) error {
-			logger.InfoContext(ctx, "starting component construction",
-				"component", component.Name,
-				"version", component.Version,
-			)
-			return nil
-		}
-		options.OnEndComponentConstruct = func(ctx context.Context, descriptor *descriptor.Descriptor, err error) error {
-			if err != nil {
-				logger.ErrorContext(ctx, "component construction failed",
-					"error", err,
-				)
-			} else {
-				logger.InfoContext(ctx, "component construction completed",
-					"component", descriptor.Component.Name,
-					"version", descriptor.Component.Version,
-				)
-			}
-			return nil
-		}
-		return options, func() {}, nil
-	}
 
-	return opts, nil, fmt.Errorf("unknown log format to track component construction: %q", format)
+		var roots []string
+		if err := graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+			roots = d.Roots()
+			return nil
+		}); err != nil {
+			return fmt.Errorf("getting roots of component version graph failed: %w", err)
+		}
+
+		renderer, err := buildRenderer(cmd.Context(), graph, roots, format)
+		if err != nil {
+			return fmt.Errorf("building renderer failed: %w", err)
+		}
+
+		if err := render.RenderOnce(cmd.Context(), renderer, render.WithWriter(cmd.OutOrStdout())); err != nil {
+			return err
+		}
+	case render.LiveRenderMode:
+		graph := constr.GetGraph()
+		// Start the render loop.
+		renderCtx, cancel := context.WithCancel(cmd.Context())
+		defer cancel()
+
+		renderer, err := buildRenderer(cmd.Context(), graph, nil, format)
+		if err != nil {
+			return fmt.Errorf("building renderer failed: %w", err)
+		}
+
+		wait := render.RunRenderLoop(renderCtx, renderer, render.WithRenderOptions(render.WithWriter(cmd.OutOrStdout())))
+
+		err = constr.Construct(cmd.Context())
+		if err != nil {
+			return fmt.Errorf("constructing component versions failed: %w", err)
+		}
+
+		if err := wait(); !errors.Is(err, context.Canceled) {
+			return fmt.Errorf("rendering component version graph failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func buildRenderer(ctx context.Context, graph *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
+	// Initialize renderer based on the requested output format.
+	switch format {
+	case render.OutputFormatJSON.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatJSON))
+		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case render.OutputFormatNDJSON.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatNDJSON))
+		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case render.OutputFormatYAML.String():
+		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatYAML))
+		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case render.OutputFormatTree.String():
+		serializer := tree.VertexSerializerFunc[string](serializeVertexToDescriptorTree)
+		return tree.New(ctx, graph, tree.WithVertexSerializerFunc(serializer), tree.WithRoots(roots...)), nil
+	case render.OutputFormatTable.String():
+		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
+		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	default:
+		return nil, fmt.Errorf("invalid output format %q", format)
+	}
+}
+
+func serializeVertexToDescriptorTree(vertex *dag.Vertex[string]) (tree.Row, error) {
+	untypedDescriptor, ok := vertex.Attributes[constructor.AttributeDescriptor]
+	if !ok {
+		return tree.Row{}, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, constructor.AttributeDescriptor)
+	}
+	desc, ok := untypedDescriptor.(*descriptor.Descriptor)
+	if !ok {
+		return tree.Row{}, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, constructor.AttributeDescriptor, &descriptor.Descriptor{}, untypedDescriptor)
+	}
+	descriptorV2, err := descriptor.ConvertToV2(descriptorv2.Scheme, desc)
+	if err != nil {
+		return tree.Row{}, fmt.Errorf("converting descriptor to v2 failed: %w", err)
+	}
+	identity := descriptorV2.Component.ToIdentity()
+	return tree.Row{
+		Component: descriptorV2.Component.Name,
+		Version:   descriptorV2.Component.Version,
+		Provider:  descriptorV2.Component.Provider,
+		Identity:  identity.String(),
+	}, nil
+}
+
+func serializeVertexToDescriptor(vertex *dag.Vertex[string]) (any, error) {
+	untypedDescriptor, ok := vertex.Attributes[constructor.AttributeDescriptor]
+	if !ok {
+		return nil, fmt.Errorf("vertex %s has no %s attribute", vertex.ID, constructor.AttributeDescriptor)
+	}
+	desc, ok := untypedDescriptor.(*descriptor.Descriptor)
+	if !ok {
+		return nil, fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, constructor.AttributeDescriptor, &descriptor.Descriptor{}, untypedDescriptor)
+	}
+	descriptorV2, err := descriptor.ConvertToV2(descriptorv2.Scheme, desc)
+	if err != nil {
+		return nil, fmt.Errorf("converting descriptor to v2 failed: %w", err)
+	}
+	return descriptorV2, nil
+}
+
+func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	t := table.NewWriter()
+	t.SetOutputMirror(writer)
+	t.AppendHeader(table.Row{"Component", "Version", "Provider"})
+	for _, vertex := range vertices {
+		untypedDescriptor, ok := vertex.Attributes[constructor.AttributeDescriptor]
+		if !ok {
+			return fmt.Errorf("vertex %s has no %s attribute", vertex.ID, constructor.AttributeDescriptor)
+		}
+		desc, ok := untypedDescriptor.(*descriptor.Descriptor)
+		if !ok {
+			return fmt.Errorf("expected vertex %s attribute %s to be of type %T, got type %T", vertex.ID, constructor.AttributeDescriptor, &descriptor.Descriptor{}, desc)
+		}
+
+		t.AppendRow(table.Row{desc.Component.Name, desc.Component.Version, desc.Component.Provider.Name})
+	}
+	t.SetColumnConfigs([]table.ColumnConfig{
+		{Number: 1, AutoMerge: true},
+		{Number: 3, AutoMerge: true},
+	})
+	style := table.StyleLight
+	style.Options.DrawBorder = false
+	t.SetStyle(style)
+	t.Render()
+	return nil
 }

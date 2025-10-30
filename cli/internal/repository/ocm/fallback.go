@@ -32,9 +32,9 @@ type fallbackProvider struct {
 // GetComponentVersionRepositoryForComponent returns a [repository.ComponentVersionRepository] based on the fallback resolvers.
 // This implementation is solely provided to support backward compatibility for existing configurations.
 //
-//nolint:staticcheck // kept for backward compatibility, use resolvers instead
+
 func (f *fallbackProvider) GetComponentVersionRepositoryForComponent(ctx context.Context, component, version string) (repository.ComponentVersionRepository, error) {
-	//nolint:staticcheck // no replacement for resolvers available yet https://github.com/open-component-model/ocm-project/issues/575
+	//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 	fallbackRepo, err := fallback.NewFallbackRepository(ctx, f.repoProvider, f.graph, f.resolvers)
 	if err != nil {
 		return nil, fmt.Errorf("creating fallback repository failed: %w", err)
@@ -54,14 +54,18 @@ func FallbackResolversFromConfig(config *genericv1.Config) ([]*resolverruntime.R
 	if err != nil {
 		return nil, fmt.Errorf("filtering configuration for resolver config failed: %w", err)
 	}
+	//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 	resolverConfigV1 := resolverv1.Merge(filtered...)
 
+	//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 	resolverConfig, err := resolverruntime.ConvertFromV1(ocirepository.Scheme, resolverConfigV1)
 	if err != nil {
 		return nil, fmt.Errorf("converting resolver configuration from v1 to runtime failed: %w", err)
 	}
+	//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 	var resolvers []*resolverruntime.Resolver
 	if resolverConfig != nil && len(resolverConfig.Resolvers) > 0 {
+		//nolint:staticcheck // kept for backward compatibility, use resolvers instead
 		resolvers = make([]*resolverruntime.Resolver, len(resolverConfig.Resolvers))
 		for index, resolver := range resolverConfig.Resolvers {
 			resolvers[index] = &resolver
