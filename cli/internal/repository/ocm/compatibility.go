@@ -63,6 +63,11 @@ func NewComponentRepositoryProvider(
 		}
 	}
 
+	// Default to "*" pattern if no patterns specified and repository is provided
+	if len(options.componentPatterns) == 0 {
+		options.componentPatterns = []string{"*"}
+	}
+
 	switch {
 	case len(pathMatchers) > 0 && len(fallbackResolvers) > 0:
 		return nil, fmt.Errorf("both path matcher and fallback resolvers are configured, only one type is allowed")
@@ -75,10 +80,6 @@ func NewComponentRepositoryProvider(
 		return createPathMatcherProvider(ctx, repoProvider, credentialGraph, options.repository, options.componentPatterns, pathMatchers)
 	case len(pathMatchers) == 0 && len(fallbackResolvers) == 0 && options.repository != nil:
 		slog.DebugContext(ctx, "no resolvers configured, using repository reference as resolver")
-		// Default to "*" pattern if no patterns specified and repository is provided
-		if len(options.componentPatterns) == 0 {
-			options.componentPatterns = []string{"*"}
-		}
 		return createSimplePathMatcherProvider(ctx, repoProvider, credentialGraph, options.repository)
 	}
 	return nil, nil
@@ -251,14 +252,6 @@ func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	config *genericv1.Config,
 	ref *compref.Ref,
 ) (ComponentVersionRepositoryForComponentProvider, error) {
-	var repository runtime.Typed
-	var componentPatterns []string
 
-	if ref != nil {
-		repository = ref.Repository
-		if ref.Component != "" {
-			componentPatterns = []string{ref.Component}
-		}
-	}
-	return NewComponentRepositoryProvider(ctx, repoProvider, credentialGraph, WithConfig(config), WithRepository(repository), WithComponentPatterns(componentPatterns))
+	return NewComponentRepositoryProvider(ctx, repoProvider, credentialGraph, WithConfig(config), WithComponentRef(ref))
 }
