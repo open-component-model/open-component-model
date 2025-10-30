@@ -196,6 +196,29 @@ func TestListComponentVersions(t *testing.T) {
 		require.Contains(t, versions, "3.0.0")
 	})
 
+	t.Run("WithLatestOnly_NoVersionsAvailable", func(t *testing.T) {
+		ctx := context.Background()
+		repo := newMockComponentVersionRepository()
+		// Create a component with no versions (empty version map)
+		require.NoError(t, repo.AddComponentVersion(ctx, &descriptor.Descriptor{
+			Component: descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{
+					ObjectMeta: descriptor.ObjectMeta{
+						Name: "empty-component",
+					},
+				},
+			},
+		}))
+
+		descs, err := ListComponentVersions(ctx, repo,
+			WithComponentNames([]string{"empty-component"}),
+			WithLatestOnly(true),
+		)
+
+		require.NoError(t, err)
+		require.Len(t, descs, 0)
+	})
+
 	t.Run("EmptyComponentList", func(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()

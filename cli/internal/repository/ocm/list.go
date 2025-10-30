@@ -99,7 +99,11 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 
 			// If latestOnly, find and fetch only the latest version
 			if options.latestOnly {
-				versions = []string{findLatestVersion(ctx, versions)}
+				if len(versions) == 0 {
+					return nil
+				}
+				sortSemverVersions(ctx, versions)
+				versions = []string{versions[0]}
 			}
 
 			descs := make([]*descriptor.Descriptor, 0, len(versions))
@@ -129,17 +133,6 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 	}
 
 	return result, nil
-}
-
-// findLatestVersion returns the latest semantic version from a list of version strings.
-// Returns empty string if no valid versions found.
-func findLatestVersion(ctx context.Context, versions []string) string {
-	if len(versions) == 0 {
-		return ""
-	}
-
-	sortSemverVersions(ctx, versions)
-	return versions[0]
 }
 
 // sortSemverVersions sorts version strings by semantic version in descending order (newest first).
