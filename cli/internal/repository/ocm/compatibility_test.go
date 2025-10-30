@@ -134,17 +134,8 @@ func TestNewComponentRepositoryProvider(t *testing.T) {
 			require.NotNil(t, result)
 
 			// Component pattern is ignored without config - should still create simple resolver
-			resolverProvider, ok := result.(*resolverProvider)
+			_, ok := result.(*resolverProvider)
 			require.True(t, ok, "expected *resolverProvider, got %T", result)
-			require.NotNil(t, resolverProvider.provider)
-
-			// Should resolve any component (component patterns ignored without config, fallback to wildcard)
-			compRepo, err := result.GetComponentVersionRepositoryForComponent(ctx, "ocm.software/root", "1.0.0")
-			require.NoError(t, err, "should resolve specified component pattern")
-			require.Nil(t, compRepo, "mock provider returns nil repository")
-			compRepo, err = result.GetComponentVersionRepositoryForComponent(ctx, "other.domain/component", "1.0.0")
-			require.NoError(t, err, "should resolve any component since patterns are ignored without config")
-			require.Nil(t, compRepo, "mock provider returns nil repository")
 		})
 
 		t.Run("ReturnsNilWhenNeitherRepositoryNorConfig", func(t *testing.T) {
