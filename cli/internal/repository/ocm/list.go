@@ -97,6 +97,11 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 				}
 			}
 
+			// If latestOnly, find and fetch only the latest version
+			if options.latestOnly {
+				versions = []string{findLatestVersion(ctx, versions)}
+			}
+
 			descs := make([]*descriptor.Descriptor, 0, len(versions))
 			for _, version := range versions {
 				desc, err := repo.GetComponentVersion(ctx, compName, version)
@@ -104,11 +109,6 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 					return fmt.Errorf("getting component version failed: %w", err)
 				}
 				descs = append(descs, desc)
-			}
-
-			if options.latestOnly {
-				sortDescriptorsBySemver(ctx, descs)
-				descs = descs[:1]
 			}
 
 			mu.Lock()
@@ -129,6 +129,34 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 	}
 
 	return result, nil
+}
+
+// findLatestVersion returns the latest semantic version from a list of version strings.
+// Returns empty string if no valid versions found.
+func findLatestVersion(ctx context.Context, versions []string) string {
+	if len(versions) == 0 {
+		return ""
+	}
+
+	sortSemverVersions(ctx, versions)
+	return versions[0]
+}
+
+// sortSemverVersions sorts version strings by semantic version in descending order (newest first).
+func sortSemverVersions(ctx context.Context, versions []string) {
+	slices.SortFunc(versions, func(a, b string) int {
+		semverA, err := semver.NewVersion(a)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", a, "error", err)
+			return 0
+		}
+		semverB, err := semver.NewVersion(b)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b, "error", err)
+			return 0
+		}
+		return semverB.Compare(semverA)
+	})
 }
 
 // sortDescriptorsBySemver sorts descriptors by semantic version in descending order (newest first).
