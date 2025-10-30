@@ -63,7 +63,7 @@ func NewComponentRepositoryProvider(
 		}
 	}
 
-	// Default to "*" pattern if no patterns specified and repository is provided
+	// Default to "*" if no component patterns specified
 	if len(options.componentPatterns) == 0 {
 		options.componentPatterns = []string{"*"}
 	}
