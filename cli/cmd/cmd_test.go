@@ -683,8 +683,8 @@ func Test_Get_Component_Version_CTF_Dir(t *testing.T) {
 			expectedOutput: `
 COMPONENT           │ VERSION │ PROVIDER     
 ─────────────────────┼─────────┼──────────────
- ocm.software/root-a │ 0.0.1   │ ocm.software 
- ocm.software/root-b │ 0.0.2   │`,
+ ocm.software/root-b │ 0.0.2   │ ocm.software 
+ ocm.software/root-a │ 0.0.1   │`,
 			expectedError: false,
 		},
 		{
@@ -705,8 +705,8 @@ configurations:
 			expectedOutput: `
 COMPONENT           │ VERSION │ PROVIDER     
 ─────────────────────┼─────────┼──────────────
- ocm.software/root-a │ 0.0.1   │ ocm.software 
- ocm.software/root-b │ 0.0.2   │`,
+ ocm.software/root-b │ 0.0.2   │ ocm.software 
+ ocm.software/root-a │ 0.0.1   │`,
 			expectedError: false,
 		},
 	}

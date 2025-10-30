@@ -144,6 +144,6 @@ func sortDescriptorsBySemver(ctx context.Context, descs []*descriptor.Descriptor
 			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b.Component.Version, "error", err)
 			return 0
 		}
-		return semverA.Compare(semverB)
+		return semverB.Compare(semverA)
 	})
 }
