@@ -18,7 +18,7 @@ export default async function calculateHelmPluginVersion({ core, context }) {
         const version = computeVersion(core, eventName, ref, sha, manualVersion);
 
         core.setOutput("version", version);
-        core.info(`VERSION: ${version} (deterministic, safe for re-runs)`);
+        core.info(`VERSION: ${version}`);
 
         // --------------------------
         // Step summary
