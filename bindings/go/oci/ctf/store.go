@@ -238,7 +238,7 @@ func (s *repository) resolve(ctx context.Context, reference string) (ociImageSpe
 		}, nil
 	}
 
-	slog.Info("reference not found in index", "repository", repo, "reference", reference)
+	slog.DebugContext(ctx, "reference not found in index", "repository", repo, "reference", reference)
 	return ociImageSpecV1.Descriptor{}, errdef.ErrNotFound
 }
 
