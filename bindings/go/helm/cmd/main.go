@@ -54,6 +54,8 @@ func main() {
 		Level: slog.LevelDebug,
 	}))
 
+	logger.Info("this is a test log")
+
 	capabilities := endpoints.NewEndpoints(helminput.Scheme)
 	helmPlugin := &HelmInputPlugin{}
 	if err := input.RegisterInputProcessor(&helmv1.Helm{}, helmPlugin, capabilities); err != nil {
