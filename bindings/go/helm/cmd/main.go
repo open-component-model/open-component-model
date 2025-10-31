@@ -55,6 +55,7 @@ func main() {
 	}))
 
 	logger.Info("this is a test log")
+	logger.Info("this is a test log 2")
 
 	capabilities := endpoints.NewEndpoints(helminput.Scheme)
 	helmPlugin := &HelmInputPlugin{}
