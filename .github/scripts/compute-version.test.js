@@ -109,7 +109,7 @@ assert.strictEqual(
 // Special characters in branch names
 assert.strictEqual(
     computeVersion("feature/issue#123", "cli/v"),
-    "0.0.0-feature-issue#123",
+    "0.0.0-feature-issue-123",
     "Branch with # should be preserved"
 );
 
