@@ -58,13 +58,11 @@ tasks:
     deps:
       - tmp
       - download/deps
+    requires:
+      vars: [ GOOS, GOARCH ]
     cmds:
       - cmd: |
           set -euo pipefail
-          
-          # Validate required variables
-          : "{{ .GOOS }}" || (echo "GOOS is not set" && exit 1)
-          : "{{ .GOARCH }}" || (echo "GOARCH is not set" && exit 1)
           
           # Change into correct working directory
           cd "{{ .TASKFILE_DIR }}"
