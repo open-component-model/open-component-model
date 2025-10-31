@@ -147,12 +147,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-      - name: Generate token
-        id: token
-        uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2
-        with:
-          app_id: ${{ secrets.OCMBOT_APP_ID }}
-          private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
+      # - name: Generate token
+      #   id: token
+      #   uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2
+      #   with:
+      #     app_id: ${{ secrets.OCMBOT_APP_ID }}
+      #     private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
       - name: Setup git config
         run: |
           git config user.name "GitHub Actions Bot"
@@ -160,7 +160,7 @@ jobs:
 
       - name: Create and Push Tag
         env:
-          GITHUB_TOKEN: ${{ steps.token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${{ needs.version.outputs.new_tag }}"
           msg=$(echo "${{ needs.version.outputs.changelog_b64 }}" | base64 -d)
