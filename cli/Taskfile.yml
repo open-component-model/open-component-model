@@ -75,7 +75,7 @@ tasks:
       - |
         mkdir -p {{ .TASKFILE_DIR }}/tmp/oci
         {{ .IMAGE_TOOL }} buildx build \
-          --platform linux/amd64,linux/arm64,windows/amd64,windows/arm64,darwin/amd64,darwin/arm64 \
+          --platform linux/amd64,linux/arm64 \
           --tag ghcr.io/open-component-model/cli:{{ .VERSION }} \
           --output type=oci,dest={{ .TASKFILE_DIR }}/tmp/oci/cli.tar,oci-mediatypes=true,name=ghcr.io/open-component-model/cli \
           -f ./Containerfile .
@@ -102,7 +102,7 @@ tasks:
       - tmp/resources/ocm-{{ .GOOS }}-{{ .GOARCH }}.yaml
     cmds:
       - cmd: |
-          GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
+          CGO_ENABLED=0 GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build \
             -ldflags "-s -w -X ocm.software/open-component-model/cli/cmd/version.BuildVersion={{ .VERSION }}" \
             -o {{ .TASKFILE_DIR }}/tmp/bin/ocm-{{ .GOOS }}-{{ .GOARCH }}
       - |

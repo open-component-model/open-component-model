@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 	"testing"
 
@@ -13,6 +14,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	"ocm.software/open-component-model/bindings/go/dag"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
@@ -288,14 +291,16 @@ components:
 			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
 			ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicyCopyOrFail,
 		}
-		constructorInstance := NewDefaultConstructor(opts)
+		constructorInstance := NewDefaultConstructor(converted, opts)
+		graph := constructorInstance.GetGraph()
 
-		descriptors, err := constructorInstance.Construct(t.Context(), converted)
+		err := constructorInstance.Construct(t.Context())
 		require.NoError(t, err)
-		require.Len(t, descriptors, 3)
+		descs := collectDescriptors(t, graph)
+		require.Len(t, descs, 4)
 
 		descMap := make(map[string]*descriptor.Descriptor)
-		for _, d := range descriptors {
+		for _, d := range descs {
 			descMap[d.Component.Name] = d
 		}
 		runAssertions(t, descMap)
@@ -315,14 +320,17 @@ components:
 			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(externalRepo),
 			ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicySkip,
 		}
-		constructorInstance := NewDefaultConstructor(opts)
 
-		descriptors, err := constructorInstance.Construct(t.Context(), converted)
+		constructorInstance := NewDefaultConstructor(converted, opts)
+		graph := constructorInstance.GetGraph()
+
+		err := constructorInstance.Construct(t.Context())
 		require.NoError(t, err)
-		require.Len(t, descriptors, 3)
+		descs := collectDescriptors(t, graph)
+		require.Len(t, descs, 4)
 
 		descMap := make(map[string]*descriptor.Descriptor)
-		for _, d := range descriptors {
+		for _, d := range descs {
 			descMap[d.Component.Name] = d
 		}
 		runAssertions(t, descMap)
@@ -570,7 +578,6 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 				}
 			}
 
-			constructor := NewDefaultConstructor(opts)
 			compConstructor := &constructorruntime.ComponentConstructor{
 				Components: make([]constructorruntime.Component, len(tt.components)),
 			}
@@ -578,21 +585,32 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 				compConstructor.Components[i] = *comp
 			}
 
-			descriptors, err := constructor.Construct(t.Context(), compConstructor)
+			constructorInstance := NewDefaultConstructor(compConstructor, opts)
+			graph := constructorInstance.GetGraph()
 
+			err := constructorInstance.Construct(t.Context())
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Nil(t, descriptors)
 			} else {
+				descs := collectDescriptors(t, graph)
 				assert.NoError(t, err)
 				if len(tt.components) > 0 {
-					assert.Len(t, descriptors, len(tt.components))
+					assert.Len(t, descs, len(tt.components))
+
+					// sort by name and version
+					slices.SortFunc(descs, func(a, b *descriptor.Descriptor) int {
+						if a.Component.Name == b.Component.Name {
+							return bytes.Compare([]byte(a.Component.Version), []byte(b.Component.Version))
+						}
+						return bytes.Compare([]byte(a.Component.Name), []byte(b.Component.Name))
+					})
+
 					for i, component := range tt.components {
-						assert.Equal(t, component.Name, descriptors[i].Component.Name)
-						assert.Equal(t, component.Version, descriptors[i].Component.Version)
+						assert.Equal(t, component.Name, descs[i].Component.Name)
+						assert.Equal(t, component.Version, descs[i].Component.Version)
 					}
 				} else {
-					assert.Empty(t, descriptors)
+					assert.Empty(t, descs)
 				}
 			}
 
@@ -605,4 +623,23 @@ func TestComponentVersionConflictPolicies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func collectDescriptors(t *testing.T, graph *syncdag.SyncedDirectedAcyclicGraph[string]) []*descriptor.Descriptor {
+	var descs []*descriptor.Descriptor
+	_ = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		for id, vert := range d.Vertices {
+			val, ok := vert.Attributes[AttributeDescriptor]
+			if !ok {
+				t.Fatalf("no attributes found for vertex %s", id)
+			}
+			desc, ok := val.(*descriptor.Descriptor)
+			if !ok {
+				t.Fatalf("attribute value for vertex %s is not of type *descriptor.Descriptor", id)
+			}
+			descs = append(descs, desc)
+		}
+		return nil
+	})
+	return descs
 }
