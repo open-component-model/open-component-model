@@ -10,20 +10,9 @@ vars:
   OUTDIR: "{{ .TASKFILE_DIR }}/tmp"
   COMPONENT_CONSTRUCTOR_FILE: "{{ .OUTDIR }}/component-constructor.yaml"
 
-  # Calculate default version based on latest tag in the bindings/go/helm path.
-  # This is used when VERSION is not explicitly set or when building from 'main' branch.
-  DEFAULT_VERSION:
-    sh: |
-      current_tag=$(git tag | grep '^bindings/go/helm' | sort -V | tail -1 | sed 's#.*/v##' || echo "0.0.0")
-      echo "${current_tag}-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)"
-  VERSION: '{{ .VERSION | default .DEFAULT_VERSION }}'
-  COMPONENT_VERSION:
-    sh: |
-      if [ "{{ .VERSION }}" = "main" ]; then
-        echo "{{ .DEFAULT_VERSION }}"
-      else
-        echo "{{ .VERSION }}"
-      fi
+  # VERSION must be provided by the caller (typically GitHub Actions workflow)
+  # For local development, defaults to a dev version
+  VERSION: '{{ .VERSION | default "0.0.0-local.dev" }}'
 
 tasks:
   tmp:
@@ -87,7 +76,7 @@ tasks:
         cat > {{ .OUTDIR }}/resources/helminput-plugin-{{ .GOOS }}-{{ .GOARCH }}.yaml <<EOF
         - name: binary
           type: ocmPlugin
-          version: "{{ .COMPONENT_VERSION }}"
+          version: "{{ .VERSION }}"
           extraIdentity:
             os: {{ .GOOS }}
             architecture: {{ .GOARCH }}
@@ -110,7 +99,6 @@ tasks:
         vars:
           GOOS: '{{ .ITEM.GOOS }}'
           GOARCH: '{{ .ITEM.GOARCH }}'
-          COMPONENT_VERSION: '{{ .COMPONENT_VERSION }}'
 
   generate/component-constructor:
     desc: "Generate the component-constructor.yaml by aggregating all built resources"
@@ -121,10 +109,10 @@ tasks:
     silent: true
     cmds:
       - |
-        echo "Generating component constructor with version: {{ .COMPONENT_VERSION }}"
+        echo "Generating component constructor with version: {{ .VERSION }}"
         cat <<EOF > {{ .COMPONENT_CONSTRUCTOR_FILE }}
         name: {{ .PROVIDER }}/{{ .NAME }}
-        version: {{ .COMPONENT_VERSION }}
+        version: {{ .VERSION }}
         provider:
           name: {{ .PROVIDER }}
         labels:
@@ -137,7 +125,14 @@ tasks:
         resources:
         EOF
       - |
+        shopt -s nullglob
         for file in {{ .OUTDIR }}/resources/*.yaml; do
-          cat "$file" >> {{ .COMPONENT_CONSTRUCTOR_FILE }}
+          if [ -f "$file" ]; then
+            cat "$file" >> {{ .COMPONENT_CONSTRUCTOR_FILE }}
+          fi
         done
+        if [ ! -s {{ .COMPONENT_CONSTRUCTOR_FILE }} ] || ! grep -q "^  - name:" {{ .COMPONENT_CONSTRUCTOR_FILE }}; then
+          echo "Error: No resources found to add to component constructor"
+          exit 1
+        fi
       - cat "{{ .COMPONENT_CONSTRUCTOR_FILE }}"
