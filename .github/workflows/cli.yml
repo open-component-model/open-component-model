@@ -66,7 +66,9 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           repository: ${{ env.CHECKOUT_REPO }}
-          sparse-checkout: ${{ env.LOCATION }}
+          sparse-checkout: |
+            .github/scripts
+            ${{ env.LOCATION }}
           persist-credentials: 'false'  # Disable automatic token persistence
           ref: ${{ env.REF }}
 
