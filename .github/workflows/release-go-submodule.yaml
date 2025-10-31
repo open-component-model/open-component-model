@@ -170,8 +170,8 @@ jobs:
           git push origin "$tag"
 
   build:
-    name: Build Helm Plugin for ${{ needs.prepare.outputs.new_tag }}
-    if: ${{ needs.tag.outputs.pushed == 'true' && contains(needs.version.outputs.new_tag, 'bindings/go/helm') }}
+    name: Build Helm Plugin for ${{ needs.version.outputs.new_tag }}
+    if: ${{ contains(needs.version.outputs.new_tag, 'bindings/go/helm') }}
     needs: [ version, release ]
     uses: ./.github/workflows/publish-helminput-plugin-component.yaml
     secrets: inherit
