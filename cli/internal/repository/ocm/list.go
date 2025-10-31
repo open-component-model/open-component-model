@@ -3,7 +3,6 @@ package ocm
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"slices"
 	"sync"
 
@@ -97,18 +96,23 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 				}
 			}
 
-			// If latestOnly, find and fetch only the latest version
-			if options.latestOnly {
-				if len(versions) == 0 {
-					return nil
-				}
-				sortSemverVersions(ctx, versions)
-				versions = []string{versions[0]}
+			semvers, err := convertToSemverVersions(versions)
+			if err != nil {
+				return fmt.Errorf("found invalid semver version: %w", err)
 			}
 
-			descs := make([]*descriptor.Descriptor, 0, len(versions))
-			for _, version := range versions {
-				desc, err := repo.GetComponentVersion(ctx, compName, version)
+			// If latestOnly, find and fetch only the latest version
+			if options.latestOnly {
+				if len(semvers) == 0 {
+					return nil
+				}
+
+				semvers = semvers[:1]
+			}
+
+			descs := make([]*descriptor.Descriptor, 0, len(semvers))
+			for _, version := range semvers {
+				desc, err := repo.GetComponentVersion(ctx, compName, version.Original())
 				if err != nil {
 					return fmt.Errorf("getting component version failed: %w", err)
 				}
@@ -129,42 +133,54 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 
 	// Ensure deterministic global ordering across components and versions.
 	if options.sort {
-		sortDescriptorsBySemver(ctx, result)
+		return sortDescriptorsBySemver(result)
 	}
 
 	return result, nil
 }
 
-// sortSemverVersions sorts version strings by semantic version in descending order (newest first).
-func sortSemverVersions(ctx context.Context, versions []string) {
-	slices.SortFunc(versions, func(a, b string) int {
-		semverA, err := semver.NewVersion(a)
+// convertToSemverVersions attempts to convert all versions to semver for sorting.
+func convertToSemverVersions(versions []string) ([]*semver.Version, error) {
+	semvers := make([]*semver.Version, 0, len(versions))
+	for _, version := range versions {
+		semverVersion, err := semver.NewVersion(version)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", a, "error", err)
-			return 0
+			return nil, fmt.Errorf("parsing version %q failed: %w", version, err)
 		}
-		semverB, err := semver.NewVersion(b)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b, "error", err)
-			return 0
-		}
-		return semverB.Compare(semverA)
+		semvers = append(semvers, semverVersion)
+	}
+
+	slices.SortFunc(semvers, func(a, b *semver.Version) int {
+		return b.Compare(a)
 	})
+
+	return semvers, nil
+}
+
+// versionConvertedDescriptors contains the descriptor and its version converted to semver.
+type versionConvertedDescriptors struct {
+	desc    *descriptor.Descriptor
+	version *semver.Version
 }
 
 // sortDescriptorsBySemver sorts descriptors by semantic version in descending order (newest first).
-func sortDescriptorsBySemver(ctx context.Context, descs []*descriptor.Descriptor) {
-	slices.SortFunc(descs, func(a, b *descriptor.Descriptor) int {
-		semverA, err := semver.NewVersion(a.Component.Version)
+func sortDescriptorsBySemver(descs []*descriptor.Descriptor) ([]*descriptor.Descriptor, error) {
+	vcd := make([]*versionConvertedDescriptors, 0, len(descs))
+	for _, d := range descs {
+		sv, err := semver.NewVersion(d.Component.Version)
 		if err != nil {
-			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", a.Component.Version, "error", err)
-			return 0
+			return nil, fmt.Errorf("parsing version %q failed: %w", d.Component.Version, err)
 		}
-		semverB, err := semver.NewVersion(b.Component.Version)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed parsing version, this may result in wrong ordering", "version", b.Component.Version, "error", err)
-			return 0
-		}
-		return semverB.Compare(semverA)
+		vcd = append(vcd, &versionConvertedDescriptors{desc: d, version: sv})
+	}
+
+	slices.SortFunc(vcd, func(a, b *versionConvertedDescriptors) int {
+		return b.version.Compare(a.version)
 	})
+
+	return slices.Collect[*descriptor.Descriptor](func(yield func(*descriptor.Descriptor) bool) {
+		for _, d := range vcd {
+			yield(d.desc)
+		}
+	}), nil
 }

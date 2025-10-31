@@ -296,4 +296,17 @@ func TestListComponentVersions(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "filtering component versions failed")
 	})
+
+	t.Run("InvalidSemver", func(t *testing.T) {
+		ctx := context.Background()
+		repo := newMockComponentVersionRepository()
+		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "latest")))
+
+		_, err := ListComponentVersions(ctx, repo,
+			WithComponentNames([]string{"test-component"}),
+		)
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "found invalid semver version: parsing version \"latest\" failed: invalid semantic version")
+	})
 }
