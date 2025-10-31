@@ -90,11 +90,9 @@ tasks:
     desc: "Build Helm input plugin for all supported targets"
     deps:
       - for:
-          #TODO: Add back other architectures after successful tests
-          #Add back: GOOS: darwin, GOARCH arm64
           matrix:
-            GOOS: [ "linux" ]
-            GOARCH: [ "amd64" ]
+            GOOS: [ "linux", "darwin" ]
+            GOARCH: [ "amd64", "arm64" ]
         task: build:target
         vars:
           GOOS: '{{ .ITEM.GOOS }}'
