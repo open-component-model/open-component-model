@@ -11,12 +11,15 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -42,7 +45,7 @@ func New() *cobra.Command {
 		Aliases:    []string{"cv", "component-versions", "cvs", "componentversion", "componentversions", "component", "components", "comp", "comps", "c"},
 		SuggestFor: []string{"version", "versions"},
 		Short:      "Get component version(s) from an OCM repository",
-		Args:       cobra.MatchAll(cobra.ExactArgs(1), ComponentReferenceAsFirstPositional),
+		Args:       cobra.MatchAll(cobra.ExactArgs(1), componentOrRepositoryReferenceAsFirstPositional),
 		Long: fmt.Sprintf(`Get component version(s) from an OCM repository.
 
 The format of a component reference is:
@@ -95,14 +98,18 @@ get cvs oci::http://localhost:8080//ocm.software/ocmcli
 	return cmd
 }
 
-func ComponentReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
+func componentOrRepositoryReferenceAsFirstPositional(_ *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing component reference as first positional argument")
 	}
-	if _, err := compref.Parse(args[0]); err != nil {
-		return fmt.Errorf("parsing component reference from first position argument %q failed: %w", args[0], err)
+	var compErr, repoErr error
+	if _, compErr = compref.Parse(args[0]); compErr == nil {
+		return nil
 	}
-	return nil
+	if _, repoErr = compref.ParseRepository(args[0]); repoErr == nil {
+		return nil
+	}
+	return fmt.Errorf("first position argument %q must be either a component reference or repository reference: %w", args[0], errors.Join(compErr, repoErr))
 }
 
 func GetComponentVersion(cmd *cobra.Command, args []string) error {
@@ -142,27 +149,60 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
 
-	reference := args[0]
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
-	// we have a reference and parse it
-	ref, err := compref.Parse(reference)
-	if err != nil {
-		return fmt.Errorf("parsing component reference %q failed: %w", reference, err)
+	params := Params{
+		output:      output,
+		displayMode: displayMode,
+		constraint:  constraint,
+		latestOnly:  latestOnly,
+		recursive:   recursive,
+	}
+
+	reference := args[0]
+
+	// We have a reference, check if it is a component reference.
+	ref, compErr := compref.Parse(reference)
+	if compErr != nil {
+		// If not a component reference, check if it is a repository reference.
+		repository, repoErr := compref.ParseRepository(args[0])
+		if repoErr != nil {
+			return fmt.Errorf("first position argument %q must be either a component reference or repository reference: %w", reference, errors.Join(compErr, repoErr))
+		}
+		slog.DebugContext(cmd.Context(), "parsed repository reference", "reference", reference, "parsed", repository)
+
+		return processRepositoryReference(cmd, pluginManager, credentialGraph, config, params, repository)
 	}
 	slog.DebugContext(cmd.Context(), "parsed component reference", "reference", reference, "parsed", ref)
 
-	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(cmd.Context(), pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
+	return processComponentReference(cmd, pluginManager, credentialGraph, config, params, ref)
+}
+
+func processComponentReference(cmd *cobra.Command,
+	pluginManager *manager.PluginManager,
+	credentialGraph credentials.GraphResolver,
+	config *genericv1.Config,
+	params Params,
+	ref *compref.Ref,
+) error {
+	constraint := params.constraint
+	latestOnly := params.latestOnly
+	recursive := params.recursive
+	output := params.output
+	displayMode := params.displayMode
+	ctx := cmd.Context()
+
+	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(ctx, pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
-	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(cmd.Context(), ref.Component, ref.Version)
+	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
 	if err != nil {
 		return fmt.Errorf("could not access ocm repository: %w", err)
 	}
 
-	descs, err := ocm.GetComponentVersions(cmd.Context(), ocm.GetComponentVersionsOptions{
+	descs, err := ocm.GetComponentVersions(ctx, ocm.GetComponentVersionsOptions{
 		VersionOptions: ocm.VersionOptions{
 			SemverConstraint: constraint,
 			LatestOnly:       latestOnly,
@@ -183,6 +223,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
+
 	return nil
 }
 
@@ -347,4 +388,129 @@ func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntim
 		return nil, fmt.Errorf("recursion depth > 0 not implemented yet")
 	}
 	return nil, fmt.Errorf("invalid recursion depth %d", r.recursive)
+}
+
+// Params holds the values of the flags for the `get cv` command.
+type Params struct {
+	output      string
+	displayMode string
+	constraint  string
+	latestOnly  bool
+	recursive   int
+}
+
+// processRepositoryReference implements the logic for the `get cv <ref>` command, where <ref> is a repository reference.
+func processRepositoryReference(cmd *cobra.Command,
+	pluginManager *manager.PluginManager,
+	credentialGraph credentials.GraphResolver,
+	config *genericv1.Config,
+	params Params,
+	repository runtime.Typed,
+) error {
+	recursive := params.recursive
+	output := params.output
+	displayMode := params.displayMode
+	ctx := cmd.Context()
+
+	componentNames, err := listComponentsFromRepository(ctx, pluginManager, repository, credentialGraph)
+	if err != nil {
+		return fmt.Errorf("could not list components in repository %v: %w", repository, err)
+	}
+	slog.DebugContext(ctx, "listed components from repository", "repository", repository, "components", componentNames)
+
+	// We found no components in the repository; this means that no roots will be found in the later calls.
+	// without this check the wildcard matches make no sense and also are potentially duplicated because there will be
+	// no roots, and we default add wildcard matches. User defined wildcard matches are still valid.
+	if len(componentNames) == 0 {
+		return fmt.Errorf("no components found in repository %v", repository)
+	}
+
+	roots, err := getIDsForComponentsFromRepository(ctx, pluginManager, repository, componentNames, params, credentialGraph)
+	if err != nil {
+		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
+	}
+	slog.DebugContext(ctx, "components versions", "roots", roots)
+
+	// Create a component reference wrapper for the repository to use the standard provider function
+	repoProvider, err := ocm.NewComponentRepositoryProvider(ctx,
+		pluginManager.ComponentVersionRepositoryRegistry,
+		credentialGraph,
+		ocm.WithConfig(config),
+		ocm.WithRepository(repository),
+		ocm.WithComponentPatterns(componentNames))
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+	}
+
+	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
+		return fmt.Errorf("failed to render components recursively: %w", err)
+	}
+
+	return nil
+}
+
+// listComponentsFromRepository lists component names from a given repository using the component lister interface.
+// Currently only CTF repositories are supported.
+func listComponentsFromRepository(ctx context.Context,
+	pluginManager *manager.PluginManager,
+	repository runtime.Typed,
+	_ credentials.GraphResolver,
+) ([]string, error) {
+	// TODO(ikhandamirov): git rid of this type check. Use credentials in case of OCI.
+	_, ok := repository.(*ctfv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("component listing in repositories of type %T not supported", repository)
+	}
+
+	lister, err := pluginManager.ComponentListerRegistry.GetComponentLister(ctx, repository, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not get component lister for repository %+v: %w", repository, err)
+	}
+
+	var componentNames []string
+	err = lister.ListComponents(ctx, "", func(names []string) error {
+		componentNames = append(componentNames, names...)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not list components in repository %+v: %w", repository, err)
+	}
+
+	return componentNames, nil
+}
+
+// getIDsForComponentsFromRepository gets versions for given component names and returns a list of component
+// identities. All components are located in the same repository.
+func getIDsForComponentsFromRepository(ctx context.Context,
+	pluginManager *manager.PluginManager,
+	repository runtime.Typed,
+	componentNames []string,
+	params Params,
+	_ credentials.GraphResolver,
+) ([]string, error) {
+	constraint := params.constraint
+	latestOnly := params.latestOnly
+
+	// TODO(ikhandamirov): call with credentials in case of OCI.
+	repo, err := pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, repository, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not get component version repository for reference %+v", repository)
+	}
+
+	descriptors, err := ocm.ListComponentVersions(ctx, repo,
+		ocm.WithComponentNames(componentNames),
+		ocm.WithSemverConstraint(constraint),
+		ocm.WithLatestOnly(latestOnly),
+		ocm.WithSort(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("listing component versions failed: %w", err)
+	}
+
+	identities := make([]string, 0, len(descriptors))
+	for _, desc := range descriptors {
+		identities = append(identities, desc.Component.ToIdentity().String())
+	}
+
+	return identities, nil
 }
