@@ -73,7 +73,7 @@ add component-version --repository oci::http://localhost:8080/my-repo --construc
   -c, --constructor path                              path to the component constructor file (default component-constructor.yaml)
       --display-mode enum                             display mode can be used in combination with --recursive
                                                         static: print the output once the complete component graph is discovered
-                                                        live (experimental): continuously updates the output to represent the current discovery state of the component graph
+                                                        live (experimental): continuously updates the output to represent the current construction state of the component graph
                                                       (must be one of [live static]) (default static)
       --external-component-version-copy-policy enum   policy to apply when a component reference to a component version outside of the constructor or target repository is encountered
                                                       (must be one of [copy-or-fail skip]) (default skip)

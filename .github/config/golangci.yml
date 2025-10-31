@@ -111,6 +111,9 @@ linters:
       - linters:
           - cyclop
         path: (.+)_test\.go
+      - linters:
+          - staticcheck
+        path: (.+)repository/ocm/fallback.go
     paths:
       - third_party$
       - builtin$

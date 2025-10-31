@@ -176,7 +176,7 @@ add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.y
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `display mode can be used in combination with --recursive
   static: print the output once the complete component graph is discovered
-  live (experimental): continuously updates the output to represent the current discovery state of the component graph`)
+  live (experimental): continuously updates the output to represent the current construction state of the component graph`)
 
 	return cmd
 }
