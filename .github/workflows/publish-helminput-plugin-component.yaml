@@ -17,10 +17,6 @@ on:
       - '.github/workflows/publish-helminput-plugin-component.yaml'
   workflow_call:
     inputs:
-      artifact_name:
-        description: "The artifact name to build."
-        type: string
-        required: false
       ref:
         description: "The ref to build on (branch or tag). Defaults to the current ref."
         type: string
@@ -51,29 +47,15 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # TODO: Re-use the version calculation from CLI ( or adjust if the RC calculation is irrelevant for the plugin release cycle )
-      # Unify version calculation.
       - name: Compute VERSION
         id: calculate_version
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          TAG_PREFIX: "bindings/go/helm/v"
         with:
           script: |
-            const ref = process.env.REF;
-
-            // Determine ref type purely by pattern
-            const isTag = /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref);
-
-            let version;
-            if (isTag) {
-              // Strip 'cli/' prefix from tag name, e.g. bindings/go/helm/v1.2.3 -> 1.2.3
-              version = ref.replace(/^bindings\/go\/helm\/v/, "");
-            } else {
-              // Convert branch or other ref to semver-safe pseudo version, e.g. releases/v0.1 -> 0.0.0-releases-v0.1
-              version = `0.0.0-${ref.replace(/[\/+]/g, "-")}`;
-            }
-
-            core.exportVariable("VERSION", version);
-            core.info(`Computed VERSION=${version} from REF=${ref}`);
+            const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
+            await script.default({ core });
 
       - name: Setup Go
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6

@@ -85,24 +85,12 @@ jobs:
       - name: Compute VERSION
         id: version
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          TAG_PREFIX: "cli/v"
         with:
           script: |
-            const ref = process.env.REF;
-
-            // Determine ref type purely by pattern
-            const isTag = /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref);
-
-            let version;
-            if (isTag) {
-              // Strip 'cli/' prefix from tag name, e.g. cli/v1.2.3 -> 1.2.3
-              version = ref.replace(/^cli\/v/, "");
-            } else {
-              // Convert branch or other ref to semver-safe pseudo version, e.g. releases/v0.1 -> 0.0.0-releases-v0.1
-              version = `0.0.0-${ref.replace(/[\/+]/g, "-")}`;
-            }
-
-            core.exportVariable("VERSION", version);
-            core.info(`Computed VERSION=${version} from REF=${ref}`);
+            const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
+            await script.default({ core });
 
       # Generate and verify the Component Transport Format (CTF) resulting in all artifacts
       # use a version that includes the branch name to ensure uniqueness
