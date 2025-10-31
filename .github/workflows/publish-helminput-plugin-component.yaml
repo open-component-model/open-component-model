@@ -146,12 +146,17 @@ jobs:
           echo "Created ${HOME}/.ocmconfig:"
           cat ${HOME}/.ocmconfig
 
+      - name: downcase REPO
+        id: downcase
+        run: |
+          echo "ocm_repository=ghcr.io/${GITHUB_REPOSITORY,,}/plugins" >>${GITHUB_OUTPUT}
+
       # Publish component version using CLI image
       # TODO: replace with github action workflow call so it runs in a container.
       - name: Publish OCM Component Version
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          OCM_REPOSITORY: ghcr.io/${{ github.repository_owner }}/plugins
+          OCM_REPOSITORY: ${{ steps.downcase.outputs.ocm_repository }}
           CLI_IMAGE: ghcr.io/open-component-model/cli:main
           WORKDIR: ${{ github.workspace }}/bindings/go/helm/tmp
         shell: bash
@@ -174,7 +179,7 @@ jobs:
       - name: Verify uploaded plugin.
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          OCM_REPOSITORY: ghcr.io/${{ github.repository_owner }}/plugins
+          OCM_REPOSITORY: ${{ steps.downcase.outputs.ocm_repository }}
           CLI_IMAGE: ghcr.io/open-component-model/cli:main
           WORKDIR: ${{ github.workspace }}/bindings/go/helm/tmp
         shell: bash

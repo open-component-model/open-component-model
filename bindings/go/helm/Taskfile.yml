@@ -89,8 +89,8 @@ tasks:
     deps:
       - for:
           matrix:
-            GOOS: [ "linux", "darwin" ]
-            GOARCH: [ "amd64", "arm64" ]
+            GOOS: [ "linux" ]
+            GOARCH: [ "amd64" ]
         task: build:target
         vars:
           GOOS: '{{ .ITEM.GOOS }}'
