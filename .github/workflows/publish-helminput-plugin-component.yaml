@@ -23,10 +23,10 @@ on:
         required: false
 
 env:
-  # github.head_ref → branch name from the PR target (works only for pull_request events)
+  # github.base_ref → branch name from the PR target (works only for pull_request events)
   # github.ref_name → branch or tag name for normal push/tag events
   # inputs.ref → overrides both for workflow_call
-  REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
+  REF: ${{ inputs.ref || github.base_ref || github.ref_name }}
 
 jobs:
   build:
