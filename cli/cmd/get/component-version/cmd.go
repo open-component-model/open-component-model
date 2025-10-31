@@ -418,6 +418,13 @@ func processRepositoryReference(cmd *cobra.Command,
 	}
 	slog.DebugContext(ctx, "listed components from repository", "repository", repository, "components", componentNames)
 
+	// We found no components in the repository; this means that no roots will be found in the later calls.
+	// without this check the wildcard matches make no sense and also are potentially duplicated because there will be
+	// no roots, and we default add wildcard matches. User defined wildcard matches are still valid.
+	if len(componentNames) == 0 {
+		return fmt.Errorf("no components found in repository %v", repository)
+	}
+
 	roots, err := getIDsForComponentsFromRepository(ctx, pluginManager, repository, componentNames, params, credentialGraph)
 	if err != nil {
 		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
