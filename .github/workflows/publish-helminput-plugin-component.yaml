@@ -39,7 +39,6 @@ jobs:
     name: Build Plugin Component
     runs-on: ubuntu-latest
     outputs:
-      should_publish: ${{ steps.publish-check.outputs.should_publish }}
       version: ${{ steps.calculate_version.outputs.version }}
     permissions:
       contents: read
