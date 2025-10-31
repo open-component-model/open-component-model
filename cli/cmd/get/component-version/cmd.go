@@ -374,7 +374,7 @@ func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntim
 	case r.recursive < -1:
 		return nil, fmt.Errorf("invalid recursion depth %d: must be -1 (unlimited) or >= 0", r.recursive)
 	case r.recursive == 0:
-		slog.InfoContext(ctx, "not discovering children, recursion depth 0", "component", parent.Component.ToIdentity().String())
+		slog.DebugContext(ctx, "not discovering children, recursion depth 0", "component", parent.Component.ToIdentity().String())
 		return nil, nil
 	case r.recursive == -1:
 		// unlimited recursion
@@ -382,7 +382,7 @@ func (r *resolverAndDiscoverer) Discover(ctx context.Context, parent *descruntim
 		for index, reference := range parent.Component.References {
 			children[index] = reference.ToComponentIdentity().String()
 		}
-		slog.InfoContext(ctx, "discovering children", "component", parent.Component.ToIdentity().String(), "children", children)
+		slog.DebugContext(ctx, "discovering children", "component", parent.Component.ToIdentity().String(), "children", children)
 		return children, nil
 	case r.recursive > 0:
 		return nil, fmt.Errorf("recursion depth > 0 not implemented yet")
