@@ -15,24 +15,22 @@ on:
     paths:
       - 'bindings/go/helm/**'
       - '.github/workflows/publish-helminput-plugin-component.yaml'
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      version:
-        description: "Component version, e.g., 0.0.1 or 0.0.1-alpha1. Must match existing bindings/go/helm/vX.Y.Z[-suffix] tag without the 'v'. If not set, 'main' is used."
-        required: false
+      artifact_name:
+        description: "The artifact name to build."
         type: string
-        default: "main"
-      # Add possible inputs for OCM repository and CLI image to be able to test with different repos/images
-      ocm_repository:
-        description: "OCM repository to publish to. Default is ghcr.io/open-component-model/plugins."
         required: false
+      ref:
+        description: "The ref to build on (branch or tag). Defaults to the current ref."
         type: string
-        default: "ghcr.io/open-component-model/plugins"
-      ocm_image:
-        description: "OCM CLI image to use for publishing. Default is ghcr.io/open-component-model/cli:main"
         required: false
-        type: string
-        default: "ghcr.io/open-component-model/cli:main"
+
+env:
+  # github.base_ref → branch name from the PR target (works only for pull_request events)
+  # github.ref_name → branch or tag name for normal push/tag events
+  # inputs.ref → overrides both for workflow_call
+  REF: ${{ inputs.ref || github.base_ref || github.ref_name }}
 
 jobs:
   build:
@@ -46,47 +44,36 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - name: Determine checkout ref
-        id: checkout_ref
-        run: |
-          set -euo pipefail
-
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION="${{ github.event.inputs.version || 'main' }}"
-            if [[ "$VERSION" != "main" && "$VERSION" != "" ]]; then
-              # Check out the tag for the specified version
-              REF="refs/tags/bindings/go/helm/v${VERSION}"
-              echo "ref=${REF}" >> "$GITHUB_OUTPUT"
-              echo "Will checkout tag: ${REF}"
-            else
-              # For "main" or empty, use default ref
-              echo "ref=" >> "$GITHUB_OUTPUT"
-              echo "Will checkout default ref (HEAD)"
-            fi
-          else
-            # For other events (tag push, PR, main push), use default ref
-            echo "ref=" >> "$GITHUB_OUTPUT"
-            echo "Will checkout default ref"
-          fi
-
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
-          ref: ${{ steps.checkout_ref.outputs.ref }}
+          ref: ${{ env.REF }}
           fetch-depth: 0
-          persist-credentials: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Calculate version
+      # TODO: Re-use the version calculation from CLI ( or adjust if the RC calculation is irrelevant for the plugin release cycle )
+      # Unify version calculation.
+      - name: Compute VERSION
         id: calculate_version
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
-        env:
-          MANUAL_VERSION: ${{ github.event.inputs.version || '' }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const script = await import('${{ github.workspace }}/.github/scripts/calculate-helm-plugin-version.js');
-            await script.default({ core, github, context });
+            const ref = process.env.REF;
+
+            // Determine ref type purely by pattern
+            const isTag = /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref);
+
+            let version;
+            if (isTag) {
+              // Strip 'cli/' prefix from tag name, e.g. bindings/go/helm/v1.2.3 -> 1.2.3
+              version = ref.replace(/^bindings\/go\/helm\/v/, "");
+            } else {
+              // Convert branch or other ref to semver-safe pseudo version, e.g. releases/v0.1 -> 0.0.0-releases-v0.1
+              version = `0.0.0-${ref.replace(/[\/+]/g, "-")}`;
+            }
+
+            core.exportVariable("VERSION", version);
+            core.info(`Computed VERSION=${version} from REF=${ref}`);
 
       - name: Setup Go
         uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
@@ -126,21 +113,10 @@ jobs:
           path: bindings/go/helm/tmp/
           retention-days: 1
 
-      - name: Determine if eligible for publishing
-        id: publish-check
-        run: |
-          should_publish="false"
-          # Never publish on pull requests
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            should_publish="true"
-          fi
-          echo "should_publish=$should_publish" >> "$GITHUB_OUTPUT"
-          echo "✅ Should publish: $should_publish (event: ${{ github.event_name }})"
-
   publish:
     name: Publish Component
     needs: build
-    if: ${{ needs.build.outputs.should_publish == 'true' }}
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     concurrency:
       group: helm-plugin-publish-${{ github.ref }}
@@ -149,14 +125,6 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-        with:
-          fetch-depth: 0
-          sparse-checkout: |
-            bindings/go/helm
-          sparse-checkout-cone-mode: false
-
       - name: Download build artifacts
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 #v6
         with:
@@ -197,11 +165,12 @@ jobs:
           cat ${HOME}/.ocmconfig
 
       # Publish component version using CLI image
+      # TODO: replace with github action workflow call so it runs in a container.
       - name: Publish OCM Component Version
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          OCM_REPOSITORY: ${{ github.event.inputs.ocm_repository || 'ghcr.io/open-component-model/plugins' }}
-          CLI_IMAGE: ${{ github.event.inputs.ocm_image || 'ghcr.io/open-component-model/cli:main' }}
+          OCM_REPOSITORY: ghcr.io/${{ github.repository_owner }}/plugins
+          CLI_IMAGE: ghcr.io/open-component-model/cli:main
           WORKDIR: ${{ github.workspace }}/bindings/go/helm/tmp
         shell: bash
         run: |
@@ -223,8 +192,8 @@ jobs:
       - name: Verify uploaded plugin.
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          OCM_REPOSITORY: ${{ github.event.inputs.ocm_repository || 'ghcr.io/open-component-model/plugins' }}
-          CLI_IMAGE: ${{ github.event.inputs.ocm_image || 'ghcr.io/open-component-model/cli:main' }}
+          OCM_REPOSITORY: ghcr.io/${{ github.repository_owner }}/plugins
+          CLI_IMAGE: ghcr.io/open-component-model/cli:main
           WORKDIR: ${{ github.workspace }}/bindings/go/helm/tmp
         shell: bash
         run: |
@@ -253,3 +222,8 @@ jobs:
           echo "- OCM Repository: ${OCM_REPOSITORY}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Component Name: ocm.software/plugins/helminput" >> "$GITHUB_STEP_SUMMARY"
           echo "- Component Version: ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm ${HOME}/.docker/config.json || true
