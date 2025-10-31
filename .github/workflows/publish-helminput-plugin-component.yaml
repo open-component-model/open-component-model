@@ -46,9 +46,33 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - name: Determine checkout ref
+        id: checkout_ref
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version || 'main' }}"
+            if [[ "$VERSION" != "main" && "$VERSION" != "" ]]; then
+              # Check out the tag for the specified version
+              REF="refs/tags/bindings/go/helm/v${VERSION}"
+              echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+              echo "Will checkout tag: ${REF}"
+            else
+              # For "main" or empty, use default ref
+              echo "ref=" >> "$GITHUB_OUTPUT"
+              echo "Will checkout default ref (HEAD)"
+            fi
+          else
+            # For other events (tag push, PR, main push), use default ref
+            echo "ref=" >> "$GITHUB_OUTPUT"
+            echo "Will checkout default ref"
+          fi
+
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
+          ref: ${{ steps.checkout_ref.outputs.ref }}
           fetch-depth: 0
           persist-credentials: true
           token: ${{ secrets.GITHUB_TOKEN }}
