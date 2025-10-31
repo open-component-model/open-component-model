@@ -104,7 +104,7 @@ jobs:
               "should_push_oci_image",
               process.env.GITHUB_REF_NAME === context.payload.repository.default_branch ||
               /^releases\/v0\./.test(process.env.GITHUB_REF_NAME) ||
-              /^bindings/go/helm\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(process.env.GITHUB_REF_NAME)
+              /^bindings\/go\/helm\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(process.env.GITHUB_REF_NAME)
             )
 
       - name: Upload build artifacts
