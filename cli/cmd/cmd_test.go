@@ -485,6 +485,11 @@ COMPONENT                   │ VERSION │ PROVIDER
 			expectedError: false,
 		},
 		{
+			name:          "No versions",
+			args:          []string{"get", "cv", "."},
+			expectedError: true,
+		},
+		{
 			name: "Semver constraint",
 			args: []string{"get", "cv", path, "--semver-constraint", "< 0.0.2"},
 			expectedOutput: `
