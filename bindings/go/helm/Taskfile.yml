@@ -83,14 +83,16 @@ tasks:
             type: file
             path: {{ .OUTDIR }}/bin/helminput-plugin-{{ .GOOS }}-{{ .GOARCH }}
         EOF
-
+#TODO: Add back other architectures when testing is complete
+#            GOOS: [ "linux", "darwin" ]
+#            GOARCH: [ "amd64", "arm64" ]
   build:matrix:
     desc: "Build Helm input plugin for all supported targets"
     deps:
       - for:
           matrix:
-            GOOS: [ "linux", "darwin" ]
-            GOARCH: [ "amd64", "arm64" ]
+            GOOS: [ "linux" ]
+            GOARCH: [ "amd64" ]
         task: build:target
         vars:
           GOOS: '{{ .ITEM.GOOS }}'
