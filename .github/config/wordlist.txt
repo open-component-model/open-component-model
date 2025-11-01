@@ -458,6 +458,9 @@ typehandler
 typename
 uncommenting
 unmarshaller
+unmarshal
+unmarshalling
+unmarshalled
 unmodifiable
 untrusted
 updatevendorhash
