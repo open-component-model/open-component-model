@@ -15,7 +15,7 @@ require (
 	github.com/google/cel-go v0.26.1
 	github.com/mandelsoft/goutils v0.0.0-20250821215621-af06c70600cf
 	github.com/mandelsoft/vfs v0.4.5-0.20250514111339-d7b067920e91
-	github.com/onsi/ginkgo/v2 v2.25.3
+	github.com/onsi/ginkgo/v2 v2.26.0
 	github.com/onsi/gomega v1.38.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
