@@ -1,16 +1,16 @@
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: ocm-k8s-toolkit-cluster-admin
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-admin
-subjects:
-  - kind: ServiceAccount
-    name: ocm-k8s-toolkit-controller-manager
-    namespace: ocm-k8s-toolkit-system
+# ---
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: ClusterRoleBinding
+# metadata:
+#   name: ocm-k8s-toolkit-cluster-admin
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: ClusterRole
+#   name: cluster-admin
+# subjects:
+#   - kind: ServiceAccount
+#     name: ocm-k8s-toolkit-controller-manager
+#     namespace: ocm-k8s-toolkit-system
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
