@@ -1,13 +1,13 @@
 apiVersion: kro.run/v1alpha1
 kind: ResourceGraphDefinition
 metadata:
-  name: helm-configuration-localization
+  name: helm-configuration-localization-advanced
 spec:
   schema:
     apiVersion: v1alpha1
-    kind: HelmConfigurationLocalization
+    kind: HelmConfigurationLocalizationAdvanced
     spec:
-      prefix: string | default="helm-configuration-localization"
+      prefix: string | default="helm-configuration-localization-advanced"
       podinfo:
         message: string | default="hello world"
         releaseName: string | default="podinfo"
@@ -20,7 +20,7 @@ spec:
           name: "${schema.spec.prefix}-resource-chart-name"
         spec:
           componentRef:
-            name: helm-configuration-localization-component
+            name: helm-configuration-localization-advanced-component
           resource:
             byReference:
               resource:
@@ -38,7 +38,7 @@ spec:
           name: "${schema.spec.prefix}-resource-image-name"
         spec:
           componentRef:
-            name: helm-configuration-localization-component
+            name: helm-configuration-localization-advanced-component
           resource:
             byReference:
               resource:
