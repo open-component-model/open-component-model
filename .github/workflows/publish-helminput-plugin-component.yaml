@@ -167,12 +167,16 @@ jobs:
           echo "Created ${HOME}/.ocmconfig:"
           cat ${HOME}/.ocmconfig
 
+      - name: Repository Owner
+        run: |
+          echo "REPOSITORY_OWNER=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/plugins" >> $GITHUB_ENV
+
       # Publish component version using CLI image
       # TODO: replace with github action workflow call so it runs in a container.
       - name: Publish OCM Component Version
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          OCM_REPOSITORY: ghcr.io/${{ github.repository_owner }}/plugins
+          OCM_REPOSITORY: ${{ env.REPOSITORY_OWNER }}
           CLI_IMAGE: ghcr.io/open-component-model/cli:main
           WORKDIR: ${{ github.workspace }}/bindings/go/helm/tmp
         shell: bash
@@ -187,6 +191,7 @@ jobs:
             -w "${WORKDIR}" \
             "$CLI_IMAGE" \
               add component-version \
+              --component-version-conflict-policy replace \
               --config "/.ocmconfig" \
               --repository "${OCM_REPOSITORY}" \
               --constructor "./component-constructor.yaml"
@@ -195,7 +200,7 @@ jobs:
       - name: Verify uploaded plugin.
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          OCM_REPOSITORY: ghcr.io/${{ github.repository_owner }}/plugins
+          OCM_REPOSITORY: ${{ env.REPOSITORY_OWNER }}
           CLI_IMAGE: ghcr.io/open-component-model/cli:main
           WORKDIR: ${{ github.workspace }}/bindings/go/helm/tmp
         shell: bash
@@ -218,7 +223,7 @@ jobs:
       - name: Summary
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          OCM_REPOSITORY: ${{ github.event.inputs.ocm_repository || 'ghcr.io/open-component-model/plugins' }}
+          OCM_REPOSITORY: ${{ env.REPOSITORY_OWNER }}
         shell: bash
         run: |
           echo "## Published Helm input plugin component version" >> "$GITHUB_STEP_SUMMARY"
