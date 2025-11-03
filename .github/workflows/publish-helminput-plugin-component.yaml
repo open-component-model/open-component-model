@@ -187,6 +187,7 @@ jobs:
             -w "${WORKDIR}" \
             "$CLI_IMAGE" \
               add component-version \
+              --component-version-conflict-policy replace \
               --config "/.ocmconfig" \
               --repository "${OCM_REPOSITORY}" \
               --constructor "./component-constructor.yaml"
