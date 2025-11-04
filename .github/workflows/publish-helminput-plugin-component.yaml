@@ -233,8 +233,3 @@ jobs:
           echo "- OCM Repository: ${OCM_REPOSITORY}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Component Name: ocm.software/plugins/helminput" >> "$GITHUB_STEP_SUMMARY"
           echo "- Component Version: ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm ${HOME}/.docker/config.json || true
