@@ -7,50 +7,36 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/repository"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type PluginManagerOptions struct {
-	Locations   []string
 	IdleTimeout time.Duration
 	Logger      logr.Logger
-}
-
-// DefaultPluginManagerOptions returns default options for plugin manager setup.
-func DefaultPluginManagerOptions(log logr.Logger) PluginManagerOptions {
-	return PluginManagerOptions{
-		Locations:   []string{}, // TODO: Set up temp?
-		IdleTimeout: time.Hour,
-		Logger:      log,
-	}
+	Scheme      *ocmruntime.Scheme
+	Provider    repository.ComponentVersionRepositoryProvider
 }
 
 // PluginManager contains settings for the plugin manager.
 type PluginManager struct {
 	IdleTimeout   time.Duration
 	Logger        logr.Logger
-	Locations     []string
 	PluginManager *manager.PluginManager
+	Scheme        *ocmruntime.Scheme
+	Provider      repository.ComponentVersionRepositoryProvider
 }
 
 // Start will start the plugin manager with the given configuration. Start will BLOCK until the
 // context is cancelled. It's designed to be called by the controller manager.
 func (m *PluginManager) Start(ctx context.Context) error {
 	pm := manager.NewPluginManager(ctx)
-	for _, location := range m.Locations {
-		err := pm.RegisterPlugins(ctx, location,
-			manager.WithIdleTimeout(m.IdleTimeout),
-		)
-		if err != nil {
-			// Log but don't fail - plugins are optional
-			m.Logger.V(1).Info("failed to register plugins from location",
-				"location", location,
-				"error", err.Error())
-		}
+	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(m.Scheme, pm.ComponentVersionRepositoryRegistry, m.Provider, &ociv1.Repository{}); err != nil {
+		return fmt.Errorf("failed to register internal component version repository plugin: %w", err)
 	}
-
-	m.PluginManager = pm
 
 	<-ctx.Done() // block until context is done ( expected by the manager )
 
@@ -80,7 +66,8 @@ func NewPluginManager(opts PluginManagerOptions) *PluginManager {
 
 	return &PluginManager{
 		Logger:      opts.Logger,
-		Locations:   opts.Locations,
 		IdleTimeout: opts.IdleTimeout,
+		Scheme:      opts.Scheme,
+		Provider:    opts.Provider,
 	}
 }

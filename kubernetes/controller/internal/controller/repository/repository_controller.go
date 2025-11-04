@@ -135,6 +135,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	logger.Info("reconciling OCM repository")
+	// 1. Load Configurations
+	// 2. Validate
+
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), ocmRepo)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.ConfigureContextFailedReason, err.Error())
