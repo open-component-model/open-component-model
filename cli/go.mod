@@ -17,16 +17,16 @@ require (
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251024100521-a7be1bf5ce0d
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251024100521-a7be1bf5ce0d
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251104081249-38e3382d9873
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251104081249-38e3382d9873
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1
 	ocm.software/open-component-model/bindings/go/input/file v0.0.1
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251024100521-a7be1bf5ce0d
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251104081249-38e3382d9873
 	ocm.software/open-component-model/bindings/go/oci v0.0.11
 	ocm.software/open-component-model/bindings/go/plugin v0.0.10
 	ocm.software/open-component-model/bindings/go/repository v0.0.3
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251024100521-a7be1bf5ce0d
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251104081249-38e3382d9873
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
@@ -56,5 +56,5 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/text v0.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251024100521-a7be1bf5ce0d // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251104081249-38e3382d9873 // indirect
 )
