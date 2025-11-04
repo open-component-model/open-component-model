@@ -40,6 +40,8 @@ const (
 )
 
 // PluginType is the type of the resource containing the plugin in the component version.
+// This type has been established by OCM v1 here:
+// https://github.com/open-component-model/ocm/blob/bccf3310af0665eaab3f0ea9803e6b903d858d52/api/ocm/extensions/artifacttypes/const.go#L40
 const PluginType = "ocmPlugin"
 
 // pluginDirectoryDefault contains all plugins for ocm.
