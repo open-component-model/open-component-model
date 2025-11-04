@@ -69,7 +69,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 	}
 
 	cmd.Flags().String(FlagResourceVersion, "", "version of the plugin resource to download (optional, defaults to component version)")
-	cmd.Flags().String(FlagOutput, pluginDirectoryDefault, "output folder to download the plugin binary to")
+	cmd.Flags().String(FlagOutput, "", "output folder to download the plugin binary to (default $HOME/.config/ocm/plugins)")
 	enum.VarP(cmd.Flags(), FlagOutputFormat, "f", []string{"table", "yaml", "json"}, "output format of the plugin information, defaults to table")
 	cmd.Flags().StringSlice(FlagExtraIdentity, []string{}, "extra identity parameters for resource matching (e.g., os=linux,arch=amd64)")
 	cmd.Flags().Bool(SkipValidation, false, "skip validation of the downloaded plugin binary")
@@ -97,6 +97,9 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	output, err := cmd.Flags().GetString(FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
+	}
+	if output == "" {
+		output = pluginDirectoryDefault
 	}
 
 	skipValidation, err := cmd.Flags().GetBool(SkipValidation)

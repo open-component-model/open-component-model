@@ -39,7 +39,7 @@ ocm download plugin [flags]
 ```
       --extra-identity strings    extra identity parameters for resource matching (e.g., os=linux,arch=amd64)
   -h, --help                      help for plugin
-      --output string             output folder to download the plugin binary to (default "/Users/skarlso/.config/ocm/plugins")
+      --output string             output folder to download the plugin binary to (default $HOME/.config/ocm/plugins)
   -f, --output-format enum        output format of the plugin information, defaults to table
                                   (must be one of [json table yaml]) (default table)
       --plugin-type string        type of the plugin resource in the component version containing the plugin binary (default "ocmPlugin")
