@@ -853,12 +853,57 @@ plugin system in place, the complexity of maintaining two different plugin
 systems is even higher.
 
 ## Static Type Analysis
-- Each external plugin provides a JSON schema. In the current plugin system, 
-  this allows validating the HTTP request and HTTP response data.
-- These JSON schemas are the basis for allowing us to implement static type
-  analysis on the transformation specification.
 
-We can leverage the CEL language to implement this static type analysis.
+**Prerequisite**
+- Each plugin (internal and external) has to provide a JSON schema for both, 
+  its input type and its output type.
+
+**Current State**
+- Only external plugins provide JSON schemas and only for their input types.
+- The schemas are only available on the low-level external plugin data 
+  structure.
+
+```go
+type Plugin struct {
+  ID     string
+  Path   string
+  Config Config
+  Types  map[PluginType][]Type
+  
+  Cmd *exec.Cmd
+  Stderr io.ReadCloser
+  Stdout io.ReadCloser
+}
+
+type Type struct {
+  Type runtime.Type `json:"type"`
+  JSONSchema []byte `json:"jsonSchema"`
+}
+```
+
+**Proposed Implementation**
+- Add a schema mapper to the runtime module that is able to map a
+  `runtime.Type` to its corresponding JSON schema (this is similar to 
+  kubernetes REST mapper).
+  - Register:
+    - **Statically**: Internal plugins register through explicit 
+      `mapper.Register(...)` calls.
+    - **Dynamically**: External plugins are registered by the plugins managers 
+      discovery process (analyzing a filesystem for plugins).
+
+**Static Type Analysis Implementation**
+- We translate the JSON schemas of input and output types to CEL types. 
+- **JSON schema to CEL:** Kubernetes API server has an implementation to 
+  translate OpenAPI schemas to CEL types. With slight modifications, this 
+  can be used to translate our JSON schemas to CEL types.
+- **Expected Types:** To deduct the expected CEL type for a field in a 
+  transformation specification (e.g. `resource` field in `resource.uploader`),
+  with slight modifications, we can reuse the `ParseResource` implementation of
+  KRO.
+- Switching from JSON schema to OpenAPI schema was also considered. 
+  However, the OpenAPI schema generator of kubernetes as well as the OpenAPI schema 
+  implementation is tailored for kubernetes resources. Therefore, we would 
+  also have to make adjustments to make it work for our use cases.
 
 
 - The example above shows the *outputs* of each transformation as comments. This
@@ -866,11 +911,18 @@ We can leverage the CEL language to implement this static type analysis.
   capability has to define a static output schema (kind of like kubernetes
   resource status).
 - The transformation specification is statically typed. This means that
-  everything that we programmatically write into MUST be typed
-  (e.g. `repository: ${attributes.repositorySpec}`, here we have to be able to
-  match the type of `repositorySpec` with the expected type of `repository`).
-- This is required to enable static type analysis, which will be important to
-  avoid problems in complex graphs.
+  everything that we programmatically write into MUST be typed.
+
+```yaml
+  - type: resource.uploader
+    id: uploadresource1
+    spec:
+      resource: ${createresource1.output.resource}
+```
+
+- Here we have to be able to check whether the type of 
+  `${createresource1.output.resource}` is assignable to the 
+  expected type of `resource`.
 
 ### Program Flow
 
