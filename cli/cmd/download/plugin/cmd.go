@@ -67,7 +67,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 	}
 
 	cmd.Flags().String(FlagResourceVersion, "", "version of the plugin resource to download (optional, defaults to component version)")
-	cmd.Flags().String(FlagOutput, pluginDirectoryDefault, "output location to download the plugin binary to")
+	cmd.Flags().String(FlagOutput, pluginDirectoryDefault, "output folder to download the plugin binary to")
 	enum.VarP(cmd.Flags(), FlagOutputFormat, "f", []string{"table", "yaml", "json"}, "output format of the plugin information, defaults to table")
 	cmd.Flags().StringSlice(FlagExtraIdentity, []string{}, "extra identity parameters for resource matching (e.g., os=linux,arch=amd64)")
 	cmd.Flags().Bool(SkipValidation, false, "skip validation of the downloaded plugin binary")
