@@ -926,6 +926,11 @@ type Type struct {
 
 ### Program Flow
 
+> [!NOTE]
+> This section will be enhanced once we progressed a bit more on the 
+> implementation and have a better idea. The build up and validation of the 
+> graph will likely be heavily inspired by the `Builder` implementation of KRO.
+
 **1. Discover**
 - Discover loops over the entries in the (already parsed) transformation 
   specification go struct. We do 2 iterations:
