@@ -44,3 +44,6 @@ go.work.sum
 
 # gitguardian
 .cache_ggshield
+
+# local node modules
+.github/scripts/node_modules/
