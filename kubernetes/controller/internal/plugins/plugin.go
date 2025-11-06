@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
@@ -37,6 +38,12 @@ func (m *PluginManager) Start(ctx context.Context) error {
 	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(m.Scheme, pm.ComponentVersionRepositoryRegistry, m.Provider, &ociv1.Repository{}); err != nil {
 		return fmt.Errorf("failed to register internal component version repository plugin: %w", err)
 	}
+
+	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(m.Scheme, pm.ComponentVersionRepositoryRegistry, m.Provider, &ctfv1.Repository{}); err != nil {
+		return fmt.Errorf("failed to register internal component version repository plugin: %w", err)
+	}
+
+	m.PluginManager = pm
 
 	<-ctx.Done() // block until context is done ( expected by the manager )
 

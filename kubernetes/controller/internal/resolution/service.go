@@ -66,13 +66,18 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	opts := c.opts
 	opts.Component = component
 	opts.Version = version
-	
-	key, err := buildCacheKey(c.cfg.Hash, c.opts.RepositorySpec, component, version)
+
+	var configHash []byte
+	if c.cfg != nil {
+		configHash = c.cfg.Hash
+	}
+
+	key, err := buildCacheKey(configHash, c.opts.RepositorySpec, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build cache key: %w", err)
 	}
 
-	result, err := c.workerPool.GetComponentVersion(ctx, key, opts, c.repo, c.cfg.Hash)
+	result, err := c.workerPool.GetComponentVersion(ctx, key, opts, c.repo, configHash)
 	if err != nil {
 		return nil, err
 	}
@@ -83,13 +88,18 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 func (c *CacheBackedRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
 	opts := c.opts
 	opts.Component = component
-	
-	key, err := buildCacheKey(c.cfg.Hash, c.opts.RepositorySpec, component, "")
+
+	var configHash []byte
+	if c.cfg != nil {
+		configHash = c.cfg.Hash
+	}
+
+	key, err := buildCacheKey(configHash, c.opts.RepositorySpec, component, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to build cache key: %w", err)
 	}
 
-	result, err := c.workerPool.ListComponentVersions(ctx, key, opts, c.repo, c.cfg.Hash)
+	result, err := c.workerPool.ListComponentVersions(ctx, key, opts, c.repo, configHash)
 	if err != nil {
 		return nil, err
 	}
@@ -116,40 +126,41 @@ func (c *CacheBackedRepository) GetLocalSource(ctx context.Context, component, v
 
 var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
 
-// ResolveComponentVersion resolves a component version using the cache-backed repository.
-// This is a convenience method that implements the ComponentVersionResolver interface.
-func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOptions) (*ResolveResult, error) {
-	if err := r.validateOptions(opts); err != nil {
-		return nil, err
-	}
-
-	// Deep copy the repository spec early to avoid races during hashing/marshaling.
-	optsCopy := ResolveOptions{
-		RepositorySpec:    opts.RepositorySpec.DeepCopyTyped(),
-		OCMConfigurations: slices.Clone(opts.OCMConfigurations),
-		Namespace:         opts.Namespace,
-		Component:         opts.Component,
-		Version:           opts.Version,
-	}
-
-	// Load OCM configurations
-	cfg, err := configuration.LoadConfigurations(ctx, r.client, optsCopy.Namespace, optsCopy.OCMConfigurations)
-	if err != nil || cfg == nil {
-		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
-	}
-
-	repo, err := r.createRepository(ctx, opts, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	key, err := buildCacheKey(cfg.Hash, optsCopy.RepositorySpec, optsCopy.Component, optsCopy.Version)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build cache key: %w", err)
-	}
-
-	return r.workerPool.GetComponentVersion(ctx, key, optsCopy, repo, cfg.Hash)
-}
+//
+//// ResolveComponentVersion resolves a component version using the cache-backed repository.
+//// This is a convenience method that implements the ComponentVersionResolver interface.
+//func (r *Resolver) ResolveComponentVersion(ctx context.Context, opts *ResolveOptions) (*ResolveResult, error) {
+//	if err := r.validateOptions(opts); err != nil {
+//		return nil, err
+//	}
+//
+//	// Deep copy the repository spec early to avoid races during hashing/marshaling.
+//	optsCopy := ResolveOptions{
+//		RepositorySpec:    opts.RepositorySpec.DeepCopyTyped(),
+//		OCMConfigurations: slices.Clone(opts.OCMConfigurations),
+//		Namespace:         opts.Namespace,
+//		Component:         opts.Component,
+//		Version:           opts.Version,
+//	}
+//
+//	// Load OCM configurations
+//	cfg, err := configuration.LoadConfigurations(ctx, r.client, optsCopy.Namespace, optsCopy.OCMConfigurations)
+//	if err != nil || cfg == nil {
+//		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
+//	}
+//
+//	repo, err := r.createRepository(ctx, opts, cfg)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	key, err := buildCacheKey(cfg.Hash, optsCopy.RepositorySpec, optsCopy.Component, optsCopy.Version)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to build cache key: %w", err)
+//	}
+//
+//	return r.workerPool.GetComponentVersion(ctx, key, optsCopy, repo, cfg.Hash)
+//}
 
 func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *ResolveOptions) (*CacheBackedRepository, error) {
 	if err := r.validateOptions(opts); err != nil {
@@ -167,7 +178,7 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *ResolveOp
 
 	// Load OCM configurations
 	cfg, err := configuration.LoadConfigurations(ctx, r.client, optsCopy.Namespace, optsCopy.OCMConfigurations)
-	if err != nil || cfg == nil {
+	if err != nil {
 		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
 	}
 
@@ -193,14 +204,6 @@ func (r *Resolver) validateOptions(opts *ResolveOptions) error {
 		return errors.New("repository spec is required")
 	}
 
-	if opts.Component == "" {
-		return errors.New("component name is required")
-	}
-
-	if opts.Version == "" {
-		return errors.New("component version is required")
-	}
-
 	return nil
 }
 
@@ -210,20 +213,24 @@ func (r *Resolver) createRepository(ctx context.Context, opts *ResolveOptions, c
 		return nil, fmt.Errorf("plugin manager is nil")
 	}
 
-	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+	options := setup.RepositoryOptions{
 		PluginManager: pm,
 		Logger:        r.logger,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create credential graph: %w", err)
 	}
-	r.logger.V(1).Info("resolved credential graph")
+	if cfg != nil {
+		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
+			PluginManager: pm,
+			Logger:        r.logger,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create credential graph: %w", err)
+		}
+		r.logger.V(1).Info("resolved credential graph")
 
-	repo, err := setup.NewRepository(ctx, opts.RepositorySpec, setup.RepositoryOptions{
-		PluginManager:   pm,
-		CredentialGraph: credGraph,
-		Logger:          r.logger,
-	})
+		options.CredentialGraph = credGraph
+	}
+
+	repo, err := setup.NewRepository(ctx, opts.RepositorySpec, options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -224,13 +226,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to convert repository spec: %w", err)
 	}
 
-	cachedBackRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.ResolveOptions{
+	cachedBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.ResolveOptions{
 		RepositorySpec: spec,
 		Namespace:      component.GetNamespace(),
 	})
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to create back repo: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create cache backed repo: %w", err)
 	}
 
 	//octx, session, err := r.OCMContextCache.GetSession(&ocm.GetSessionOptions{
@@ -265,10 +267,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	//defer func() {
 	//	err = errors.Join(err, liveRepo.Close())
 	//}()
-	version, err := r.DetermineEffectiveVersionFromLiveRepo(ctx, component, cachedBackRepo)
+	version, err := r.DetermineEffectiveVersionFromLiveRepo(ctx, component, cachedBackedRepo)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.CheckVersionFailedReason, err.Error())
+		if errors.Is(err, resolution.ErrResolutionInProgress) {
+			status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
+			return ctrl.Result{RequeueAfter: component.GetRequeueAfter()}, nil
+		}
 
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.CheckVersionFailedReason, err.Error())
 		return ctrl.Result{}, fmt.Errorf("failed to determine effective version: %w", err)
 	}
 
@@ -279,10 +285,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	//	return ctrl.Result{}, fmt.Errorf("failed looking up repository: %w", err)
 	//}
 	//cv, err := session.LookupComponentVersion(repository, component.Spec.Component, version)
-	cv, err := cachedBackRepo.GetComponentVersion(ctx, component.Spec.Component, version)
+	cv, err := cachedBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+		if errors.Is(err, resolution.ErrResolutionInProgress) {
+			status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
+			return ctrl.Result{RequeueAfter: component.GetRequeueAfter()}, nil
+		}
 
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 	}
 
@@ -485,13 +495,40 @@ func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.
 		return nil, fmt.Errorf("repository spec is nil")
 	}
 
-	// First decode into a Raw object to determine the type
-	var raw runtime.Raw
-	if err := r.OCMScheme.Decode(bytes.NewReader(spec.Raw), &raw); err != nil {
+	// TODO: Test needs to be updated to use ctfv1 from us.
+	raw := &runtime.Raw{}
+	if err := r.OCMScheme.Decode(bytes.NewReader(spec.Raw), raw); err != nil {
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
-	return &raw, nil
+	values := make(map[string]interface{})
+	if err := json.Unmarshal(raw.Data, &values); err != nil {
+		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
+	}
+
+	ctfType := &ctfv1.Repository{
+		Type: runtime.Type{
+			Version: "",
+			Name:    "CommonTransportFormat",
+		},
+		Path:       values["filePath"].(string),
+		AccessMode: ctfv1.AccessModeReadOnly,
+	}
+	//raw := &runtime.Raw{}
+	//if err := r.OCMScheme.Decode(bytes.NewReader(spec.Raw), raw); err != nil {
+	//	return nil, fmt.Errorf("failed to decode repository spec: %w", err)
+	//}
+	//
+	//obj, err := r.OCMScheme.NewObject(raw.Type)
+	//if err != nil {
+	//	return nil, fmt.Errorf("failed to create new object: %w", err)
+	//}
+
+	//if err := r.OCMScheme.Convert(raw, obj); err != nil {
+	//	return nil, fmt.Errorf("failed to convert repository spec: %w", err)
+	//}
+
+	return ctfType, nil
 }
 
 func calculateDigest(component *descriptor.Descriptor) (*descriptor.Digest, error) {
