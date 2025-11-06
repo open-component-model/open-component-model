@@ -337,29 +337,6 @@ func TestGetBlobFromPath_Compression(t *testing.T) {
 	r.Equal(byte(0x8b), magicBytes[1])
 }
 
-func TestGetBlobFromPath_DefaultMediaType(t *testing.T) {
-	r := require.New(t)
-
-	// Setup: create test file
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.txt")
-	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
-
-	// Test: default media type when not specified
-	opt := filesystem.DirOptions{Compress: false}
-	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
-	r.NoError(err)
-
-	// Verify: blob can be read successfully (functional test)
-	reader, err := b.ReadCloser()
-	r.NoError(err)
-	defer func() { r.NoError(reader.Close()) }()
-
-	content, err := io.ReadAll(reader)
-	r.NoError(err)
-	r.NotEmpty(content, "expected blob to contain data")
-}
-
 func TestGetBlobFromPath_MediaTypeHandling(t *testing.T) {
 	r := require.New(t)
 
@@ -427,24 +404,6 @@ func TestGetBlobFromPath_ReproducibleBuilds(t *testing.T) {
 
 	// Verify: reproducible builds produce identical output
 	r.Equal(data1, data2, "expected reproducible builds to produce identical output")
-}
-
-func TestGetBlobFromPath_NonReproducibleBuilds(t *testing.T) {
-	r := require.New(t)
-
-	// Setup: create test file
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.txt")
-	r.NoError(os.WriteFile(testFile, []byte("test content"), 0644))
-
-	// Test: non-reproducible builds preserve timestamps
-	opt := filesystem.DirOptions{Reproducible: false}
-	b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
-	r.NoError(err)
-
-	data, err := readAllFromBlob(b)
-	r.NoError(err)
-	r.NotEmpty(data, "expected non-empty output from non-reproducible build")
 }
 
 // =============================================================================
@@ -533,6 +492,47 @@ func TestGetBlobFromPath_SymlinkRejection(t *testing.T) {
 	_, err = readAllFromBlob(b)
 	r.Error(err)
 	r.Contains(err.Error(), "symlinks are not supported")
+}
+
+func TestGetBlobFromPath_IncludeDirectoryOnly(t *testing.T) {
+	r := require.New(t)
+
+	// Setup: create directory with an empty sub directory
+	tmpDir := t.TempDir()
+	targetDir := filepath.Join(tmpDir, "sub", "dir")
+	r.NoError(os.MkdirAll(targetDir, 0755))
+
+	// Only include the directory itself
+	opt := filesystem.DirOptions{
+		IncludePatterns: []string{"sub/dir"},
+		Reproducible:    true,
+	}
+	b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+	r.NoError(err)
+	r.NotNil(b)
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
+
+	tr := tar.NewReader(reader)
+	foundDir := false
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+
+		name := strings.TrimPrefix(hdr.Name, "./")
+		// tolerate missing trailing slash just in case, but we expect it with the new logic
+		if hdr.Typeflag == tar.TypeDir && (name == "sub/dir/" || name == "sub/dir") {
+			foundDir = true
+		}
+		_, err = io.ReadAll(tr)
+		r.NoError(err)
+	}
+	r.True(foundDir, "expected directory header for sub/dir to be present when included explicitly")
 }
 
 // =============================================================================

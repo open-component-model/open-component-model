@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -29,7 +30,7 @@ type DirOptions struct {
 	PreserveDir     bool     // Add parent directory to the tar archive.
 	Reproducible    bool     // Create a reproducible tar archive (fixed timestamps, uid/gid etc).
 	ExcludePatterns []string // Patterns to exclude (glob patterns). Applies to files and directories.
-	IncludePatterns []string // Patterns to include (glob patterns). Applies only to files, directories are always traversed.
+	IncludePatterns []string // Patterns to include (glob patterns). Applies to files and directories (always traversed unless excluded).
 	WorkingDir      string   // Working directory to ensure the path is within and avoid path traversal.
 }
 
@@ -43,9 +44,7 @@ type DirOptions struct {
 // include/exclude patterns are matched using `filepath.Match`
 // No additional globbing extensions (like `**`) are performed.
 // Exclude patterns take precedence over include patterns.
-// Include patterns only apply to files - directories are always traversed (unless excluded)
-// to allow matching files in subdirectories.
-// Patterns are not supported for single files and will result in an error.
+// Patterns are not supported for single file paths and will result in an error.
 //
 // The function returns an error if the file path is empty,
 // the specified path is outside the working directory
@@ -67,7 +66,7 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 		}
 	}
 
-	// Check if path is a directory or single file.
+	// Check if path is a valid directory or single file.
 	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("error accessing path %q: %w", path, err)
@@ -91,10 +90,19 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 // If requested it compresses the resulting blob using gzip.
 // It uses a virtual filesystem to read the directory contents and streams the TAR data using a pipe.
 func createDirBlob(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
-	// Create a virtual filesystem rooted at the directory path
-	fileSystem, err := NewFS(path, os.O_RDONLY)
+	// Determine filesystem root and walk start based on PreserveDir
+	baseFSPath := path
+	subPath := "."
+	if opt.PreserveDir {
+		// Root the virtual FS at the parent, and start walking at the preserved base directory name.
+		baseFSPath = filepath.Dir(path)
+		subPath = filepath.Base(path)
+	}
+
+	// Create a virtual filesystem rooted at baseFSPath
+	fileSystem, err := NewFS(baseFSPath, os.O_RDONLY)
 	if err != nil {
-		return nil, fmt.Errorf("error creating virtual filesystem for path %q: %w", path, err)
+		return nil, fmt.Errorf("error creating virtual filesystem for path %q: %w", baseFSPath, err)
 	}
 
 	// Create TAR stream using pipe
@@ -125,12 +133,6 @@ func createDirBlob(ctx context.Context, path string, opt DirOptions) (blob.ReadO
 			tarErr = fmt.Errorf("context cancelled while preparing tar for path %q: %w", path, ctx.Err())
 			return
 		default:
-		}
-
-		// If PreserveDir is true, include the base directory in the TAR archive
-		subPath := "."
-		if opt.PreserveDir {
-			subPath = filepath.Base(path)
 		}
 
 		// Create TAR content from directory
@@ -204,57 +206,79 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 			return fmt.Errorf("error getting file info for %q: %w", path, err)
 		}
 
-		// Skip symlinks
+		// Reject symlinks
 		if (fi.Mode() & fs.ModeSymlink) != 0 {
 			return fmt.Errorf("symlinks are not supported: found symlink %q", path)
 		}
 
-		// Check if path is a Directory and skip if excluded
-		if fi.IsDir() && len(opt.ExcludePatterns) > 0 {
-			// Check exclude patterns for directories
-			if ok, err := isPathIncluded(path, nil, opt.ExcludePatterns); err != nil {
-				return fmt.Errorf("error checking exclusion of directory %q: %w", path, err)
-			} else if !ok {
-				return fs.SkipDir // Exclude entire directory and its contents
+		// Directories: prune on exclude, optionally emit header if included, always traverse
+		if fi.IsDir() {
+			// Exclude precedence: if directory matches any exclude pattern -> prune subtree
+			if len(opt.ExcludePatterns) > 0 {
+				ok, err := isPathIncluded(path, nil, opt.ExcludePatterns)
+				if err != nil {
+					return fmt.Errorf("error checking exclusion of directory %q: %w", path, err)
+				}
+				if !ok {
+					return fs.SkipDir
+				}
 			}
-		} else {
-			if ok, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns); err != nil {
-				return fmt.Errorf("error checking include/exclude pattern for path %q: %w", path, err)
-			} else if !ok {
-				return nil // Exclude this file or directory
+
+			// Emit directory header only if the directory path itself is included
+			inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
+			if err != nil {
+				return fmt.Errorf("error checking include/exclude pattern for directory %q: %w", path, err)
 			}
+			if inc {
+				header, err := createTarHeader(fi, "", opt.Reproducible)
+				if err != nil {
+					return fmt.Errorf("error creating tar header for directory %q: %w", path, err)
+				}
+				name := filepath.ToSlash(path)
+				if !strings.HasSuffix(name, "/") {
+					name += "/"
+				}
+				header.Name = name
+				if err := tw.WriteHeader(header); err != nil {
+					return fmt.Errorf("error writing tar header for directory %q: %w", path, err)
+				}
+			}
+			// continue walking into directory regardless of include result
+			return nil
 		}
 
-		// Create TAR header
+		// Files: emit only if included (exclude precedence handled in isPathIncluded)
+		inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
+		if err != nil {
+			return fmt.Errorf("error checking include/exclude pattern for file %q: %w", path, err)
+		}
+		if !inc {
+			return nil
+		}
+
 		header, err := createTarHeader(fi, "", opt.Reproducible)
 		if err != nil {
 			return fmt.Errorf("error creating tar header for %q: %w", path, err)
 		}
-
-		// Use forward slashes to ensure compatibility across platforms
 		header.Name = filepath.ToSlash(path)
 
-		// Write header
 		if err := tw.WriteHeader(header); err != nil {
 			return fmt.Errorf("error writing tar header for %q: %w", path, err)
 		}
 
-		// For regular files, copy content
-		if fi.Mode().IsRegular() {
-			fr, err := fileSystem.Open(path)
-			if err != nil {
-				return fmt.Errorf("error opening file %q for reading: %w", path, err)
-			}
+		fr, err := fileSystem.Open(path)
+		if err != nil {
+			return fmt.Errorf("error opening file %q for reading: %w", path, err)
+		}
 
-			_, copyErr := io.Copy(tw, fr)
-			closeErr := fr.Close()
+		_, copyErr := io.Copy(tw, fr)
+		closeErr := fr.Close()
 
-			if copyErr != nil {
-				return fmt.Errorf("error copying content of file %q to tar: %w", path, copyErr)
-			}
-			if closeErr != nil {
-				return fmt.Errorf("error closing file %q: %w", path, closeErr)
-			}
+		if copyErr != nil {
+			return fmt.Errorf("error copying content of file %q to tar: %w", path, copyErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("error closing file %q: %w", path, closeErr)
 		}
 
 		return nil
