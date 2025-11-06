@@ -58,7 +58,7 @@ jobs:
         uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
 
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@6bf37f6a560fd84982d67f853162e4b3c2235edb # v2.6.4
+        uses: fluxcd/flux2/action@4a15fa6a023259353ef750acf1c98fe88407d4d0 # v2.7.2
 
       - name: Setup Local E2E Test Cluster
         run: task kubernetes/controller:test/e2e/setup/local
