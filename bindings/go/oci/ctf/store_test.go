@@ -1,10 +1,12 @@
 package ctf
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -179,7 +181,7 @@ func TestResolve(t *testing.T) {
 	}
 
 	for _, tc := range expectedOkResolves {
-		t.Run(fmt.Sprintf("%s", tc), func(t *testing.T) {
+		t.Run(tc, func(t *testing.T) {
 			desc, err := store.Resolve(ctx, tc)
 			assert.NoError(t, err)
 			assert.Equal(t, ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
@@ -474,4 +476,103 @@ func TestCompatibility(t *testing.T) {
 			r.Equal("test", string(data))
 		})
 	}
+}
+
+// TestConcurrentBlobOperations tests thread safety of blob operations
+func TestConcurrentBlobOperations(t *testing.T) {
+	ctf := setupTestCTF(t)
+	provider := NewFromCTF(ctf)
+	store, err := provider.StoreForReference(t.Context(), "test-repo:test-tag")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	numGoroutines := 10
+	numBlobsPerGoroutine := 5
+
+	// Test concurrent operations on the same blob
+	t.Run("concurrent same blob", func(t *testing.T) {
+		t.Parallel()
+		// Create a test blob
+		content := "concurrent test content"
+		blobDigest := digest.FromString(content).String()
+		desc := ociImageSpecV1.Descriptor{
+			MediaType: "application/octet-stream",
+			Size:      int64(len(content)),
+			Digest:    digest.Digest(blobDigest),
+		}
+
+		var wg sync.WaitGroup
+
+		// Launch multiple goroutines performing operations on the same blob
+		for i := 0; i < numGoroutines; i++ {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+
+				// Push operation
+				err := store.Push(ctx, desc, bytes.NewReader([]byte(content)))
+				require.NoError(t, err, "goroutine %d: push should succeed", id)
+
+				// Fetch operation
+				reader, err := store.Fetch(ctx, desc)
+				require.NoError(t, err, "goroutine %d: fetch should succeed", id)
+				require.NotNil(t, reader, "goroutine %d: reader should not be nil", id)
+
+				data, err := io.ReadAll(reader)
+				reader.Close()
+				require.NoError(t, err, "goroutine %d: read should succeed", id)
+				require.Equal(t, content, string(data), "goroutine %d: content should match", id)
+
+				// Exists operation
+				exists, err := store.Exists(ctx, desc)
+				require.NoError(t, err, "goroutine %d: exists check should succeed", id)
+				require.True(t, exists, "goroutine %d: blob should exist", id)
+			}(i)
+		}
+
+		wg.Wait()
+	})
+
+	// Test concurrent operations on different blobs
+	t.Run("concurrent different blobs", func(t *testing.T) {
+		var wg sync.WaitGroup
+
+		for i := 0; i < numGoroutines; i++ {
+			wg.Add(1)
+			go func(goroutineID int) {
+				defer wg.Done()
+
+				for j := 0; j < numBlobsPerGoroutine; j++ {
+					content := fmt.Sprintf("content-goroutine-%d-blob-%d", goroutineID, j)
+					blobDigest := digest.FromString(content).String()
+					desc := ociImageSpecV1.Descriptor{
+						MediaType: "application/test",
+						Size:      int64(len(content)),
+						Digest:    digest.Digest(blobDigest),
+					}
+
+					// Push
+					err := store.Push(ctx, desc, bytes.NewReader([]byte(content)))
+					require.NoError(t, err, "goroutine %d blob %d: push should succeed", goroutineID, j)
+
+					// Fetch
+					reader, err := store.Fetch(ctx, desc)
+					require.NoError(t, err, "goroutine %d blob %d: fetch should succeed", goroutineID, j)
+					require.NotNil(t, reader, "goroutine %d blob %d: reader should not be nil", goroutineID, j)
+
+					data, err := io.ReadAll(reader)
+					reader.Close()
+					require.NoError(t, err, "goroutine %d blob %d: read should succeed", goroutineID, j)
+					require.Equal(t, content, string(data), "goroutine %d blob %d: content should match", goroutineID, j)
+
+					// Exists
+					exists, err := store.Exists(ctx, desc)
+					require.NoError(t, err, "goroutine %d blob %d: exists check should succeed", goroutineID, j)
+					require.True(t, exists, "goroutine %d blob %d: blob should exist", goroutineID, j)
+				}
+			}(i)
+		}
+
+		wg.Wait()
+	})
 }

@@ -94,24 +94,25 @@ func (s *Store) ComponentVersionReference(ctx context.Context, component, versio
 type repository struct {
 	archive ctf.CTF
 	repo    string
-	mu      *sync.RWMutex
+	mu      *sync.RWMutex // Shared repository mutex for all operations
+}
+
+func (s *repository) getLock(_ string) *sync.RWMutex {
+	// placeholder: this could return a lock per file stored in sync.Map
+	// currently returning single lock per store
+	return s.mu
 }
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
 func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.fetch(ctx, target)
-}
-
-// fetch is the internal version of Fetch that assumes the caller holds the lock.
-func (s *repository) fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	b, err := s.archive.GetBlob(ctx, target.Digest.String())
 	if err != nil {
-		return nil, fmt.Errorf("unable to get blob: %w", err)
+		return nil, err
 	}
-	return b.ReadCloser()
+	// Wraps io.ReadClose with LockedReader.
+	// Holds the mutex and is responsible for releasing it as reading is async.
+	return blob.NewLockedReader(ctx, s.mu, b)
 }
 
 // Exists checks if a blob exists in the CTF archive based on its descriptor.
@@ -136,12 +137,18 @@ func (s *repository) exists(ctx context.Context, target ociImageSpecV1.Descripto
 
 func (s *repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 	desc, err := s.resolve(ctx, reference)
+	if err != nil {
+		s.mu.RUnlock()
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+
+	b, err := s.archive.GetBlob(ctx, desc.Digest.String())
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
-	data, err := s.fetch(ctx, desc)
+	data, err := blob.NewLockedReader(ctx, s.mu, b)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
@@ -296,15 +303,7 @@ func (s *repository) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 		}
 	}
 
-	ok, err := s.exists(ctx, desc)
-	if err != nil {
-		return fmt.Errorf("unable to check if descriptor exists: %w", err)
-	}
-	if !ok {
-		// if the descriptor does not exist, we cannot tag it
-		return fmt.Errorf("descriptor %s does not exist in the archive", desc.Digest)
-	}
-
+	// Existence check already done in Tag method
 	slog.DebugContext(ctx, "adding artifact to index", "meta", meta)
 
 	addOrUpdateArtifactMetadataInIndex(idx, meta)
