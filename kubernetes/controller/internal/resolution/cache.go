@@ -109,6 +109,6 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 
 // Result contains the result of a resolution including any errors that might have occurred.
 type Result struct {
-	result *ResolveResult
-	err    error
+	Value any
+	Error error
 }

@@ -180,20 +180,16 @@ func main() {
 
 	// Create worker pool with its own dependencies
 	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		WorkerCount:   resolverWorkerCount,
-		QueueSize:     resolverWorkerQueueLength,
-		Logger:        setupLog,
-		Client:        mgr.GetClient(),
-		PluginManager: pm, // plugin manager is passed in here as the manager is started with the controller manager
-		Cache:         resolverCache,
+		WorkerCount: resolverWorkerCount,
+		QueueSize:   resolverWorkerQueueLength,
+		Logger:      setupLog,
+		Client:      mgr.GetClient(),
+		Cache:       resolverCache,
 	})
 	if err := mgr.Add(workerPool); err != nil {
 		setupLog.Error(err, "unable to add worker pool")
 		os.Exit(1)
 	}
-
-	// resolver will be used in the controller
-	_ = resolution.NewResolver(mgr.GetClient(), setupLog, workerPool)
 
 	var eventsRecorder *events.Recorder
 	if eventsRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, "ocm-k8s-toolkit"); err != nil {
@@ -219,6 +215,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	resolver := resolution.NewResolver(mgr.GetClient(), setupLog, workerPool, pm)
+
 	if err = (&component.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),
@@ -226,6 +224,8 @@ func main() {
 			EventRecorder: eventsRecorder,
 		},
 		OCMContextCache: ocmContextCache,
+		OCMScheme:       ocmscheme,
+		Resolver:        resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)

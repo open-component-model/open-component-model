@@ -10,21 +10,32 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
-	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
+	"ocm.software/open-component-model/bindings/go/repository"
+	//"ocm.software/open-component-model/kubernetes/controller/internal/setup"
+)
+
+// WorkItemType indicates the type of work to be performed.
+type WorkItemType int
+
+const (
+	WorkItemTypeGetComponentVersion WorkItemType = iota
+	WorkItemTypeListComponentVersions
 )
 
 // WorkItem represents a single work item to be processed by the worker pool.
 type WorkItem struct {
+	// Type indicates the type of work to be performed.
+	Type WorkItemType
 	// Context for the work item - workers respect this context for cancellation.
 	Context context.Context
 	// Key is a unique identifier for this work item.
 	Key string
 	// Opts contains the resolve options.
 	Opts ResolveOptions
-	// Cfg contains the configuration.
-	Cfg *configuration.Configuration
+	// Repository belonging to this worker pool to work with.
+	Repository repository.ComponentVersionRepository
+	// ConfigHash is the hash of the configuration used to create the repository.
+	ConfigHash []byte
 }
 
 // WorkerPoolOptions configures the worker pool.
@@ -37,8 +48,6 @@ type WorkerPoolOptions struct {
 	Logger logr.Logger
 	// Client for Kubernetes API access.
 	Client client.Reader
-	// PluginManager for OCM operations.
-	PluginManager *plugins.PluginManager
 	// Cache for caching.
 	Cache *expirable.LRU[string, *Result]
 }
@@ -95,46 +104,61 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	return nil
 }
 
-// Resolve resolves a component version with caching and async queuing.
-func (wp *WorkerPool) Resolve(ctx context.Context, key string, opts ResolveOptions, cfg *configuration.Configuration) (*ResolveResult, error) {
+func (wp *WorkerPool) GetComponentVersion(ctx context.Context, key string, opts ResolveOptions, repo repository.ComponentVersionRepository, configHash []byte) (*ResolveResult, error) {
+	return enqueueWorkItem[*ResolveResult](ctx, wp, key, opts, repo, configHash, WorkItemTypeGetComponentVersion)
+}
+
+func (wp *WorkerPool) ListComponentVersions(ctx context.Context, key string, opts ResolveOptions, repo repository.ComponentVersionRepository, configHash []byte) ([]string, error) {
+	return enqueueWorkItem[[]string](ctx, wp, key, opts, repo, configHash, WorkItemTypeListComponentVersions)
+}
+
+func enqueueWorkItem[T any](ctx context.Context, wp *WorkerPool, key string, opts ResolveOptions, repo repository.ComponentVersionRepository, configHash []byte, workItemType WorkItemType) (result T, _ error) {
 	if cached, ok := wp.Cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
-		if cached.err != nil {
-			return nil, cached.err
+		if cached.Error != nil {
+			return result, cached.Error
 		}
-		return cached.result, nil
+
+		res, ok := cached.Value.(T)
+		if !ok {
+			return result, fmt.Errorf("unable to assert cache value for key %s", key)
+		}
+
+		return res, nil
 	}
 
-	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
+	CacheMissCounterTotal.WithLabelValues(opts.Component, "latest").Inc()
 
 	if _, exists := wp.inProgress.LoadOrStore(key, struct{}{}); exists {
 		wp.Logger.V(1).Info("resolution already in progress", "component", opts.Component, "version", opts.Version)
-		return nil, ErrResolutionInProgress
+		return result, ErrResolutionInProgress
 	}
 
 	InProgressGauge.Inc()
 
 	workItem := &WorkItem{
-		Context: ctx,
-		Key:     key,
-		Opts:    opts,
-		Cfg:     cfg,
+		Type:       workItemType,
+		Context:    ctx,
+		Key:        key,
+		Repository: repo,
+		Opts:       opts,
+		ConfigHash: configHash,
 	}
 
 	select {
 	case wp.workQueue <- workItem:
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
-		wp.Logger.V(1).Info("enqueued resolution request", "component", opts.Component, "version", opts.Version)
-		return nil, ErrResolutionInProgress
+		wp.Logger.V(1).Info("enqueued request", "component", opts.Component)
+		return result, ErrResolutionInProgress
 	default:
 		// failed, decrement in-progress and decrement the gauge.
 		wp.inProgress.Delete(key)
 		InProgressGauge.Dec()
 		if len(wp.workQueue) == wp.QueueSize {
-			return nil, fmt.Errorf("work queue is full, cannot enqueue request for %s:%s", opts.Component, opts.Version)
+			return result, fmt.Errorf("work queue is full, cannot enqueue request for %s", opts.Component)
 		}
 
-		return nil, fmt.Errorf("failed to enqueue resolution request for %s:%s", opts.Component, opts.Version)
+		return result, fmt.Errorf("failed to enqueue resolution request for %s", opts.Component)
 	}
 }
 
@@ -160,65 +184,52 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 
 			QueueSizeGauge.Set(float64(len(wp.workQueue)))
 
-			logger.V(1).Info("processing work item", "key", item.Key)
-
-			start := time.Now()
-			result, err := wp.resolve(item.Context, &item.Opts, item.Cfg)
-			duration := time.Since(start).Seconds()
-
-			// Track metrics
-			ResolutionDurationHistogram.WithLabelValues(item.Opts.Component, item.Opts.Version).Observe(duration)
-
-			if err != nil {
-				logger.Error(err, "failed to process work item",
-					"component", item.Opts.Component,
-					"version", item.Opts.Version,
-					"duration", duration)
-			} else {
-				logger.V(1).Info("processed work item",
-					"component", item.Opts.Component,
-					"version", item.Opts.Version,
-					"duration", duration)
+			switch item.Type {
+			case WorkItemTypeGetComponentVersion:
+				wp.handleWorkItemWithHash(wp.getComponentVersion, logger, item)
+			case WorkItemTypeListComponentVersions:
+				wp.handleWorkItem(wp.listComponentVersion, logger, item)
+			default:
+				logger.Error(fmt.Errorf("unknown work item type: %d", item.Type), "skipping work item")
 			}
-
-			wp.Cache.Add(item.Key, &Result{
-				result: result,
-				err:    err,
-			})
-
-			// we are done, remove in-progress
-			wp.inProgress.Delete(item.Key)
-			InProgressGauge.Dec()
 		}
 	}
 }
 
-// resolve performs the actual component version resolution.
-func (wp *WorkerPool) resolve(ctx context.Context, opts *ResolveOptions, cfg *configuration.Configuration) (*ResolveResult, error) {
-	pm := wp.PluginManager.PluginManager
-	if pm == nil {
-		return nil, fmt.Errorf("plugin manager is nil")
-	}
+func (wp *WorkerPool) handleWorkItem(f func(ctx context.Context, opts *ResolveOptions, repo repository.ComponentVersionRepository) (any, error), logger logr.Logger, item *WorkItem) {
+	logger.V(1).Info("processing work item", "key", item.Key)
 
-	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
-		PluginManager: pm,
-		Logger:        wp.Logger,
-	})
+	start := time.Now()
+	result, err := f(item.Context, &item.Opts, item.Repository)
+	duration := time.Since(start).Seconds()
+
+	// Track metrics
+	ResolutionDurationHistogram.WithLabelValues(item.Opts.Component, item.Opts.Version).Observe(duration)
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to create credential graph: %w", err)
+		logger.Error(err, "failed to process work item",
+			"component", item.Opts.Component,
+			"version", item.Opts.Version,
+			"duration", duration)
+	} else {
+		logger.V(1).Info("processed work item",
+			"component", item.Opts.Component,
+			"version", item.Opts.Version,
+			"duration", duration)
 	}
-	wp.Logger.V(1).Info("resolved credential graph")
 
-	repo, err := setup.NewRepository(ctx, opts.RepositorySpec, setup.RepositoryOptions{
-		PluginManager:   pm,
-		CredentialGraph: credGraph,
-		Logger:          wp.Logger,
+	wp.Cache.Add(item.Key, &Result{
+		Value: result,
+		Error: err,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create repository: %w", err)
-	}
-	wp.Logger.V(1).Info("new repository created")
 
+	// we are done, remove in-progress
+	wp.inProgress.Delete(item.Key)
+	InProgressGauge.Dec()
+}
+
+// getComponentVersion performs the actual component version resolution.
+func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts *ResolveOptions, repo repository.ComponentVersionRepository) (any, error) {
 	descriptor, err := repo.GetComponentVersion(ctx, opts.Component, opts.Version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get component version %s:%s: %w", opts.Component, opts.Version, err)
@@ -228,8 +239,53 @@ func (wp *WorkerPool) resolve(ctx context.Context, opts *ResolveOptions, cfg *co
 	result := &ResolveResult{
 		Descriptor: descriptor,
 		Repository: repo,
-		ConfigHash: cfg.Hash,
 	}
 
 	return result, nil
+}
+
+func (wp *WorkerPool) handleWorkItemWithHash(f func(ctx context.Context, opts *ResolveOptions, repo repository.ComponentVersionRepository) (any, error), logger logr.Logger, item *WorkItem) {
+	logger.V(1).Info("processing work item", "key", item.Key)
+
+	start := time.Now()
+	result, err := f(item.Context, &item.Opts, item.Repository)
+	duration := time.Since(start).Seconds()
+
+	// Track metrics
+	ResolutionDurationHistogram.WithLabelValues(item.Opts.Component, item.Opts.Version).Observe(duration)
+
+	if err != nil {
+		logger.Error(err, "failed to process work item",
+			"component", item.Opts.Component,
+			"version", item.Opts.Version,
+			"duration", duration)
+	} else {
+		logger.V(1).Info("processed work item",
+			"component", item.Opts.Component,
+			"version", item.Opts.Version,
+			"duration", duration)
+		
+		// Add ConfigHash to the result if it's a ResolveResult
+		if resolveResult, ok := result.(*ResolveResult); ok {
+			resolveResult.ConfigHash = item.ConfigHash
+		}
+	}
+
+	wp.Cache.Add(item.Key, &Result{
+		Value: result,
+		Error: err,
+	})
+
+	// we are done, remove in-progress
+	wp.inProgress.Delete(item.Key)
+	InProgressGauge.Dec()
+}
+func (wp *WorkerPool) listComponentVersion(ctx context.Context, opts *ResolveOptions, repo repository.ComponentVersionRepository) (any, error) {
+	versions, err := repo.ListComponentVersions(ctx, opts.Component)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get component version %s:%s: %w", opts.Component, opts.Version, err)
+	}
+	wp.Logger.V(1).Info("resolved component version", "component", opts.Component, "version", opts.Version)
+
+	return versions, nil
 }
