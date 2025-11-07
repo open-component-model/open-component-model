@@ -95,6 +95,17 @@ func (c *CacheBackedRepository) GetLocalSource(ctx context.Context, component, v
 	return c.repo.GetLocalSource(ctx, component, version, identity)
 }
 
+// CheckHealth calls health check on the underlying repository. Returns an error if the repository does not support
+// health checking.
+func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
+	checkable, ok := c.repo.(repository.HealthCheckable)
+	if !ok {
+		return fmt.Errorf("repository is not healthy")
+	}
+
+	return checkable.CheckHealth(ctx)
+}
+
 // buildCacheKey generates a cache key from the configuration hash, repository spec, component, and version.
 func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)

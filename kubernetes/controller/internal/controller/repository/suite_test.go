@@ -7,9 +7,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -88,8 +96,45 @@ var _ = BeforeSuite(func() {
 	ctx, cancel := context.WithCancel(context.Background())
 	DeferCleanup(cancel)
 
-	ocmContextCache := ocm.NewContextCache("shared_ocm_context_cache", 100, 100, k8sManager.GetClient(), GinkgoLogr)
-	Expect(k8sManager.Add(ocmContextCache)).To(Succeed())
+	ocmscheme := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
+	ocmrepository.MustAddToScheme(ocmscheme)
+	//ocmscheme.MustRegisterWithAlias(&oci.Repository{}, ocmruntime.NewUnversionedType(oci.LegacyRegistryType))
+	//ocmscheme.MustRegisterWithAlias(&oci.Repository{}, ocmruntime.NewUnversionedType(oci.LegacyRegistryType2))
+	//ocmscheme.MustRegisterWithAlias(&ctf.Repository{},
+	//	ocmruntime.NewVersionedType(ctf.Type, ctf.Version),
+	//	ocmruntime.NewUnversionedType(ctf.Type),
+	//	ocmruntime.NewVersionedType(ctf.ShortType, ctf.Version),
+	//	ocmruntime.NewUnversionedType(ctf.ShortType),
+	//	ocmruntime.NewVersionedType(ctf.ShortType2, ctf.Version),
+	//	ocmruntime.NewUnversionedType(ctf.ShortType2),
+	//)
+	//access.MustAddToScheme(ocmscheme)
+
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
+
+	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
+		IdleTimeout: 20 * time.Minute,
+		Logger:      logf.Log.WithName("plugin-manager"),
+		Scheme:      ocmscheme,
+		Provider:    repositoryProvider,
+	})
+	Expect(k8sManager.Add(pm)).To(Succeed())
+
+	const unlimited = 0
+	ttl := time.Minute * 30
+	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
+
+	// Create worker pool with its own dependencies
+	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
+		WorkerCount: 10,
+		QueueSize:   100,
+		Logger:      logf.Log.WithName("worker-pool"),
+		Client:      k8sManager.GetClient(),
+		Cache:       resolverCache,
+	})
+	Expect(k8sManager.Add(workerPool)).To(Succeed())
+
+	resolver := resolution.NewResolver(k8sClient, logf.Log.WithName("resolution"), workerPool, pm)
 
 	repositoryKey = "metadata.name"
 	// Register reconcilers
@@ -102,7 +147,8 @@ var _ = BeforeSuite(func() {
 				IncludeObject: true,
 			},
 		},
-		OCMContextCache: ocmContextCache,
+		OCMScheme: ocmscheme,
+		Resolver:  resolver,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
 	go func() {

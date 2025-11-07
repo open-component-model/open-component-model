@@ -204,19 +204,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	resolver := resolution.NewResolver(mgr.GetClient(), setupLog, workerPool, pm)
+
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMContextCache: ocmContextCache,
+		OCMScheme: ocmscheme,
+		Resolver:  resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Repository")
 		os.Exit(1)
 	}
-
-	resolver := resolution.NewResolver(mgr.GetClient(), setupLog, workerPool, pm)
 
 	if err = (&component.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
@@ -224,9 +225,8 @@ func main() {
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMContextCache: ocmContextCache,
-		OCMScheme:       ocmscheme,
-		Resolver:        resolver,
+		OCMScheme: ocmscheme,
+		Resolver:  resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)

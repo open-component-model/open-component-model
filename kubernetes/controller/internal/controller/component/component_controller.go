@@ -42,9 +42,8 @@ import (
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	OCMContextCache *ocm.ContextCache
-	Resolver        *resolution.Resolver
-	OCMScheme       *runtime.Scheme
+	Resolver  *resolution.Resolver
+	OCMScheme *runtime.Scheme
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
