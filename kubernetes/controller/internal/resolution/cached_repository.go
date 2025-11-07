@@ -71,30 +71,7 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 
 // ListComponentVersions lists all versions of a component, using the cache when possible.
 func (c *CacheBackedRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
-	var configHash []byte
-	if c.cfg != nil {
-		configHash = c.cfg.Hash
-	}
-
-	key, err := buildCacheKey(configHash, c.baseOpts.RepositorySpec, component, "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to build cache key: %w", err)
-	}
-
-	wpOpts := workerpool.ResolveOptions{
-		RepositorySpec:    c.baseOpts.RepositorySpec,
-		Component:         component,
-		Version:           "",
-		OCMConfigurations: c.baseOpts.OCMConfigurations,
-		Namespace:         c.baseOpts.Namespace,
-	}
-
-	result, err := c.workerPool.ListComponentVersions(ctx, key, wpOpts, c.repo, configHash)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return c.repo.ListComponentVersions(ctx, component)
 }
 
 // AddLocalResource adds a local resource to the underlying repository.

@@ -137,6 +137,7 @@ func (wp *WorkerPool) GetComponentVersion(ctx context.Context, key string, opts 
 }
 
 // ListComponentVersions lists component versions using the worker pool and cache.
+// TODO: this is obsolete
 func (wp *WorkerPool) ListComponentVersions(ctx context.Context, key string, opts ResolveOptions, repo repository.ComponentVersionRepository, configHash []byte) ([]string, error) {
 	return enqueueWorkItem[[]string](ctx, wp, key, opts, repo, configHash, WorkItemTypeListComponentVersions)
 }
@@ -308,6 +309,7 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, item *WorkItem) (
 	result := &ResolveResult{
 		Descriptor: descriptor,
 		Repository: item.Repository,
+		ConfigHash: item.ConfigHash,
 	}
 
 	return result, nil
