@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -87,7 +86,7 @@ func TestGetBlobFromPath_Directory(t *testing.T) {
 
 // =============================================================================
 // PATTERN FILTERING TESTS
-// Include/exclude pattern functionality and directory traversal semantics
+// Include/exclude pattern functionality and directory traversal
 // =============================================================================
 
 func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
@@ -288,9 +287,8 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 		foundHeaders = append(foundHeaders, header.Name)
 
-		// Check for directory prefix (could be with or without leading ./)
-		name := strings.TrimPrefix(header.Name, "./")
-		if strings.HasPrefix(name, targetDirName+"/") || strings.HasPrefix(header.Name, targetDirName+"/") {
+		// Expect exact directory header for preserved directory
+		if header.Typeflag == tar.TypeDir && header.Name == targetDirName+"/" {
 			foundPrefixed = true
 		}
 
@@ -528,9 +526,7 @@ func TestGetBlobFromPath_IncludeDirectoryOnly(t *testing.T) {
 		}
 		r.NoError(err)
 
-		name := hdr.Name
-		// tolerate missing trailing slash just in case, but we expect it with the new logic
-		if hdr.Typeflag == tar.TypeDir && (name == "sub/dir/" || name == "sub/dir") {
+		if hdr.Typeflag == tar.TypeDir && hdr.Name == "sub/dir/" {
 			foundDir = true
 		}
 		_, err = io.ReadAll(tr)
@@ -573,9 +569,10 @@ func readAllFromBlob(b blob.ReadOnlyBlob) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Read first, then close and prefer read error over close error.
+	// Read first, then close. This ensures we capture read errors before close errors.
 	data, readErr := io.ReadAll(rc)
 	closeErr := rc.Close()
+
 	if readErr != nil {
 		return nil, readErr
 	}
@@ -614,7 +611,6 @@ func extractTarContents(t *testing.T, b blob.ReadOnlyBlob) []string {
 
 		// Only track regular files, not directories
 		if header.Typeflag == tar.TypeReg {
-			// Normalize path (remove leading ./)
 			name := header.Name
 			files = append(files, name)
 		}
