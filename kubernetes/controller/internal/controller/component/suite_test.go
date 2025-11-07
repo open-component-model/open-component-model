@@ -115,9 +115,6 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	ocmContextCache := ocm.NewContextCache("shared_ocm_context_cache", 100, 100, k8sManager.GetClient(), GinkgoLogr)
-	Expect(k8sManager.Add(ocmContextCache)).To(Succeed())
-
 	ocmscheme := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
 	ocmrepository.MustAddToScheme(ocmscheme)
 	access.MustAddToScheme(ocmscheme)
@@ -152,9 +149,8 @@ var _ = BeforeSuite(func() {
 			Scheme:        testEnv.Scheme,
 			EventRecorder: recorder,
 		},
-		OCMContextCache: ocmContextCache,
-		OCMScheme:       ocmscheme,
-		Resolver:        resolver,
+		OCMScheme: ocmscheme,
+		Resolver:  resolver,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
 	go func() {
