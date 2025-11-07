@@ -1,0 +1,134 @@
+package resolution
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+
+	"ocm.software/open-component-model/bindings/go/blob"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
+)
+
+// CacheBackedRepository provides a cache-backed implementation of repository.ComponentVersionRepository.
+// It wraps a real repository and uses a worker pool to handle concurrent access with caching.
+type CacheBackedRepository struct {
+	baseOpts   ResolveOptions
+	cfg        *configuration.Configuration
+	workerPool *workerpool.WorkerPool
+	repo       repository.ComponentVersionRepository
+}
+
+var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
+
+// newCacheBackedRepository creates a new CacheBackedRepository instance.
+func newCacheBackedRepository(baseOpts ResolveOptions, cfg *configuration.Configuration, wp *workerpool.WorkerPool, repo repository.ComponentVersionRepository) *CacheBackedRepository {
+	return &CacheBackedRepository{
+		baseOpts:   baseOpts,
+		cfg:        cfg,
+		workerPool: wp,
+		repo:       repo,
+	}
+}
+
+// AddComponentVersion adds a component version to the underlying repository.
+func (c *CacheBackedRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
+	return c.repo.AddComponentVersion(ctx, descriptor)
+}
+
+// GetComponentVersion retrieves a component version, using the cache when possible.
+func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+	var configHash []byte
+	if c.cfg != nil {
+		configHash = c.cfg.Hash
+	}
+
+	key, err := buildCacheKey(configHash, c.baseOpts.RepositorySpec, component, version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build cache key: %w", err)
+	}
+
+	wpOpts := workerpool.ResolveOptions{
+		RepositorySpec:    c.baseOpts.RepositorySpec,
+		Component:         component,
+		Version:           version,
+		OCMConfigurations: c.baseOpts.OCMConfigurations,
+		Namespace:         c.baseOpts.Namespace,
+	}
+
+	result, err := c.workerPool.GetComponentVersion(ctx, key, wpOpts, c.repo, configHash)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Descriptor, nil
+}
+
+// ListComponentVersions lists all versions of a component, using the cache when possible.
+func (c *CacheBackedRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
+	var configHash []byte
+	if c.cfg != nil {
+		configHash = c.cfg.Hash
+	}
+
+	key, err := buildCacheKey(configHash, c.baseOpts.RepositorySpec, component, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to build cache key: %w", err)
+	}
+
+	wpOpts := workerpool.ResolveOptions{
+		RepositorySpec:    c.baseOpts.RepositorySpec,
+		Component:         component,
+		Version:           "",
+		OCMConfigurations: c.baseOpts.OCMConfigurations,
+		Namespace:         c.baseOpts.Namespace,
+	}
+
+	result, err := c.workerPool.ListComponentVersions(ctx, key, wpOpts, c.repo, configHash)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// AddLocalResource adds a local resource to the underlying repository.
+// TODO: Eventually cache these as well.
+func (c *CacheBackedRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	return c.repo.AddLocalResource(ctx, component, version, res, content)
+}
+
+// GetLocalResource retrieves a local resource from the underlying repository.
+func (c *CacheBackedRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+	return c.repo.GetLocalResource(ctx, component, version, identity)
+}
+
+// AddLocalSource adds a local source to the underlying repository.
+func (c *CacheBackedRepository) AddLocalSource(ctx context.Context, component, version string, src *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
+	return c.repo.AddLocalSource(ctx, component, version, src, content)
+}
+
+// GetLocalSource retrieves a local source from the underlying repository.
+func (c *CacheBackedRepository) GetLocalSource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Source, error) {
+	return c.repo.GetLocalSource(ctx, component, version, identity)
+}
+
+// buildCacheKey generates a cache key from the configuration hash, repository spec, component, and version.
+func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
+	repoJSON, err := json.Marshal(repoSpec)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
+	}
+
+	hasher := sha256.New()
+	hasher.Write(configHash)
+	hasher.Write(repoJSON)
+	hasher.Write([]byte(component))
+	hasher.Write([]byte(version))
+	return hex.EncodeToString(hasher.Sum(nil)), err
+}

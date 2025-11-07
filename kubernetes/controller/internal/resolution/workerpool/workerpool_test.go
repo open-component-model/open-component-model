@@ -1,4 +1,4 @@
-package resolution_test
+package workerpool_test
 
 import (
 	"bytes"
@@ -19,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -71,7 +72,7 @@ func TestWorkerPool_StartAndStop(t *testing.T) {
 		fakeLogger := &FakeLogger{}
 		logger := logr.New(fakeLogger)
 
-		wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+		wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 			WorkerCount: 3,
 			QueueSize:   10,
 			Logger:      logger,
@@ -281,8 +282,8 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 		require.NoError(t, err)
 
 		// Use TTL=0 to avoid background ticker goroutine that causes synctest deadlock
-		cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
-		wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+		cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+		wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 			WorkerCount: 5,
 			QueueSize:   100,
 			Logger:      logger,
@@ -397,8 +398,8 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		WorkerCount: 1, // Only 1 worker
 		QueueSize:   2, // Very small queue
 		Logger:      logger,
@@ -786,8 +787,8 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 	require.NoError(t, err)
 
 	// Use TTL=0 to avoid background ticker goroutine that causes synctest deadlock
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		Logger: logger,
 		Client: k8sClient,
 		Cache:  cache,
@@ -808,4 +809,114 @@ func setupDynamicTestEnvironment(t *testing.T, k8sClient client.Reader, logger l
 	}()
 
 	return resolver
+}
+
+// testEnvironment holds the test infrastructure including resolver and plugin manager.
+type testEnvironment struct {
+	Resolver      resolution.ComponentVersionResolver
+	PluginManager *manager.PluginManager
+}
+
+func (e *testEnvironment) Close(ctx context.Context) error {
+	if e.PluginManager != nil {
+		return e.PluginManager.Shutdown(ctx)
+	}
+
+	return nil
+}
+
+// setupTestEnvironment creates a test environment with a resolver that has mock plugins registered.
+func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Logger) *testEnvironment {
+	t.Helper()
+
+	// Register mock OCI plugin
+	scheme := ocmruntime.NewScheme()
+	ocirepository.MustAddToScheme(scheme)
+
+	cvRepoPlugin := &mockPlugin{
+		component: "test-component",
+		version:   "v1.0.0",
+	}
+
+	pm := manager.NewPluginManager(t.Context())
+	err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
+		scheme,
+		pm.ComponentVersionRepositoryRegistry,
+		cvRepoPlugin,
+		&ociv1.Repository{},
+	)
+	require.NoError(t, err)
+
+	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
+		PluginManager: &plugins.PluginManager{
+			PluginManager: pm,
+		},
+		Logger: logger,
+		Client: k8sClient,
+		Cache:  cache,
+	})
+	resolver := resolution.NewResolver(k8sClient, logger, wp)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	// Start worker pool in background since Start() blocks for graceful shutdown
+	go func() {
+		_ = wp.Start(ctx)
+	}()
+
+	return &testEnvironment{
+		Resolver:      resolver,
+		PluginManager: pm,
+	}
+}
+
+// mockPlugin is a minimal OCI repository plugin for testing.
+// It implements both the plugin interface and the repository interface.
+type mockPlugin struct {
+	repository.ComponentVersionRepository
+	component string
+	version   string
+}
+
+func (p *mockPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
+	_ context.Context,
+	repositorySpecification ocmruntime.Typed,
+) (ocmruntime.Identity, error) {
+	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
+	if !ok {
+		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
+	}
+
+	identity, err := ocmruntime.ParseURLToIdentity(ociRepoSpec.BaseUrl)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
+	}
+	identity.SetType(ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version))
+
+	return identity, nil
+}
+
+func (p *mockPlugin) GetComponentVersionRepository(
+	_ context.Context,
+	_ ocmruntime.Typed,
+	_ map[string]string,
+) (repository.ComponentVersionRepository, error) {
+	// Return the plugin itself as it implements the repository interface
+	return p, nil
+}
+
+// GetComponentVersion implements repository.ComponentVersionRepository
+func (p *mockPlugin) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+	return &descriptor.Descriptor{
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    p.component,
+					Version: p.version,
+				},
+			},
+		},
+	}, nil
 }

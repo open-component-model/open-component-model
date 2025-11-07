@@ -39,6 +39,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
 var (
@@ -176,10 +177,10 @@ func main() {
 
 	const unlimited = 0
 	ttl := time.Minute * 30
-	resolverCache := expirable.NewLRU[string, *resolution.Result](unlimited, nil, ttl)
+	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
 
 	// Create worker pool with its own dependencies
-	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		WorkerCount: resolverWorkerCount,
 		QueueSize:   resolverWorkerQueueLength,
 		Logger:      setupLog,

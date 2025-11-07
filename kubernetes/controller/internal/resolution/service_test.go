@@ -16,7 +16,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -29,6 +28,7 @@ import (
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
 func TestResolveComponentVersion_Success(t *testing.T) {
@@ -97,6 +97,7 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 		assert.Equal(t, "test-component", resolvedResult.Descriptor.Component.Name)
 		assert.Equal(t, "v1.0.0", resolvedResult.Descriptor.Component.Version)
 		assert.NotZero(t, resolvedResult)
+		assert.NotEmpty(t, resolvedResult.ConfigHash)
 	})
 }
 
@@ -169,6 +170,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 		// Results should be identical (same pointer from cache)
 		assert.Equal(t, result1.Descriptor.Component.Name, result2.Descriptor.Component.Name)
 		assert.Equal(t, result1.Descriptor.Component.Version, result2.Descriptor.Component.Version)
+		assert.Equal(t, result1.ConfigHash, result2.ConfigHash)
 	})
 }
 
@@ -278,9 +280,8 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result2)
 
-		// Different configs should produce different results (cache miss/separate resolution)
-		assert.Equal(t, result1.Descriptor.Component.Name, result2.Descriptor.Component.Name)
-		assert.Equal(t, result1.Descriptor.Component.Version, result2.Descriptor.Component.Version)
+		// Config hashes should be different
+		assert.NotEqual(t, result1.ConfigHash, result2.ConfigHash)
 	})
 }
 
@@ -296,12 +297,12 @@ func TestResolveComponentVersion_ValidationErrors(t *testing.T) {
 		Build()
 
 	// Use TTL=0 to avoid background ticker goroutine
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		Cache: cache,
 	})
 
-	resolver := resolution.NewResolver(k8sClient, logger, wp, nil)
+	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
 	repoSpec := &ociv1.Repository{
 		BaseUrl: "localhost:5000/test",
@@ -365,12 +366,12 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 		Build()
 
 	// Use TTL=0 to avoid background ticker goroutine
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		Client: k8sClient,
 		Cache:  cache,
 	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp, nil)
+	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
 	repoSpec := &ociv1.Repository{
 		BaseUrl: "localhost:5000/test",
@@ -537,15 +538,13 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Log
 	)
 	require.NoError(t, err)
 
-	cache := expirable.NewLRU[string, *resolution.Result](0, nil, 0)
-	wp := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
+	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		Logger: logger,
 		Client: k8sClient,
 		Cache:  cache,
 	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp, &plugins.PluginManager{
-		PluginManager: pm,
-	})
+	resolver := resolution.NewResolver(k8sClient, logger, wp)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)

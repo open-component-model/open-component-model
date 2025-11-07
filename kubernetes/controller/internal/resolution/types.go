@@ -1,10 +1,9 @@
 package resolution
 
 import (
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
 // ResolveOptions contains all the options the resolution service requires to perform a resolve operation.
@@ -17,9 +16,5 @@ type ResolveOptions struct {
 	Namespace         string
 }
 
-// ResolveResult contains the descriptor, repository and the compute hash of the config for further processing.
-type ResolveResult struct {
-	Descriptor *descriptor.Descriptor
-	Repository repository.ComponentVersionRepository
-	ConfigHash []byte
-}
+// ResolveResult is an alias for workerpool.ResolveResult for backward compatibility.
+type ResolveResult = workerpool.ResolveResult

@@ -1,14 +1,8 @@
-package resolution
+package workerpool
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
-
 	kmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/internal/metrics"
 )
 
@@ -92,23 +86,3 @@ var ResolutionDurationHistogram = metrics.MustRegisterHistogramVec(
 	[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
 	ComponentLabel, VersionLabel,
 )
-
-func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
-	repoJSON, err := json.Marshal(repoSpec)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
-	}
-
-	hasher := sha256.New()
-	hasher.Write(configHash)
-	hasher.Write(repoJSON)
-	hasher.Write([]byte(component))
-	hasher.Write([]byte(version))
-	return hex.EncodeToString(hasher.Sum(nil)), err
-}
-
-// Result contains the result of a resolution including any errors that might have occurred.
-type Result struct {
-	Value any
-	Error error
-}
