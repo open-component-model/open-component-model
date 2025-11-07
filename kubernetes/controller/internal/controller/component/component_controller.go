@@ -298,7 +298,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	//compareStart := time.Now()
 	//logger.V(1).Info("comparing cached and live hashes", "component", component.Spec.Component, "version", version)
-	// TODO: Think about this. The cached back repo does have a TTL but we might still have to do this.
 	// Maybe have an indicator if the result is from cache so we know we have to use the live repo.
 	//digestSpec, err := ocm.CompareCachedAndLiveHashes(cv, liveRepo, component.Spec.Component, version,
 	//	compdesc.JsonNormalisationV3, crypto.SHA256,
@@ -495,12 +494,29 @@ func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.
 		return nil, fmt.Errorf("repository spec is nil")
 	}
 
-	// TODO: Test needs to be updated to use ctfv1 from us.
 	raw := &runtime.Raw{}
 	if err := r.OCMScheme.Decode(bytes.NewReader(spec.Raw), raw); err != nil {
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
+	if raw.GetType().Name == ctfv1.Type {
+		return r.convertCTFOCMv1ToCTFOCMv2(raw)
+	}
+
+	obj, err := r.OCMScheme.NewObject(raw.Type)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new object: %w", err)
+	}
+
+	if err := r.OCMScheme.Convert(raw, obj); err != nil {
+		return nil, fmt.Errorf("failed to convert repository spec: %w", err)
+	}
+
+	return obj, nil
+}
+
+// TODO: This needs to be adjusted, but irrelevant for the prototype that works on the resolution service.
+func (r *Reconciler) convertCTFOCMv1ToCTFOCMv2(raw *runtime.Raw) (runtime.Typed, error) {
 	values := make(map[string]interface{})
 	if err := json.Unmarshal(raw.Data, &values); err != nil {
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
@@ -514,19 +530,6 @@ func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.
 		Path:       values["filePath"].(string),
 		AccessMode: ctfv1.AccessModeReadOnly,
 	}
-	//raw := &runtime.Raw{}
-	//if err := r.OCMScheme.Decode(bytes.NewReader(spec.Raw), raw); err != nil {
-	//	return nil, fmt.Errorf("failed to decode repository spec: %w", err)
-	//}
-	//
-	//obj, err := r.OCMScheme.NewObject(raw.Type)
-	//if err != nil {
-	//	return nil, fmt.Errorf("failed to create new object: %w", err)
-	//}
-
-	//if err := r.OCMScheme.Convert(raw, obj); err != nil {
-	//	return nil, fmt.Errorf("failed to convert repository spec: %w", err)
-	//}
 
 	return ctfType, nil
 }

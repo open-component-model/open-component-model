@@ -88,12 +88,12 @@ var _ = Describe("Component Controller", func() {
 
 		It("reconcileComponent a component", func(ctx SpecContext) {
 			By("creating a component version")
+			// TODO: Create an issue to allow the new ocm spec to parse the v1 and then change the spec to not use integer for the bitmask.
 			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
 				env.Component(componentName, func() {
 					env.Version(Version1)
 				})
 			})
-
 			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
 			specData := Must(spec.MarshalJSON())
 
@@ -222,8 +222,7 @@ var _ = Describe("Component Controller", func() {
 			test.DeleteObject(ctx, k8sClient, component)
 		})
 
-		// TODO: FIX ME
-		PIt("grabs the new version when it becomes available", func(ctx SpecContext) {
+		It("grabs the new version when it becomes available", func(ctx SpecContext) {
 			By("creating a component version")
 			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
 				env.Component(componentName, func() {
@@ -451,10 +450,9 @@ var _ = Describe("Component Controller", func() {
 			test.DeleteObject(ctx, k8sClient, component)
 		})
 
-		// TODO: FIX ME
-		PIt("normalizes a component version with a plus", func(ctx SpecContext) {
+		It("normalizes a component version with a plus", func(ctx SpecContext) {
 			componentObjName := ComponentObj + "-with-plus"
-			componentVersionPlus := Version1 + "+componentVersionSuffix"
+			componentVersionPlus := Version1 + "+componentversionsuffix"
 
 			By("creating a component version")
 			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
