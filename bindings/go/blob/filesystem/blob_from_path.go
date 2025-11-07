@@ -30,7 +30,7 @@ type DirOptions struct {
 	PreserveDir     bool     // Add parent directory to the tar archive.
 	Reproducible    bool     // Create a reproducible tar archive (fixed timestamps, uid/gid etc).
 	ExcludePatterns []string // Patterns to exclude (glob patterns). Applies to files and directories.
-	IncludePatterns []string // Patterns to include (glob patterns). Applies to files and directories (always traversed unless excluded).
+	IncludePatterns []string // Patterns to include (glob patterns). Applies to files and directories.
 	WorkingDir      string   // Working directory to ensure the path is within and avoid path traversal.
 }
 
@@ -41,16 +41,15 @@ type DirOptions struct {
 // Exclude and include patterns can be used to filter files when adding directories.
 //
 // Note on pattern option semantics:
-// include/exclude patterns are matched using `filepath.Match`
+// Include/exclude patterns are matched using `filepath.Match`
 // No additional globbing extensions (like `**`) are performed.
 // Exclude patterns take precedence over include patterns.
 // Patterns are not supported for single file paths and will result in an error.
 //
-// The function returns an error if the file path is empty,
-// the specified path is outside the working directory
-// or if there are issues accessing the directory.
-//
-// Symlinks are not supported and will result in an error.
+// Paths and patterns are normalized to use forward slashes (`/`) as separators for matching
+// and have any leading `./` or `/` removed.
+
+// Symlinks are not supported so far and will result in an error.
 
 func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
 	// Validate the input path
@@ -90,7 +89,7 @@ func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.Rea
 // If requested it compresses the resulting blob using gzip.
 // It uses a virtual filesystem to read the directory contents and streams the TAR data using a pipe.
 func createDirBlob(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
-	// Determine filesystem root and walk start based on PreserveDir
+	// Determine filesystem root and start dir walk based on PreserveDir
 	baseFSPath := path
 	subPath := "."
 	if opt.PreserveDir {
@@ -183,7 +182,7 @@ func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error
 	return fileBlob, nil
 }
 
-// createTarFromDir creates a TAR archive from the filesystem
+// createTarFromDir creates a TAR archive from the filesystem.
 // Uses the virtual filesystem to read the directory contents.
 // Uses fs.WalkDir to traverse the directory structure in a deterministic order.
 // This is required to ensure reproducible TAR archives.
@@ -208,23 +207,23 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 
 		// Reject symlinks
 		if (fi.Mode() & fs.ModeSymlink) != 0 {
-			return fmt.Errorf("symlinks are not supported: found symlink %q", path)
+			return fmt.Errorf("symlinks are not supported yet: found symlink %q", path)
 		}
 
-		// Directories: prune on exclude, optionally emit header if included, always traverse
+		// Directories: prune on exclude, optionally write header if included, always traverse
 		if fi.IsDir() {
-			// Exclude precedence: if directory matches any exclude pattern -> prune subtree
+			// Exclude precedence: if directory matches any exclude pattern -> prune subtree by skipping dir
 			if len(opt.ExcludePatterns) > 0 {
-				ok, err := isPathIncluded(path, nil, opt.ExcludePatterns)
+				inc, err := isPathIncluded(path, nil, opt.ExcludePatterns)
 				if err != nil {
 					return fmt.Errorf("error checking exclusion of directory %q: %w", path, err)
 				}
-				if !ok {
+				if !inc {
 					return fs.SkipDir
 				}
 			}
 
-			// Emit directory header only if the directory path itself is included
+			// Write directory header only if the directory path itself is included
 			inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
 			if err != nil {
 				return fmt.Errorf("error checking include/exclude pattern for directory %q: %w", path, err)
@@ -243,11 +242,11 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 					return fmt.Errorf("error writing tar header for directory %q: %w", path, err)
 				}
 			}
-			// continue walking into directory regardless of include result
+			// continue walking into directory in any case
 			return nil
 		}
 
-		// Files: emit only if included (exclude precedence handled in isPathIncluded)
+		// Files: write only if included (exclude precedence handled in isPathIncluded)
 		inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
 		if err != nil {
 			return fmt.Errorf("error checking include/exclude pattern for file %q: %w", path, err)
@@ -289,9 +288,13 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 // Simple pattern matching using filepath.Match is used. Patterns are matched against the entire path, no globbing.
 // Exclude patterns take precedence over include patterns and apply to both files and directories.
 func isPathIncluded(path string, includePatterns, excludePatterns []string) (bool, error) {
-	// Check exclude patterns first, they have precedence.
+	// Normalize path for consistent matching.
+	np := normalizePathOrPattern(path)
+
+	// Exclude patterns take precedence.
 	for _, pattern := range excludePatterns {
-		if ok, err := filepath.Match(pattern, path); err != nil {
+		pp := normalizePathOrPattern(pattern)
+		if ok, err := filepath.Match(pp, np); err != nil {
 			return false, fmt.Errorf("error matching exclude pattern %q with path %q: %w", pattern, path, err)
 		} else if ok {
 			return false, nil
@@ -305,7 +308,8 @@ func isPathIncluded(path string, includePatterns, excludePatterns []string) (boo
 
 	// Check include patterns.
 	for _, pattern := range includePatterns {
-		if ok, err := filepath.Match(pattern, path); err != nil {
+		pp := normalizePathOrPattern(pattern)
+		if ok, err := filepath.Match(pp, np); err != nil {
 			return false, fmt.Errorf("error matching include pattern %q with path %q: %w", pattern, path, err)
 		} else if ok {
 			return true, nil
@@ -332,4 +336,13 @@ func createTarHeader(fi fs.FileInfo, linkTarget string, reproducible bool) (*tar
 		h.Mode &= 0o777 // remove all but permission bits
 	}
 	return h, nil
+}
+
+// normalizePathOrPattern normalizes a path or pattern for matching:
+// Convert to forward slashes and strip leading "./" and "/"
+func normalizePathOrPattern(s string) string {
+	s = filepath.ToSlash(s)
+	s = strings.TrimPrefix(s, "./")
+	s = strings.TrimPrefix(s, "/")
+	return s
 }
