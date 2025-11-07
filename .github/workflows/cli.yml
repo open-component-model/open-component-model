@@ -15,7 +15,7 @@ on:
     branches:
       - main
     paths:
-      - 'cli/v**'
+      - 'cli/**'
       - '.github/workflows/cli.yml'
   workflow_call:
     inputs:
@@ -38,11 +38,15 @@ on:
 env:
   LOCATION: "cli"                       # Folder containing the CLI source
   REGISTRY: ghcr.io                     # Target container registry
-  # github.base_ref → branch name from the PR target (works only for pull_request events)
+  # github.head_ref → branch name from the PR target (works only for pull_request events)
   # github.ref_name → branch or tag name for normal push/tag events
   # inputs.ref → overrides both for workflow_call
-  REF: ${{ inputs.ref || github.base_ref || github.ref_name }}
+  REF: ${{ inputs.ref || github.head_ref || github.ref_name }}
   ARTIFACT_NAME: ${{ inputs.artifact_name || 'cli-artifacts' }}
+  # Repository selection for checkout:
+  # - pull_request: Use head repository (fork) for PR changes
+  # - other events: Use current repository
+  CHECKOUT_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
 jobs:
   build:
@@ -61,7 +65,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          sparse-checkout: ${{ env.LOCATION }}
+          repository: ${{ env.CHECKOUT_REPO }}
+          sparse-checkout: |
+            .github/scripts
+            ${{ env.LOCATION }}
           persist-credentials: 'false'  # Disable automatic token persistence
           ref: ${{ env.REF }}
 
@@ -84,25 +91,13 @@ jobs:
       # Compute VERSION from env.REF
       - name: Compute VERSION
         id: version
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          TAG_PREFIX: "cli/v"
         with:
           script: |
-            const ref = process.env.REF;
-
-            // Determine ref type purely by pattern
-            const isTag = /^cli\/v\d+\.\d+(\.\d+)?(-.*)?$/.test(ref);
-
-            let version;
-            if (isTag) {
-              // Strip 'cli/' prefix from tag name, e.g. cli/v1.2.3 -> 1.2.3
-              version = ref.replace(/^cli\/v/, "");
-            } else {
-              // Convert branch or other ref to semver-safe pseudo version, e.g. releases/v0.1 -> 0.0.0-releases-v0.1
-              version = `0.0.0-${ref.replace(/[\/+]/g, "-")}`;
-            }
-
-            core.exportVariable("VERSION", version);
-            core.info(`Computed VERSION=${version} from REF=${ref}`);
+            const script = await import('${{ github.workspace }}/.github/scripts/compute-version.js');
+            await script.default({ core });
 
       # Generate and verify the Component Transport Format (CTF) resulting in all artifacts
       # use a version that includes the branch name to ensure uniqueness
@@ -115,7 +110,7 @@ jobs:
       # Attest built binaries with provenance metadata, but only if we're not on a PR
       - name: Attest binaries
         if: ${{ github.event_name != 'pull_request' }}
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-path: "${{ env.LOCATION }}/tmp/bin/ocm-*"
@@ -124,7 +119,7 @@ jobs:
       - name: Determine if this is a push-eligible branch
         if: ${{ github.event_name != 'pull_request' }}
         id: branch-check
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             core.setOutput(
@@ -137,7 +132,7 @@ jobs:
       # Upload CLI binaries and OCI layout only if branch is eligible for push
       - name: Upload Artifacts
         if: ${{ steps.branch-check.outputs.should_push_oci_image }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
@@ -161,7 +156,7 @@ jobs:
     steps:
       # Retrieve artifacts produced by the build job
       - name: Download build artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: ${{ env.ARTIFACT_NAME }}
 
@@ -174,14 +169,14 @@ jobs:
 
       # Setup ORAS CLI for pushing OCI artifacts from OCI layouts.
       - name: Setup ORAS
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
 
       # use discovered tag from layout
       - name: Set TAG
         run: echo "TAG=$(oras repo tags --oci-layout ${LAYOUT} | head -n 1)" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -210,7 +205,7 @@ jobs:
         id: digest
         run: echo "digest=$(oras resolve ${TARGET_REPO}:${TAG})" >> "$GITHUB_OUTPUT"
       - name: Attest OCI image
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           subject-digest: ${{ steps.digest.outputs.digest }}

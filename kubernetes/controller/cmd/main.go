@@ -5,12 +5,14 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"time"
 
 	// to ensure that exec-entrypoint and run can make use of them.
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"github.com/fluxcd/pkg/runtime/events"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -31,6 +33,8 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 )
 
 var (
@@ -62,6 +66,8 @@ func main() {
 		ocmContextCacheSize       int
 		ocmSessionCacheSize       int
 		resourceConcurrency       int
+		resolverWorkerCount       int
+		resolverWorkerQueueLength int
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -83,6 +89,10 @@ func main() {
 		"The maximum size of the OCM context cache. This is the number of active OCM sessions that can be kept alive.")
 	flag.IntVar(&resourceConcurrency, "resource-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The resource controller concurrency. This is the number of active resource controller workers that can be kept alive.")
+	flag.IntVar(&resolverWorkerCount, "resolver-worker-count", 10, //nolint:mnd // no magic number
+		"This is the number of active resolver workers.")
+	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 100, //nolint:mnd // no magic number
+		"The maximum number of work items in the queue for the workers to pick up component versions to resolve from.")
 
 	opts := zap.Options{
 		Development: true,
@@ -142,6 +152,33 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	pm := plugins.NewPluginManager(plugins.DefaultPluginManagerOptions(setupLog))
+	if err := mgr.Add(pm); err != nil {
+		setupLog.Error(err, "unable to add plugin manager")
+		os.Exit(1)
+	}
+
+	const unlimited = 0
+	ttl := time.Minute * 30
+	resolverCache := expirable.NewLRU[string, *resolution.Result](unlimited, nil, ttl)
+
+	// Create worker pool with its own dependencies
+	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+		WorkerCount:   resolverWorkerCount,
+		QueueSize:     resolverWorkerQueueLength,
+		Logger:        setupLog,
+		Client:        mgr.GetClient(),
+		PluginManager: pm, // plugin manager is passed in here as the manager is started with the controller manager
+		Cache:         resolverCache,
+	})
+	if err := mgr.Add(workerPool); err != nil {
+		setupLog.Error(err, "unable to add worker pool")
+		os.Exit(1)
+	}
+
+	// resolver will be used in the controller
+	_ = resolution.NewResolver(mgr.GetClient(), setupLog, workerPool)
 
 	var eventsRecorder *events.Recorder
 	if eventsRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, "ocm-k8s-toolkit"); err != nil {

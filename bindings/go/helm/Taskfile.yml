@@ -1,9 +1,18 @@
 version: '3'
 
-
 vars:
   DEFAULT_CLI_PLUGIN_LOCATION:
     sh: 'echo {{env "HOME"}}/.config/ocm/plugins'
+
+  # Additional vars for release/build pipeline
+  PROVIDER: ocm.software
+  NAME: plugins/helminput
+  OUTDIR: "{{ .TASKFILE_DIR }}/tmp"
+  COMPONENT_CONSTRUCTOR_FILE: "{{ .OUTDIR }}/component-constructor.yaml"
+
+  # VERSION must be provided by the caller (typically GitHub Actions workflow)
+  # For local development, defaults to a dev version
+  VERSION: '{{ .VERSION | default "0.0.0-local.dev" }}'
 
 tasks:
   tmp:
@@ -11,9 +20,11 @@ tasks:
       - mkdir -p tmp
     status:
       - test -d tmp
+
   build:
     cmds:
       - go build -o tmp/testdata/test-input-plugin cmd/main.go
+
   test:
     sources:
       - ./**/*.go
@@ -24,8 +35,99 @@ tasks:
     deps:
       - tmp
       - build
+
   install/local:
     desc: 'Installs the plugin locally to the default location'
     deps:
       - build
     cmd: 'install $(pwd)/tmp/testdata/test-input-plugin {{.DEFAULT_CLI_PLUGIN_LOCATION}}/helm'
+
+  # ===== New tasks for release workflow =====
+  download/deps:
+    internal: true
+    cmd: go mod download
+
+  build:target:
+    desc: "Build Helm input plugin for a specific GOOS/GOARCH target and emit resource YAML for constructor"
+    internal: true
+    silent: false
+    prefix: '{{ .GOOS }}-{{ .GOARCH }}'
+    generates:
+      - '{{ .OUTDIR }}/bin/helminput-plugin-{{ .GOOS }}-{{ .GOARCH }}'
+      - '{{ .OUTDIR }}/resources/helminput-plugin-{{ .GOOS }}-{{ .GOARCH }}.yaml'
+    deps:
+      - tmp
+      - download/deps
+    requires:
+      vars: [ GOOS, GOARCH ]
+    cmds:
+      - cmd: |
+          set -euo pipefail
+          
+          # Change into correct working directory
+          cd "{{ .TASKFILE_DIR }}"
+          
+          mkdir -p {{ .OUTDIR }}/bin {{ .OUTDIR }}/resources
+          CGO_ENABLED=0 GOOS={{ .GOOS }} GOARCH={{ .GOARCH }} go build -ldflags "-s -w" \
+            -o {{ .OUTDIR }}/bin/helminput-plugin-{{ .GOOS }}-{{ .GOARCH }} ./cmd/main.go
+      - |
+        cat > {{ .OUTDIR }}/resources/helminput-plugin-{{ .GOOS }}-{{ .GOARCH }}.yaml <<EOF
+        - name: binary
+          type: ocmPlugin
+          version: "{{ .VERSION }}"
+          extraIdentity:
+            os: {{ .GOOS }}
+            architecture: {{ .GOARCH }}
+          relation: local
+          input:
+            type: file
+            path: {{ .OUTDIR }}/bin/helminput-plugin-{{ .GOOS }}-{{ .GOARCH }}
+        EOF
+  build:matrix:
+    desc: "Build Helm input plugin for all supported targets"
+    deps:
+      - for:
+          matrix:
+            GOOS: [ "linux", "darwin" ]
+            GOARCH: [ "amd64", "arm64" ]
+        task: build:target
+        vars:
+          GOOS: '{{ .ITEM.GOOS }}'
+          GOARCH: '{{ .ITEM.GOARCH }}'
+
+  generate/component-constructor:
+    desc: "Generate the component-constructor.yaml by aggregating all built resources"
+    generates:
+      - '{{ .COMPONENT_CONSTRUCTOR_FILE }}'
+    deps:
+      - build:matrix
+    silent: true
+    cmds:
+      - |
+        echo "Generating component constructor with version: {{ .VERSION }}"
+        cat <<EOF > {{ .COMPONENT_CONSTRUCTOR_FILE }}
+        name: {{ .PROVIDER }}/{{ .NAME }}
+        version: {{ .VERSION }}
+        provider:
+          name: {{ .PROVIDER }}
+        labels:
+          - name: category
+            value: input
+          - name: registry
+            value: official
+          - name: description
+            value: Official Helm input plugin
+        resources:
+        EOF
+      - |
+        shopt -s nullglob
+        for file in {{ .OUTDIR }}/resources/*.yaml; do
+          if [ -f "$file" ]; then
+            cat "$file" >> {{ .COMPONENT_CONSTRUCTOR_FILE }}
+          fi
+        done
+        if [ ! -s {{ .COMPONENT_CONSTRUCTOR_FILE }} ] || ! grep -q "^  - name:" {{ .COMPONENT_CONSTRUCTOR_FILE }}; then
+          echo "Error: No resources found to add to component constructor"
+          exit 1
+        fi
+      - cat "{{ .COMPONENT_CONSTRUCTOR_FILE }}"

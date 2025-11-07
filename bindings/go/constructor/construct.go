@@ -29,22 +29,27 @@ import (
 // e.g. because the component version already exists in the target repository.
 var ErrShouldSkipConstruction = errors.New("should skip construction")
 
+const AttributeDescriptor string = "constructor/descriptor"
+
 type Constructor interface {
 	// Construct processes a component constructor specification and creates the corresponding component descriptors.
 	// It validates the constructor specification and processes each component in topological order.
-	Construct(ctx context.Context, constructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error)
-}
+	Construct(ctx context.Context) error
 
-// ConstructDefault is a convenience function that creates a new default DefaultConstructor and calls its Constructor.Construct method.
-func ConstructDefault(ctx context.Context, constructor *constructor.ComponentConstructor, opts Options) ([]*descriptor.Descriptor, error) {
-	return NewDefaultConstructor(opts).Construct(ctx, constructor)
+	// GetGraph returns the internal graph used during construction.
+	// It can be used to inspect the relationships between components.
+	// Construct must be called to ensure the graph is populated.
+	// TODO: https://github.com/open-component-model/ocm-project/issues/736 this is temporary and needs to be replaced with proper abstraction
+	GetGraph() *syncdag.SyncedDirectedAcyclicGraph[string]
 }
 
 type DefaultConstructor struct {
 	componentDigestCacheMu sync.Mutex
 	componentDigestCache   map[string]*descriptor.Digest
-
-	opts Options
+	discoverer             *syncdag.GraphDiscoverer[string, *ConstructorOrExternalComponent]
+	constructor            *constructor.ComponentConstructor
+	constructMutex         sync.Mutex
+	opts                   Options
 }
 
 var _ Constructor = (*DefaultConstructor)(nil)
@@ -68,7 +73,19 @@ type ConstructorOrExternalComponent struct {
 	ExternalComponent    *descriptor.Descriptor
 }
 
-func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor *constructor.ComponentConstructor) ([]*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) Construct(ctx context.Context) error {
+	c.constructMutex.Lock()
+	defer c.constructMutex.Unlock()
+
+	if err := c.discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+		if len(d.Vertices) > 0 {
+			return fmt.Errorf("component constructor graph has already been constructed")
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	logger := log.Base().With("operation", "constructComponent")
 
 	if c.opts.ResourceInputMethodProvider == nil {
@@ -80,71 +97,53 @@ func (c *DefaultConstructor) Construct(ctx context.Context, componentConstructor
 		c.opts.SourceInputMethodProvider = DefaultInputMethodRegistry
 	}
 
-	if len(componentConstructor.Components) == 0 {
-		return nil, nil
+	if len(c.constructor.Components) == 0 {
+		return nil
 	}
 
-	graph, err := c.discover(ctx, componentConstructor)
+	err := c.discover(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover component constructor graph: %w", err)
+		return fmt.Errorf("failed to discover component constructor graph: %w", err)
 	}
-	processedDescriptors, err := c.construct(ctx, graph)
+	err = c.construct(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to constructComponent components from graph: %w", err)
+		return fmt.Errorf("failed to constructComponent components from graph: %w", err)
 	}
 
-	constructedDescriptors := make([]*descriptor.Descriptor, len(componentConstructor.Components))
-	for index, component := range componentConstructor.Components {
-		desc, ok := processedDescriptors[component.ToIdentity().String()]
-		if !ok {
-			return nil, fmt.Errorf("component %s is expected to have been constructed but was not found in processed descriptors", component.ToIdentity())
-		}
-		constructedDescriptors[index] = desc
-	}
-	return constructedDescriptors, nil
+	return nil
 }
 
-func (c *DefaultConstructor) discover(ctx context.Context, componentConstructor *constructor.ComponentConstructor) (*syncdag.SyncedDirectedAcyclicGraph[string], error) {
-	roots := make([]string, len(componentConstructor.Components))
-	for index, component := range componentConstructor.Components {
-		roots[index] = component.ToIdentity().String()
-	}
-	resAndDis := resolverAndDiscoverer{
-		componentConstructor:                componentConstructor,
-		externalComponentRepositoryProvider: c.opts.ExternalComponentRepositoryProvider,
-	}
-	graphDiscoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *ConstructorOrExternalComponent]{
-		Roots:      roots,
-		Resolver:   &resAndDis,
-		Discoverer: &resAndDis,
-	})
-	slog.DebugContext(ctx, "starting discovery based on components in constructor", "components", roots)
-	if err := graphDiscoverer.Discover(ctx); err != nil {
-		return nil, fmt.Errorf("failed to discover components: %w", err)
+func (c *DefaultConstructor) GetGraph() *syncdag.SyncedDirectedAcyclicGraph[string] {
+	return c.discoverer.Graph()
+}
+
+func (c *DefaultConstructor) discover(ctx context.Context) error {
+	slog.DebugContext(ctx, "starting discovery based on components in constructor")
+	if err := c.discoverer.Discover(ctx); err != nil {
+		return fmt.Errorf("failed to discover components: %w", err)
 	}
 	slog.DebugContext(ctx, "component reference discovery completed successfully")
-	return graphDiscoverer.Graph(), nil
+	return nil
 }
 
-func (c *DefaultConstructor) construct(ctx context.Context, graph *syncdag.SyncedDirectedAcyclicGraph[string]) (map[string]*descriptor.Descriptor, error) {
+func (c *DefaultConstructor) construct(ctx context.Context) error {
 	var (
 		reversedGraph *dag.DirectedAcyclicGraph[string]
 		err           error
 	)
-	if err = graph.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
+	if err = c.discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		if reversedGraph, err = d.Reverse(); err != nil {
 			return fmt.Errorf("failed to reverse graph: %w", err)
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		return err
 	}
 
 	proc := processor{
 		constructor: c,
 		processedDescriptors: descriptors{
-			mu:          sync.RWMutex{},
-			descriptors: make(map[string]*descriptor.Descriptor),
+			graph: c.discoverer.Graph(),
 		},
 	}
 
@@ -155,17 +154,39 @@ func (c *DefaultConstructor) construct(ctx context.Context, graph *syncdag.Synce
 	})
 	slog.DebugContext(ctx, "starting processing of discovered component graph")
 	if err := graphProcessor.Process(ctx); err != nil {
-		return nil, fmt.Errorf("failed to process component constructor graph: %w", err)
+		return fmt.Errorf("failed to process component constructor graph: %w", err)
 	}
 	slog.DebugContext(ctx, "component construction completed successfully")
-	return proc.processedDescriptors.descriptors, nil
+	return nil
 }
 
-func NewDefaultConstructor(opts Options) Constructor {
+func NewDefaultConstructor(constructor *constructor.ComponentConstructor, opts Options) Constructor {
+	discoverer := buildDiscoverer(constructor, opts)
 	return &DefaultConstructor{
 		componentDigestCache: make(map[string]*descriptor.Digest),
+		constructor:          constructor,
+		discoverer:           discoverer,
 		opts:                 opts,
 	}
+}
+
+// buildDiscoverer creates a graph discoverer for the component constructor.
+// It sets up the roots of the graph based on the components in the constructor
+func buildDiscoverer(componentConstructor *constructor.ComponentConstructor, opts Options) *syncdag.GraphDiscoverer[string, *ConstructorOrExternalComponent] {
+	roots := make([]string, len(componentConstructor.Components))
+	for index, comp := range componentConstructor.Components {
+		roots[index] = comp.ToIdentity().String()
+	}
+	resAndDis := resolverAndDiscoverer{
+		componentConstructor:                componentConstructor,
+		externalComponentRepositoryProvider: opts.ExternalComponentRepositoryProvider,
+	}
+	graphDiscoverer := syncdag.NewGraphDiscoverer(&syncdag.GraphDiscovererOptions[string, *ConstructorOrExternalComponent]{
+		Roots:      roots,
+		Resolver:   &resAndDis,
+		Discoverer: &resAndDis,
+	})
+	return graphDiscoverer
 }
 
 // constructComponent creates a single component descriptor from a component specification.
@@ -419,11 +440,12 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 	}
 
 	logger.Debug("resource processed successfully")
+
 	return res, nil
 }
 
 func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetRepo TargetRepository, resource *constructor.Resource, component, version string) (*descriptor.Resource, error) {
-	repository, err := c.opts.GetResourceRepository(ctx, resource)
+	repo, err := c.opts.GetResourceRepository(ctx, resource)
 	if err != nil {
 		return nil, err
 	}
@@ -433,13 +455,13 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 	// best effort to resolve credentials for by value resource download.
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
-	if identity, err := repository.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
+	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
 		if creds, err = resolveCredentials(ctx, c.opts.CredentialProvider, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
 		}
 	}
 
-	data, err := repository.DownloadResource(ctx, converted, creds)
+	data, err := repo.DownloadResource(ctx, converted, creds)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource: %w", err)
 	}

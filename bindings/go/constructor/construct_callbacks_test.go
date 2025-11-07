@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -184,12 +183,14 @@ func TestConstructionCallbacks(t *testing.T) {
 		},
 	}
 
-	constructorInstance := NewDefaultConstructor(opts)
-
+	constructorInstance := NewDefaultConstructor(constructor, opts)
+	graph := constructorInstance.GetGraph()
+	
 	// Process the constructor
-	descriptors, err := constructorInstance.Construct(context.Background(), constructor)
+	err := constructorInstance.Construct(context.Background())
 	require.NoError(t, err)
-	require.Len(t, descriptors, 1)
+	descs := collectDescriptors(t, graph)
+	require.Len(t, descs, 1)
 
 	// Verify all callbacks were called
 	assert.True(t, tracker.startComponentCalled, "OnStartComponentConstruct should have been called")

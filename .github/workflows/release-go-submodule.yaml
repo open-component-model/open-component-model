@@ -168,3 +168,12 @@ jobs:
           printf "%s\n" "$msg" > .tagmsg
           git tag -a "$tag" -F .tagmsg
           git push origin "$tag"
+
+  build:
+    name: Build Helm Plugin for ${{ needs.version.outputs.new_tag }}
+    if: ${{ contains(needs.version.outputs.new_tag, 'bindings/go/helm') }}
+    needs: [ version, release ]
+    uses: ./.github/workflows/publish-helminput-plugin-component.yaml
+    secrets: inherit
+    with:
+      ref: ${{ needs.version.outputs.new_tag }}
