@@ -189,17 +189,13 @@ func (s *repository) resolve(ctx context.Context, reference string) (ociImageSpe
 
 	repo := s.repo
 
-	// if we do not have a pure digest, we need to parse the reference
-	// loosely because it could be that registry/repository information is prefixed to the actual reference.
-	if _, err := digest.Parse(reference); err != nil {
-		ref, err := looseref.ParseReference(reference)
-		if err != nil {
-			return ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid reference %q: %w", reference, err)
-		}
-		if ref.ValidateReferenceAsDigest() == nil {
-			reference = ref.Reference.Reference
-		} else if ref.ValidateReferenceAsTag() == nil {
-			reference = ref.Tag
+	// We need to parse the reference loosely because the registry/repository information may be prefixed to the actual reference.
+	if ref, err := looseref.ParseReference(reference); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid reference %q: %w", reference, err)
+	} else {
+		// If we have a valid digest or tag, use it instead of the reference.
+		if refOrTag := ref.ReferenceOrTag(); refOrTag != "" {
+			reference = refOrTag
 		}
 	}
 
@@ -242,7 +238,7 @@ func (s *repository) resolve(ctx context.Context, reference string) (ociImageSpe
 		}, nil
 	}
 
-	slog.Info("reference not found in index", "repository", repo, "reference", reference)
+	slog.DebugContext(ctx, "reference not found in index", "repository", repo, "reference", reference)
 	return ociImageSpecV1.Descriptor{}, errdef.ErrNotFound
 }
 
@@ -265,20 +261,7 @@ func (s *repository) tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	repo := s.repo
 
 	var meta v1.ArtifactMetadata
-	// TODO(fabianburth): This is a workaround around currently covering two cases:
-	//  - a bug in our looseref parser, which parses `sha256:abc` as
-	//    repository: sha256, tag: abc (https://github.com/open-component-model/ocm-project/issues/700)
-	//  - the canonical oras implementation of a store where a manifest can be
-	//    referenced by multiple tags instead of just by one tag as implemented
-	//    by the ctf store implementation (we decided against implementing this
-	//    for ctf, as ctf will be replaced by oci layouts in the future)
-	if _, err := digest.Parse(reference); err == nil {
-		meta = v1.ArtifactMetadata{
-			Repository: repo,
-			Digest:     desc.Digest.String(),
-			MediaType:  desc.MediaType,
-		}
-	} else if ref, err := looseref.ParseReference(reference); err == nil {
+	if ref, err := looseref.ParseReference(reference); err == nil {
 		if err := ref.ValidateReferenceAsTag(); err == nil {
 			meta = v1.ArtifactMetadata{
 				Repository: repo,

@@ -680,7 +680,7 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 	if err != nil {
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
 	}
-	slogcontext.Log(ctx, slog.LevelInfo, "fetching descriptor", log.DescriptorLogAttr(base))
+	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor", log.DescriptorLogAttr(base))
 	manifestRaw, err := store.Fetch(ctx, ociImageSpecV1.Descriptor{
 		MediaType: base.MediaType,
 		Digest:    base.Digest,
