@@ -15,12 +15,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -29,8 +23,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
 // +kubebuilder:scaffold:imports
@@ -132,10 +133,10 @@ var _ = BeforeSuite(func() {
 
 	const unlimited = 0
 	ttl := time.Minute * 30
-	resolverCache := expirable.NewLRU[string, *resolution.Result](unlimited, nil, ttl)
+	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
 
 	// Create worker pool with its own dependencies
-	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
+	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		WorkerCount: 10,
 		QueueSize:   100,
 		Logger:      logf.Log.WithName("worker-pool"),
