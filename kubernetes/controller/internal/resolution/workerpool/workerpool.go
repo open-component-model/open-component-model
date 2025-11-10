@@ -34,8 +34,6 @@ type Result struct {
 type WorkItem struct {
 	// Type indicates the type of work to be performed.
 	Fn workFunc
-	// Context for the work item - workers respect this context for cancellation.
-	Context context.Context
 	// Opts contains the resolve options.
 	Opts ResolveOptions
 }
@@ -153,9 +151,8 @@ func enqueueWorkItem[T any](ctx context.Context, wp *WorkerPool, opts ResolveOpt
 	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 
 	workItem := &WorkItem{
-		Fn:      fn,
-		Context: ctx,
-		Opts:    opts,
+		Fn:   fn,
+		Opts: opts,
 	}
 
 	// Try to enqueue with lock held to make check-and-enqueue atomic
@@ -194,7 +191,7 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 			}
 
 			QueueSizeGauge.Set(float64(len(wp.workQueue)))
-			wp.handleWorkItem(item.Fn, logger, item)
+			wp.handleWorkItem(ctx, item.Fn, logger, item)
 		}
 	}
 }
@@ -202,7 +199,7 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 // workFunc is the signature for functions that process work items.
 type workFunc func(ctx context.Context, item ResolveOptions) (any, error)
 
-func (wp *WorkerPool) handleWorkItem(f workFunc, logger logr.Logger, item *WorkItem) {
+func (wp *WorkerPool) handleWorkItem(ctx context.Context, f workFunc, logger logr.Logger, item *WorkItem) {
 	logger.V(1).Info("processing work item", "key", item.Opts.Key)
 
 	// either way, we are done with this item so remove it and decrease InProgress count.
@@ -214,7 +211,7 @@ func (wp *WorkerPool) handleWorkItem(f workFunc, logger logr.Logger, item *WorkI
 	}()
 
 	start := time.Now()
-	result, err := f(item.Context, item.Opts)
+	result, err := f(ctx, item.Opts)
 	duration := time.Since(start).Seconds()
 
 	// Track metrics
