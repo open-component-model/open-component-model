@@ -44,7 +44,7 @@ func TestGetBlobFromPath_SingleFile(t *testing.T) {
 	r.Equal(testContent, string(content))
 }
 
-func TestGetBlobFromPath_Directory(t *testing.T) {
+func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {
 	r := require.New(t)
 
 	// Setup: create directory with multiple files
@@ -107,21 +107,21 @@ func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
 		},
 		{
 			name:            "Include files in subdirectory",
-			includePatterns: []string{"config/config.json", "*.md"},
+			includePatterns: []string{"config/my-config.json", "*.md"},
 			excludePatterns: []string{},
-			expectedFiles:   []string{"config/config.json", "README.md"},
+			expectedFiles:   []string{"config/my-config.json", "README.md"},
 		},
 		{
 			name:            "Exclude test directory and tmp files",
 			includePatterns: []string{},
 			excludePatterns: []string{"test", "*.tmp"},
-			expectedFiles:   []string{"main.go", "helper.go", "main_test.go", "config/config.json", "README.md"},
+			expectedFiles:   []string{"main.go", "helper.go", "main_test.go", "config/my-config.json", "README.md"},
 		},
 		{
 			name:            "Combine includes and excludes",
-			includePatterns: []string{"*.go", "config/config.json"},
+			includePatterns: []string{"*.go", "config/my-config.json"},
 			excludePatterns: []string{"*_test.go"},
-			expectedFiles:   []string{"main.go", "helper.go", "config/config.json"},
+			expectedFiles:   []string{"main.go", "helper.go", "config/my-config.json"},
 		},
 		{
 			name:            "Exclude precedence over include",
@@ -138,7 +138,7 @@ func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
 			createTestFile(t, tmpDir, "main.go", "package main")
 			createTestFile(t, tmpDir, "helper.go", "package helper")
 			createTestFile(t, tmpDir, "main_test.go", "package main")
-			createTestFile(t, tmpDir, "config/config.json", `{"key": "value"}`)
+			createTestFile(t, tmpDir, "config/my-config.json", `{"key": "value"}`)
 			createTestFile(t, tmpDir, "README.md", "# Project")
 			createTestFile(t, tmpDir, "temp.tmp", "temporary")
 			require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "test"), 0755))
@@ -151,16 +151,16 @@ func TestGetBlobFromPath_PatternSemantics(t *testing.T) {
 				Reproducible:    true,
 			}
 
-			blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+			resultBlob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
 			if tt.expectError {
 				r.Error(err)
 				return
 			}
 			r.NoError(err)
-			r.NotNil(blob)
+			r.NotNil(resultBlob)
 
 			// Verify TAR contents
-			files := extractTarContents(t, blob)
+			files := extractTarContents(t, resultBlob)
 			r.ElementsMatch(tt.expectedFiles, files)
 		})
 	}
@@ -189,61 +189,6 @@ func TestGetBlobFromPath_SingleFileWithPatterns(t *testing.T) {
 	_, err = filesystem.GetBlobFromPath(context.Background(), testFile, opt)
 	r.Error(err)
 	r.Contains(err.Error(), "include/exclude patterns are not supported for single files")
-}
-
-func TestGetBlobFromPath_DirectoryTraversal(t *testing.T) {
-	r := require.New(t)
-
-	// Setup: nested structure (but not too deep for filepath.Match)
-	tmpDir := t.TempDir()
-	createTestFile(t, tmpDir, "src/main.go", "package main")
-	createTestFile(t, tmpDir, "src/helper.py", "print('hello')")
-	createTestFile(t, tmpDir, "shallow.go", "package test")
-
-	// Test: include pattern should traverse directories to find matching files
-	// Note: filepath.Match doesn't support recursive patterns, so we use exact paths
-	opt := filesystem.DirOptions{
-		IncludePatterns: []string{"src/main.go", "shallow.go"},
-		Reproducible:    true,
-	}
-
-	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
-	r.NoError(err)
-
-	files := extractTarContents(t, blob)
-	expectedFiles := []string{"src/main.go", "shallow.go"}
-	r.ElementsMatch(expectedFiles, files)
-}
-
-func TestGetBlobFromPath_ExcludeDirectoryAndContents(t *testing.T) {
-	r := require.New(t)
-
-	tmpDir := t.TempDir()
-	createTestFile(t, tmpDir, "src/main.go", "package main")
-	createTestFile(t, tmpDir, "src/helper.go", "package src")
-	createTestFile(t, tmpDir, "test/main_test.go", "package test")
-	createTestFile(t, tmpDir, "test/helper_test.go", "package test")
-	createTestFile(t, tmpDir, "docs/README.md", "# README")
-
-	// Test: exclude entire test directory
-	opt := filesystem.DirOptions{
-		ExcludePatterns: []string{"test"},
-		Reproducible:    true,
-	}
-
-	blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
-	r.NoError(err)
-
-	files := extractTarContents(t, blob)
-
-	// Should contain src files and docs, but NO test files
-	expectedFiles := []string{"src/main.go", "src/helper.go", "docs/README.md"}
-	r.ElementsMatch(expectedFiles, files)
-
-	// Verify test files are not included
-	for _, file := range files {
-		r.NotContains(file, "test/")
-	}
 }
 
 // =============================================================================
@@ -277,6 +222,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 	tr := tar.NewReader(reader)
 	foundPrefixed := false
 	var foundHeaders []string
+	expectedDirHeader := filepath.Base(targetDir) + "/"
 
 	for {
 		header, err := tr.Next()
@@ -287,8 +233,8 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 		foundHeaders = append(foundHeaders, header.Name)
 
-		// Expect exact directory header for preserved directory
-		if header.Typeflag == tar.TypeDir && header.Name == targetDirName+"/" {
+		// Expect exact directory header for preserved directory in canonical form (Base + "/")
+		if header.Typeflag == tar.TypeDir && header.Name == expectedDirHeader {
 			foundPrefixed = true
 		}
 
@@ -351,12 +297,14 @@ func TestGetBlobFromPath_MediaTypeHandling(t *testing.T) {
 			MediaType: "application/custom-tar",
 		}
 
-		blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+		b, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
 		r.NoError(err)
 
-		// Note: ReadOnlyBlob interface doesn't expose MediaType,
-		// so we can't directly test this, but we ensure no error occurs
-		r.NotNil(blob)
+		mt, ok := b.(blob.MediaTypeAware)
+		r.True(ok, "blob should implement MediaTypeAware")
+		media, known := mt.MediaType()
+		r.True(known, "media type should be known")
+		r.Equal("application/custom-tar", media)
 	})
 
 	t.Run("Single file with custom media type", func(t *testing.T) {
@@ -366,9 +314,14 @@ func TestGetBlobFromPath_MediaTypeHandling(t *testing.T) {
 			MediaType: "text/plain",
 		}
 
-		blob, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
+		b, err := filesystem.GetBlobFromPath(context.Background(), testFile, opt)
 		r.NoError(err)
-		r.NotNil(blob)
+
+		mt, ok := b.(blob.MediaTypeAware)
+		r.True(ok, "blob should implement MediaTypeAware")
+		media, known := mt.MediaType()
+		r.True(known, "media type should be known")
+		r.Equal("text/plain", media)
 	})
 }
 
@@ -552,9 +505,9 @@ func TestGetBlobFromPath_PatternNormalization(t *testing.T) {
 			IncludePatterns: inc,
 			Reproducible:    true,
 		}
-		blob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
+		resultBlob, err := filesystem.GetBlobFromPath(context.Background(), tmpDir, opt)
 		r.NoError(err)
-		files := extractTarContents(t, blob)
+		files := extractTarContents(t, resultBlob)
 		r.Contains(files, "sub/dir/file.txt")
 	}
 }
