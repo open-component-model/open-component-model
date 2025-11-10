@@ -631,9 +631,8 @@ github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 h1:He8af
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6/go.mod h1:8o94RPi1/7XTJvwPpRSzSUedZrtlirdB3r9Z20bi2f8=
 github.com/AdamKorcz/go-fuzz-headers-1 v0.0.0-20230919221257-8b5d3ce2d11d h1:zjqpY4C7H15HjRPEenkS4SAn3Jy2eRRjkjZbGR30TOg=
 github.com/AdamKorcz/go-fuzz-headers-1 v0.0.0-20230919221257-8b5d3ce2d11d/go.mod h1:XNqJ7hv2kY++g8XEHREpi+JqZo3+0l+CH2egBVN4yqM=
-github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.18.1 h1:YWDC5K6uH/hUB9iBqNMzcbYw/mpySDyRiMv4auyB7xY=
-github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.18.1/go.mod h1:eoheXiZu1MD1WqNrjd6QCzH9eNc564OBZhwmPpIHWfw=
-github.com/AliyunContainerService/ack-ram-tool/pkg/ecsmetadata v0.0.7/go.mod h1:QM3VKYNyD5thMEWqKef+uOfpNmZG7RjG7wOsCdavj9w=
+github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.19.0 h1:vwv/agiYvAl9mbZJVlj+APq/g5X2eDOFJP1z22wHxWI=
+github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.19.0/go.mod h1:tnM3BJf7FxRkymr4KI9hb0YfHeU+IjH79rKs9frzKXw=
 github.com/AliyunContainerService/ack-ram-tool/pkg/ecsmetadata v0.0.9 h1:LW8G8Zf9R6+F0ZpV1FLimv2rVaBRRX+mR1b6N6vIpJc=
 github.com/AliyunContainerService/ack-ram-tool/pkg/ecsmetadata v0.0.9/go.mod h1:QM3VKYNyD5thMEWqKef+uOfpNmZG7RjG7wOsCdavj9w=
 github.com/Azure/azure-sdk-for-go v68.0.0+incompatible h1:fcYLmCpyNYRnvJbPerq7U0hS+6+I79yEDJBqVNcqUzU=
