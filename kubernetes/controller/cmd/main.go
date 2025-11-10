@@ -10,9 +10,6 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -27,7 +24,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer"
@@ -58,7 +58,7 @@ func init() {
 	ocm.MustRegisterMetrics(metrics.Registry)
 }
 
-//nolint:funlen // the main function is complex enough as it is - we don't want to separate the initialization
+//nolint:funlen,maintidx // the main function is complex enough as it is - we don't want to separate the initialization
 func main() {
 	var (
 		metricsAddr               string
@@ -204,7 +204,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	resolver := resolution.NewResolver(mgr.GetClient(), setupLog, workerPool, pm)
+	_ = resolution.NewResolver(mgr.GetClient(), setupLog, workerPool, pm)
 
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
@@ -212,8 +212,7 @@ func main() {
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMScheme: ocmscheme,
-		Resolver:  resolver,
+		OCMContextCache: ocmContextCache,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Repository")
 		os.Exit(1)
@@ -225,8 +224,7 @@ func main() {
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMScheme: ocmscheme,
-		Resolver:  resolver,
+		OCMContextCache: ocmContextCache,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)

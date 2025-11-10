@@ -88,12 +88,12 @@ var _ = Describe("Component Controller", func() {
 
 		It("reconcileComponent a component", func(ctx SpecContext) {
 			By("creating a component version")
-			// TODO: Create an issue to allow the new ocm spec to parse the v1 and then change the spec to not use integer for the bitmask.
 			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
 				env.Component(componentName, func() {
 					env.Version(Version1)
 				})
 			})
+
 			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
 			specData := Must(spec.MarshalJSON())
 
@@ -112,7 +112,7 @@ var _ = Describe("Component Controller", func() {
 					},
 					Component: componentName,
 					Semver:    "1.0.0",
-					Interval:  metav1.Duration{Duration: time.Second * 5},
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}
@@ -157,7 +157,7 @@ var _ = Describe("Component Controller", func() {
 					},
 					Component: componentName,
 					Semver:    "1.0.0",
-					Interval:  metav1.Duration{Duration: time.Second * 5},
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}
@@ -200,7 +200,7 @@ var _ = Describe("Component Controller", func() {
 					},
 					Component: componentName,
 					Semver:    "1.0.0",
-					Interval:  metav1.Duration{Duration: time.Second * 5},
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}
@@ -248,7 +248,7 @@ var _ = Describe("Component Controller", func() {
 					},
 					Component: componentName,
 					Semver:    ">=1.0.0",
-					Interval:  metav1.Duration{Duration: time.Second * 5},
+					Interval:  metav1.Duration{Duration: time.Second},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}
@@ -309,7 +309,7 @@ var _ = Describe("Component Controller", func() {
 					Component:       componentName,
 					DowngradePolicy: v1alpha1.DowngradePolicyAllow,
 					Semver:          "<1.0.0",
-					Interval:        metav1.Duration{Duration: time.Second * 5},
+					Interval:        metav1.Duration{Duration: time.Second},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}
@@ -364,7 +364,7 @@ var _ = Describe("Component Controller", func() {
 					Component:       componentName,
 					DowngradePolicy: v1alpha1.DowngradePolicyDeny,
 					Semver:          "0.0.3",
-					Interval:        metav1.Duration{Duration: time.Second * 5},
+					Interval:        metav1.Duration{Duration: time.Second},
 				},
 			}
 			Expect(k8sClient.Create(ctx, component)).To(Succeed())
@@ -426,7 +426,7 @@ var _ = Describe("Component Controller", func() {
 					Component:       componentName,
 					DowngradePolicy: v1alpha1.DowngradePolicyEnforce,
 					Semver:          "<1.0.0",
-					Interval:        metav1.Duration{Duration: time.Second * 5},
+					Interval:        metav1.Duration{Duration: time.Second},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}
@@ -452,7 +452,7 @@ var _ = Describe("Component Controller", func() {
 
 		It("normalizes a component version with a plus", func(ctx SpecContext) {
 			componentObjName := ComponentObj + "-with-plus"
-			componentVersionPlus := Version1 + "+componentversionsuffix"
+			componentVersionPlus := Version1 + "+componentVersionSuffix"
 
 			By("creating a component version")
 			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
@@ -486,7 +486,7 @@ var _ = Describe("Component Controller", func() {
 					},
 					Component: componentName,
 					Semver:    componentVersionPlus,
-					Interval:  metav1.Duration{Duration: time.Second * 5},
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}
@@ -527,7 +527,7 @@ var _ = Describe("Component Controller", func() {
 					},
 					Component: componentName,
 					Semver:    "1.0.0",
-					Interval:  metav1.Duration{Duration: time.Second * 5},
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}
@@ -600,7 +600,7 @@ var _ = Describe("Component Controller", func() {
 					},
 					Component: componentName,
 					Semver:    Version1,
-					Interval:  metav1.Duration{Duration: time.Second * 5},
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}
@@ -704,7 +704,7 @@ var _ = Describe("Component Controller", func() {
 							Policy: v1alpha1.ConfigurationPolicyPropagate,
 						},
 					},
-					Interval: metav1.Duration{Duration: time.Second * 5},
+					Interval: metav1.Duration{Duration: time.Minute * 10},
 				},
 			}
 
@@ -825,7 +825,7 @@ var _ = Describe("Component Controller", func() {
 							Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 						},
 					},
-					Interval: metav1.Duration{Duration: time.Second * 5},
+					Interval: metav1.Duration{Duration: time.Minute * 10},
 				},
 				Status: v1alpha1.ComponentStatus{},
 			}

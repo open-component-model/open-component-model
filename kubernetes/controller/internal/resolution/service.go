@@ -6,11 +6,11 @@ import (
 	"slices"
 
 	"github.com/go-logr/logr"
-	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
 	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"

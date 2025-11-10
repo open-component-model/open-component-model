@@ -2,15 +2,12 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	. "github.com/mandelsoft/goutils/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "ocm.software/ocm/api/helper/builder"
-	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -64,20 +61,11 @@ var _ = Describe("Repository Controller", func() {
 	Describe("Reconciling with different RepositorySpec specifications", func() {
 
 		Context("When correct RepositorySpec is provided", func() {
-			FIt("Repository can be reconciled", func(ctx SpecContext) {
+			It("Repository can be reconciled", func(ctx SpecContext) {
 
 				By("creating a OCI repository with existing host")
-				// TODO: This should use the proper type and marshal then just works naturally.
-				//obj := &ocirepospecv1.Repository{}
-				spec := &ocirepospecv1.Repository{
-					Type: runtime.Type{
-						Version: "v1",
-						Name:    "OCIRepository",
-					},
-					BaseUrl: "ghcr.io/open-component-model",
-				}
-				specdata, err := json.Marshal(spec)
-				Expect(err).ToNot(HaveOccurred())
+				spec := ocireg.NewRepositorySpec("ghcr.io/open-component-model")
+				specdata := Must(spec.MarshalJSON())
 				repoName := TestRepositoryObj + "-passing"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, repoName, &specdata)
 				Expect(k8sClient.Create(ctx, ocmRepo)).To(Succeed())
@@ -93,6 +81,7 @@ var _ = Describe("Repository Controller", func() {
 
 		Context("When incorrect RepositorySpec is provided", func() {
 			It("Validation must fail", func(ctx SpecContext) {
+
 				By("creating a OCI repository with non-existing host")
 				spec := ocireg.NewRepositorySpec("https://doesnotexist")
 				specdata := Must(spec.MarshalJSON())

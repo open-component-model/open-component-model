@@ -1,21 +1,15 @@
 package repository
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/fluxcd/pkg/runtime/patch"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	ocmctx "ocm.software/ocm/api/ocm"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,8 +30,7 @@ var repositoryKey = ".spec.repositoryRef"
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	Resolver  *resolution.Resolver
-	OCMScheme *runtime.Scheme
+	OCMContextCache *ocm.ContextCache
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -142,37 +135,28 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	logger.Info("reconciling OCM repository")
-	// 1. Load Configurations
-	// 2. Validate
-
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), ocmRepo)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.ConfigureContextFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
-
-	spec, err := r.convertRepositorySpec(ocmRepo.Spec.RepositorySpec)
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.ConfigureContextFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to convert repository spec: %w", err)
-	}
-
-	cachedBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.ResolveOptions{
-		RepositorySpec: spec,
-		Namespace:      ocmRepo.GetNamespace(),
+	octx, session, err := r.OCMContextCache.GetSession(&ocm.GetSessionOptions{
+		RepositorySpecification: ocmRepo.Spec.RepositorySpec,
+		OCMConfigurations:       configs,
 	})
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.ConfigureContextFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create cache backed repo: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to get session: %w", err)
 	}
+	logger = logger.WithValues("ocmContext", octx.GetId())
 
-	if err := cachedBackedRepo.CheckHealth(ctx); err != nil {
+	err = r.validate(octx, session, ocmRepo)
+	if err != nil {
 		status.MarkNotReady(r.EventRecorder, ocmRepo, v1alpha1.GetRepositoryFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to check health of cached backed repo: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to validate ocm repository: %w", err)
 	}
 
 	r.fillRepoStatusFromSpec(ocmRepo, configs)
@@ -183,7 +167,20 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	return ctrl.Result{RequeueAfter: ocmRepo.GetRequeueAfter()}, nil
 }
 
-func (r *Reconciler) validate(ctx context.Context, repo repository.ComponentVersionRepository) error {
+func (r *Reconciler) validate(octx ocmctx.Context, session ocmctx.Session, ocmRepo *v1alpha1.Repository) error {
+	spec, err := octx.RepositorySpecForConfig(ocmRepo.Spec.RepositorySpec.Raw, nil)
+	if err != nil {
+		return fmt.Errorf("cannot create RepositorySpec from raw data: %w", err)
+	}
+
+	if err = spec.Validate(octx, nil); err != nil {
+		return fmt.Errorf("invalid RepositorySpec: %w", err)
+	}
+
+	_, err = session.LookupRepository(octx, spec)
+	if err != nil {
+		return fmt.Errorf("cannot lookup repository for RepositorySpec: %w", err)
+	}
 
 	return nil
 }
@@ -237,49 +234,4 @@ func (r *Reconciler) deleteRepository(ctx context.Context, obj *v1alpha1.Reposit
 	)
 
 	return nil
-}
-
-func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.Typed, error) {
-	if spec == nil {
-		return nil, fmt.Errorf("repository spec is nil")
-	}
-
-	raw := &runtime.Raw{}
-	if err := r.OCMScheme.Decode(bytes.NewReader(spec.Raw), raw); err != nil {
-		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
-	}
-
-	if raw.GetType().Name == ctfv1.Type {
-		return r.convertCTFOCMv1ToCTFOCMv2(raw)
-	}
-
-	obj, err := r.OCMScheme.NewObject(raw.Type)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new object: %w", err)
-	}
-
-	if err := r.OCMScheme.Convert(raw, obj); err != nil {
-		return nil, fmt.Errorf("failed to convert repository spec: %w", err)
-	}
-
-	return obj, nil
-}
-
-// TODO: This needs to be adjusted, but irrelevant for the prototype that works on the resolution service.
-func (r *Reconciler) convertCTFOCMv1ToCTFOCMv2(raw *runtime.Raw) (runtime.Typed, error) {
-	values := make(map[string]interface{})
-	if err := json.Unmarshal(raw.Data, &values); err != nil {
-		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
-	}
-
-	ctfType := &ctfv1.Repository{
-		Type: runtime.Type{
-			Version: "",
-			Name:    "CommonTransportFormat",
-		},
-		Path:       values["filePath"].(string),
-		AccessMode: ctfv1.AccessModeReadOnly,
-	}
-
-	return ctfType, nil
 }

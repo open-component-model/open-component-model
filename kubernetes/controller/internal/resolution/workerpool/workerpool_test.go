@@ -171,7 +171,6 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 
 		const numComponents = 20
 		results := make([]*descriptor.Descriptor, numComponents)
-		errs := make([]error, numComponents)
 
 		// Create a single shared mock repository to avoid race conditions
 		mockRepo := &mockRepository{}
@@ -185,11 +184,10 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 					Key:            fmt.Sprintf("ocm-config-%d", i),
 					Repository:     mockRepo,
 				}
-				result, err := env.Pool.GetComponentVersion(ctx, opts)
+				// we ignore the error since it's InProgress error.
+				// we check for the results later on.
+				result, _ := env.Pool.GetComponentVersion(ctx, opts)
 				results[i] = result
-				if err != nil {
-					errs[i] = err
-				}
 			}()
 		}
 
@@ -209,7 +207,8 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 					Key:            fmt.Sprintf("ocm-config-%d", i),
 					Repository:     mockRepo,
 				}
-				result, _ := env.Pool.GetComponentVersion(ctx, opts)
+				result, err := env.Pool.GetComponentVersion(ctx, opts)
+				require.NoError(t, err)
 				results[i] = result
 			}
 			require.NotNil(t, results[i], "component-%d should have a result", i)

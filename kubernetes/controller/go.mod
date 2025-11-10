@@ -32,12 +32,10 @@ require (
 
 require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/opencontainers/go-digest v1.0.0
 	ocm.software/ocm v0.31.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251104081249-38e3382d9873
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251104081249-38e3382d9873
 	ocm.software/open-component-model/bindings/go/oci v0.0.8
 	ocm.software/open-component-model/bindings/go/plugin v0.0.7
@@ -293,6 +291,7 @@ require (
 	github.com/nozzle/throttler v0.0.0-20180817012639-2ea982251481 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/oleiade/reflections v1.1.0 // indirect
+	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runtime-spec v1.2.1 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
@@ -412,6 +411,7 @@ require (
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251024100521-a7be1bf5ce0d // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251104081249-38e3382d9873 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251104081249-38e3382d9873 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
