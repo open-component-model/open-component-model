@@ -54,19 +54,19 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 	}
 
 	wpOpts := workerpool.ResolveOptions{
-		RepositorySpec:    c.baseOpts.RepositorySpec,
-		Component:         component,
-		Version:           version,
-		OCMConfigurations: c.baseOpts.OCMConfigurations,
-		Namespace:         c.baseOpts.Namespace,
+		RepositorySpec: c.baseOpts.RepositorySpec,
+		Component:      component,
+		Version:        version,
+		Repository:     c.repo,
+		Key:            key,
 	}
 
-	result, err := c.workerPool.GetComponentVersion(ctx, key, wpOpts, c.repo, configHash)
+	result, err := c.workerPool.GetComponentVersion(ctx, wpOpts)
 	if err != nil {
 		return nil, err
 	}
 
-	return result.Descriptor, nil
+	return result, nil
 }
 
 // ListComponentVersions lists all versions of a component, using the cache when possible.
