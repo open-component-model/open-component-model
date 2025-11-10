@@ -20,6 +20,7 @@ require (
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
+	golang.org/x/sync v0.18.0
 	golang.org/x/sys v0.37.0
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
