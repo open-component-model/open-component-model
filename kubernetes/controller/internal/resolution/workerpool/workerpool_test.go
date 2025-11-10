@@ -5,13 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
-	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/assert"
@@ -23,14 +23,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
@@ -177,21 +173,24 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 		results := make([]*descriptor.Descriptor, numComponents)
 		errs := make([]error, numComponents)
 
+		// Create a single shared mock repository to avoid race conditions
+		mockRepo := &mockRepository{}
+
 		for i := range numComponents {
-			go func(idx int) {
+			go func() {
 				opts := workerpool.ResolveOptions{
 					RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-					Component:      fmt.Sprintf("component-%d", idx),
+					Component:      fmt.Sprintf("component-%d", i),
 					Version:        "v1.0.0",
-					Key:            "ocm-config",
-					Repository:     &mockRepository{},
+					Key:            fmt.Sprintf("ocm-config-%d", i),
+					Repository:     mockRepo,
 				}
 				result, err := env.Pool.GetComponentVersion(ctx, opts)
-				results[idx] = result
+				results[i] = result
 				if err != nil {
-					errs[idx] = err
+					errs[i] = err
 				}
-			}(i)
+			}()
 		}
 
 		// Wait for all resolutions to complete
@@ -207,8 +206,8 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 					RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 					Component:      fmt.Sprintf("component-%d", i),
 					Version:        "v1.0.0",
-					Key:            "ocm-config",
-					Repository:     &mockRepository{},
+					Key:            fmt.Sprintf("ocm-config-%d", i),
+					Repository:     mockRepo,
 				}
 				result, _ := env.Pool.GetComponentVersion(ctx, opts)
 				results[i] = result
@@ -247,74 +246,41 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 			WithObjects(configMap).
 			Build()
 
-		// Use a plugin that tracks call count
+		// Use a mock repository that tracks call count
 		var callCount atomic.Int32
-		plugin := &configurablePlugin{
-			BeforeGetRepositoryFn: func() {
+		mockRepo := &mockRepository{
+			GetComponentVersionFn: func(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
 				callCount.Add(1)
+				return &descriptor.Descriptor{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    component,
+								Version: version,
+							},
+						},
+					},
+				}, nil
 			},
 		}
 
-		ocmScheme := ocmruntime.NewScheme()
-		ocirepository.MustAddToScheme(ocmScheme)
-
-		pm := manager.NewPluginManager(t.Context())
-		err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-			ocmScheme,
-			pm.ComponentVersionRepositoryRegistry,
-			plugin,
-			&ociv1.Repository{},
-		)
-		require.NoError(t, err)
-
-		// Use TTL=0 to avoid background ticker goroutine that causes synctest deadlock
-		cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
-		wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
-			WorkerCount: 5,
-			QueueSize:   100,
-			Logger:      logger,
-			Client:      k8sClient,
-			Cache:       cache,
-		})
-		resolver := resolution.NewResolver(k8sClient, logger, wp, &plugins.PluginManager{
-			PluginManager: pm,
-			Scheme:        ocmScheme,
-			Provider:      pm.ComponentVersionRepositoryRegistry,
-		})
-
-		wpCtx, wpCancel := context.WithCancel(t.Context())
-		t.Cleanup(wpCancel)
-
-		go func() { _ = wp.Start(wpCtx) }()
+		env := setupTestEnvironment(t, k8sClient, logger)
 
 		const numConcurrent = 50
-		results := make([]*descriptor.Descriptor, numConcurrent)
 		errs := make([]error, numConcurrent)
 
-		opts := &resolution.ResolveOptions{
-			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-			OCMConfigurations: []v1alpha1.OCMConfiguration{
-				{
-					NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-						Kind: "ConfigMap",
-						Name: "ocm-config",
-					},
-				},
-			},
-			Namespace: "default",
-		}
-
-		// Fire off concurrent requests for the same component
-		repo, err := resolver.NewCacheBackedRepository(ctx, opts)
-		require.NoError(t, err)
-
+		// Fire off concurrent requests for the same component - first wave gets ErrResolutionInProgress
 		for i := range numConcurrent {
 			go func() {
-				result, err := repo.GetComponentVersion(ctx, "shared-component", "v1.0.0")
-				results[i] = result
-				if err != nil {
-					errs[i] = err
+				opts := workerpool.ResolveOptions{
+					RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+					Component:      "shared-component",
+					Version:        "v1.0.0",
+					Key:            "ocm-config-shared",
+					Repository:     mockRepo,
 				}
+				_, err := env.Pool.GetComponentVersion(ctx, opts)
+				errs[i] = err
 			}()
 		}
 
@@ -323,21 +289,23 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 		synctest.Wait()
 		t.Log("after synctest wait")
 
-		// Verify all requests got the result
-		for i := range numConcurrent {
-			result := results[i]
-			if result == nil {
-				// refetch things after synctest wait is done
-				result, err = repo.GetComponentVersion(ctx, "shared-component", "v1.0.0")
-				require.NoError(t, err)
-			}
-			require.NotNil(t, result, "request %d should have a result", i)
-			assert.Equal(t, "shared-component", result.Component.Name)
+		// Check if it's in cache now
+		opts := workerpool.ResolveOptions{
+			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+			Component:      "shared-component",
+			Version:        "v1.0.0",
+			Key:            "ocm-config-shared",
+			Repository:     mockRepo,
 		}
+		result, err := env.Pool.GetComponentVersion(ctx, opts)
+		require.NoError(t, err, "after wait, should get result from cache")
+		require.NotNil(t, result)
+		assert.Equal(t, "shared-component", result.Component.Name)
 
 		calls := callCount.Load()
-		assert.Equal(t, calls, int32(1), "inProgress tracking should allow only a single call to the plugin (got %d calls)", calls)
-		t.Logf("plugin was called %d times (inProgress deduplication working)", calls)
+		// Due to synctest timing, we might get 1-3 calls instead of exactly 1, but should be FAR less than 50
+		assert.Equal(t, int32(1), calls, "inProgress tracking should significantly reduce calls (got %d calls for %d concurrent requests)", calls, numConcurrent)
+		t.Logf("repository was called %d times for %d concurrent requests (inProgress deduplication working)", calls, numConcurrent)
 	})
 }
 
@@ -369,24 +337,22 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 		WithObjects(configMap).
 		Build()
 
-	// Use a slow plugin to fill the queue
-	plugin := &configurablePlugin{
-		BeforeGetRepositoryFn: func() {
+	// Use a slow mock repository to fill the queue
+	mockRepo := &mockRepository{
+		GetComponentVersionFn: func(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
 			time.Sleep(5 * time.Second)
+			return &descriptor.Descriptor{
+				Component: descriptor.Component{
+					ComponentMeta: descriptor.ComponentMeta{
+						ObjectMeta: descriptor.ObjectMeta{
+							Name:    component,
+							Version: version,
+						},
+					},
+				},
+			}, nil
 		},
 	}
-
-	ocmScheme := ocmruntime.NewScheme()
-	ocirepository.MustAddToScheme(ocmScheme)
-
-	pm := manager.NewPluginManager(t.Context())
-	err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-		ocmScheme,
-		pm.ComponentVersionRepositoryRegistry,
-		plugin,
-		&ociv1.Repository{},
-	)
-	require.NoError(t, err)
 
 	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
 	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
@@ -395,11 +361,6 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 		Logger:      logger,
 		Client:      k8sClient,
 		Cache:       cache,
-	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp, &plugins.PluginManager{
-		PluginManager: pm,
-		Scheme:        ocmScheme,
-		Provider:      pm.ComponentVersionRepositoryRegistry,
 	})
 
 	wpCtx, wpCancel := context.WithCancel(t.Context())
@@ -415,32 +376,19 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(10)
 
-	opts := &resolution.ResolveOptions{
-		RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-		OCMConfigurations: []v1alpha1.OCMConfiguration{
-			{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind: "ConfigMap",
-					Name: "ocm-config",
-				},
-			},
-		},
-		Namespace: "default",
-	}
-
 	for i := range 10 {
 		go func() {
 			defer wg.Done()
-			repo, err := resolver.NewCacheBackedRepository(ctx, opts)
-			if err != nil && !errors.Is(err, resolution.ErrResolutionInProgress) {
-				if err.Error() == fmt.Sprintf("work queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
-					queueFullCount.Add(1)
-				}
-				return
+			opts := workerpool.ResolveOptions{
+				RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
+				Component:      fmt.Sprintf("component-%d", i),
+				Version:        "v1.0.0",
+				Key:            fmt.Sprintf("ocm-config-%d", i),
+				Repository:     mockRepo,
 			}
-			_, err = repo.GetComponentVersion(ctx, fmt.Sprintf("component-%d", i), "v1.0.0")
+			_, err := wp.GetComponentVersion(ctx, opts)
 			if err != nil && !errors.Is(err, resolution.ErrResolutionInProgress) {
-				if err.Error() == fmt.Sprintf("work queue is full, cannot enqueue request for component-%d:v1.0.0", i) {
+				if strings.Contains(err.Error(), "work queue is full") {
 					queueFullCount.Add(1)
 				}
 			}
@@ -543,19 +491,22 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 			results[v] = make([]*descriptor.Descriptor, numConcurrent)
 		}
 
+		// Create a single shared mock repository to avoid race conditions
+		mockRepo := &mockRepository{}
+
 		for _, version := range versions {
 			for i := range numConcurrent {
-				go func(v string, idx int) {
+				go func() {
 					opts := workerpool.ResolveOptions{
 						RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 						Component:      "multi-version-component",
-						Version:        v,
-						Key:            "ocm-config",
-						Repository:     &mockRepository{},
+						Version:        version,
+						Key:            fmt.Sprintf("ocm-config-%s", version),
+						Repository:     mockRepo,
 					}
 					result, _ := env.Pool.GetComponentVersion(ctx, opts)
-					results[v][idx] = result
-				}(version, i)
+					results[version][i] = result
+				}()
 			}
 		}
 
@@ -573,8 +524,8 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 						RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 						Component:      "multi-version-component",
 						Version:        version,
-						Key:            "ocm-config",
-						Repository:     &mockRepository{},
+						Key:            fmt.Sprintf("ocm-config-%s", version),
+						Repository:     mockRepo,
 					}
 					result, err := env.Pool.GetComponentVersion(ctx, opts)
 					require.NoError(t, err)
@@ -635,12 +586,15 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 
 		env := setupTestEnvironment(t, k8sClient, logger)
 
+		// Create a single shared mock repository to avoid race conditions
+		mockRepo := &mockRepository{}
+
 		opts1 := workerpool.ResolveOptions{
 			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
 			Component:      "cache-test",
 			Version:        "v1.0.0",
 			Key:            "ocm-config-1",
-			Repository:     &mockRepository{},
+			Repository:     mockRepo,
 		}
 
 		// First resolution with config-1
@@ -658,7 +612,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 			Component:      "cache-test",
 			Version:        "v1.0.0",
 			Key:            "ocm-config-2", // Different key = different cache entry
-			Repository:     &mockRepository{},
+			Repository:     mockRepo,
 		}
 
 		// Second resolution with config-2 (different config = cache miss)
@@ -679,6 +633,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 
 // mockRepository is a flexible mock plugin for testing that allows customizing behavior.
 type mockRepository struct {
+	mu sync.Mutex
 	repository.ComponentVersionRepository
 	GetComponentVersionFn func(ctx context.Context, component, version string) (*descriptor.Descriptor, error)
 	BeforeGetRepositoryFn func()
@@ -689,6 +644,9 @@ func (p *mockRepository) GetComponentVersionRepository(
 	_ ocmruntime.Typed,
 	_ map[string]string,
 ) (repository.ComponentVersionRepository, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if p.BeforeGetRepositoryFn != nil {
 		p.BeforeGetRepositoryFn()
 	}
@@ -698,6 +656,9 @@ func (p *mockRepository) GetComponentVersionRepository(
 
 // GetComponentVersion implements repository.ComponentVersionRepository
 func (p *mockRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if p.GetComponentVersionFn != nil {
 		return p.GetComponentVersionFn(ctx, component, version)
 	}
@@ -715,61 +676,12 @@ func (p *mockRepository) GetComponentVersion(ctx context.Context, component, ver
 	}, nil
 }
 
-// configurablePlugin is a mock plugin that implements the component version repository plugin interface
-type configurablePlugin struct {
-	repository.ComponentVersionRepository
-	BeforeGetRepositoryFn func()
-}
-
-func (p *configurablePlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
-	_ context.Context,
-	repositorySpecification ocmruntime.Typed,
-) (ocmruntime.Identity, error) {
-	ociRepoSpec, ok := repositorySpecification.(*ociv1.Repository)
-	if !ok {
-		return nil, fmt.Errorf("invalid repository specification: %T", repositorySpecification)
-	}
-
-	identity, err := ocmruntime.ParseURLToIdentity(ociRepoSpec.BaseUrl)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
-	}
-	identity.SetType(ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version))
-
-	return identity, nil
-}
-
-func (p *configurablePlugin) GetComponentVersionRepository(
-	_ context.Context,
-	_ ocmruntime.Typed,
-	_ map[string]string,
-) (repository.ComponentVersionRepository, error) {
-	if p.BeforeGetRepositoryFn != nil {
-		p.BeforeGetRepositoryFn()
-	}
-
-	return p, nil
-}
-
-func (p *configurablePlugin) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
-	return &descriptor.Descriptor{
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    component,
-					Version: version,
-				},
-			},
-		},
-	}, nil
-}
-
-// testEnvironment holds the test infrastructure including resolver and plugin manager.
+// testEnvironment holds the test infrastructure for workerpool testing.
 type testEnvironment struct {
 	Pool *workerpool.WorkerPool
 }
 
-// setupTestEnvironment creates a test environment with a resolver that has mock plugins registered.
+// setupTestEnvironment creates a test environment with a worker pool.
 func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Logger) *testEnvironment {
 	t.Helper()
 
