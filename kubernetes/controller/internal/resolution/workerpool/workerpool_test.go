@@ -302,7 +302,6 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 		assert.Equal(t, "shared-component", result.Component.Name)
 
 		calls := callCount.Load()
-		// Due to synctest timing, we might get 1-3 calls instead of exactly 1, but should be FAR less than 50
 		assert.Equal(t, int32(1), calls, "inProgress tracking should significantly reduce calls (got %d calls for %d concurrent requests)", calls, numConcurrent)
 		t.Logf("repository was called %d times for %d concurrent requests (inProgress deduplication working)", calls, numConcurrent)
 	})
@@ -450,6 +449,12 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 
 		// Wait for workers to stop
 		synctest.Wait()
+
+		opts.Component = "cancel-component-new"
+		opts.Key = "ocm-config-new"
+		result, err = env.Pool.GetComponentVersion(ctx, opts)
+		assert.Nil(t, result)
+		assert.EqualError(t, err, "context canceled")
 	})
 }
 
@@ -635,7 +640,6 @@ type mockRepository struct {
 	mu sync.Mutex
 	repository.ComponentVersionRepository
 	GetComponentVersionFn func(ctx context.Context, component, version string) (*descriptor.Descriptor, error)
-	BeforeGetRepositoryFn func()
 }
 
 func (p *mockRepository) GetComponentVersionRepository(
@@ -645,10 +649,6 @@ func (p *mockRepository) GetComponentVersionRepository(
 ) (repository.ComponentVersionRepository, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
-	if p.BeforeGetRepositoryFn != nil {
-		p.BeforeGetRepositoryFn()
-	}
 
 	return p, nil
 }

@@ -107,6 +107,10 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 }
 
 // buildCacheKey generates a cache key from the configuration hash, repository spec, component, and version.
+// TODO: Arguably, this function could live in the workerpool where it would generate the key for the right
+// entry since that's the one using the cache in the end. However, arguably*2 the cached back repository
+// gets the component version and the config hash and the repository spec. So it knows how to calculate the key
+// out of those items. Question: Where does this function belong?
 func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)
 	if err != nil {

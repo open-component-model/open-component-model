@@ -57,9 +57,10 @@ type PoolOptions struct {
 // WorkerPool manages a pool of workers that process work items concurrently.
 type WorkerPool struct {
 	PoolOptions
-	workQueue   chan *WorkItem
-	inProgress  sync.Map // map[string]struct{} - tracks keys currently being processed
-	workersDone sync.WaitGroup
+	workQueue    chan *WorkItem
+	inProgressMu sync.RWMutex
+	inProgress   map[string]struct{} // tracks keys currently being processed
+	workersDone  sync.WaitGroup
 }
 
 // ErrResolutionInProgress is returned when a component version is being resolved in the background.
@@ -82,6 +83,7 @@ func NewWorkerPool(opts PoolOptions) *WorkerPool {
 	return &WorkerPool{
 		PoolOptions: opts,
 		workQueue:   make(chan *WorkItem, opts.QueueSize),
+		inProgress:  make(map[string]struct{}),
 	}
 }
 
@@ -118,6 +120,15 @@ func (wp *WorkerPool) GetComponentVersion(ctx context.Context, opts ResolveOptio
 // like the GetComponentVersion function above, that wish to use the worker-pool to cache results. For example,
 // GetLocalResource later on.
 func enqueueWorkItem[T any](ctx context.Context, wp *WorkerPool, opts ResolveOptions, fn workFunc) (result T, _ error) {
+	wp.inProgressMu.Lock()
+	defer wp.inProgressMu.Unlock()
+
+	// check if already in progress
+	if _, exists := wp.inProgress[opts.Key]; exists {
+		wp.Logger.V(1).Info("resolution already in progress", "component", opts.Component, "version", opts.Version)
+		return result, ErrResolutionInProgress
+	}
+
 	if cached, ok := wp.Cache.Get(opts.Key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.Error != nil {
@@ -132,14 +143,13 @@ func enqueueWorkItem[T any](ctx context.Context, wp *WorkerPool, opts ResolveOpt
 		return res, nil
 	}
 
-	CacheMissCounterTotal.WithLabelValues(opts.Component, "latest").Inc()
-
-	if _, exists := wp.inProgress.LoadOrStore(opts.Key, struct{}{}); exists {
-		wp.Logger.V(1).Info("resolution already in progress", "component", opts.Component, "version", opts.Version)
-		return result, ErrResolutionInProgress
+	select {
+	case <-ctx.Done():
+		return result, ctx.Err()
+	default:
 	}
 
-	InProgressGauge.Inc()
+	CacheMissCounterTotal.WithLabelValues(opts.Component, "latest").Inc()
 
 	workItem := &WorkItem{
 		Fn:      fn,
@@ -147,20 +157,18 @@ func enqueueWorkItem[T any](ctx context.Context, wp *WorkerPool, opts ResolveOpt
 		Opts:    opts,
 	}
 
+	// Try to enqueue with lock held to make check-and-enqueue atomic
 	select {
 	case wp.workQueue <- workItem:
+		wp.inProgress[opts.Key] = struct{}{}
+		InProgressGauge.Inc()
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
 		wp.Logger.V(1).Info("enqueued request", "component", opts.Component)
+
 		return result, ErrResolutionInProgress
 	default:
-		// failed, decrement in-progress and decrement the gauge.
-		wp.inProgress.Delete(opts.Key)
-		InProgressGauge.Dec()
-		if len(wp.workQueue) == wp.QueueSize {
-			return result, fmt.Errorf("work queue is full, cannot enqueue request for %s", opts.Component)
-		}
-
-		return result, fmt.Errorf("failed to enqueue resolution request for %s", opts.Component)
+		// Queue is full
+		return result, fmt.Errorf("work queue is full, cannot enqueue request for %s", opts.Component)
 	}
 }
 
@@ -196,6 +204,14 @@ type workFunc func(ctx context.Context, item ResolveOptions) (any, error)
 func (wp *WorkerPool) handleWorkItem(f workFunc, logger logr.Logger, item *WorkItem) {
 	logger.V(1).Info("processing work item", "key", item.Opts.Key)
 
+	// either way, we are done with this item so remove it and decrease InProgress count.
+	defer func() {
+		wp.inProgressMu.Lock()
+		delete(wp.inProgress, item.Opts.Key)
+		wp.inProgressMu.Unlock()
+		InProgressGauge.Dec()
+	}()
+
 	start := time.Now()
 	result, err := f(item.Context, item.Opts)
 	duration := time.Since(start).Seconds()
@@ -219,10 +235,6 @@ func (wp *WorkerPool) handleWorkItem(f workFunc, logger logr.Logger, item *WorkI
 		Value: result,
 		Error: err,
 	})
-
-	// we are done, remove in-progress
-	wp.inProgress.Delete(item.Opts.Key)
-	InProgressGauge.Dec()
 }
 
 // getComponentVersion performs the actual component version resolution.
