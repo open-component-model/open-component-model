@@ -58,7 +58,7 @@ type PoolOptions struct {
 type WorkerPool struct {
 	PoolOptions
 	workQueue    chan *WorkItem
-	inProgressMu sync.RWMutex
+	inProgressMu sync.Mutex
 	inProgress   map[string]struct{} // tracks keys currently being processed
 	workersDone  sync.WaitGroup
 }
@@ -143,13 +143,14 @@ func enqueueWorkItem[T any](ctx context.Context, wp *WorkerPool, opts ResolveOpt
 		return res, nil
 	}
 
+	// check for context cancellation before enqueuing
 	select {
 	case <-ctx.Done():
 		return result, ctx.Err()
 	default:
 	}
 
-	CacheMissCounterTotal.WithLabelValues(opts.Component, "latest").Inc()
+	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 
 	workItem := &WorkItem{
 		Fn:      fn,

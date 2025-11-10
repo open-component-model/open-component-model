@@ -3,7 +3,6 @@ package resolution
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,27 +55,19 @@ type ResolveOptions struct {
 
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
 func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *ResolveOptions) (*CacheBackedRepository, error) {
-	// Deep copy the repository spec early to avoid races during hashing/marshaling.
-	// Workers may mutate the spec (SetType during resolve), so we need our own copy.
-	// Full deep copy to prevent pointer shares.
-	optsCopy := ResolveOptions{
-		RepositorySpec:    opts.RepositorySpec.DeepCopyTyped(),
-		OCMConfigurations: slices.Clone(opts.OCMConfigurations),
-		Namespace:         opts.Namespace,
-	}
-
 	// Load OCM configurations
-	cfg, err := configuration.LoadConfigurations(ctx, r.client, optsCopy.Namespace, optsCopy.OCMConfigurations)
+	cfg, err := configuration.LoadConfigurations(ctx, r.client, opts.Namespace, opts.OCMConfigurations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
 	}
 
-	repo, err := r.createRepository(ctx, opts.RepositorySpec, cfg)
+	spec := opts.RepositorySpec.DeepCopyTyped()
+	repo, err := r.createRepository(ctx, spec, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return newCacheBackedRepository(optsCopy, cfg, r.workerPool, repo), nil
+	return newCacheBackedRepository(spec, cfg, r.workerPool, repo), nil
 }
 
 func (r *Resolver) createRepository(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (repository.ComponentVersionRepository, error) {

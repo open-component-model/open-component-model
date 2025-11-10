@@ -18,7 +18,7 @@ import (
 // CacheBackedRepository provides a cache-backed implementation of repository.ComponentVersionRepository.
 // It wraps a real repository and uses a worker pool to handle concurrent access with caching.
 type CacheBackedRepository struct {
-	baseOpts   ResolveOptions
+	spec       runtime.Typed
 	cfg        *configuration.Configuration
 	workerPool *workerpool.WorkerPool
 	repo       repository.ComponentVersionRepository
@@ -27,9 +27,9 @@ type CacheBackedRepository struct {
 var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
 
 // newCacheBackedRepository creates a new CacheBackedRepository instance.
-func newCacheBackedRepository(baseOpts ResolveOptions, cfg *configuration.Configuration, wp *workerpool.WorkerPool, repo repository.ComponentVersionRepository) *CacheBackedRepository {
+func newCacheBackedRepository(spec runtime.Typed, cfg *configuration.Configuration, wp *workerpool.WorkerPool, repo repository.ComponentVersionRepository) *CacheBackedRepository {
 	return &CacheBackedRepository{
-		baseOpts:   baseOpts,
+		spec:       spec,
 		cfg:        cfg,
 		workerPool: wp,
 		repo:       repo,
@@ -48,13 +48,13 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		configHash = c.cfg.Hash
 	}
 
-	key, err := buildCacheKey(configHash, c.baseOpts.RepositorySpec, component, version)
+	key, err := buildCacheKey(configHash, c.spec, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build cache key: %w", err)
 	}
 
 	wpOpts := workerpool.ResolveOptions{
-		RepositorySpec: c.baseOpts.RepositorySpec,
+		RepositorySpec: c.spec,
 		Component:      component,
 		Version:        version,
 		Repository:     c.repo,
@@ -122,5 +122,6 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 	hasher.Write(repoJSON)
 	hasher.Write([]byte(component))
 	hasher.Write([]byte(version))
-	return hex.EncodeToString(hasher.Sum(nil)), err
+
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
