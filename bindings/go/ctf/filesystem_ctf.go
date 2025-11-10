@@ -30,6 +30,9 @@ const (
 //   - the blobs at BlobsDirectoryName
 //
 // The CTF offered will always be of type FormatDirectory.
+//
+// Concurrency: All file writes use atomic operations (temp file + rename) to prevent
+// race conditions and ensure readers never see partially written files during concurrent access.
 type FileSystemCTF struct {
 	fs        fs.FS
 	statFS    fs.StatFS
@@ -135,43 +138,62 @@ var ioBufPool = sync.Pool{
 
 // writeFile writes the given raw data to the given name in the CTF.
 // If the directory does not exist, it will be created.
+// Always uses atomic write (temp file + rename) for safe concurrent access.
 func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err error) {
+	// Ensure directory exists
 	if c.mkdirFS != nil {
 		if err := c.mkdirFS.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 			return fmt.Errorf("unable to create directory: %w", err)
 		}
 	}
 
-	if c.ofFS == nil {
-		return fmt.Errorf("filesystem does not support opening files for write or creation: %T", c.fs)
+	// Check if this is an OS filesystem
+	osFS, ok := c.fs.(*filesystem.RootFileSystem)
+	if !ok {
+		return fmt.Errorf("atomic writes not supported on non-OS filesystem: %T", c.fs)
 	}
+	targetPath := filepath.Join(osFS.String(), name)
 
-	var file fs.File
-	// If the file does not exist, we create it.
-	// If it exists, we truncate it to make sure that size is correct
-	// and we can write the new data to it.
-	if file, err = c.ofFS.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644); err != nil {
-		return fmt.Errorf("unable to open artifact index: %w", err)
+	// Create temp file
+	tempFile, err := os.CreateTemp(filepath.Dir(targetPath), "."+filepath.Base(targetPath)+".*")
+	if err != nil {
+		return fmt.Errorf("unable to create temp file: %w", err)
 	}
+	tempPath := tempFile.Name()
+
+	// Ensure cleanup
 	defer func() {
-		err = errors.Join(err, file.Close())
+		if closeErr := tempFile.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("unable to close temp file: %w", closeErr))
+		}
+		if err != nil {
+			if removeErr := os.Remove(tempPath); removeErr != nil {
+				err = errors.Join(err, fmt.Errorf("unable to remove temp file: %w", removeErr))
+			}
+		}
 	}()
 
-	writeable, ok := file.(io.Writer)
-	if !ok {
-		return fmt.Errorf("file %s is read only and cannot be saved", name)
-	}
-
+	// Write content to temp file
 	if size <= blob.SizeUnknown {
 		buf := ioBufPool.Get().(*[]byte)
 		defer ioBufPool.Put(buf)
-		if _, err = io.CopyBuffer(writeable, raw, *buf); err != nil {
-			return fmt.Errorf("unable to write artifact index: %w", err)
+		if _, err = io.CopyBuffer(tempFile, raw, *buf); err != nil {
+			return fmt.Errorf("unable to write content: %w", err)
 		}
 	} else {
-		if _, err = io.CopyN(writeable, raw, size); err != nil {
-			return fmt.Errorf("unable to write artifact index: %w", err)
+		if _, err = io.CopyN(tempFile, raw, size); err != nil {
+			return fmt.Errorf("unable to write content: %w", err)
 		}
+	}
+
+	// Make read-only
+	if err = os.Chmod(tempPath, 0o444); err != nil {
+		return fmt.Errorf("unable to make temp file readonly: %w", err)
+	}
+
+	// Atomic rename
+	if err = os.Rename(tempPath, targetPath); err != nil {
+		return fmt.Errorf("unable to rename temp file: %w", err)
 	}
 
 	return nil

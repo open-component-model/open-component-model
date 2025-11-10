@@ -91,6 +91,8 @@ func (s *Store) ComponentVersionReference(ctx context.Context, component, versio
 }
 
 // Repository implements the spec.Store interface for a CTF OCI Repository.
+// Each repository instance shares the same mutex with its parent Store to ensure
+// consistent locking across all repositories within the same CTF archive.
 type repository struct {
 	archive ctf.CTF
 	repo    string
@@ -99,19 +101,16 @@ type repository struct {
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
+// Uses LockedReader to maintain read lock during async streaming operations.
 func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.fetch(ctx, target)
-}
-
-// fetch is the internal version of Fetch that assumes the caller holds the lock.
-func (s *repository) fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	b, err := s.archive.GetBlob(ctx, target.Digest.String())
 	if err != nil {
-		return nil, fmt.Errorf("unable to get blob: %w", err)
+		return nil, err
 	}
-	return b.ReadCloser()
+	// LockedReader wraps the blob with a read lock that persists during streaming.
+	// The mutex is held until the reader is closed, ensuring consistent access
+	// during concurrent operations while the blob content is being read.
+	return blob.NewLockedReader(ctx, s.mu, b)
 }
 
 // Exists checks if a blob exists in the CTF archive based on its descriptor.
@@ -136,12 +135,20 @@ func (s *repository) exists(ctx context.Context, target ociImageSpecV1.Descripto
 
 func (s *repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 	desc, err := s.resolve(ctx, reference)
 	if err != nil {
+		s.mu.RUnlock()
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
-	data, err := s.fetch(ctx, desc)
+
+	b, err := s.archive.GetBlob(ctx, desc.Digest.String())
+	if err != nil {
+		s.mu.RUnlock()
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+	s.mu.RUnlock()
+	data, err := blob.NewLockedReader(ctx, s.mu, b)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
