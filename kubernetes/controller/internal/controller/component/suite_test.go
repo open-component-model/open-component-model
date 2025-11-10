@@ -7,9 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -23,15 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
 // +kubebuilder:scaffold:imports
@@ -115,42 +106,16 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	ocmscheme := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
-	ocmrepository.MustAddToScheme(ocmscheme)
-	access.MustAddToScheme(ocmscheme)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
+	ocmContextCache := ocm.NewContextCache("shared_ocm_context_cache", 100, 100, k8sManager.GetClient(), GinkgoLogr)
+	Expect(k8sManager.Add(ocmContextCache)).To(Succeed())
 
-	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
-		IdleTimeout: 20 * time.Minute,
-		Logger:      logf.Log.WithName("plugin-manager"),
-		Scheme:      ocmscheme,
-		Provider:    repositoryProvider,
-	})
-	Expect(k8sManager.Add(pm)).To(Succeed())
-
-	const unlimited = 0
-	ttl := time.Minute * 30
-	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
-
-	// Create worker pool with its own dependencies
-	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		WorkerCount: 10,
-		QueueSize:   100,
-		Logger:      logf.Log.WithName("worker-pool"),
-		Client:      k8sManager.GetClient(),
-		Cache:       resolverCache,
-	})
-	Expect(k8sManager.Add(workerPool)).To(Succeed())
-
-	resolver := resolution.NewResolver(k8sClient, logf.Log.WithName("resolution"), workerPool, pm)
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        k8sManager.GetClient(),
 			Scheme:        testEnv.Scheme,
 			EventRecorder: recorder,
 		},
-		OCMScheme: ocmscheme,
-		Resolver:  resolver,
+		OCMContextCache: ocmContextCache,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
 	go func() {

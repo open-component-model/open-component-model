@@ -1,22 +1,22 @@
 package component
 
 import (
-	"bytes"
 	"context"
 	"crypto"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/opencontainers/go-digest"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	mandelerrors "github.com/mandelsoft/goutils/errors"
+	"github.com/mandelsoft/goutils/sliceutils"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
-	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ocmctx "ocm.software/ocm/api/ocm"
+	"ocm.software/ocm/api/ocm/compdesc"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,14 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 )
@@ -42,8 +37,7 @@ import (
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	Resolver  *resolution.Resolver
-	OCMScheme *runtime.Scheme
+	OCMContextCache *ocm.ContextCache
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -219,125 +213,94 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
-	spec, err := r.convertRepositorySpec(repo.Spec.RepositorySpec)
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to convert repository spec: %w", err)
-	}
-
-	cachedBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.ResolveOptions{
-		RepositorySpec: spec,
-		Namespace:      component.GetNamespace(),
+	octx, session, err := r.OCMContextCache.GetSession(&ocm.GetSessionOptions{
+		RepositorySpecification: repo.Spec.RepositorySpec,
+		OCMConfigurations:       configs,
+		VerificationProvider:    component,
 	})
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to create cache backed repo: %w", err)
-	}
 
-	//octx, session, err := r.OCMContextCache.GetSession(&ocm.GetSessionOptions{
-	//	RepositorySpecification: repo.Spec.RepositorySpec,
-	//	OCMConfigurations:       configs,
-	//	VerificationProvider:    component,
-	//})
-	//if err != nil {
-	//	status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
-	//
-	//	return ctrl.Result{}, fmt.Errorf("failed to get session: %w", err)
-	//}
-	//logger = logger.WithValues("ocmContext", octx.GetId())
-	//
-	//spec, err := octx.RepositorySpecForConfig(repo.Spec.RepositorySpec.Raw, nil)
-	//if err != nil {
-	//	status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetComponentVersionFailedReason, err.Error())
-	//
-	//	return ctrl.Result{}, fmt.Errorf("failed to get repository spec: %w", err)
-	//}
+		return ctrl.Result{}, fmt.Errorf("failed to get session: %w", err)
+	}
+	logger = logger.WithValues("ocmContext", octx.GetId())
+
+	spec, err := octx.RepositorySpecForConfig(repo.Spec.RepositorySpec.Raw, nil)
+	if err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get repository spec: %w", err)
+	}
 
 	// We need a "live", aka not cached, repository access. This is because
 	// even though the cached version is mostly good for other controllers, it is the component controllers
 	// responsibility to check if the cached version is still valid, or if we need to retrieve a new version.
 	// We need to do this because the cached version might be outdated.
-	//liveRepo, err := octx.RepositoryForSpec(spec)
-	//if err != nil {
-	//	status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
-	//
-	//	return ctrl.Result{}, fmt.Errorf("failed to get live repository access: %w", err)
-	//}
-	//defer func() {
-	//	err = errors.Join(err, liveRepo.Close())
-	//}()
-	version, err := r.DetermineEffectiveVersionFromLiveRepo(ctx, component, cachedBackedRepo)
+	liveRepo, err := octx.RepositoryForSpec(spec)
 	if err != nil {
-		if errors.Is(err, resolution.ErrResolutionInProgress) {
-			status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
-			return ctrl.Result{RequeueAfter: component.GetRequeueAfter()}, nil
-		}
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
+		return ctrl.Result{}, fmt.Errorf("failed to get live repository access: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, liveRepo.Close())
+	}()
+	version, err := r.DetermineEffectiveVersionFromLiveRepo(ctx, component, session, liveRepo)
+	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.CheckVersionFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to determine effective version: %w", err)
 	}
 
-	//repository, err := session.LookupRepository(octx, spec)
-	//if err != nil {
-	//	status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, "Failed looking up repository")
-	//
-	//	return ctrl.Result{}, fmt.Errorf("failed looking up repository: %w", err)
-	//}
-	//cv, err := session.LookupComponentVersion(repository, component.Spec.Component, version)
-	cv, err := cachedBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
+	repository, err := session.LookupRepository(octx, spec)
 	if err != nil {
-		if errors.Is(err, resolution.ErrResolutionInProgress) {
-			status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
-			return ctrl.Result{RequeueAfter: component.GetRequeueAfter()}, nil
-		}
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, "Failed looking up repository")
 
+		return ctrl.Result{}, fmt.Errorf("failed looking up repository: %w", err)
+	}
+	cv, err := session.LookupComponentVersion(repository, component.Spec.Component, version)
+	switch {
+	case mandelerrors.IsErrNotFound(err):
+		// If we are here, then the component version was not found in the cached session, but in the live repo.
+		// In this case we know the session is outdated, so forcefully close it and re-open it on the next reconcile.
+		return ctrl.Result{}, fmt.Errorf("cached component version access was not found and cached session needed to be invalidated: %w", errors.Join(err, session.Close()))
+	case err != nil:
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	//compareStart := time.Now()
-	//logger.V(1).Info("comparing cached and live hashes", "component", component.Spec.Component, "version", version)
-	// Maybe have an indicator if the result is from cache so we know we have to use the live repo.
-	//digestSpec, err := ocm.CompareCachedAndLiveHashes(cv, liveRepo, component.Spec.Component, version,
-	//	compdesc.JsonNormalisationV3, crypto.SHA256,
-	//)
-	//logger.V(1).Info("finished comparing cached and live hashes", "component", component.Spec.Component, "version", version, "duration", time.Since(compareStart))
+	compareStart := time.Now()
+	logger.V(1).Info("comparing cached and live hashes", "component", component.Spec.Component, "version", version)
+	digestSpec, err := ocm.CompareCachedAndLiveHashes(cv, liveRepo, component.Spec.Component, version,
+		compdesc.JsonNormalisationV3, crypto.SHA256,
+	)
+	logger.V(1).Info("finished comparing cached and live hashes", "component", component.Spec.Component, "version", version, "duration", time.Since(compareStart))
 
-	//switch {
-	//case errors.Is(err, ocm.ErrUnstableHash):
-	//	event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
-	//	err = nil
-	//case errors.Is(err, ocm.ErrComponentVersionHashMismatch):
-	//	// If we are here, then the component version was found in the cache, but under a different hash.
-	//	// In this case we know the session is outdated, so forcefully close it and re-open it on the next reconcile.
-	//	log.FromContext(ctx).Info("cached component version access was found, but under a different hash, closing session and re-opening it on the next reconcile")
-	//
-	//	return ctrl.Result{}, errors.Join(err, session.Close())
-	//case err != nil:
-	//	status.MarkNotReady(r.EventRecorder, component, v1alpha1.CheckVersionFailedReason, err.Error())
-	//
-	//	return ctrl.Result{}, fmt.Errorf("failed to compare cached and live hashes: %w", err)
-	//}
-	//
-	//sessionResolver := ocm.NewSessionResolver(octx, session)
+	switch {
+	case errors.Is(err, ocm.ErrUnstableHash):
+		event.New(r.EventRecorder, component, nil, eventv1.EventSeverityInfo, err.Error())
+		err = nil
+	case errors.Is(err, ocm.ErrComponentVersionHashMismatch):
+		// If we are here, then the component version was found in the cache, but under a different hash.
+		// In this case we know the session is outdated, so forcefully close it and re-open it on the next reconcile.
+		log.FromContext(ctx).Info("cached component version access was found, but under a different hash, closing session and re-opening it on the next reconcile")
 
-	// TODO: Use Verification from v2
-	//if err := r.verifyComponentVersion(ctx, cv, component); err != nil {
-	//	status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
-	//	return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
-	//}
-	//if _, err := ocm.VerifyComponentVersion(ctx, cv, sessionResolver, sliceutils.Transform(component.Spec.Verify, func(verify v1alpha1.Verification) string {
-	//	return verify.Signature
-	//})); err != nil {
-	//	status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
-	//
-	//	return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
-	//}
+		return ctrl.Result{}, errors.Join(err, session.Close())
+	case err != nil:
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.CheckVersionFailedReason, err.Error())
 
-	cvDigest, err := calculateDigest(cv)
-	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to compare cached and live hashes: %w", err)
+	}
+
+	sessionResolver := ocm.NewSessionResolver(octx, session)
+
+	if _, err := ocm.VerifyComponentVersion(ctx, cv, sessionResolver, sliceutils.Transform(component.Spec.Verify, func(verify v1alpha1.Verification) string {
+		return verify.Signature
+	})); err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to calculate component version digest: %w", err)
+
+		return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
 	}
 
 	logger.Info("updating status")
@@ -345,11 +308,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		RepositorySpec: repo.Spec.RepositorySpec,
 		Component:      component.Spec.Component,
 		Version:        version,
-		Digest: &ocmv1.DigestSpec{
-			HashAlgorithm:          cvDigest.HashAlgorithm,
-			NormalisationAlgorithm: cvDigest.NormalisationAlgorithm,
-			Value:                  cvDigest.Value,
-		},
+		Digest:         digestSpec,
 	}
 
 	component.Status.EffectiveOCMConfig = configs
@@ -408,25 +367,22 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 	return nil
 }
 
-func (r *Reconciler) DetermineEffectiveVersionFromLiveRepo(ctx context.Context, component *v1alpha1.Component, liveRepo repository.ComponentVersionRepository) (_ string, err error) {
-	//liveComponentAccess, err := liveRepo.GetComponentVersion(ctx, component.Spec.Component)
-	//if err != nil {
-	//	return "", fmt.Errorf("failed to lookup component: %w", err)
-	//}
-	//defer func() {
-	//	err = errors.Join(err, liveComponentAccess.Close())
-	//}()
-	//versions, err := liveComponentAccess.ListVersions()
-	//if err != nil {
-	//	return "", fmt.Errorf("failed to list versions: %w", err)
-	//}
-	versions, err := liveRepo.ListComponentVersions(ctx, component.Spec.Component)
+func (r *Reconciler) DetermineEffectiveVersionFromLiveRepo(ctx context.Context, component *v1alpha1.Component,
+	session ocmctx.Session, liveRepo ocmctx.Repository,
+) (_ string, err error) {
+	liveComponentAccess, err := liveRepo.LookupComponent(component.Spec.Component)
 	if err != nil {
-		return "", fmt.Errorf("failed to list component versions: %w", err)
+		return "", fmt.Errorf("failed to lookup component: %w", err)
 	}
-
+	defer func() {
+		err = errors.Join(err, liveComponentAccess.Close())
+	}()
+	versions, err := liveComponentAccess.ListVersions()
+	if err != nil {
+		return "", fmt.Errorf("failed to list versions: %w", err)
+	}
 	if len(versions) == 0 {
-		return "", fmt.Errorf("component %s not found in repository", component.Spec.Component)
+		return "", fmt.Errorf("component %s not found in repository", liveComponentAccess.GetName())
 	}
 	filter, err := ocm.RegexpFilter(component.Spec.SemverFilter)
 	if err != nil {
@@ -458,13 +414,13 @@ func (r *Reconciler) DetermineEffectiveVersionFromLiveRepo(ctx context.Context, 
 	case v1alpha1.DowngradePolicyEnforce:
 		return latestSemver.Original(), nil
 	case v1alpha1.DowngradePolicyAllow:
-		reconciledcv, err := liveRepo.GetComponentVersion(ctx, component.Spec.Component, currentSemver.Original())
+		reconciledcv, err := session.LookupComponentVersion(liveRepo, liveComponentAccess.GetName(), currentSemver.Original())
 		if err != nil {
 			return "", reconcile.TerminalError(fmt.Errorf("failed to get reconciled component version to check"+
 				" downgradability: %w", err))
 		}
 
-		latestcv, err := liveRepo.GetComponentVersion(ctx, component.Spec.Component, latestSemver.Original())
+		latestcv, err := session.LookupComponentVersion(liveRepo, liveComponentAccess.GetName(), latestSemver.Original())
 		if err != nil {
 			return "", fmt.Errorf("failed to get component version: %w", err)
 		}
@@ -487,141 +443,3 @@ func (r *Reconciler) DetermineEffectiveVersionFromLiveRepo(ctx context.Context, 
 		return "", reconcile.TerminalError(errors.New("unknown downgrade policy: " + string(component.Spec.DowngradePolicy)))
 	}
 }
-
-func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.Typed, error) {
-	if spec == nil {
-		return nil, fmt.Errorf("repository spec is nil")
-	}
-
-	raw := &runtime.Raw{}
-	if err := r.OCMScheme.Decode(bytes.NewReader(spec.Raw), raw); err != nil {
-		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
-	}
-
-	if raw.GetType().Name == ctfv1.Type {
-		return r.convertCTFOCMv1ToCTFOCMv2(raw)
-	}
-
-	obj, err := r.OCMScheme.NewObject(raw.Type)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new object: %w", err)
-	}
-
-	if err := r.OCMScheme.Convert(raw, obj); err != nil {
-		return nil, fmt.Errorf("failed to convert repository spec: %w", err)
-	}
-
-	return obj, nil
-}
-
-// TODO: This needs to be adjusted, but irrelevant for the prototype that works on the resolution service.
-func (r *Reconciler) convertCTFOCMv1ToCTFOCMv2(raw *runtime.Raw) (runtime.Typed, error) {
-	values := make(map[string]interface{})
-	if err := json.Unmarshal(raw.Data, &values); err != nil {
-		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
-	}
-
-	ctfType := &ctfv1.Repository{
-		Type: runtime.Type{
-			Version: "",
-			Name:    "CommonTransportFormat",
-		},
-		Path:       values["filePath"].(string),
-		AccessMode: ctfv1.AccessModeReadOnly,
-	}
-
-	return ctfType, nil
-}
-
-func calculateDigest(component *descriptor.Descriptor) (*descriptor.Digest, error) {
-	normalisedData, err := normalisation.Normalisations.Normalise(component, v4alpha1.Algorithm)
-	if err != nil {
-		return nil, fmt.Errorf("error normalising descriptor %s: %w", component.Component.ToIdentity().String(), err)
-	}
-	return &descriptor.Digest{
-		HashAlgorithm:          crypto.SHA256.String(),
-		NormalisationAlgorithm: v4alpha1.Algorithm,
-		Value:                  digest.SHA256.FromBytes(normalisedData).Encoded(),
-	}, nil
-}
-
-//
-//func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descruntime.Descriptor, component *v1alpha1.Component) error {
-//	//var sigs []descruntime.Signature
-//	//if signatureName != "" {
-//	//	for _, sig := range desc.Signatures {
-//	//		if sig.Name == signatureName {
-//	//			sigs = append(sigs, sig)
-//	//			break
-//	//		}
-//	//	}
-//	//} else {
-//	//	sigs = desc.Signatures
-//	//}
-//	//
-//	if len(desc.Signatures) == 0 {
-//		return fmt.Errorf("no signatures found to verify")
-//	}
-//
-//	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-//		logger.WarnContext(ctx, "component version is not considered safely digestable", "error", err.Error())
-//	}
-//
-//	var verifierSpec runtime.Typed
-//	if verifierSpecPath == "" {
-//		logger.InfoContext(ctx, "no verifier specification file given, using default RSASSA-PSS")
-//		verifierSpec = &v1alpha1.Config{}
-//		_, _ = v1alpha1.Scheme.DefaultType(verifierSpec)
-//	} else {
-//		genericScheme := runtime.NewScheme(runtime.WithAllowUnknown())
-//		verifierSpecBytes, err := os.ReadFile(verifierSpecPath)
-//		if err != nil {
-//			return fmt.Errorf("reading verifier specification file %q failed: %w", verifierSpecPath, err)
-//		}
-//		verifierSpec = &runtime.Raw{}
-//		if err := genericScheme.Decode(bytes.NewReader(verifierSpecBytes), verifierSpec); err != nil {
-//			return fmt.Errorf("decoding verifier specification file %q failed: %w", verifierSpecPath, err)
-//		}
-//	}
-//
-//	handler, err := pluginManager.SigningRegistry.GetPlugin(ctx, verifierSpec)
-//	if err != nil {
-//		return fmt.Errorf("getting signature handler plugin failed: %w", err)
-//	}
-//
-//	eg, egctx := errgroup.WithContext(ctx)
-//	eg.SetLimit(concurrencyLimit)
-//	for _, signature := range sigs {
-//		eg.Go(func() error {
-//			start := time.Now()
-//			logger.InfoContext(egctx, "verifying signature", "name", signature.Name)
-//			defer func() {
-//				logger.InfoContext(egctx, "signature verification completed", "name", signature.Name, "duration", time.Since(start).String())
-//			}()
-//
-//			if err := signing.VerifyDigestMatchesDescriptor(egctx, desc, signature, logger); err != nil {
-//				return err
-//			}
-//
-//			var credentials map[string]string
-//			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, signature, verifierSpec); err == nil {
-//				if credentials, err = credentialGraph.Resolve(egctx, consumerID); err != nil {
-//					logger.DebugContext(egctx, "could not resolve credentials for verification", "error", err.Error())
-//				}
-//			}
-//
-//			if len(credentials) > 0 {
-//				logger.DebugContext(egctx, "using discovered credentials for verification", "attributes", slices.Collect(maps.Keys(credentials)))
-//			}
-//
-//			return handler.Verify(egctx, signature, verifierSpec, credentials)
-//		})
-//	}
-//
-//	if err := eg.Wait(); err != nil {
-//		return fmt.Errorf("SIGNATURE VERIFICATION FAILED: %w", err)
-//	}
-//
-//	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL")
-//	return nil
-//}
