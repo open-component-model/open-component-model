@@ -233,7 +233,7 @@ func TestGetBlobFromPath_PreserveDirectory(t *testing.T) {
 
 		foundHeaders = append(foundHeaders, header.Name)
 
-		// Expect exact directory header for preserved directory in canonical form (Base + "/")
+		// Expect exact directory header for preserved directory in canonical form (base + "/")
 		if header.Typeflag == tar.TypeDir && header.Name == expectedDirHeader {
 			foundPrefixed = true
 		}
@@ -516,13 +516,12 @@ func TestGetBlobFromPath_PatternNormalization(t *testing.T) {
 // HELPER FUNCTIONS
 // =============================================================================
 
-// readAllFromBlob reads all content from a blob for testing purposes
+// readAllFromBlob reads all content from a blob.
 func readAllFromBlob(b blob.ReadOnlyBlob) ([]byte, error) {
 	rc, err := b.ReadCloser()
 	if err != nil {
 		return nil, err
 	}
-	// Read first, then close. This ensures we capture read errors before close errors.
 	data, readErr := io.ReadAll(rc)
 	closeErr := rc.Close()
 
@@ -535,7 +534,7 @@ func readAllFromBlob(b blob.ReadOnlyBlob) ([]byte, error) {
 	return data, nil
 }
 
-// createTestFile creates a file with content in the specified path
+// createTestFile creates a file with content in the specified path.
 func createTestFile(t *testing.T, basePath, relativePath, content string) string {
 	fullPath := filepath.Join(basePath, relativePath)
 	dir := filepath.Dir(fullPath)
@@ -546,7 +545,7 @@ func createTestFile(t *testing.T, basePath, relativePath, content string) string
 	return fullPath
 }
 
-// extractTarContents extracts file names from a TAR blob for testing
+// extractTarContents extracts file names from a TAR blob.
 func extractTarContents(t *testing.T, b blob.ReadOnlyBlob) []string {
 	reader, err := b.ReadCloser()
 	require.NoError(t, err)
