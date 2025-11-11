@@ -50,7 +50,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.5.3 // indirect
 	cloud.google.com/go/longrunning v0.6.7 // indirect
-	cloud.google.com/go/monitoring v1.24.2 // indirect
+	cloud.google.com/go/monitoring v1.24.3 // indirect
 	cloud.google.com/go/spanner v1.86.0 // indirect
 	cloud.google.com/go/storage v1.57.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
