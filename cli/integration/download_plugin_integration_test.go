@@ -47,7 +47,6 @@ configurations:
 		"download",
 		"plugin",
 		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
-		"--resource-name", "demo",
 		"--extra-identity", "os=linux",
 		"--extra-identity", "architecture=amd64",
 		"--output", outputPath,
@@ -55,9 +54,10 @@ configurations:
 		"--config", cfgPath,
 	})
 	require.NoError(t, downloadCMD.ExecuteContext(t.Context()), "DownloadPlugin should succeed")
-	assert.FileExists(t, outputPath, "binary should be downloaded")
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.FileExists(t, pluginLocation, "binary should be downloaded")
 
-	info, err := os.Stat(outputPath)
+	info, err := os.Stat(pluginLocation)
 	require.NoError(t, err, "should be able to stat the downloaded file")
 	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
 	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
@@ -94,24 +94,25 @@ configurations:
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir, "ecrplugin")
+	outputPath := filepath.Join(tempDir)
 
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{
 		"download",
 		"plugin",
 		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
-		"--resource-name", "demo",
 		"--extra-identity", "os=linux",
 		"--extra-identity", "architecture=amd64",
 		"--output", outputPath,
 		"--skip-validation",
 		"--config", cfgPath,
 	})
-	require.NoError(t, downloadCMD.ExecuteContext(t.Context()), "DownloadPlugin should succeed")
-	assert.FileExists(t, outputPath, "binary should be downloaded")
 
-	info, err := os.Stat(outputPath)
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	require.NoError(t, downloadCMD.ExecuteContext(t.Context()), "DownloadPlugin should succeed")
+	assert.FileExists(t, pluginLocation, "binary should be downloaded")
+
+	info, err := os.Stat(pluginLocation)
 	require.NoError(t, err, "should be able to stat the downloaded file")
 	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
 	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
@@ -147,14 +148,13 @@ configurations:
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir, "ecrplugin")
+	outputPath := filepath.Join(tempDir)
 
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{
 		"download",
 		"plugin",
 		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
-		"--resource-name", "demo",
 		"--extra-identity", "os=linux",
 		"--extra-identity", "architecture=amd64",
 		"--output", outputPath,
@@ -162,9 +162,11 @@ configurations:
 		"--config", cfgPath,
 	})
 	require.NoError(t, downloadCMD.ExecuteContext(t.Context()), "DownloadPlugin should succeed")
-	assert.FileExists(t, outputPath, "binary should be downloaded")
 
-	info, err := os.Stat(outputPath)
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.FileExists(t, pluginLocation, "binary should be downloaded")
+
+	info, err := os.Stat(pluginLocation)
 	require.NoError(t, err, "should be able to stat the downloaded file")
 	assert.True(t, info.Mode().IsRegular(), "downloaded file should be a regular file")
 	assert.Greater(t, info.Size(), int64(0), "downloaded file should not be empty")
@@ -195,15 +197,14 @@ configurations:
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir, "nonexistent")
+	outputPath := filepath.Join(tempDir)
 
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{
 		"download",
 		"plugin",
 		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
-		"--resource-name", "nonexistent-resource",
-		"--extra-identity", "os=linux",
+		"--extra-identity", "os=does-not-exist",
 		"--extra-identity", "architecture=amd64",
 		"--output", outputPath,
 		"--skip-validation",
@@ -212,7 +213,9 @@ configurations:
 	err := downloadCMD.ExecuteContext(t.Context())
 	require.Error(t, err, "DownloadPlugin should fail for non-existent resource")
 	assert.Contains(t, err.Error(), "no resource found matching identity", "error should mention missing resource")
-	assert.NoFileExists(t, outputPath, "plugin binary should not be downloaded for non-existent resource")
+
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.NoFileExists(t, pluginLocation, "plugin binary should not be downloaded for non-existent resource")
 }
 
 func TestDownloadPluginInvalidComponentReferenceIntegration(t *testing.T) {
@@ -247,14 +250,15 @@ configurations:
 		"download",
 		"plugin",
 		"invalid-component-reference",
-		"--resource-name", "demo",
 		"--output", outputPath,
 		"--skip-validation",
 		"--config", cfgPath,
 	})
 	err := downloadCMD.ExecuteContext(t.Context())
 	require.Error(t, err, "DownloadPlugin should fail for invalid component reference")
-	assert.NoFileExists(t, outputPath, "plugin binary should not be downloaded for invalid component reference")
+
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.NoFileExists(t, pluginLocation, "plugin binary should not be downloaded for invalid component reference")
 }
 
 func TestDownloadPluginWithValidationFailureIntegration(t *testing.T) {
@@ -289,7 +293,6 @@ configurations:
 		"download",
 		"plugin",
 		"ghcr.io/open-component-model/ocm//ocm.software/plugins/ecrplugin:0.27.0",
-		"--resource-name", "demo",
 		"--extra-identity", "os=linux",
 		"--extra-identity", "architecture=amd64",
 		"--output", outputPath,
@@ -302,7 +305,8 @@ configurations:
 	assert.Contains(t, err.Error(), "downloaded binary is not a valid plugin", "error should mention plugin validation failure")
 
 	// The binary should be cleaned up after validation failure
-	assert.NoFileExists(t, outputPath, "plugin binary should be removed after validation failure")
+	pluginLocation := filepath.Join(outputPath, "ecrplugin")
+	assert.NoFileExists(t, pluginLocation, "plugin binary should be removed after validation failure")
 }
 
 // getUserAndPasswordForTest safely gets GitHub credentials for testing
