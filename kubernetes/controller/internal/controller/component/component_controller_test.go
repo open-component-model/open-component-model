@@ -452,7 +452,7 @@ var _ = Describe("Component Controller", func() {
 
 		It("normalizes a component version with a plus", func(ctx SpecContext) {
 			componentObjName := ComponentObj + "-with-plus"
-			componentVersionPlus := Version1 + "+componentVersionSuffix"
+			componentVersionPlus := Version1 + "+componentversionsuffix"
 
 			By("creating a component version")
 			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
