@@ -2,6 +2,7 @@ package blob
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,36 +20,27 @@ type LockedReader struct {
 // before streaming data. The lock is held during the entire copy operation to ensure
 // consistent access and prevent concurrent writes.
 func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) (io.ReadCloser, error) {
-	mu.RLock()
-
-	// Create pipe for streaming
 	pr, pw := io.Pipe()
-
-	var rc io.ReadCloser
-
-	// Context cancellation goroutine - monitors for cancellation and interrupts pipe
-	go func() {
-		<-ctx.Done()
-		if err := ctx.Err(); err != nil {
-			if err := pw.CloseWithError(err); err != nil {
-				slog.ErrorContext(ctx, "unable to close pipe with cancellation error", slog.String("error", err.Error()))
-			}
-			return
-		}
-	}()
-
 	// Copy goroutine - performs the actual data copy
 	go func() {
+		done := make(chan struct{})
+		var copyErrs error
 		var err error
-
-		// Ensure lock is released
-		defer mu.RUnlock()
-		// Ensure pipe is closed
-		defer func() {
-			if err := pw.Close(); err != nil {
-				slog.ErrorContext(ctx, "unable to close pipe writer", slog.String("error", err.Error()))
+		var rc io.ReadCloser
+		closePipe := func() {
+			if copyErrs != nil {
+				if err := pw.CloseWithError(fmt.Errorf("unable to copy data: %w", copyErrs)); err != nil {
+					slog.ErrorContext(ctx, "unable to close pipe with error", slog.String("error", err.Error()))
+				}
+			} else {
+				if err := pw.Close(); err != nil {
+					slog.ErrorContext(ctx, "failed to close pipe", slog.String("error", err.Error()))
+				}
 			}
-		}()
+			if err := rc.Close(); err != nil {
+				slog.ErrorContext(ctx, "failed to close reader", slog.String("error", err.Error()))
+			}
+		}
 		// Get reader
 		if rc, err = blob.ReadCloser(); err != nil {
 			if err := pw.CloseWithError(fmt.Errorf("unable to get reader: %w", err)); err != nil {
@@ -57,21 +49,22 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) (
 			return
 		}
 
-		// Ensure reader is closed once it is available
-		defer func() {
-			if err := rc.Close(); err != nil {
-				slog.ErrorContext(ctx, "unable to close reader", slog.String("error", err.Error()))
+		go func() {
+			defer close(done)
+			if _, err = io.Copy(pw, rc); err != nil {
+				copyErrs = errors.Join(copyErrs, err)
 			}
+
 		}()
 
-		// Copy data through pipe
-		if _, err := io.Copy(pw, rc); err != nil {
-			if err := pw.CloseWithError(fmt.Errorf("unable to copy data: %w", err)); err != nil {
-				slog.ErrorContext(ctx, "unable to close pipe with error", slog.String("error", err.Error()))
-			}
-			return
+		select {
+		case <-ctx.Done():
+			copyErrs = errors.Join(copyErrs, ctx.Err())
+			closePipe()
+			<-done // Wait for copy to finish
+		case <-done:
+			closePipe()
 		}
-
 	}()
 
 	return &LockedReader{pr: pr}, nil

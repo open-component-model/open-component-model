@@ -120,7 +120,7 @@ func TestNewLockedReader(t *testing.T) {
 
 		_, err = io.ReadAll(lockedReader)
 		r.Error(err)
-		r.Equal(err.Error(), "unable to copy data: simulated read failure")
+		r.Equal("unable to copy data: simulated read failure", err.Error())
 	})
 
 	t.Run("should handle concurrent access", func(t *testing.T) {
