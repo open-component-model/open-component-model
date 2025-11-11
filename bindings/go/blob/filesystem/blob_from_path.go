@@ -114,16 +114,10 @@ func createDirBlob(ctx context.Context, path string, opt DirOptions) (blob.ReadO
 		var tarErr error
 
 		defer func() {
-			// Close TAR writer first and combine errors
-			if closeErr := tw.Close(); closeErr != nil {
-				if tarErr == nil {
-					tarErr = closeErr
-				} else {
-					tarErr = errors.Join(tarErr, closeErr)
-				}
-			}
+			// Close TAR writer
+			closeErr := tw.Close()
 			// Close pipe with combined error (if any, otherwise nil -> io.EOF)
-			_ = pw.CloseWithError(tarErr)
+			_ = pw.CloseWithError(errors.Join(tarErr, closeErr))
 		}()
 
 		// If context is already done, abort early.
