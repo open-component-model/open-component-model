@@ -220,8 +220,7 @@ jobs:
               download plugin \
               ${OCM_REPOSITORY}//ocm.software/plugins/helminput:${VERSION} \
               --output /tmp/plugin \
-              --config "/.ocmconfig" \
-              --resource-name binary
+              --config "/.ocmconfig"
 
       - name: Summary
         env:
