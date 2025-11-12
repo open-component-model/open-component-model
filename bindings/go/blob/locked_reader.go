@@ -24,6 +24,7 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) (
 	// Copy goroutine - performs the actual data copy
 	go func() {
 		mu.RLock()
+		defer mu.RLock()
 		done := make(chan struct{})
 		var copyErrs error
 		var err error
@@ -41,7 +42,6 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) (
 			if err := rc.Close(); err != nil {
 				slog.ErrorContext(ctx, "failed to close reader", slog.String("error", err.Error()))
 			}
-			mu.RUnlock()
 		}
 		// Get reader
 		if rc, err = blob.ReadCloser(); err != nil {
