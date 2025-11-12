@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -17,18 +18,21 @@ import (
 
 // CacheBackedRepository provides a cache-backed implementation of repository.ComponentVersionRepository.
 // It wraps a real repository and uses a worker pool to handle concurrent access with caching.
+// This is a READ-ONLY cache. Writing operations are not cached.
 type CacheBackedRepository struct {
 	spec       runtime.Typed
 	cfg        *configuration.Configuration
 	workerPool *workerpool.WorkerPool
 	repo       repository.ComponentVersionRepository
+	logger     *logr.Logger
 }
 
 var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
 
 // newCacheBackedRepository creates a new CacheBackedRepository instance.
-func newCacheBackedRepository(spec runtime.Typed, cfg *configuration.Configuration, wp *workerpool.WorkerPool, repo repository.ComponentVersionRepository) *CacheBackedRepository {
+func newCacheBackedRepository(logger *logr.Logger, spec runtime.Typed, cfg *configuration.Configuration, wp *workerpool.WorkerPool, repo repository.ComponentVersionRepository) *CacheBackedRepository {
 	return &CacheBackedRepository{
+		logger:     logger,
 		spec:       spec,
 		cfg:        cfg,
 		workerPool: wp,
@@ -42,6 +46,8 @@ func (c *CacheBackedRepository) AddComponentVersion(ctx context.Context, descrip
 }
 
 // GetComponentVersion retrieves a component version, using the cache when possible.
+// This function is async. First call to this function will return a resolution.ErrResolutionInProgress error.
+// Second call, once the resolution succeeds, will return a cached result with a default TTL.
 func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
 	var configHash []byte
 	if c.cfg != nil {
@@ -70,12 +76,12 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 }
 
 // ListComponentVersions lists all versions of a component, using the cache when possible.
+// We never cache this call because it needs to return actual, existing versions on each call.
 func (c *CacheBackedRepository) ListComponentVersions(ctx context.Context, component string) ([]string, error) {
 	return c.repo.ListComponentVersions(ctx, component)
 }
 
 // AddLocalResource adds a local resource to the underlying repository.
-// TODO: Eventually cache these as well.
 func (c *CacheBackedRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
 	return c.repo.AddLocalResource(ctx, component, version, res, content)
 }
@@ -100,17 +106,15 @@ func (c *CacheBackedRepository) GetLocalSource(ctx context.Context, component, v
 func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 	checkable, ok := c.repo.(repository.HealthCheckable)
 	if !ok {
-		return fmt.Errorf("repository is not healthy")
+		c.logger.V(1).Info("repository is not health-checkable", "repository", c.spec)
+
+		return nil
 	}
 
 	return checkable.CheckHealth(ctx)
 }
 
 // buildCacheKey generates a cache key from the configuration hash, repository spec, component, and version.
-// TODO: Arguably, this function could live in the workerpool where it would generate the key for the right
-// entry since that's the one using the cache in the end. However, arguably*2 the cached back repository
-// gets the component version and the config hash and the repository spec. So it knows how to calculate the key
-// out of those items. Question: Where does this function belong?
 func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)
 	if err != nil {

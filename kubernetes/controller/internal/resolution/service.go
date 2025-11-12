@@ -21,11 +21,7 @@ var ErrResolutionInProgress = workerpool.ErrResolutionInProgress
 
 // NewResolver creates a new component version resolver.
 // The returned worker pool must be started separately by adding it to the manager.
-func NewResolver(client client.Reader, logger logr.Logger, workerPool *workerpool.WorkerPool, pluginManager *plugins.PluginManager) *Resolver {
-	if logger.GetSink() == nil {
-		logger = logr.Discard()
-	}
-
+func NewResolver(client client.Reader, logger *logr.Logger, workerPool *workerpool.WorkerPool, pluginManager *plugins.PluginManager) *Resolver {
 	resolver := &Resolver{
 		client:        client,
 		logger:        logger,
@@ -40,7 +36,7 @@ func NewResolver(client client.Reader, logger logr.Logger, workerPool *workerpoo
 // is non-blocking so the controller can return once the resolution is done.
 type Resolver struct {
 	client        client.Reader
-	logger        logr.Logger
+	logger        *logr.Logger
 	workerPool    *workerpool.WorkerPool
 	pluginManager *plugins.PluginManager
 }
@@ -61,24 +57,19 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *ResolveOp
 		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
 	}
 
-	spec := opts.RepositorySpec.DeepCopyTyped()
-	repo, err := r.createRepository(ctx, spec, cfg)
+	repo, err := r.createRepository(ctx, opts.RepositorySpec, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return newCacheBackedRepository(spec, cfg, r.workerPool, repo), nil
+	return newCacheBackedRepository(r.logger, opts.RepositorySpec, cfg, r.workerPool, repo), nil
 }
 
 func (r *Resolver) createRepository(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (repository.ComponentVersionRepository, error) {
 	pm := r.pluginManager.PluginManager
-	if pm == nil {
-		return nil, fmt.Errorf("plugin manager is nil")
-	}
-
 	options := setup.RepositoryOptions{
-		PluginManager: pm,
-		Logger:        r.logger,
+		Registry: pm.ComponentVersionRepositoryRegistry,
+		Logger:   r.logger,
 	}
 	if cfg != nil {
 		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{

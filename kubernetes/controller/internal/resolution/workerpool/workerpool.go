@@ -45,7 +45,7 @@ type PoolOptions struct {
 	// QueueSize is the size of the work queue buffer.
 	QueueSize int
 	// Logger for the worker pool.
-	Logger logr.Logger
+	Logger *logr.Logger
 	// Client for Kubernetes API access.
 	Client client.Reader
 	// Cache for caching.
@@ -66,10 +66,6 @@ var ErrResolutionInProgress = fmt.Errorf("component version resolution in progre
 
 // NewWorkerPool creates a new worker pool.
 func NewWorkerPool(opts PoolOptions) *WorkerPool {
-	if opts.Logger.GetSink() == nil {
-		opts.Logger = logr.Discard()
-	}
-
 	if opts.WorkerCount <= 0 {
 		opts.WorkerCount = 10
 	}
@@ -111,25 +107,27 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 
 // GetComponentVersion retrieves a component version using the worker pool and cache.
 func (wp *WorkerPool) GetComponentVersion(ctx context.Context, opts ResolveOptions) (*descriptor.Descriptor, error) {
-	return enqueueWorkItem[*descriptor.Descriptor](ctx, wp, opts, wp.getComponentVersion)
+	return resolveWorkRequest[*descriptor.Descriptor](ctx, wp, opts, wp.getComponentVersion)
 }
 
-// enqueueWorkItem is an abstraction in front of the worker queue. It is meant to be called but small purpose functions,
-// like the GetComponentVersion function above, that wish to use the worker-pool to cache results. For example,
-// GetLocalResource later on.
-func enqueueWorkItem[T any](ctx context.Context, wp *WorkerPool, opts ResolveOptions, fn workFunc) (result T, _ error) {
+// resolveWorkRequest is an abstraction in front of the worker queue and resolution logic. It is meant to be called by
+// small purpose functions, like the GetComponentVersion function above, that wish to use the worker-pool to cache results.
+// For example, another function could be GetLocalResource that caches the blob object.
+func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts ResolveOptions, fn workFunc) (result T, _ error) {
 	wp.inProgressMu.Lock()
 	defer wp.inProgressMu.Unlock()
 
 	// check if already in progress
 	if _, exists := wp.inProgress[opts.Key]; exists {
-		wp.Logger.V(1).Info("resolution already in progress", "component", opts.Component, "version", opts.Version)
+		wp.Logger.V(1).Info("resolution still in progress", "component", opts.Component, "version", opts.Version)
 		return result, ErrResolutionInProgress
 	}
 
 	if cached, ok := wp.Cache.Get(opts.Key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.Error != nil {
+			// we remove error results so the controller can immediately retry.
+			wp.Cache.Remove(opts.Key)
 			return result, cached.Error
 		}
 
@@ -159,7 +157,7 @@ func enqueueWorkItem[T any](ctx context.Context, wp *WorkerPool, opts ResolveOpt
 	select {
 	case wp.workQueue <- workItem:
 		wp.inProgress[opts.Key] = struct{}{}
-		InProgressGauge.Inc()
+		InProgressGauge.Set(float64(len(wp.inProgress)))
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
 		wp.Logger.V(1).Info("enqueued request", "component", opts.Component)
 
@@ -174,22 +172,14 @@ func enqueueWorkItem[T any](ctx context.Context, wp *WorkerPool, opts ResolveOpt
 func (wp *WorkerPool) worker(ctx context.Context, id int) {
 	defer wp.workersDone.Done()
 	logger := wp.Logger.WithValues("worker", id)
-	logger.V(1).Info("worker started")
 	defer logger.V(1).Info("worker stopped")
 
 	for {
 		select {
 		case <-ctx.Done():
-			logger.V(1).Info("worker stopped due to context cancellation")
+			logger.V(1).Error(ctx.Err(), "worker stopped due to context cancellation")
 			return
-		case item, ok := <-wp.workQueue:
-			if !ok {
-				// the channel was closed; most likely the controller is shutting down and
-				// the starting context was cancelled which closes the worker queue.
-				logger.V(1).Info("work queue closed, worker exiting")
-				return
-			}
-
+		case item := <-wp.workQueue:
 			QueueSizeGauge.Set(float64(len(wp.workQueue)))
 			wp.handleWorkItem(ctx, item.Fn, logger, item)
 		}
@@ -207,7 +197,7 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, f workFunc, logger log
 		wp.inProgressMu.Lock()
 		delete(wp.inProgress, item.Opts.Key)
 		wp.inProgressMu.Unlock()
-		InProgressGauge.Dec()
+		InProgressGauge.Set(float64(len(wp.inProgress)))
 	}()
 
 	start := time.Now()
@@ -241,7 +231,6 @@ func (wp *WorkerPool) getComponentVersion(ctx context.Context, opts ResolveOptio
 	if err != nil {
 		return nil, fmt.Errorf("failed to get component version %s:%s: %w", opts.Component, opts.Version, err)
 	}
-	wp.Logger.V(1).Info("resolved component version", "component", opts.Component, "version", opts.Version, "descriptor", descriptor)
 
 	return descriptor, nil
 }

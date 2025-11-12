@@ -36,6 +36,7 @@ type PluginManager struct {
 // context is cancelled. It's designed to be called by the controller manager.
 func (m *PluginManager) Start(ctx context.Context) error {
 	pm := manager.NewPluginManager(ctx)
+	// TODO(Skarlso): Change the registration process once update lands.
 	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(m.Scheme, pm.ComponentVersionRepositoryRegistry, m.Provider, &ociv1.Repository{}); err != nil {
 		return fmt.Errorf("failed to register internal component version repository plugin: %w", err)
 	}

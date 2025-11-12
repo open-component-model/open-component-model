@@ -59,7 +59,7 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 		t.Cleanup(func() {
 			err := env.Close(ctx)
 			require.NoError(t, err)
@@ -127,7 +127,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 		t.Cleanup(func() {
 			err := env.Close(ctx)
 			require.NoError(t, err)
@@ -217,7 +217,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 			WithObjects(configMap1, configMap2).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 		t.Cleanup(func() {
 			err := env.Close(ctx)
 			require.NoError(t, err)
@@ -294,7 +294,7 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	env := setupTestEnvironment(t, k8sClient, logger)
+	env := setupTestEnvironment(t, k8sClient, &logger)
 	t.Cleanup(func() {
 		err := env.Close(ctx)
 		require.NoError(t, err)
@@ -349,7 +349,7 @@ func TestResolveComponentVersionDeduplication(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 		t.Cleanup(func() {
 			err := env.Close(ctx)
 			require.NoError(t, err)
@@ -443,7 +443,7 @@ func (e *testEnvironment) Close(ctx context.Context) error {
 }
 
 // setupTestEnvironment creates a test environment with a resolver that has mock plugins registered.
-func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Logger) *testEnvironment {
+func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Logger) *testEnvironment {
 	t.Helper()
 
 	// Register mock OCI plugin

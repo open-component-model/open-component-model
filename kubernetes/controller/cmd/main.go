@@ -38,7 +38,6 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
@@ -183,7 +182,7 @@ func main() {
 	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		WorkerCount: resolverWorkerCount,
 		QueueSize:   resolverWorkerQueueLength,
-		Logger:      setupLog,
+		Logger:      &setupLog,
 		Client:      mgr.GetClient(),
 		Cache:       resolverCache,
 	})
@@ -203,8 +202,6 @@ func main() {
 		setupLog.Error(err, "unable to create ocm context cache")
 		os.Exit(1)
 	}
-
-	_ = resolution.NewResolver(mgr.GetClient(), setupLog, workerPool, pm)
 
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
