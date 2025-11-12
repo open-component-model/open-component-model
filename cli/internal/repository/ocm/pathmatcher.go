@@ -2,6 +2,7 @@ package ocm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -45,7 +46,11 @@ func (r *resolverProvider) GetComponentVersionRepositoryForComponent(ctx context
 	if err == nil {
 		if r.graph != nil {
 			if credMap, err = r.graph.Resolve(ctx, consumerIdentity); err != nil {
-				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", repoSpec, err.Error()))
+				if errors.Is(err, repository.ErrNotFound) {
+					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", repoSpec, err.Error()))
+				} else {
+					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", repoSpec, err)
+				}
 			}
 		}
 	} else {
