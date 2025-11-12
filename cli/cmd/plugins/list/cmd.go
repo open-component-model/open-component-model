@@ -7,9 +7,9 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
+
 	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/bindings/go/dag/sync"
-
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -75,11 +75,11 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 
 	if pluginRegistryFlag != "" {
 		pluginRegistries = append(pluginRegistries, pluginRegistryFlag)
-	} else {
-		// TODO: Load registryDescs from config
+	} else { //nolint:staticcheck // see TODOs below
+		// TODO: Load registries from config
 		// see https://github.com/open-component-model/ocm-project/issues/599
 
-		// TODO: Set default registryDesc
+		// TODO: Set default registry if no registry is provided
 		// see https://github.com/open-component-model/ocm-project/issues/598
 	}
 

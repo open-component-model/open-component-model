@@ -1,9 +1,6 @@
 package get
 
 import (
-	"os"
-	"path/filepath"
-
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +12,7 @@ const (
 
 // pluginDirectoryDefault contains all plugins for ocm.
 // TODO: Check if const would be better suited as this is used in cmd/download/plugin/cmd.go as well.
-var pluginDirectoryDefault = filepath.Join(os.Getenv("HOME"), ".config", "ocm", "plugins")
+// var pluginDirectoryDefault = filepath.Join(os.Getenv("HOME"), ".config", "ocm", "plugins")
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
