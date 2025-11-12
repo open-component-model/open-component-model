@@ -333,7 +333,11 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	if err == nil {
 		if f.credentialProvider != nil {
 			if credentials, err = f.credentialProvider.Resolve(ctx, consumerIdentity); err != nil {
-				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
+				if errors.Is(err, repository.ErrNotFound) {
+					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
+				} else {
+					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, err)
+				}
 			}
 		}
 	} else {

@@ -444,7 +444,11 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 	if err == nil {
 		if prov.graph != nil {
 			if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
-				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", prov.targetRepoSpec, err.Error()))
+				if errors.Is(err, repository.ErrNotFound) {
+					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", prov.targetRepoSpec, err.Error()))
+				} else {
+					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", prov.targetRepoSpec, err)
+				}
 			}
 		}
 	} else {
