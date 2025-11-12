@@ -18,15 +18,36 @@ However, we noticed a significant overlap of the **transfer requirements** with
 the **component constructors** requirements. A detailed comparison of shared 
 requirements is provided in [Requirements](#requirements).
 
-This ADR proposes a unified solution for transferring and constructing 
-component versions. The goal behind this unification is:
+With the **transformation specification**, this ADR proposes a unified solution 
+for transferring and constructing component versions.
 
-- **Maintainability**: By having a unified engine / unified code paths for both 
-  use cases, we reduce code duplication and maintenance efforts. It is also 
-  easier to keep both use cases in sync with new features and bug fixes.
-- **Extensibility**: The transformation specification is designed to be 
-  extensible. By reusing it for component construction, we gain flexibility 
-  to extend the component construction capabilities.
+## Value Proposition of the Transformation Specification
+
+### Flexible Composability of Extensible Transformations
+
+The CEL-based expression syntax provides a **unified foundation for all component modifications** in OCM:
+
+- **Uniform Codebase**: Single consistent framework for all transformations, 
+  reducing fragmentation and maintenance burden.
+- **Plugin Extensibility**: Open type system allows domain-specific 
+  transformations without core code changes.
+- **Low-Level Primitive Language**: Maps high-level operations (`construct`, 
+  `transfer`) to an extensible atomic set of composable transformations.
+
+### Transparency into Transformation Composition
+
+The **serializable specification** enables validation before execution:
+
+- **Static Analysis**: Inspect the complete transformation graph without running anything
+- **Pre-Execution Type Checking**: Catch type mismatches at specification time, not runtime
+- **Early Failure Detection**: Immediate feedback, especially critical for large multi-component transfers
+- **Debuggability**: Addresses the **core OCM pain point**—opaque transfer 
+  failures. Explicit specifications make troubleshooting straightforward with clear visibility into what failed and why.
+
+For complex operations, validating transformation chains before execution is 
+**mission-critical** for operational confidence and efficiency.
+
+### Size of a Transformation Graph
 
 
 ## Requirements
@@ -52,7 +73,8 @@ This serves as:
 
 ### Conclusion
 
-The functional requirements of both use cases are almost identical. The 
+The functional requirements of both use cases are almost identical - they 
+both build on a common set of atomic transformations. The 
 difference between the use cases is currently the **user interface**:
 
 - for **ocm transfer component**, the plan is to offer a backwards compatible 
@@ -131,7 +153,8 @@ It is not intended to be complete. It is brief, contains explanatory comments
 and serves to illustrate the general structure and concept of transformations.
 
 Detailed samples for specific use cases are provided in [Mapping From 
-Constructor to Transformation Specification](#mapping-constructor-file-to-transformation-specification).
+Constructor to Transformation Specification](#mapping-from-constructor-to-transformation-specification) and [Mapping 
+From Transfer to Transformation Specification](#mapping-from-transfer-command-to-transformation-specification).
 
 The sample shows the exemplary `output` as a comment under each transformation.
 This is purely for illustration purposes. In reality, each transformation 
@@ -766,6 +789,9 @@ The result of the last transformation step (so, currently, either a
 `digester`, `verifier` of `uploader` is used to create the component
 version). This then has to be uploaded with a `component.uploader`
 transformation.
+
+## Mapping From Transfer Command to Transformation Specification
+TBD
 
 ## Resource as Atomic Unit in OCM
 - The atomic unit in ocm is **resource** NOT A PLAIN BLOB or ACCESS, kind of
