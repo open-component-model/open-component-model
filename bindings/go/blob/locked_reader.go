@@ -19,12 +19,12 @@ type LockedReader struct {
 // NewLockedReader creates a thread-safe reader for a blob that acquires a read lock
 // before streaming data. The lock is held during the entire copy operation to ensure
 // consistent access and prevent concurrent writes.
-func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) (io.ReadCloser, error) {
+func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) io.ReadCloser {
 	pr, pw := io.Pipe()
 	// Copy goroutine - performs the actual data copy
 	go func() {
 		mu.RLock()
-		defer mu.RLock()
+		defer mu.RUnlock()
 		done := make(chan struct{})
 		var copyErrs error
 		var err error
@@ -68,7 +68,7 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) (
 		}
 	}()
 
-	return &LockedReader{pr: pr}, nil
+	return &LockedReader{pr: pr}
 }
 
 func (lr *LockedReader) Read(p []byte) (n int, err error) {
