@@ -93,13 +93,14 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	<-ctx.Done()
 	wp.Logger.Info("worker pool shutting down, draining queue")
 
-	// close work queue to signal workers to stop
-	close(wp.workQueue)
-
 	// wait for all workers to finish
 	done := make(chan struct{})
 	go func() {
 		wp.workersDone.Wait()
+
+		// now it's safe to close the queue
+		close(wp.workQueue)
+
 		close(done)
 	}()
 
@@ -205,12 +206,7 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 		case <-ctx.Done():
 			logger.V(1).Error(ctx.Err(), "worker stopped due to context cancellation")
 			return
-		case item, ok := <-wp.workQueue:
-			if !ok {
-				logger.V(1).Info("worker stopped due to closed channel")
-				return
-			}
-
+		case item := <-wp.workQueue:
 			QueueSizeGauge.Set(float64(len(wp.workQueue)))
 			wp.handleWorkItem(ctx, &logger, item)
 		}
