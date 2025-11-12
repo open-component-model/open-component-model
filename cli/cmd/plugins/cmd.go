@@ -10,15 +10,25 @@ import (
 // New represents any command that is related to adding ( "add"ing ) objects
 func New() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "plugin registry {get|list}",
+		Use:   "plugin",
 		Short: "Manage OCM plugins",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
 	}
 
-	cmd.AddCommand(get.New())
-	cmd.AddCommand(list.New())
+	registry := &cobra.Command{
+		Use:   "registry {get|list}",
+		Short: "Manage plugin registries",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	registry.AddCommand(get.New())
+	registry.AddCommand(list.New())
+
+	cmd.AddCommand(registry)
 
 	return cmd
 }
