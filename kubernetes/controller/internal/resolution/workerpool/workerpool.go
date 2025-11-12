@@ -30,7 +30,7 @@ type Result struct {
 
 // WorkItem represents a single work item to be processed by the worker pool.
 type WorkItem struct {
-	// Type indicates the type of work to be performed.
+	// Fn is the work function that is executed to process a work item.
 	Fn workFunc
 	// Opts contains the resolve options.
 	Opts ResolveOptions
@@ -131,12 +131,16 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 		return result, fmt.Errorf("failed to generate cache key: %w", err)
 	}
 
-	// check if already in progress
-	if _, exists := wp.inProgress[key]; exists {
-		wp.Logger.V(1).Info("resolution still in progress", "component", opts.Component, "version", opts.Version)
-		return result, ErrResolutionInProgress
-	}
-
+	// Check cache BEFORE checking in-progress, otherwise we get into a scenario where
+	// cache has been populated but in-progress has not yet been cleared and an error
+	// is returned even though the value exists.
+	// This is a slim chance, but not zero.
+	// handleWorkItem -> Cache.Add
+	// resolveWorkRequest -> locks InProgress so handleWorkItem cannot lock to delete the key
+	// If it would check InProgress before we check the cache it would return the error even though the item
+	// is already in the cache.
+	// With this, it returns, releases in-progress mutex, defer in handleWorkItem continues and removes the
+	// InProgress key.
 	if cached, ok := wp.Cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.Error != nil {
@@ -153,6 +157,14 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 		return res, nil
 	}
 
+	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
+
+	// check if already/still in progress
+	if _, exists := wp.inProgress[key]; exists {
+		wp.Logger.V(1).Info("resolution still in progress", "component", opts.Component, "version", opts.Version)
+		return result, ErrResolutionInProgress
+	}
+
 	// check for context cancellation before enqueuing
 	select {
 	case <-ctx.Done():
@@ -160,14 +172,11 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 	default:
 	}
 
-	CacheMissCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
-
 	workItem := &WorkItem{
 		Fn:   fn,
 		Opts: opts,
 	}
 
-	// Try to enqueue with lock held to make check-and-enqueue atomic
 	select {
 	case wp.workQueue <- workItem:
 		wp.inProgress[key] = struct{}{}
@@ -177,8 +186,11 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 
 		return result, ErrResolutionInProgress
 	default:
-		// Queue is full
-		return result, fmt.Errorf("work queue is full, cannot enqueue request for %s", opts.Component)
+		if len(wp.workQueue) == wp.QueueSize {
+			return result, fmt.Errorf("work queue is full; cannot resolve requests for %s", opts.Component)
+		}
+
+		return result, fmt.Errorf("cannot enqueue request for %s", opts.Component)
 	}
 }
 
@@ -195,12 +207,12 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 			return
 		case item, ok := <-wp.workQueue:
 			if !ok {
-				logger.V(1).Error(ctx.Err(), "worker stopped due to closed channel")
+				logger.V(1).Info("worker stopped due to closed channel")
 				return
 			}
 
 			QueueSizeGauge.Set(float64(len(wp.workQueue)))
-			wp.handleWorkItem(ctx, item.Fn, logger, item)
+			wp.handleWorkItem(ctx, &logger, item)
 		}
 	}
 }
@@ -208,7 +220,7 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 // workFunc is the signature for functions that process work items.
 type workFunc func(ctx context.Context, item ResolveOptions) (any, error)
 
-func (wp *WorkerPool) handleWorkItem(ctx context.Context, f workFunc, logger logr.Logger, item *WorkItem) {
+func (wp *WorkerPool) handleWorkItem(ctx context.Context, logger *logr.Logger, item *WorkItem) {
 	key, err := item.Opts.KeyFunc()
 	if err != nil {
 		logger.Error(err, "failed to generate cache key")
@@ -226,7 +238,7 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, f workFunc, logger log
 	}()
 
 	start := time.Now()
-	result, err := f(ctx, item.Opts)
+	result, err := item.Fn(ctx, item.Opts)
 	duration := time.Since(start).Seconds()
 
 	// Track metrics

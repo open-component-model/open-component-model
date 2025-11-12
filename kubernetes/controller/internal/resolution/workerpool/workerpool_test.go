@@ -116,7 +116,7 @@ func TestWorkerPool_SingleResolution(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 
 		opts := workerpool.ResolveOptions{
 			Component:  "single-component",
@@ -165,7 +165,7 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 
 		const numComponents = 20
 		results := make([]*descriptor.Descriptor, numComponents)
@@ -259,7 +259,7 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 			},
 		}
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 
 		const numConcurrent = 50
 		errs := make([]error, numConcurrent)
@@ -422,7 +422,7 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 
 		opts := workerpool.ResolveOptions{
 			Component:  "cancel-component",
@@ -477,7 +477,7 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 			WithObjects(configMap).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 
 		versions := []string{"v1.0.0", "v1.1.0", "v1.2.0", "v2.0.0"}
 		const numConcurrent = 10
@@ -578,7 +578,7 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 			WithObjects(configMap1, configMap2).
 			Build()
 
-		env := setupTestEnvironment(t, k8sClient, logger)
+		env := setupTestEnvironment(t, k8sClient, &logger)
 
 		// Create a single shared mock repository to avoid race conditions
 		mockRepo := &mockRepository{}
@@ -669,12 +669,12 @@ type testEnvironment struct {
 }
 
 // setupTestEnvironment creates a test environment with a worker pool.
-func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Logger) *testEnvironment {
+func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Logger) *testEnvironment {
 	t.Helper()
 
 	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
 	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		Logger: &logger,
+		Logger: logger,
 		Client: k8sClient,
 		Cache:  cache,
 	})
