@@ -165,7 +165,7 @@ func main() {
 
 	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
 		IdleTimeout: time.Hour,
-		Logger:      setupLog,
+		Logger:      &setupLog,
 		Scheme:      ocmscheme,
 		Provider:    repositoryProvider,
 	})

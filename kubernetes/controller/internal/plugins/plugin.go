@@ -18,7 +18,7 @@ import (
 
 type PluginManagerOptions struct {
 	IdleTimeout time.Duration
-	Logger      logr.Logger
+	Logger      *logr.Logger
 	Scheme      *ocmruntime.Scheme
 	Provider    repository.ComponentVersionRepositoryProvider
 }
@@ -26,7 +26,7 @@ type PluginManagerOptions struct {
 // PluginManager contains settings for the plugin manager.
 type PluginManager struct {
 	IdleTimeout   time.Duration
-	Logger        logr.Logger
+	Logger        *logr.Logger
 	PluginManager *manager.PluginManager
 	Scheme        *ocmruntime.Scheme
 	Provider      repository.ComponentVersionRepositoryProvider
@@ -69,10 +69,6 @@ func (m *PluginManager) Shutdown(ctx context.Context) error {
 // NewPluginManager creates and initializes a plugin manager with the given configuration.
 // It registers plugins from the configured Locations and built-in plugins.
 func NewPluginManager(opts PluginManagerOptions) *PluginManager {
-	if opts.Logger.GetSink() == nil {
-		opts.Logger = logr.Discard()
-	}
-
 	return &PluginManager{
 		Logger:      opts.Logger,
 		IdleTimeout: opts.IdleTimeout,

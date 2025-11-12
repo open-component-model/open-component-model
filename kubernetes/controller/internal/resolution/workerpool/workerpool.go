@@ -99,10 +99,21 @@ func (wp *WorkerPool) Start(ctx context.Context) error {
 	close(wp.workQueue)
 
 	// wait for all workers to finish
-	wp.workersDone.Wait()
+	done := make(chan struct{})
+	go func() {
+		wp.workersDone.Wait()
+		close(done)
+	}()
 
-	wp.Logger.Info("worker pool shutdown complete")
-	return nil
+	timeout := time.NewTimer(5 * time.Second)
+	defer timeout.Stop()
+	select {
+	case <-done:
+		wp.Logger.Info("worker pool shutdown complete")
+		return nil
+	case <-timeout.C:
+		return fmt.Errorf("timed out waiting for worker pool to shutdown")
+	}
 }
 
 // GetComponentVersion retrieves a component version using the worker pool and cache.
@@ -179,7 +190,12 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 		case <-ctx.Done():
 			logger.V(1).Error(ctx.Err(), "worker stopped due to context cancellation")
 			return
-		case item := <-wp.workQueue:
+		case item, ok := <-wp.workQueue:
+			if !ok {
+				logger.V(1).Error(ctx.Err(), "worker stopped due to closed channel")
+				return
+			}
+
 			QueueSizeGauge.Set(float64(len(wp.workQueue)))
 			wp.handleWorkItem(ctx, item.Fn, logger, item)
 		}
@@ -196,8 +212,8 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, f workFunc, logger log
 	defer func() {
 		wp.inProgressMu.Lock()
 		delete(wp.inProgress, item.Opts.Key)
-		wp.inProgressMu.Unlock()
 		InProgressGauge.Set(float64(len(wp.inProgress)))
+		wp.inProgressMu.Unlock()
 	}()
 
 	start := time.Now()
