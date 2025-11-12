@@ -54,8 +54,7 @@ func TestNewLockedReader(t *testing.T) {
 		testData := "hello world test data"
 		testBlob := inmemory.New(strings.NewReader(testData))
 
-		lockedReader, err := blob.NewLockedReader(ctx, &mu, testBlob)
-		r.NoError(err, "NewLockedReader should not return error")
+		lockedReader := blob.NewLockedReader(ctx, &mu, testBlob)
 		r.NotNil(lockedReader, "LockedReader should not be nil")
 
 		// Read data
@@ -75,8 +74,7 @@ func TestNewLockedReader(t *testing.T) {
 
 		testBlob := inmemory.New(strings.NewReader(""))
 
-		lockedReader, err := blob.NewLockedReader(ctx, &mu, testBlob)
-		r.NoError(err, "NewLockedReader should not return error for empty blob")
+		lockedReader := blob.NewLockedReader(ctx, &mu, testBlob)
 		r.NotNil(lockedReader, "LockedReader should not be nil")
 
 		// Read data
@@ -98,9 +96,8 @@ func TestNewLockedReader(t *testing.T) {
 		expectedErr := errors.New("failed to get reader")
 		mockBlob.On("ReadCloser").Return(nil, expectedErr)
 
-		reader, err := blob.NewLockedReader(ctx, &mu, mockBlob)
-		r.NoError(err, "NewLockedReader should not return error")
-		_, err = io.ReadAll(reader)
+		reader := blob.NewLockedReader(ctx, &mu, mockBlob)
+		_, err := io.ReadAll(reader)
 		r.ErrorContains(err, expectedErr.Error(), "NewLockedReader should return error when blob.ReadCloser fails")
 	})
 
@@ -115,10 +112,9 @@ func TestNewLockedReader(t *testing.T) {
 		failingReadCloser.On("Read", mock.Anything).Return(0, errors.New("simulated read failure"))
 		failingReadCloser.On("Close").Return(nil)
 
-		lockedReader, err := blob.NewLockedReader(ctx, &mu, mockBlob)
-		r.NoError(err)
+		lockedReader := blob.NewLockedReader(ctx, &mu, mockBlob)
 
-		_, err = io.ReadAll(lockedReader)
+		_, err := io.ReadAll(lockedReader)
 		r.Error(err)
 		r.Equal("unable to copy data: simulated read failure", err.Error())
 	})
@@ -136,10 +132,7 @@ func TestNewLockedReader(t *testing.T) {
 			eg.Go(func() error {
 				localBlob := inmemory.New(strings.NewReader(testData))
 
-				lockedReader, err := blob.NewLockedReader(ctx, &mu, localBlob)
-				if err != nil {
-					return fmt.Errorf("NewLockedReader failed for reader %d: %w", i, err)
-				}
+				lockedReader := blob.NewLockedReader(ctx, &mu, localBlob)
 
 				if _, err := io.ReadAll(lockedReader); err != nil {
 					return fmt.Errorf("ReadAll failed for reader %d: %w", i, err)
@@ -170,8 +163,7 @@ func TestNewLockedReader(t *testing.T) {
 		// Close might not be called if context cancellation happens before defer cleanup is reached
 		slowReadCloser.On("Close").Return(nil).Once()
 
-		lockedReader, err := blob.NewLockedReader(ctx, &mu, mockBlob)
-		r.NoError(err, "NewLockedReader should not return error")
+		lockedReader := blob.NewLockedReader(ctx, &mu, mockBlob)
 
 		// Cancel context after a brief delay
 		go func() {
@@ -180,7 +172,7 @@ func TestNewLockedReader(t *testing.T) {
 		}()
 
 		// Try to read - should get cancellation error due to separate goroutine interrupting pipe
-		_, err = io.ReadAll(lockedReader)
+		_, err := io.ReadAll(lockedReader)
 		r.Error(err, "Reading should return error when context is cancelled")
 		r.ErrorContains(err, "context canceled", "Error should indicate context cancellation")
 
