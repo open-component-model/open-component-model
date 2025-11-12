@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash"
 	"hash/fnv"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
@@ -56,17 +55,16 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		configHash = c.cfg.Hash
 	}
 
-	key, err := buildCacheKey(configHash, c.spec, component, version)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build cache key: %w", err)
+	// create our key function that the cache will use to determine the key for this request
+	keyFunc := func() (string, error) {
+		return buildCacheKey(configHash, c.spec, component, version)
 	}
 
 	wpOpts := workerpool.ResolveOptions{
-		RepositorySpec: c.spec,
-		Component:      component,
-		Version:        version,
-		Repository:     c.repo,
-		Key:            key,
+		Component:  component,
+		Version:    version,
+		Repository: c.repo,
+		KeyFunc:    keyFunc,
 	}
 
 	result, err := c.workerPool.GetComponentVersion(ctx, wpOpts)
@@ -116,22 +114,6 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 	return checkable.CheckHealth(ctx)
 }
 
-// writer is just a convenient wrapper around multiple Write operations and not
-// ignoring errors from them all, but also not having to check them all separately one-by-one.
-// This way, we will catch any error then the rest of the operations is a no-op.
-type writer struct {
-	err    error
-	hasher hash.Hash64
-}
-
-func (w *writer) Write(p []byte) {
-	if w.err != nil {
-		return
-	}
-
-	_, w.err = w.hasher.Write(p)
-}
-
 // buildCacheKey generates a cache key from the configuration hash, repository spec, component, and version.
 // It canonicalizes the repository spec using JCS (RFC 8785) before hashing to ensure consistent keys
 // regardless of field ordering in the JSON representation.
@@ -147,14 +129,11 @@ func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version
 	}
 
 	hasher := fnv.New64a()
-	w := &writer{hasher: hasher}
-	w.Write(configHash)
-	w.Write(canonicalJSON)
-	w.Write([]byte(component))
-	w.Write([]byte(version))
-	if w.err != nil {
-		return "", fmt.Errorf("failed to create hash: %w", w.err)
-	}
+	// can safely ignore because fnv.Write never actually returns an error
+	_, _ = hasher.Write(configHash)
+	_, _ = hasher.Write(canonicalJSON)
+	_, _ = hasher.Write([]byte(component))
+	_, _ = hasher.Write([]byte(version))
 
 	return fmt.Sprintf("%016x", hasher.Sum64()), nil
 }

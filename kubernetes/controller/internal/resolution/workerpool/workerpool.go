@@ -12,16 +12,14 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ResolveOptions contains all the options the resolution service requires to perform a resolve operation.
 type ResolveOptions struct {
-	RepositorySpec runtime.Typed
-	Component      string
-	Version        string
-	Key            string
-	Repository     repository.ComponentVersionRepository
+	Component  string
+	Version    string
+	Repository repository.ComponentVersionRepository
+	KeyFunc    func() (string, error)
 }
 
 // Result contains the result of a resolution including any errors that might have occurred.
@@ -128,23 +126,28 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 	wp.inProgressMu.Lock()
 	defer wp.inProgressMu.Unlock()
 
+	key, err := opts.KeyFunc()
+	if err != nil {
+		return result, fmt.Errorf("failed to generate cache key: %w", err)
+	}
+
 	// check if already in progress
-	if _, exists := wp.inProgress[opts.Key]; exists {
+	if _, exists := wp.inProgress[key]; exists {
 		wp.Logger.V(1).Info("resolution still in progress", "component", opts.Component, "version", opts.Version)
 		return result, ErrResolutionInProgress
 	}
 
-	if cached, ok := wp.Cache.Get(opts.Key); ok {
+	if cached, ok := wp.Cache.Get(key); ok {
 		CacheHitCounterTotal.WithLabelValues(opts.Component, opts.Version).Inc()
 		if cached.Error != nil {
 			// we remove error results so the controller can immediately retry.
-			wp.Cache.Remove(opts.Key)
+			wp.Cache.Remove(key)
 			return result, cached.Error
 		}
 
 		res, ok := cached.Value.(T)
 		if !ok {
-			return result, fmt.Errorf("unable to assert cache value for key %s", opts.Key)
+			return result, fmt.Errorf("unable to assert cache value for key %s", key)
 		}
 
 		return res, nil
@@ -167,7 +170,7 @@ func resolveWorkRequest[T any](ctx context.Context, wp *WorkerPool, opts Resolve
 	// Try to enqueue with lock held to make check-and-enqueue atomic
 	select {
 	case wp.workQueue <- workItem:
-		wp.inProgress[opts.Key] = struct{}{}
+		wp.inProgress[key] = struct{}{}
 		InProgressGauge.Set(float64(len(wp.inProgress)))
 		QueueSizeGauge.Set(float64(len(wp.workQueue)))
 		wp.Logger.V(1).Info("enqueued request", "component", opts.Component)
@@ -206,12 +209,18 @@ func (wp *WorkerPool) worker(ctx context.Context, id int) {
 type workFunc func(ctx context.Context, item ResolveOptions) (any, error)
 
 func (wp *WorkerPool) handleWorkItem(ctx context.Context, f workFunc, logger logr.Logger, item *WorkItem) {
-	logger.V(1).Info("processing work item", "key", item.Opts.Key)
+	key, err := item.Opts.KeyFunc()
+	if err != nil {
+		logger.Error(err, "failed to generate cache key")
+		return
+	}
+
+	logger.V(1).Info("processing work item", "key", key)
 
 	// either way, we are done with this item so remove it and decrease InProgress count.
 	defer func() {
 		wp.inProgressMu.Lock()
-		delete(wp.inProgress, item.Opts.Key)
+		delete(wp.inProgress, key)
 		InProgressGauge.Set(float64(len(wp.inProgress)))
 		wp.inProgressMu.Unlock()
 	}()
@@ -235,7 +244,7 @@ func (wp *WorkerPool) handleWorkItem(ctx context.Context, f workFunc, logger log
 			"duration", duration)
 	}
 
-	wp.Cache.Add(item.Opts.Key, &Result{
+	wp.Cache.Add(key, &Result{
 		Value: result,
 		Error: err,
 	})

@@ -23,7 +23,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -120,11 +119,10 @@ func TestWorkerPool_SingleResolution(t *testing.T) {
 		env := setupTestEnvironment(t, k8sClient, logger)
 
 		opts := workerpool.ResolveOptions{
-			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-			Component:      "single-component",
-			Version:        "v1.0.0",
-			Key:            "ocm-config",
-			Repository:     &mockRepository{},
+			Component:  "single-component",
+			Version:    "v1.0.0",
+			KeyFunc:    func() (string, error) { return "ocm-config", nil },
+			Repository: &mockRepository{},
 		}
 
 		result, err := env.Pool.GetComponentVersion(ctx, opts)
@@ -178,11 +176,10 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 		for i := range numComponents {
 			go func() {
 				opts := workerpool.ResolveOptions{
-					RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-					Component:      fmt.Sprintf("component-%d", i),
-					Version:        "v1.0.0",
-					Key:            fmt.Sprintf("ocm-config-%d", i),
-					Repository:     mockRepo,
+					Component:  fmt.Sprintf("component-%d", i),
+					Version:    "v1.0.0",
+					KeyFunc:    func() (string, error) { return fmt.Sprintf("ocm-config-%d", i), nil },
+					Repository: mockRepo,
 				}
 				// we ignore the error since it's InProgress error.
 				// we check for the results later on.
@@ -201,11 +198,10 @@ func TestWorkerPool_ParallelResolutions_DifferentComponents(t *testing.T) {
 			if results[i] == nil {
 				// Try one more time after synctest.Wait
 				opts := workerpool.ResolveOptions{
-					RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-					Component:      fmt.Sprintf("component-%d", i),
-					Version:        "v1.0.0",
-					Key:            fmt.Sprintf("ocm-config-%d", i),
-					Repository:     mockRepo,
+					Component:  fmt.Sprintf("component-%d", i),
+					Version:    "v1.0.0",
+					KeyFunc:    func() (string, error) { return fmt.Sprintf("ocm-config-%d", i), nil },
+					Repository: mockRepo,
 				}
 				result, err := env.Pool.GetComponentVersion(ctx, opts)
 				require.NoError(t, err)
@@ -272,11 +268,10 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 		for i := range numConcurrent {
 			go func() {
 				opts := workerpool.ResolveOptions{
-					RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-					Component:      "shared-component",
-					Version:        "v1.0.0",
-					Key:            "ocm-config-shared",
-					Repository:     mockRepo,
+					Component:  "shared-component",
+					Version:    "v1.0.0",
+					KeyFunc:    func() (string, error) { return "ocm-config-shared", nil },
+					Repository: mockRepo,
 				}
 				_, err := env.Pool.GetComponentVersion(ctx, opts)
 				errs[i] = err
@@ -290,11 +285,10 @@ func TestWorkerPool_ParallelResolutions_SameComponent_Deduplication(t *testing.T
 
 		// Check if it's in cache now
 		opts := workerpool.ResolveOptions{
-			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-			Component:      "shared-component",
-			Version:        "v1.0.0",
-			Key:            "ocm-config-shared",
-			Repository:     mockRepo,
+			Component:  "shared-component",
+			Version:    "v1.0.0",
+			KeyFunc:    func() (string, error) { return "ocm-config-shared", nil },
+			Repository: mockRepo,
 		}
 		result, err := env.Pool.GetComponentVersion(ctx, opts)
 		require.NoError(t, err, "after wait, should get result from cache")
@@ -378,11 +372,10 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			opts := workerpool.ResolveOptions{
-				RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-				Component:      fmt.Sprintf("component-%d", i),
-				Version:        "v1.0.0",
-				Key:            fmt.Sprintf("ocm-config-%d", i),
-				Repository:     mockRepo,
+				Component:  fmt.Sprintf("component-%d", i),
+				Version:    "v1.0.0",
+				KeyFunc:    func() (string, error) { return fmt.Sprintf("ocm-config-%d", i), nil },
+				Repository: mockRepo,
 			}
 			_, err := wp.GetComponentVersion(ctx, opts)
 			if err != nil && !errors.Is(err, resolution.ErrResolutionInProgress) {
@@ -432,11 +425,10 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 		env := setupTestEnvironment(t, k8sClient, logger)
 
 		opts := workerpool.ResolveOptions{
-			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-			Component:      "cancel-component",
-			Version:        "v1.0.0",
-			Key:            "ocm-config",
-			Repository:     &mockRepository{},
+			Component:  "cancel-component",
+			Version:    "v1.0.0",
+			KeyFunc:    func() (string, error) { return "ocm-config", nil },
+			Repository: &mockRepository{},
 		}
 
 		// Start resolution
@@ -451,7 +443,7 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 		synctest.Wait()
 
 		opts.Component = "cancel-component-new"
-		opts.Key = "ocm-config-new"
+		opts.KeyFunc = func() (string, error) { return "ocm-config-new", nil }
 		result, err = env.Pool.GetComponentVersion(ctx, opts)
 		assert.Nil(t, result)
 		assert.EqualError(t, err, "context canceled")
@@ -502,11 +494,10 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 			for i := range numConcurrent {
 				go func() {
 					opts := workerpool.ResolveOptions{
-						RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-						Component:      "multi-version-component",
-						Version:        version,
-						Key:            fmt.Sprintf("ocm-config-%s", version),
-						Repository:     mockRepo,
+						Component:  "multi-version-component",
+						Version:    version,
+						KeyFunc:    func() (string, error) { return fmt.Sprintf("ocm-config-%s", version), nil },
+						Repository: mockRepo,
 					}
 					result, _ := env.Pool.GetComponentVersion(ctx, opts)
 					results[version][i] = result
@@ -525,11 +516,10 @@ func TestWorkerPool_MultipleVersionsSameComponent(t *testing.T) {
 				if results[version][i] == nil {
 					// refetch values after sync wait is done for all go routines
 					opts := workerpool.ResolveOptions{
-						RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-						Component:      "multi-version-component",
-						Version:        version,
-						Key:            fmt.Sprintf("ocm-config-%s", version),
-						Repository:     mockRepo,
+						Component:  "multi-version-component",
+						Version:    version,
+						KeyFunc:    func() (string, error) { return fmt.Sprintf("ocm-config-%s", version), nil },
+						Repository: mockRepo,
 					}
 					result, err := env.Pool.GetComponentVersion(ctx, opts)
 					require.NoError(t, err)
@@ -594,11 +584,10 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 		mockRepo := &mockRepository{}
 
 		opts1 := workerpool.ResolveOptions{
-			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-			Component:      "cache-test",
-			Version:        "v1.0.0",
-			Key:            "ocm-config-1",
-			Repository:     mockRepo,
+			Component:  "cache-test",
+			Version:    "v1.0.0",
+			KeyFunc:    func() (string, error) { return "ocm-config-1", nil },
+			Repository: mockRepo,
 		}
 
 		// First resolution with config-1
@@ -612,11 +601,10 @@ func TestWorkerPool_CacheInvalidation(t *testing.T) {
 		require.NotNil(t, result1)
 
 		opts2 := workerpool.ResolveOptions{
-			RepositorySpec: &ociv1.Repository{BaseUrl: "localhost:5000/test"},
-			Component:      "cache-test",
-			Version:        "v1.0.0",
-			Key:            "ocm-config-2", // Different key = different cache entry
-			Repository:     mockRepo,
+			Component:  "cache-test",
+			Version:    "v1.0.0",
+			KeyFunc:    func() (string, error) { return "ocm-config-2", nil }, // Different key = different cache entry
+			Repository: mockRepo,
 		}
 
 		// Second resolution with config-2 (different config = cache miss)
