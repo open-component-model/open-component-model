@@ -71,7 +71,7 @@ func TestWorkerPool_StartAndStop(t *testing.T) {
 		wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 			WorkerCount: 3,
 			QueueSize:   10,
-			Logger:      logger,
+			Logger:      &logger,
 		})
 
 		go func() { _ = wp.Start(ctx) }()
@@ -356,7 +356,7 @@ func TestWorkerPool_QueueFull(t *testing.T) {
 	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		WorkerCount: 1, // Only 1 worker
 		QueueSize:   2, // Very small queue
-		Logger:      logger,
+		Logger:      &logger,
 		Client:      k8sClient,
 		Cache:       cache,
 	})
@@ -686,7 +686,7 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger logr.Log
 
 	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
 	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		Logger: logger,
+		Logger: &logger,
 		Client: k8sClient,
 		Cache:  cache,
 	})

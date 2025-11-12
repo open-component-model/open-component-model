@@ -2,12 +2,14 @@ package resolution
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
+	"hash/fnv"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/go-logr/logr"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -114,18 +116,45 @@ func (c *CacheBackedRepository) CheckHealth(ctx context.Context) error {
 	return checkable.CheckHealth(ctx)
 }
 
+// writer is just a convenient wrapper around multiple Write operations and not
+// ignoring errors from them all, but also not having to check them all separately one-by-one.
+// This way, we will catch any error then the rest of the operations is a no-op.
+type writer struct {
+	err    error
+	hasher hash.Hash64
+}
+
+func (w *writer) Write(p []byte) {
+	if w.err != nil {
+		return
+	}
+
+	_, w.err = w.hasher.Write(p)
+}
+
 // buildCacheKey generates a cache key from the configuration hash, repository spec, component, and version.
+// It canonicalizes the repository spec using JCS (RFC 8785) before hashing to ensure consistent keys
+// regardless of field ordering in the JSON representation.
 func buildCacheKey(configHash []byte, repoSpec runtime.Typed, component, version string) (string, error) {
 	repoJSON, err := json.Marshal(repoSpec)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
 	}
 
-	hasher := sha256.New()
-	hasher.Write(configHash)
-	hasher.Write(repoJSON)
-	hasher.Write([]byte(component))
-	hasher.Write([]byte(version))
+	canonicalJSON, err := jsoncanonicalizer.Transform(repoJSON)
+	if err != nil {
+		return "", fmt.Errorf("failed to canonicalize repository spec: %w", err)
+	}
 
-	return hex.EncodeToString(hasher.Sum(nil)), nil
+	hasher := fnv.New64a()
+	w := &writer{hasher: hasher}
+	w.Write(configHash)
+	w.Write(canonicalJSON)
+	w.Write([]byte(component))
+	w.Write([]byte(version))
+	if w.err != nil {
+		return "", fmt.Errorf("failed to create hash: %w", w.err)
+	}
+
+	return fmt.Sprintf("%016x", hasher.Sum64()), nil
 }
