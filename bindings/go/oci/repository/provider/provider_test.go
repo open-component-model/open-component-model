@@ -22,7 +22,7 @@ func Test_Provider_Smoke(t *testing.T) {
 	prov := provider.NewComponentVersionRepositoryProvider()
 
 	r := require.New(t)
-	repoSpec := &ctfrepospecv1.Repository{Path: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
+	repoSpec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
 	id, err := prov.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
 	r.NoError(err)
 
