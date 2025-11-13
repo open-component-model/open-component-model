@@ -33,6 +33,7 @@ require (
 require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/ocm v0.31.0
+	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251104081249-38e3382d9873
@@ -347,6 +348,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/vbatts/tar-split v0.12.1 // indirect
+	github.com/veqryn/slog-context v0.8.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
@@ -406,7 +408,6 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/kubectl v0.34.1 // indirect
-	ocm.software/open-component-model/bindings/go/blob v0.0.9 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251024100521-a7be1bf5ce0d // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
