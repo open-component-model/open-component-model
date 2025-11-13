@@ -287,7 +287,7 @@ func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
 			t.BaseUrl = fmt.Sprintf("%s%s", uri.Host, uri.EscapedPath())
 		}
 	case *ctfv1.Repository:
-		t.Path = input
+		t.FilePath = input
 		if options.CTFAccessMode != "" {
 			Base.Debug("overriding ctf access mode for repository reference", "mode", options.CTFAccessMode, "ref", repoRef)
 			t.AccessMode = options.CTFAccessMode
