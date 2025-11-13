@@ -2,14 +2,18 @@ package list
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
-
+	"gopkg.in/yaml.v3"
 	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/bindings/go/dag/sync"
+
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -74,7 +78,9 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 	}
 
 	if pluginRegistryFlag != "" {
-		pluginRegistries = append(pluginRegistries, pluginRegistryFlag)
+		// TODO: Discuss if multiple registries should be supported via flag
+		regs := strings.Split(pluginRegistryFlag, ",")
+		pluginRegistries = append(pluginRegistries, regs...)
 	} else { //nolint:staticcheck // see TODOs below
 		// TODO: Load registries from config
 		// see https://github.com/open-component-model/ocm-project/issues/599
@@ -82,9 +88,6 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 		// TODO: Set default registry if no registry is provided
 		// see https://github.com/open-component-model/ocm-project/issues/598
 	}
-
-	// TODO: Remove after testing (Added additional hardcoded registry for testing)
-	pluginRegistries = append(pluginRegistries, "ghcr.io/frewilhelm//ocm.software/test-plugin-registry-two:v1.0.0")
 
 	// The config can contain several registries from which we want to list plugins
 	// e.g. registries:
@@ -125,21 +128,36 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 			for _, r := range d.Component.References {
 				logger.Debug("Adding plugin to graph", "plugin", r.Name, "version", r.Version, "registry", reg)
 
-				var desc string
+				var desc, os, arch string
 				for _, l := range r.Labels {
 					if l.Name == "description" {
-						// TODO: check out
-						desc = string(l.Value)
+						desc = strings.Trim(string(l.Value), "\"")
+					}
+					if l.Name == "os" {
+						os = strings.Trim(string(l.Value), "\"")
+					}
+					if l.Name == "arch" {
+						arch = strings.Trim(string(l.Value), "\"")
 					}
 				}
-				if err := graph.AddVertex(r.Name, map[string]any{
-					"version":     r.Version,
-					"registry":    reg,
-					"description": desc,
-				}); err != nil {
-					return fmt.Errorf("adding vertex to DAG failed: %w", err)
+
+				// Need a unique key for each plugin version + platform
+				id := fmt.Sprintf("%s/%s:%s-%s/%s", reg, r.Name, r.Version, os, arch)
+				if err := graph.AddVertex(
+					id,
+					map[string]any{
+						"name":        r.Name,
+						"version":     r.Version,
+						"registry":    reg,
+						"description": desc,
+						"os":          os,
+						"arch":        arch,
+					}); err != nil {
+					// Currently, only an "Already exists" error is returned, which we can safely ignore.
+					logger.Warn("Failed to add vertex", "id", id, "error", err)
+					continue
 				}
-				order = append(order, r.Name)
+				order = append(order, id)
 			}
 		}
 	}
@@ -153,10 +171,16 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 }
 
 func buildRenderer(ctx context.Context, graph *sync.SyncedDirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
-	// Initialize renderer based on the requested output format.
 	switch format {
-	case render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatYAML.String():
-		return nil, fmt.Errorf("(currently) unsupported output format: %s", format)
+	case render.OutputFormatJSON.String():
+		serializer := list.ListSerializerFunc[string](serializeVerticesToJSON)
+		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case render.OutputFormatNDJSON.String():
+		serializer := list.ListSerializerFunc[string](serializeVerticesToNDJSON)
+		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case render.OutputFormatYAML.String():
+		serializer := list.ListSerializerFunc[string](serializeVerticesToYAML)
+		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTable.String():
 		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
 		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
@@ -165,16 +189,121 @@ func buildRenderer(ctx context.Context, graph *sync.SyncedDirectedAcyclicGraph[s
 	}
 }
 
+type PluginInfo struct {
+	Name        string `json:"name" yaml:"name"`
+	Version     string `json:"version" yaml:"version"`
+	Os          string `json:"os" yaml:"os"`
+	Arch        string `json:"arch" yaml:"arch"`
+	Description string `json:"description" yaml:"description"`
+	Registry    string `json:"registry" yaml:"registry"`
+}
+
+func convertVerticesToPluginInfos(vertices []*dag.Vertex[string]) []PluginInfo {
+	// Sort vertices by name, then version, then registry
+	sort.Slice(vertices, func(i, j int) bool {
+		nameI := vertices[i].Attributes["name"].(string)
+		nameJ := vertices[j].Attributes["name"].(string)
+		if nameI != nameJ {
+			return nameI < nameJ
+		}
+
+		versionI := vertices[i].Attributes["version"].(string)
+		versionJ := vertices[j].Attributes["version"].(string)
+		if versionI != versionJ {
+			return versionI < versionJ
+		}
+
+		registryI := vertices[i].Attributes["registry"].(string)
+		registryJ := vertices[j].Attributes["registry"].(string)
+		return registryI < registryJ
+	})
+
+	plugins := make([]PluginInfo, 0, len(vertices))
+	for _, vertex := range vertices {
+		plugins = append(plugins, PluginInfo{
+			Name:        vertex.Attributes["name"].(string),
+			Version:     vertex.Attributes["version"].(string),
+			Os:          vertex.Attributes["os"].(string),
+			Arch:        vertex.Attributes["arch"].(string),
+			Description: vertex.Attributes["description"].(string),
+			Registry:    vertex.Attributes["registry"].(string),
+		})
+	}
+	return plugins
+}
+
+func serializeVerticesToJSON(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	plugins := convertVerticesToPluginInfos(vertices)
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(plugins)
+}
+
+func serializeVerticesToNDJSON(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	plugins := convertVerticesToPluginInfos(vertices)
+	encoder := json.NewEncoder(writer)
+	for _, plugin := range plugins {
+		if err := encoder.Encode(plugin); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func serializeVerticesToYAML(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	plugins := convertVerticesToPluginInfos(vertices)
+	encoder := yaml.NewEncoder(writer)
+	defer encoder.Close()
+	return encoder.Encode(plugins)
+}
+
 func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	// Sort vertices by name, then version, then registry
+	sort.Slice(vertices, func(i, j int) bool {
+		nameI := vertices[i].Attributes["name"].(string)
+		nameJ := vertices[j].Attributes["name"].(string)
+		if nameI != nameJ {
+			return nameI < nameJ
+		}
+
+		versionI := vertices[i].Attributes["version"].(string)
+		versionJ := vertices[j].Attributes["version"].(string)
+		if versionI != versionJ {
+			return versionI < versionJ
+		}
+
+		registryI := vertices[i].Attributes["registry"].(string)
+		registryJ := vertices[j].Attributes["registry"].(string)
+		return registryI < registryJ
+	})
 	t := table.NewWriter()
 	t.SetOutputMirror(writer)
-	t.AppendHeader(table.Row{"Name", "Version", "Description", "Registry"})
+	t.AppendHeader(table.Row{"Name", "Version", "Platform", "Description", "Registry"})
 	for _, vertex := range vertices {
-		t.AppendRow(table.Row{vertex.ID, vertex.Attributes["version"], vertex.Attributes["description"], vertex.Attributes["registry"]})
+
+		// Prettify platform display
+		platform := "n/a"
+		if vertex.Attributes["os"] != "" && vertex.Attributes["arch"] != "" {
+			platform = fmt.Sprintf("%s/%s", vertex.Attributes["os"], vertex.Attributes["arch"])
+		} else if vertex.Attributes["arch"] != "" {
+			platform = vertex.Attributes["arch"].(string)
+		} else if vertex.Attributes["os"] != "" {
+			platform = vertex.Attributes["os"].(string)
+		}
+
+		t.AppendRow(table.Row{
+			vertex.Attributes["name"],
+			vertex.Attributes["version"],
+			platform,
+			vertex.Attributes["description"],
+			vertex.Attributes["registry"]})
 	}
 
 	t.SetColumnConfigs([]table.ColumnConfig{
+		{Number: 1, AutoMerge: true},
+		{Number: 2, AutoMerge: true},
 		{Number: 4, AutoMerge: true},
+		{Number: 5, AutoMerge: true},
 	})
 
 	style := table.StyleLight
