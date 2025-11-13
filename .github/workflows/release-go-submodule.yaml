@@ -175,5 +175,9 @@ jobs:
     needs: [ version, release ]
     uses: ./.github/workflows/publish-helminput-plugin-component.yaml
     secrets: inherit
+    permissions:
+      id-token: write
+      attestations: write
+      packages: write
     with:
       ref: ${{ needs.version.outputs.new_tag }}
