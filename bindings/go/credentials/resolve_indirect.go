@@ -53,7 +53,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 			// would require dynamic recursion detection via stack and would make the code significantly more complex.
 			credentials, _ = g.resolveFromGraph(ctx, identity)
 		}
-		slog.InfoContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
+		slog.DebugContext(ctx, "Resolving credentials via repository", "identity", identity, "config", cfg)
 		credentials, err := plugin.Resolve(ctx, cfg, identity, credentials)
 
 		mu.Lock()

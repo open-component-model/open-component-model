@@ -52,7 +52,7 @@ func IdentityFromOCIRepository(repository *oci.Repository) (runtime.Identity, er
 
 func IdentityFromCTFRepository(repository *ctf.Repository) (runtime.Identity, error) {
 	identity := runtime.Identity{
-		runtime.IdentityAttributePath: repository.Path,
+		runtime.IdentityAttributePath: repository.FilePath,
 	}
 	identity.SetType(Type)
 	return identity, nil

@@ -563,3 +563,5 @@ rbac
 zulip
 superset
 dl
+mirza
+kopic
