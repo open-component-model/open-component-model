@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -205,13 +206,12 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
 	}
-	defer func() {
-		_ = componentConfigRaw.Close()
-	}()
 	cfg := componentConfig.Config{}
 	if err := json.NewDecoder(componentConfigRaw).Decode(&cfg); err != nil {
 		return nil, nil, nil, err
 	}
+
+	err = errors.Join(err, componentConfigRaw.Close())
 
 	// Read component descriptor
 	descriptorRaw, err := store.Fetch(ctx, *cfg.ComponentDescriptorLayer)
@@ -219,7 +219,7 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
 	defer func() {
-		_ = descriptorRaw.Close()
+		err = errors.Join(err, descriptorRaw.Close())
 	}()
 
 	desc, err := ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, cfg.ComponentDescriptorLayer.MediaType)

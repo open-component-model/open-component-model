@@ -45,6 +45,10 @@ func NewFromCTF(store ctf.CTF) *Store {
 	return &Store{archive: store}
 }
 
+type closerFunc func() error
+
+func (f closerFunc) Close() error { return f() }
+
 // Store implements an OCI Store interface backed by a CTF (Common Transport Format).
 // It provides functionality to:
 // - Resolve and Tag component version references using the CTF's index archive
@@ -103,14 +107,31 @@ type repository struct {
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
 // Uses LockedReader to maintain read lock during async streaming operations.
 func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	s.mu.RLock()
 	b, err := s.archive.GetBlob(ctx, target.Digest.String())
 	if err != nil {
+		s.mu.RUnlock()
 		return nil, err
 	}
-	// LockedReader wraps the blob with a read lock that persists during streaming.
-	// The mutex is held until the reader is closed, ensuring consistent access
-	// during concurrent operations while the blob content is being read.
-	return blob.NewLockedReader(ctx, s.mu, b)
+	rc, err := b.ReadCloser()
+	if err != nil {
+		s.mu.RUnlock()
+		return nil, err
+	}
+	return s.asLockedReader(rc), nil
+}
+
+func (s *repository) asLockedReader(rc io.ReadCloser) io.ReadCloser {
+	return struct {
+		io.Reader
+		io.Closer
+	}{
+		Reader: rc,
+		Closer: closerFunc(func() error {
+			defer s.mu.RUnlock()
+			return rc.Close()
+		}),
+	}
 }
 
 // Exists checks if a blob exists in the CTF archive based on its descriptor.
@@ -147,12 +168,12 @@ func (s *repository) FetchReference(ctx context.Context, reference string) (ociI
 		s.mu.RUnlock()
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
-	s.mu.RUnlock()
-	data, err := blob.NewLockedReader(ctx, s.mu, b)
+	rc, err := b.ReadCloser()
 	if err != nil {
+		s.mu.RUnlock()
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
-	return desc, data, nil
+	return desc, s.asLockedReader(rc), nil
 }
 
 // Push stores a new blob in the CTF archive with the expected descriptor.
