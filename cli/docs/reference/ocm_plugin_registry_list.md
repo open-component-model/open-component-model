@@ -1,6 +1,6 @@
 ---
 title: ocm plugin registry list
-description: List available plugin binaries from a registry.
+description: List available plugin binaries from a plugin registry.
 suppressTitle: true
 toc: true
 sidebar:
@@ -9,12 +9,7 @@ sidebar:
 
 ## ocm plugin registry list
 
-List available plugin binaries from a registry.
-
-### Synopsis
-
- # List available plugin binaries from a registry.
-ocm plugin registry list --registry ghcr.io/open-component-model/plugin-registry:1.0.0
+List available plugin binaries from a plugin registry.
 
 ```
 ocm plugin registry list [flags]
@@ -23,8 +18,13 @@ ocm plugin registry list [flags]
 ### Examples
 
 ```
-  # List available plugin binaries from a registry.
-  ocm plugin registry list --registry ocm.software/plugin-registry
+  # List available plugin binaries from a registry using the flag.
+  ocm plugin registry list --registry ocm.software/plugin-registry:v1.0.0
+
+ NAME       │ VERSION         │ PLATFORM    │ DESCRIPTION       │ REGISTRY
+────────────┼─────────────────┼─────────────┼───────────────────┼───────────────────────────────────────────────────────
+ helm       │ 1.2.0           │ linux/amd64 │ An exmpale desc   │ ocm.software/plugin-registry:v1.0.0
+ docker     │ 1.0.0           │ macOs/arm64 │                   │
 
 ```
 

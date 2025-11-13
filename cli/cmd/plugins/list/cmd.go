@@ -31,14 +31,17 @@ const (
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List available plugin binaries from a registry.",
+		Short: "List available plugin binaries from a plugin registry.",
 		Args:  cobra.ExactArgs(0),
-		Long: ` # List available plugin binaries from a registry.
-ocm plugin registry list --registry ghcr.io/open-component-model/plugin-registry:1.0.0`,
-		Example: `  # List available plugin binaries from a registry.
-  ocm plugin registry list --registry ocm.software/plugin-registry
-`,
+		Long:  ``,
+		Example: `  # List available plugin binaries from a registry using the flag.
+  ocm plugin registry list --registry ocm.software/plugin-registry:v1.0.0
 
+ NAME       │ VERSION         │ PLATFORM    │ DESCRIPTION       │ REGISTRY
+────────────┼─────────────────┼─────────────┼───────────────────┼───────────────────────────────────────────────────────
+ helm       │ 1.2.0           │ linux/amd64 │ An exmpale desc   │ ocm.software/plugin-registry:v1.0.0
+ docker     │ 1.0.0           │ macOs/arm64 │                   │
+`,
 		RunE:              ListPlugins,
 		DisableAutoGenTag: true,
 	}

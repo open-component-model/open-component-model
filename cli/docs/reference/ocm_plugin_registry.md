@@ -65,5 +65,5 @@ ocm plugin registry {get|list} [flags]
 
 * [ocm plugin]({{< relref "ocm_plugin.md" >}})	 - Manage OCM plugins
 * [ocm plugin registry get]({{< relref "ocm_plugin_registry_get.md" >}})	 - Download specified plugin binary from a registry.
-* [ocm plugin registry list]({{< relref "ocm_plugin_registry_list.md" >}})	 - List available plugin binaries from a registry.
+* [ocm plugin registry list]({{< relref "ocm_plugin_registry_list.md" >}})	 - List available plugin binaries from a plugin registry.
 
