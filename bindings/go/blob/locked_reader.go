@@ -39,13 +39,6 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, rc io.ReadCloser) io
 				slog.ErrorContext(ctx, "failed to close reader", slog.String("error", err.Error()))
 			}
 		}
-		//// Get reader
-		//if rc, errs = blob.ReadCloser(); errs != nil {
-		//	if err := pw.CloseWithError(fmt.Errorf("unable to get reader: %w", errs)); err != nil {
-		//		slog.ErrorContext(ctx, "unable to close pipe with error", slog.String("error", err.Error()))
-		//	}
-		//	return
-		//}
 
 		go func() {
 			defer close(done)
