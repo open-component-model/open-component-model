@@ -26,26 +26,23 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) i
 		mu.RLock()
 		defer mu.RUnlock()
 		done := make(chan struct{})
-		var copyErrs error
-		var err error
+		var errs error
 		var rc io.ReadCloser
 		closePipe := func() {
-			if copyErrs != nil {
-				if err := pw.CloseWithError(fmt.Errorf("unable to copy data: %w", copyErrs)); err != nil {
+			if errs != nil {
+				if err := pw.CloseWithError(fmt.Errorf("unable to copy data: %w", errs)); err != nil {
 					slog.ErrorContext(ctx, "unable to close pipe with error", slog.String("error", err.Error()))
 				}
-			} else {
-				if err := pw.Close(); err != nil {
-					slog.ErrorContext(ctx, "failed to close pipe", slog.String("error", err.Error()))
-				}
+			} else if err := pw.Close(); err != nil {
+				slog.ErrorContext(ctx, "failed to close pipe", slog.String("error", err.Error()))
 			}
 			if err := rc.Close(); err != nil {
 				slog.ErrorContext(ctx, "failed to close reader", slog.String("error", err.Error()))
 			}
 		}
 		// Get reader
-		if rc, err = blob.ReadCloser(); err != nil {
-			if err := pw.CloseWithError(fmt.Errorf("unable to get reader: %w", err)); err != nil {
+		if rc, errs = blob.ReadCloser(); errs != nil {
+			if err := pw.CloseWithError(fmt.Errorf("unable to get reader: %w", errs)); err != nil {
 				slog.ErrorContext(ctx, "unable to close pipe with error", slog.String("error", err.Error()))
 			}
 			return
@@ -53,14 +50,14 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) i
 
 		go func() {
 			defer close(done)
-			if _, err = io.Copy(pw, rc); err != nil {
-				copyErrs = errors.Join(copyErrs, err)
+			if _, err := io.Copy(pw, rc); err != nil {
+				errs = errors.Join(errs, err)
 			}
 		}()
 
 		select {
 		case <-ctx.Done():
-			copyErrs = errors.Join(copyErrs, ctx.Err())
+			errs = errors.Join(errs, ctx.Err())
 			closePipe()
 			<-done // Wait for copy to finish
 		case <-done:
