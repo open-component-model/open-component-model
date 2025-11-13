@@ -44,10 +44,32 @@ The **serializable specification** enables validation before execution:
 - **Debuggability**: Addresses the **core OCM pain point**—opaque transfer 
   failures. Explicit specifications make troubleshooting straightforward with clear visibility into what failed and why.
 
-For complex operations, validating transformation chains before execution is 
-**mission-critical** for operational confidence and efficiency.
+For complex operations, validating the transformation graph before 
+execution is **mission-critical** for operational confidence and efficiency.
 
 ### Size of a Transformation Graph
+A serializable transformation specification makes complexity and the 
+number of atomic transformations involved in an operation such as transfer 
+visible and tangible.  
+With the legacy ocm cli, we have use cases including:
+- **~ 100 components**
+- **~ 1500 resources**
+
+In the most basic of transfer use cases (source resource format matches target 
+resource format, no resigning required, no custom modifications of upload 
+locations, ...),
+we have
+- download transformation per component version
+- upload transformation per component version
+and 
+- download transformation per resource
+- upload transformation per resource
+
+This results in a transformation graph with (100 + 1500) * 2 = **3200 atomic 
+transformations**.
+
+> [!NOTE] The serialized version of such a transformation specification is 
+> rather large (several MBs).
 
 
 ## Requirements
@@ -296,6 +318,9 @@ graph TD
 >    order to determine in which step to define those variables. Even then, this 
 >    might add unnecessary dependencies that could be avoided by defining them 
 >    in an `env` section.
+> 
+> To avoid such complications and to keep the generation logic simple, the 
+> generator will include such static variables as literal in both places.
 
 
 ## Mapping From Constructor to Transformation Specification
@@ -791,7 +816,14 @@ version). This then has to be uploaded with a `component.uploader`
 transformation.
 
 ## Mapping From Transfer Command to Transformation Specification
-TBD
+We do not want to go into detail here. This section alone warrants an entire 
+ADR. However, the rough general idea here is:
+1) **Prefetch:** Download the entire component graph of the component to be 
+   transferred.
+2) **Deduce and Generate Transformations:** Analyze each component in the 
+   component graph and deduce the necessary transformations.
+3) **Perform the Transfer:** Execute the generated 
+   transformation specification.
 
 ## Resource as Atomic Unit in OCM
 - The atomic unit in ocm is **resource** NOT A PLAIN BLOB or ACCESS, kind of
@@ -907,15 +939,45 @@ type Type struct {
 }
 ```
 
-**Proposed Implementation**
-- Add a schema mapper to the runtime module that is able to map a
-  `runtime.Type` to its corresponding JSON schema (this is similar to 
-  kubernetes REST mapper).
-  - Register:
-    - **Statically**: Internal plugins register through explicit 
-      `mapper.Register(...)` calls.
-    - **Dynamically**: External plugins are registered by the plugins managers 
-      discovery process (analyzing a filesystem for plugins).
+**Proposed Solution**
+- Implement a JSON schema generator to generate JSON schemas for go types.
+  - A generator is more suitable than a runtime generation of JSON schemas 
+    as the schemas are static.
+- Extend the plugin interface to provide JSON schemas for `runtime.Type` for 
+  the `runtime.Typed` (fully specified schema) input and the entire output.
+- Register:
+  - **Statically**: Internal plugins register through explicit 
+    `mapper.Register(...)` calls.
+  - **Dynamically**: External plugins are registered by the plugins managers 
+    discovery process (analyzing a filesystem for plugins).
+- Each transformation defines a static spec schema. It merges its statically 
+  defined spec schema with the concrete input type schemas of the plugins it 
+  uses (see code snippet below for details).
+
+```yaml
+env:
+  repositorySpec:
+    type: ociRegistry
+    baseUrl: ghcr.io
+    subPath: /open-component-model/target-ocm-repository
+transformations:
+  - type: component.uploader
+    id: uploadcomponentversion1
+    spec:
+      # The "component.uploader" only knows that it expects a `runtime.Type` 
+      # repository specification here. We use the CEL type name of 
+      # the "repositorySpec" variable in the CEL expression to ask a type 
+      # provider (this part is kind of an implementation detail) for the JSON
+      # schema of that CEL type. We then check the "type" property of the provided
+      # JSON schema. This provides an Enum or Const with the concrete type 
+      # (e.g. oci). We use this type to query a 
+      # ComponentVersionRepositoryProvider for the JSON schema for the type.
+      repository: ${env.common.repositorySpec}
+      # The "component.uploader" transformation knows that it expects a 
+      # component descriptor. It will provide a corresponding component 
+      # descriptor JSON schema for this field.
+      componentDescriptor: ${createcomponentversion1.output.descriptor}
+```
 
 **Static Type Analysis Implementation**
 - We translate the JSON schemas of input and output types to CEL types. 
@@ -924,7 +986,8 @@ type Type struct {
   can be used to translate our JSON schemas to CEL types.
 - **Expected Types:** To deduct the expected CEL type for a field in a 
   transformation specification (e.g. `resource` field in `resource.uploader`),
-  with slight modifications, we can reuse the `ParseResource` implementation of
+  with slight modifications, we can reuse the `ParseResource` 
+  and `setExpectedTypeOnDescriptor` implementation of
   KRO.
 - Switching from JSON schema to OpenAPI schema was also considered. 
   However, the OpenAPI schema generator of kubernetes as well as the OpenAPI schema 
@@ -932,23 +995,10 @@ type Type struct {
   also have to make adjustments to make it work for our use cases.
 
 
-- The example above shows the *outputs* of each transformation as comments. This
+- The [example](#conceptual-example-constructing-a-component-version-with-a-local-file-resource)
+  shows the *outputs* of each transformation as comments. This
   is purely for illustration purposes. In the actual implementation, every
-  capability has to define a static output schema (kind of like kubernetes
-  resource status).
-- The transformation specification is statically typed. This means that
-  everything that we programmatically write into MUST be typed.
-
-```yaml
-  - type: resource.uploader
-    id: uploadresource1
-    spec:
-      resource: ${createresource1.output.resource}
-```
-
-- Here we have to be able to check whether the type of 
-  `${createresource1.output.resource}` is assignable to the 
-  expected type of `resource`.
+  transformation has to define its *specification* and *output* schema.
 
 ### Program Flow
 
