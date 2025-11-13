@@ -7,14 +7,13 @@ import (
 	"github.com/go-logr/logr"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // RepositoryOptions configures OCM repository creation.
 type RepositoryOptions struct {
-	Registry        *componentversionrepository.RepositoryRegistry
+	Registry        repository.ComponentVersionRepositoryProvider
 	CredentialGraph credentials.GraphResolver
 	Logger          *logr.Logger
 }

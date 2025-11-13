@@ -69,7 +69,7 @@ func TestResolveComponentVersion_Success(t *testing.T) {
 			BaseUrl: "localhost:5000/test",
 		}
 
-		opts := &resolution.ResolveOptions{
+		opts := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			OCMConfigurations: []v1alpha1.OCMConfiguration{
 				{
@@ -137,7 +137,7 @@ func TestResolveComponentVersion_CacheHit(t *testing.T) {
 			BaseUrl: "localhost:5000/test",
 		}
 
-		opts := &resolution.ResolveOptions{
+		opts := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			OCMConfigurations: []v1alpha1.OCMConfiguration{
 				{
@@ -228,7 +228,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 		}
 
 		// First call with config1
-		opts1 := &resolution.ResolveOptions{
+		opts1 := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			OCMConfigurations: []v1alpha1.OCMConfiguration{
 				{
@@ -254,7 +254,7 @@ func TestResolveComponentVersion_CacheMissOnConfigChange(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result1)
 
-		opts2 := &resolution.ResolveOptions{
+		opts2 := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			OCMConfigurations: []v1alpha1.OCMConfiguration{
 				{
@@ -304,7 +304,7 @@ func TestResolveComponentVersion_MissingConfig(t *testing.T) {
 		BaseUrl: "localhost:5000/test",
 	}
 
-	opts := &resolution.ResolveOptions{
+	opts := &resolution.RepositoryOptions{
 		RepositorySpec: repoSpec,
 		OCMConfigurations: []v1alpha1.OCMConfiguration{
 			{
@@ -359,7 +359,7 @@ func TestResolveComponentVersionDeduplication(t *testing.T) {
 			BaseUrl: "localhost:5000/test",
 		}
 
-		opts := &resolution.ResolveOptions{
+		opts := &resolution.RepositoryOptions{
 			RepositorySpec: repoSpec,
 			OCMConfigurations: []v1alpha1.OCMConfiguration{
 				{

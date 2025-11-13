@@ -41,16 +41,16 @@ type Resolver struct {
 	pluginManager *plugins.PluginManager
 }
 
-// ResolveOptions contains all the options the resolution service requires to perform a resolve operation.
+// RepositoryOptions contains all the options the resolution service requires to perform a resolve operation.
 // The RepositorySpec, Component, Version, the accumulated configuration, the namespace for the resolved configuration.
-type ResolveOptions struct {
+type RepositoryOptions struct {
 	RepositorySpec    runtime.Typed
 	OCMConfigurations []v1alpha1.OCMConfiguration
 	Namespace         string
 }
 
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
-func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *ResolveOptions) (*CacheBackedRepository, error) {
+func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *RepositoryOptions) (*CacheBackedRepository, error) {
 	// Load OCM configurations
 	cfg, err := configuration.LoadConfigurations(ctx, r.client, opts.Namespace, opts.OCMConfigurations)
 	if err != nil {
