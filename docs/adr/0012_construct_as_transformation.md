@@ -855,7 +855,8 @@ ADR. However, the rough general idea here is:
 
 ## Integration with Plugin System
 - The transformation specification implementation is aware of the supported 
-  capabilities. So, depending on the *capability* (such as `type: resource.
+  capabilities. So, depending on the *capability* 
+  (such as `type: resource.
   uploader`), the implementation will use the corresponding *Provider* 
   API (e.g. `ResourcePluginProvider`).
   ```go
@@ -874,14 +875,14 @@ ADR. However, the rough general idea here is:
       case "localblob":
       default:
        resourceUploader := t.resourcePluginProvider.GetResourcePlugin(access)
-       if err := resourceUploader.UploadResource(transformation); err != nil {
+       if err := resourceUploader.UploadResource(resource); err != nil {
          return nil, err
        }
   }
   ```
   
 - For a *capability* (such as `resource.uploader`), all its types share a 
-  common`spec` schema. The `type` information has to be contained in this 
+  common `spec` schema. The `type` information has to be contained in this 
   common portion.
   ```yaml
   - type: resource.uploader
@@ -922,6 +923,9 @@ cases (capability with a single type).
 - However, since we already have this 
 plugin system in place, the complexity of maintaining two different plugin 
 systems is even higher.
+
+**It is not possible - and an explicit non goal - to add additional 
+capabilities and therefore, transformers, at runtime.**
 
 ## Versioning of Transformations
 - The examples currently omit versioning of transformations for brevity.
@@ -1011,7 +1015,6 @@ transformations:
   However, the OpenAPI schema generator of kubernetes as well as the OpenAPI schema 
   implementation is tailored for kubernetes resources. Therefore, we would 
   also have to make adjustments to make it work for our use cases.
-
 
 - The [example](#conceptual-example-constructing-a-component-version-with-a-local-file-resource)
   shows the *outputs* of each transformation as comments. This
