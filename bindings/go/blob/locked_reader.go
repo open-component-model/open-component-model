@@ -9,10 +9,10 @@ import (
 	"sync"
 )
 
-// LockedReader provides thread-safe access to blob data by wrapping reads
+// lockedReader provides thread-safe access to blob data by wrapping reads
 // with mutex synchronization. It uses a pipe to stream data while holding
 // a read lock on the underlying blob.
-type LockedReader struct {
+type lockedReader struct {
 	pr *io.PipeReader
 }
 
@@ -68,13 +68,13 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) i
 		}
 	}()
 
-	return &LockedReader{pr: pr}
+	return &lockedReader{pr: pr}
 }
 
-func (lr *LockedReader) Read(p []byte) (n int, err error) {
+func (lr *lockedReader) Read(p []byte) (n int, err error) {
 	return lr.pr.Read(p)
 }
 
-func (lr *LockedReader) Close() error {
+func (lr *lockedReader) Close() error {
 	return lr.pr.Close()
 }

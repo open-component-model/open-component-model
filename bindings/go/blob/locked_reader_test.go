@@ -55,16 +55,16 @@ func TestNewLockedReader(t *testing.T) {
 		testBlob := inmemory.New(strings.NewReader(testData))
 
 		lockedReader := blob.NewLockedReader(ctx, &mu, testBlob)
-		r.NotNil(lockedReader, "LockedReader should not be nil")
+		r.NotNil(lockedReader, "lockedReader should not be nil")
 
 		// Read data
 		data, err := io.ReadAll(lockedReader)
-		r.NoError(err, "Reading from LockedReader should not return error")
+		r.NoError(err, "Reading from lockedReader should not return error")
 		r.Equal(testData, string(data), "Data should match original")
 
 		// Close
 		err = lockedReader.Close()
-		r.NoError(err, "Closing LockedReader should not return error")
+		r.NoError(err, "Closing lockedReader should not return error")
 	})
 
 	t.Run("should handle empty blob data without error", func(t *testing.T) {
@@ -75,16 +75,16 @@ func TestNewLockedReader(t *testing.T) {
 		testBlob := inmemory.New(strings.NewReader(""))
 
 		lockedReader := blob.NewLockedReader(ctx, &mu, testBlob)
-		r.NotNil(lockedReader, "LockedReader should not be nil")
+		r.NotNil(lockedReader, "lockedReader should not be nil")
 
 		// Read data
 		data, err := io.ReadAll(lockedReader)
-		r.NoError(err, "Reading from empty LockedReader should not return error")
+		r.NoError(err, "Reading from empty lockedReader should not return error")
 		r.Equal("", string(data), "Empty blob should return empty data")
 
 		// Close
 		err = lockedReader.Close()
-		r.NoError(err, "Closing LockedReader should not return error")
+		r.NoError(err, "Closing lockedReader should not return error")
 	})
 
 	t.Run("should return error when blob ReadCloser fails", func(t *testing.T) {
@@ -180,7 +180,7 @@ func TestNewLockedReader(t *testing.T) {
 		closeErr := lockedReader.Close()
 		r.NoError(closeErr, "Close should not return error after cancellation")
 
-		// Wait for LockedReader's internal goroutines to complete
+		// Wait for lockedReader's internal goroutines to complete
 		// The implementation has 2 goroutines: context cancellation + copy goroutine
 		time.Sleep(50 * time.Millisecond)
 
