@@ -19,7 +19,7 @@ type lockedReader struct {
 // NewLockedReader creates a thread-safe reader for a blob that acquires a read lock
 // before streaming data. The lock is held during the entire copy operation to ensure
 // consistent access and prevent concurrent writes.
-func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) io.ReadCloser {
+func NewLockedReader(ctx context.Context, mu *sync.RWMutex, rc io.ReadCloser) io.ReadCloser {
 	pr, pw := io.Pipe()
 	// Copy goroutine - performs the actual data copy
 	go func() {
@@ -27,7 +27,6 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) i
 		defer mu.RUnlock()
 		done := make(chan struct{})
 		var errs error
-		var rc io.ReadCloser
 		closePipe := func() {
 			if errs != nil {
 				if err := pw.CloseWithError(fmt.Errorf("unable to copy data: %w", errs)); err != nil {
@@ -40,13 +39,13 @@ func NewLockedReader(ctx context.Context, mu *sync.RWMutex, blob ReadOnlyBlob) i
 				slog.ErrorContext(ctx, "failed to close reader", slog.String("error", err.Error()))
 			}
 		}
-		// Get reader
-		if rc, errs = blob.ReadCloser(); errs != nil {
-			if err := pw.CloseWithError(fmt.Errorf("unable to get reader: %w", errs)); err != nil {
-				slog.ErrorContext(ctx, "unable to close pipe with error", slog.String("error", err.Error()))
-			}
-			return
-		}
+		//// Get reader
+		//if rc, errs = blob.ReadCloser(); errs != nil {
+		//	if err := pw.CloseWithError(fmt.Errorf("unable to get reader: %w", errs)); err != nil {
+		//		slog.ErrorContext(ctx, "unable to close pipe with error", slog.String("error", err.Error()))
+		//	}
+		//	return
+		//}
 
 		go func() {
 			defer close(done)

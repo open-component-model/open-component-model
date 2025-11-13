@@ -18,19 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 )
 
-type mockReadOnlyBlobLocked struct {
-	mock.Mock
-}
-
-func (m *mockReadOnlyBlobLocked) ReadCloser() (io.ReadCloser, error) {
-	args := m.Called()
-	rc := args.Get(0)
-	if rc == nil {
-		return nil, args.Error(1)
-	}
-	return rc.(io.ReadCloser), args.Error(1)
-}
-
 type mockReadCloser struct {
 	mock.Mock
 }
@@ -53,8 +40,10 @@ func TestNewLockedReader(t *testing.T) {
 
 		testData := "hello world test data"
 		testBlob := inmemory.New(strings.NewReader(testData))
+		rc, err := testBlob.ReadCloser()
+		r.NoError(err, "Getting ReadCloser should not error")
 
-		lockedReader := blob.NewLockedReader(ctx, &mu, testBlob)
+		lockedReader := blob.NewLockedReader(ctx, &mu, rc)
 		r.NotNil(lockedReader, "lockedReader should not be nil")
 
 		// Read data
@@ -73,8 +62,10 @@ func TestNewLockedReader(t *testing.T) {
 		var mu sync.RWMutex
 
 		testBlob := inmemory.New(strings.NewReader(""))
+		rc, err := testBlob.ReadCloser()
+		r.NoError(err, "Getting ReadCloser should not error")
 
-		lockedReader := blob.NewLockedReader(ctx, &mu, testBlob)
+		lockedReader := blob.NewLockedReader(ctx, &mu, rc)
 		r.NotNil(lockedReader, "lockedReader should not be nil")
 
 		// Read data
@@ -87,32 +78,16 @@ func TestNewLockedReader(t *testing.T) {
 		r.NoError(err, "Closing lockedReader should not return error")
 	})
 
-	t.Run("should return error when blob ReadCloser fails", func(t *testing.T) {
-		r := require.New(t)
-		ctx := context.Background()
-		var mu sync.RWMutex
-
-		mockBlob := new(mockReadOnlyBlobLocked)
-		expectedErr := errors.New("failed to get reader")
-		mockBlob.On("ReadCloser").Return(nil, expectedErr)
-
-		reader := blob.NewLockedReader(ctx, &mu, mockBlob)
-		_, err := io.ReadAll(reader)
-		r.ErrorContains(err, expectedErr.Error(), "NewLockedReader should return error when blob.ReadCloser fails")
-	})
-
 	t.Run("should propagate error when underlying reader fails during copy", func(t *testing.T) {
 		r := require.New(t)
 		ctx := context.Background()
 		var mu sync.RWMutex
 
-		mockBlob := new(mockReadOnlyBlobLocked)
 		failingReadCloser := new(mockReadCloser)
-		mockBlob.On("ReadCloser").Return(failingReadCloser, nil)
 		failingReadCloser.On("Read", mock.Anything).Return(0, errors.New("simulated read failure"))
 		failingReadCloser.On("Close").Return(nil)
 
-		lockedReader := blob.NewLockedReader(ctx, &mu, mockBlob)
+		lockedReader := blob.NewLockedReader(ctx, &mu, failingReadCloser)
 
 		_, err := io.ReadAll(lockedReader)
 		r.Error(err)
@@ -131,8 +106,12 @@ func TestNewLockedReader(t *testing.T) {
 		for i := 0; i < numReaders; i++ {
 			eg.Go(func() error {
 				localBlob := inmemory.New(strings.NewReader(testData))
+				rc, err := localBlob.ReadCloser()
+				if err != nil {
+					return fmt.Errorf("getting ReadCloser failed: %w", err)
+				}
 
-				lockedReader := blob.NewLockedReader(ctx, &mu, localBlob)
+				lockedReader := blob.NewLockedReader(ctx, &mu, rc)
 
 				if _, err := io.ReadAll(lockedReader); err != nil {
 					return fmt.Errorf("ReadAll failed for reader %d: %w", i, err)
@@ -151,11 +130,8 @@ func TestNewLockedReader(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		var mu sync.RWMutex
 
-		// Create mock blob with slow reader
-		mockBlob := new(mockReadOnlyBlobLocked)
+		// Create slow reader
 		slowReadCloser := new(mockReadCloser)
-
-		mockBlob.On("ReadCloser").Return(slowReadCloser, nil)
 
 		// Mock Read that blocks until context is cancelled
 		slowReadCloser.On("Read", mock.Anything).After(10*time.Millisecond).Return(9, nil)
@@ -163,7 +139,7 @@ func TestNewLockedReader(t *testing.T) {
 		// Close might not be called if context cancellation happens before defer cleanup is reached
 		slowReadCloser.On("Close").Return(nil).Once()
 
-		lockedReader := blob.NewLockedReader(ctx, &mu, mockBlob)
+		lockedReader := blob.NewLockedReader(ctx, &mu, slowReadCloser)
 
 		// Cancel context after a brief delay
 		go func() {
@@ -184,7 +160,6 @@ func TestNewLockedReader(t *testing.T) {
 		// The implementation has 2 goroutines: context cancellation + copy goroutine
 		time.Sleep(50 * time.Millisecond)
 
-		mockBlob.AssertExpectations(t)
 		slowReadCloser.AssertExpectations(t)
 	})
 }
