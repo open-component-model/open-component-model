@@ -190,7 +190,7 @@ type: transformations.ocm.config.software/v1alpha1
 # env is an initial environment context. It can specify variables for static
 # information that is used throughout the transformation specification.
 env:
-  # We define id`s here, instead of making componentIdentity and repositorySpec
+  # We define ids here, instead of making componentIdentity and repositorySpec
   # top-level fields, to allow defining componentIdentity and repositorySpec for
   # multiple different components in the same transformation specification 
   # without collision. 
@@ -226,9 +226,9 @@ transformations:
       #       localReference: sha256:<hash>
       #     data: <binary data>
     
-  # resource.uploader calls either a resource repository's upload resource 
-  # method or a local resource repository's add local resource method, depending
-  # on the access type.
+  # resource.uploader calls either a resource repository's upload-resource-method
+  # or a local resource repository's add-local-resource-method, depending on 
+  # the access type.
   # If `spec.resource.access.type == localblob`, the spec has to contain the
   # component's identity as whose localblob the blob has to be uploaded and the 
   # repository where the component will also be uploaded to.
@@ -339,7 +339,7 @@ graph TD
 ## Mapping From Constructor to Transformation Specification
 
 This section lists the use cases currently available in the **constructor**. 
-This corresponds to the list provided in the constructor ADR. It provides 
+This corresponds to the list provided in the constructor [ADR](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0006_component_constructors.md). It provides 
 examples of how these **constructor** use cases can be mapped to the 
 **transformation specification**.
 
