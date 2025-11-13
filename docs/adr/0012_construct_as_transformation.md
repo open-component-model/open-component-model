@@ -41,7 +41,7 @@ The **serializable specification** enables validation before execution:
 - **Static Analysis**: Inspect the complete transformation graph without running anything
 - **Pre-Execution Type Checking**: Catch type mismatches at specification time, not runtime
 - **Early Failure Detection**: Immediate feedback, especially critical for large multi-component transfers
-- **Debuggability**: Addresses the **core OCM pain point**—opaque transfer 
+- **Debug Ability**: Addresses the **core OCM pain point**—opaque transfer 
   failures. Explicit specifications make troubleshooting straightforward with clear visibility into what failed and why.
 
 For complex operations, validating the transformation graph before 
@@ -69,12 +69,12 @@ This results in a transformation graph with (100 + 1500) * 2 = **3200 atomic
 transformations**.
 
 > [!NOTE] The serialized version of such a transformation specification is 
-> rather large (several MBs).
+> rather large.
 
 
 ## Requirements
 
-The table below list the requirements shared by the **transfer** and 
+The table below lists the requirements shared by the **transfer** and 
 **constructor** use cases.
 
 This serves as:
@@ -190,18 +190,13 @@ type: transformations.ocm.config.software/v1alpha1
 # env is an initial environment context. It can specify variables for static
 # information that is used throughout the transformation specification.
 env:
-  # We define ids here, instead of making componentIdentity and repositorySpec
-  # top-level fields, to allow defining componentIdentity and repositorySpec for
-  # multiple different components in the same transformation specification 
-  # without collision. 
-  - id: example
-    componentIdentity:
-      name: ocm.software/example
-      version: 1.0.0
-    repositorySpec: 
-      type: ociRegistry
-      baseUrl: ghcr.io
-      subPath: /open-component-model/target-ocm-repository
+  componentIdentity:
+    name: ocm.software/example
+    version: 1.0.0
+  repositorySpec:
+    type: ociRegistry
+    baseUrl: ghcr.io
+    subPath: /open-component-model/target-ocm-repository
 transformations: 
   # resource.creator calls the current input implementations to get the data
   # blob and either localblob access OR external access which can be used by
@@ -337,6 +332,8 @@ graph TD
 
 
 ## Mapping From Constructor to Transformation Specification
+
+**We still lack a prototype here to validate the concept.**
 
 This section lists the use cases currently available in the **constructor**. 
 This corresponds to the list provided in the constructor [ADR](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0006_component_constructors.md). It provides 
@@ -829,9 +826,12 @@ version). This then has to be uploaded with a `component.uploader`
 transformation.
 
 ## Mapping From Transfer Command to Transformation Specification
+
+**We still lack a prototype here to validate the concept.**
+
 We do not want to go into detail here. This section alone warrants an entire 
 ADR. However, the rough general idea here is:
-1) **Prefetch:** Download the entire component graph of the component to be 
+1) **Pre-Fetch:** Download the entire component graph of the component to be 
    transferred.
 2) **Deduce and Generate Transformations:** Analyze each component in the 
    component graph and deduce the necessary transformations.
