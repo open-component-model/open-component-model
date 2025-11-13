@@ -166,7 +166,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		//  and then returns the newly created store.
 		//  Without this cache, we would create multiple stores for the same path
 		//  which would race on file access (https://github.com/open-component-model/ocm-project/issues/694).
-		store, err := b.storeCache.loadOrStore(ctx, obj.Path, loadFunc)
+		store, err := b.storeCache.loadOrStore(ctx, obj.FilePath, loadFunc)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve store from cache: %w", err)
 		}

@@ -1,6 +1,8 @@
 package ctf
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -31,7 +33,7 @@ type Repository struct {
 	//   - ./relative/path/to/archive.tgz
 	//   - relative/path/to/archive.tar
 	//   - /absolute/path/to/archive-folder
-	Path string `json:"path"`
+	FilePath string `json:"filePath"`
 
 	// AccessMode can be set to request readonly access or creation
 	// The format of the path is determined by the access mode bitmask aggregated with |.
@@ -41,7 +43,7 @@ type Repository struct {
 }
 
 func (spec *Repository) String() string {
-	return spec.Path
+	return spec.FilePath
 }
 
 type AccessMode string
@@ -51,6 +53,34 @@ const (
 	AccessModeReadWrite = "readwrite"
 	AccessModeCreate    = "create"
 )
+
+// UnmarshalJSON implements custom unmarshaling for AccessMode to support both
+// string values ("readonly", "readwrite", "create") and numeric values (0, 1, 2).
+// OCM v1 CTF implementation and spec has this field as byte. But we would like to
+// keep the string representation for ease of usage.
+func (mode *AccessMode) UnmarshalJSON(data []byte) error {
+	var num int
+	if err := json.Unmarshal(data, &num); err == nil {
+		switch num {
+		case 0:
+			*mode = AccessModeReadOnly
+		case 1:
+			*mode = AccessModeReadWrite
+		case 2:
+			*mode = AccessModeCreate
+		default:
+			return fmt.Errorf("invalid AccessMode numeric value: %d", num)
+		}
+		return nil
+	}
+
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	*mode = AccessMode(str)
+	return nil
+}
 
 // ToAccessBitmask converts the AccessMode string to a bitmask
 // that can be used with the CTF library.
