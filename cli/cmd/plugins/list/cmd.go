@@ -11,9 +11,9 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+
 	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/bindings/go/dag/sync"
-
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -190,12 +190,12 @@ func buildRenderer(ctx context.Context, graph *sync.SyncedDirectedAcyclicGraph[s
 }
 
 type PluginInfo struct {
-	Name        string `json:"name" yaml:"name"`
-	Version     string `json:"version" yaml:"version"`
-	Os          string `json:"os" yaml:"os"`
-	Arch        string `json:"arch" yaml:"arch"`
+	Name        string `json:"name"        yaml:"name"`
+	Version     string `json:"version"     yaml:"version"`
+	Os          string `json:"os"          yaml:"os"`
+	Arch        string `json:"arch"        yaml:"arch"`
 	Description string `json:"description" yaml:"description"`
-	Registry    string `json:"registry" yaml:"registry"`
+	Registry    string `json:"registry"    yaml:"registry"`
 }
 
 func convertVerticesToPluginInfos(vertices []*dag.Vertex[string]) []PluginInfo {
@@ -280,15 +280,15 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 	t.SetOutputMirror(writer)
 	t.AppendHeader(table.Row{"Name", "Version", "Platform", "Description", "Registry"})
 	for _, vertex := range vertices {
-
 		// Prettify platform display
 		platform := "n/a"
-		if vertex.Attributes["os"] != "" && vertex.Attributes["arch"] != "" {
-			platform = fmt.Sprintf("%s/%s", vertex.Attributes["os"], vertex.Attributes["arch"])
-		} else if vertex.Attributes["arch"] != "" {
-			platform = vertex.Attributes["arch"].(string)
-		} else if vertex.Attributes["os"] != "" {
+		switch {
+		case vertex.Attributes["os"] == "" && vertex.Attributes["arch"] == "":
+			platform = "n/a"
+		case vertex.Attributes["os"] != "" && vertex.Attributes["arch"] == "":
 			platform = vertex.Attributes["os"].(string)
+		case vertex.Attributes["os"] == "" && vertex.Attributes["arch"] != "":
+			platform = vertex.Attributes["arch"].(string)
 		}
 
 		t.AppendRow(table.Row{
@@ -296,7 +296,8 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 			vertex.Attributes["version"],
 			platform,
 			vertex.Attributes["description"],
-			vertex.Attributes["registry"]})
+			vertex.Attributes["registry"],
+		})
 	}
 
 	t.SetColumnConfigs([]table.ColumnConfig{
