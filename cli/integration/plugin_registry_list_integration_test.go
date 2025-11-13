@@ -69,7 +69,7 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 			},
 		},
 		{
-			name:             "two remotes, two plugin registries",
+			name:             "two remote, two plugin registries",
 			pluginRegistries: []string{"registry-one", "registry-two"},
 			plugins: map[string][]list.PluginInfo{
 				"remote-registry-1": {
