@@ -400,7 +400,7 @@ func Test_Integration_CTF(t *testing.T) {
 	t.Run("specification-based", func(t *testing.T) {
 		r := require.New(t)
 		repoProvider := provider.NewComponentVersionRepositoryProvider()
-		repoSpec := &ctfrepospecv1.Repository{Path: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
+		repoSpec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
 		id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
 		r.NoError(err)
 

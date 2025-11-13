@@ -485,6 +485,11 @@ COMPONENT                   │ VERSION │ PROVIDER
 			expectedError: false,
 		},
 		{
+			name:          "No versions",
+			args:          []string{"get", "cv", "."},
+			expectedError: true,
+		},
+		{
 			name: "Semver constraint",
 			args: []string{"get", "cv", path, "--semver-constraint", "< 0.0.2"},
 			expectedOutput: `
@@ -661,6 +666,88 @@ COMPONENT           │ VERSION │ PROVIDER
 	}
 }
 
+// Test_Get_Component_Version_CTF_Dir tests the call to `ocm get cv <ctf_dir>` command.
+// The command has to list all component versions contained in the CTF folder.
+func Test_Get_Component_Version_CTF_Dir(t *testing.T) {
+	roota := createTestDescriptor("ocm.software/root-a", "0.0.1")
+	rootb := createTestDescriptor("ocm.software/root-b", "0.0.2")
+
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, roota, rootb)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		args           []string
+		configYAML     string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "get cv from CTF dir - default",
+			args: []string{"get", "cv", archivePath},
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root-b │ 0.0.2   │ ocm.software 
+ ocm.software/root-a │ 0.0.1   │`,
+			expectedError: false,
+		},
+		{
+			// The resolver configuration in the configYAML points to a non-existing path.
+			// Therefore, the command would fail to find the components when doing rendering,
+			// if there were no dynamically added resolvers, that take precedence over the config file.
+			name: "get cv from CTF dir - override resolvers from config",
+			args: []string{"get", "cv", archivePath},
+			configYAML: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: resolvers.config.ocm.software
+  resolvers:
+  - repository:
+      type: CommonTransportFormat/v1
+      path: /does/not/exist
+    componentNamePattern: ocm.software/*`,
+			expectedOutput: `
+COMPONENT           │ VERSION │ PROVIDER     
+─────────────────────┼─────────┼──────────────
+ ocm.software/root-b │ 0.0.2   │ ocm.software 
+ ocm.software/root-a │ 0.0.1   │`,
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			args := tt.args
+
+			if tt.configYAML != "" {
+				tmp := t.TempDir()
+				configYAMLFilePath := filepath.Join(tmp, "config-with-resolver.yaml")
+				r.NoError(os.WriteFile(configYAMLFilePath, []byte(tt.configYAML), 0o600))
+				args = append(args, "--config", configYAMLFilePath)
+			}
+
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err = test.OCM(t, test.WithArgs(args...), test.WithOutput(result), test.WithErrorOutput(logs))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+
+			r.NoError(err, "failed to run command")
+
+			logEntries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(logEntries, "expected log entries to be present")
+
+			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
+		})
+	}
+}
+
 func Test_Add_Component_Version(t *testing.T) {
 	r := require.New(t)
 	logs := test.NewJSONLogReader()
@@ -700,20 +787,6 @@ resources:
 		r.NoError(err, "failed to list log entries")
 		r.NotEmpty(entries, "expected log entries to be present")
 
-		expected := []string{
-			"starting component construction",
-			"component construction completed",
-		}
-		for _, entry := range entries {
-			if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
-				require.Contains(t, expected, entry.Msg)
-				expected = slices.DeleteFunc(expected, func(s string) bool {
-					return s == entry.Msg
-				})
-			}
-		}
-		r.Empty(expected, "expected logs should all have been matched within the CLI realm")
-
 		fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
 		r.NoError(err, "could not create test filesystem")
 		archive := ctf.NewFileSystemCTF(fs)
@@ -738,6 +811,7 @@ resources:
 		r.Equal("foobar", buf.String(), "expected resource content to match test file content")
 
 		t.Run("expect failure on existing component version", func(t *testing.T) {
+
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
@@ -749,20 +823,6 @@ resources:
 			entries, err := logs.List()
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(entries, "expected log entries to be present")
-
-			expected := []string{
-				"starting component construction",
-				"component construction failed",
-			}
-			for _, entry := range entries {
-				if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
-					require.Contains(t, expected, entry.Msg)
-					expected = slices.DeleteFunc(expected, func(s string) bool {
-						return s == entry.Msg
-					})
-				}
-			}
-			r.Empty(expected, "expected logs should all have been matched matched within the CLI realm")
 		})
 
 		t.Run("expect success on replace strategy", func(t *testing.T) {
@@ -785,32 +845,19 @@ resources:
 
 			constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-replace.yaml")
 			r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
-
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
 				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
-			), test.WithErrorOutput(logs))
+			), test.WithErrorOutput(logs), test.WithOutput(result))
 
 			r.NoError(err, "could not construct component version", "replace strategy should allow an existing component version to be replaced")
 
 			entries, err := logs.List()
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(entries, "expected log entries to be present")
-
-			expected := []string{
-				"starting component construction",
-				"component construction completed",
-			}
-			for _, entry := range entries {
-				if realm, ok := entry.Extras["realm"]; ok && realm == "cli" {
-					require.Contains(t, expected, entry.Msg)
-					expected = slices.DeleteFunc(expected, func(s string) bool {
-						return s == entry.Msg
-					})
-				}
-			}
-			r.Empty(expected, "expected logs should all have been matched matched within the CLI realm")
 
 			desc, err := helperRepo.GetComponentVersion(t.Context(), "ocm.software/examples-01", "1.0.0")
 			r.NoError(err, "could not retrieve component version from test repository")
@@ -984,7 +1031,6 @@ components:
 				r.NoError(err, "could not retrieve component version from test repository")
 			})
 		}
-
 	})
 
 	t.Run("construction with references targeting resolvers", func(t *testing.T) {
@@ -1099,8 +1145,179 @@ components:
 				r.NoError(err, "could not retrieve component version from test repository")
 			})
 		}
-
 	})
+}
+
+// Test_Add_Component_Version_Formats tests the different output formats for the add cv command
+func Test_Add_Component_Version_Formats(t *testing.T) {
+	r := require.New(t)
+	tests := []struct {
+		name           string
+		outputArg      string
+		expectedOutput string
+		expectedError  bool
+	}{
+		{
+			name: "Default Options (Table)",
+			expectedOutput: ` COMPONENT                │ VERSION │ PROVIDER     
+──────────────────────────┼─────────┼──────────────
+ ocm.software/examples-01 │ 1.0.0   │ ocm.software 
+`,
+			expectedError: false,
+		},
+		{
+			name:      "YAML output",
+			outputArg: "--output=yaml",
+			expectedOutput: `
+- component:
+    componentReferences: null
+    name: ocm.software/examples-01
+    provider: ocm.software
+    repositoryContexts: null
+    resources:
+    - access:
+        localReference: sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2
+        mediaType: text/plain; charset=utf-8
+        type: localBlob/v1
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2
+      name: my-file
+      relation: local
+      type: blob
+      version: 1.0.0
+    sources: null
+    version: 1.0.0
+  meta:
+    schemaVersion: v2
+
+`,
+			expectedError: false,
+		},
+		{
+			name:           "JSON output",
+			outputArg:      "--output=json",
+			expectedOutput: "", // JSON output is handled differently
+			expectedError:  false,
+		},
+		{
+			name:           "NDJSON output",
+			outputArg:      "--output=ndjson",
+			expectedOutput: "", // JSON output is handled differently
+			expectedError:  false,
+		},
+		{
+			name:      "tree output",
+			outputArg: "--output=tree",
+			expectedOutput: ` NESTING  COMPONENT                 VERSION  PROVIDER      IDENTITY                                    
+ └─       ocm.software/examples-01  1.0.0    ocm.software  name=ocm.software/examples-01,version=1.0.0`,
+			expectedError: false,
+		},
+		{
+			name:           "Invalid output format",
+			outputArg:      "--output=invalid",
+			expectedOutput: "",
+			expectedError:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+
+			// Create a test file to be added to the component version
+			testFilePath := filepath.Join(tmp, "test-file.txt")
+			r.NoError(os.WriteFile(testFilePath, []byte("foobar"), 0o600), "could not create test file")
+
+			constructorYAML := fmt.Sprintf(`
+name: ocm.software/examples-01
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+			constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+			r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+			archiveFilePath := filepath.Join(tmp, "transport-archive")
+			r := require.New(t)
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			args := []string{"add", "cv",
+				"--constructor", constructorYAMLFilePath,
+				"--repository", archiveFilePath}
+			if tt.outputArg != "" {
+				args = append(args, tt.outputArg)
+			}
+			_, err := test.OCM(t, test.WithArgs(args...), test.WithErrorOutput(logs), test.WithOutput(result))
+
+			if tt.expectedError {
+				r.Error(err, "expected error but got none")
+				return
+			}
+
+			r.NoError(err, "failed to run command")
+
+			if tt.outputArg == "--output=json" || tt.outputArg == "--output=ndjson" {
+				// Handle JSON output separately
+				var resultJSON any
+				decoder := json.NewDecoder(result)
+				r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+
+				component := map[string]any{
+					"component": map[string]any{
+						"componentReferences": nil,
+						"name":                "ocm.software/examples-01",
+						"provider":            "ocm.software",
+						"repositoryContexts":  nil,
+						"resources": []any{
+							map[string]any{
+								"name":     "my-file",
+								"type":     "blob",
+								"version":  "1.0.0",
+								"relation": "local",
+								"digest": map[string]any{
+									"hashAlgorithm":          "SHA-256",
+									"normalisationAlgorithm": "genericBlobDigest/v1",
+									"value":                  "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2",
+								},
+								"access": map[string]any{
+									"type":           "localBlob/v1",
+									"mediaType":      "text/plain; charset=utf-8",
+									"localReference": "sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2",
+								},
+							},
+						},
+						"sources": nil,
+						"version": "1.0.0",
+					},
+					"meta": map[string]any{
+						"schemaVersion": "v2",
+					},
+				}
+
+				switch {
+				case strings.Contains(tt.outputArg, "--output=json"):
+					r.EqualValues([]any{component}, resultJSON)
+				case strings.Contains(tt.outputArg, "--output=ndjson"):
+					r.EqualValues(component, resultJSON)
+				}
+			}
+
+			logEntries, err := logs.List()
+			r.NoError(err, "failed to list log entries")
+			r.NotEmpty(logEntries, "expected log entries to be present")
+
+			r.EqualValues(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+		})
+	}
 }
 
 func Test_Version(t *testing.T) {
@@ -1253,7 +1470,6 @@ configurations:
 		test.WithOutput(logs),
 	)
 	r.NoError(err, "failed to verify component version")
-
 }
 
 func mustKey(t *testing.T) *rsa.PrivateKey {

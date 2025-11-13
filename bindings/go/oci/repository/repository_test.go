@@ -36,7 +36,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "valid repository with read access",
 			repository: &ctfrepospecv1.Repository{
-				Path:       t.TempDir(),
+				FilePath:   t.TempDir(),
 				AccessMode: ctfrepospecv1.AccessModeReadOnly,
 			},
 			wantErr: false,
@@ -44,7 +44,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "valid repository with write access",
 			repository: &ctfrepospecv1.Repository{
-				Path:       t.TempDir(),
+				FilePath:   t.TempDir(),
 				AccessMode: ctfrepospecv1.AccessModeReadWrite,
 			},
 			wantErr: false,
@@ -52,7 +52,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "valid repository with readwrite access",
 			repository: &ctfrepospecv1.Repository{
-				Path:       t.TempDir(),
+				FilePath:   t.TempDir(),
 				AccessMode: ctfrepospecv1.AccessModeReadWrite,
 			},
 			wantErr: false,
@@ -60,7 +60,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "invalid path",
 			repository: &ctfrepospecv1.Repository{
-				Path:       "/nonexistent/path",
+				FilePath:   "/nonexistent/path",
 				AccessMode: ctfrepospecv1.AccessModeReadOnly,
 			},
 			wantErr:     true,
@@ -69,7 +69,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "empty path",
 			repository: &ctfrepospecv1.Repository{
-				Path:       "",
+				FilePath:   "",
 				AccessMode: ctfrepospecv1.AccessModeReadOnly,
 			},
 			wantErr:     true,
