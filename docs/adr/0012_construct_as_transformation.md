@@ -848,7 +848,7 @@ ADR. However, the rough general idea here is:
 > In ocm v1, several interfaces were built against plain blobs or access as
 > the atomic unit. This led to issues, as
 > - several operations had to be performed twice (digest calculation of a blob)
->   or as the metadata could not be passed along.
+>   or the metadata could not be passed along.
 > - several extension points were not flexible enough (resource uploader could
 >   not provide the digest of the uploaded blob, as it only returned a blob)
 
@@ -898,7 +898,8 @@ ADR. However, the rough general idea here is:
           # <may have varying access properties>
   ```
 
-> [!NOTE] Look back at the initial conceptual example. There, we combine both,
+> [!NOTE] 
+> Look back at the initial conceptual example. There, we combine both,
 > localblob upload and remote resource upload by saying:
 > > If `spec.resource.access.type == localblob`, the spec has to contain the
 > > component's identity as whose localblob the blob has to be uploaded and the
