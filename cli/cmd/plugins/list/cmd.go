@@ -99,8 +99,7 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 	// TODO: Discuss/Find out if the same is possible using dag.Discover (First attempts failed because of different
 	//       types in the graph)
 	graph := dag.NewDirectedAcyclicGraph[string]()
-	// TODO: Remove "order" when we find a better way to sort the graph for an ordered output.
-	var order []string
+	var roots []string
 	for _, reg := range pluginRegistries {
 		logger.Debug("Getting plugin registry", "registry", reg)
 
@@ -157,12 +156,12 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 					logger.Warn("Failed to add vertex", "id", id, "error", err)
 					continue
 				}
-				order = append(order, id)
+				roots = append(roots, id)
 			}
 		}
 	}
 
-	renderer, err := buildRenderer(ctx, sync.ToSyncedGraph(graph), order, output)
+	renderer, err := buildRenderer(ctx, sync.ToSyncedGraph(graph), roots, output)
 	if err != nil {
 		return fmt.Errorf("building renderer failed: %w", err)
 	}
