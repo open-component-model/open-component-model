@@ -1002,10 +1002,31 @@ transformations:
 
 ### Program Flow
 
-> [!NOTE]
-> This section will be enhanced once we progressed a bit more on the 
-> implementation and have a better idea. The build up and validation of the 
-> graph will likely be heavily inspired by the `Builder` implementation of KRO.
+We propose a 3-step program flow for the transformation engine:
+1. **Discover**: 
+   - Parse the transformations without knowledge of the schemas 
+     (reuse KROs `ParseSchemalessResource` ). This process discovers all 
+     the CEL expressions in a transformation.
+     > [!NOTE] We DO NOT have knowledge about the complete schemas yet, as - for 
+     typed fields - the concrete schema depends on the schema of the input cel
+     variable (e.g. `repositorySpec` in the example above). Therefore, we
+     have to respect the order determined by the dependencies in the cel
+     expressions.
+   - Create a node per transformation. The node `id` is the transformation 
+     `id`.
+   - Inspect the CEL expressions to determine the 
+     dependencies between the transformations (reuse KROs `inspector`).
+   - Create an edge for each dependency (add edge always does a cycle check).
+
+2. **Static Type Analysis**:
+   - Set up a CEL environment initialized with constants for the `env` 
+     section of the transformation specification.
+     - To set up the CEL constants for the `env`, we infer a JSON schema and a
+       corresponding CEL type for the `env` section.
+   - Process the transformation by traversing graph nodes in topological 
+     order (reuse our `GraphProcessor`).
+   - For each node:
+     - 
 
 **1. Discover**
 - Discover loops over the entries in the (already parsed) transformation 
