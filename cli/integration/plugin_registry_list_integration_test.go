@@ -91,7 +91,7 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 			defer cancel()
 
-			var pluginRegistryAddresses []string
+			var pluginRegistryURLs []string
 
 			cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 			cfg := fmt.Sprintf(`
@@ -105,8 +105,8 @@ configurations:
 				// Start a registry for each remote registry
 				t.Logf("Start remote registries and prepare config")
 				containerName := fmt.Sprintf("%s-%d", remote, time.Now().UnixNano())
-				registryAddress := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
-				host, port, err := net.SplitHostPort(registryAddress)
+				registryURL := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
+				host, port, err := net.SplitHostPort(registryURL)
 				r.NoError(err)
 
 				// Generate and write config for the remote registry
@@ -131,12 +131,12 @@ configurations:
 				for _, plugin := range pluginList {
 					// Skip if version already exists
 					if !slices.Contains(versions, plugin.Version) {
-						r.NoError(addComponent(ctx, createPluginComponentConstructors(plugin), cfgPath, registryAddress))
+						r.NoError(addComponent(ctx, createPluginComponentConstructors(plugin), cfgPath, registryURL))
 						versions = append(versions, plugin.Version)
 					}
 				}
 
-				var pluginRegistryAddress string
+				var pluginRegistryURL string
 
 				// Create constructor file for each plugin registry containing the plugin references
 				for _, pluginRegistry := range tc.pluginRegistries {
@@ -163,14 +163,14 @@ componentReferences:
 					for _, plugin := range pluginList {
 						if plugin.Registry == pluginRegistry {
 							constructorPluginRegistry += generatePluginReferences(plugin)
-							pluginRegistryAddress = fmt.Sprintf("http://%s//%s:%s", registryAddress, componentName, componentVersion)
-							if !slices.Contains(pluginRegistryAddresses, pluginRegistryAddress) {
-								pluginRegistryAddresses = append(pluginRegistryAddresses, pluginRegistryAddress)
+							pluginRegistryURL = fmt.Sprintf("http://%s//%s:%s", registryURL, componentName, componentVersion)
+							if !slices.Contains(pluginRegistryURLs, pluginRegistryURL) {
+								pluginRegistryURLs = append(pluginRegistryURLs, pluginRegistryURL)
 							}
 						}
 					}
 
-					r.NoError(addComponent(ctx, constructorPluginRegistry, cfgPath, registryAddress))
+					r.NoError(addComponent(ctx, constructorPluginRegistry, cfgPath, registryURL))
 				}
 
 			}
@@ -183,7 +183,7 @@ componentReferences:
 				"registry",
 				"list",
 				"--config", cfgPath,
-				"--registry", strings.Join(pluginRegistryAddresses, ","),
+				"--registry", strings.Join(pluginRegistryURLs, ","),
 				"--output", "json",
 			})
 
@@ -196,12 +196,12 @@ componentReferences:
 			var expectedPlugins []list.PluginInfo
 			for _, pluginList := range tc.plugins {
 				for _, plugin := range pluginList {
-					// Update registry field with actual registry address
+					// Update registry field with actual registry URL
 					expectedPlugin := plugin
-					// Find matching registry address for this plugin's registry name
-					for _, addr := range pluginRegistryAddresses {
-						if strings.Contains(addr, plugin.Registry) {
-							expectedPlugin.Registry = addr
+					// Find matching registry URL for this plugin's registry name
+					for _, URL := range pluginRegistryURLs {
+						if strings.Contains(URL, plugin.Registry) {
+							expectedPlugin.Registry = URL
 							break
 						}
 					}
@@ -239,7 +239,7 @@ componentReferences:
 	}
 }
 
-func addComponent(ctx context.Context, constructorContent string, cfgPath string, registryAddress string) (err error) {
+func addComponent(ctx context.Context, constructorContent string, cfgPath string, registryURL string) (err error) {
 	constructorPath := filepath.Join(os.TempDir(), "constructor.yaml")
 	defer func(name string) {
 		err = os.Remove(name)
@@ -253,7 +253,7 @@ func addComponent(ctx context.Context, constructorContent string, cfgPath string
 	addCMD.SetArgs([]string{
 		"add",
 		"component-version",
-		"--repository", fmt.Sprintf("http://%s", registryAddress),
+		"--repository", fmt.Sprintf("http://%s", registryURL),
 		"--constructor", constructorPath,
 		"--config", cfgPath,
 	})
