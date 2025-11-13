@@ -138,8 +138,8 @@ github.com/spf13/pflag v1.0.9/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
 github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
-github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
-github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=
+github.com/stretchr/objx v0.5.3 h1:jmXUvGomnU1o3W/V5h2VEradbpJDwGrzugQQvL0POH4=
+github.com/stretchr/objx v0.5.3/go.mod h1:rDQraq+vQZU7Fde9LOZLr8Tax6zZvy4kuNKF+QYS+U0=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
@@ -242,8 +242,8 @@ ocm.software/open-component-model/bindings/go/input/file v0.0.1 h1:BIKycHjhhe1Vq
 ocm.software/open-component-model/bindings/go/input/file v0.0.1/go.mod h1:+YQ9j/FgfEVqiUn9hsO6lvG12lzV5M7lkY3hObNNuic=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251104081249-38e3382d9873 h1:y66h6dkTXh4IgGkFlu9Cf0XTbuFNn2+UgEOJGhD7Ihc=
 ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251104081249-38e3382d9873/go.mod h1:lq2gnopJ3axVmgI1cAjRBgWTTFFR/qPH1BQztzfgcDI=
-ocm.software/open-component-model/bindings/go/oci v0.0.11 h1:TaRVtaPpUtgTszO3DZBCB+ziBxgqNuKl605UrcoTuiA=
-ocm.software/open-component-model/bindings/go/oci v0.0.11/go.mod h1:EiLycy6ZadALKDC0x83O0+1l+gVStUwz8OHm7JDKQCE=
+ocm.software/open-component-model/bindings/go/oci v0.0.12 h1:33PKed6iOC2G2xphGSwsZsNQMaD35V48CumtIGaB12k=
+ocm.software/open-component-model/bindings/go/oci v0.0.12/go.mod h1:/7TZxlZwyo6gvCaWTW8QMaZ2TMmRpfaoKfv6eSCRJA4=
 ocm.software/open-component-model/bindings/go/plugin v0.0.10 h1:Ca0ziLN/O6G4N317QRsCGcVawWKGMyihnxLFeXb3HFo=
 ocm.software/open-component-model/bindings/go/plugin v0.0.10/go.mod h1:Gw3HIYzdj3ZGUZzy0c+iIDWlVjRwcAjy9Jbb2ofk4aw=
 ocm.software/open-component-model/bindings/go/repository v0.0.3 h1:Enwxm8XldcsQYqG3P5vAY00Q2MRIdcG/XmWwj0vZjlY=
