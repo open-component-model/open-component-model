@@ -274,6 +274,19 @@ transformations:
       componentDescriptor: ${createcomponentversion1.outputs.descriptor}
 ```
 
+> [!NOTE] Comparison with Transformation ADR
+> - Instead of expecting a component descriptor as a starting point for all
+>   operations that is consecutively modified and then merged (to detect
+>   conflicts), we create a new component descriptor to be uploaded
+>   with the resources created in the previous operations.
+> - This simplifies the operations, as we do not have to deal with
+>   merging and conflict detection.
+> - This would also be adopted for the transfer use case. Here, the component
+>   to be uploaded at the target location would be created from scratch and 
+   > filled
+>   with information from the original component descriptor through `cel` 
+   > expressions.
+
 ### Graph Topology
 
 The specification in [Conceptual Example](#conceptual-example-constructing-a-component-version-with-a-local-file-resource)
@@ -910,6 +923,11 @@ cases (capability with a single type).
 plugin system in place, the complexity of maintaining two different plugin 
 systems is even higher.
 
+## Versioning of Transformations
+- The examples currently omit versioning of transformations for brevity.
+- We assume that transformations will be versioned similar to plugins to be 
+  able to introduce non-backwards compatible changes in the future.
+
 ## Static Type Analysis
 
 **Prerequisite**
@@ -1020,56 +1038,39 @@ We propose a 3-step program flow for the transformation engine:
 
 2. **Static Type Analysis**:
    - Set up a CEL environment initialized with constants for the `env` 
-     section of the transformation specification.
+     section of the transformation specification and a corresponding type 
+     provider.
      - To set up the CEL constants for the `env`, we infer a JSON schema and a
-       corresponding CEL type for the `env` section.
+       corresponding CEL type for the `env` section. The CEL type assumes 
+       the specified `env` data is a structure and not a map. 
+     - Thereby, we also add the value of each primitive type field as a 
+       `constant` to the JSON schema. This allows us to determine the `runtime.Type` 
+       based on the schema (this could eventually be improved).
+     - For custom types (such as the ones we set up here), CEL needs a 
+       custom type provider. Such a type provider essentially tells CEL what 
+       fields are available on a particular type. 
    - Process the transformation by traversing graph nodes in topological 
      order (reuse our `GraphProcessor`).
-   - For each node:
-     - 
+   - For each transformation:
+     - Compile (we DO NOT evaluate yet) all CEL expressions.
+     - Determine the JSON schema and the corresponding CEL type for the 
+       transformation.
+       - This includes introspecting the JSON schema of a CEL variable to 
+         determine the `runtime.Type` of a type field base on its constant 
+         value.
+     - Add the determined CEL type to the CEL environment. This allows 
+       consecutive transformations to refer to this transformation.
+     - Validate the spec field of the current transformation against the 
+       determined JSON schema (reuse KROs `ParseResource`).
 
-**1. Discover**
-- Discover loops over the entries in the (already parsed) transformation 
-  specification go struct. We do 2 iterations:
-  - **First Iteration**
-    - For each item in the `transformations` list:
-      - We create a vertex with the transformation `id` as the vertex `id`.
-  - **Second Iteration**
-    - For each item in the `transformations` list:
-      - We parse the cel expressions in the transformation `config` (without 
-        evaluating them yet). 
-      - We add edges based on the cel expressions in the `config` (add edge 
-        always does a cycle check). Here, we can error if the vertex with 
-        the `id` referenced in the cel expression does not exist because of 
-        the first iteration.
-      - We unmarshal the `config` into its corresponding go type. As 
-        mentioned above, we do not want an additional registry level. So, we 
-        do a switch case on the transformation `type` and perform the 
-        unmarshalling. Doing this here, instead of during process time,
-        allows us to error early if the config is invalid.
-      - We add the transformation with the unmarshalled `config` as an 
-        attribute to the vertex.
-
-**2. Process**
-- Process loops over the graph in topological order. For each vertex:
-  - We get the transformation with the typed `config` from the vertex attribute.
-  - We evaluate all cel expressions in the `config`, using the outputs of 
-    the predecessor vertices as input.
-  - We do another switch case statement on the transformation type to call the
-    corresponding transformation logic, passing in the `config`.
-  - We store the processed transformations with their outputs in the vertex 
-    as an attribute (can be used for rendering) and additionally in a map with
-    the vertex `id` as key (can be used for cel expression evaluation of 
-    successor vertices).
-
-## Comparison with Transformation ADR
-
-- Instead of expecting a component descriptor as a starting point for all
-  operations that is consecutively modified and then merged (to detect
-  conflicts), we create a new component descriptor to be uploaded
-  with the resources created in the previous operations.
-- This simplifies the operations, as we do not have to deal with
-  merging and conflict detection.
-- This would also be adopted for the transfer use case. Here, the component
-  to be uploaded at the target location would be created from scratch and filled
-  with information from the original component descriptor through `cel` expressions.
+3. **Runtime Evaluation**:
+    - Process the transformation by traversing graph nodes in topological 
+      order (reuse our `GraphProcessor`).
+    - For each transformation:
+      - Evaluate all CEL expressions.
+        - Each evaluation receives the previously evaluated transformations 
+          as input.
+      - Replace the CEL expressions in the spec with the evaluated values.
+      - Call the corresponding transformation logic.
+      - Store the evaluated transformation (spec and output) for consecutive 
+        transformations to refer to.
