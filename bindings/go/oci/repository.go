@@ -475,14 +475,13 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	if err != nil {
 		return nil, fmt.Errorf("fetch layer: %w", err)
 	}
-	defer func() { err = errors.Join(err, data.Close()) }()
+	defer func() { _ = data.Close() }()
 
 	b := ociblob.NewDescriptorBlob(data, artifact)
 	if actual, _ := b.Digest(); actual != artifact.Digest.String() {
-		err = errors.Join(err, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual))
-		return nil, err
+		return nil, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual)
 	}
-	return b, err
+	return b, nil
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {
