@@ -123,8 +123,8 @@ func TestRepository_GetComponentVersion(t *testing.T) {
 	r.NoError(err, "Failed to add component version when it should succeed")
 
 	desc, err = repo.GetComponentVersion(ctx, "test-component", "1.0.0")
-	r.NoError(err, "Expected error when getting non-existent component version")
-	r.NotNil(desc, "Expected nil descriptor when getting non-existent component version")
+	r.NoError(err, "No error expected when getting existing component version")
+	r.NotNil(desc, "Expected non-nil descriptor when getting existing component version")
 
 }
 
