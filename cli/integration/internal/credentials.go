@@ -110,12 +110,14 @@ type ConfigOpts struct {
 }
 
 func CreateOCMConfigForRegistry(t *testing.T, opts []ConfigOpts) (string, error) {
+	t.Helper()
+
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
-	cfg := fmt.Sprintf(`
+	cfg := `
 type: generic.config.ocm.software/v1
 configurations:
 - type: credentials.config.ocm.software
-  consumers:`)
+  consumers:`
 
 	for _, o := range opts {
 		cfg += fmt.Sprintf(`
@@ -131,7 +133,7 @@ configurations:
         password: %q`, o.Host, o.Port, o.User, o.Password)
 	}
 
-	if err := os.WriteFile(cfgPath, []byte(cfg), os.ModePerm); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(cfg), os.ModePerm); err != nil { //nolint:gosec // test code
 		return "", err
 	}
 

@@ -35,9 +35,9 @@ func GeneratePluginReferences(plugin list.PluginInfo) string {
 	}
 
 	if len(plugin.Platforms) > 0 {
-		labels += fmt.Sprintf(`
+		labels += `
           platforms:
-`)
+`
 
 		for _, platform := range plugin.Platforms {
 			labels += fmt.Sprintf(`
