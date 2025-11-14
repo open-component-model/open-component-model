@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -195,7 +196,7 @@ It is used to store the component descriptor manifest and other related blob man
 }
 
 // getDescriptorFromStore retrieves a component descriptor from a given Store using the provided reference.
-func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string) (*descriptor.Descriptor, *ociImageSpecV1.Manifest, *ociImageSpecV1.Index, error) {
+func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string) (desc *descriptor.Descriptor, manifestRef *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, reference)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
@@ -205,12 +206,13 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
 	}
-	defer func() {
-		_ = componentConfigRaw.Close()
-	}()
 	cfg := componentConfig.Config{}
 	if err := json.NewDecoder(componentConfigRaw).Decode(&cfg); err != nil {
 		return nil, nil, nil, err
+	}
+
+	if closeErr := componentConfigRaw.Close(); closeErr != nil {
+		return nil, nil, nil, fmt.Errorf("failed to close component config reader: %w", closeErr)
 	}
 
 	// Read component descriptor
@@ -219,10 +221,10 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
 	defer func() {
-		_ = descriptorRaw.Close()
+		err = errors.Join(err, descriptorRaw.Close())
 	}()
 
-	desc, err := ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, cfg.ComponentDescriptorLayer.MediaType)
+	desc, err = ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, cfg.ComponentDescriptorLayer.MediaType)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
 	}
