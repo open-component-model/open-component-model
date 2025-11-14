@@ -172,7 +172,7 @@ jobs:
 
       - name: Repository Owner
         run: |
-          echo "REPOSITORY_OWNER=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/plugins" >> $GITHUB_ENV
+          echo "REPOSITORY_OWNER=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
       # Publish component version using CLI image
       # TODO: replace with github action workflow call so it runs in a container.
