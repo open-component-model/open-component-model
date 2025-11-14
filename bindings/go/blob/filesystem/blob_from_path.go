@@ -203,78 +203,88 @@ func createTarFromDir(ctx context.Context, fileSystem FileSystem, subPath string
 			return fmt.Errorf("symlinks are not supported yet: found symlink %q", path)
 		}
 
-		// Directories: prune on exclude, optionally write header if included, always traverse
+		// Process directory or file
 		if fi.IsDir() {
-			// Exclude precedence: if directory matches any exclude pattern -> prune subtree by skipping dir
-			if len(opt.ExcludePatterns) > 0 {
-				inc, err := isPathIncluded(path, nil, opt.ExcludePatterns)
-				if err != nil {
-					return fmt.Errorf("error checking exclusion of directory %q: %w", path, err)
-				}
-				if !inc {
-					return fs.SkipDir
-				}
-			}
-
-			// Write directory header only if the directory path itself is included
-			inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
-			if err != nil {
-				return fmt.Errorf("error checking include/exclude pattern for directory %q: %w", path, err)
-			}
-			if inc {
-				header, err := createTarHeader(fi, "", opt.Reproducible)
-				if err != nil {
-					return fmt.Errorf("error creating tar header for directory %q: %w", path, err)
-				}
-				name := filepath.ToSlash(path)
-				if !strings.HasSuffix(name, "/") {
-					name += "/"
-				}
-				header.Name = name
-				if err := tw.WriteHeader(header); err != nil {
-					return fmt.Errorf("error writing tar header for directory %q: %w", path, err)
-				}
-			}
-			// continue walking into directory in any case
-			return nil
+			return processDirectory(path, fi, opt, tw)
 		}
+		return processFile(path, fi, fileSystem, opt, tw)
+	})
+}
 
-		// Files: write only if included (exclude precedence handled in isPathIncluded)
-		inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
+// processDirectory handles directory entries during DirWalk
+// Prune on exclude, optionally write header if included, always traverse
+func processDirectory(path string, fi fs.FileInfo, opt DirOptions, tw *tar.Writer) error {
+	// Exclude precedence: if directory matches any exclude pattern -> prune subtree by skipping dir
+	if len(opt.ExcludePatterns) > 0 {
+		inc, err := isPathIncluded(path, nil, opt.ExcludePatterns)
 		if err != nil {
-			return fmt.Errorf("error checking include/exclude pattern for file %q: %w", path, err)
+			return fmt.Errorf("error checking exclusion of directory %q: %w", path, err)
 		}
 		if !inc {
-			return nil
+			return fs.SkipDir
 		}
+	}
 
+	// Write directory header only if the directory path itself is included
+	inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
+	if err != nil {
+		return fmt.Errorf("error checking include/exclude pattern for directory %q: %w", path, err)
+	}
+	if inc {
 		header, err := createTarHeader(fi, "", opt.Reproducible)
 		if err != nil {
-			return fmt.Errorf("error creating tar header for %q: %w", path, err)
+			return fmt.Errorf("error creating tar header for directory %q: %w", path, err)
 		}
-		header.Name = filepath.ToSlash(path)
-
+		name := filepath.ToSlash(path)
+		if !strings.HasSuffix(name, "/") {
+			name += "/"
+		}
+		header.Name = name
 		if err := tw.WriteHeader(header); err != nil {
-			return fmt.Errorf("error writing tar header for %q: %w", path, err)
+			return fmt.Errorf("error writing tar header for directory %q: %w", path, err)
 		}
+	}
+	// continue walking into directory in any case
+	return nil
+}
 
-		fr, err := fileSystem.Open(path)
-		if err != nil {
-			return fmt.Errorf("error opening file %q for reading: %w", path, err)
-		}
-
-		_, copyErr := io.Copy(tw, fr)
-		closeErr := fr.Close()
-
-		if copyErr != nil {
-			return fmt.Errorf("error copying content of file %q to tar: %w", path, copyErr)
-		}
-		if closeErr != nil {
-			return fmt.Errorf("error closing file %q: %w", path, closeErr)
-		}
-
+// processFile handles file entries during DirWalk
+// Write only if included (exclude precedence handled in isPathIncluded)
+func processFile(path string, fi fs.FileInfo, fileSystem FileSystem, opt DirOptions, tw *tar.Writer) error {
+	inc, err := isPathIncluded(path, opt.IncludePatterns, opt.ExcludePatterns)
+	if err != nil {
+		return fmt.Errorf("error checking include/exclude pattern for file %q: %w", path, err)
+	}
+	if !inc {
 		return nil
-	})
+	}
+
+	header, err := createTarHeader(fi, "", opt.Reproducible)
+	if err != nil {
+		return fmt.Errorf("error creating tar header for %q: %w", path, err)
+	}
+	header.Name = filepath.ToSlash(path)
+
+	if err := tw.WriteHeader(header); err != nil {
+		return fmt.Errorf("error writing tar header for %q: %w", path, err)
+	}
+
+	fr, err := fileSystem.Open(path)
+	if err != nil {
+		return fmt.Errorf("error opening file %q for reading: %w", path, err)
+	}
+
+	_, copyErr := io.Copy(tw, fr)
+	closeErr := fr.Close()
+
+	if copyErr != nil {
+		return fmt.Errorf("error copying content of file %q to tar: %w", path, copyErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("error closing file %q: %w", path, closeErr)
+	}
+
+	return nil
 }
 
 // isPathIncluded checks if a given path should be included based on include and exclude patterns.
