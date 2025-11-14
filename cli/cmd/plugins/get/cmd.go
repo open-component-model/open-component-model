@@ -193,8 +193,9 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 				if err := graph.AddVertex(plugin.String(), map[string]any{
 					sync.AttributeValue: desc,
 				}); err != nil {
-					roots = append(roots, plugin.String())
+					return fmt.Errorf("adding vertex to graph failed: %w", err)
 				}
+				roots = append(roots, plugin.String())
 			}
 		} else {
 			if err := graph.AddVertex(
@@ -206,9 +207,7 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 					"description": plugin.Description,
 					"platforms":   plugin.Platforms,
 				}); err != nil {
-				// Currently, only an "Already exists" error is returned, which we can safely ignore.
-				logger.Warn("Failed to add vertex", "id", plugin.String(), "error", err)
-				continue
+				return fmt.Errorf("adding vertex to graph failed: %w", err)
 			}
 			roots = append(roots, plugin.String())
 		}
