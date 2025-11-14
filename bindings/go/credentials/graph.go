@@ -21,6 +21,12 @@ var ErrNoDirectCredentials = errors.New("no direct credentials found in graph")
 // credentials for the given identity.
 var ErrNoIndirectCredentials = errors.New("no indirect credentials found in graph")
 
+// ErrNotFound is returned when no credentials could be found for the given identity.
+var ErrNotFound = errors.New("credentials not found")
+
+// ErrUnknown is a generic error indicating an unknown failure during credential resolution.
+var ErrUnknown = errors.New("unknown error occurred")
+
 var scheme = runtime.NewScheme()
 
 func init() {
@@ -73,6 +79,7 @@ type Graph struct {
 // falls back to indirect resolution through plugins.
 func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
 	if _, err := identity.ParseType(); err != nil {
+		err = errors.Join(ErrUnknown, err)
 		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", err)
 	}
 
@@ -86,6 +93,13 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 	}
 
 	if err != nil {
+		if errors.Is(err, ErrNoDirectCredentials) || errors.Is(err, ErrNoIndirectCredentials) {
+			// not found err
+			err = errors.Join(ErrNotFound, err)
+			return nil, fmt.Errorf("credentials for identity %q not found: %w", identity.String(), err)
+		}
+
+		err = errors.Join(ErrUnknown, err)
 		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 	}
 
