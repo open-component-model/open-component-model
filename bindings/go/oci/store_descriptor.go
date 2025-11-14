@@ -196,7 +196,7 @@ It is used to store the component descriptor manifest and other related blob man
 }
 
 // getDescriptorFromStore retrieves a component descriptor from a given Store using the provided reference.
-func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string) (*descriptor.Descriptor, *ociImageSpecV1.Manifest, *ociImageSpecV1.Index, error) {
+func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string) (desc *descriptor.Descriptor, manifestRef *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, reference)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
@@ -224,7 +224,7 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 		err = errors.Join(err, descriptorRaw.Close())
 	}()
 
-	desc, err := ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, cfg.ComponentDescriptorLayer.MediaType)
+	desc, err = ocidescriptor.SingleFileDecodeDescriptor(descriptorRaw, cfg.ComponentDescriptorLayer.MediaType)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
 	}

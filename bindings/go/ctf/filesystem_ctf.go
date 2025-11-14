@@ -161,30 +161,33 @@ func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) (err e
 	}
 	tempPath := tempFile.Name()
 
-	// Ensure cleanup
-	defer func() {
-		if closeErr := tempFile.Close(); closeErr != nil {
-			err = errors.Join(err, fmt.Errorf("unable to close temp file: %w", closeErr))
-		}
-		if err != nil {
-			if removeErr := os.Remove(tempPath); removeErr != nil {
-				err = errors.Join(err, fmt.Errorf("unable to remove temp file: %w", removeErr))
-			}
-		}
-	}()
-
 	// Write content to temp file
 	if size <= blob.SizeUnknown {
 		buf := ioBufPool.Get().(*[]byte)
 		defer ioBufPool.Put(buf)
 		if _, err = io.CopyBuffer(tempFile, raw, *buf); err != nil {
-			return fmt.Errorf("unable to write content: %w", err)
+			err = errors.Join(err, tempFile.Close(), os.Remove(tempPath))
+			return fmt.Errorf("unable to write content: %w", errors.Join(err, tempFile.Close(), os.Remove(tempPath)))
 		}
 	} else {
 		if _, err = io.CopyN(tempFile, raw, size); err != nil {
+			err = errors.Join(err, tempFile.Close(), os.Remove(tempPath))
 			return fmt.Errorf("unable to write content: %w", err)
 		}
 	}
+
+	// Close file before chmod and rename (required for Windows compatibility)
+	if err = tempFile.Close(); err != nil {
+		err = errors.Join(err, os.Remove(tempPath))
+		return fmt.Errorf("unable to close temp file: %w", err)
+	}
+
+	// Ensure cleanup on error after this point
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, os.Remove(tempPath))
+		}
+	}()
 
 	// Make read-only
 	if err = os.Chmod(tempPath, 0o444); err != nil {
