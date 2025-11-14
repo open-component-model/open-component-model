@@ -80,7 +80,7 @@ func Test_Get_Component_Version_Formats(t *testing.T) {
 
 	ref := compref.Ref{
 		Repository: &ctfv1.Repository{
-			Path: archivePath,
+			FilePath: archivePath,
 		},
 		Component: desc.Component.Name,
 		Version:   desc.Component.Version,
@@ -237,7 +237,7 @@ func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 
 	ref := compref.Ref{
 		Repository: &ctfv1.Repository{
-			Path: archivePath,
+			FilePath: archivePath,
 		},
 		Component: root.Component.Name,
 		Version:   root.Component.Version,
@@ -450,7 +450,7 @@ func Test_List_Component_Version_Variations(t *testing.T) {
 
 	ref := compref.Ref{
 		Repository: &ctfv1.Repository{
-			Path: archivePath,
+			FilePath: archivePath,
 		},
 		Component: desc1.Component.Name,
 	}
@@ -580,7 +580,7 @@ func Test_List_Component_Version_Variations_Recursive(t *testing.T) {
 
 	ref := compref.Ref{
 		Repository: &ctfv1.Repository{
-			Path: archivePath,
+			FilePath: archivePath,
 		},
 		Component: desc1.Component.Name,
 	}
@@ -705,7 +705,7 @@ configurations:
   resolvers:
   - repository:
       type: CommonTransportFormat/v1
-      path: /does/not/exist
+      filePath: /does/not/exist
     componentNamePattern: ocm.software/*`,
 			expectedOutput: `
 COMPONENT           │ VERSION │ PROVIDER     
@@ -952,7 +952,7 @@ configurations:
   resolvers:
   - repository:
       type: CommonTransportFormat/v1
-      path: %[1]s
+      filePath: %[1]s
 `, externalArchiveFilePath)
 
 		legacyResolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-legacy-resolver.yaml")
@@ -1065,7 +1065,7 @@ configurations:
   resolvers:
   - repository:
       type: CommonTransportFormat/v1
-      path: %[1]s
+      filePath: %[1]s
     componentNamePattern: ocm.software/*
 `, externalArchiveFilePath)
 
