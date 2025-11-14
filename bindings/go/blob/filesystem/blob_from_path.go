@@ -274,7 +274,7 @@ func processFile(path string, fi fs.FileInfo, fileSystem FileSystem, opt DirOpti
 		return fmt.Errorf("error opening file %q for reading: %w", path, err)
 	}
 
-	_, copyErr := io.Copy(tw, fr)
+	_, copyErr := io.CopyN(tw, fr, header.Size)
 	closeErr := fr.Close()
 
 	if copyErr != nil {
