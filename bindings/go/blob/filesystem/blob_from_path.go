@@ -17,12 +17,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 )
 
-// DefaultTarMediaType is used as blob media type for directories, if not set in the DirOptions.
-const DefaultTarMediaType = "application/x-tar"
-
-// DefaultFileMediaType is used as blob media type for a single file, if not set in the DirOptions.
-const DefaultFileMediaType = "application/octet-stream"
-
 // DirOptions contains options for creating a blob from a path.
 type DirOptions struct {
 	MediaType       string   // Media type of the resulting blob. If empty, defaults are used.
@@ -33,6 +27,12 @@ type DirOptions struct {
 	IncludePatterns []string // Patterns to include (glob patterns). Applies to files and directories.
 	WorkingDir      string   // Working directory to ensure the path is within and avoid path traversal.
 }
+
+// DefaultTarMediaType is used as blob media type for directories, if not set in the DirOptions.
+const DefaultTarMediaType = "application/x-tar"
+
+// DefaultFileMediaType is used as blob media type for a single file, if not set in the DirOptions.
+const DefaultFileMediaType = "application/octet-stream"
 
 // GetBlobFromPath creates a blob from a path using the provided options.
 //
@@ -48,7 +48,6 @@ type DirOptions struct {
 //
 // Paths and patterns are normalized to use forward slashes (`/`) as separators for matching
 // and have any leading `./` or `/` removed.
-
 // Symlinks are not supported so far and will result in an error.
 
 func GetBlobFromPath(ctx context.Context, path string, opt DirOptions) (blob.ReadOnlyBlob, error) {
