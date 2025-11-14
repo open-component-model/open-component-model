@@ -107,12 +107,12 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 
 		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
 		if err != nil {
-			return fmt.Errorf("could not access ocm repository: %w", err)
+			return fmt.Errorf("failed getting repository", err)
 		}
 
 		desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
 		if err != nil {
-			return fmt.Errorf("getting component version for plugin registry failed: %w", err)
+			return fmt.Errorf("failed getting component constructor for plugin registry", err)
 		}
 
 		for _, r := range desc.Component.References {

@@ -68,7 +68,7 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 
 	pluginRegistryFlag, err := cmd.Flags().GetString(FlagRegistry)
 	if err != nil {
-		return fmt.Errorf("failed to get registryDesc flag: %w", err)
+		return fmt.Errorf("failed to get registry flag: %w", err)
 	}
 
 	pluginArgVersion, err := cmd.Flags().GetString(FlagVersion)
@@ -124,12 +124,12 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 
 		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
 		if err != nil {
-			return fmt.Errorf("could not access ocm repository: %w", err)
+			return fmt.Errorf("failed getting repository: %w", err)
 		}
 
 		desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
 		if err != nil {
-			return fmt.Errorf("getting component reference and versions failed: %w", err)
+			return fmt.Errorf("failed getting component descriptor of plugin registry: %w", err)
 		}
 
 		logger.Debug("Looking for plugin in component version", slog.String("component", desc.Component.String()))
