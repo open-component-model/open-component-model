@@ -37,7 +37,7 @@ func NewFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository,
 }
 
 func NewStoreFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Repository, options ...oci.RepositoryOption) (*ocictf.Store, error) {
-	path := repository.Path
+	path := repository.FilePath
 	if path == "" {
 		return nil, fmt.Errorf("a path is required")
 	}

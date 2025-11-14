@@ -24,6 +24,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
+	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer"
@@ -34,7 +38,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
 var (
@@ -53,7 +57,7 @@ func init() {
 	ocm.MustRegisterMetrics(metrics.Registry)
 }
 
-//nolint:funlen // the main function is complex enough as it is - we don't want to separate the initialization
+//nolint:funlen,maintidx // the main function is complex enough as it is - we don't want to separate the initialization
 func main() {
 	var (
 		metricsAddr               string
@@ -153,7 +157,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	pm := plugins.NewPluginManager(plugins.DefaultPluginManagerOptions(setupLog))
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
+
+	ocmscheme := ocmruntime.NewScheme()
+	ocmrepository.MustAddToScheme(ocmscheme)
+	access.MustAddToScheme(ocmscheme)
+
+	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
+		IdleTimeout: time.Hour,
+		Logger:      &setupLog,
+		Scheme:      ocmscheme,
+		Provider:    repositoryProvider,
+	})
 	if err := mgr.Add(pm); err != nil {
 		setupLog.Error(err, "unable to add plugin manager")
 		os.Exit(1)
@@ -161,24 +176,20 @@ func main() {
 
 	const unlimited = 0
 	ttl := time.Minute * 30
-	resolverCache := expirable.NewLRU[string, *resolution.Result](unlimited, nil, ttl)
+	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
 
 	// Create worker pool with its own dependencies
-	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		WorkerCount:   resolverWorkerCount,
-		QueueSize:     resolverWorkerQueueLength,
-		Logger:        setupLog,
-		Client:        mgr.GetClient(),
-		PluginManager: pm, // plugin manager is passed in here as the manager is started with the controller manager
-		Cache:         resolverCache,
+	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
+		WorkerCount: resolverWorkerCount,
+		QueueSize:   resolverWorkerQueueLength,
+		Logger:      &setupLog,
+		Client:      mgr.GetClient(),
+		Cache:       resolverCache,
 	})
 	if err := mgr.Add(workerPool); err != nil {
 		setupLog.Error(err, "unable to add worker pool")
 		os.Exit(1)
 	}
-
-	// resolver will be used in the controller
-	_ = resolution.NewResolver(mgr.GetClient(), setupLog, workerPool)
 
 	var eventsRecorder *events.Recorder
 	if eventsRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, "ocm-k8s-toolkit"); err != nil {

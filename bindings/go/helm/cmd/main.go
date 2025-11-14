@@ -24,6 +24,28 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+var helpContent = `
+Helm Input Plugin for OCM
+
+This plugin processes Helm charts as OCM component resources.
+
+Usage:
+ helm-plugin capabilities           Returns plugin capabilities (JSON)
+ helm-plugin --config <json>        Starts the plugin server
+ helm-plugin help                   Shows this help message
+
+Examples:
+ # Query plugin capabilities
+ $ helm-plugin capabilities
+ {"types":{"inputRepository":[{"type":"Helm/v1","jsonSchema":"..."}]}}
+
+ # Start plugin (typically called by OCM plugin manager)
+ $ helm-plugin --config '{"id":"helm","type":"unix","pluginType":"inputRepository",...}'
+ http+unix:///tmp/helm-plugin.socket
+
+Configuration:
+ Accepts filesystem/v1alpha1 config for temp folder location.`
+
 // HelmInputPlugin is a plugin that implements the helm.InputMethod interface as an external binary.
 type HelmInputPlugin struct {
 	contracts.EmptyBasePlugin
@@ -74,6 +96,15 @@ func main() {
 		}
 
 		logger.Info("capabilities sent")
+		os.Exit(0)
+	}
+
+	if len(args) > 0 && args[0] == "help" {
+		if _, err := fmt.Fprintln(os.Stdout, helpContent); err != nil {
+			logger.Error("failed print helm input", "error", err)
+			os.Exit(1)
+		}
+
 		os.Exit(0)
 	}
 

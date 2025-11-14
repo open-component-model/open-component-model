@@ -32,7 +32,7 @@ func SetupRepositoryWithSpecData(
 			RepositorySpec: &apiextensionsv1.JSON{
 				Raw: specData,
 			},
-			Interval: metav1.Duration{Duration: time.Minute},
+			Interval: metav1.Duration{Duration: time.Second * 5},
 		},
 	}
 	Expect(k8sClient.Create(ctx, repository)).To(Succeed())
