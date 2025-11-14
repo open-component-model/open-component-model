@@ -14,6 +14,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/bindings/go/dag/sync"
+
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -73,15 +74,13 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("getting output flag failed: %w", err)
 	}
 
-	var pluginRegistries []string
-
 	pluginRegistryFlag, err := cmd.Flags().GetString(FlagRegistry)
 	if err != nil {
-		return fmt.Errorf("failed to get registryDesc flag: %w", err)
+		return fmt.Errorf("failed to get plugin registry flag: %w", err)
 	}
 
+	var pluginRegistries []string
 	if pluginRegistryFlag != "" {
-		// TODO: Discuss if multiple registries should be supported via flag
 		regs := strings.Split(pluginRegistryFlag, ",")
 		pluginRegistries = append(pluginRegistries, regs...)
 	} else { //nolint:staticcheck // see TODOs below
@@ -130,36 +129,36 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 			for _, r := range d.Component.References {
 				logger.Debug("Adding plugin to graph", "plugin", r.Name, "version", r.Version, "registry", reg)
 
-				var desc, os, arch string
+				var info PluginInfo
 				for _, l := range r.Labels {
-					if l.Name == "description" {
-						desc = strings.Trim(string(l.Value), "\"")
-					}
-					if l.Name == "os" {
-						os = strings.Trim(string(l.Value), "\"")
-					}
-					if l.Name == "arch" {
-						arch = strings.Trim(string(l.Value), "\"")
+					if l.Name == "ocm.software/pluginInfo" {
+						dec := json.NewDecoder(strings.NewReader(string(l.Value)))
+						dec.DisallowUnknownFields()
+						if err := dec.Decode(&info); err != nil {
+							return fmt.Errorf("decoding plugin info label failed: %w", err)
+						}
+
+						info.Name = r.Name
+						info.Version = r.Version
+						info.Registry = reg
+						break
 					}
 				}
 
-				// Need a unique key for each plugin version + platform
-				id := fmt.Sprintf("%s/%s:%s-%s/%s", reg, r.Name, r.Version, os, arch)
 				if err := graph.AddVertex(
-					id,
+					info.String(),
 					map[string]any{
 						"name":        r.Name,
 						"version":     r.Version,
 						"registry":    reg,
-						"description": desc,
-						"os":          os,
-						"arch":        arch,
+						"description": info.Description,
+						"platforms":   info.Platforms,
 					}); err != nil {
 					// Currently, only an "Already exists" error is returned, which we can safely ignore.
-					logger.Warn("Failed to add vertex", "id", id, "error", err)
+					logger.Warn("Failed to add vertex", "id", info.String(), "error", err)
 					continue
 				}
-				roots = append(roots, id)
+				roots = append(roots, info.String())
 			}
 		}
 	}
@@ -192,12 +191,15 @@ func buildRenderer(ctx context.Context, graph *sync.SyncedDirectedAcyclicGraph[s
 }
 
 type PluginInfo struct {
-	Name        string `json:"name"        yaml:"name"`
-	Version     string `json:"version"     yaml:"version"`
-	Os          string `json:"os"          yaml:"os"`
-	Arch        string `json:"arch"        yaml:"arch"`
-	Description string `json:"description" yaml:"description"`
-	Registry    string `json:"registry"    yaml:"registry"`
+	Name        string   `json:"name"        yaml:"name"`
+	Version     string   `json:"version"     yaml:"version"`
+	Platforms   []string `json:"platforms"   yaml:"platforms"`
+	Description string   `json:"description" yaml:"description"`
+	Registry    string   `json:"registry"    yaml:"registry"`
+}
+
+func (p *PluginInfo) String() string {
+	return fmt.Sprintf("%s/%s:%s-%s", p.Registry, p.Name, p.Version, p.Platforms)
 }
 
 func convertVerticesToPluginInfos(vertices []*dag.Vertex[string]) []PluginInfo {
@@ -225,8 +227,7 @@ func convertVerticesToPluginInfos(vertices []*dag.Vertex[string]) []PluginInfo {
 		plugins = append(plugins, PluginInfo{
 			Name:        vertex.Attributes["name"].(string),
 			Version:     vertex.Attributes["version"].(string),
-			Os:          vertex.Attributes["os"].(string),
-			Arch:        vertex.Attributes["arch"].(string),
+			Platforms:   vertex.Attributes["platforms"].([]string),
 			Description: vertex.Attributes["description"].(string),
 			Registry:    vertex.Attributes["registry"].(string),
 		})
@@ -280,23 +281,12 @@ func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) 
 	})
 	t := table.NewWriter()
 	t.SetOutputMirror(writer)
-	t.AppendHeader(table.Row{"Name", "Version", "Platform", "Description", "Registry"})
+	t.AppendHeader(table.Row{"Name", "Version", "Platforms", "Description", "Registry"})
 	for _, vertex := range vertices {
-		// Prettify platform display
-		platform := "n/a"
-		switch {
-		case vertex.Attributes["os"] == "" && vertex.Attributes["arch"] == "":
-			platform = "n/a"
-		case vertex.Attributes["os"] != "" && vertex.Attributes["arch"] == "":
-			platform = vertex.Attributes["os"].(string)
-		case vertex.Attributes["os"] == "" && vertex.Attributes["arch"] != "":
-			platform = vertex.Attributes["arch"].(string)
-		}
-
 		t.AppendRow(table.Row{
 			vertex.Attributes["name"],
 			vertex.Attributes["version"],
-			platform,
+			strings.Join(vertex.Attributes["platforms"].([]string), ", "),
 			vertex.Attributes["description"],
 			vertex.Attributes["registry"],
 		})
