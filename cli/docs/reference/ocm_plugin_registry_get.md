@@ -1,6 +1,6 @@
 ---
 title: ocm plugin registry get
-description: Download specified plugin binary from a registry.
+description: Get information about specified plugin from a plugin registry.
 suppressTitle: true
 toc: true
 sidebar:
@@ -9,22 +9,28 @@ sidebar:
 
 ## ocm plugin registry get
 
-Download specified plugin binary from a registry.
+Get information about specified plugin from a plugin registry.
 
 ```
-ocm plugin registry get <plugin-component-version> [flags]
+ocm plugin registry get <plugin-name[:version]> [flags]
 ```
 
 ### Examples
 
 ```
-  # Download a plugin binary from a registry.
+  # Get information about specified plugin from a plugin registry.
+  ocm plugin registry get helminput
 ```
 
 ### Options
 
 ```
-  -h, --help   help for get
+      --component-descriptor   return component descriptors of the plugins
+  -h, --help                   help for get
+  -o, --output enum            output format of the plugin list
+                               (must be one of [json ndjson table yaml]) (default table)
+      --registry string        registry URL to list plugins from
+      --version string         specific version of the plugin to display (default: latest version)
 ```
 
 ### Options inherited from parent commands
