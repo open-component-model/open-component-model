@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -23,282 +21,152 @@ import (
 func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
+	defer cancel()
 
-	t.Logf("Starting Integration Test for Plugin Registry List Command")
-	// Setup credentials and htpasswd
+	t.Logf("Starting Integration Test for Plugin Registry Get Command")
+
+	// Setup environment
+	// Two remote registries (A and B) with one plugin registry each
 	user := "ocm"
 	password := internal.GenerateRandomPassword(t, 20)
 	htpasswd := internal.GenerateHtpasswd(t, user, password)
 
-	testFilePath := filepath.Join(t.TempDir(), "test-file.txt")
-	r.NoError(os.WriteFile(testFilePath, []byte("foobar"), 0o600), "could not create test file")
+	// Registry A
+	registryURLA := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-a", time.Now().UnixNano()), htpasswd)
+	var err error
+	oA := internal.ConfigOpts{
+		User:     user,
+		Password: password,
+	}
+	oA.Host, oA.Port, err = net.SplitHostPort(registryURLA)
+	r.NoError(err)
+
+	// Registry B
+	registryURLB := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-b", time.Now().UnixNano()), htpasswd)
+	oB := internal.ConfigOpts{
+		User:     user,
+		Password: password,
+	}
+	oB.Host, oB.Port, err = net.SplitHostPort(registryURLB)
+	r.NoError(err)
+
+	// Generate and write config for the remote registry
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{oA, oB})
+	r.NoError(err)
+
+	// Plugin A
+	pluginRegistryComponentA := "ocm.software/plugin-registry-a"
+	pluginRegistryVersionA := "v1.0.0"
+	pluginRegistryURLA := fmt.Sprintf("http://%s//%s:%s", registryURLA, pluginRegistryComponentA, pluginRegistryVersionA)
+	pluginsA := []list.PluginInfo{
+		{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
+		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
+		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
+	}
+
+	// Create plugin constructors and add them to the registry
+	var componentReferencesA string
+	for _, plugin := range pluginsA {
+		r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginComponentConstructors(plugin), cfgPath, registryURLA))
+		componentReferencesA += internal.GeneratePluginReferences(plugin)
+	}
+
+	// Create plugin registry constructor and add it to the registry
+	r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryURLA))
+
+	// Plugin B
+	pluginRegistryComponentB := "ocm.software/plugin-registry-b"
+	pluginRegistryVersionB := "v1.0.0"
+	pluginRegistryURLB := fmt.Sprintf("http://%s//%s:%s", registryURLB, pluginRegistryComponentB, pluginRegistryVersionB)
+	pluginsB := []list.PluginInfo{
+		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
+		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLB, ""},
+	}
+
+	// Create plugin constructors and add them to the registry
+	var componentReferencesB string
+	for _, plugin := range pluginsB {
+		r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginComponentConstructors(plugin), cfgPath, registryURLB))
+		componentReferencesB += internal.GeneratePluginReferences(plugin)
+	}
+
+	// Create plugin registry constructor and add it to the registry
+	r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryURLB))
 
 	cases := []struct {
 		name             string
 		pluginRegistries []string
-		plugins          map[string][]list.PluginInfo
+		result           []list.PluginInfo
 	}{
 		{
-			name:             "one remote, one plugin registry",
-			pluginRegistries: []string{"registry-one"},
-			plugins: map[string][]list.PluginInfo{
-				"remote-registry": {
-					{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", "registry-one"},
-					{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", "registry-one"},
-					{"plugin-two", "v1.5.0", []string{"linux/amd64"}, "Another test plugin", "registry-one"},
-					{"plugin-two", "v1.5.0", []string{"windows/amd64"}, "Another test plugin", "registry-one"},
-					{"plugin-two", "v1.5.0", []string{"macOs/arm64"}, "Another test plugin", "registry-one"},
-				},
+			name: "list from one registry",
+			pluginRegistries: []string{
+				pluginRegistryURLA,
 			},
+			result: pluginsA,
 		},
 		{
-			name:             "one remote, two plugin registries",
-			pluginRegistries: []string{"registry-one", "registry-two"},
-			plugins: map[string][]list.PluginInfo{
-				"remote-registry": {
-					{"plugin-one", "v1.7.0", []string{"linux/amd64", "windows/amd64", "macOS/arm64"}, "Second test plugin", "registry-one"},
-					{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", "registry-one"},
-					{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/amd64", "macOS/amd64"}, "First test plugin", "registry-two"},
-				},
+			name: "list from both registries",
+			pluginRegistries: []string{
+				pluginRegistryURLA,
+				pluginRegistryURLB,
 			},
-		},
-		{
-			name:             "two remote, two plugin registries",
-			pluginRegistries: []string{"registry-one", "registry-two"},
-			plugins: map[string][]list.PluginInfo{
-				"remote-registry-1": {
-					{"plugin-one", "v1.7.0", []string{"linux/amd64", "linux/arm64", "windows/amd64"}, "What a test", "registry-one"},
-				},
-				"remote-registry-2": {
-					{"plugin-two", "v1.7.0", []string{"windows/amd64", "linux/amd64", "windows/amd64"}, "Hello World", "registry-two"},
-					{"plugin-three", "v1.0.0", []string{"windows/amd64"}, "Hello Plugin", "registry-two"},
-				},
-			},
+			result: append(pluginsA, pluginsB...),
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
-			defer cancel()
+			var outputBuffer, errorBuffer bytes.Buffer
+			getCmd := cmd.New()
+			getCmd.SetOut(&outputBuffer)
+			getCmd.SetErr(&errorBuffer)
 
-			var pluginRegistryURLs []string
-
-			cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
-			cfg := fmt.Sprintf(`
-type: generic.config.ocm.software/v1
-configurations:
-- type: credentials.config.ocm.software
-  consumers:
-`)
-
-			for remote, pluginList := range tc.plugins {
-				// Start a registry for each remote registry
-				t.Logf("Start remote registries and prepare config")
-				containerName := fmt.Sprintf("%s-%d", remote, time.Now().UnixNano())
-				registryURL := internal.StartDockerContainerRegistry(t, containerName, htpasswd)
-				host, port, err := net.SplitHostPort(registryURL)
-				r.NoError(err)
-
-				// Generate and write config for the remote registry
-				cfg += fmt.Sprintf(`
-  - identity:
-      type: OCIRepository
-      hostname: %q
-      port: %q
-      scheme: http
-    credentials:
-    - type: Credentials/v1
-      properties:
-        username: %q
-        password: %q
-`, host, port, user, password)
-				r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
-
-				t.Logf("Generated config:\n%s", cfg)
-
-				// Create constructor file for each plugin and add them to their remote registries
-				var versions []string
-				for _, plugin := range pluginList {
-					// Skip if version already exists
-					if !slices.Contains(versions, plugin.Version) {
-						r.NoError(addComponent(ctx, createPluginComponentConstructors(plugin), cfgPath, registryURL))
-						versions = append(versions, plugin.Version)
-					}
-				}
-
-				var pluginRegistryURL string
-
-				// Create constructor file for each plugin registry containing the plugin references
-				for _, pluginRegistry := range tc.pluginRegistries {
-					componentName := fmt.Sprintf("ocm.software/%s", pluginRegistry)
-					componentVersion := "v1.0.0"
-
-					// Create constructor file for component containing the plugin registry
-					constructorPluginRegistry := fmt.Sprintf(`
-name: %s
-version: %s 
-provider:
-  name: ocm.software
-labels:
-  - name: category
-    value: plugin-registry
-  - name: registry
-    value: official
-  - name: description
-    value: Official OCM plugin registry
-
-componentReferences:
-`, componentName, componentVersion)
-
-					for _, plugin := range pluginList {
-						if plugin.Registry == pluginRegistry {
-							constructorPluginRegistry += generatePluginReferences(plugin)
-							pluginRegistryURL = fmt.Sprintf("http://%s//%s:%s", registryURL, componentName, componentVersion)
-							if !slices.Contains(pluginRegistryURLs, pluginRegistryURL) {
-								pluginRegistryURLs = append(pluginRegistryURLs, pluginRegistryURL)
-							}
-						}
-					}
-
-					r.NoError(addComponent(ctx, constructorPluginRegistry, cfgPath, registryURL))
-				}
-
-			}
-
-			var outputBuffer bytes.Buffer
-			listCMDJSON := cmd.New()
-			listCMDJSON.SetOut(&outputBuffer)
-			listCMDJSON.SetArgs([]string{
+			cmdArgs := []string{
 				"plugin",
 				"registry",
 				"list",
 				"--config", cfgPath,
-				"--registry", strings.Join(pluginRegistryURLs, ","),
+				"--registry", strings.Join(tc.pluginRegistries, ","),
 				"--output", "json",
-			})
+			}
 
-			r.NoError(listCMDJSON.ExecuteContext(ctx), "plugin registry list should succeed with a print statement")
+			getCmd.SetArgs(cmdArgs)
+
+			r.NoError(getCmd.ExecuteContext(ctx), "plugin registry list should succeed with a print statement")
+			cmdErr := errorBuffer.String()
+			if cmdErr != "" {
+				t.Logf("Command error output: %s", cmdErr)
+			}
 			resultJson := outputBuffer.String()
 
 			var actualPlugins []list.PluginInfo
 			r.NoError(json.Unmarshal([]byte(resultJson), &actualPlugins), "should be able to unmarshal JSON result")
 
-			var expectedPlugins []list.PluginInfo
-			for _, pluginList := range tc.plugins {
-				for _, plugin := range pluginList {
-					// Update registry field with actual registry URL
-					expectedPlugin := plugin
-					// Find matching registry URL for this plugin's registry name
-					for _, URL := range pluginRegistryURLs {
-						if strings.Contains(URL, plugin.Registry) {
-							expectedPlugin.Registry = URL
-							break
-						}
+			SortPluginsByAllFields := func(plugins []list.PluginInfo) {
+				slices.SortFunc(plugins, func(a, b list.PluginInfo) int {
+					if a.Name != b.Name {
+						return strings.Compare(a.Name, b.Name)
 					}
-					expectedPlugins = append(expectedPlugins, expectedPlugin)
-				}
+					if a.Version != b.Version {
+						return strings.Compare(a.Version, b.Version)
+					}
+					if a.Registry != b.Registry {
+						return strings.Compare(a.Registry, b.Registry)
+					}
+					return 0
+				})
 			}
 
-			// Compare the results
-			r.Len(actualPlugins, len(expectedPlugins), "should have correct number of plugins")
+			SortPluginsByAllFields(actualPlugins)
+			SortPluginsByAllFields(tc.result)
 
-			// Resulting plugins were sorted
-			slices.SortFunc(actualPlugins, func(a, b list.PluginInfo) int {
-				if a.Name != b.Name {
-					return strings.Compare(a.Name, b.Name)
-				}
-				return strings.Compare(a.Version, b.Version)
-			})
-			slices.SortFunc(expectedPlugins, func(a, b list.PluginInfo) int {
-				if a.Name != b.Name {
-					return strings.Compare(a.Name, b.Name)
-				}
-				return strings.Compare(a.Version, b.Version)
-			})
-
-			// Compare each plugin
-			for i, expected := range expectedPlugins {
-				r.Equal(expected.Name, actualPlugins[i].Name, "plugin name should match")
-				r.Equal(expected.Version, actualPlugins[i].Version, "plugin version should match")
-				r.Equal(expected.Platforms, actualPlugins[i].Platforms, "plugin platforms should match")
-				r.Equal(expected.Description, actualPlugins[i].Description, "plugin description should match")
-				r.Equal(expected.Registry, actualPlugins[i].Registry, "plugin registry should match")
-			}
+			r.Equal(tc.result, actualPlugins, "plugin registry list should have the same result")
 		})
 	}
-}
-
-func addComponent(ctx context.Context, constructorContent string, cfgPath string, registryURL string) (err error) {
-	constructorPath := filepath.Join(os.TempDir(), "constructor.yaml")
-	defer func(name string) {
-		err = os.Remove(name)
-	}(constructorPath)
-
-	if err = os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm); err != nil {
-		return err
-	}
-
-	addCMD := cmd.New()
-	addCMD.SetArgs([]string{
-		"add",
-		"component-version",
-		"--repository", fmt.Sprintf("http://%s", registryURL),
-		"--constructor", constructorPath,
-		"--config", cfgPath,
-	})
-
-	return addCMD.ExecuteContext(ctx)
-}
-
-func createPluginComponentConstructors(info list.PluginInfo) string {
-	var s string
-	s += fmt.Sprintf(`
----
-name: %s
-version: %s 
-provider:
-  name: ocm.software
-`, info.Name, info.Version)
-
-	return s
-}
-
-func generatePluginReferences(plugin list.PluginInfo) string {
-	var s string
-
-	s += fmt.Sprintf(`
-  - name: %s
-    version: %s
-    componentName: %s
-`, plugin.Name, plugin.Version, plugin.Name)
-
-	// Add labels if description or platforms are provided
-	var labels string
-	if plugin.Description != "" {
-		labels += fmt.Sprintf(`
-          description: %s
-`, plugin.Description)
-	}
-
-	if len(plugin.Platforms) > 0 {
-		labels += fmt.Sprintf(`
-          platforms:
-`)
-
-		for _, platform := range plugin.Platforms {
-			labels += fmt.Sprintf(`
-            - %s`, strings.TrimSpace(platform))
-		}
-	}
-
-	if labels != "" {
-		s += fmt.Sprintf(`
-    labels:
-      - name: ocm.software/pluginInfo
-        value:
-%s`, labels)
-	}
-
-	return s
 }

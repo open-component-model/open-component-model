@@ -21,11 +21,6 @@ ocm plugin registry list [flags]
   # List available plugin binaries from a registry using the flag.
   ocm plugin registry list --registry ocm.software/plugin-registry:v1.0.0
 
- NAME       │ VERSION         │ PLATFORM    │ DESCRIPTION       │ REGISTRY
-────────────┼─────────────────┼─────────────┼───────────────────┼───────────────────────────────────────────────────────
- helm       │ 1.2.0           │ linux/amd64 │ An exmpale desc   │ ocm.software/plugin-registry:v1.0.0
- docker     │ 1.0.0           │ macOs/arm64 │                   │
-
 ```
 
 ### Options
@@ -33,7 +28,7 @@ ocm plugin registry list [flags]
 ```
   -h, --help              help for list
   -o, --output enum       output format of the plugin list
-                          (must be one of [json ndjson table tree yaml]) (default table)
+                          (must be one of [json ndjson table yaml]) (default table)
       --registry string   registry URL to list plugins from
 ```
 

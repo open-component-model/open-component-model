@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -102,4 +103,39 @@ func WithHtpasswd(credentials string) testcontainers.CustomizeRequestOption {
 
 		return registry.WithHtpasswdFile(tmpFile.Name())(req)
 	}
+}
+
+type ConfigOpts struct {
+	Host, Port, User, Password string
+}
+
+func CreateOCMConfigForRegistry(t *testing.T, opts []ConfigOpts) (string, error) {
+	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:`)
+
+	for _, o := range opts {
+		cfg += fmt.Sprintf(`
+  - identity:
+      type: OCIRepository
+      hostname: %q
+      port: %q
+      scheme: http
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %q
+        password: %q`, o.Host, o.Port, o.User, o.Password)
+	}
+
+	if err := os.WriteFile(cfgPath, []byte(cfg), os.ModePerm); err != nil {
+		return "", err
+	}
+
+	t.Logf("Generated config:%s", cfg)
+
+	return cfgPath, nil
 }
