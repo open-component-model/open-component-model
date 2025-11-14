@@ -37,17 +37,12 @@ func New() *cobra.Command {
 		Long:  ``,
 		Example: `  # List available plugin binaries from a registry using the flag.
   ocm plugin registry list --registry ocm.software/plugin-registry:v1.0.0
-
- NAME       │ VERSION         │ PLATFORM    │ DESCRIPTION       │ REGISTRY
-────────────┼─────────────────┼─────────────┼───────────────────┼───────────────────────────────────────────────────────
- helm       │ 1.2.0           │ linux/amd64 │ An exmpale desc   │ ocm.software/plugin-registry:v1.0.0
- docker     │ 1.0.0           │ macOs/arm64 │                   │
 `,
 		RunE:              ListPlugins,
 		DisableAutoGenTag: true,
 	}
 
-	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the plugin list")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the plugin list")
 	cmd.Flags().String(FlagRegistry, "", "registry URL to list plugins from")
 	// TODO: Remove when https://github.com/open-component-model/ocm-project/issues/599 is implemented.
 	_ = cmd.MarkFlagRequired(FlagRegistry)
@@ -67,7 +62,7 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("no OCM context found")
 	}
 
-	config := ocmctx.FromContext(cmd.Context()).Configuration()
+	config := ocmctx.FromContext(ctx).Configuration()
 
 	output, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
@@ -96,10 +91,6 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 	//   - ghcr.io/open-component-model/plugin-registry:1.0.0
 	//   - example.com/ocm/plugin-registry:2.0.0
 	// Each registry (component) can contain several plugins (component references)
-
-	// The DAG is used to represent the plugins and their versions in a pretty way
-	// TODO: Discuss/Find out if the same is possible using dag.Discover (First attempts failed because of different
-	//       types in the graph)
 	graph := dag.NewDirectedAcyclicGraph[string]()
 	var roots []string
 	for _, reg := range pluginRegistries {
@@ -120,46 +111,44 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("could not access ocm repository: %w", err)
 		}
 
-		descs, err := ocm.GetComponentVersions(ctx, ocm.GetComponentVersionsOptions{}, ref.Component, ref.Version, repo)
+		desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
 		if err != nil {
-			return fmt.Errorf("getting component reference and versions failed: %w", err)
+			return fmt.Errorf("getting component version for plugin registry failed: %w", err)
 		}
 
-		for _, d := range descs {
-			for _, r := range d.Component.References {
-				logger.Debug("Adding plugin to graph", "plugin", r.Name, "version", r.Version, "registry", reg)
+		for _, r := range desc.Component.References {
+			logger.Debug("Adding plugin to graph", "plugin", r.Name, "version", r.Version, "registry", reg)
 
-				var info PluginInfo
-				for _, l := range r.Labels {
-					if l.Name == "ocm.software/pluginInfo" {
-						dec := json.NewDecoder(strings.NewReader(string(l.Value)))
-						dec.DisallowUnknownFields()
-						if err := dec.Decode(&info); err != nil {
-							return fmt.Errorf("decoding plugin info label failed: %w", err)
-						}
-
-						info.Name = r.Name
-						info.Version = r.Version
-						info.Registry = reg
-						break
+			var info PluginInfo
+			for _, l := range r.Labels {
+				if l.Name == "ocm.software/pluginInfo" {
+					dec := json.NewDecoder(strings.NewReader(string(l.Value)))
+					dec.DisallowUnknownFields()
+					if err := dec.Decode(&info); err != nil {
+						return fmt.Errorf("decoding plugin info label failed: %w", err)
 					}
-				}
 
-				if err := graph.AddVertex(
-					info.String(),
-					map[string]any{
-						"name":        r.Name,
-						"version":     r.Version,
-						"registry":    reg,
-						"description": info.Description,
-						"platforms":   info.Platforms,
-					}); err != nil {
-					// Currently, only an "Already exists" error is returned, which we can safely ignore.
-					logger.Warn("Failed to add vertex", "id", info.String(), "error", err)
-					continue
+					info.Name = r.Name
+					info.Version = r.Version
+					info.Registry = reg
+					break
 				}
-				roots = append(roots, info.String())
 			}
+
+			if err := graph.AddVertex(
+				info.String(),
+				map[string]any{
+					"name":        r.Name,
+					"version":     r.Version,
+					"registry":    reg,
+					"description": info.Description,
+					"platforms":   info.Platforms,
+				}); err != nil {
+				// Currently, only an "Already exists" error is returned, which we can safely ignore.
+				logger.Warn("Failed to add vertex", "id", info.String(), "error", err)
+				continue
+			}
+			roots = append(roots, info.String())
 		}
 	}
 
@@ -174,16 +163,16 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 func buildRenderer(ctx context.Context, graph *sync.SyncedDirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
 	switch format {
 	case render.OutputFormatJSON.String():
-		serializer := list.ListSerializerFunc[string](serializeVerticesToJSON)
+		serializer := list.ListSerializerFunc[string](SerializeVerticesToJSON)
 		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatNDJSON.String():
-		serializer := list.ListSerializerFunc[string](serializeVerticesToNDJSON)
+		serializer := list.ListSerializerFunc[string](SerializeVerticesToNDJSON)
 		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatYAML.String():
-		serializer := list.ListSerializerFunc[string](serializeVerticesToYAML)
+		serializer := list.ListSerializerFunc[string](SerializeVerticesToYAML)
 		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTable.String():
-		serializer := list.ListSerializerFunc[string](serializeVerticesToTable)
+		serializer := list.ListSerializerFunc[string](SerializeVerticesToTable)
 		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	default:
 		return nil, fmt.Errorf("invalid output format %q", format)
@@ -195,7 +184,9 @@ type PluginInfo struct {
 	Version     string   `json:"version"     yaml:"version"`
 	Platforms   []string `json:"platforms"   yaml:"platforms"`
 	Description string   `json:"description" yaml:"description"`
-	Registry    string   `json:"registry"    yaml:"registry"`
+	// Plugin registry (Not a remote registry)
+	Registry  string `json:"registry"    yaml:"registry"`
+	Component string `json:"component"   yaml:"component"`
 }
 
 func (p *PluginInfo) String() string {
@@ -235,14 +226,14 @@ func convertVerticesToPluginInfos(vertices []*dag.Vertex[string]) []PluginInfo {
 	return plugins
 }
 
-func serializeVerticesToJSON(writer io.Writer, vertices []*dag.Vertex[string]) error {
+func SerializeVerticesToJSON(writer io.Writer, vertices []*dag.Vertex[string]) error {
 	plugins := convertVerticesToPluginInfos(vertices)
 	encoder := json.NewEncoder(writer)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(plugins)
 }
 
-func serializeVerticesToNDJSON(writer io.Writer, vertices []*dag.Vertex[string]) error {
+func SerializeVerticesToNDJSON(writer io.Writer, vertices []*dag.Vertex[string]) error {
 	plugins := convertVerticesToPluginInfos(vertices)
 	encoder := json.NewEncoder(writer)
 	for _, plugin := range plugins {
@@ -253,14 +244,14 @@ func serializeVerticesToNDJSON(writer io.Writer, vertices []*dag.Vertex[string])
 	return nil
 }
 
-func serializeVerticesToYAML(writer io.Writer, vertices []*dag.Vertex[string]) error {
+func SerializeVerticesToYAML(writer io.Writer, vertices []*dag.Vertex[string]) error {
 	plugins := convertVerticesToPluginInfos(vertices)
 	encoder := yaml.NewEncoder(writer)
 	defer encoder.Close()
 	return encoder.Encode(plugins)
 }
 
-func serializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
+func SerializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
 	// Sort vertices by name, then version, then registry
 	sort.Slice(vertices, func(i, j int) bool {
 		nameI := vertices[i].Attributes["name"].(string)
