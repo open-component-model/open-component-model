@@ -1,0 +1,8 @@
+apiVersion: kro.run/v1alpha1
+kind: HelmConfigurationLocalizationAdvanced
+metadata:
+  name: helm-configuration-localization-advanced
+spec:
+  podinfo:
+    message: "helm-configuration-localization-advanced"
+    releaseName: "helm-configuration-localization-advanced"
