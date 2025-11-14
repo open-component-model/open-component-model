@@ -15,7 +15,7 @@ func AddComponentForConstructor(ctx context.Context, constructorContent string, 
 		err = os.Remove(name)
 	}(constructorPath)
 
-	if err = os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm); err != nil {
+	if err = os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm); err != nil { //nolint:gosec // test code
 		return err
 	}
 
