@@ -43,13 +43,11 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 			pluginRegistries: []string{"registry-one"},
 			plugins: map[string][]list.PluginInfo{
 				"remote-registry": {
-					{"plugin-one", "v1.7.0", "linux", "amd64", "Second test plugin", "registry-one"},
-					{"plugin-one", "v1.7.0", "windows", "amd64", "Second test plugin", "registry-one"},
-					{"plugin-one", "v1.7.0", "macOs", "arm64", "Second test plugin", "registry-one"},
-					{"plugin-one", "v1.4.0", "linux", "amd64", "First test plugin", "registry-one"},
-					{"plugin-two", "v1.5.0", "linux", "amd64", "Another test plugin", "registry-one"},
-					{"plugin-two", "v1.5.0", "windows", "amd64", "Another test plugin", "registry-one"},
-					{"plugin-two", "v1.5.0", "macOs", "ard64", "Another test plugin", "registry-one"},
+					{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", "registry-one"},
+					{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", "registry-one"},
+					{"plugin-two", "v1.5.0", []string{"linux/amd64"}, "Another test plugin", "registry-one"},
+					{"plugin-two", "v1.5.0", []string{"windows/amd64"}, "Another test plugin", "registry-one"},
+					{"plugin-two", "v1.5.0", []string{"macOs/arm64"}, "Another test plugin", "registry-one"},
 				},
 			},
 		},
@@ -58,13 +56,9 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 			pluginRegistries: []string{"registry-one", "registry-two"},
 			plugins: map[string][]list.PluginInfo{
 				"remote-registry": {
-					{"plugin-one", "v1.7.0", "linux", "amd64", "Second test plugin", "registry-one"},
-					{"plugin-one", "v1.7.0", "windows", "amd64", "Second test plugin", "registry-one"},
-					{"plugin-one", "v1.7.0", "macOs", "arm64", "Second test plugin", "registry-one"},
-					{"plugin-one", "v1.4.0", "linux", "amd64", "First test plugin", "registry-one"},
-					{"plugin-two", "v1.5.0", "linux", "amd64", "First test plugin", "registry-two"},
-					{"plugin-two", "v1.5.0", "windows", "amd64", "First test plugin", "registry-two"},
-					{"plugin-two", "v1.5.0", "macOs", "ard64", "First test plugin", "registry-two"},
+					{"plugin-one", "v1.7.0", []string{"linux/amd64", "windows/amd64", "macOS/arm64"}, "Second test plugin", "registry-one"},
+					{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", "registry-one"},
+					{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/amd64", "macOS/amd64"}, "First test plugin", "registry-two"},
 				},
 			},
 		},
@@ -73,14 +67,11 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 			pluginRegistries: []string{"registry-one", "registry-two"},
 			plugins: map[string][]list.PluginInfo{
 				"remote-registry-1": {
-					{"plugin-one", "v1.7.0", "linux", "amd64", "What a test", "registry-one"},
-					{"plugin-one", "v1.7.0", "linux", "arm64", "Nice", "registry-one"},
-					{"plugin-one", "v1.7.0", "windows", "amd64", "First test plugin", "registry-one"},
+					{"plugin-one", "v1.7.0", []string{"linux/amd64", "linux/arm64", "windows/amd64"}, "What a test", "registry-one"},
 				},
 				"remote-registry-2": {
-					{"plugin-two", "v1.7.0", "windows", "amd64", "Hello World", "registry-two"},
-					{"plugin-two", "v1.7.0", "linux", "amd64", "Hello OCM", "registry-two"},
-					{"plugin-three", "v1.0.0", "windows", "amd64", "Hello Plugin", "registry-two"},
+					{"plugin-two", "v1.7.0", []string{"windows/amd64", "linux/amd64", "windows/amd64"}, "Hello World", "registry-two"},
+					{"plugin-three", "v1.0.0", []string{"windows/amd64"}, "Hello Plugin", "registry-two"},
 				},
 			},
 		},
@@ -230,8 +221,7 @@ componentReferences:
 			for i, expected := range expectedPlugins {
 				r.Equal(expected.Name, actualPlugins[i].Name, "plugin name should match")
 				r.Equal(expected.Version, actualPlugins[i].Version, "plugin version should match")
-				r.Equal(expected.Os, actualPlugins[i].Os, "plugin OS should match")
-				r.Equal(expected.Arch, actualPlugins[i].Arch, "plugin architecture should match")
+				r.Equal(expected.Platforms, actualPlugins[i].Platforms, "plugin platforms should match")
 				r.Equal(expected.Description, actualPlugins[i].Description, "plugin description should match")
 				r.Equal(expected.Registry, actualPlugins[i].Registry, "plugin registry should match")
 			}
@@ -283,31 +273,31 @@ func generatePluginReferences(plugin list.PluginInfo) string {
     componentName: %s
 `, plugin.Name, plugin.Version, plugin.Name)
 
+	// Add labels if description or platforms are provided
 	var labels string
 	if plugin.Description != "" {
 		labels += fmt.Sprintf(`
-    - name: description
-      value: %s
+          description: %s
 `, plugin.Description)
 	}
 
-	if plugin.Os != "" {
+	if len(plugin.Platforms) > 0 {
 		labels += fmt.Sprintf(`
-    - name: os
-      value: %s
-`, plugin.Os)
-	}
+          platforms:
+`)
 
-	if plugin.Arch != "" {
-		labels += fmt.Sprintf(`
-    - name: arch
-      value: %s
-`, plugin.Arch)
-
+		for _, platform := range plugin.Platforms {
+			labels += fmt.Sprintf(`
+            - %s`, strings.TrimSpace(platform))
+		}
 	}
 
 	if labels != "" {
-		s += fmt.Sprintf(`    labels:%s`, labels)
+		s += fmt.Sprintf(`
+    labels:
+      - name: ocm.software/pluginInfo
+        value:
+%s`, labels)
 	}
 
 	return s
