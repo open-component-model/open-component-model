@@ -161,6 +161,7 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 				info.Name = r.Name
 				info.Version = r.Version
 				info.Registry = reg
+				info.Component = r.Component
 
 				// If we reach here the plugin was found and info was extracted
 				plugins = append(plugins, info)
@@ -182,12 +183,12 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 			for _, repoProvider := range repoProviders {
 				repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, plugin.Component, plugin.Version)
 				if err != nil {
-					return fmt.Errorf("could not access ocm repository: %w", err)
+					return fmt.Errorf("cannot get repository provider: %w", err)
 				}
 
 				desc, err := repo.GetComponentVersion(ctx, plugin.Component, plugin.Version)
 				if err != nil {
-					return fmt.Errorf("getting component reference and versions failed: %w", err)
+					return fmt.Errorf("getting component descriptor for plugin failed: %w", err)
 				}
 
 				if err := graph.AddVertex(plugin.String(), map[string]any{
