@@ -96,7 +96,7 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 		if errors.Is(err, ErrNoDirectCredentials) || errors.Is(err, ErrNoIndirectCredentials) {
 			// not found err
 			err = errors.Join(ErrNotFound, err)
-			return nil, fmt.Errorf("credentials for identity %q not found: %w", identity.String(), err)
+			return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 		}
 
 		err = errors.Join(ErrUnknown, err)

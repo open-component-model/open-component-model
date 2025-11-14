@@ -500,7 +500,8 @@ func TestResolutionErrors(t *testing.T) {
 	r.Empty(creds)
 	r.Error(err)
 	r.ErrorIs(err, credentials.ErrNoDirectCredentials)
-	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: failed to match any node: no direct credentials found in graph", id.String()))
+	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: credentials not found", id.String()))
+	r.ErrorContains(err, "failed to match any node: no direct credentials found in graph")
 
 	g, err = credentials.ToGraph(t.Context(), &credentialruntime.Config{}, credentials.Options{
 		RepositoryPluginProvider: credentials.GetRepositoryPluginFn(func(ctx context.Context, repoType runtime.Typed) (credentials.RepositoryPlugin, error) {
@@ -516,5 +517,6 @@ func TestResolutionErrors(t *testing.T) {
 	r.Empty(creds)
 	r.Error(err)
 	r.ErrorIs(err, credentials.ErrNoIndirectCredentials)
-	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: no indirect credentials found in graph", id.String()))
+	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: credentials not found", id.String()))
+	r.ErrorContains(err, "no indirect credentials found in graph")
 }
