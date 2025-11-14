@@ -107,12 +107,12 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 
 		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)
 		if err != nil {
-			return fmt.Errorf("failed getting repository", err)
+			return fmt.Errorf("failed getting repository: %w", err)
 		}
 
 		desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
 		if err != nil {
-			return fmt.Errorf("failed getting component constructor for plugin registry", err)
+			return fmt.Errorf("failed getting component constructor for plugin registry: %w", err)
 		}
 
 		for _, r := range desc.Component.References {
