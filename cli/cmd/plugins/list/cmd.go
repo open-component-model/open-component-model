@@ -42,7 +42,7 @@ func New() *cobra.Command {
 		DisableAutoGenTag: true,
 	}
 
-	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String()}, "output format of the plugin list")
+	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), "wide"}, "output format of the plugin list")
 	cmd.Flags().String(FlagRegistry, "", "registry URL to list plugins from")
 	// TODO: Remove when https://github.com/open-component-model/ocm-project/issues/599 is implemented.
 	_ = cmd.MarkFlagRequired(FlagRegistry)
@@ -144,9 +144,7 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 					"description": info.Description,
 					"platforms":   info.Platforms,
 				}); err != nil {
-				// Currently, only an "Already exists" error is returned, which we can safely ignore.
-				logger.Warn("Failed to add vertex", "id", info.String(), "error", err)
-				continue
+				return fmt.Errorf("adding plugin vertex to graph failed: %w", err)
 			}
 			roots = append(roots, info.String())
 		}
@@ -174,6 +172,9 @@ func buildRenderer(ctx context.Context, graph *sync.SyncedDirectedAcyclicGraph[s
 	case render.OutputFormatTable.String():
 		serializer := list.ListSerializerFunc[string](SerializeVerticesToTable)
 		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
+	case "wide":
+		serializer := list.ListSerializerFunc[string](SerializeVerticesToTableWide)
+		return list.New(ctx, graph, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	default:
 		return nil, fmt.Errorf("invalid output format %q", format)
 	}
@@ -184,9 +185,8 @@ type PluginInfo struct {
 	Version     string   `json:"version"     yaml:"version"`
 	Platforms   []string `json:"platforms"   yaml:"platforms"`
 	Description string   `json:"description" yaml:"description"`
-	// Plugin registry (Not a remote registry)
-	Registry  string `json:"registry"    yaml:"registry"`
-	Component string `json:"component"   yaml:"component"`
+	Registry    string   `json:"registry"    yaml:"registry"`
+	Component   string   `json:"component"   yaml:"component"`
 }
 
 func (p *PluginInfo) String() string {
@@ -252,6 +252,44 @@ func SerializeVerticesToYAML(writer io.Writer, vertices []*dag.Vertex[string]) e
 }
 
 func SerializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
+	// Sort vertices by name, then version, then registry
+	sort.Slice(vertices, func(i, j int) bool {
+		nameI := vertices[i].Attributes["name"].(string)
+		nameJ := vertices[j].Attributes["name"].(string)
+		if nameI != nameJ {
+			return nameI < nameJ
+		}
+
+		versionI := vertices[i].Attributes["version"].(string)
+		versionJ := vertices[j].Attributes["version"].(string)
+		return versionI < versionJ
+	})
+	t := table.NewWriter()
+	t.SetOutputMirror(writer)
+	t.AppendHeader(table.Row{"Name", "Version", "Platforms", "Description"})
+	for _, vertex := range vertices {
+		t.AppendRow(table.Row{
+			vertex.Attributes["name"],
+			vertex.Attributes["version"],
+			strings.Join(vertex.Attributes["platforms"].([]string), ", "),
+			vertex.Attributes["description"],
+		})
+	}
+
+	t.SetColumnConfigs([]table.ColumnConfig{
+		{Number: 1, AutoMerge: true},
+		{Number: 2, AutoMerge: true},
+		{Number: 4, AutoMerge: true},
+	})
+
+	style := table.StyleLight
+	style.Options.DrawBorder = false
+	t.SetStyle(style)
+	t.Render()
+	return nil
+}
+
+func SerializeVerticesToTableWide(writer io.Writer, vertices []*dag.Vertex[string]) error {
 	// Sort vertices by name, then version, then registry
 	sort.Slice(vertices, func(i, j int) bool {
 		nameI := vertices[i].Attributes["name"].(string)
