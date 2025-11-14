@@ -211,7 +211,9 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 		return nil, nil, nil, err
 	}
 
-	err = errors.Join(err, componentConfigRaw.Close())
+	if closeErr := componentConfigRaw.Close(); closeErr != nil {
+		return nil, nil, nil, fmt.Errorf("failed to close component config reader: %w", closeErr)
+	}
 
 	// Read component descriptor
 	descriptorRaw, err := store.Fetch(ctx, *cfg.ComponentDescriptorLayer)

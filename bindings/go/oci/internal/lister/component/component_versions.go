@@ -3,7 +3,6 @@ package component
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -82,7 +81,9 @@ func ReferenceTagVersionResolver(component string, store interface {
 				return "", fmt.Errorf("failed to decode manifest for tag %q: %w", tag, err)
 			}
 			manifestAnnotations = manifest.Annotations
-			err = errors.Join(err, data.Close())
+			if closeErr := data.Close(); closeErr != nil {
+				return "", fmt.Errorf("failed to close descriptor reader for tag %q: %w", tag, closeErr)
+			}
 		case ociImageSpecV1.MediaTypeImageIndex:
 			data, err := store.Fetch(ctx, desc)
 			if err != nil {
@@ -93,7 +94,9 @@ func ReferenceTagVersionResolver(component string, store interface {
 				return "", fmt.Errorf("failed to decode index for tag %q: %w", tag, err)
 			}
 			manifestAnnotations = index.Annotations
-			err = errors.Join(err, data.Close())
+			if closeErr := data.Close(); closeErr != nil {
+				return "", fmt.Errorf("failed to close descriptor reader for tag %q: %w", tag, closeErr)
+			}
 		default:
 			return "", fmt.Errorf("unsupported media type %q for tag %q: %w", desc.MediaType, tag, lister.ErrSkip)
 		}
