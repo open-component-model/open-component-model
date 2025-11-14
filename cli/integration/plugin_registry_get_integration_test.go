@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -37,24 +35,24 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	// Registry A
 	registryURLA := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-a", time.Now().UnixNano()), htpasswd)
 	var err error
-	oA := opts{
-		user:     user,
-		password: password,
+	oA := internal.ConfigOpts{
+		User:     user,
+		Password: password,
 	}
-	oA.host, oA.port, err = net.SplitHostPort(registryURLA)
+	oA.Host, oA.Port, err = net.SplitHostPort(registryURLA)
 	r.NoError(err)
 
 	// Registry B
 	registryURLB := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-b", time.Now().UnixNano()), htpasswd)
-	oB := opts{
-		user:     user,
-		password: password,
+	oB := internal.ConfigOpts{
+		User:     user,
+		Password: password,
 	}
-	oB.host, oB.port, err = net.SplitHostPort(registryURLB)
+	oB.Host, oB.Port, err = net.SplitHostPort(registryURLB)
 	r.NoError(err)
 
 	// Generate and write config for the remote registry
-	cfgPath, err := createOCMConfigForRegistry(t, []opts{oA, oB})
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{oA, oB})
 	r.NoError(err)
 
 	// Plugin A
@@ -77,7 +75,7 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	}
 
 	// Create plugin registry constructor and add it to the registry
-	r.NoError(internal.AddComponentForConstructor(ctx, createPluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryURLA))
+	r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryURLA))
 
 	// Plugin B
 	pluginRegistryComponentB := "ocm.software/plugin-registry-b"
@@ -98,7 +96,7 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	}
 
 	// Create plugin registry constructor and add it to the registry
-	r.NoError(internal.AddComponentForConstructor(ctx, createPluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryURLB))
+	r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryURLB))
 
 	cases := []struct {
 		name             string
@@ -172,7 +170,7 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 
 			getCmd.SetArgs(cmdArgs)
 
-			r.NoError(getCmd.ExecuteContext(ctx), "plugin registry list should succeed with a print statement")
+			r.NoError(getCmd.ExecuteContext(ctx), "plugin registry get should succeed with a print statement")
 			cmdErr := errorBuffer.String()
 			if cmdErr != "" {
 				t.Logf("Command error output: %s", cmdErr)
@@ -200,64 +198,7 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 			sortPluginsByAllFields(actualPlugins)
 			sortPluginsByAllFields(tc.result)
 
-			r.Equal(tc.result, actualPlugins, "plugin registry list should have the same result")
+			r.Equal(tc.result, actualPlugins, "plugin registry get should have the same result")
 		})
 	}
-
-}
-
-type opts struct {
-	host, port, user, password string
-}
-
-func createPluginRegistryConstructor(component, version, references string) string {
-	return fmt.Sprintf(`
-name: %s
-version: %s 
-provider:
-  name: ocm.software
-labels:
-  - name: category
-    value: plugin-registry
-  - name: registry
-    value: official
-  - name: description
-    value: Official OCM plugin registry
-
-componentReferences:
-%s
-`, component, version, references)
-}
-
-func createOCMConfigForRegistry(t *testing.T, opts []opts) (string, error) {
-	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
-	cfg := fmt.Sprintf(`
-type: generic.config.ocm.software/v1
-configurations:
-- type: credentials.config.ocm.software
-  consumers:
-`)
-
-	for _, o := range opts {
-		cfg += fmt.Sprintf(`
-  - identity:
-      type: OCIRepository
-      hostname: %q
-      port: %q
-      scheme: http
-    credentials:
-    - type: Credentials/v1
-      properties:
-        username: %q
-        password: %q
-`, o.host, o.port, o.user, o.password)
-	}
-
-	if err := os.WriteFile(cfgPath, []byte(cfg), os.ModePerm); err != nil {
-		return "", err
-	}
-
-	t.Logf("Generated config:\n%s", cfg)
-
-	return cfgPath, nil
 }
