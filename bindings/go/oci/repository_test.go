@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -409,7 +410,6 @@ func TestRepository_GetLocalResource(t *testing.T) {
 
 			// Test getting the resource
 			blob, _, err := repo.GetLocalResource(ctx, desc.Component.Name, desc.Component.Version, tc.identity)
-
 			if tc.expectError {
 				r.Error(err, "Expected error but got none")
 				if tc.errorContains != "" {
@@ -427,7 +427,7 @@ func TestRepository_GetLocalResource(t *testing.T) {
 					defer reader.Close()
 
 					content, err := io.ReadAll(reader)
-					r.NoError(err, "Failed to read blob content")
+					r.NoError(err, fmt.Errorf("failed to read blob content: %w", err))
 
 					// If the content is gzipped (starts with gzip magic number), decompress it
 					if len(content) >= 2 && content[0] == 0x1f && content[1] == 0x8b {

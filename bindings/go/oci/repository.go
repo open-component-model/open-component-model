@@ -475,8 +475,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	if err != nil {
 		return nil, fmt.Errorf("fetch layer: %w", err)
 	}
-	defer func() { _ = data.Close() }()
-
+	// data cannot be closed, as it is used by the blob
 	b := ociblob.NewDescriptorBlob(data, artifact)
 	if actual, _ := b.Digest(); actual != artifact.Digest.String() {
 		return nil, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual)
