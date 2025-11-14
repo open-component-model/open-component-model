@@ -28,7 +28,7 @@ ocm plugin registry list [flags]
 ```
   -h, --help              help for list
   -o, --output enum       output format of the plugin list
-                          (must be one of [json ndjson table yaml]) (default table)
+                          (must be one of [json ndjson table wide yaml]) (default table)
       --registry string   registry URL to list plugins from
 ```
 
