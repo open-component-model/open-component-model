@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -70,9 +71,10 @@ func ReferenceTagVersionResolver(component string, store interface {
 		}
 
 		var manifestAnnotations map[string]string
+		var data io.ReadCloser
 		switch desc.MediaType {
 		case ociImageSpecV1.MediaTypeImageManifest:
-			data, err := store.Fetch(ctx, desc)
+			data, err = store.Fetch(ctx, desc)
 			if err != nil {
 				return "", fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err)
 			}
@@ -81,11 +83,8 @@ func ReferenceTagVersionResolver(component string, store interface {
 				return "", fmt.Errorf("failed to decode manifest for tag %q: %w", tag, err)
 			}
 			manifestAnnotations = manifest.Annotations
-			if closeErr := data.Close(); closeErr != nil {
-				return "", fmt.Errorf("failed to close descriptor reader for tag %q: %w", tag, closeErr)
-			}
 		case ociImageSpecV1.MediaTypeImageIndex:
-			data, err := store.Fetch(ctx, desc)
+			data, err = store.Fetch(ctx, desc)
 			if err != nil {
 				return "", fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err)
 			}
@@ -94,13 +93,13 @@ func ReferenceTagVersionResolver(component string, store interface {
 				return "", fmt.Errorf("failed to decode index for tag %q: %w", tag, err)
 			}
 			manifestAnnotations = index.Annotations
-			if closeErr := data.Close(); closeErr != nil {
-				return "", fmt.Errorf("failed to close descriptor reader for tag %q: %w", tag, closeErr)
-			}
+
 		default:
 			return "", fmt.Errorf("unsupported media type %q for tag %q: %w", desc.MediaType, tag, lister.ErrSkip)
 		}
-
+		if err = data.Close(); err != nil {
+			return "", fmt.Errorf("failed to close descriptor reader for tag %q: %w", tag, err)
+		}
 		annotation, ok := manifestAnnotations[annotations.OCMComponentVersion]
 		if !ok {
 			return "", fmt.Errorf("failed to find %q annotation for tag %q: %w", annotations.OCMComponentVersion, tag, lister.ErrSkip)
