@@ -11,7 +11,7 @@ import (
 
 // resolveFromRepository is invoked when the DAG does not yield direct credentials.
 // The method ensures that successful resolutions are cached for subsequent calls.
-func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
+func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Identity) (runtime.Typed, error) {
 	if credentials, cached := g.getCredentials(identity.String()); cached {
 		return credentials, nil
 	}
@@ -33,7 +33,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	var (
 		wg       sync.WaitGroup
 		mu       sync.Mutex
-		resolved map[string]string
+		resolved runtime.Typed
 		errs     []error
 	)
 
@@ -44,7 +44,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	resolve := func(plugin RepositoryPlugin, cfg runtime.Typed) {
 		defer wg.Done()
 
-		var credentials map[string]string
+		var credentials runtime.Typed
 		// Obtain the consumer identity for the repository configuration.
 		if identity, err := plugin.ConsumerIdentityForConfig(ctx, cfg); err == nil {
 			// Attempt to resolve direct credentials from the graph.
