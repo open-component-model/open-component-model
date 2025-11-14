@@ -1,0 +1,172 @@
+package integration
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/cli/cmd"
+	"ocm.software/open-component-model/cli/cmd/plugins/list"
+	"ocm.software/open-component-model/cli/integration/internal"
+)
+
+func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
+	r := require.New(t)
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
+	defer cancel()
+
+	t.Logf("Starting Integration Test for Plugin Registry Get Command")
+
+	// Setup environment
+	// Two remote registries (A and B) with one plugin registry each
+	user := "ocm"
+	password := internal.GenerateRandomPassword(t, 20)
+	htpasswd := internal.GenerateHtpasswd(t, user, password)
+
+	// Registry A
+	registryURLA := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-a", time.Now().UnixNano()), htpasswd)
+	var err error
+	oA := internal.ConfigOpts{
+		User:     user,
+		Password: password,
+	}
+	oA.Host, oA.Port, err = net.SplitHostPort(registryURLA)
+	r.NoError(err)
+
+	// Registry B
+	registryURLB := internal.StartDockerContainerRegistry(t, fmt.Sprintf("%s-%d", "registry-b", time.Now().UnixNano()), htpasswd)
+	oB := internal.ConfigOpts{
+		User:     user,
+		Password: password,
+	}
+	oB.Host, oB.Port, err = net.SplitHostPort(registryURLB)
+	r.NoError(err)
+
+	// Generate and write config for the remote registry
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{oA, oB})
+	r.NoError(err)
+
+	// Plugin A
+	pluginRegistryComponentA := "ocm.software/plugin-registry-a"
+	pluginRegistryVersionA := "v1.0.0"
+	pluginRegistryURLA := fmt.Sprintf("http://%s//%s:%s", registryURLA, pluginRegistryComponentA, pluginRegistryVersionA)
+	pluginsA := []list.PluginInfo{
+		{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
+		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
+		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
+	}
+
+	// Create plugin constructors and add them to the registry
+	var componentReferencesA string
+	for _, plugin := range pluginsA {
+		r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginComponentConstructors(plugin), cfgPath, registryURLA))
+		componentReferencesA += internal.GeneratePluginReferences(plugin)
+	}
+
+	// Create plugin registry constructor and add it to the registry
+	r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryURLA))
+
+	// Plugin B
+	pluginRegistryComponentB := "ocm.software/plugin-registry-b"
+	pluginRegistryVersionB := "v1.0.0"
+	pluginRegistryURLB := fmt.Sprintf("http://%s//%s:%s", registryURLB, pluginRegistryComponentB, pluginRegistryVersionB)
+	pluginsB := []list.PluginInfo{
+		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
+		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLB, ""},
+	}
+
+	// Create plugin constructors and add them to the registry
+	var componentReferencesB string
+	for _, plugin := range pluginsB {
+		r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginComponentConstructors(plugin), cfgPath, registryURLB))
+		componentReferencesB += internal.GeneratePluginReferences(plugin)
+	}
+
+	// Create plugin registry constructor and add it to the registry
+	r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryURLB))
+
+	cases := []struct {
+		name             string
+		pluginRegistries []string
+		result           []list.PluginInfo
+	}{
+		{
+			name: "list from one registry",
+			pluginRegistries: []string{
+				pluginRegistryURLA,
+			},
+			result: pluginsA,
+		},
+		{
+			name: "list from both registries",
+			pluginRegistries: []string{
+				pluginRegistryURLA,
+				pluginRegistryURLB,
+			},
+			result: append(pluginsA, pluginsB...),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var outputBuffer, errorBuffer bytes.Buffer
+			getCmd := cmd.New()
+			getCmd.SetOut(&outputBuffer)
+			getCmd.SetErr(&errorBuffer)
+
+			cmdArgs := []string{
+				"plugin",
+				"registry",
+				"list",
+				"--config", cfgPath,
+				"--registry", strings.Join(tc.pluginRegistries, ","),
+				"--output", "json",
+			}
+
+			getCmd.SetArgs(cmdArgs)
+
+			r.NoError(getCmd.ExecuteContext(ctx), "plugin registry list should succeed with a print statement")
+			cmdErr := errorBuffer.String()
+			if cmdErr != "" {
+				t.Logf("Command error output: %s", cmdErr)
+			}
+			resultJson := outputBuffer.String()
+
+			var actualPlugins []list.PluginInfo
+			r.NoError(json.Unmarshal([]byte(resultJson), &actualPlugins), "should be able to unmarshal JSON result")
+
+			SortPluginsByAllFields := func(plugins []list.PluginInfo) {
+				slices.SortFunc(plugins, func(a, b list.PluginInfo) int {
+					if a.Name != b.Name {
+						return strings.Compare(a.Name, b.Name)
+					}
+					if a.Version != b.Version {
+						return strings.Compare(a.Version, b.Version)
+					}
+					if a.Registry != b.Registry {
+						return strings.Compare(a.Registry, b.Registry)
+					}
+					return 0
+				})
+			}
+
+			SortPluginsByAllFields(actualPlugins)
+			SortPluginsByAllFields(tc.result)
+
+			r.Equal(tc.result, actualPlugins, "plugin registry list should have the same result")
+		})
+	}
+}
