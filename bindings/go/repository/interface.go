@@ -116,6 +116,12 @@ type SourceRepository interface {
 	DownloadSource(ctx context.Context, res *descriptor.Source) (content blob.ReadOnlyBlob, err error)
 }
 
+// ErrCredentialsNotFound is returned when no credentials could be found for the given identity.
+var ErrCredentialsNotFound = errors.New("credentials not found")
+
+// ErrUnknown is a generic error indicating an unknown failure during credential resolution.
+var ErrUnknown = errors.New("unknown error occurred")
+
 // CredentialProvider defines the interface for resolving credentials based on
 // a given identity.
 type CredentialProvider interface {
