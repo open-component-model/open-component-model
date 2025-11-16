@@ -14,11 +14,11 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
@@ -228,13 +228,13 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// credentials
-	credentials := map[string]string{}
+	credMap := map[string]string{}
 	if consumerID, err := handler.GetSigningCredentialConsumerIdentity(ctx, signatureName, *unsignedDigest, signerSpec); err == nil {
 		if creds, err := credentialGraph.Resolve(ctx, consumerID); err == nil {
-			credentials = creds
-			logger.DebugContext(ctx, "using discovered credentials", "attributes", slices.Collect(maps.Keys(credentials)))
+			credMap = creds
+			logger.DebugContext(ctx, "using discovered credentials", "attributes", slices.Collect(maps.Keys(credMap)))
 		} else {
-			if errors.Is(err, repository.ErrNotFound) {
+			if errors.Is(err, credentials.ErrNotFound) {
 				logger.DebugContext(ctx, "could not resolve credentials", "error", err.Error())
 			} else {
 				return fmt.Errorf("resolving signing credentials failed: %w", err)
@@ -243,7 +243,7 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// sign
-	sigBytes, err := handler.Sign(ctx, *unsignedDigest, signerSpec, credentials)
+	sigBytes, err := handler.Sign(ctx, *unsignedDigest, signerSpec, credMap)
 	if err != nil {
 		return fmt.Errorf("signing failed: %w", err)
 	}

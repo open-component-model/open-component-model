@@ -13,10 +13,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
@@ -231,10 +231,10 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				return err
 			}
 
-			var credentials map[string]string
+			var creds map[string]string
 			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, signature, verifierSpec); err == nil {
-				if credentials, err = credentialGraph.Resolve(egctx, consumerID); err != nil {
-					if errors.Is(err, repository.ErrNotFound) {
+				if creds, err = credentialGraph.Resolve(egctx, consumerID); err != nil {
+					if errors.Is(err, credentials.ErrNotFound) {
 						logger.DebugContext(egctx, "could not resolve credentials for verification", "error", err.Error())
 					} else {
 						return fmt.Errorf("resolving credentials for verification failed: %w", err)
@@ -242,11 +242,11 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			if len(credentials) > 0 {
-				logger.DebugContext(egctx, "using discovered credentials for verification", "attributes", slices.Collect(maps.Keys(credentials)))
+			if len(creds) > 0 {
+				logger.DebugContext(egctx, "using discovered credentials for verification", "attributes", slices.Collect(maps.Keys(creds)))
 			}
 
-			return handler.Verify(egctx, signature, verifierSpec, credentials)
+			return handler.Verify(egctx, signature, verifierSpec, creds)
 		})
 	}
 
