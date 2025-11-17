@@ -3,43 +3,41 @@ package internal
 import (
 	"fmt"
 	"strings"
-
-	"ocm.software/open-component-model/cli/cmd/plugins/list"
 )
 
-func CreatePluginComponentConstructors(info list.PluginInfo) string {
+func CreatePluginComponentConstructors(name, version string) string {
 	return fmt.Sprintf(`
 ---
 name: %s
 version: %s
 provider:
   name: ocm.software
-`, info.Name, info.Version)
+`, name, version)
 }
 
-func GeneratePluginReferences(plugin list.PluginInfo) string {
+func GeneratePluginReferences(name, version, description string, platforms []string) string {
 	var s string
 
 	s += fmt.Sprintf(`
   - name: %s
     version: %s
     componentName: %s
-`, plugin.Name, plugin.Version, plugin.Name)
+`, name, version, name)
 
 	// Add labels if description or platforms are provided
 	var labels string
-	if plugin.Description != "" {
+	if description != "" {
 		labels += fmt.Sprintf(`
           description: %s
-`, plugin.Description)
+`, description)
 	}
 
-	if len(plugin.Platforms) > 0 {
+	if len(platforms) > 0 {
 		labels += `
           platforms:
 `
 
-		for _, platform := range plugin.Platforms {
+		for _, platform := range platforms {
 			labels += fmt.Sprintf(`
             - %s`, strings.TrimSpace(platform))
 		}

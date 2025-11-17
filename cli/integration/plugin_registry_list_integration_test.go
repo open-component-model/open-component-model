@@ -70,8 +70,8 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	// Create plugin constructors and add them to the registry
 	var componentReferencesA string
 	for _, plugin := range pluginsA {
-		r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginComponentConstructors(plugin), cfgPath, registryURLA))
-		componentReferencesA += internal.GeneratePluginReferences(plugin)
+		r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLA))
+		componentReferencesA += internal.GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
 	}
 
 	// Create plugin registry constructor and add it to the registry
@@ -91,8 +91,8 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	// Create plugin constructors and add them to the registry
 	var componentReferencesB string
 	for _, plugin := range pluginsB {
-		r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginComponentConstructors(plugin), cfgPath, registryURLB))
-		componentReferencesB += internal.GeneratePluginReferences(plugin)
+		r.NoError(internal.AddComponentForConstructor(ctx, internal.CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLB))
+		componentReferencesB += internal.GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
 	}
 
 	// Create plugin registry constructor and add it to the registry
