@@ -224,6 +224,7 @@ ocm.software/open-component-model/bindings/go/configuration v0.0.9 h1:bfgPD2G3fg
 ocm.software/open-component-model/bindings/go/configuration v0.0.9/go.mod h1:VZ8jQ3a6oTWyOpY09C7V3L0CfzKe9i1/Z4uJjLAVjN4=
 ocm.software/open-component-model/bindings/go/constructor v0.0.1 h1:uSYpIwLOWI4wlG+jRdISJylgtQlJk8X0FEvCuNcn3SM=
 ocm.software/open-component-model/bindings/go/constructor v0.0.1/go.mod h1:2xa5MuleDJ7ug3L13K3AMR193Vv7yMk1QglyYmxjeiQ=
+ocm.software/open-component-model/bindings/go/credentials v0.0.3-0.20251114112331-3af5ed79952f/go.mod h1:hGguMD6I9HnjI0GBBv8BfFpfBSZmLzEMnAJ4eOUMLmc=
 ocm.software/open-component-model/bindings/go/credentials v0.0.3 h1:PYCu8QYgY7+KcOVLCc0TYJ5PLhXgU7+lbfcrgA0zjyE=
 ocm.software/open-component-model/bindings/go/credentials v0.0.3/go.mod h1:B1RJDS5dV59Z+PBw2bddP8Ks63dr43QrNB7SkNEr6cg=
 ocm.software/open-component-model/bindings/go/ctf v0.3.0 h1:u1B26OgUvR+gzTwY0hTVdZgFIXv5uwdI8reEvCcjNV4=
