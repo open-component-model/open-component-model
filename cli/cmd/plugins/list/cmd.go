@@ -124,11 +124,11 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 				return fmt.Errorf("failed getting component versions for plugin registry: %w", err)
 			}
 
-			desc = descs[0]
-
 			if len(descs) == 0 {
 				return fmt.Errorf("no versions found for component %q in plugin registry", ref.Component)
 			}
+
+			desc = descs[0]
 
 			// Add version to registry ref to be able to identify the source later
 			reg = fmt.Sprintf("%s:%s", reg, descs[0].Component.Version)
