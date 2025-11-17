@@ -33,6 +33,8 @@ func setupTestCTF(t *testing.T) ctf.CTF {
 	return ctf.NewFileSystemCTF(fs)
 }
 
+var logHandler *mockLogHandler
+
 // mockLogHandler is a mock slog.Handler for testing
 type mockLogHandler struct {
 	mock.Mock
@@ -56,6 +58,16 @@ func (m *mockLogHandler) WithAttrs(_ []slog.Attr) slog.Handler {
 
 func (m *mockLogHandler) WithGroup(_ string) slog.Handler {
 	return m
+}
+
+func TestMain(m *testing.M) {
+	logHandler = &mockLogHandler{}
+	slog.SetDefault(slog.New(logHandler))
+	logHandler.On("Handle", mock.AnythingOfType("slog.Level"), mock.AnythingOfType("string")).Return(nil)
+
+	exitCode := m.Run()
+
+	os.Exit(exitCode)
 }
 
 func TestNewCTFComponentVersionStore(t *testing.T) {
@@ -118,14 +130,6 @@ func TestFetch(t *testing.T) {
 	})
 
 	t.Run("close called multiple times is safe and logs warning", func(t *testing.T) {
-		originalLogger := slog.Default()
-		logHandler := &mockLogHandler{}
-		slog.SetDefault(slog.New(logHandler))
-		defer slog.SetDefault(originalLogger)
-
-		// Allow any log messages
-		logHandler.On("Handle", slog.LevelWarn, "Close called multiple times on locked reader, this is a programming error").Return(nil).Once()
-
 		reader, err := store.Fetch(ctx, desc)
 		require.NoError(t, err)
 		require.NotNil(t, reader)
@@ -140,7 +144,7 @@ func TestFetch(t *testing.T) {
 		assert.NoError(t, err, "second close should be safe (logs warning)")
 
 		// Verify the warning was logged exactly once
-		logHandler.AssertExpectations(t)
+		logHandler.AssertCalled(t, "Handle", slog.LevelWarn, "Close called multiple times on locked reader.")
 	})
 }
 

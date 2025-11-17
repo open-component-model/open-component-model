@@ -132,7 +132,7 @@ func (s *repository) asLockedReader(rc io.ReadCloser) io.ReadCloser {
 		Reader: rc,
 		Closer: closerFunc(func() error {
 			if !isFirstCall {
-				slog.Warn("Close called multiple times on locked reader, this is a programming error")
+				slog.Warn("Close called multiple times on locked reader.")
 			}
 			once.Do(func() {
 				isFirstCall = false
