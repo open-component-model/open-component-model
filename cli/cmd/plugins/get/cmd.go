@@ -193,6 +193,10 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if len(plugins) == 0 {
+		return fmt.Errorf("plugin %q not found in specified registries: %q", pluginArgName, strings.Join(pluginRegistries, ", "))
+	}
+
 	// Create DAG and render output
 	// Depending on the --component-descriptor flag either render plugin info or component descriptors
 	graph, roots, err := createDAG(ctx, plugins, repoProviders, cd, output)
