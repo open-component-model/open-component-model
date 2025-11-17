@@ -3,7 +3,9 @@ package component
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -70,31 +72,35 @@ func ReferenceTagVersionResolver(component string, store interface {
 		}
 
 		var manifestAnnotations map[string]string
+		var data io.ReadCloser
 		switch desc.MediaType {
 		case ociImageSpecV1.MediaTypeImageManifest:
-			data, err := store.Fetch(ctx, desc)
+			data, err = store.Fetch(ctx, desc)
 			if err != nil {
 				return "", fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err)
 			}
 			var manifest ociImageSpecV1.Manifest
 			if err := json.NewDecoder(data).Decode(&manifest); err != nil {
-				return "", fmt.Errorf("failed to decode manifest for tag %q: %w", tag, err)
+				return "", errors.Join(fmt.Errorf("failed to decode manifest for tag %q: %w", tag, err), data.Close())
 			}
 			manifestAnnotations = manifest.Annotations
 		case ociImageSpecV1.MediaTypeImageIndex:
-			data, err := store.Fetch(ctx, desc)
+			data, err = store.Fetch(ctx, desc)
 			if err != nil {
 				return "", fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err)
 			}
 			var index ociImageSpecV1.Index
 			if err := json.NewDecoder(data).Decode(&index); err != nil {
-				return "", fmt.Errorf("failed to decode index for tag %q: %w", tag, err)
+				return "", errors.Join(fmt.Errorf("failed to decode index for tag %q: %w", tag, err), data.Close())
 			}
 			manifestAnnotations = index.Annotations
+
 		default:
 			return "", fmt.Errorf("unsupported media type %q for tag %q: %w", desc.MediaType, tag, lister.ErrSkip)
 		}
-
+		if err = data.Close(); err != nil {
+			return "", fmt.Errorf("failed to close descriptor reader for tag %q: %w", tag, err)
+		}
 		annotation, ok := manifestAnnotations[annotations.OCMComponentVersion]
 		if !ok {
 			return "", fmt.Errorf("failed to find %q annotation for tag %q: %w", annotations.OCMComponentVersion, tag, lister.ErrSkip)

@@ -475,7 +475,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	if err != nil {
 		return nil, fmt.Errorf("fetch layer: %w", err)
 	}
-
+	// data cannot be closed, as it is used by the blob
 	b := ociblob.NewDescriptorBlob(data, artifact)
 	if actual, _ := b.Digest(); actual != artifact.Digest.String() {
 		return nil, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual)
@@ -705,18 +705,24 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		if descriptorManifest.MediaType != ociImageSpecV1.MediaTypeImageManifest {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
 		}
-		manifestRaw, err = store.Fetch(ctx, descriptorManifest)
+		indexManifestRaw, err := store.Fetch(ctx, descriptorManifest)
+		defer func() {
+			err = errors.Join(err, indexManifestRaw.Close())
+		}()
 		if err != nil {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 		}
+		if err := json.NewDecoder(indexManifestRaw).Decode(&manifest); err != nil {
+			return ociImageSpecV1.Manifest{}, nil, err
+		}
 	case ociImageSpecV1.MediaTypeImageManifest:
+		if err := json.NewDecoder(manifestRaw).Decode(&manifest); err != nil {
+			return ociImageSpecV1.Manifest{}, nil, err
+		}
 	default:
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("unsupported media type %q", base.MediaType)
 	}
 
-	if err := json.NewDecoder(manifestRaw).Decode(&manifest); err != nil {
-		return ociImageSpecV1.Manifest{}, nil, err
-	}
 	return manifest, index, nil
 }
 

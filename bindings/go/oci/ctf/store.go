@@ -45,6 +45,10 @@ func NewFromCTF(store ctf.CTF) *Store {
 	return &Store{archive: store}
 }
 
+type closerFunc func() error
+
+func (f closerFunc) Close() error { return f() }
+
 // Store implements an OCI Store interface backed by a CTF (Common Transport Format).
 // It provides functionality to:
 // - Resolve and Tag component version references using the CTF's index archive
@@ -91,6 +95,8 @@ func (s *Store) ComponentVersionReference(ctx context.Context, component, versio
 }
 
 // Repository implements the spec.Store interface for a CTF OCI Repository.
+// Each repository instance shares the same mutex with its parent Store to ensure
+// consistent locking across all repositories within the same CTF archive.
 type repository struct {
 	archive ctf.CTF
 	repo    string
@@ -99,19 +105,42 @@ type repository struct {
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
+// Uses LockedReader to maintain read lock during async streaming operations. The io.ReadCloser must be closed.
 func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.fetch(ctx, target)
-}
-
-// fetch is the internal version of Fetch that assumes the caller holds the lock.
-func (s *repository) fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	b, err := s.archive.GetBlob(ctx, target.Digest.String())
 	if err != nil {
-		return nil, fmt.Errorf("unable to get blob: %w", err)
+		s.mu.RUnlock()
+		return nil, err
 	}
-	return b.ReadCloser()
+	rc, err := b.ReadCloser()
+	if err != nil {
+		s.mu.RUnlock()
+		return nil, err
+	}
+	return s.asLockedReader(rc), nil
+}
+
+func (s *repository) asLockedReader(rc io.ReadCloser) io.ReadCloser {
+	isFirstCall := true
+	doClose := sync.OnceValue(func() error {
+		isFirstCall = false
+		defer s.mu.RUnlock()
+		return rc.Close()
+	})
+
+	return struct {
+		io.Reader
+		io.Closer
+	}{
+		Reader: rc,
+		Closer: closerFunc(func() error {
+			if !isFirstCall {
+				slog.Error("Close called multiple times on locked reader.")
+			}
+			return doClose()
+		}),
+	}
 }
 
 // Exists checks if a blob exists in the CTF archive based on its descriptor.
@@ -136,16 +165,24 @@ func (s *repository) exists(ctx context.Context, target ociImageSpecV1.Descripto
 
 func (s *repository) FetchReference(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, io.ReadCloser, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+
 	desc, err := s.resolve(ctx, reference)
 	if err != nil {
+		s.mu.RUnlock()
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
-	data, err := s.fetch(ctx, desc)
+
+	b, err := s.archive.GetBlob(ctx, desc.Digest.String())
 	if err != nil {
+		s.mu.RUnlock()
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
-	return desc, data, nil
+	rc, err := b.ReadCloser()
+	if err != nil {
+		s.mu.RUnlock()
+		return ociImageSpecV1.Descriptor{}, nil, err
+	}
+	return desc, s.asLockedReader(rc), nil
 }
 
 // Push stores a new blob in the CTF archive with the expected descriptor.
