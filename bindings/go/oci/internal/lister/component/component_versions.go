@@ -77,7 +77,7 @@ func ReferenceTagVersionResolver(component string, store interface {
 		case ociImageSpecV1.MediaTypeImageManifest:
 			data, err = store.Fetch(ctx, desc)
 			if err != nil {
-				return "", errors.Join(fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err), data.Close())
+				return "", fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err)
 			}
 			var manifest ociImageSpecV1.Manifest
 			if err := json.NewDecoder(data).Decode(&manifest); err != nil {
@@ -87,7 +87,7 @@ func ReferenceTagVersionResolver(component string, store interface {
 		case ociImageSpecV1.MediaTypeImageIndex:
 			data, err = store.Fetch(ctx, desc)
 			if err != nil {
-				return "", errors.Join(fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err), data.Close())
+				return "", fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err)
 			}
 			var index ociImageSpecV1.Index
 			if err := json.NewDecoder(data).Decode(&index); err != nil {
