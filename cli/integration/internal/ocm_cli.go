@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"ocm.software/open-component-model/cli/cmd"
+	"github.com/spf13/cobra"
 )
 
-func AddComponentForConstructor(ctx context.Context, constructorContent string, cfgPath string, registryURL string) (err error) {
+func AddComponentForConstructor(ctx context.Context, addCMD *cobra.Command, constructorContent string, cfgPath string, registryURL string) (err error) {
 	constructorPath := filepath.Join(os.TempDir(), "constructor.yaml")
 	defer os.Remove(constructorPath)
 
@@ -17,7 +17,6 @@ func AddComponentForConstructor(ctx context.Context, constructorContent string, 
 		return err
 	}
 
-	addCMD := cmd.New()
 	addCMD.SetArgs([]string{
 		"add",
 		"component-version",
