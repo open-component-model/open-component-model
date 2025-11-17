@@ -122,9 +122,13 @@ func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor
 }
 
 func (s *repository) asLockedReader(rc io.ReadCloser) io.ReadCloser {
-	var once sync.Once
-	var closeErr error
 	isFirstCall := true
+	doClose := sync.OnceValue(func() error {
+		isFirstCall = false
+		defer s.mu.RUnlock()
+		return rc.Close()
+	})
+
 	return struct {
 		io.Reader
 		io.Closer
@@ -134,13 +138,7 @@ func (s *repository) asLockedReader(rc io.ReadCloser) io.ReadCloser {
 			if !isFirstCall {
 				slog.Warn("Close called multiple times on locked reader.")
 			}
-			once.Do(func() {
-				isFirstCall = false
-				defer s.mu.RUnlock()
-				closeErr = rc.Close()
-			})
-
-			return closeErr
+			return doClose()
 		}),
 	}
 }
