@@ -129,13 +129,13 @@ func TestFetch(t *testing.T) {
 		assert.Contains(t, err.Error(), "not found")
 	})
 
-	t.Run("close called multiple times is safe and logs warning", func(t *testing.T) {
+	t.Run("close called multiple times is safe and logs error", func(t *testing.T) {
 		reader, err := store.Fetch(ctx, desc)
 		require.NoError(t, err)
 		require.NotNil(t, reader)
 
 		// Call Close multiple times - all should succeed without panic
-		// The sync.Once ensures RUnlock and rc.Close() are only called once
+		// The sync.OnceValue ensures RUnlock and rc.Close() are only called once
 		err = reader.Close()
 		assert.NoError(t, err, "first close should succeed")
 
@@ -144,7 +144,7 @@ func TestFetch(t *testing.T) {
 		assert.NoError(t, err, "second close should be safe (logs warning)")
 
 		// Verify the warning was logged exactly once
-		logHandler.AssertCalled(t, "Handle", slog.LevelWarn, "Close called multiple times on locked reader.")
+		logHandler.AssertCalled(t, "Handle", slog.LevelError, "Close called multiple times on locked reader.")
 	})
 }
 
