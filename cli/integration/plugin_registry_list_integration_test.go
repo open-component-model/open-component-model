@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -70,12 +72,12 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	// Create plugin constructors and add them to the registry
 	var componentReferencesA string
 	for _, plugin := range pluginsA {
-		r.NoError(internal.AddComponentForConstructor(ctx, cmd.New(), internal.CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLA))
-		componentReferencesA += internal.GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
+		r.NoError(AddComponentForConstructor(ctx, CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLA))
+		componentReferencesA += GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
 	}
 
 	// Create plugin registry constructor and add it to the registry
-	r.NoError(internal.AddComponentForConstructor(ctx, cmd.New(), internal.CreatePluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryURLA))
+	r.NoError(AddComponentForConstructor(ctx, CreatePluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryURLA))
 
 	// Plugin B
 	pluginRegistryComponentB := "ocm.software/plugin-registry-b"
@@ -91,12 +93,12 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	// Create plugin constructors and add them to the registry
 	var componentReferencesB string
 	for _, plugin := range pluginsB {
-		r.NoError(internal.AddComponentForConstructor(ctx, cmd.New(), internal.CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLB))
-		componentReferencesB += internal.GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
+		r.NoError(AddComponentForConstructor(ctx, CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLB))
+		componentReferencesB += GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
 	}
 
 	// Create plugin registry constructor and add it to the registry
-	r.NoError(internal.AddComponentForConstructor(ctx, cmd.New(), internal.CreatePluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryURLB))
+	r.NoError(AddComponentForConstructor(ctx, CreatePluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryURLB))
 
 	cases := []struct {
 		name             string
@@ -176,4 +178,92 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 			r.Equal(tc.result, actualPlugins, "plugin registry list should have the same result")
 		})
 	}
+}
+
+func AddComponentForConstructor(ctx context.Context, constructorContent string, cfgPath string, registryURL string) (err error) {
+	constructorPath := filepath.Join(os.TempDir(), "constructor.yaml")
+	defer os.Remove(constructorPath)
+
+	if err = os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm); err != nil { //nolint:gosec // test code
+		return err
+	}
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add",
+		"component-version",
+		"--repository", fmt.Sprintf("http://%s", registryURL),
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+	})
+
+	return addCMD.ExecuteContext(ctx)
+}
+
+func CreatePluginComponentConstructors(name, version string) string {
+	return fmt.Sprintf(`
+---
+name: %s
+version: %s
+provider:
+  name: ocm.software
+`, name, version)
+}
+
+func GeneratePluginReferences(name, version, description string, platforms []string) string {
+	var s string
+
+	s += fmt.Sprintf(`
+  - name: %s
+    version: %s
+    componentName: %s
+`, name, version, name)
+
+	// Add labels if description or platforms are provided
+	var labels string
+	if description != "" {
+		labels += fmt.Sprintf(`
+          description: %s
+`, description)
+	}
+
+	if len(platforms) > 0 {
+		labels += `
+          platforms:
+`
+
+		for _, platform := range platforms {
+			labels += fmt.Sprintf(`
+            - %s`, strings.TrimSpace(platform))
+		}
+	}
+
+	if labels != "" {
+		s += fmt.Sprintf(`
+    labels:
+      - name: %s
+        value:
+%s`, list.PluginInfoKey, labels)
+	}
+
+	return s
+}
+
+func CreatePluginRegistryConstructor(component, version, references string) string {
+	return fmt.Sprintf(`
+name: %s
+version: %s
+provider:
+  name: ocm.software
+labels:
+  - name: category
+    value: plugin-registry
+  - name: registry
+    value: official
+  - name: description
+    value: Official OCM plugin registry
+
+componentReferences:
+%s
+`, component, version, references)
 }

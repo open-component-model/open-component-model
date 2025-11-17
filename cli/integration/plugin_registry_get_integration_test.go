@@ -70,12 +70,12 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	// Create plugin constructors and add them to the registry
 	var componentReferencesA string
 	for _, plugin := range pluginsA {
-		r.NoError(internal.AddComponentForConstructor(ctx, cmd.New(), internal.CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLA))
-		componentReferencesA += internal.GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
+		r.NoError(AddComponentForConstructor(ctx, CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLA))
+		componentReferencesA += GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
 	}
 
 	// Create plugin registry constructor and add it to the registry
-	r.NoError(internal.AddComponentForConstructor(ctx, cmd.New(), internal.CreatePluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryURLA))
+	r.NoError(AddComponentForConstructor(ctx, CreatePluginRegistryConstructor(pluginRegistryComponentA, pluginRegistryVersionA, componentReferencesA), cfgPath, registryURLA))
 
 	// Plugin B
 	pluginRegistryComponentB := "ocm.software/plugin-registry-b"
@@ -91,12 +91,12 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	// Create plugin constructors and add them to the registry
 	var componentReferencesB string
 	for _, plugin := range pluginsB {
-		r.NoError(internal.AddComponentForConstructor(ctx, cmd.New(), internal.CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLB))
-		componentReferencesB += internal.GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
+		r.NoError(AddComponentForConstructor(ctx, CreatePluginComponentConstructors(plugin.Name, plugin.Version), cfgPath, registryURLB))
+		componentReferencesB += GeneratePluginReferences(plugin.Name, plugin.Version, plugin.Description, plugin.Platforms)
 	}
 
 	// Create plugin registry constructor and add it to the registry
-	r.NoError(internal.AddComponentForConstructor(ctx, cmd.New(), internal.CreatePluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryURLB))
+	r.NoError(AddComponentForConstructor(ctx, CreatePluginRegistryConstructor(pluginRegistryComponentB, pluginRegistryVersionB, componentReferencesB), cfgPath, registryURLB))
 
 	cases := []struct {
 		name             string
