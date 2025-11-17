@@ -38,9 +38,9 @@ require (
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251114112331-3af5ed79952f
-	ocm.software/open-component-model/bindings/go/oci v0.0.9
-	ocm.software/open-component-model/bindings/go/plugin v0.0.7
-	ocm.software/open-component-model/bindings/go/repository v0.0.2
+	ocm.software/open-component-model/bindings/go/oci v0.0.10
+	ocm.software/open-component-model/bindings/go/plugin v0.0.9
+	ocm.software/open-component-model/bindings/go/repository v0.0.3
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
