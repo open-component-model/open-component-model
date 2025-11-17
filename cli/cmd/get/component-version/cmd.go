@@ -221,7 +221,7 @@ func processComponentReference(cmd *cobra.Command,
 	}
 
 	if err := renderComponents(cmd, repoProvider, roots, output, displayMode, recursive); err != nil {
-		return fmt.Errorf("failed to render components recursively: %w", err)
+		return fmt.Errorf("failed to render components: %w", err)
 	}
 
 	return nil
