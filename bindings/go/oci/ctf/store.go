@@ -124,7 +124,7 @@ func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor
 func (s *repository) asLockedReader(rc io.ReadCloser) io.ReadCloser {
 	var once sync.Once
 	var closeErr error
-	var isFirstCall = true
+	isFirstCall := true
 	return struct {
 		io.Reader
 		io.Closer
