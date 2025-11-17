@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -76,21 +77,21 @@ func ReferenceTagVersionResolver(component string, store interface {
 		case ociImageSpecV1.MediaTypeImageManifest:
 			data, err = store.Fetch(ctx, desc)
 			if err != nil {
-				return "", fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err)
+				return "", errors.Join(fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err), data.Close())
 			}
 			var manifest ociImageSpecV1.Manifest
 			if err := json.NewDecoder(data).Decode(&manifest); err != nil {
-				return "", fmt.Errorf("failed to decode manifest for tag %q: %w", tag, err)
+				return "", errors.Join(fmt.Errorf("failed to decode manifest for tag %q: %w", tag, err), data.Close())
 			}
 			manifestAnnotations = manifest.Annotations
 		case ociImageSpecV1.MediaTypeImageIndex:
 			data, err = store.Fetch(ctx, desc)
 			if err != nil {
-				return "", fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err)
+				return "", errors.Join(fmt.Errorf("failed to fetch descriptor for tag %q: %w", tag, err), data.Close())
 			}
 			var index ociImageSpecV1.Index
 			if err := json.NewDecoder(data).Decode(&index); err != nil {
-				return "", fmt.Errorf("failed to decode index for tag %q: %w", tag, err)
+				return "", errors.Join(fmt.Errorf("failed to decode index for tag %q: %w", tag, err), data.Close())
 			}
 			manifestAnnotations = index.Annotations
 

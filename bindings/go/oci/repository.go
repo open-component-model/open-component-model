@@ -705,19 +705,24 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		if descriptorManifest.MediaType != ociImageSpecV1.MediaTypeImageManifest {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
 		}
-		err = errors.Join(err, manifestRaw.Close())
-		manifestRaw, err = store.Fetch(ctx, descriptorManifest)
+		indexManifestRaw, err := store.Fetch(ctx, descriptorManifest)
+		defer func() {
+			err = errors.Join(err, indexManifestRaw.Close())
+		}()
 		if err != nil {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 		}
+		if err := json.NewDecoder(indexManifestRaw).Decode(&manifest); err != nil {
+			return ociImageSpecV1.Manifest{}, nil, err
+		}
 	case ociImageSpecV1.MediaTypeImageManifest:
+		if err := json.NewDecoder(manifestRaw).Decode(&manifest); err != nil {
+			return ociImageSpecV1.Manifest{}, nil, err
+		}
 	default:
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("unsupported media type %q", base.MediaType)
 	}
 
-	if err := json.NewDecoder(manifestRaw).Decode(&manifest); err != nil {
-		return ociImageSpecV1.Manifest{}, nil, err
-	}
 	return manifest, index, nil
 }
 

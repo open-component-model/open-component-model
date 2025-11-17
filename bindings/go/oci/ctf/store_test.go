@@ -2,8 +2,10 @@ package ctf
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -12,6 +14,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -28,6 +31,31 @@ func setupTestCTF(t *testing.T) ctf.CTF {
 	fs, err := filesystem.NewFS(tmpDir, os.O_RDWR|os.O_CREATE)
 	require.NoError(t, err)
 	return ctf.NewFileSystemCTF(fs)
+}
+
+// mockLogHandler is a mock slog.Handler for testing
+type mockLogHandler struct {
+	mock.Mock
+	mu sync.Mutex
+}
+
+func (m *mockLogHandler) Enabled(_ context.Context, _ slog.Level) bool {
+	return true
+}
+
+func (m *mockLogHandler) Handle(_ context.Context, record slog.Record) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.Called(record.Level, record.Message)
+	return nil
+}
+
+func (m *mockLogHandler) WithAttrs(_ []slog.Attr) slog.Handler {
+	return m
+}
+
+func (m *mockLogHandler) WithGroup(_ string) slog.Handler {
+	return m
 }
 
 func TestNewCTFComponentVersionStore(t *testing.T) {
@@ -87,6 +115,32 @@ func TestFetch(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, reader)
 		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("close called multiple times is safe and logs warning", func(t *testing.T) {
+		originalLogger := slog.Default()
+		logHandler := &mockLogHandler{}
+		slog.SetDefault(slog.New(logHandler))
+		defer slog.SetDefault(originalLogger)
+
+		// Allow any log messages
+		logHandler.On("Handle", slog.LevelWarn, "Close called multiple times on locked reader, this is a programming error").Return(nil).Once()
+
+		reader, err := store.Fetch(ctx, desc)
+		require.NoError(t, err)
+		require.NotNil(t, reader)
+
+		// Call Close multiple times - all should succeed without panic
+		// The sync.Once ensures RUnlock and rc.Close() are only called once
+		err = reader.Close()
+		assert.NoError(t, err, "first close should succeed")
+
+		// Second call logs warning but not fail
+		err = reader.Close()
+		assert.NoError(t, err, "second close should be safe (logs warning)")
+
+		// Verify the warning was logged exactly once
+		logHandler.AssertExpectations(t)
 	})
 }
 

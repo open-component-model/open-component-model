@@ -105,7 +105,7 @@ type repository struct {
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
-// Uses LockedReader to maintain read lock during async streaming operations.
+// Uses LockedReader to maintain read lock during async streaming operations. The io.ReadCloser must be closed.
 func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	s.mu.RLock()
 	b, err := s.archive.GetBlob(ctx, target.Digest.String())
@@ -122,14 +122,25 @@ func (s *repository) Fetch(ctx context.Context, target ociImageSpecV1.Descriptor
 }
 
 func (s *repository) asLockedReader(rc io.ReadCloser) io.ReadCloser {
+	var once sync.Once
+	var closeErr error
+	var isFirstCall = true
 	return struct {
 		io.Reader
 		io.Closer
 	}{
 		Reader: rc,
 		Closer: closerFunc(func() error {
-			defer s.mu.RUnlock()
-			return rc.Close()
+			if !isFirstCall {
+				slog.Warn("Close called multiple times on locked reader, this is a programming error")
+			}
+			once.Do(func() {
+				isFirstCall = false
+				defer s.mu.RUnlock()
+				closeErr = rc.Close()
+			})
+
+			return closeErr
 		}),
 	}
 }
