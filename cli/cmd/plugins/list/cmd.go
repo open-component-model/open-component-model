@@ -27,6 +27,8 @@ import (
 const (
 	FlagRegistry = "registry"
 	FlagOutput   = "output"
+
+	PluginInfoKey = "ocm.software/pluginInfo"
 )
 
 func New() *cobra.Command {
@@ -144,7 +146,7 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 
 			var info PluginInfo
 			for _, l := range r.Labels {
-				if l.Name == "ocm.software/pluginInfo" {
+				if l.Name == PluginInfoKey {
 					dec := json.NewDecoder(strings.NewReader(string(l.Value)))
 					dec.DisallowUnknownFields()
 					if err := dec.Decode(&info); err != nil {

@@ -3,6 +3,8 @@ package internal
 import (
 	"fmt"
 	"strings"
+
+	"ocm.software/open-component-model/cli/cmd/plugins/list"
 )
 
 func CreatePluginComponentConstructors(name, version string) string {
@@ -46,9 +48,9 @@ func GeneratePluginReferences(name, version, description string, platforms []str
 	if labels != "" {
 		s += fmt.Sprintf(`
     labels:
-      - name: ocm.software/pluginInfo
+      - name: %s
         value:
-%s`, labels)
+%s`, list.PluginInfoKey, labels)
 	}
 
 	return s
