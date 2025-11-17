@@ -7,10 +7,10 @@ vars:
   CLI_DOCUMENTATION_DIRECTORY: tmp/docs
   PROVIDER: ocm.software
   NAME: cli
-  DEFAULT_VERSION: '0.0.0-donotmerge-test-version'
-#    sh: |
-#      echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)"
-  VERSION:  '0.0.0-donotmerge-test-version' #'{{ .VERSION | default .DEFAULT_VERSION }}'
+  DEFAULT_VERSION:
+    sh: |
+      echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)" | tr '_' '-'
+  VERSION: '{{ .VERSION | default .DEFAULT_VERSION }}'
   COMPONENT_CONSTRUCTOR_FILE: "{{ .TASKFILE_DIR }}/tmp/component-constructor.yaml"
   CTF_LOCATION: '{{ .TASKFILE_DIR }}/tmp/transport-archive'
   GOOS:
