@@ -56,7 +56,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.6.8 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
-	github.com/lufia/plan9stats v0.0.0-20250827001030-24949be3fa54 // indirect
+	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
