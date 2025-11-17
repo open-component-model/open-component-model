@@ -113,8 +113,8 @@ ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251118094009-5d448c44
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251118094009-5d448c440041/go.mod h1:LyfkmcZpqHEEf+3ukIX8OVxzEaz/36godNgwJ8uyM9Y=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2 h1:YA20enOxMsk4gDWF+Anltwkc616dXebfgPz/0Bl0EKE=
 ocm.software/open-component-model/bindings/go/runtime v0.0.2/go.mod h1:9qeyWvvxkua6NyDVGxeQV6B022WqoAfdU/JnuImm1ws=
-ocm.software/open-component-model/bindings/go/signing v0.0.0-20251118094009-5d448c440041 h1:MaFVev74lfQimnP57A+GelsFnP0ScDP39YGiyqEXMok=
-ocm.software/open-component-model/bindings/go/signing v0.0.0-20251118094009-5d448c440041/go.mod h1:72TawTYLBvWiD3xmpeDFfZInvIsyrrt03EQWxwLNWvc=
+ocm.software/open-component-model/bindings/go/signing v0.0.0-20251114112331-3af5ed79952f h1:DoJYkyAwjJ+B9/RZBGL86r/Ggbcb7+AHuX1wjI4rnPQ=
+ocm.software/open-component-model/bindings/go/signing v0.0.0-20251114112331-3af5ed79952f/go.mod h1:+Nq0dPefVaOh86mi1BYFDaLp7t+KxSYH4rHL1MPeA/g=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
 oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
 sigs.k8s.io/yaml v1.6.0 h1:G8fkbMSAFqgEFgh4b1wmtzDnioxFCUgTZhlbj5P9QYs=

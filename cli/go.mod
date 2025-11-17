@@ -11,6 +11,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.37.0
+	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.1
@@ -55,6 +56,5 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/text v0.30.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251118094009-5d448c440041 // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251114112331-3af5ed79952f // indirect
 )
