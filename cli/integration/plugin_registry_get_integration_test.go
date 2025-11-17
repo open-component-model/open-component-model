@@ -180,8 +180,20 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 
 			getCmd.SetArgs(cmdArgs)
 
-			r.NoError(getCmd.ExecuteContext(ctx), "plugin registry get should succeed with a print statement")
+			err := getCmd.ExecuteContext(ctx)
+			if err != nil && len(tc.result) != 0 {
+				t.Fatal("plugin registry get should succeed with a print statement")
+			}
+
 			cmdErr := errorBuffer.String()
+			if len(tc.result) == 0 {
+				r.Contains(
+					cmdErr,
+					fmt.Sprintf("Error: plugin %q not found in specified registries: %q\n", tc.plugin, strings.Join(tc.pluginRegistries, ", ")),
+					"should return specified error message")
+				return
+			}
+
 			if cmdErr != "" {
 				t.Logf("Command error output: %s", cmdErr)
 			}
