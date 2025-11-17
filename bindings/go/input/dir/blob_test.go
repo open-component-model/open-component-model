@@ -61,7 +61,7 @@ func TestGetV1DirBlob_Symlinks(t *testing.T) {
 	// Expect an error on read, as symlinks are not supported yet.
 	_, err = io.ReadAll(reader)
 	r.Error(err)
-	r.Contains(err.Error(), "symlinks not supported")
+	r.Contains(err.Error(), "symlinks are not supported yet")
 }
 
 func TestGetV1DirBlob_Reproducibility(t *testing.T) {
@@ -358,7 +358,7 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 					expectedType := tt.mediaType
 					if expectedType == "" {
 						// If media type isn't set in the spec, expect the default.
-						expectedType = dir.DEFAULT_TAR_MIME_TYPE
+						expectedType = "application/x-tar"
 					}
 					expectedType += "+gzip"
 					r.True(known)
@@ -371,7 +371,7 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 					expectedType := tt.mediaType
 					if expectedType == "" {
 						// If media type isn't set in the spec, expect the default.
-						expectedType = dir.DEFAULT_TAR_MIME_TYPE
+						expectedType = "application/x-tar"
 					}
 					r.True(known)
 					r.Equal(expectedType, actualType)
