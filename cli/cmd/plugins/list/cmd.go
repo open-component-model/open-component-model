@@ -14,6 +14,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	"ocm.software/open-component-model/bindings/go/dag/sync"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
@@ -110,9 +111,32 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("failed getting repository: %w", err)
 		}
 
-		desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
-		if err != nil {
-			return fmt.Errorf("failed getting component constructor for plugin registry: %w", err)
+		var desc *descriptor.Descriptor
+
+		// Get latest version of plugin registry if no version is specified
+		if ref.Version == "" {
+			descs, err := ocm.GetComponentVersions(ctx, ocm.GetComponentVersionsOptions{
+				VersionOptions: ocm.VersionOptions{
+					LatestOnly: true,
+				},
+			}, ref.Component, ref.Version, repo)
+			if err != nil {
+				return fmt.Errorf("failed getting component versions for plugin registry: %w", err)
+			}
+
+			desc = descs[0]
+
+			if len(descs) == 0 {
+				return fmt.Errorf("no versions found for component %q in plugin registry", ref.Component)
+			}
+
+			// Add version to registry ref to be able to identify the source later
+			reg = fmt.Sprintf("%s:%s", reg, descs[0].Component.Version)
+		} else {
+			desc, err = repo.GetComponentVersion(ctx, ref.Component, ref.Version)
+			if err != nil {
+				return fmt.Errorf("failed getting component constructor for plugin registry: %w", err)
+			}
 		}
 
 		for _, r := range desc.Component.References {

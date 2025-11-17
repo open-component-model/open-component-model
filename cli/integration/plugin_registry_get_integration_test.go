@@ -117,6 +117,16 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 			},
 		},
 		{
+			name:             "get plugin-one with version (without registry version)",
+			plugin:           "plugin-one",
+			version:          "v1.7.0",
+			pluginRegistries: []string{strings.Split(pluginRegistryURLA, ":"+pluginRegistryVersionA)[0]},
+			withVersion:      true,
+			result: []list.PluginInfo{
+				{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
+			},
+		},
+		{
 			name:             "get plugin-two without version",
 			plugin:           "plugin-two",
 			pluginRegistries: []string{pluginRegistryURLA},

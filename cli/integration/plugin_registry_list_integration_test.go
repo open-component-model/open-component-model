@@ -111,6 +111,13 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 			result: pluginsA,
 		},
 		{
+			name: "list from one registry without registry version",
+			pluginRegistries: []string{
+				strings.Split(pluginRegistryURLA, ":"+pluginRegistryVersionA)[0],
+			},
+			result: pluginsA,
+		},
+		{
 			name: "list from both registries",
 			pluginRegistries: []string{
 				pluginRegistryURLA,

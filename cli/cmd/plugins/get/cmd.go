@@ -127,9 +127,28 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed getting repository: %w", err)
 		}
 
-		desc, err := repo.GetComponentVersion(ctx, ref.Component, ref.Version)
-		if err != nil {
-			return fmt.Errorf("failed getting component descriptor of plugin registry: %w", err)
+		var desc *descruntime.Descriptor
+
+		// Get latest version of plugin registry if no version is specified
+		if ref.Version == "" {
+			descs, err := ocm.GetComponentVersions(ctx, ocm.GetComponentVersionsOptions{VersionOptions: ocm.VersionOptions{LatestOnly: true}}, ref.Component, ref.Version, repo)
+			if err != nil {
+				return fmt.Errorf("failed getting component versions for plugin registry: %w", err)
+			}
+
+			if len(descs) == 0 {
+				return fmt.Errorf("no versions found for component %q in plugin registry", ref.Component)
+			}
+
+			desc = descs[0]
+
+			// Add version to registry ref to be able to identify the source later
+			reg = fmt.Sprintf("%s:%s", reg, desc.Component.Version)
+		} else {
+			desc, err = repo.GetComponentVersion(ctx, ref.Component, ref.Version)
+			if err != nil {
+				return fmt.Errorf("failed getting component constructor for plugin registry: %w", err)
+			}
 		}
 
 		logger.Debug("Looking for plugin in component version", slog.String("component", desc.Component.String()))
@@ -176,25 +195,39 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 
 	// Create DAG and render output
 	// Depending on the --component-descriptor flag either render plugin info or component descriptors
+	graph, roots, err := createDAG(ctx, plugins, repoProviders, cd, output)
+	if err != nil {
+		return fmt.Errorf("creating DAG failed: %w", err)
+	}
+
+	renderer, err := buildRenderer(ctx, sync.ToSyncedGraph(graph), roots, output, cd)
+	if err != nil {
+		return fmt.Errorf("building renderer failed: %w", err)
+	}
+
+	return render.RenderOnce(cmd.Context(), renderer, render.WithWriter(cmd.OutOrStdout()))
+}
+
+func createDAG(ctx context.Context, plugins []list.PluginInfo, providers []ocm.ComponentVersionRepositoryForComponentProvider, cd bool, output string) (*dag.DirectedAcyclicGraph[string], []string, error) {
 	graph := dag.NewDirectedAcyclicGraph[string]()
 	var roots []string
 	for _, plugin := range plugins {
 		if cd && output != render.OutputFormatTable.String() {
-			for _, repoProvider := range repoProviders {
+			for _, repoProvider := range providers {
 				repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, plugin.Component, plugin.Version)
 				if err != nil {
-					return fmt.Errorf("cannot get repository provider: %w", err)
+					return nil, nil, fmt.Errorf("cannot get repository provider: %w", err)
 				}
 
 				desc, err := repo.GetComponentVersion(ctx, plugin.Component, plugin.Version)
 				if err != nil {
-					return fmt.Errorf("getting component descriptor for plugin failed: %w", err)
+					return nil, nil, fmt.Errorf("getting component descriptor for plugin failed: %w", err)
 				}
 
 				if err := graph.AddVertex(plugin.String(), map[string]any{
 					sync.AttributeValue: desc,
 				}); err != nil {
-					return fmt.Errorf("adding vertex to graph failed: %w", err)
+					return nil, nil, fmt.Errorf("adding vertex to graph failed: %w", err)
 				}
 				roots = append(roots, plugin.String())
 			}
@@ -208,18 +241,13 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 					"description": plugin.Description,
 					"platforms":   plugin.Platforms,
 				}); err != nil {
-				return fmt.Errorf("adding vertex to graph failed: %w", err)
+				return nil, nil, fmt.Errorf("adding vertex to graph failed: %w", err)
 			}
 			roots = append(roots, plugin.String())
 		}
 	}
 
-	renderer, err := buildRenderer(ctx, sync.ToSyncedGraph(graph), roots, output, cd)
-	if err != nil {
-		return fmt.Errorf("building renderer failed: %w", err)
-	}
-
-	return render.RenderOnce(cmd.Context(), renderer, render.WithWriter(cmd.OutOrStdout()))
+	return graph, roots, nil
 }
 
 func buildRenderer(ctx context.Context, graph *sync.SyncedDirectedAcyclicGraph[string], roots []string, format string, desc bool) (render.Renderer, error) {
