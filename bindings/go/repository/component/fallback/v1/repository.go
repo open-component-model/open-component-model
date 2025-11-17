@@ -333,7 +333,8 @@ func (f *FallbackRepository) getRepositoryForSpecification(ctx context.Context, 
 	if err == nil {
 		if f.credentialProvider != nil {
 			if creds, err = f.credentialProvider.Resolve(ctx, consumerIdentity); err != nil {
-				if errors.Is(err, repository.ErrCredentialsNotFound) {
+				// does not know the credentials package - so we need to check manually
+				if strings.Contains(err.Error(), "credentials not found") {
 					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", specification, err.Error()))
 				} else {
 					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", specification, err)
