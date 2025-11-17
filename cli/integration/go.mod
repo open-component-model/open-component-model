@@ -102,7 +102,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9 // indirect
 	ocm.software/open-component-model/bindings/go/constructor v0.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/credentials v0.0.3-0.20251114112331-3af5ed79952f // indirect
+	ocm.software/open-component-model/bindings/go/credentials v0.0.3 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251128170812-81b92bc4adf4 // indirect
