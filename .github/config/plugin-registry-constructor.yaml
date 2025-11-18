@@ -1,0 +1,15 @@
+name: ocm.software/plugin-registry
+version: ((REGISTRY_VERSION))
+provider:
+  name: ocm.software
+labels:
+  - name: category
+    value: plugin-registry
+  - name: registry
+    value: official
+  - name: description
+    value: Official OCM plugin registry
+componentReferences:
+  - name: helminput
+    version: ((HELMINPUT_VERSION))
+    componentName: ocm.software/plugins/helminput
