@@ -155,7 +155,7 @@ func (r *RepositoryRegistry) GetComponentVersionRepositoryCredentialConsumerIden
 
 		identity, err := p.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, repositorySpecification)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get component version repository with credential consumer identity: %w", err)
+			return nil, fmt.Errorf("failed to get component version repository: %w", err)
 		}
 
 		return identity, nil

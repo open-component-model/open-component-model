@@ -120,9 +120,10 @@ var _ = BeforeSuite(func() {
 	access.MustAddToScheme(ocmscheme)
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
 
+	pmLogger := logf.Log.WithName("plugin-manager")
 	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
 		IdleTimeout: 20 * time.Minute,
-		Logger:      logf.Log.WithName("plugin-manager"),
+		Logger:      &pmLogger,
 		Scheme:      ocmscheme,
 		Provider:    repositoryProvider,
 	})
@@ -133,16 +134,18 @@ var _ = BeforeSuite(func() {
 	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
 
 	// Create worker pool with its own dependencies
+	workerLogger := logf.Log.WithName("worker-pool")
 	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
 		WorkerCount: 10,
 		QueueSize:   100,
-		Logger:      logf.Log.WithName("worker-pool"),
+		Logger:      &workerLogger,
 		Client:      k8sManager.GetClient(),
 		Cache:       resolverCache,
 	})
 	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
-	resolver := resolution.NewResolver(k8sClient, logf.Log.WithName("resolution"), workerPool, pm)
+	resolutionLogger := logf.Log.WithName("resolution")
+	resolver := resolution.NewResolver(k8sClient, &resolutionLogger, workerPool, pm)
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
