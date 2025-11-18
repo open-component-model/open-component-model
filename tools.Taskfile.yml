@@ -96,6 +96,7 @@ tasks:
 
   golangci-lint/verify:
     desc: "Run golangci-lint verify once on the config file"
+    deps: [golangci-lint/install]
     vars:
       GOLANGCI_LINT: '{{ .ROOT_DIR }}/tmp/bin/golangci-lint'
       GOLANGCI_LINT_CONFIG: '{{ .ROOT_DIR }}/.github/config/golangci.yml'
