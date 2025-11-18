@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
@@ -111,7 +110,7 @@ func TestPluginNotFound(t *testing.T) {
 }
 
 func TestSchemeDoesNotExist(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	registry := NewComponentVersionRepositoryRegistry(ctx)
 	proto := &dummyv1.Repository{
 		Type: runtime.Type{
@@ -124,9 +123,90 @@ func TestSchemeDoesNotExist(t *testing.T) {
 	require.ErrorContains(t, err, "failed to get plugin for typ \"DummyRepository/v1\"")
 }
 
+func TestInternalPluginRegistry(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	registry := NewComponentVersionRepositoryRegistry(ctx)
+	repositoryProvider := &mockPluginProvider{
+		mockPlugin: &mockedRepository{},
+	}
+	r.NoError(RegisterInternalComponentVersionRepositoryPlugin(registry, repositoryProvider))
+
+	tests := []struct {
+		name           string
+		repositorySpec runtime.Typed
+		err            require.ErrorAssertionFunc
+	}{
+		{
+			name:           "prototype",
+			repositorySpec: &dummyv1.Repository{},
+			err:            require.NoError,
+		},
+		{
+			name: "canonical type",
+			repositorySpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.Type,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "short type",
+			repositorySpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.ShortType,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "invalid type",
+			repositorySpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "NonExistingType",
+					Version: "v1",
+				},
+			},
+			err: require.Error,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			identity, err := registry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, tc.repositorySpec)
+			tc.err(t, err)
+			if err != nil {
+				return
+			}
+			expectedIdentity := runtime.Identity{
+				"test": "identity",
+			}
+			r.Equal(expectedIdentity, identity)
+		})
+
+		t.Run(tc.name, func(t *testing.T) {
+			retrievedPluginProvider, err := registry.GetComponentVersionRepository(ctx, tc.repositorySpec, nil)
+			tc.err(t, err)
+			if err != nil {
+				return
+			}
+			r.NotNil(retrievedPluginProvider)
+		})
+	}
+}
+
 type mockPluginProvider struct {
 	mockPlugin repository.ComponentVersionRepository
 }
+
+func (m *mockPluginProvider) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	return dummytype.Scheme
+}
+
+var _ repository.ComponentVersionRepositoryProvider = (*mockPluginProvider)(nil)
 
 func (m *mockPluginProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	return runtime.Identity{
@@ -139,32 +219,13 @@ func (m *mockPluginProvider) GetComponentVersionRepository(ctx context.Context, 
 }
 
 type mockedRepository struct {
+	dummyv1.Repository
+	// No need to provide a mock implementation for the repository here, we
+	// test the provider.
 	repository.ComponentVersionRepository
 }
 
-var _ repository.ComponentVersionRepository = &mockedRepository{}
-
-func TestInternalPluginRegistry(t *testing.T) {
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
-	registry := NewComponentVersionRepositoryRegistry(ctx)
-	proto := &dummyv1.Repository{
-		Type: runtime.Type{
-			Name:    "DummyRepository",
-			Version: "v1",
-		},
-		BaseUrl: "",
-	}
-	require.NoError(t, RegisterInternalComponentVersionRepositoryPlugin(scheme, registry, &mockPluginProvider{
-		mockPlugin: &mockedRepository{},
-	}, proto))
-
-	identity, err := registry.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, proto)
-	require.NoError(t, err)
-	require.NotNil(t, identity)
-
-	retrievedPluginProvider, err := registry.GetComponentVersionRepository(ctx, proto, nil)
-	require.NoError(t, err)
-	require.NotNil(t, retrievedPluginProvider)
-}
+var (
+	_ runtime.Typed                         = (*mockedRepository)(nil)
+	_ repository.ComponentVersionRepository = (*mockedRepository)(nil)
+)

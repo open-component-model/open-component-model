@@ -446,10 +446,6 @@ func (e *testEnvironment) Close(ctx context.Context) error {
 func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Logger) *testEnvironment {
 	t.Helper()
 
-	// Register mock OCI plugin
-	scheme := ocmruntime.NewScheme()
-	ocirepository.MustAddToScheme(scheme)
-
 	cvRepoPlugin := &mockPlugin{
 		component: "test-component",
 		version:   "v1.0.0",
@@ -457,15 +453,13 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Lo
 
 	pm := manager.NewPluginManager(t.Context())
 	err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-		scheme,
 		pm.ComponentVersionRepositoryRegistry,
 		cvRepoPlugin,
-		&ociv1.Repository{},
 	)
 	require.NoError(t, err)
 	pluginManager := &plugins.PluginManager{
 		PluginManager: pm,
-		Scheme:        scheme,
+		Scheme:        ocmruntime.NewScheme(),
 		Provider:      pm.ComponentVersionRepositoryRegistry,
 	}
 
@@ -498,6 +492,12 @@ type mockPlugin struct {
 	component string
 	version   string
 }
+
+func (p *mockPlugin) GetComponentVersionRepositoryScheme() *ocmruntime.Scheme {
+	return ocirepository.Scheme
+}
+
+var _ repository.ComponentVersionRepositoryProvider = (*mockPlugin)(nil)
 
 func (p *mockPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
 	_ context.Context,

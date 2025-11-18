@@ -34,6 +34,8 @@ type ComponentVersionRepositoryProvider interface {
 	// - Setting up the repository with appropriate credentials
 	// - Configuring caching and other repository options
 	GetComponentVersionRepository(ctx context.Context, repositorySpecification runtime.Typed, credentials map[string]string) (ComponentVersionRepository, error)
+
+	GetComponentVersionRepositoryScheme() *runtime.Scheme
 }
 
 // ComponentVersionRepository defines the interface for storing and retrieving OCM component versions

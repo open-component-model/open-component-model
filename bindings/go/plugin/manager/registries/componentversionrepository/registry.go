@@ -23,27 +23,22 @@ type constructedPlugin struct {
 
 // RegisterInternalComponentVersionRepositoryPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
-func RegisterInternalComponentVersionRepositoryPlugin[T runtime.Typed](
-	scheme *runtime.Scheme,
+func RegisterInternalComponentVersionRepositoryPlugin(
 	r *RepositoryRegistry,
 	p repository.ComponentVersionRepositoryProvider,
-	prototype T,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(prototype)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", prototype, err)
-	}
+	for providerType, providerTypeAliases := range p.GetComponentVersionRepositoryScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(p.GetComponentVersionRepositoryScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
 
-	r.internalComponentVersionRepositoryPlugins[typ] = p
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalComponentVersionRepositoryPlugins[alias] = r.internalComponentVersionRepositoryPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
-		return fmt.Errorf("failed to register prototype %T: %w", prototype, err)
+		r.internalComponentVersionRepositoryPlugins[providerType] = p
+		for _, alias := range providerTypeAliases {
+			r.internalComponentVersionRepositoryPlugins[alias] = r.internalComponentVersionRepositoryPlugins[providerType]
+		}
 	}
 
 	return nil
@@ -64,6 +59,10 @@ type RepositoryRegistry struct {
 	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
 	// that their type is registered or not.
 	scheme *runtime.Scheme
+}
+
+func (r *RepositoryRegistry) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	return r.scheme
 }
 
 // Ensure RepositoryRegistry implements ComponentVersionRepositoryProvider interface

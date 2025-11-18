@@ -8,8 +8,6 @@ import (
 
 	"github.com/go-logr/logr"
 
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -37,11 +35,7 @@ type PluginManager struct {
 func (m *PluginManager) Start(ctx context.Context) error {
 	pm := manager.NewPluginManager(ctx)
 	// TODO(Skarlso): Change the registration process once update lands.
-	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(m.Scheme, pm.ComponentVersionRepositoryRegistry, m.Provider, &ociv1.Repository{}); err != nil {
-		return fmt.Errorf("failed to register internal component version repository plugin: %w", err)
-	}
-
-	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(m.Scheme, pm.ComponentVersionRepositoryRegistry, m.Provider, &ctfv1.Repository{}); err != nil {
+	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(pm.ComponentVersionRepositoryRegistry, m.Provider); err != nil {
 		return fmt.Errorf("failed to register internal component version repository plugin: %w", err)
 	}
 

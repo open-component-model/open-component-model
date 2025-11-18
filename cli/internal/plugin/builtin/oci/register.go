@@ -12,7 +12,6 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
@@ -42,16 +41,8 @@ func Register(
 
 	return errors.Join(
 		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-			scheme,
 			compverRegistry,
 			CachingComponentVersionRepositoryProvider,
-			&ociv1.Repository{},
-		),
-		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-			scheme,
-			compverRegistry,
-			CachingComponentVersionRepositoryProvider,
-			&ctfv1.Repository{},
 		),
 		resource.RegisterInternalResourcePlugin(
 			scheme,
