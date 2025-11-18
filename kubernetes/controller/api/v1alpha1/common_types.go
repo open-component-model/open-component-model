@@ -95,6 +95,9 @@ type ResourceInfo struct {
 	// +optional
 	ExtraIdentity map[string]string `json:"extraIdentity,omitempty"`
 	// +required
+	// +kubebuilder:pruning:PreserveUnknownFields
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:validation:Type=object
 	Access apiextensionsv1.JSON `json:"access,omitempty"`
 	// +required
 	Digest string `json:"digest,omitempty"`
