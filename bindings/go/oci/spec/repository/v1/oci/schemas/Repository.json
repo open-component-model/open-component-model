@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci/schemas/Repository.json",
-  "description": "Repository is a type that represents an OCI repository as per\nhttps://github.com/opencontainers/distribution-spec\nIt is not only used to specify the full OCI compliant repository namespace, but also contains\na full URL in which the scheme can indicate support for https or http. the oci scheme is also recognized.\nAdditionally, the port can be used to specify a port for the repository.\nNote that any path here is used to specify the root path of the OCI Repository.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "Repository is a type that represents an OCI repository as per\nhttps://github.com/opencontainers/distribution-spec\nIt is not only used to specify the full OCI compliant repository namespace, but also contains\na full URL in which the scheme can indicate support for https or http. the oci scheme is also recognized.\nAdditionally, the port can be used to specify a port for the repository.\nNote that any path here is used to specify the root path of the OCI Repository.",
   "title": "Repository",
   "type": "object",
   "properties": {

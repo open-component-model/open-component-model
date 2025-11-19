@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec/schemas/Rule.json",
-  "description": "Rule represents a rule for extracting selected layers to a target file.\nMultiple layer selectors can be specified to select different layers that should\nbe merged into the same output file. For now, the first matching selector is used.\n+k8s:deepcopy-gen=true\n+ocm:jsonschema-gen=true",
+  "description": "Rule represents a rule for extracting selected layers to a target file.\nMultiple layer selectors can be specified to select different layers that should\nbe merged into the same output file. For now, the first matching selector is used.",
   "title": "Rule",
   "type": "object",
   "properties": {

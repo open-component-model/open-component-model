@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec/schemas/Config.json",
-  "description": "Config is the OCM configuration type for configuring legacy fallback\nresolvers.\ntype: ocm.config.ocm.software\nresolvers:\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 100\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 10\nDeprecated: Resolvers are deprecated and are only added for backwards\ncompatibility.\nNew concepts will likely be introduced in the future (contributions welcome!).\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "Config is the OCM configuration type for configuring legacy fallback\nresolvers.\ntype: ocm.config.ocm.software\nresolvers:\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 100\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 10\nDeprecated: Resolvers are deprecated and are only added for backwards\ncompatibility.\nNew concepts will likely be introduced in the future (contributions welcome!).",
   "title": "Config",
   "type": "object",
   "properties": {

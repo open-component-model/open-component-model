@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/generator/jsonschemagen/test/schemas/SampleType.json",
-  "description": "SampleType is a sample struct that includes a field of type runtime.Type.\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "SampleType is a sample struct that includes a field of type runtime.Type.",
   "title": "SampleType",
   "type": "object",
   "properties": {

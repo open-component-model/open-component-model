@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1/schemas/Repository.json",
-  "description": "Repository type is used by the tests in this package for a Type.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "Repository type is used by the tests in this package for a Type.",
   "title": "Repository",
   "type": "object",
   "properties": {

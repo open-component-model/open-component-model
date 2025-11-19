@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf/schemas/Repository.json",
-  "description": "Repository is a type that represents an OCI repository backed by a CTF archive.\nThis archive is accessed as if it was a remote OCI repository, but all accesses to it\nare translated into archive-specific operations.\nNote that content stored within this Repository is not necessarily globally accessible so\nthe OCI library does not attempt to interpret global accesses.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "Repository is a type that represents an OCI repository backed by a CTF archive.\nThis archive is accessed as if it was a remote OCI repository, but all accesses to it\nare translated into archive-specific operations.\nNote that content stored within this Repository is not necessarily globally accessible so\nthe OCI library does not attempt to interpret global accesses.",
   "title": "Repository",
   "type": "object",
   "properties": {

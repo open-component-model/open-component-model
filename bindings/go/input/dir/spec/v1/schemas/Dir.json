@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/input/dir/spec/v1/schemas/Dir.json",
-  "description": "Dir describes an input sourced by a directory.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "Dir describes an input sourced by a directory.",
   "title": "Dir",
   "type": "object",
   "properties": {

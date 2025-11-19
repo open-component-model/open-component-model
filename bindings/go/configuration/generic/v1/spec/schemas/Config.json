@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec/schemas/Config.json",
-  "description": "Config holds configuration entities loaded through a configuration file.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "Config holds configuration entities loaded through a configuration file.",
   "title": "Config",
   "type": "object",
   "properties": {

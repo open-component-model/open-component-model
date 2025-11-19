@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1/schemas/Config.json",
-  "description": "Config defines configuration for signing based on AlgorithmRSASSAPSS or AlgorithmRSASSAPKCS1V15.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "Config defines configuration for signing based on AlgorithmRSASSAPSS or AlgorithmRSASSAPKCS1V15.",
   "title": "Config",
   "type": "object",
   "properties": {

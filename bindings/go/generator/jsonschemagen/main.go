@@ -563,11 +563,11 @@ func extractCommentText(cg *ast.CommentGroup) string {
 			out = append(out, x)
 		}
 	}
-	return strings.Join(out, "\n")
+	return cleanDescription(strings.Join(out, "\n"))
 }
 
 func findFieldComment(f *ast.Field) string {
-	return extractCommentText(f.Doc)
+	return cleanDescription(extractCommentText(f.Doc))
 }
 
 func findStructComment(ts *ast.TypeSpec, gd *ast.GenDecl) string {
@@ -575,6 +575,20 @@ func findStructComment(ts *ast.TypeSpec, gd *ast.GenDecl) string {
 		return extractCommentText(ts.Doc)
 	}
 	return extractCommentText(gd.Doc)
+}
+
+func cleanDescription(desc string) string {
+	if desc == "" {
+		return ""
+	}
+	var out []string
+	for _, line := range strings.Split(desc, "\n") {
+		if strings.HasPrefix(line, "+") {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
 ///////////////////////////////////////////////////////////////////////////

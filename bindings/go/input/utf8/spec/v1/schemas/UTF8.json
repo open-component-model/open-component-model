@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/input/utf8/spec/v1/schemas/UTF8.json",
-  "description": "UTF8 describes an input sourced by a UTF-8 string.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "UTF8 describes an input sourced by a UTF-8 string.",
   "title": "UTF8",
   "type": "object",
   "properties": {

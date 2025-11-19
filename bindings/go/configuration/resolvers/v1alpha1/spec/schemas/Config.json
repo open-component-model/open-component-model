@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec/schemas/Config.json",
-  "description": "Config is the new OCM configuration type for configuring glob based\nresolvers that replace the deprecated fallback resolvers.\ntype: resolvers.config.ocm.software\nresolvers:\n- repository:\ntype: OCIRegistry\nbaseUrl: ghcr.io\nsubPath: open-component-model/components\ncomponentName: ocm.software/core/*\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "Config is the new OCM configuration type for configuring glob based\nresolvers that replace the deprecated fallback resolvers.\ntype: resolvers.config.ocm.software\nresolvers:\n- repository:\ntype: OCIRegistry\nbaseUrl: ghcr.io\nsubPath: open-component-model/components\ncomponentName: ocm.software/core/*",
   "title": "Config",
   "type": "object",
   "properties": {

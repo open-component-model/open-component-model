@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/helm/input/spec/v1/schemas/Helm.json",
-  "description": "Helm implements the input type for helm charts.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "Helm implements the input type for helm charts.",
   "title": "Helm",
   "type": "object",
   "properties": {

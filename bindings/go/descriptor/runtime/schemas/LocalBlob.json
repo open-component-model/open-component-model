@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/descriptor/runtime/schemas/LocalBlob.json",
-  "description": "LocalBlob describes the access for a local blob.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "description": "LocalBlob describes the access for a local blob.",
   "title": "LocalBlob",
   "type": "object",
   "properties": {

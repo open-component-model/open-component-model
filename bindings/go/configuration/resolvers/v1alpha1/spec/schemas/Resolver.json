@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec/schemas/Resolver.json",
-  "description": "Resolver assigns a component name pattern to a single OCM repository specification\nto allow defining component version resolution using glob patterns.\n+k8s:deepcopy-gen=true\n+ocm:jsonschema-gen=true",
+  "description": "Resolver assigns a component name pattern to a single OCM repository specification\nto allow defining component version resolution using glob patterns.",
   "title": "Resolver",
   "type": "object",
   "properties": {
