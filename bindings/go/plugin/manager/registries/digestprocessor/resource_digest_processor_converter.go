@@ -16,6 +16,10 @@ type resourceDigestProcessorPluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
+func (r *resourceDigestProcessorPluginConverter) GetResourceRepositoryScheme() *runtime.Scheme {
+	return r.scheme
+}
+
 func (r *resourceDigestProcessorPluginConverter) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
 	request := &v1.GetIdentityRequest[runtime.Typed]{
 		Typ: resource.Access,

@@ -112,6 +112,8 @@ type ResourceDigestProcessor interface {
 	// The resource returned MUST have its digest information filled appropriately or the method MUST return an error.
 	// The resource passed MUST have an access set that can be used to interpret the resource and provide the digest.
 	ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error)
+
+	GetResourceRepositoryScheme() *runtime.Scheme
 }
 
 type ResourceDigestProcessorProvider interface {

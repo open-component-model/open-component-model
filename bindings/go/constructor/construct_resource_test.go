@@ -124,6 +124,10 @@ type mockDigestProcessor struct {
 	processedDigest *descriptor.Digest
 }
 
+func (m *mockDigestProcessor) GetResourceRepositoryScheme() *runtime.Scheme {
+	return runtime.NewScheme()
+}
+
 func (m *mockDigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
 	identity = runtime.Identity{}
 	identity.SetType(runtime.NewVersionedType("mock", "v1"))

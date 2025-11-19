@@ -9,7 +9,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
@@ -46,11 +45,8 @@ func Register(
 		resRegistry.RegisterInternalResourcePlugin(
 			&resourceRepoPlugin,
 		),
-		digestprocessor.RegisterInternalDigestProcessorPlugin(
-			scheme,
-			digRegistry,
+		digRegistry.RegisterInternalDigestProcessorPlugin(
 			&resourceRepoPlugin,
-			&v1.OCIImage{},
 		),
 		blobtransformer.RegisterInternalBlobTransformerPlugin(
 			extractspecv1alpha1.Scheme,

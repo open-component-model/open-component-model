@@ -33,27 +33,21 @@ func NewDigestProcessorRegistry(ctx context.Context) *RepositoryRegistry {
 
 // RegisterInternalDigestProcessorPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
-func RegisterInternalDigestProcessorPlugin(
-	scheme *runtime.Scheme,
-	r *RepositoryRegistry,
-	p constructor.ResourceDigestProcessor,
-	prototype runtime.Typed,
+func (r *RepositoryRegistry) RegisterInternalDigestProcessorPlugin(
+	plugin constructor.ResourceDigestProcessor,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(prototype)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", prototype, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetResourceRepositoryScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(plugin.GetResourceRepositoryScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
 
-	r.internalDigestProcessorPlugins[typ] = p
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalDigestProcessorPlugins[alias] = r.internalDigestProcessorPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
-		return fmt.Errorf("failed to register prototype %T: %w", prototype, err)
+		r.internalDigestProcessorPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalDigestProcessorPlugins[alias] = r.internalDigestProcessorPlugins[providerType]
+		}
 	}
 
 	return nil
