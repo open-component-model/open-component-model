@@ -44,10 +44,12 @@ var (
 type Handler struct {
 	roots *x509.CertPool
 	now   func() time.Time
+
+	scheme *runtime.Scheme
 }
 
 // New returns a Handler. If useSystemRoots is true, system trust roots are loaded, otherwise an empty pool is used.
-func New(useSystemRoots bool) (*Handler, error) {
+func New(scheme *runtime.Scheme, useSystemRoots bool) (*Handler, error) {
 	var (
 		roots *x509.CertPool
 		err   error
@@ -59,9 +61,14 @@ func New(useSystemRoots bool) (*Handler, error) {
 		}
 	}
 	return &Handler{
-		roots: roots,
-		now:   time.Now,
+		roots:  roots,
+		now:    time.Now,
+		scheme: scheme,
 	}, nil
+}
+
+func (h *Handler) GetSigningHandlerScheme() *runtime.Scheme {
+	return h.scheme
 }
 
 // ---- SPI ----
@@ -69,14 +76,14 @@ func New(useSystemRoots bool) (*Handler, error) {
 // Sign produces a signature for the given digest, using RSA and the configured
 // algorithm and encoding policy. For PEM encoding, the certificate chain is
 // read from credentials and embedded into the SIGNATURE block.
-func (*Handler) Sign(
+func (h *Handler) Sign(
 	ctx context.Context,
 	unsigned descruntime.Digest,
 	rawCfg runtime.Typed,
 	creds map[string]string,
 ) (descruntime.SignatureInfo, error) {
 	var supported v1alpha1.Config
-	if err := v1alpha1.Scheme.Convert(rawCfg, &supported); err != nil {
+	if err := h.scheme.Convert(rawCfg, &supported); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 	algorithm := supported.GetSignatureAlgorithm()

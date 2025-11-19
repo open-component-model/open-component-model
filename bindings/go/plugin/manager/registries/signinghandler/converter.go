@@ -15,6 +15,10 @@ type pluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
+func (r *pluginConverter) GetSigningHandlerScheme() *runtime.Scheme {
+	return r.scheme
+}
+
 func (r *pluginConverter) GetSigningCredentialConsumerIdentity(ctx context.Context, name string, unsigned descriptor.Digest, config runtime.Typed) (runtime.Identity, error) {
 	request := &v1.GetSignerIdentityRequest[runtime.Typed]{
 		SignRequest: v1.SignRequest[runtime.Typed]{
