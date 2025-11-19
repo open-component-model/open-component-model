@@ -60,9 +60,9 @@ spec:
           layerSelector:
             mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
             operation: copy
-          url: oci://${string(resourceChart.status.additional.registry)}/${string(resourceChart.status.additional.repository)}
+          url: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
           ref:
-            digest: ${string(resourceChart.status.additional.digest)}
+            digest: ${resourceChart.status.additional.digest}
     - id: helmrelease
       template:
         apiVersion: helm.toolkit.fluxcd.io/v2
@@ -80,8 +80,8 @@ spec:
           values:
             # Localization
             image:
-              repository: ${string(resourceImage.status.additional.registry)}/${string(resourceImage.status.additional.repository)}
-              tag: ${string(resourceImage.status.additional.tag)} # Using the tag for e2e-tests but the reference can be used as well
+              repository: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}
+              tag: ${resourceImage.status.additional.tag} # Using the tag for e2e-tests but the reference can be used as well
             # Configuration
             ui:
               message: ${schema.spec.podinfo.message}
