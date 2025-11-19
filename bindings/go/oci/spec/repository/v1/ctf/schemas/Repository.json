@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf/schemas/Repository.json",
-  "description": "Repository is a type that represents an OCI repository backed by a CTF archive.\nThis archive is accessed as if it was a remote OCI repository, but all accesses to it\nare translated into archive-specific operations.\nNote that content stored within this Repository is not necessarily globally accessible so\nthe OCI library does not attempt to interpret global accesses.",
   "title": "Repository",
+  "description": "Repository is a type that represents an OCI repository backed by a CTF archive.\nThis archive is accessed as if it was a remote OCI repository, but all accesses to it\nare translated into archive-specific operations.\nNote that content stored within this Repository is not necessarily globally accessible so\nthe OCI library does not attempt to interpret global accesses.",
   "type": "object",
   "properties": {
     "accessMode": {
@@ -14,12 +14,19 @@
       "type": "string"
     },
     "type": {
-      "type": "string",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+      "$ref": "#/$defs/runtime.Type"
     }
   },
   "required": [
     "type",
     "filePath"
-  ]
+  ],
+  "$defs": {
+    "runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }

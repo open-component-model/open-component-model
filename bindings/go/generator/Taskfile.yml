@@ -58,22 +58,9 @@ tasks:
   jsonschemagen/generate:
     deps: ["jsonschemagen/install"]
     desc: "Run Type OCM JSON Schema Generation in the Project"
-    cmds: [ task: jsonschemagen/concurrent ]
-
-  jsonschemagen/concurrent:
-    internal: true
-    deps:
-      - for: { var: GO_MODULES }
-        task: 'jsonschemagen/module'
-        vars: { ITEM: '{{ .ITEM }}' }
-
-  jsonschemagen/module:
-    internal: true
-    silent: true
-    prefix: '{{.ITEM}}'
-    cmd: '{{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .ROOT_DIR }}/{{.ITEM}}'
+    cmd: '{{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .ROOT_DIR }}'
 
   jsonschemagen/test:
     desc: "Run OCM JSON Schema Generation test"
     cmds:
-      - cmd: 'go run {{ .TASKFILE_DIR }}/jsonschemagen/... {{ .TASKFILE_DIR }}/jsonschemagen/test'
+      - cmd: 'go run {{ .TASKFILE_DIR }}/jsonschemagen/... {{ .TASKFILE_DIR }}'

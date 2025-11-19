@@ -25,19 +25,15 @@ var Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 }))
 
 func init() {
-	logLevel.Set(getLogLevelFromEnv())
-}
-
-func getLogLevelFromEnv() slog.Level {
 	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
 	case "debug":
-		return slog.LevelDebug
+		logLevel.Set(slog.LevelDebug)
 	case "warn":
-		return slog.LevelWarn
+		logLevel.Set(slog.LevelWarn)
 	case "error":
-		return slog.LevelError
+		logLevel.Set(slog.LevelError)
 	default:
-		return slog.LevelInfo
+		logLevel.Set(slog.LevelInfo)
 	}
 }
 
@@ -46,50 +42,85 @@ func getLogLevelFromEnv() slog.Level {
 ///////////////////////////////////////////////////////////////////////////
 
 const (
-	marker             = "+ocm:jsonschema-gen=true"
-	SchemaDir          = "schemas"
-	outputGo           = "zz_generated_schemas.go"
+	marker           = "+ocm:jsonschema-gen=true"
+	SchemaDir        = "schemas"
+	outputGo         = "zz_generated_schemas.go"
+	DefaultSchemaURI = "https://json-schema.org/draft/2020-12/schema"
+
+	RuntimeRawID  = "ocm.software/open-component-model/bindings/go/runtime/schemas/Raw.json"
+	RuntimeRawDef = "runtime.Raw"
+
+	RuntimeTypeID  = "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json"
+	RuntimeTypeDef = "runtime.Type"
+
 	runtimeTypePattern = `^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$`
 )
 
 ///////////////////////////////////////////////////////////////////////////
-// Main
+// JSON Schema Model
 ///////////////////////////////////////////////////////////////////////////
 
-func main() {
-	if len(os.Args) < 2 {
-		Logger.Error("Usage: jsonschemagen <root-dir>")
-		os.Exit(1)
+type Schema struct {
+	Schema      string `json:"$schema,omitempty"`
+	ID          string `json:"$id,omitempty"`
+	Ref         string `json:"$ref,omitempty"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Type        string `json:"type,omitempty"`
+
+	Properties map[string]*Schema `json:"properties,omitempty"`
+	Items      *Schema            `json:"items,omitempty"`
+	Required   []string           `json:"required,omitempty"`
+
+	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitempty"`
+	Pattern              string        `json:"pattern,omitempty"`
+
+	Defs map[string]*Schema `json:"$defs,omitempty"`
+}
+
+type SchemaOrBool struct {
+	Schema *Schema `json:"schema,omitempty"`
+	Bool   *bool   `json:"bool,omitempty"`
+}
+
+func (sb SchemaOrBool) MarshalJSON() ([]byte, error) {
+	if sb.Bool != nil {
+		return json.Marshal(*sb.Bool)
 	}
+	return json.Marshal(sb.Schema)
+}
 
-	root := os.Args[1]
+func (sb *SchemaOrBool) UnmarshalJSON(b []byte) error {
+	t := strings.TrimSpace(string(b))
 
-	infos, err := FindAnnotatedStructs(root)
-	if err != nil {
-		Logger.Error("scan error", "error", err)
-		os.Exit(1)
-	}
-
-	if len(infos) == 0 {
-		Logger.Info("No annotated types found")
-		return
-	}
-
-	for _, info := range infos {
-		schemaID := fmt.Sprintf("%s/%s/%s.json", info.PkgPath, SchemaDir, info.TypeName)
-		schema := GenerateSchemaForStruct(info, schemaID)
-		if err := WriteSchemaJSON(info, schema); err != nil {
-			Logger.Error("error writing schema json", "error", err)
+	switch t {
+	case "true":
+		sb.Bool = ptr(true)
+		sb.Schema = nil
+		return nil
+	case "false":
+		sb.Bool = ptr(false)
+		sb.Schema = nil
+		return nil
+	case "null":
+		sb.Bool = nil
+		sb.Schema = nil
+		return nil
+	default:
+		var obj Schema
+		if err := json.Unmarshal(b, &obj); err != nil {
+			return fmt.Errorf("invalid SchemaOrBool JSON: %q", t)
 		}
-	}
-
-	if err := WriteEmbedFile(infos); err != nil {
-		Logger.Error("error writing embed file", "error", err)
+		sb.Bool = nil
+		sb.Schema = &obj
+		return nil
 	}
 }
 
+func ptr[T any](v T) *T { return &v }
+
 ///////////////////////////////////////////////////////////////////////////
-// Struct models
+// Struct Info
 ///////////////////////////////////////////////////////////////////////////
 
 type StructInfo struct {
@@ -101,48 +132,29 @@ type StructInfo struct {
 	TypeComment string
 }
 
-type Schema struct {
-	Schema               string             `json:"$schema,omitempty"`
-	ID                   string             `json:"$id,omitempty"`
-	Description          string             `json:"description,omitempty"`
-	Title                string             `json:"title,omitempty"`
-	Type                 string             `json:"type,omitempty"`
-	Properties           map[string]*Schema `json:"properties,omitempty"`
-	Items                *Schema            `json:"items,omitempty"`
-	AdditionalProperties *SchemaOrBool      `json:"additionalProperties,omitempty"`
-	Pattern              string             `json:"pattern,omitempty"`
-	Required             []string           `json:"required,omitempty"`
-}
-
-type SchemaOrBool struct {
-	Schema *Schema `json:"schema,omitempty"`
-	Bool   *bool   `json:"bool,omitempty"`
-}
-
-func (s *SchemaOrBool) MarshalJSON() ([]byte, error) {
-	if s.Bool != nil {
-		return json.Marshal(s.Bool)
-	}
-	return json.Marshal(s.Schema)
-}
-
 ///////////////////////////////////////////////////////////////////////////
-// Annotated type registry
+// Global Registry for Named Struct Schemas Only
 ///////////////////////////////////////////////////////////////////////////
 
-var annotatedTypes = map[string]StructInfo{}
+var namedSchemas = map[string]*Schema{}
+var namedInfos = map[string]StructInfo{}
 
-func lookupStruct(name string) (*StructInfo, bool) {
-	for k, si := range annotatedTypes {
-		if strings.HasSuffix(k, "."+name) {
-			return &si, true
+func makeSchemaID(pkgPath, typeName string) string {
+	return fmt.Sprintf("%s/%s/%s.json", pkgPath, SchemaDir, typeName)
+}
+
+// Lookup struct by type name (unique because we use full pkg path + name)
+func lookupStruct(name string) (StructInfo, bool) {
+	for _, si := range namedInfos {
+		if si.TypeName == name {
+			return si, true
 		}
 	}
-	return nil, false
+	return StructInfo{}, false
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// Find annotated structs
+// Annotated Struct Discovery
 ///////////////////////////////////////////////////////////////////////////
 
 func FindAnnotatedStructs(root string) ([]StructInfo, error) {
@@ -164,20 +176,21 @@ func FindAnnotatedStructs(root string) ([]StructInfo, error) {
 			return err
 		}
 
-		importPath, _ := getImportPath(filepath.Dir(path))
+		pkgPath, _ := getImportPath(filepath.Dir(path))
 
 		for _, decl := range file.Decls {
 			gd, ok := decl.(*ast.GenDecl)
 			if !ok || gd.Tok != token.TYPE {
 				continue
 			}
-
-			for _, s := range gd.Specs {
-				ts, ok := s.(*ast.TypeSpec)
-				if !ok || !hasMarker(gd.Doc, ts.Doc) {
+			for _, spec := range gd.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok {
 					continue
 				}
-
+				if !hasMarker(gd.Doc, ts.Doc) {
+					continue
+				}
 				st, ok := ts.Type.(*ast.StructType)
 				if !ok {
 					continue
@@ -186,7 +199,7 @@ func FindAnnotatedStructs(root string) ([]StructInfo, error) {
 				comment := findStructComment(ts, gd)
 
 				si := StructInfo{
-					PkgPath:     importPath,
+					PkgPath:     pkgPath,
 					PkgName:     file.Name.Name,
 					TypeName:    ts.Name.Name,
 					File:        path,
@@ -194,15 +207,21 @@ func FindAnnotatedStructs(root string) ([]StructInfo, error) {
 					TypeComment: comment,
 				}
 
+				key := pkgPath + "." + si.TypeName
+				namedInfos[key] = si
 				out = append(out, si)
-				annotatedTypes[fmt.Sprintf("%s.%s", importPath, ts.Name.Name)] = si
 			}
 		}
+
 		return nil
 	})
 
 	return out, err
 }
+
+///////////////////////////////////////////////////////////////////////////
+// Marker + Comments
+///////////////////////////////////////////////////////////////////////////
 
 func hasMarker(groups ...*ast.CommentGroup) bool {
 	for _, g := range groups {
@@ -218,8 +237,35 @@ func hasMarker(groups ...*ast.CommentGroup) bool {
 	return false
 }
 
+func extractCommentText(cg *ast.CommentGroup) string {
+	if cg == nil {
+		return ""
+	}
+	var out []string
+	for _, c := range cg.List {
+		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
+		line = strings.TrimSpace(strings.TrimPrefix(line, "/*"))
+		line = strings.TrimSpace(strings.TrimSuffix(line, "*/"))
+		if line != "" && !strings.HasPrefix(line, "+") {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+func findFieldComment(f *ast.Field) string {
+	return extractCommentText(f.Doc)
+}
+
+func findStructComment(ts *ast.TypeSpec, gd *ast.GenDecl) string {
+	if ts.Doc != nil {
+		return extractCommentText(ts.Doc)
+	}
+	return extractCommentText(gd.Doc)
+}
+
 ///////////////////////////////////////////////////////////////////////////
-// go.mod import path
+// Import Path Resolution
 ///////////////////////////////////////////////////////////////////////////
 
 func getImportPath(folder string) (string, error) {
@@ -236,11 +282,11 @@ func getImportPath(folder string) (string, error) {
 			}
 			return filepath.ToSlash(filepath.Join(module, rel)), nil
 		}
-		if parent := filepath.Dir(dir); parent != dir {
-			dir = parent
-			continue
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
 		}
-		break
+		dir = parent
 	}
 	return "", errors.New("go.mod not found")
 }
@@ -260,13 +306,59 @@ func readModulePath(path string) (string, error) {
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// Schema generation
+// Primitive Type Mapping
 ///////////////////////////////////////////////////////////////////////////
 
-func GenerateSchemaForStruct(info StructInfo, schemaID string) *Schema {
-	props := make(map[string]*Schema)
-	var required []string
+func primitiveSchema(name string) *Schema {
+	switch name {
+	case "string":
+		return &Schema{Type: "string"}
+	case "bool":
+		return &Schema{Type: "boolean"}
+	case "int", "int32", "int64":
+		return &Schema{Type: "integer"}
+	case "float32", "float64":
+		return &Schema{Type: "number"}
+	}
+	return nil
+}
 
+///////////////////////////////////////////////////////////////////////////
+// Special Runtime Types
+///////////////////////////////////////////////////////////////////////////
+
+func isRuntimeType(sel *ast.SelectorExpr) bool {
+	id, ok := sel.X.(*ast.Ident)
+	return ok && id.Name == "runtime" && sel.Sel.Name == "Type"
+}
+
+func isRuntimeRaw(star *ast.StarExpr) bool {
+	sel, ok := star.X.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	id, ok := sel.X.(*ast.Ident)
+	return ok && id.Name == "runtime" && sel.Sel.Name == "Raw"
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Core: Generate Schema for a Named Struct (unbundled)
+///////////////////////////////////////////////////////////////////////////
+
+func GenerateSchemaForNamed(info StructInfo) *Schema {
+	schemaID := makeSchemaID(info.PkgPath, info.TypeName)
+
+	root := &Schema{
+		Schema:      DefaultSchemaURI,
+		ID:          schemaID,
+		Title:       info.TypeName,
+		Description: info.TypeComment,
+		Type:        "object",
+		Properties:  map[string]*Schema{},
+		Required:    []string{},
+	}
+
+	// Fill properties from struct fields
 	for _, field := range info.Node.Fields.List {
 		if len(field.Names) == 0 {
 			continue
@@ -283,232 +375,143 @@ func GenerateSchemaForStruct(info StructInfo, schemaID string) *Schema {
 			jsonName = tag
 		}
 
-		sch, err := schemaForField(field.Type, map[string]bool{})
-		if err != nil {
-			panic(err)
+		prop := schemaForType(field.Type)
+
+		// Field comment → description
+		if c := findFieldComment(field); c != "" {
+			prop.Description = c
 		}
 
-		comment := findFieldComment(field)
-		if comment != "" {
-			sch.Description = comment
-		}
-
-		props[jsonName] = sch
+		root.Properties[jsonName] = prop
 
 		if !jsonTagHasOmitEmpty(field) {
-			required = append(required, jsonName)
+			root.Required = append(root.Required, jsonName)
 		}
 	}
 
-	return &Schema{
-		Schema:      "https://json-schema.org/draft/2020-12/schema",
-		ID:          schemaID,
-		Title:       info.TypeName,
-		Description: info.TypeComment,
-		Type:        "object",
-		Properties:  props,
-		Required:    required,
-	}
+	return root
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// Recursive schema creation
+// Field Type → Schema (anonymous fully inline, named via $ref)
 ///////////////////////////////////////////////////////////////////////////
 
-func schemaForField(expr ast.Expr, stack map[string]bool) (*Schema, error) {
+func schemaForType(expr ast.Expr) *Schema {
 	switch t := expr.(type) {
-	// runtime.Type
-	case *ast.SelectorExpr:
-		if isRuntimeType(t) {
-			return &Schema{
-				Type:    "string",
-				Pattern: runtimeTypePattern,
-			}, nil
-		}
-		return &Schema{Type: "object"}, nil
 
-	// Identifiers (primitive or struct)
+	//--------------------------------------------------------------
+	// Primitive identifiers (string, int, ...)
+	//--------------------------------------------------------------
 	case *ast.Ident:
-		if ps := primitiveSchema(t.Name); ps.Type != "object" {
-			return ps, nil
+		if prim := primitiveSchema(t.Name); prim != nil {
+			return prim
 		}
 
+		// Named struct?
 		if si, ok := lookupStruct(t.Name); ok {
-			if stack[si.TypeName] {
-				return nil, fmt.Errorf("recursive type detected: %s", si.TypeName)
-			}
-
-			stack[si.TypeName] = true
-			defer delete(stack, si.TypeName)
-
-			props := make(map[string]*Schema)
-			var required []string
-
-			for _, f := range si.Node.Fields.List {
-				if len(f.Names) == 0 {
-					continue
-				}
-
-				fn := f.Names[0].Name
-				tag := parseJSONTag(f)
-				jsonName := fn
-				if tag != "" {
-					jsonName = tag
-				}
-
-				sub, err := schemaForField(f.Type, stack)
-				if err != nil {
-					return nil, err
-				}
-				props[jsonName] = sub
-
-				if !jsonTagHasOmitEmpty(f) {
-					required = append(required, jsonName)
-				}
-			}
-
-			return &Schema{
-				Type:       "object",
-				Properties: props,
-				Required:   required,
-				AdditionalProperties: &SchemaOrBool{
-					Bool: ptr(false),
-				},
-			}, nil
+			// Use $ref into $defs
+			return &Schema{Ref: "#/$defs/" + si.TypeName}
 		}
 
-		return &Schema{Type: "object"}, nil
+		// Unknown identifier → loose object
+		return &Schema{Type: "object"}
 
-	// Anonymous struct
-	case *ast.StructType:
-		props := make(map[string]*Schema)
-		var required []string
-
-		for _, f := range t.Fields.List {
-			if len(f.Names) == 0 {
-				continue
-			}
-			fn := f.Names[0].Name
-			tag := parseJSONTag(f)
-
-			jsonName := fn
-			if tag != "" {
-				jsonName = tag
-			}
-
-			sub, err := schemaForField(f.Type, stack)
-			if err != nil {
-				return nil, err
-			}
-
-			props[jsonName] = sub
-			required = append(required, jsonName)
+	//--------------------------------------------------------------
+	// Pointers
+	//--------------------------------------------------------------
+	case *ast.StarExpr:
+		if isRuntimeRaw(t) {
+			// Instead of absolute schema ID → local $defs ref
+			return &Schema{Ref: "#/$defs/" + RuntimeRawDef}
 		}
+		return schemaForType(t.X)
 
-		return &Schema{
-			Type:                 "object",
-			Properties:           props,
-			Required:             required,
-			AdditionalProperties: &SchemaOrBool{Bool: ptr(false)},
-		}, nil
-
-	// Array
+	//--------------------------------------------------------------
+	// Arrays
+	//--------------------------------------------------------------
 	case *ast.ArrayType:
-		s, err := schemaForField(t.Elt, stack)
-		if err != nil {
-			return nil, err
+		return &Schema{
+			Type:  "array",
+			Items: schemaForType(t.Elt),
 		}
-		return &Schema{Type: "array", Items: s}, nil
 
-	// Map
+	//--------------------------------------------------------------
+	// Maps
+	//--------------------------------------------------------------
 	case *ast.MapType:
-		if isAnyType(t.Value) {
-			return &Schema{
-				Type: "object",
-				AdditionalProperties: &SchemaOrBool{
-					Bool: ptr(true),
-				},
-			}, nil
-		}
-
-		sub, err := schemaForField(t.Value, stack)
-		if err != nil {
-			return nil, err
-		}
-
+		valueSchema := schemaForType(t.Value)
 		return &Schema{
 			Type: "object",
 			AdditionalProperties: &SchemaOrBool{
-				Schema: sub,
+				Schema: valueSchema,
 			},
-		}, nil
-
-	// *runtime.Raw → free-form object with required type field
-	case *ast.StarExpr:
-		if isRuntimeRaw(t) {
-			return &Schema{
-				Type: "object",
-				Properties: map[string]*Schema{
-					"type": {
-						Type:    "string",
-						Pattern: runtimeTypePattern,
-					},
-				},
-				Required:             []string{"type"},
-				AdditionalProperties: &SchemaOrBool{Bool: ptr(true)},
-			}, nil
 		}
-		return schemaForField(t.X, stack)
-	}
 
-	return &Schema{Type: "object"}, nil
-}
+	//--------------------------------------------------------------
+	// SelectorExpr (runtime.Type)
+	//--------------------------------------------------------------
+	case *ast.SelectorExpr:
+		if isRuntimeType(t) {
+			return &Schema{Ref: "#/$defs/" + RuntimeTypeDef}
+		}
+		return &Schema{Type: "object"}
 
-///////////////////////////////////////////////////////////////////////////
-// Helpers
-///////////////////////////////////////////////////////////////////////////
+	//--------------------------------------------------------------
+	// Anonymous struct — fully inline
+	//--------------------------------------------------------------
+	case *ast.StructType:
+		return inlineAnonymousStruct(t)
 
-func primitiveSchema(name string) *Schema {
-	switch name {
-	case "string":
-		return &Schema{Type: "string"}
-	case "int", "int32", "int64":
-		return &Schema{Type: "integer"}
-	case "float32", "float64":
-		return &Schema{Type: "number"}
-	case "bool":
-		return &Schema{Type: "boolean"}
-	}
-	return &Schema{Type: "object"}
-}
-
-func isAnyType(expr ast.Expr) bool {
-	switch x := expr.(type) {
-	case *ast.InterfaceType:
-		return true
-	case *ast.Ident:
-		return x.Name == "any" || x.Name == "interface{}"
+	//--------------------------------------------------------------
 	default:
-		return false
+		return &Schema{Type: "object"}
 	}
-}
-
-func isRuntimeType(x *ast.SelectorExpr) bool {
-	ident, ok := x.X.(*ast.Ident)
-	return ok && ident.Name == "runtime" && x.Sel.Name == "Type"
-}
-
-func isRuntimeRaw(x *ast.StarExpr) bool {
-	sel, ok := x.X.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	ident, ok := sel.X.(*ast.Ident)
-	return ok && ident.Name == "runtime" && sel.Sel.Name == "Raw"
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// JSON tag parsing
+// Inline Anonymous Struct Generation (unlimited nesting!)
+///////////////////////////////////////////////////////////////////////////
+
+func inlineAnonymousStruct(st *ast.StructType) *Schema {
+	out := &Schema{
+		Type:       "object",
+		Properties: map[string]*Schema{},
+		Required:   []string{},
+	}
+
+	for _, field := range st.Fields.List {
+		if len(field.Names) == 0 {
+			continue
+		}
+		fName := field.Names[0].Name
+		tag := parseJSONTag(field)
+		if tag == "-" {
+			continue
+		}
+
+		jsonName := fName
+		if tag != "" {
+			jsonName = tag
+		}
+
+		prop := schemaForType(field.Type)
+
+		if c := findFieldComment(field); c != "" {
+			prop.Description = c
+		}
+
+		out.Properties[jsonName] = prop
+
+		if !jsonTagHasOmitEmpty(field) {
+			out.Required = append(out.Required, jsonName)
+		}
+	}
+
+	return out
+}
+
+///////////////////////////////////////////////////////////////////////////
+// JSON Tag Helpers
 ///////////////////////////////////////////////////////////////////////////
 
 func parseJSONTag(f *ast.Field) string {
@@ -517,7 +520,7 @@ func parseJSONTag(f *ast.Field) string {
 	}
 	tag := strings.Trim(f.Tag.Value, "`")
 	for _, part := range strings.Split(tag, " ") {
-		if strings.HasPrefix(part, "json:\"") {
+		if strings.HasPrefix(part, `json:"`) {
 			val := strings.TrimPrefix(part, `json:"`)
 			val = strings.TrimSuffix(val, `"`)
 			return strings.Split(val, ",")[0]
@@ -530,13 +533,11 @@ func jsonTagHasOmitEmpty(f *ast.Field) bool {
 	if f.Tag == nil {
 		return false
 	}
-
 	tag := strings.Trim(f.Tag.Value, "`")
 	for _, part := range strings.Split(tag, " ") {
 		if !strings.HasPrefix(part, `json:"`) {
 			continue
 		}
-
 		content := strings.TrimSuffix(strings.TrimPrefix(part, `json:"`), `"`)
 		parts := strings.Split(content, ",")
 		for _, p := range parts[1:] {
@@ -549,56 +550,238 @@ func jsonTagHasOmitEmpty(f *ast.Field) bool {
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// Comments
+// Deep Copy Utility
 ///////////////////////////////////////////////////////////////////////////
 
-func extractCommentText(cg *ast.CommentGroup) string {
-	if cg == nil {
-		return ""
+func deepCopySchema(s *Schema) *Schema {
+	if s == nil {
+		return nil
 	}
-
-	var out []string
-	for _, c := range cg.List {
-		x := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
-		x = strings.TrimSpace(strings.TrimPrefix(x, "/*"))
-		x = strings.TrimSpace(strings.TrimSuffix(x, "*/"))
-		if x != "" {
-			out = append(out, x)
-		}
-	}
-	return cleanDescription(strings.Join(out, "\n"))
-}
-
-func findFieldComment(f *ast.Field) string {
-	return cleanDescription(extractCommentText(f.Doc))
-}
-
-func findStructComment(ts *ast.TypeSpec, gd *ast.GenDecl) string {
-	if ts.Doc != nil {
-		return extractCommentText(ts.Doc)
-	}
-	return extractCommentText(gd.Doc)
-}
-
-func cleanDescription(desc string) string {
-	if desc == "" {
-		return ""
-	}
-	var out []string
-	for _, line := range strings.Split(desc, "\n") {
-		if strings.HasPrefix(line, "+") {
-			continue
-		}
-		out = append(out, line)
-	}
-	return strings.TrimSpace(strings.Join(out, "\n"))
+	raw, _ := json.Marshal(s)
+	var out Schema
+	_ = json.Unmarshal(raw, &out)
+	return &out
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// Output writers
+// Runtime Raw Detection
+///////////////////////////////////////////////////////////////////////////
+
+func usesRuntimeRaw(s *Schema) bool {
+	if s == nil {
+		return false
+	}
+
+	// Direct reference
+	if s.Ref == "#/$defs/"+RuntimeRawDef {
+		return true
+	}
+
+	// Properties
+	for _, p := range s.Properties {
+		if usesRuntimeRaw(p) {
+			return true
+		}
+	}
+
+	// Items
+	if s.Items != nil && usesRuntimeRaw(s.Items) {
+		return true
+	}
+
+	// additionalProperties
+	if s.AdditionalProperties != nil && s.AdditionalProperties.Schema != nil {
+		if usesRuntimeRaw(s.AdditionalProperties.Schema) {
+			return true
+		}
+	}
+
+	// defs (for named schemas only)
+	for _, d := range s.Defs {
+		if usesRuntimeRaw(d) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func usesRuntimeType(s *Schema) bool {
+	if s == nil {
+		return false
+	}
+	if s.Ref == "#/$defs/"+RuntimeTypeDef {
+		return true
+	}
+	for _, p := range s.Properties {
+		if usesRuntimeType(p) {
+			return true
+		}
+	}
+	if s.Items != nil && usesRuntimeType(s.Items) {
+		return true
+	}
+	if s.AdditionalProperties != nil && s.AdditionalProperties.Schema != nil {
+		if usesRuntimeType(s.AdditionalProperties.Schema) {
+			return true
+		}
+	}
+	for _, d := range s.Defs {
+		if usesRuntimeType(d) {
+			return true
+		}
+	}
+	return false
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Build $defs for a Named Root Schema
+///////////////////////////////////////////////////////////////////////////
+
+func buildDefsForRoot(rootInfo StructInfo) map[string]*Schema {
+	defs := map[string]*Schema{}
+
+	// Collect all reachable named types from this root
+	reachable := collectReachableNamed(rootInfo)
+
+	// Add reachable named types except the root itself
+	for _, si := range reachable {
+		if si.TypeName == rootInfo.TypeName && si.PkgPath == rootInfo.PkgPath {
+			continue // never include the root in $defs
+		}
+		id := makeSchemaID(si.PkgPath, si.TypeName)
+		if schema := namedSchemas[id]; schema != nil {
+			defs[si.TypeName] = deepCopySchema(schema)
+		}
+	}
+
+	// Determine if *any* reachable type uses runtime.Raw
+	needsRaw := false
+	for _, si := range reachable {
+		id := makeSchemaID(si.PkgPath, si.TypeName)
+		if schema := namedSchemas[id]; schema != nil {
+			if usesRuntimeRaw(schema) {
+				needsRaw = true
+				break
+			}
+		}
+	}
+
+	// Add runtime.Raw only if needed
+	if needsRaw {
+		if raw := namedSchemas[RuntimeRawID]; raw != nil {
+			defs[RuntimeRawDef] = deepCopySchema(raw)
+		}
+	}
+
+	needsRuntimeType := false
+	for _, si := range reachable {
+		id := makeSchemaID(si.PkgPath, si.TypeName)
+		if schema := namedSchemas[id]; schema != nil {
+			if usesRuntimeType(schema) {
+				needsRuntimeType = true
+				break
+			}
+		}
+	}
+	if needsRuntimeType {
+		if t := namedSchemas[RuntimeTypeID]; t != nil {
+			defs[RuntimeTypeDef] = deepCopySchema(t)
+		}
+	}
+
+	return defs
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Collect reachable *named* struct types recursively
+///////////////////////////////////////////////////////////////////////////
+
+func collectReachableNamed(root StructInfo) []StructInfo {
+	seen := map[string]bool{}
+	var out []StructInfo
+
+	var walk func(StructInfo)
+	walk = func(si StructInfo) {
+		key := si.PkgPath + "." + si.TypeName
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, si)
+
+		for _, field := range si.Node.Fields.List {
+			collectNamedTypesInExpr(field.Type, func(name string) {
+				if nested, ok := lookupStruct(name); ok {
+					walk(nested)
+				}
+			})
+		}
+	}
+
+	walk(root)
+	return out
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Collect named types mentioned inside a type expression
+///////////////////////////////////////////////////////////////////////////
+
+func collectNamedTypesInExpr(expr ast.Expr, fn func(name string)) {
+	switch t := expr.(type) {
+
+	case *ast.Ident:
+		fn(t.Name)
+
+	case *ast.SelectorExpr:
+		// Only last part can be type name
+		fn(t.Sel.Name)
+
+	case *ast.StarExpr:
+		collectNamedTypesInExpr(t.X, fn)
+
+	case *ast.ArrayType:
+		collectNamedTypesInExpr(t.Elt, fn)
+
+	case *ast.MapType:
+		collectNamedTypesInExpr(t.Value, fn)
+
+	case *ast.StructType:
+		for _, f := range t.Fields.List {
+			collectNamedTypesInExpr(f.Type, fn)
+		}
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Finalize root schema: attach $defs with all reachable named schemas
+///////////////////////////////////////////////////////////////////////////
+
+func finalizeSchema(root *Schema, info StructInfo) *Schema {
+	if root == nil {
+		return nil
+	}
+
+	defs := buildDefsForRoot(info)
+	if len(defs) > 0 {
+		root.Defs = defs
+	}
+
+	return root
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Schema Output Writer
 ///////////////////////////////////////////////////////////////////////////
 
 func WriteSchemaJSON(info StructInfo, schema *Schema) error {
+	if schema == nil {
+		return nil
+	}
+
+	// Attach $defs for this root schema
+	schema = finalizeSchema(schema, info)
+
 	outDir := filepath.Join(filepath.Dir(info.File), SchemaDir)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
@@ -608,25 +791,25 @@ func WriteSchemaJSON(info StructInfo, schema *Schema) error {
 	if err != nil {
 		return err
 	}
-	out := filepath.Join(outDir, info.TypeName+".json")
 
-	//nolint:gosec // generated files can be more permissive
-	if err := os.WriteFile(out, raw, 0o644); err != nil {
+	outPath := filepath.Join(outDir, info.TypeName+".json")
+
+	//nolint:gosec
+	if err := os.WriteFile(outPath, raw, 0o644); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func WriteEmbedFile(infos []StructInfo) error {
-	if len(infos) == 0 {
-		return nil
-	}
+// /////////////////////////////////////////////////////////////////////////
+// Embedding for go:embed (per module)
+// /////////////////////////////////////////////////////////////////////////
 
-	dir := filepath.Dir(infos[0].File)
-	outPath := filepath.Join(dir, outputGo)
+func WriteEmbedFileForPackage(info StructInfo) error {
+	pkgDir := filepath.Dir(info.File)
 
-	Logger.Debug("writing schema embed file", "file", outPath, "pkg", infos[0].PkgPath)
+	outPath := filepath.Join(pkgDir, outputGo)
 
 	f, err := os.Create(outPath)
 	if err != nil {
@@ -642,12 +825,162 @@ import "embed"
 
 //go:embed %s/*.json
 var JSONSchemaFS embed.FS
-`, infos[0].PkgName, SchemaDir)
+`, info.PkgName, SchemaDir)
+
 	return err
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// Utility
+// Runtime Raw Built-in Schema
 ///////////////////////////////////////////////////////////////////////////
 
-func ptr[T any](v T) *T { return &v }
+func ensureRuntimeRawSchema() {
+	if _, ok := namedSchemas[RuntimeRawID]; ok {
+		return
+	}
+
+	raw := &Schema{
+		Schema: DefaultSchemaURI,
+		ID:     RuntimeRawID,
+		Type:   "object",
+		Properties: map[string]*Schema{
+			"type": {
+				Ref: "#/$defs/" + RuntimeTypeDef,
+			},
+		},
+		Required:             []string{"type"},
+		AdditionalProperties: &SchemaOrBool{Bool: ptr(true)},
+	}
+
+	namedSchemas[RuntimeRawID] = raw
+}
+
+func ensureRuntimeTypeSchema() {
+	if _, ok := namedSchemas[RuntimeTypeID]; ok {
+		return
+	}
+
+	t := &Schema{
+		Schema:  DefaultSchemaURI,
+		ID:      RuntimeTypeID,
+		Type:    "string",
+		Pattern: runtimeTypePattern,
+	}
+
+	namedSchemas[RuntimeTypeID] = t
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Module discovery
+///////////////////////////////////////////////////////////////////////////
+
+func findAllModules(root string) ([]string, error) {
+	var modules []string
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if filepath.Base(path) == "go.mod" {
+			modules = append(modules, filepath.Dir(path))
+		}
+		return nil
+	})
+
+	return modules, err
+}
+
+func findModuleRoot(file string) string {
+	d := filepath.Dir(file)
+	for {
+		if _, err := os.Stat(filepath.Join(d, "go.mod")); err == nil {
+			return d
+		}
+		p := filepath.Dir(d)
+		if p == d {
+			return ""
+		}
+		d = p
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Main Program
+///////////////////////////////////////////////////////////////////////////
+
+func main() {
+	if len(os.Args) < 2 {
+		Logger.Error("Usage: jsonschemagen <root-dir>")
+		os.Exit(1)
+	}
+
+	root := os.Args[1]
+
+	// RuntimeRaw must be available before anything else
+	ensureRuntimeRawSchema()
+	ensureRuntimeTypeSchema()
+
+	// Discover modules
+	modules, err := findAllModules(root)
+	if err != nil {
+		Logger.Error("module discovery error", "error", err)
+		os.Exit(1)
+	}
+	if len(modules) == 0 {
+		Logger.Error("No go.mod files found", "root", root)
+		os.Exit(1)
+	}
+
+	// Collect annotated structs across all modules
+	var allInfos []StructInfo
+	for _, mod := range modules {
+		infos, err := FindAnnotatedStructs(mod)
+		if err != nil {
+			Logger.Error("scan error", "module", mod, "error", err)
+			os.Exit(1)
+		}
+		allInfos = append(allInfos, infos...)
+	}
+
+	if len(allInfos) == 0 {
+		Logger.Info("No annotated types found")
+		return
+	}
+
+	// Generate unbundled schemas for named structs
+	for _, info := range allInfos {
+		s := GenerateSchemaForNamed(info)
+		namedSchemas[s.ID] = s
+	}
+
+	// Write bundled schemas to disk
+	for _, info := range allInfos {
+		id := makeSchemaID(info.PkgPath, info.TypeName)
+		s := namedSchemas[id]
+		if s == nil {
+			Logger.Error("missing schema for type", "type", info.TypeName)
+			continue
+		}
+
+		if err := WriteSchemaJSON(info, s); err != nil {
+			Logger.Error("write schema error", "type", info.TypeName, "error", err)
+		}
+	}
+
+	// Track packages we already wrote an embed file for
+	written := map[string]bool{}
+
+	for _, si := range allInfos {
+		pkgDir := filepath.Dir(si.File)
+		if written[pkgDir] {
+			continue
+		}
+		if err := WriteEmbedFileForPackage(si); err != nil {
+			Logger.Error("embed file error", "package", pkgDir, "error", err)
+		}
+		written[pkgDir] = true
+	}
+}

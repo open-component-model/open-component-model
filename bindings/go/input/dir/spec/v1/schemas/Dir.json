@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/input/dir/spec/v1/schemas/Dir.json",
-  "description": "Dir describes an input sourced by a directory.",
   "title": "Dir",
+  "description": "Dir describes an input sourced by a directory.",
   "type": "object",
   "properties": {
     "compress": {
@@ -44,12 +44,19 @@
       "type": "boolean"
     },
     "type": {
-      "type": "string",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+      "$ref": "#/$defs/runtime.Type"
     }
   },
   "required": [
     "type",
     "path"
-  ]
+  ],
+  "$defs": {
+    "runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }

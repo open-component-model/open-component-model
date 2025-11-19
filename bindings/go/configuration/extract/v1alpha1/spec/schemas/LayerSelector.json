@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec/schemas/LayerSelector.json",
-  "description": "LayerSelector allows selecting layers based on index, mediatype, and annotations.",
   "title": "LayerSelector",
+  "description": "LayerSelector allows selecting layers based on index, mediatype, and annotations.",
   "type": "object",
   "properties": {
     "matchExpressions": {

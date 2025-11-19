@@ -1,16 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/generator/ocmtypegen/test/schemas/SampleType.json",
-  "description": "SampleType is a sample struct that includes a field of type runtime.Type.",
   "title": "SampleType",
+  "description": "SampleType is a sample struct that includes a field of type runtime.Type.",
   "type": "object",
   "properties": {
     "type": {
-      "type": "string",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+      "$ref": "#/$defs/runtime.Type"
     }
   },
   "required": [
     "type"
-  ]
+  ],
+  "$defs": {
+    "runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }

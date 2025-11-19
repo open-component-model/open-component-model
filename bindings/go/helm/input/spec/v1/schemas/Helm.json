@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/helm/input/spec/v1/schemas/Helm.json",
-  "description": "Helm implements the input type for helm charts.",
   "title": "Helm",
+  "description": "Helm implements the input type for helm charts.",
   "type": "object",
   "properties": {
     "caCert": {
@@ -26,8 +26,7 @@
       "type": "string"
     },
     "type": {
-      "type": "string",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+      "$ref": "#/$defs/runtime.Type"
     },
     "version": {
       "description": "Version is used in the following ways:\n- in the case of HTTP/S based helm repositories, the version is ignored (e.g.: https://example.com/charts/mychart-1.2.3.tgz)\n- in case of oci based helm repositories:\n- if not set, the version is taken from the oci reference tag (e.g.: oci://example.com/charts/mychart:1.2.3)\n- if set, and the oci reference tag is not set, the version is set to the value of this field.\n- if both are set they MUST equal otherwise helm download will fail with a mismatch error.\nDeprecated: This field should NOT be used, either rely on the full http/s url or an oci reference with a tag.",
@@ -36,5 +35,13 @@
   },
   "required": [
     "type"
-  ]
+  ],
+  "$defs": {
+    "runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }

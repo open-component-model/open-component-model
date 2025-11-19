@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/generator/jsonschemagen/test/schemas/SampleType.json",
-  "description": "SampleType is a sample struct that includes a field of type runtime.Type.",
   "title": "SampleType",
+  "description": "SampleType is a sample struct that includes a field of type runtime.Type.",
   "type": "object",
   "properties": {
     "MyStruct": {
@@ -10,10 +10,10 @@
       "type": "object",
       "properties": {
         "myString": {
+          "description": "MyComment",
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "myString"
       ]
@@ -35,18 +35,8 @@
       }
     },
     "myRaw": {
-      "description": "MyRawComment",
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
-        }
-      },
-      "additionalProperties": true,
-      "required": [
-        "type"
-      ]
+      "$ref": "#/$defs/runtime.Raw",
+      "description": "MyRawComment"
     },
     "myRuntime": {
       "description": "MyRuntimeComment",
@@ -66,37 +56,20 @@
     "myUnknownMap": {
       "description": "MyUnknownMapComment",
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": {
+        "type": "object"
+      }
     },
     "nested": {
-      "description": "NestedComment",
-      "type": "object",
-      "properties": {
-        "nestedField": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "nestedField"
-      ]
+      "$ref": "#/$defs/NestedType",
+      "description": "NestedComment"
     },
     "nestedPointer": {
-      "description": "NestedPointerComment",
-      "type": "object",
-      "properties": {
-        "nestedField": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "nestedField"
-      ]
+      "$ref": "#/$defs/NestedType",
+      "description": "NestedPointerComment"
     },
     "type": {
-      "type": "string",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+      "$ref": "#/$defs/runtime.Type"
     }
   },
   "required": [
@@ -113,5 +86,43 @@
     "myRaw",
     "nested",
     "nestedPointer"
-  ]
+  ],
+  "$defs": {
+    "NestedType": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/generator/jsonschemagen/test/schemas/NestedType.json",
+      "title": "NestedType",
+      "description": "NestedType is a nested struct used for testing.",
+      "type": "object",
+      "properties": {
+        "nestedField": {
+          "description": "NestedFieldComment",
+          "type": "string"
+        }
+      },
+      "required": [
+        "nestedField"
+      ]
+    },
+    "runtime.Raw": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Raw.json",
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/runtime.Type"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": true
+    },
+    "runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }

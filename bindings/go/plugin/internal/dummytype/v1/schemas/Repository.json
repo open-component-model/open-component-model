@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1/schemas/Repository.json",
-  "description": "Repository type is used by the tests in this package for a Type.",
   "title": "Repository",
+  "description": "Repository type is used by the tests in this package for a Type.",
   "type": "object",
   "properties": {
     "baseUrl": {
@@ -10,12 +10,19 @@
       "type": "string"
     },
     "type": {
-      "type": "string",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+      "$ref": "#/$defs/runtime.Type"
     }
   },
   "required": [
     "type",
     "baseUrl"
-  ]
+  ],
+  "$defs": {
+    "runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1/schemas/Config.json",
-  "description": "Config defines configuration for signing based on AlgorithmRSASSAPSS or AlgorithmRSASSAPKCS1V15.",
   "title": "Config",
+  "description": "Config defines configuration for signing based on AlgorithmRSASSAPSS or AlgorithmRSASSAPKCS1V15.",
   "type": "object",
   "properties": {
     "signatureAlgorithm": {
@@ -13,12 +13,19 @@
       "type": "object"
     },
     "type": {
-      "description": "Type identifies this configuration object’s runtime type.",
-      "type": "string",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+      "$ref": "#/$defs/runtime.Type",
+      "description": "Type identifies this configuration object’s runtime type."
     }
   },
   "required": [
     "type"
-  ]
+  ],
+  "$defs": {
+    "runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }

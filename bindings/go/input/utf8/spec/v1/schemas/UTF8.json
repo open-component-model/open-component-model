@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/input/utf8/spec/v1/schemas/UTF8.json",
-  "description": "UTF8 describes an input sourced by a UTF-8 string.",
   "title": "UTF8",
+  "description": "UTF8 describes an input sourced by a UTF-8 string.",
   "type": "object",
   "properties": {
     "compress": {
@@ -22,8 +22,7 @@
       "type": "string"
     },
     "type": {
-      "type": "string",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+      "$ref": "#/$defs/runtime.Type"
     },
     "yaml": {
       "description": "YAML is a YAML object, raw encoded via UTF-8.",
@@ -32,5 +31,13 @@
   },
   "required": [
     "type"
-  ]
+  ],
+  "$defs": {
+    "runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }

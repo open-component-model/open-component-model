@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/access/v1/schemas/OCIImageLayer.json",
-  "description": "OCIImageLayer describes the access for a local blob as an OCI Layer.\nNote that an OCIImageLayer itself usually needs to be resolved through the manifest\nto determine the mediaType of the Layer.\nTo avoid this lookup necessity to interpret the layer, the mediaType\ncan be set in the OCIImageLayer directly and can be used instead of a manifest lookup.\nNote however, that presence of the layer in OCI is only guaranteed if a Manifest\nis present in the repository that references the layer.",
   "title": "OCIImageLayer",
+  "description": "OCIImageLayer describes the access for a local blob as an OCI Layer.\nNote that an OCIImageLayer itself usually needs to be resolved through the manifest\nto determine the mediaType of the Layer.\nTo avoid this lookup necessity to interpret the layer, the mediaType\ncan be set in the OCIImageLayer directly and can be used instead of a manifest lookup.\nNote however, that presence of the layer in OCI is only guaranteed if a Manifest\nis present in the repository that references the layer.",
   "type": "object",
   "properties": {
     "digest": {
@@ -22,8 +22,7 @@
       "type": "integer"
     },
     "type": {
-      "type": "string",
-      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+      "$ref": "#/$defs/runtime.Type"
     }
   },
   "required": [
@@ -31,5 +30,13 @@
     "ref",
     "digest",
     "size"
-  ]
+  ],
+  "$defs": {
+    "runtime.Type": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.json",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  }
 }
