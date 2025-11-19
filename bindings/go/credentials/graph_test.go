@@ -194,11 +194,11 @@ func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
 					}
 				},
 			}, nil
-		case "ErrorPluginResolve":
+		case "ErrorRegistry":
 			return RepositoryPlugin{
 				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
 					return runtime.Identity{
-						runtime.IdentityAttributeType: "ErrorPluginResolve",
+						runtime.IdentityAttributeType: "ErrorRegistry",
 					}, nil
 				},
 				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
@@ -415,7 +415,7 @@ func TestResolveCredentials(t *testing.T) {
 			"plugin resolution error handling",
 			testYAML,
 			runtime.Identity{
-				"type":     "ErrorPluginResolve",
+				"type":     "ErrorRegistry",
 				"hostname": "quay.io",
 				"path":     "some-owner/some-repo",
 			},
