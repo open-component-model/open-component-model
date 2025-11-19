@@ -21,10 +21,26 @@ type constructedPlugin struct {
 	cmd *exec.Cmd
 }
 
+// RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
+// It implements the ComponentVersionRepositoryProvider interface.
+type RepositoryRegistry struct {
+	ctx                context.Context
+	mu                 sync.RWMutex
+	registry           map[runtime.Type]mtypes.Plugin // Have this as a single plugin for read/write
+	constructedPlugins map[string]*constructedPlugin  // running plugins
+
+	// internalComponentVersionRepositoryPlugins contains all plugins that have been registered using internally import statement.
+	internalComponentVersionRepositoryPlugins map[runtime.Type]repository.ComponentVersionRepositoryProvider
+	// scheme is the holder of schemes. This hold will contain the scheme required to
+	// construct and understand the passed in types and what / how they need to look like. The passed in scheme during
+	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
+	// that their type is registered or not.
+	scheme *runtime.Scheme
+}
+
 // RegisterInternalComponentVersionRepositoryPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
-func RegisterInternalComponentVersionRepositoryPlugin(
-	r *RepositoryRegistry,
+func (r *RepositoryRegistry) RegisterInternalComponentVersionRepositoryPlugin(
 	p repository.ComponentVersionRepositoryProvider,
 ) error {
 	r.mu.Lock()
@@ -42,23 +58,6 @@ func RegisterInternalComponentVersionRepositoryPlugin(
 	}
 
 	return nil
-}
-
-// RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
-// It implements the ComponentVersionRepositoryProvider interface.
-type RepositoryRegistry struct {
-	ctx                context.Context
-	mu                 sync.RWMutex
-	registry           map[runtime.Type]mtypes.Plugin // Have this as a single plugin for read/write
-	constructedPlugins map[string]*constructedPlugin  // running plugins
-
-	// internalComponentVersionRepositoryPlugins contains all plugins that have been registered using internally import statement.
-	internalComponentVersionRepositoryPlugins map[runtime.Type]repository.ComponentVersionRepositoryProvider
-	// scheme is the holder of schemes. This hold will contain the scheme required to
-	// construct and understand the passed in types and what / how they need to look like. The passed in scheme during
-	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
-	// that their type is registered or not.
-	scheme *runtime.Scheme
 }
 
 func (r *RepositoryRegistry) GetComponentVersionRepositoryScheme() *runtime.Scheme {

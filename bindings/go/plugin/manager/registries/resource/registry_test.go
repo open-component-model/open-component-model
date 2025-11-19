@@ -108,7 +108,7 @@ func TestRegisterInternalResourcePlugin(t *testing.T) {
 
 	registry := NewResourceRegistry(ctx)
 	plugin := &mockResourcePlugin{}
-	r.NoError(RegisterInternalResourcePlugin(registry, plugin))
+	r.NoError(registry.RegisterInternalResourcePlugin(plugin))
 
 	tests := []struct {
 		name       string

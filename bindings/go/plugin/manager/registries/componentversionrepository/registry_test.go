@@ -131,7 +131,7 @@ func TestInternalPluginRegistry(t *testing.T) {
 	repositoryProvider := &mockPluginProvider{
 		mockPlugin: &mockedRepository{},
 	}
-	r.NoError(RegisterInternalComponentVersionRepositoryPlugin(registry, repositoryProvider))
+	r.NoError(registry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider))
 
 	tests := []struct {
 		name           string

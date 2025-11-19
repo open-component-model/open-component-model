@@ -40,12 +40,10 @@ func Register(
 	ociBlobTransformerPlugin := transformer.New(logger)
 
 	return errors.Join(
-		componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-			compverRegistry,
+		compverRegistry.RegisterInternalComponentVersionRepositoryPlugin(
 			CachingComponentVersionRepositoryProvider,
 		),
-		resource.RegisterInternalResourcePlugin(
-			resRegistry,
+		resRegistry.RegisterInternalResourcePlugin(
 			&resourceRepoPlugin,
 		),
 		digestprocessor.RegisterInternalDigestProcessorPlugin(

@@ -20,7 +20,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -240,8 +239,7 @@ func registerOCIPlugin(t *testing.T, pm *manager.PluginManager, component, versi
 		version:   version,
 	}
 
-	err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-		pm.ComponentVersionRepositoryRegistry,
+	err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(
 		cvRepoPlugin,
 	)
 
