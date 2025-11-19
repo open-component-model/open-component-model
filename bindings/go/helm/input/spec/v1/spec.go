@@ -21,6 +21,7 @@ type Helm struct {
 	// The reference MUST contain a version tag, and it needs to equal the version of the chart.
 	Repository string `json:"repository,omitempty"`
 
+	//nolint:gocritic // Deprecated field is okay
 	// Version is used in the following ways:
 	// - in the case of HTTP/S based helm repositories, the version is ignored (e.g.: https://example.com/charts/mychart-1.2.3.tgz)
 	// - in case of oci based helm repositories:
@@ -33,10 +34,12 @@ type Helm struct {
 	// HelmRepository specifies the download location of the helm chart. It can either be a URL or an OCI reference.
 	HelmRepository string `json:"helmRepository,omitempty"`
 
+	//nolint:gocritic // Deprecated field is okay
 	// CACert is used in combination with HelmRepository to specify a TLS root certificate to access the source helm repository.
 	// Deprecated: This field is deprecated in favor of using certificates through the credentials.
 	CACert string `json:"caCert,omitempty"`
 
+	//nolint:gocritic // Deprecated field is okay
 	// CACertFile is used in combination with HelmRepository to specify a relative filename
 	// for TLS root certificate to access the source helm repository.
 	// Deprecated: This field is deprecated in favor of using certificates through the credentials.

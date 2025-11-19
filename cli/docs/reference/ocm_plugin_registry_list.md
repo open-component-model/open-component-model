@@ -1,27 +1,38 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm plugin registry list
+description: List available plugin binaries from a plugin registry.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm plugin registry list
 
-The official Open Component Model (OCM) CLI
-
-### Synopsis
-
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+List available plugin binaries from a plugin registry.
 
 ```
-ocm [sub-command] [flags]
+ocm plugin registry list [flags]
+```
+
+### Examples
+
+```
+  # List available plugin binaries from a registry using the flag.
+  ocm plugin registry list --registry ocm.software/plugin-registry:v1.0.0
+
 ```
 
 ### Options
+
+```
+  -h, --help              help for list
+  -o, --output enum       output format of the plugin list
+                          (must be one of [json ndjson table wide yaml]) (default table)
+      --registry string   registry URL to list plugins from
+```
+
+### Options inherited from parent commands
 
 ```
       --config string                      supply configuration by a given configuration file.
@@ -41,7 +52,6 @@ ocm [sub-command] [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            Using the option, this configuration file be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -64,13 +74,5 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
-* [ocm plugin]({{< relref "ocm_plugin.md" >}})	 - Manage OCM plugins
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
-* [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
+* [ocm plugin registry]({{< relref "ocm_plugin_registry.md" >}})	 - Manage plugin registries
 
