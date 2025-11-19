@@ -45,10 +45,8 @@ func Register(
 			CachingComponentVersionRepositoryProvider,
 		),
 		resource.RegisterInternalResourcePlugin(
-			scheme,
 			resRegistry,
 			&resourceRepoPlugin,
-			&v1.OCIImage{},
 		),
 		digestprocessor.RegisterInternalDigestProcessorPlugin(
 			scheme,

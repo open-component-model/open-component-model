@@ -103,26 +103,74 @@ func TestPluginFlow(t *testing.T) {
 }
 
 func TestRegisterInternalResourcePlugin(t *testing.T) {
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
+	ctx := t.Context()
+	r := require.New(t)
+
 	registry := NewResourceRegistry(ctx)
+	plugin := &mockResourcePlugin{}
+	r.NoError(RegisterInternalResourcePlugin(registry, plugin))
 
-	mockPlugin := &mockResourcePlugin{}
-	proto := &dummyv1.Repository{}
-	scheme.MustRegister(proto, "v1")
-	err := RegisterInternalResourcePlugin(scheme, registry, mockPlugin, proto)
-	require.NoError(t, err)
-	_, err = scheme.TypeForPrototype(proto)
-	require.NoError(t, err)
+	tests := []struct {
+		name       string
+		accessSpec runtime.Typed
+		err        require.ErrorAssertionFunc
+	}{
+		{
+			name:       "prototype",
+			accessSpec: &dummyv1.Repository{},
+			err:        require.NoError,
+		},
+		{
+			name: "canonical type",
+			accessSpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.Type,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "short type",
+			accessSpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.ShortType,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "invalid type",
+			accessSpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "NonExistingType",
+					Version: "v1",
+				},
+			},
+			err: require.Error,
+		},
+	}
 
-	plugin, err := registry.GetResourcePlugin(ctx, proto)
-	require.NoError(t, err)
-	require.Equal(t, mockPlugin, plugin)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resourceRepository, err := registry.GetResourcePlugin(ctx, tc.accessSpec)
+			tc.err(t, err)
+			if err != nil {
+				return
+			}
+			r.NotNil(resourceRepository)
+		})
+	}
 }
 
 type mockResourcePlugin struct{}
 
 var _ Repository = (*mockResourcePlugin)(nil)
+
+func (m *mockResourcePlugin) GetResourceRepositoryScheme() *runtime.Scheme {
+	return dummytype.Scheme
+}
 
 func (m *mockResourcePlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	return nil, nil

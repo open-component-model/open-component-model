@@ -21,6 +21,10 @@ type ResourceRepositoryPlugin struct {
 	filesystemConfig  *filesystemv1alpha1.Config
 }
 
+func (p *ResourceRepositoryPlugin) GetResourceRepositoryScheme() *runtime.Scheme {
+	return p.scheme
+}
+
 func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	t := resource.Access.GetType()
 	obj, err := p.scheme.NewObject(t)
