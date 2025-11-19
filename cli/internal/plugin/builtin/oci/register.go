@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log/slog"
 
-	extractspecv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -40,11 +39,8 @@ func Register(
 		digRegistry.RegisterInternalDigestProcessorPlugin(
 			&resourceRepoPlugin,
 		),
-		blobtransformer.RegisterInternalBlobTransformerPlugin(
-			extractspecv1alpha1.Scheme,
-			blobTransformerRegistry,
+		blobTransformerRegistry.RegisterInternalBlobTransformerPlugin(
 			ociBlobTransformerPlugin,
-			&extractspecv1alpha1.Config{},
 		),
 		compListRegistry.RegisterInternalComponentListerPlugin(
 			&CTFComponentListerPlugin{},

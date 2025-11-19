@@ -13,4 +13,6 @@ type BlobTransformer interface {
 	// GetBlobTransformerCredentialConsumerIdentity retrieves an identity for the given specification that
 	// can be used to lookup credentials for the blob transformer.
 	GetBlobTransformerCredentialConsumerIdentity(ctx context.Context, spec runtime.Typed) (runtime.Identity, error)
+
+	GetTransformerScheme() *runtime.Scheme
 }
