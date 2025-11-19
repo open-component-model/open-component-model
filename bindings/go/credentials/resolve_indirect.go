@@ -82,7 +82,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 
 	if resolved == nil {
 		if len(errs) > 0 {
-			slog.WarnContext(ctx, "All repository plugins failed to resolve credentials", slog.Any("errors", errs), "identity", identity)
+			slog.WarnContext(ctx, "All repository plugins failed to resolve credentials", slog.Any("errors", errs), slog.Any("identity", identity))
 			return nil, fmt.Errorf("all repository plugins failed to resolve credentials for identity %q: %w", identity.String(), errors.Join(errs...))
 		}
 
