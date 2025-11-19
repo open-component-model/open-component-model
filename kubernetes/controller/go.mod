@@ -22,7 +22,7 @@ require (
 	golang.org/x/sync v0.17.0
 	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.1
-	k8s.io/apimachinery v0.34.1
+	k8s.io/apimachinery v0.34.2
 	k8s.io/apiserver v0.34.1
 	k8s.io/client-go v0.34.1
 	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
@@ -121,7 +121,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/buildkite/agent/v3 v3.109.0 // indirect
+	github.com/buildkite/agent/v3 v3.109.1 // indirect
 	github.com/buildkite/go-pipeline v0.16.0 // indirect
 	github.com/buildkite/interpolate v0.1.5 // indirect
 	github.com/buildkite/roko v1.4.0 // indirect
