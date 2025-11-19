@@ -275,9 +275,9 @@ spec:
           layerSelector:
             mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
             operation: copy
-          url: oci://${resourceChart.status.additional.?registry}/${resourceChart.status.additional.?repository}
+          url: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
           ref:
-            tag: ${resourceChart.status.additional.?tag}
+            tag: ${resourceChart.status.additional.tag}
           # secretRef is required, if the OCI repository requires credentials to access it.
           # secretRef:
     # HelmRelease refers to the OCIRepository, lets you configure the helm chart and deploys the Helm Chart into the
@@ -300,8 +300,8 @@ spec:
             # This is the second step of the localization. We use the image reference from the resource "image-resource"
             # and insert it into the Helm chart values.
             image:
-              repository: ${resourceImage.status.additional.?registry}/${resourceImage.status.additional.?repository}
-              tag: ${resourceImage.status.additional.?tag}
+              repository: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}
+              tag: ${resourceImage.status.additional.tag}
 ```
 
 > [!NOTE]

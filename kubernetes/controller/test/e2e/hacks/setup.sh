@@ -101,4 +101,4 @@ kubectl wait pod -l app=protected-registry2 --for condition=Ready --timeout 5m |
 flux install || exit 1
 
 # Install kro operators
-helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.5.1 || exit 1
+helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.6.3 || exit 1
