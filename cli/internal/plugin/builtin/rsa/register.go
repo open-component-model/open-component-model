@@ -26,8 +26,6 @@ func Register(
 	}
 
 	return errors.Join(
-		signingHandlerRegistry.RegisterInternalComponentSignatureHandler(
-			hdlr,
-		),
+		signingHandlerRegistry.RegisterInternalComponentSignatureHandler(hdlr),
 	)
 }

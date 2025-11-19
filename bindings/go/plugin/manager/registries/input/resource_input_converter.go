@@ -19,6 +19,10 @@ type resourceInputPluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
+func (r *resourceInputPluginConverter) GetResourceInputMethodScheme() *runtime.Scheme {
+	return r.scheme
+}
+
 func (r *resourceInputPluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
 	request := &v1.GetIdentityRequest[runtime.Typed]{}
 	if resource.HasAccess() {

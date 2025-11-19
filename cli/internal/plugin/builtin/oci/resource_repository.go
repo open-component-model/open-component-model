@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -16,22 +17,21 @@ import (
 )
 
 type ResourceRepositoryPlugin struct {
-	scheme            *runtime.Scheme
 	manifests, layers cache.OCIDescriptorCache
 	filesystemConfig  *filesystemv1alpha1.Config
 }
 
 func (p *ResourceRepositoryPlugin) GetResourceRepositoryScheme() *runtime.Scheme {
-	return p.scheme
+	return ociaccess.Scheme
 }
 
 func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	t := resource.Access.GetType()
-	obj, err := p.scheme.NewObject(t)
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
 	}
-	if err := p.scheme.Convert(resource.Access, obj); err != nil {
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
 		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
 	}
 	return p.getIdentity(obj)
@@ -39,11 +39,11 @@ func (p *ResourceRepositoryPlugin) GetResourceDigestProcessorCredentialConsumerI
 
 func (p *ResourceRepositoryPlugin) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (runtime.Identity, error) {
 	t := resource.Access.GetType()
-	obj, err := p.scheme.NewObject(t)
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
 	}
-	if err := p.scheme.Convert(resource.Access, obj); err != nil {
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
 		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
 	}
 	return p.getIdentity(obj)
@@ -51,11 +51,11 @@ func (p *ResourceRepositoryPlugin) GetResourceCredentialConsumerIdentity(ctx con
 
 func (p *ResourceRepositoryPlugin) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error) {
 	t := resource.Access.GetType()
-	obj, err := p.scheme.NewObject(t)
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
 	}
-	if err := p.scheme.Convert(resource.Access, obj); err != nil {
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
 		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
 	}
 	switch access := obj.(type) {
@@ -106,11 +106,11 @@ func (p *ResourceRepositoryPlugin) getIdentity(obj runtime.Typed) (runtime.Ident
 
 func (p *ResourceRepositoryPlugin) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error) {
 	t := resource.Access.GetType()
-	obj, err := p.scheme.NewObject(t)
+	obj, err := p.GetResourceRepositoryScheme().NewObject(t)
 	if err != nil {
 		return nil, fmt.Errorf("error creating new object for type %s: %w", t, err)
 	}
-	if err := p.scheme.Convert(resource.Access, obj); err != nil {
+	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
 		return nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
 	}
 	switch access := obj.(type) {

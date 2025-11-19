@@ -48,6 +48,7 @@ type ResourceInputMethod interface {
 	// These can then be passed to ProcessResource.
 	ResourceConsumerIdentityProvider
 	ProcessResource(ctx context.Context, resource *constructor.Resource, credentials map[string]string) (result *ResourceInputMethodResult, err error)
+	GetResourceInputMethodScheme() *runtime.Scheme
 }
 
 // SourceInputMethodResult is the return value of a SourceInputMethod.
@@ -88,6 +89,7 @@ type SourceInputMethod interface {
 	// These can then be passed to ProcessSource.
 	SourceConsumerIdentityProvider
 	ProcessSource(ctx context.Context, source *constructor.Source, credentials map[string]string) (result *SourceInputMethodResult, err error)
+	GetSourceInputMethodScheme() *runtime.Scheme
 }
 
 type ResourceInputMethodProvider interface {

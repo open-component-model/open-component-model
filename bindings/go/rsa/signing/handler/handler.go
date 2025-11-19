@@ -44,8 +44,6 @@ var (
 type Handler struct {
 	roots *x509.CertPool
 	now   func() time.Time
-
-	scheme *runtime.Scheme
 }
 
 // New returns a Handler. If useSystemRoots is true, system trust roots are loaded, otherwise an empty pool is used.
@@ -61,14 +59,13 @@ func New(scheme *runtime.Scheme, useSystemRoots bool) (*Handler, error) {
 		}
 	}
 	return &Handler{
-		roots:  roots,
-		now:    time.Now,
-		scheme: scheme,
+		roots: roots,
+		now:   time.Now,
 	}, nil
 }
 
 func (h *Handler) GetSigningHandlerScheme() *runtime.Scheme {
-	return h.scheme
+	return v1alpha1.Scheme
 }
 
 // ---- SPI ----
@@ -83,7 +80,7 @@ func (h *Handler) Sign(
 	creds map[string]string,
 ) (descruntime.SignatureInfo, error) {
 	var supported v1alpha1.Config
-	if err := h.scheme.Convert(rawCfg, &supported); err != nil {
+	if err := h.GetSigningHandlerScheme().Convert(rawCfg, &supported); err != nil {
 		return descruntime.SignatureInfo{}, fmt.Errorf("convert config: %w", err)
 	}
 	algorithm := supported.GetSignatureAlgorithm()

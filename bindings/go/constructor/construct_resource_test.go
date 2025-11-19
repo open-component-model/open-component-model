@@ -24,6 +24,10 @@ type mockInputMethod struct {
 	processedBlob     blob.ReadOnlyBlob
 }
 
+func (m *mockInputMethod) GetResourceInputMethodScheme() *runtime.Scheme {
+	return runtime.NewScheme()
+}
+
 func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	id := runtime.Identity{}
 	id.SetType(runtime.NewVersionedType("mock", "v1"))

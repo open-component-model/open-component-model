@@ -65,6 +65,14 @@ func NewInputMethod(workingDir string) (*InputMethod, error) {
 	}, nil
 }
 
+func (i *InputMethod) GetResourceInputMethodScheme() *runtime.Scheme {
+	return Scheme
+}
+
+func (i *InputMethod) GetSourceInputMethodScheme() *runtime.Scheme {
+	return Scheme
+}
+
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrDirsDoNotRequireCredentials
 // since directory inputs do not require any credentials for access. Directories are read directly
 // from the local filesystem without authentication.
@@ -83,7 +91,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, _
 //  3. Returns the processed blob data wrapped in a ResourceInputMethodResult
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	dir := v1.Dir{}
-	if err := Scheme.Convert(resource.Input, &dir); err != nil {
+	if err := i.GetResourceInputMethodScheme().Convert(resource.Input, &dir); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
@@ -115,7 +123,7 @@ func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, _ *
 //  3. Returns the processed blob data wrapped in a SourceInputMethodResult
 func (i *InputMethod) ProcessSource(ctx context.Context, src *constructorruntime.Source, _ map[string]string) (result *constructor.SourceInputMethodResult, err error) {
 	dir := v1.Dir{}
-	if err := Scheme.Convert(src.Input, &dir); err != nil {
+	if err := i.GetResourceInputMethodScheme().Convert(src.Input, &dir); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 

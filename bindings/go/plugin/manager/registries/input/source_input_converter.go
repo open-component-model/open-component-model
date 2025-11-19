@@ -18,6 +18,10 @@ type sourceInputPluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
+func (r *sourceInputPluginConverter) GetSourceInputMethodScheme() *runtime.Scheme {
+	return r.scheme
+}
+
 func (r *sourceInputPluginConverter) GetSourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Source) (runtime.Identity, error) {
 	request := &v1.GetIdentityRequest[runtime.Typed]{}
 	if resource.HasAccess() {

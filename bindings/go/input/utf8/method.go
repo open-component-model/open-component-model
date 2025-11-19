@@ -49,6 +49,14 @@ func init() {
 //   - Returning processed blob data for further use
 type InputMethod struct{}
 
+func (i *InputMethod) GetResourceInputMethodScheme() *runtime.Scheme {
+	return Scheme
+}
+
+func (i *InputMethod) GetSourceInputMethodScheme() *runtime.Scheme {
+	return Scheme
+}
+
 // GetResourceCredentialConsumerIdentity returns nil identity and ErrFilesDoNotRequireCredentials
 // since file inputs do not require any credentials for access. Files are read directly
 // from the local filesystem without authentication.
@@ -60,7 +68,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 // to a v1.UTF8 format, reading the utf8 string, and returning the processed blob data based on GetV1UTF8Blob.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, _ map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	utf8 := v1.UTF8{}
-	if err := Scheme.Convert(resource.Input, &utf8); err != nil {
+	if err := i.GetResourceInputMethodScheme().Convert(resource.Input, &utf8); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
@@ -85,7 +93,7 @@ func (i *InputMethod) GetSourceCredentialConsumerIdentity(_ context.Context, sou
 // to a v1.UTF8 format and returning the processed blob data based on GetV1UTF8Blob.
 func (i *InputMethod) ProcessSource(_ context.Context, src *constructorruntime.Source, _ map[string]string) (result *constructor.SourceInputMethodResult, err error) {
 	utf8 := v1.UTF8{}
-	if err := Scheme.Convert(src.Input, &utf8); err != nil {
+	if err := i.GetSourceInputMethodScheme().Convert(src.Input, &utf8); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 

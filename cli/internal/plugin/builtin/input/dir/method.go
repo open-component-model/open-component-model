@@ -5,7 +5,6 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/input/dir"
-	dirv1 "ocm.software/open-component-model/bindings/go/input/dir/spec/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 )
 
@@ -20,11 +19,10 @@ func RegisterDirInputV1(inputRegistry *input.RepositoryRegistry, filesystemConfi
 	method := &dir.InputMethod{
 		WorkingDirectory: filesystemConfig.WorkingDirectory,
 	}
-	spec := &dirv1.Dir{}
-	if err := input.RegisterInternalResourceInputPlugin(dir.Scheme, inputRegistry, method, spec); err != nil {
+	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register dir resource input method: %w", err)
 	}
-	if err := input.RegisterInternalSourcePlugin(dir.Scheme, inputRegistry, method, spec); err != nil {
+	if err := inputRegistry.RegisterInternalSourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register dir source input method: %w", err)
 	}
 	return nil
