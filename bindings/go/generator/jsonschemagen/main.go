@@ -62,11 +62,13 @@ const (
 
 type Schema struct {
 	Schema      string `json:"$schema,omitempty"`
+	Comment     string `json:"$comment,omitempty"`
 	ID          string `json:"$id,omitempty"`
 	Ref         string `json:"$ref,omitempty"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
 	Type        string `json:"type,omitempty"`
+	Deprecated  *bool  `json:"deprecated,omitempty"`
 
 	Properties map[string]*Schema `json:"properties,omitempty"`
 	Items      *Schema            `json:"items,omitempty"`
@@ -241,15 +243,34 @@ func extractCommentText(cg *ast.CommentGroup) string {
 	if cg == nil {
 		return ""
 	}
+
 	var out []string
 	for _, c := range cg.List {
 		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
 		line = strings.TrimSpace(strings.TrimPrefix(line, "/*"))
 		line = strings.TrimSpace(strings.TrimSuffix(line, "*/"))
-		if line != "" && !strings.HasPrefix(line, "+") {
-			out = append(out, line)
+
+		// Skip internal markers
+		if line == "" {
+			continue
 		}
+		if strings.HasPrefix(line, "+") {
+			continue
+		}
+
+		// NEW: ignore any nolint comments
+		// examples:
+		//   //nolint
+		//   // nolint
+		//   //nolint:unique,gosec
+		if strings.HasPrefix(strings.ToLower(line), "nolint") ||
+			strings.HasPrefix(strings.ToLower(line), "//nolint") {
+			continue
+		}
+
+		out = append(out, line)
 	}
+
 	return strings.Join(out, "\n")
 }
 
@@ -262,6 +283,12 @@ func findStructComment(ts *ast.TypeSpec, gd *ast.GenDecl) string {
 		return extractCommentText(ts.Doc)
 	}
 	return extractCommentText(gd.Doc)
+}
+
+func isDeprecatedComment(c string) bool {
+	lc := strings.ToLower(c)
+	return strings.Contains(lc, "deprecated:") ||
+		strings.Contains(lc, "@deprecated")
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -380,6 +407,9 @@ func GenerateSchemaForNamed(info StructInfo) *Schema {
 		// Field comment → description
 		if c := findFieldComment(field); c != "" {
 			prop.Description = c
+			if isDeprecatedComment(c) {
+				prop.Deprecated = ptr(true)
+			}
 		}
 
 		root.Properties[jsonName] = prop
@@ -410,7 +440,12 @@ func schemaForType(expr ast.Expr) *Schema {
 		// Named struct?
 		if si, ok := lookupStruct(t.Name); ok {
 			// Use $ref into $defs
-			return &Schema{Ref: "#/$defs/" + si.TypeName}
+			sch := &Schema{Ref: "#/$defs/" + si.TypeName}
+			// mark deprecation on referenced named type
+			if isDeprecatedComment(si.TypeComment) {
+				sch.Deprecated = ptr(true)
+			}
+			return sch
 		}
 
 		// Unknown identifier → loose object
@@ -840,9 +875,10 @@ func ensureRuntimeRawSchema() {
 	}
 
 	raw := &Schema{
-		Schema: DefaultSchemaURI,
-		ID:     RuntimeRawID,
-		Type:   "object",
+		Schema:  DefaultSchemaURI,
+		ID:      RuntimeRawID,
+		Comment: "Raw is used to hold extensions that dynamically define behavior at runtime",
+		Type:    "object",
 		Properties: map[string]*Schema{
 			"type": {
 				Ref: "#/$defs/" + RuntimeTypeDef,
@@ -863,6 +899,7 @@ func ensureRuntimeTypeSchema() {
 	t := &Schema{
 		Schema:  DefaultSchemaURI,
 		ID:      RuntimeTypeID,
+		Comment: "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
 		Type:    "string",
 		Pattern: runtimeTypePattern,
 	}

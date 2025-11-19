@@ -20,6 +20,7 @@
   "$defs": {
     "runtime.Raw": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "Raw is used to hold extensions that dynamically define behavior at runtime",
       "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Raw.json",
       "type": "object",
       "properties": {

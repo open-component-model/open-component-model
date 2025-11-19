@@ -150,6 +150,7 @@ tasks:
     desc: "Run all Code Generators in the project"
     deps:
       - task: 'bindings/go/generator:ocmtypegen/generate'
+      - task: 'bindings/go/generator:jsonschemagen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
       - task: 'kubernetes/controller:manifests'
       - task: 'kubernetes/controller:generate'
