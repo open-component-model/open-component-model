@@ -1,16 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "ocm.software/open-component-model/bindings/go/generator/jsonschema/test/schemas/SampleType.json",
+  "$id": "ocm.software/open-component-model/bindings/go/generator/jsonschemagen/test/schemas/SampleType.json",
+  "description": "SampleType is a sample struct that includes a field of type runtime.Type.\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
   "title": "SampleType",
   "type": "object",
   "properties": {
     "MyStruct": {
+      "description": "MyStructComment",
       "type": "object",
       "properties": {
         "myString": {
           "type": "string"
         }
       },
+      "additionalProperties": false,
       "required": [
         "myString"
       ]
@@ -25,23 +28,71 @@
       "type": "integer"
     },
     "myMap": {
+      "description": "MyMapComment",
       "type": "object",
       "additionalProperties": {
         "type": "string"
       }
     },
-    "myRaw": {},
+    "myRaw": {
+      "description": "MyRawComment",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "type"
+      ]
+    },
     "myRuntime": {
+      "description": "MyRuntimeComment",
       "type": "object"
     },
     "mySlice": {
+      "description": "MySliceComment",
       "type": "array",
       "items": {
         "type": "string"
       }
     },
     "myString": {
+      "description": "Comment",
       "type": "string"
+    },
+    "myUnknownMap": {
+      "description": "MyUnknownMapComment",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "nested": {
+      "description": "NestedComment",
+      "type": "object",
+      "properties": {
+        "nestedField": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "nestedField"
+      ]
+    },
+    "nestedPointer": {
+      "description": "NestedPointerComment",
+      "type": "object",
+      "properties": {
+        "nestedField": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "nestedField"
+      ]
     },
     "type": {
       "type": "string",
@@ -57,7 +108,10 @@
     "MyStruct",
     "mySlice",
     "myMap",
+    "myUnknownMap",
     "myRuntime",
-    "myRaw"
+    "myRaw",
+    "nested",
+    "nestedPointer"
   ]
 }

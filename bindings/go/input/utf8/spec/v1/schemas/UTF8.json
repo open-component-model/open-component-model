@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/input/utf8/spec/v1/schemas/UTF8.json",
+  "description": "UTF8 describes an input sourced by a UTF-8 string.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "UTF8",
+  "type": "object",
+  "properties": {
+    "compress": {
+      "description": "Compress indicates whether the file should be compressed with gzip.",
+      "type": "boolean"
+    },
+    "formattedJson": {
+      "description": "FormattedJSON is a JSON object, raw encoded via UTF-8, with default indentation applied.",
+      "type": "object"
+    },
+    "json": {
+      "description": "JSON is a JSON object, raw encoded via UTF-8.",
+      "type": "object"
+    },
+    "text": {
+      "description": "Text is an UTF-8 string, raw encoded.",
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    },
+    "yaml": {
+      "description": "YAML is a YAML object, raw encoded via UTF-8.",
+      "type": "object"
+    }
+  },
+  "required": [
+    "type"
+  ]
+}

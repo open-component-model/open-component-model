@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/input/file/spec/v1/schemas/File.json",
+  "description": "File describes an input sourced by a file.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "File",
+  "type": "object",
+  "properties": {
+    "compress": {
+      "description": "Compress indicates whether the file should be compressed with gzip.",
+      "type": "boolean"
+    },
+    "mediaType": {
+      "description": "MediaType is the media type of the file.",
+      "type": "string"
+    },
+    "path": {
+      "description": "Path is the path to the file.",
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  },
+  "required": [
+    "type",
+    "path"
+  ]
+}

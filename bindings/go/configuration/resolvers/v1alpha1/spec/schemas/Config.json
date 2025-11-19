@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec/schemas/Config.json",
+  "description": "Config is the new OCM configuration type for configuring glob based\nresolvers that replace the deprecated fallback resolvers.\ntype: resolvers.config.ocm.software\nresolvers:\n- repository:\ntype: OCIRegistry\nbaseUrl: ghcr.io\nsubPath: open-component-model/components\ncomponentName: ocm.software/core/*\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "Config",
+  "type": "object",
+  "properties": {
+    "resolvers": {
+      "description": "Resolvers define a list of OCM repository specifications to be used to resolve\ndedicated component versions using glob patterns.\nAll matching entries are tried to lookup a component version in the order\nthey are defined in the configuration.\nRepositories with a specified componentName pattern are only tried if the pattern\nmatches the component name using glob syntax.\nIf resolvers are defined, it is possible to use component version names on the\ncommand line without a repository. The names are resolved with the specified\nresolution rule.\nThey are also used as default lookup repositories to lookup component references\nfor recursive operations on component versions («--lookup» option).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "componentNamePattern": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "type"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "repository"
+        ]
+      }
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  },
+  "required": [
+    "type"
+  ]
+}

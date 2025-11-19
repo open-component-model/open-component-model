@@ -45,3 +45,35 @@ tasks:
     desc: "Run OCM Type Generation test"
     cmds:
       - cmd: 'go run {{ .TASKFILE_DIR }}/ocmtypegen/... {{ .TASKFILE_DIR }}/ocmtypegen/test'
+
+  jsonschemagen/install:
+    desc: "Install {{.PKG}} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
+    vars:
+      PKG: '{{ .TASKFILE_DIR }}/jsonschemagen/...'
+    env:
+      GOBIN: '{{ .ROOT_DIR }}/tmp/bin'
+    cmds:
+      - go install {{ .PKG }}
+
+  jsonschemagen/generate:
+    deps: ["jsonschemagen/install"]
+    desc: "Run Type OCM JSON Schema Generation in the Project"
+    cmds: [ task: jsonschemagen/concurrent ]
+
+  jsonschemagen/concurrent:
+    internal: true
+    deps:
+      - for: { var: GO_MODULES }
+        task: 'jsonschemagen/module'
+        vars: { ITEM: '{{ .ITEM }}' }
+
+  jsonschemagen/module:
+    internal: true
+    silent: true
+    prefix: '{{.ITEM}}'
+    cmd: '{{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .ROOT_DIR }}/{{.ITEM}}'
+
+  jsonschemagen/test:
+    desc: "Run OCM JSON Schema Generation test"
+    cmds:
+      - cmd: 'go run {{ .TASKFILE_DIR }}/jsonschemagen/... {{ .TASKFILE_DIR }}/jsonschemagen/test'

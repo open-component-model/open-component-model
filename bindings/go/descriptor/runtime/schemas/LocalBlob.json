@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/descriptor/runtime/schemas/LocalBlob.json",
+  "description": "LocalBlob describes the access for a local blob.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "LocalBlob",
+  "type": "object",
+  "properties": {
+    "globalAccess": {
+      "description": "GlobalAccess is an optional field describing a possibility\nfor a global access. If given, it MUST describe a global access method.",
+      "type": "object"
+    },
+    "localReference": {
+      "description": "LocalReference is the repository local identity of the blob.\nit is used by the repository implementation to get access\nto the blob and if therefore specific to a dedicated repository type.",
+      "type": "string"
+    },
+    "mediaType": {
+      "description": "MediaType is the media type of the object represented by the blob",
+      "type": "string"
+    },
+    "referenceName": {
+      "description": "ReferenceName is an optional static name the object should be\nuse in a local repository context. It is use by a repository\nto optionally determine a globally referenceable access according\nto the OCI distribution spec. The result will be stored\nby the repository in the field ImageReference.\nThe value is typically an OCI repository name optionally\nfollowed by a colon ':' and a tag",
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  },
+  "required": [
+    "type",
+    "localReference",
+    "mediaType"
+  ]
+}

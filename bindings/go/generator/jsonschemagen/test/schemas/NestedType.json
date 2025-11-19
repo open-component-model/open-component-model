@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/generator/jsonschemagen/test/schemas/NestedType.json",
+  "description": "NestedType is a nested struct used for testing.\n+k8s:deepcopy-gen=true\n+ocm:jsonschema-gen=true",
+  "title": "NestedType",
+  "type": "object",
+  "properties": {
+    "nestedField": {
+      "description": "NestedFieldComment",
+      "type": "string"
+    }
+  },
+  "required": [
+    "nestedField"
+  ]
+}

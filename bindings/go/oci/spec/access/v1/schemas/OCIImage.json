@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/oci/spec/access/v1/schemas/OCIImage.json",
+  "description": "OCIImage describes the access for a oci registry.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "OCIImage",
+  "type": "object",
+  "properties": {
+    "imageReference": {
+      "description": "ImageReference is the actual reference to the oci image repository and tag.",
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  },
+  "required": [
+    "type",
+    "imageReference"
+  ]
+}

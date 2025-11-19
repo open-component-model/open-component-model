@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/spec/schemas/Config.json",
+  "description": "Config is the OCM configuration type for configuring legacy fallback\nresolvers.\ntype: ocm.config.ocm.software\nresolvers:\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 100\n- repository:\ntype: CommonTransportFormat/v1\nfilePath: ./ocm/primary-transport-archive\npriority: 10\nDeprecated: Resolvers are deprecated and are only added for backwards\ncompatibility.\nNew concepts will likely be introduced in the future (contributions welcome!).\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "Config",
+  "type": "object",
+  "properties": {
+    "aliases": {
+      "description": "With aliases repository alias names can be mapped to a repository specification.\nThe alias name can be used in a string notation for an OCM repository.\nDeprecated: Aliases are deprecated and are ignored with a warning message.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "type"
+        ]
+      }
+    },
+    "resolvers": {
+      "description": "Resolvers define a list of OCM repository specifications to be used to resolve\ndedicated component versions.\nAll matching entries are tried to lookup a component version in the following\norder:\n- highest priority first\nThe default priority is spec.DefaultLookupPriority (10).\nRepositories with a specified prefix are only even tried if the prefix\nmatches the component name.\nIf resolvers are defined, it is possible to use component version names on the\ncommand line without a repository. The names are resolved with the specified\nresolution rule.\nThey are also used as default lookup repositories to lookup component references\nfor recursive operations on component versions («--lookup» option).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "componentNamePattern": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+              }
+            },
+            "additionalProperties": true,
+            "required": [
+              "type"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "repository"
+        ]
+      }
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  },
+  "required": [
+    "type"
+  ]
+}

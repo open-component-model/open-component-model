@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec/schemas/Config.json",
+  "description": "Config represents the top-level configuration for the transformation.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "Config",
+  "type": "object",
+  "properties": {
+    "rules": {
+      "description": "Rules defines rules for extracting layers to specific files.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "layerSelectors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "matchExpressions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "matchProperties": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  },
+  "required": [
+    "type"
+  ]
+}

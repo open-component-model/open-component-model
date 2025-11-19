@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec/schemas/LayerSelector.json",
+  "description": "LayerSelector allows selecting layers based on index, mediatype, and annotations.\n+k8s:deepcopy-gen=true\n+ocm:jsonschema-gen=true",
+  "title": "LayerSelector",
+  "type": "object",
+  "properties": {
+    "matchExpressions": {
+      "description": "MatchExpressions is a list of selectors. The selectors are ANDed together.\nUse predefined keys like 'layer.index' and 'layer.mediaType' for built-in properties.",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "matchProperties": {
+      "description": "MatchProperties is a map of {key,value} pairs. A single {key,value} in the matchLabels\nmap is equivalent to an element of matchExpressions, whose key field is \"key\", the\noperator is \"In\", and the value array contains only \"value\".",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

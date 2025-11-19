@@ -35,6 +35,7 @@ func init() {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Config struct {
 	Type runtime.Type `json:"type"`
 
@@ -59,6 +60,7 @@ type Config struct {
 // to allow defining component version resolution using glob patterns.
 //
 // +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
 type Resolver struct {
 	// Repository is the OCM repository specification to be used for resolving
 	// component versions.

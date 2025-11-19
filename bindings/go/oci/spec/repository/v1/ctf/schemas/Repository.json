@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf/schemas/Repository.json",
+  "description": "Repository is a type that represents an OCI repository backed by a CTF archive.\nThis archive is accessed as if it was a remote OCI repository, but all accesses to it\nare translated into archive-specific operations.\nNote that content stored within this Repository is not necessarily globally accessible so\nthe OCI library does not attempt to interpret global accesses.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "Repository",
+  "type": "object",
+  "properties": {
+    "accessMode": {
+      "description": "AccessMode can be set to request readonly access or creation\nThe format of the path is determined by the access mode bitmask aggregated with |.\nIf not specified, the AccessMode will be interpreted as AccessModeReadOnly for read-based operations\nand as AccessModeReadWrite for write-based operations.",
+      "type": "object"
+    },
+    "filePath": {
+      "description": "Path is the path of the CTF Archive on the filesystem.\nExamples\n- ./relative/path/to/archive.tgz\n- relative/path/to/archive.tar\n- /absolute/path/to/archive-folder",
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  },
+  "required": [
+    "type",
+    "filePath"
+  ]
+}

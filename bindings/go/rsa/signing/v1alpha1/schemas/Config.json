@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1/schemas/Config.json",
+  "description": "Config defines configuration for signing based on AlgorithmRSASSAPSS or AlgorithmRSASSAPKCS1V15.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "Config",
+  "type": "object",
+  "properties": {
+    "signatureAlgorithm": {
+      "description": "SignatureAlgorithm is the signature algorithm to use when creating new signatures.\nThis field is optional and defaults to AlgorithmRSASSAPSS. For verification, this field is ignored\nand the signature algorithm is inferred from the signature specification.",
+      "type": "string"
+    },
+    "signatureEncodingPolicy": {
+      "type": "object"
+    },
+    "type": {
+      "description": "Type identifies this configuration object’s runtime type.",
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    }
+  },
+  "required": [
+    "type"
+  ]
+}

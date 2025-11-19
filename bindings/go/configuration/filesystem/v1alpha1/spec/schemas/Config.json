@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec/schemas/Config.json",
+  "description": "Config represents the top-level configuration for the plugin manager.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "Config",
+  "type": "object",
+  "properties": {
+    "tempFolder": {
+      "description": "TempFolder defines places where plugins and other functionalities can put ephemeral files under.\nIf not defined, os.TempDir is used as a default.",
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    },
+    "workingDirectory": {
+      "description": "WorkingDirectory defines the working directory for the filesystem operations.\nThis is typically the directory where the plugin operates, and it can be used\nto resolve relative paths for file operations.\nIf not defined, the current working directory is used as a default for file operations.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type"
+  ]
+}

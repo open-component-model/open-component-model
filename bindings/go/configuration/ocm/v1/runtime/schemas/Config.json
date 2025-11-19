@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/configuration/ocm/v1/runtime/schemas/Config.json",
+  "title": "Config",
+  "type": "object"
+}

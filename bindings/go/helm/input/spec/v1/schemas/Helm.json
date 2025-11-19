@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/helm/input/spec/v1/schemas/Helm.json",
+  "description": "Helm implements the input type for helm charts.\n+k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed\n+k8s:deepcopy-gen=true\n+ocm:typegen=true\n+ocm:jsonschema-gen=true",
+  "title": "Helm",
+  "type": "object",
+  "properties": {
+    "caCert": {
+      "description": "CACert is used in combination with HelmRepository to specify a TLS root certificate to access the source helm repository.\nDeprecated: This field is deprecated in favor of using certificates through the credentials.",
+      "type": "string"
+    },
+    "caCertFile": {
+      "description": "CACertFile is used in combination with HelmRepository to specify a relative filename\nfor TLS root certificate to access the source helm repository.\nDeprecated: This field is deprecated in favor of using certificates through the credentials.",
+      "type": "string"
+    },
+    "helmRepository": {
+      "description": "HelmRepository specifies the download location of the helm chart. It can either be a URL or an OCI reference.",
+      "type": "string"
+    },
+    "path": {
+      "description": "Path is the path to the directory or tgz file containing the chart.",
+      "type": "string"
+    },
+    "repository": {
+      "description": "Repository is an OCI reference specifying the upload location of the fetched chart.\nThe reference MUST contain a version tag, and it needs to equal the version of the chart.",
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+    },
+    "version": {
+      "description": "Version is used in the following ways:\n- in the case of HTTP/S based helm repositories, the version is ignored (e.g.: https://example.com/charts/mychart-1.2.3.tgz)\n- in case of oci based helm repositories:\n- if not set, the version is taken from the oci reference tag (e.g.: oci://example.com/charts/mychart:1.2.3)\n- if set, and the oci reference tag is not set, the version is set to the value of this field.\n- if both are set they MUST equal otherwise helm download will fail with a mismatch error.\nDeprecated: This field should NOT be used, either rely on the full http/s url or an oci reference with a tag.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type"
+  ]
+}

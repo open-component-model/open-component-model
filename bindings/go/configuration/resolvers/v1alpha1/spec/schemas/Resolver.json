@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec/schemas/Resolver.json",
+  "description": "Resolver assigns a component name pattern to a single OCM repository specification\nto allow defining component version resolution using glob patterns.\n+k8s:deepcopy-gen=true\n+ocm:jsonschema-gen=true",
+  "title": "Resolver",
+  "type": "object",
+  "properties": {
+    "componentNamePattern": {
+      "description": "ComponentNamePattern specifies a glob pattern for matching component names.\nIt limits the usage of the repository to resolve only components with names\nthat match the given pattern.\nExamples:\n- \"ocm.software/core/*\" (matches any component in the core namespace)\n- \"*.software/*/test\" (matches test components in any software namespace)\n- \"ocm.software/core/[tc]est\" (matches \"test\" or \"cest\" in core namespace)",
+      "type": "string"
+    },
+    "repository": {
+      "description": "Repository is the OCM repository specification to be used for resolving\ncomponent versions.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^([a-zA-Z0-9][a-zA-Z0-9.]*)(?:/(v[0-9]+(?:alpha[0-9]+|beta[0-9]+)?))?$"
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "type"
+      ]
+    }
+  },
+  "required": [
+    "repository"
+  ]
+}
