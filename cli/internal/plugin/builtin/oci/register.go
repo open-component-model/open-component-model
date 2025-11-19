@@ -8,16 +8,12 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/oci/cache/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Register(
@@ -29,10 +25,6 @@ func Register(
 	filesystemConfig *filesystemv1alpha1.Config,
 	logger *slog.Logger,
 ) error {
-	scheme := runtime.NewScheme()
-	repository.MustAddToScheme(scheme)
-	access.MustAddToScheme(scheme)
-
 	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(Creator), provider.WithTempDir(filesystemConfig.TempFolder))
 
 	resourceRepoPlugin := ResourceRepositoryPlugin{manifests: inmemory.New(), layers: inmemory.New(), filesystemConfig: filesystemConfig}
@@ -54,11 +46,8 @@ func Register(
 			ociBlobTransformerPlugin,
 			&extractspecv1alpha1.Config{},
 		),
-		componentlister.RegisterInternalComponentListerPlugin(
-			scheme,
-			compListRegistry,
+		compListRegistry.RegisterInternalComponentListerPlugin(
 			&CTFComponentListerPlugin{},
-			&ctfv1.Repository{},
 		),
 	)
 }

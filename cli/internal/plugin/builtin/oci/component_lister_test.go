@@ -19,7 +19,7 @@ func TestCTFComponentListerPlugin_Registration(t *testing.T) {
 	repository.MustAddToScheme(scheme)
 	registry := componentlister.NewComponentListerRegistry(ctx)
 	p := &CTFComponentListerPlugin{}
-	require.NoError(t, componentlister.RegisterInternalComponentListerPlugin(scheme, registry, p, &ctfv1.Repository{}))
+	require.NoError(t, registry.RegisterInternalComponentListerPlugin(p))
 
 	// Smoke test: try to retrieve a lister for a non-existing CTF repo.
 	// We expect "path does not exist" error, meaning that the plug-in was found and tried to read the CTF.
@@ -36,7 +36,7 @@ func TestCTFComponentListerPlugin_CredentialConsumerIdentity(t *testing.T) {
 	repository.MustAddToScheme(scheme)
 	registry := componentlister.NewComponentListerRegistry(ctx)
 	p := &CTFComponentListerPlugin{}
-	require.NoError(t, componentlister.RegisterInternalComponentListerPlugin(scheme, registry, p, &ctfv1.Repository{}))
+	require.NoError(t, registry.RegisterInternalComponentListerPlugin(p))
 
 	// Credentials not supported. An error expected.
 	ctfSpec := &ctfv1.Repository{}
