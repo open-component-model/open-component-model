@@ -206,8 +206,10 @@ type StructInfo struct {
 // Global Registry for Named Struct Schemas Only
 ///////////////////////////////////////////////////////////////////////////
 
-var namedSchemas = map[string]*Schema{}
-var namedInfos = map[string]StructInfo{}
+var (
+	namedSchemas = map[string]*Schema{}
+	namedInfos   = map[string]StructInfo{}
+)
 
 func makeSchemaID(pkgPath, typeName string) string {
 	return fmt.Sprintf("%s/%s/%s.schema.json", pkgPath, SchemaDir, typeName)
@@ -879,8 +881,7 @@ func WriteSchemaJSON(info StructInfo, schema *Schema) error {
 
 	outPath := filepath.Join(outDir, info.TypeName+".schema.json")
 
-	//nolint:gosec // we're writing to a file that we control with our generators, this is fine
-	if err := os.WriteFile(outPath, raw, 0o644); err != nil {
+	if err := os.WriteFile(outPath, raw, 0o600); err != nil {
 		return err
 	}
 
@@ -942,7 +943,7 @@ func (%[1]s) JSONSchema() []byte {
 		return fmt.Errorf("formatting failed: %w", err)
 	}
 
-	return os.WriteFile(outPath, formatted, 0o644)
+	return os.WriteFile(outPath, formatted, 0o600)
 }
 
 ///////////////////////////////////////////////////////////////////////////
