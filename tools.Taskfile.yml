@@ -93,3 +93,13 @@ tasks:
         curl -fsSL
         "https://raw.githubusercontent.com/golangci/golangci-lint/{{ .GOLANGCI_LINT_TARGET_VERSION }}/install.sh"
         | sh -s -- -b "{{ .ROOT_DIR }}/tmp/bin" "{{ .GOLANGCI_LINT_TARGET_VERSION }}"
+
+  golangci-lint/verify:
+    desc: "Run golangci-lint verify once on the config file"
+    deps: [golangci-lint/install]
+    vars:
+      GOLANGCI_LINT: '{{ .ROOT_DIR }}/tmp/bin/golangci-lint'
+      GOLANGCI_LINT_CONFIG: '{{ .ROOT_DIR }}/.github/config/golangci.yml'
+    cmd: |
+      {{ .GOLANGCI_LINT }} config verify \
+        --config={{ .GOLANGCI_LINT_CONFIG }}
