@@ -17,7 +17,7 @@ type resourceDigestProcessorPluginConverter struct {
 }
 
 func (r *resourceDigestProcessorPluginConverter) GetResourceRepositoryScheme() *runtime.Scheme {
-	return r.scheme
+	return runtime.NewScheme(runtime.WithAllowUnknown())
 }
 
 func (r *resourceDigestProcessorPluginConverter) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {

@@ -17,7 +17,7 @@ type resourcePluginConverter struct {
 }
 
 func (r *resourcePluginConverter) GetResourceRepositoryScheme() *runtime.Scheme {
-	return r.scheme
+	return runtime.NewScheme(runtime.WithAllowUnknown())
 }
 
 func (r *resourcePluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {

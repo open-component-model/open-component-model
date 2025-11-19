@@ -20,7 +20,7 @@ type resourceInputPluginConverter struct {
 }
 
 func (r *resourceInputPluginConverter) GetInputMethodScheme() *runtime.Scheme {
-	return r.scheme
+	return runtime.NewScheme(runtime.WithAllowUnknown())
 }
 
 func (r *resourceInputPluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (runtime.Identity, error) {
