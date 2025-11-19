@@ -24,7 +24,7 @@ type mockInputMethod struct {
 	processedBlob     blob.ReadOnlyBlob
 }
 
-func (m *mockInputMethod) GetResourceInputMethodScheme() *runtime.Scheme {
+func (m *mockInputMethod) GetInputMethodScheme() *runtime.Scheme {
 	return runtime.NewScheme()
 }
 

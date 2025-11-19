@@ -144,9 +144,9 @@ func (r *RepositoryRegistry) RegisterInternalResourceInputPlugin(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for providerType, providerTypeAliases := range plugin.GetResourceInputMethodScheme().GetTypes() {
+	for providerType, providerTypeAliases := range plugin.GetInputMethodScheme().GetTypes() {
 		if !r.scheme.IsRegistered(providerType) {
-			if err := r.scheme.RegisterSchemeType(plugin.GetResourceInputMethodScheme(), providerType); err != nil {
+			if err := r.scheme.RegisterSchemeType(plugin.GetInputMethodScheme(), providerType); err != nil {
 				return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
 			}
 		} else {
@@ -161,7 +161,7 @@ func (r *RepositoryRegistry) RegisterInternalResourceInputPlugin(
 			if err != nil {
 				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
 			}
-			newObject, err := plugin.GetResourceInputMethodScheme().NewObject(providerType)
+			newObject, err := plugin.GetInputMethodScheme().NewObject(providerType)
 			if err != nil {
 				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
 			}
@@ -186,9 +186,9 @@ func (r *RepositoryRegistry) RegisterInternalSourceInputPlugin(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for providerType, providerTypeAliases := range plugin.GetSourceInputMethodScheme().GetTypes() {
+	for providerType, providerTypeAliases := range plugin.GetInputMethodScheme().GetTypes() {
 		if !r.scheme.IsRegistered(providerType) {
-			if err := r.scheme.RegisterSchemeType(plugin.GetSourceInputMethodScheme(), providerType); err != nil {
+			if err := r.scheme.RegisterSchemeType(plugin.GetInputMethodScheme(), providerType); err != nil {
 				return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
 			}
 		} else {
@@ -203,7 +203,7 @@ func (r *RepositoryRegistry) RegisterInternalSourceInputPlugin(
 			if err != nil {
 				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
 			}
-			newObject, err := plugin.GetSourceInputMethodScheme().NewObject(providerType)
+			newObject, err := plugin.GetInputMethodScheme().NewObject(providerType)
 			if err != nil {
 				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
 			}

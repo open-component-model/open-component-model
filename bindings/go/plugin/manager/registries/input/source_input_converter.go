@@ -18,7 +18,7 @@ type sourceInputPluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
-func (r *sourceInputPluginConverter) GetSourceInputMethodScheme() *runtime.Scheme {
+func (r *sourceInputPluginConverter) GetInputMethodScheme() *runtime.Scheme {
 	return r.scheme
 }
 

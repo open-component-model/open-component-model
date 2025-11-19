@@ -207,7 +207,7 @@ type mockResourceInputPlugin struct {
 	processCalled bool
 }
 
-func (m *mockResourceInputPlugin) GetResourceInputMethodScheme() *runtime.Scheme {
+func (m *mockResourceInputPlugin) GetInputMethodScheme() *runtime.Scheme {
 	return dummytype.Scheme
 }
 
@@ -228,7 +228,7 @@ type mockSourceInputPlugin struct {
 	processCalled bool
 }
 
-func (m *mockSourceInputPlugin) GetSourceInputMethodScheme() *runtime.Scheme {
+func (m *mockSourceInputPlugin) GetInputMethodScheme() *runtime.Scheme {
 	return dummytype.Scheme
 }
 

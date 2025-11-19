@@ -23,7 +23,7 @@ type mockSourceInputMethod struct {
 	processedBlob   blob.ReadOnlyBlob
 }
 
-func (m *mockSourceInputMethod) GetSourceInputMethodScheme() *runtime.Scheme {
+func (m *mockSourceInputMethod) GetInputMethodScheme() *runtime.Scheme {
 	return runtime.NewScheme()
 }
 

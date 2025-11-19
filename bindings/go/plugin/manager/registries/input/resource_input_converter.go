@@ -19,7 +19,7 @@ type resourceInputPluginConverter struct {
 	scheme         *runtime.Scheme
 }
 
-func (r *resourceInputPluginConverter) GetResourceInputMethodScheme() *runtime.Scheme {
+func (r *resourceInputPluginConverter) GetInputMethodScheme() *runtime.Scheme {
 	return r.scheme
 }
 

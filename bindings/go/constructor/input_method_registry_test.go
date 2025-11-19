@@ -15,7 +15,7 @@ import (
 // MockResourceInputMethod is a mock implementation of ResourceInputMethod
 type MockResourceInputMethod struct{}
 
-func (m *MockResourceInputMethod) GetResourceInputMethodScheme() *runtime.Scheme {
+func (m *MockResourceInputMethod) GetInputMethodScheme() *runtime.Scheme {
 	return runtime.NewScheme()
 }
 
@@ -40,7 +40,7 @@ func (m *MockResourceInputMethod) ProcessResource(ctx context.Context, resource 
 // MockSourceInputMethod is a mock implementation of SourceInputMethod
 type MockSourceInputMethod struct{}
 
-func (m *MockSourceInputMethod) GetSourceInputMethodScheme() *runtime.Scheme {
+func (m *MockSourceInputMethod) GetInputMethodScheme() *runtime.Scheme {
 	return runtime.NewScheme()
 }
 
