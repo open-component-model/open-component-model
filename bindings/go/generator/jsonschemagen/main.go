@@ -21,23 +21,21 @@ import (
 // Logging
 ///////////////////////////////////////////////////////////////////////////
 
-var logLevel slog.LevelVar
-
-var Logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-	Level: &logLevel,
-}))
+var Logger = slog.Default()
 
 func init() {
+	var level slog.Level
 	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
 	case "debug":
-		logLevel.Set(slog.LevelDebug)
+		level = slog.LevelDebug
 	case "warn":
-		logLevel.Set(slog.LevelWarn)
+		level = slog.LevelWarn
 	case "error":
-		logLevel.Set(slog.LevelError)
+		level = slog.LevelError
 	default:
-		logLevel.Set(slog.LevelInfo)
+		level = slog.LevelInfo
 	}
+	slog.SetLogLoggerLevel(level)
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -895,6 +893,9 @@ func WriteSchemaJSON(info StructInfo, schema *Schema) error {
 func WriteEmbedFileForPackage(info StructInfo) error {
 	pkgDir := filepath.Dir(info.File)
 	outPath := filepath.Join(pkgDir, outputGo)
+
+	Logger.Debug("Generating embed file",
+		"pkg", info.PkgName, "file", outPath)
 
 	var typesInPkg []StructInfo
 	for _, si := range namedInfos {
