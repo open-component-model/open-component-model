@@ -82,6 +82,13 @@ func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, c
 		return nil, fmt.Errorf("could not parse OCI repository URL %q: %w", repository.BaseUrl, err)
 	}
 
+	// Extract SubPath from BaseUrl if not explicitly set
+	subPath := repository.SubPath
+	if subPath == "" && purl.Path != "" && purl.Path != "/" {
+		// Use the path from BaseUrl as SubPath
+		subPath = strings.TrimPrefix(purl.Path, "/")
+	}
+
 	var opts []urlresolver.Option
 	if purl.Scheme != "" {
 		opts = append(opts, urlresolver.WithBaseURL(strings.TrimPrefix(purl.String(), purl.Scheme+"://")))
@@ -90,6 +97,10 @@ func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, c
 		}
 	} else {
 		opts = append(opts, urlresolver.WithBaseURL(repository.BaseUrl))
+	}
+
+	if subPath != "" {
+		opts = append(opts, urlresolver.WithSubPath(subPath))
 	}
 
 	opts = append(opts, urlresolver.WithBaseClient(client))

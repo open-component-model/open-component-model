@@ -38,3 +38,11 @@ func WithPlainHTTP(plainHTTP bool) Option {
 		resolver.plainHTTP = plainHTTP
 	})
 }
+
+// WithSubPath sets the repository prefix path used for the OCM repository.
+// The OCM based artifacts will use this path as a repository prefix.
+func WithSubPath(subPath string) Option {
+	return OptionFunc(func(resolver *CachingResolver) {
+		resolver.subPath = subPath
+	})
+}

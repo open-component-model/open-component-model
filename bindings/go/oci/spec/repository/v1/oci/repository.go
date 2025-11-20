@@ -34,6 +34,16 @@ type Repository struct {
 	//   - docker.io
 	//   - ghcr.io/open-component-model/ocm
 	BaseUrl string `json:"baseUrl"`
+	// SubPath is an optional repository prefix path used for the OCM repository.
+	// The OCM based artifacts will use this path as repository prefix.
+	// An OCI registry may host many OCM repositories with different repository prefixes.
+	//
+	// If not specified and BaseUrl contains a path component, the path will be used as SubPath.
+	//
+	// Examples
+	//   - "open-component-model/ocm"
+	//   - "my-org/components"
+	SubPath string `json:"subPath,omitempty"`
 }
 
 func (spec *Repository) String() string {
