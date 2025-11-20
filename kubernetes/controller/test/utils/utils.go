@@ -50,7 +50,9 @@ func DeployAndWaitForResource(ctx context.Context, manifestFilePath, waitingFor,
 			return err
 		}
 
+		fmt.Println("===============================================")
 		fmt.Println("FAILED WAITING FOR RESOURCE: ", string(output))
+		fmt.Println("===============================================")
 
 		return err
 	}
