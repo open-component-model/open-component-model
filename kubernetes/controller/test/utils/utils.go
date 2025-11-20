@@ -51,7 +51,40 @@ func DeployAndWaitForResource(ctx context.Context, manifestFilePath, waitingFor,
 		}
 
 		fmt.Println("===============================================")
-		fmt.Println("FAILED WAITING FOR RESOURCE: ", string(output))
+		fmt.Println("OCM CONTROLLER: ", string(output))
+		fmt.Println("===============================================")
+
+		// dump the cluster state.
+		cmd = exec.CommandContext(ctx, "kubectl", "logs", "-l", "app=source-controller", "-n", "flux-system")
+		output, err = Run(cmd)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("===============================================")
+		fmt.Println("SOURCE CONTROLLER: ", string(output))
+		fmt.Println("===============================================")
+
+		// dump the cluster state.
+		cmd = exec.CommandContext(ctx, "kubectl", "logs", "-l", "app=helm-controller", "-n", "flux-system")
+		output, err = Run(cmd)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("===============================================")
+		fmt.Println("HELM CONTROLLER: ", string(output))
+		fmt.Println("===============================================")
+
+		// dump the cluster state.
+		cmd = exec.CommandContext(ctx, "kubectl", "logs", "-l", "app=kustomize-controller", "-n", "flux-system")
+		output, err = Run(cmd)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("===============================================")
+		fmt.Println("KUSTOMIZE CONTROLLER: ", string(output))
 		fmt.Println("===============================================")
 
 		return err
