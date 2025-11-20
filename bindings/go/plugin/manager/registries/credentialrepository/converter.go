@@ -26,6 +26,10 @@ func NewCredentialRepositoryPluginConverter(plugin v1.CredentialRepositoryPlugin
 	}
 }
 
+func (c *credentialRepositoryPluginConverter) GetCredentialRepositoryScheme() *runtime.Scheme {
+	return runtime.NewScheme(runtime.WithAllowUnknown())
+}
+
 // ConsumerIdentityForConfig converts the internal interface call to the external contract format.
 // It wraps the config in a ConsumerIdentityForConfigRequest and calls the external plugin.
 func (c *credentialRepositoryPluginConverter) ConsumerIdentityForConfig(ctx context.Context, config runtime.Typed) (runtime.Identity, error) {

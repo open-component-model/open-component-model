@@ -7,6 +7,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/ctf"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -20,6 +21,10 @@ type CTFComponentListerPlugin struct{}
 var _ componentlister.InternalComponentListerPluginContract = (*CTFComponentListerPlugin)(nil)
 
 var ErrWrongUsage = errors.New("wrong usage of CTF component lister plugin")
+
+func (l *CTFComponentListerPlugin) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	return ocirepository.Scheme
+}
 
 // GetComponentLister returns a component lister for the given CTF repository specification.
 // If the provided specification is not of type *ctfv1.Repository, an error is returned.

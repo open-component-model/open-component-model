@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/input/utf8"
-	utf8v1 "ocm.software/open-component-model/bindings/go/input/utf8/spec/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 )
 
@@ -18,11 +17,10 @@ func Register(inputRegistry *input.RepositoryRegistry) error {
 
 func RegisterUTF8InputV1(inputRegistry *input.RepositoryRegistry) error {
 	method := &utf8.InputMethod{}
-	spec := &utf8v1.UTF8{}
-	if err := input.RegisterInternalResourceInputPlugin(utf8.Scheme, inputRegistry, method, spec); err != nil {
+	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register UTF-8 file resource input method: %w", err)
 	}
-	if err := input.RegisterInternalSourcePlugin(utf8.Scheme, inputRegistry, method, spec); err != nil {
+	if err := inputRegistry.RegisterInternalSourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register UTF-8 file source input method: %w", err)
 	}
 	return nil

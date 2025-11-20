@@ -15,3 +15,8 @@ type InternalComponentListerPluginContract interface {
 	// can be used to lookup credentials for the repository.
 	GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error)
 }
+
+type BuiltinComponentListerPluginContract interface {
+	InternalComponentListerPluginContract
+	GetComponentVersionRepositoryScheme() *runtime.Scheme
+}
