@@ -31,6 +31,7 @@ func New(opts ...Option) (*CachingResolver, error) {
 // each repository is only created once per reference.
 type CachingResolver struct {
 	baseURL    string
+	subPath    string
 	baseClient remote.Client
 	plainHTTP  bool
 
@@ -45,7 +46,11 @@ func (resolver *CachingResolver) SetClient(client remote.Client) {
 }
 
 func (resolver *CachingResolver) BasePath() string {
-	return resolver.baseURL + "/" + path.DefaultComponentDescriptorPath
+	basePath := resolver.baseURL
+	if resolver.subPath != "" {
+		basePath = basePath + "/" + resolver.subPath
+	}
+	return basePath + "/" + path.DefaultComponentDescriptorPath
 }
 
 func (resolver *CachingResolver) ComponentVersionReference(ctx context.Context, component, version string) string {

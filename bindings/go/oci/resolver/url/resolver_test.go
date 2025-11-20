@@ -57,6 +57,96 @@ func TestURLPathResolver_ComponentVersionReference(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
+func TestURLPathResolver_ComponentVersionReferenceWithSubPath(t *testing.T) {
+	tests := []struct {
+		name      string
+		baseURL   string
+		subPath   string
+		component string
+		version   string
+		expected  string
+	}{
+		{
+			name:      "with subPath",
+			baseURL:   "http://example.com",
+			subPath:   "my-org/components",
+			component: "test-component",
+			version:   "v1.0.0",
+			expected:  "http://example.com/my-org/components/component-descriptors/test-component:v1.0.0",
+		},
+		{
+			name:      "without subPath",
+			baseURL:   "http://example.com",
+			subPath:   "",
+			component: "test-component",
+			version:   "v1.0.0",
+			expected:  "http://example.com/component-descriptors/test-component:v1.0.0",
+		},
+		{
+			name:      "with nested subPath",
+			baseURL:   "http://example.com",
+			subPath:   "org/team/project",
+			component: "test-component",
+			version:   "v2.1.0",
+			expected:  "http://example.com/org/team/project/component-descriptors/test-component:v2.1.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := []url.Option{url.WithBaseURL(tt.baseURL)}
+			if tt.subPath != "" {
+				opts = append(opts, url.WithSubPath(tt.subPath))
+			}
+			resolver, err := url.New(opts...)
+			assert.NoError(t, err)
+			result := resolver.ComponentVersionReference(t.Context(), tt.component, tt.version)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestURLPathResolver_BasePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		subPath  string
+		expected string
+	}{
+		{
+			name:     "without subPath",
+			baseURL:  "http://example.com",
+			subPath:  "",
+			expected: "http://example.com/component-descriptors",
+		},
+		{
+			name:     "with subPath",
+			baseURL:  "http://example.com",
+			subPath:  "my-org/components",
+			expected: "http://example.com/my-org/components/component-descriptors",
+		},
+		{
+			name:     "with nested subPath",
+			baseURL:  "registry.example.com:5000",
+			subPath:  "org/team/project",
+			expected: "registry.example.com:5000/org/team/project/component-descriptors",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := []url.Option{url.WithBaseURL(tt.baseURL)}
+			if tt.subPath != "" {
+				opts = append(opts, url.WithSubPath(tt.subPath))
+			}
+			resolver, err := url.New(opts...)
+			assert.NoError(t, err)
+			result := resolver.BasePath()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestURLPathResolver_StoreForReference(t *testing.T) {
 	tests := []struct {
 		name        string
