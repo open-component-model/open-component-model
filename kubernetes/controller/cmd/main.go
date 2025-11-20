@@ -10,7 +10,6 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
 
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -28,6 +27,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
@@ -57,7 +57,7 @@ func init() {
 	ocm.MustRegisterMetrics(metrics.Registry)
 }
 
-//nolint:funlen,maintidx // the main function is complex enough as it is - we don't want to separate the initialization
+//nolint:funlen // the main function is complex enough as it is - we don't want to separate the initialization
 func main() {
 	var (
 		metricsAddr               string
