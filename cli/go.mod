@@ -58,3 +58,5 @@ require (
 	golang.org/x/text v0.30.0 // indirect
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251114112331-3af5ed79952f // indirect
 )
+
+replace ocm.software/open-component-model/bindings/go/oci => ../bindings/go/oci
