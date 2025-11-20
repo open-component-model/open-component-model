@@ -42,7 +42,20 @@ func DeployAndWaitForResource(ctx context.Context, manifestFilePath, waitingFor,
 		return err
 	}
 
-	return WaitForResource(ctx, waitingFor, timeout, "-f", manifestFilePath)
+	if err := WaitForResource(ctx, waitingFor, timeout, "-f", manifestFilePath); err != nil {
+		// dump the cluster state.
+		cmd := exec.CommandContext(ctx, "kubectl", "logs", "-l", "control-plane=controller-manager", "-n", "ocm-k8s-toolkit-system")
+		output, err := Run(cmd)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("FAILED WAITING FOR RESOURCE: ", string(output))
+
+		return err
+	}
+
+	return nil
 }
 
 // DeployResource takes a manifest file of a k8s resource and deploys it with "kubectl". Correspondingly,
