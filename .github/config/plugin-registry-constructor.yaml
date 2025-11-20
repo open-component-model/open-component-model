@@ -9,7 +9,4 @@ labels:
     value: official
   - name: description
     value: Official OCM plugin registry
-componentReferences:
-  - name: helminput
-    version: ((HELMINPUT_VERSION))
-    componentName: ocm.software/plugins/helminput
+componentReferences: []

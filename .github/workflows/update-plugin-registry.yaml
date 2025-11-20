@@ -204,12 +204,12 @@ jobs:
             const constructor = yaml.load(template);
             const pluginName = process.env.PLUGIN_NAME;
             constructor.version = process.env.REGISTRY_VERSION;
-            let plugin = constructor.componentReferences?.find(ref => ref.name === pluginName);
+            if (!constructor.componentReferences) {
+              constructor.componentReferences = [];
+            }
 
+            let plugin = constructor.componentReferences?.find(ref => ref.name === pluginName);
             if (!plugin) {
-              if (!constructor.componentReferences) {
-                constructor.componentReferences = [];
-              }
               plugin = {
                 name: pluginName,
                 componentName: process.env.PLUGIN_COMPONENT,
@@ -220,7 +220,7 @@ jobs:
             }
 
             plugin.version = process.env.PLUGIN_VERSION;
-            
+
             core.info(`Templates substituted`);
             core.info(`Registry version: ${constructor.version}`);
             core.info(`Plugin: ${plugin.name} v${plugin.version}`);
