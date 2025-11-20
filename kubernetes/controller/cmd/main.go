@@ -25,8 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
@@ -160,9 +160,12 @@ func main() {
 
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
 
-	ocmscheme := ocmruntime.NewScheme()
+	ocmscheme := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
+	ocmrepository.MustAddLegacyToScheme(ocmscheme)
+	ociRepository := &oci.Repository{}
+	ocmscheme.MustRegisterWithAlias(ociRepository, ocmruntime.NewUnversionedType(oci.LegacyRegistryType))
+	ocmscheme.MustRegisterWithAlias(ociRepository, ocmruntime.NewUnversionedType(oci.LegacyRegistryType2))
 	ocmrepository.MustAddToScheme(ocmscheme)
-	access.MustAddToScheme(ocmscheme)
 
 	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
 		IdleTimeout: time.Hour,
