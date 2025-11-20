@@ -56,6 +56,8 @@ jobs:
 
       - name: Setup ocm
         uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
+        with:
+          version: v0.34.0-rc.1
 
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@4a15fa6a023259353ef750acf1c98fe88407d4d0 # v2.7.2
