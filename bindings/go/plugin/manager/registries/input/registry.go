@@ -139,7 +139,7 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) 
 
 // RegisterInternalResourceInputPlugin is called to register an internal implementation for an input plugin.
 func (r *RepositoryRegistry) RegisterInternalResourceInputPlugin(
-	plugin constructor.ResourceInputMethod,
+	plugin BuiltinResourceInputMethod,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -181,7 +181,7 @@ func (r *RepositoryRegistry) RegisterInternalResourceInputPlugin(
 
 // RegisterInternalSourceInputPlugin is called to register an internal implementation for an input plugin.
 func (r *RepositoryRegistry) RegisterInternalSourceInputPlugin(
-	plugin constructor.SourceInputMethod,
+	plugin BuiltinSourceInputMethod,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

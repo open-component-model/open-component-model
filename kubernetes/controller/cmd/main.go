@@ -10,6 +10,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -37,7 +38,6 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
@@ -157,22 +157,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	pluginManager := manager.NewPluginManager(ctx)
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
+	if err := pluginManager.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider); err != nil {
+		setupLog.Error(err, "failed to register internal component version repository plugin")
+	}
 
 	ocmscheme := ocmruntime.NewScheme()
 	ocmrepository.MustAddToScheme(ocmscheme)
 	access.MustAddToScheme(ocmscheme)
-
-	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
-		IdleTimeout: time.Hour,
-		Logger:      &setupLog,
-		Scheme:      ocmscheme,
-		Provider:    repositoryProvider,
-	})
-	if err := mgr.Add(pm); err != nil {
-		setupLog.Error(err, "unable to add plugin manager")
-		os.Exit(1)
-	}
 
 	const unlimited = 0
 	ttl := time.Minute * 30

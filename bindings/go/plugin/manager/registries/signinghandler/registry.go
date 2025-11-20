@@ -99,7 +99,7 @@ func (r *SigningRegistry) getPlugin(ctx context.Context, spec runtime.Type) (v1.
 
 // RegisterInternalComponentSignatureHandler is called to register an internal implementation for a plugin.
 func (r *SigningRegistry) RegisterInternalComponentSignatureHandler(
-	plugin signing.Handler,
+	plugin BuiltinSigningHandler,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

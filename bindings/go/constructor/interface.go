@@ -48,7 +48,6 @@ type ResourceInputMethod interface {
 	// These can then be passed to ProcessResource.
 	ResourceConsumerIdentityProvider
 	ProcessResource(ctx context.Context, resource *constructor.Resource, credentials map[string]string) (result *ResourceInputMethodResult, err error)
-	GetInputMethodScheme() *runtime.Scheme
 }
 
 // SourceInputMethodResult is the return value of a SourceInputMethod.
@@ -89,7 +88,6 @@ type SourceInputMethod interface {
 	// These can then be passed to ProcessSource.
 	SourceConsumerIdentityProvider
 	ProcessSource(ctx context.Context, source *constructor.Source, credentials map[string]string) (result *SourceInputMethodResult, err error)
-	GetInputMethodScheme() *runtime.Scheme
 }
 
 type ResourceInputMethodProvider interface {
@@ -112,8 +110,6 @@ type ResourceDigestProcessor interface {
 	// The resource returned MUST have its digest information filled appropriately or the method MUST return an error.
 	// The resource passed MUST have an access set that can be used to interpret the resource and provide the digest.
 	ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials map[string]string) (*descriptor.Resource, error)
-
-	GetResourceRepositoryScheme() *runtime.Scheme
 }
 
 type ResourceDigestProcessorProvider interface {

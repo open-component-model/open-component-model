@@ -26,7 +26,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
@@ -455,11 +454,6 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Lo
 		cvRepoPlugin,
 	)
 	require.NoError(t, err)
-	pluginManager := &plugins.PluginManager{
-		PluginManager: pm,
-		Scheme:        ocmruntime.NewScheme(),
-		Provider:      pm.ComponentVersionRepositoryRegistry,
-	}
 
 	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
 	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
@@ -467,7 +461,7 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Lo
 		Client: k8sClient,
 		Cache:  cache,
 	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp, pluginManager)
+	resolver := resolution.NewResolver(k8sClient, logger, wp, pm)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)

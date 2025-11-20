@@ -25,7 +25,7 @@ type constructedPlugin struct {
 
 // RegisterInternalComponentListerPlugin is called to register an internal implementation for a component lister plugin.
 func (r *ComponentListerRegistry) RegisterInternalComponentListerPlugin(
-	plugin InternalComponentListerPluginContract,
+	plugin BuiltinComponentListerPluginContract,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

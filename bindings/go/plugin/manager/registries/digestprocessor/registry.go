@@ -34,7 +34,7 @@ func NewDigestProcessorRegistry(ctx context.Context) *RepositoryRegistry {
 // RegisterInternalDigestProcessorPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
 func (r *RepositoryRegistry) RegisterInternalDigestProcessorPlugin(
-	plugin constructor.ResourceDigestProcessor,
+	plugin BuiltinDigestProcessorPlugin,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

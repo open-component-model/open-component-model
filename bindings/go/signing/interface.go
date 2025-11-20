@@ -13,7 +13,6 @@ import (
 type Handler interface {
 	Signer
 	Verifier
-	GetSigningHandlerScheme() *runtime.Scheme
 }
 
 // Signer signs a normalized Component Descriptor.

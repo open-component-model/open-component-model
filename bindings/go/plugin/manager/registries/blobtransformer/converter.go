@@ -20,10 +20,6 @@ type converter struct {
 	scheme         *runtime.Scheme
 }
 
-func (c *converter) GetTransformerScheme() *runtime.Scheme {
-	return runtime.NewScheme(runtime.WithAllowUnknown())
-}
-
 func (c *converter) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, spec runtime.Typed, credentials map[string]string) (_ blob.ReadOnlyBlob, err error) {
 	tmp, err := os.CreateTemp("", "blob")
 	if err != nil {

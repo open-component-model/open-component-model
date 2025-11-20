@@ -41,7 +41,7 @@ type RepositoryRegistry struct {
 // RegisterInternalComponentVersionRepositoryPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
 func (r *RepositoryRegistry) RegisterInternalComponentVersionRepositoryPlugin(
-	p repository.ComponentVersionRepositoryProvider,
+	p BuiltinComponentVersionRepositoryProvider,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

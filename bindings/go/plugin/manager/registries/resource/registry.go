@@ -97,7 +97,7 @@ func (r *ResourceRegistry) getPlugin(ctx context.Context, spec runtime.Type) (v1
 }
 
 // RegisterInternalResourcePlugin is called to register an internal implementation for a resource plugin.
-func (r *ResourceRegistry) RegisterInternalResourcePlugin(plugin Repository) error {
+func (r *ResourceRegistry) RegisterInternalResourcePlugin(plugin BuiltinResourceRepository) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

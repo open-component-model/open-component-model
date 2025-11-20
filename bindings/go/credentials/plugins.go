@@ -24,8 +24,6 @@ type RepositoryPlugin interface {
 	// and consumer identity. The provided credentials map may contain pre-resolved
 	// credentials from the credential graph.
 	Resolve(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
-
-	GetCredentialRepositoryScheme() *runtime.Scheme
 }
 
 // CredentialPlugin defines the interface for plugins that handle custom credential

@@ -40,7 +40,7 @@ type Registry struct {
 // RegisterInternalBlobTransformerPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
 func (r *Registry) RegisterInternalBlobTransformerPlugin(
-	plugin transformer.Transformer,
+	plugin BuiltinBlobTransformer,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

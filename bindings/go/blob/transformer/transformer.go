@@ -13,6 +13,4 @@ type Transformer interface {
 	// TransformBlob transforms the given blob data according to the specified configuration.
 	// It returns the transformed data as a blob.ReadOnlyBlob or an error if the transformation fails.
 	TransformBlob(ctx context.Context, input blob.ReadOnlyBlob, config runtime.Typed, credentials map[string]string) (blob.ReadOnlyBlob, error)
-
-	GetTransformerScheme() *runtime.Scheme
 }

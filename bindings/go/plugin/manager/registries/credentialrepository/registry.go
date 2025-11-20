@@ -102,7 +102,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 // RegisterInternalCredentialRepositoryPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
 func (r *RepositoryRegistry) RegisterInternalCredentialRepositoryPlugin(
-	plugin credentials.RepositoryPlugin,
+	plugin BuiltinCredentialRepositoryPlugin,
 	consumerTypes []runtime.Type,
 ) error {
 	r.mu.Lock()
