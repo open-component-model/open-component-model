@@ -276,15 +276,25 @@ func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
 		// For OCI repositories, we accept URLs with or without a scheme.
 		// If a scheme is provided (e.g., https, http, oci), keep it in the resulting string.
 		// If no scheme is provided, return a string without scheme containing host, optional port, and path.
+		// The path component is extracted as SubPath.
 		uri, err := runtime.ParseURLAndAllowNoScheme(input)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse repository URI %q: %w", input, err)
 		}
 		if uri.Scheme != "" {
-			// Preserve the full URL including scheme if it was explicitly set
-			t.BaseUrl = uri.String()
+			// Include scheme in BaseUrl: "https://registry.io:443"
+			t.BaseUrl = fmt.Sprintf("%s://%s", uri.Scheme, uri.Host)
 		} else {
-			t.BaseUrl = fmt.Sprintf("%s%s", uri.Host, uri.EscapedPath())
+			// No scheme, just hostname and optional port: "registry.io:443"
+			t.BaseUrl = uri.Host
+		}
+
+		// Extract SubPath from the path component if present
+		if uri.Path != "" && uri.Path != "/" {
+			// Normalize path by collapsing consecutive slashes (e.g., "//my-org//component" -> "/my-org/component")
+			// This handles cases where users mix URL syntax with component paths
+			normalizedPath := regexp.MustCompile(`/+`).ReplaceAllString(uri.Path, "/")
+			t.SubPath = strings.TrimPrefix(normalizedPath, "/")
 		}
 	case *ctfv1.Repository:
 		t.FilePath = input
