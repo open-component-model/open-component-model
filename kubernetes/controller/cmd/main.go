@@ -25,8 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
@@ -38,6 +38,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
@@ -159,9 +160,12 @@ func main() {
 
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
 
-	ocmscheme := ocmruntime.NewScheme()
+	ocmscheme := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
+	ocmrepository.MustAddLegacyToScheme(ocmscheme)
+	ociRepository := &oci.Repository{}
+	ocmscheme.MustRegisterWithAlias(ociRepository, ocmruntime.NewUnversionedType(oci.LegacyRegistryType))
+	ocmscheme.MustRegisterWithAlias(ociRepository, ocmruntime.NewUnversionedType(oci.LegacyRegistryType2))
 	ocmrepository.MustAddToScheme(ocmscheme)
-	access.MustAddToScheme(ocmscheme)
 
 	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
 		IdleTimeout: time.Hour,
@@ -215,13 +219,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	resolver := resolution.NewResolver(mgr.GetClient(), &setupLog, workerPool, pm)
 	if err = (&component.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMContextCache: ocmContextCache,
+		OCMScheme: ocmscheme,
+		Resolver:  resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)
