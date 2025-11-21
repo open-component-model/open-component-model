@@ -96,130 +96,148 @@ components:
         imageReference: gcr.io/google_containers/echoserver:1.1
 ```
 
-We run into an interesting issue: While we can easily reference `image` (as it is an external reference), the resource `busybox` is a [valid OCI Image Layout](https://github.com/opencontainers/image-spec/blob/main/image-layout.md) that could be translated into an OCI native Artifact.
+Even though there are two resources of type `ociImage`, only one of them (`image`) can be easily used by OCI-native tooling.
+For `busybox`, we need a pre-processor.
 
-When working with existing OCM Infrastructure, it is impossible to copy the layout natively because the top-level artifact is a manifest, which itself is not allowed to reference other artifacts located within the layout itself. Currently, `ocm` transports the resource as an [OCM Artifact Set](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/common/formatspec.md#artifact-set-archive-format)
+It cannot be copied natively with the existing OCM infrastructure because the top-level artifact is a manifest, 
+and manifests are not allowed to reference other artifacts contained within the same layout. 
+Consequently, `ocm` currently transports the resource as an [OCM Artifact Set](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/common/formatspec.md#artifact-set-archive-format).
 
-While this works for transporting the resource, it makes it impossible to use the resource as an OCI Artifact, so even if it was a valid OCI Image / Artifact itself, it would first have to be exported from the registry, converted by OCM into an OCI Image Layout, and then uploaded or used.
+This enables transport but prevents using the resource as an OCI artifact. Even if it is a valid OCI image, it must be exported from the registry, converted by OCM into an OCI Image Layout, and then uploaded or used.
 
 ---
 
 ## Decision Drivers
 
-In general, the usage of artifact sets prohibits the usage of local blobs as OCI artifacts. This has several consequences:
+Using artifact sets effectively prevents local blobs from being used directly as OCI artifacts. This leads to several issues:
 
-1. Even native storage formats such as OCI Image Layouts can later not be referenced by OCI compatible tooling (i.e. "docker pull" or [HELM OCI Support](https://helm.sh/docs/topics/registries/#using-an-oci-based-registry)). **A resource with a `localBlob` access should be able to be referenced by any OCI-compliant Tool, if the local blob itself is an OCI compliant artifact type** 
-2. The transport of OCI Artifacts is inefficient, because all layers have to be first converted to an `ArtifactSet` which is then archived via `tar` and then uploaded as a manifest layer. This is not only inefficient, but also makes it impossible to use existing concurrent upload tooling in OCI for uploading images / artifacts by layer.
-3. The transport of localBlob artifacts is only possible with extensive knowledge of the internal OCM implementation of artifact sets.
+1. Even native OCI formats like OCI Image Layouts can no longer be referenced by OCI-compatible tools (e.g., `docker pull` or [Helm OCI support](https://helm.sh/docs/topics/registries/#using-an-oci-based-registry)). **A resource with a `localBlob` access should be usable by any OCI-compliant tool if the blob itself is an OCI-compliant artifact.**
+2. Transporting OCI artifacts becomes inefficient because all layers must first be converted into an `ArtifactSet`, archived as a `tar`, and then uploaded as a single manifest layer. This prevents the use of OCI’s native concurrent layer uploads.
+3. Transporting `localBlob` artifacts requires deep knowledge of OCM’s internal artifact set mechanics.
 
 Any solution should therefore:
 
 1. Make sure that the OCI Artifacts can be referenced by OCI compatible tooling
-2. Make sure that the transport of OCI Artifacts is efficient and uses existing CAS Graph Transport mechanisms (by working on manifest level, not binary level)
+2. Make sure that the transport of OCI Artifacts is efficient and uses existing CAS ([Content Addressable Storage](https://en.wikipedia.org/wiki/Content-addressable_storage)) Graph Transport mechanisms (by working on manifest level, not binary level)
 3. Make sure that the transport of localBlob artifacts is efficient
 
 To solve this, **we propose to change the OCM OCI Repository Mapping to allow referencing the descriptor via an [OCI Image Index Specification](https://github.com/opencontainers/image-spec/blob/main/image-index.md) to allow native references to OCI Manifests as local blobs**.
 
 ---
 
-## Format Change Suggestions
+Below is the **full Markdown**, now with **clear, consistent coloring** for both diagrams.
 
-The old format presents the following structure:
+* **OCM Domain = light yellow**
+* **OCI Domain = light blue**
+* **OCI Clients = light green**
+* **Artifact Set (problem) = light red**
+* **Native OCI Resource Manifest (solution) = light green**
 
-```mermaid
-flowchart TD
-    subgraph OCM
-        SPEC[Repository Specification - OCIRegistry]
-        COMPID[Component Identity]
-        COMPID --> NAME[Name]
-        COMPID --> VERSION[Version]
-        ARTIFACTSET[Artifact Set - OCM-only format]
-        COMPVER[Component Version]
-        RESOURCE[OCM Resource]
-    end
+All nodes are styled using Mermaid’s `style` and `classDef` directives.
 
+You can paste this directly into your documentation.
 
-    subgraph OCI
-        Docker & HELM & Kubernetes -->|cannot read| BLOB
-        REPO[Repository]
-        IMAGE[Image Manifest]
-        DESCRIPTOR[Component Descriptor]
-        BLOB[Local Blob Layer]
-    end
+---
 
+## Format Change Proposal
 
-    SPEC -->|forms repo prefix| REPO
-    NAME -->|forms repo suffix| REPO
-    REPO -->|hosts| IMAGE
-    VERSION -->|used as tag| IMAGE
+The current OCM format forces all resource access through an **Artifact Set**, an OCM-specific packaging format. 
+Since Artifact Sets are not native OCI media types, standard OCI tooling (Docker, Helm, Kubernetes) cannot read them.
 
-    IMAGE -->|layer 0| DESCRIPTOR
-    IMAGE -->|layers 1..n| BLOB
-    BLOB -->|sourced from Layer TAR| ARTIFACTSET
-    DESCRIPTOR -->|describes| COMPVER
-    COMPVER -->|contains| RESOURCE
-    RESOURCE -->|accessed by| ARTIFACTSET
-    ARTIFACTSET -->|contains| artifact-set-descriptor.json & blobs
+To support a backwards-compatible upgraded format safely we propose the following changes:
 
-```
+1. Fetch the component version reference from the OCI registry.
+2. If the top-level manifest is an **OCI Image Index**, search for a manifest with matching component name + version.
+3. If such a manifest exists, use it as the component version descriptor.
+4. Otherwise, fall back to interpreting the top-level manifest as the component version (legacy behavior).
 
-As one can see, all access to the resource has to happen through the artifact set, which is an OCM-only format and cannot be accessed externally. We can get around this by introducing an intermediary index that can reference other manifests natively:
+This approach enables native OCI access while preserving backward compatibility.
+
+This diagram illustrates the current situation and what we want to achieve.
 
 ```mermaid
-flowchart TD
-%% --- OCM domain ---
-    subgraph OCM
-        SPEC[Repository Specification - OCIRegistry]
-        COMPID[Component Identity]
-        COMPID --> NAME[Name]
-        COMPID --> VERSION[Version]
-        COMPVER[Component Version]
-        DESCRIPTOR[Component Descriptor]
-        RESOURCE_A[OCM Resource A]
-        RESOURCE_B[OCM Resource B]
-    end
+graph TD
 
-%% --- OCI domain ---
-    subgraph OCI
-        REPO[OCI Repository]
-        INDEX[OCI Image Index]
-        MANIFEST_DESC[OCI Manifest - Component Descriptor]
-        LAYER_0_DESC[Manifest Image Layer 0]
-        LAYER_N_DESC[Manifest Image Layer 1..n]
+%% === CLASS DEFINITIONS ===
+    classDef ocm fill:#FFF3BF,stroke:#A68C00,color:#000
+    classDef oci fill:#D0EBFF,stroke:#1971C2,color:#000
+    classDef native fill:#C3FAE8,stroke:#087F5B,color:#000
+    classDef problem fill:#FFC9C9,stroke:#C92A2A,color:#000
+    classDef client fill:#D3F9D8,stroke:#2B8A3E,color:#000
+    classDef title fill:none,stroke:none,color:#000,font-weight:bold
 
-        MANIFEST_RES[OCI Manifest - Resource Artifact]
-        ARTIFACT[Other OCI native Manifests or Layers]
-        Docker & HELM & Kubernetes -->|can read| MANIFEST_RES
-        MANIFEST_DESC -->|contains| LAYER_0_DESC & LAYER_N_DESC
-    end
+%% === BEFORE COLUMN ===
+subgraph A["Current State"]
+direction TB
 
-%% --- Connections ---
-    SPEC -->|forms repo prefix| REPO
-    NAME -->|forms repo suffix| REPO
-    VERSION -->|used as tag| INDEX
-    REPO -->|hosts| INDEX
+subgraph OCM_A["OCM"]
+A_COMPVER["Component Version"]:::ocm
+A_RESA["Resource A<br>(OCI-native)"]:::native
+A_RESB["Resource B<br>(binary)"]:::ocm
+A_ARTSET["ArtifactSet<br>(OCM-only)"]:::problem
+end
 
-    INDEX -->|as manifest 0| MANIFEST_DESC
-    INDEX -->|as manifest 1..n - only OCI Image Manifests or Index Manifests| MANIFEST_RES
+subgraph OCI_A["OCI Registry"]
+A_REPO["Repository"]:::oci
+A_MAN["Descriptor Manifest"]:::oci
+end
 
-    LAYER_0_DESC -->|contains| DESCRIPTOR
-    DESCRIPTOR -->|describes| COMPVER
-    COMPVER -->|contains| RESOURCE_A & RESOURCE_B
-    RESOURCE_A -->|references via access with native OCI Media Type| MANIFEST_RES
-    RESOURCE_B -->|references as regular binary layers| LAYER_N_DESC
-    MANIFEST_RES -->|may point to| ARTIFACT
+A_CLIENTS["OCI Clients"]:::client
+
+%% Edges (Before)
+A_COMPVER --> A_RESA --> A_ARTSET
+A_COMPVER --> A_RESB --> A_ARTSET
+
+A_COMPVER --> A_MAN --> A_REPO
+A_CLIENTS --> A_REPO
+A_CLIENTS -. "cannot read" .-> A_ARTSET
+A_ARTSET -. "embedded as layer" .-> A_MAN
+
+end
+
+
+%% === AFTER COLUMN ===
+subgraph B["Desired State"]
+direction TB
+
+subgraph OCM_B["OCM"]
+B_COMPVER["Component Version"]:::ocm
+B_RESA["Resource A<br>(OCI-native)"]:::native
+B_RESB["Resource B<br>(binary)"]:::ocm
+end
+
+subgraph OCI_B["OCI Registry"]
+B_REPO["Repository"]:::oci
+B_INDEX["OCI Image Index"]:::oci
+B_MAN["Descriptor Manifest"]:::oci
+B_MAN_RESA["Manifest for Resource A"]:::native
+end
+
+B_CLIENTS["OCI Clients"]:::client
+
+%% Edges (After)
+B_COMPVER --> B_RESA
+B_COMPVER --> B_RESB
+
+B_COMPVER --> B_MAN
+B_MAN --> B_INDEX
+B_INDEX --> B_REPO
+
+%% Native OCI artifact published normally
+B_RESA -->|"published as"| B_MAN_RESA
+B_MAN_RESA --> B_INDEX
+
+%% Binary resource stays in descriptor manifest
+B_RESB -->|"directly embedded as layer"| B_MAN
+
+%% Clients can now pull native OCI resource
+B_CLIENTS -->|"pull / read"| B_MAN_RESA
+end
 ```
-
-We can achieve this by introducing the following lookup logic:
-
-1. Get a new Component Version from the OCI Registry
-2. Check if the top level manifest is an OCI Image Index & if the index contains a manifest with the same name and version as the component version
-3. If yes, use the manifest as the component version
-4. If no, use the top level manifest as the component version
 
 Whenever we now have a `localBlob` access within a resource we can now distinguish between the following 2 cases:
 
-1. The resource is a native OCI Artifact (e.g. OCI Image, OCI Artifact, OCI Image Layout). This happens when the `mediaType` property is one of `application/vnd.oci.image.manifest.v1+json` or `application/vnd.oci.image.index.v1+json`. In this case `access.localReference` points to the manifest, and not to a layer. 
+1. The resource is a native OCI Artifact (e.g. OCI Image, OCI Artifact, OCI Image Layout). This happens when the `mediaType` property is one of `application/vnd.oci.image.manifest.v1+json` or `application/vnd.oci.image.index.v1+json`. In this case `access.localReference` points to the manifest in the top level index, and not to a layer in the descriptor's manifest.
 2. The resource is a local blob that is not an OCI Artifact (e.g. a local tar file). In this case `access.localReference` points to a layer.
 
 We can now access the resource via the `access.localReference` property natively. This makes it possible to store localBlobs with a `globalAccess` value that can be externally used by other tools.
@@ -371,11 +389,11 @@ In the beginning, the existing `ocm` CLI will only able to read from such compon
 
 ## Comparison Table of Formats
 
-| Aspect                            | Old Format                  | New Format                    |
-|-----------------------------------|-----------------------------|-------------------------------|
-| Top-level object                  | Manifest                    | Image Index                   |
-| Resource storage                  | OCM Artifact Set AND Layers | Native OCI Manifest OR Layers |
-| Tool compatibility                | OCM-only                    | OCI + OCM                     |
-| Transport efficiency              | Low (tar encapsulation)     | High (manifest/layer CAS)     |
-| Backward compatibility in OLD CLI | ✅ Full                      | ✅ Read/Write                  |
-| Backward compatibility in NEW CLI | ✅ Read                      | ✅   Read/Write                |
+| Aspect                            | Old Format                  | New Format                                     |
+|-----------------------------------|-----------------------------|------------------------------------------------|
+| Top-level object                  | Manifest                    | Image Index                                    |
+| Resource storage                  | OCM Artifact Set AND Layers | Native OCI Manifest OR Layers                  |
+| Tool compatibility                | OCM-only                    | OCI + OCM                                      |
+| Transport efficiency              | Low (tar encapsulation)     | High (manifest/layer CAS)                      |
+| Backward compatibility in OLD CLI | ✅ Read/Write                | ✅ Read (Write TBD, depends on migration period |
+| Backward compatibility in NEW CLI | ✅ Read                      | ✅   Read/Write                                 |
