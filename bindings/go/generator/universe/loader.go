@@ -18,7 +18,7 @@ func Build(roots []string) (*Universe, error) {
 
 	for _, root := range roots {
 		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil { // an error from Walk
+			if err != nil { // error from Walk
 				return err
 			}
 			if info.IsDir() {
@@ -63,7 +63,7 @@ func isEligibleGoFile(path string) bool {
 }
 
 // GuessPackagePath returns the Go import path of the folder
-// containing filePath, based on nearest go.mod.
+// containing filePath, based on the nearest go.mod.
 func GuessPackagePath(folder string) (string, error) {
 	abs, _ := filepath.Abs(folder)
 	dir := abs

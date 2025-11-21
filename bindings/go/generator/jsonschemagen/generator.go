@@ -15,11 +15,20 @@ func New(u *universe.Universe) *Generator {
 // Generate builds a JSON Schema for a root type.
 func (g *Generator) Generate(root *universe.TypeInfo) *Schema {
 	schema := g.buildRootSchema(root)
-	defs := g.collectReachableDefs(root)
 
-	if len(defs) > 0 {
-		schema.Defs = defs
+	reachable := g.collectReachableQueue(root)
+	defs := map[string]*Schema{}
+
+	for _, ti := range reachable {
+		key := universe.Definition(ti.Key)
+
+		// Build full schema, but flatten its defs away
+		full := g.buildRootSchema(ti)
+		full.Defs = nil // Flatten: no nested defs
+
+		defs[key] = full
 	}
 
+	schema.Defs = defs
 	return schema
 }
