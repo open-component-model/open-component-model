@@ -27,20 +27,15 @@ func (u *Universe) LookupType(pkgPath, typeName string) *TypeInfo {
 func (u *Universe) ResolveIdent(filePath, pkgPath string, id *ast.Ident) (*TypeInfo, bool) {
 	name := id.Name
 
-	//
 	// 1. Same-package type?
-	//
 	if ti, ok := u.Types[TypeKey{PkgPath: pkgPath, TypeName: name}]; ok {
 		return ti, true
 	}
 
-	//
 	// 2. Look through imports for alias-based matches
-	//
 	imports := u.ImportMaps[filePath]
 
 	for alias, fullImportPath := range imports {
-		//
 		// Case A:
 		//   import runtime ".../runtime"
 		//   GlobalAccess Raw
@@ -52,7 +47,6 @@ func (u *Universe) ResolveIdent(filePath, pkgPath string, id *ast.Ident) (*TypeI
 			continue
 		}
 
-		//
 		// Case B:
 		//   type Raw = runtime.Raw
 		//   type Raw runtime.Raw
@@ -70,12 +64,9 @@ func (u *Universe) ResolveIdent(filePath, pkgPath string, id *ast.Ident) (*TypeI
 				return ti, true
 			}
 
-			//
 			// The important part:
 			// Check if the TypeSpec for this type *is an alias of SelectorExpr(alias.Raw)*.
-			//
 			switch t := ti.TypeSpec.Type.(type) {
-
 			case *ast.SelectorExpr:
 				// match: type Raw = runtime.Raw
 				if t.Sel.Name == name {

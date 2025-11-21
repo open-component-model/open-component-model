@@ -1,7 +1,6 @@
 package jsonschemagen
 
 import (
-	_ "embed"
 	"encoding/json"
 	"go/ast"
 
@@ -113,7 +112,6 @@ func (g *Generator) buildAliasSchema(ti *universe.TypeInfo) *Schema {
 	desc, deprecated := extractStructDoc(ti.TypeSpec, ti.GenDecl)
 
 	switch t := ti.Expr.(type) {
-
 	case *ast.Ident: // type Foo string
 		if prim := primitiveSchema(t.Name); prim != nil {
 			s := &Schema{
@@ -210,7 +208,6 @@ func (g *Generator) buildStructRequired(st *ast.StructType) []string {
 
 func (g *Generator) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo) *Schema {
 	switch t := expr.(type) {
-
 	case *ast.Ident:
 		return g.schemaForIdent(t, ctx)
 
@@ -299,7 +296,6 @@ func (g *Generator) collectReachableQueue(root *universe.TypeInfo) []*universe.T
 
 func (g *Generator) collectFromExpr(expr ast.Expr, ctx *universe.TypeInfo, walk func(*universe.TypeInfo)) {
 	switch t := expr.(type) {
-
 	case *ast.Ident:
 		if ti, ok := g.U.ResolveIdent(ctx.FilePath, ctx.Key.PkgPath, t); ok {
 			walk(ti)

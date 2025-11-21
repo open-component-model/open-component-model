@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,7 +15,8 @@ const marker = "+ocm:jsonschema-gen=true"
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatalf("Usage: jsonschemagen <root-dir>")
+		slog.Error("Usage: jsonschemagen <root-dir>")
+		os.Exit(1)
 	}
 
 	roots := os.Args[1:]
@@ -24,11 +24,12 @@ func main() {
 	for i, root := range roots {
 		var err error
 		if roots[i], err = filepath.Abs(root); err != nil {
-			log.Fatalf("cannot resolve root directory: %v", err)
+			slog.Error("cannot resolve root directory", "root", root, "error", err)
+			os.Exit(1)
 		}
 	}
 
-	fmt.Printf("jsonschemagen: scanning %s …\n", roots)
+	slog.Info("scanning...", "roots", roots)
 
 	///////////////////////////////////////////////////////////////////////////////
 	// 1. Build Universe (discover all types + imports)
@@ -36,7 +37,8 @@ func main() {
 
 	u, err := universe.Build(roots)
 	if err != nil {
-		log.Fatalf("universe build failed: %v", err)
+		slog.Error("universe build failed", "error", err)
+		os.Exit(1)
 	}
 
 	///////////////////////////////////////////////////////////////////////////////
@@ -52,11 +54,10 @@ func main() {
 	}
 
 	if len(annotated) == 0 {
-		fmt.Println("No annotated types found (+ocm:jsonschema-gen=true). Nothing to do.")
+		slog.Warn("No annotated types found. Nothing to do.", "marker", marker)
 		return
 	}
-
-	fmt.Printf("Discovered %d annotated types.\n", len(annotated))
+	slog.Info("discovered annotated types", "types", annotated, "marker", marker)
 
 	///////////////////////////////////////////////////////////////////////////////
 	// 3. Initialize Generator
@@ -73,12 +74,13 @@ func main() {
 	for _, ti := range annotated {
 		schema := gen.Generate(ti)
 		if schema == nil {
-			log.Printf("WARNING: schema generation returned nil for %s", ti.Key.TypeName)
+			slog.Warn("schema generation returned nil", "type", ti.Key.TypeName)
 			continue
 		}
 
 		if err := writer.WriteSchemaJSON(ti, schema); err != nil {
-			log.Fatalf("write schema error for %s: %v", ti.Key.TypeName, err)
+			slog.Error("write schema error", "type", ti.Key.TypeName, "error", err)
+			os.Exit(1)
 		}
 
 		pkgDir := filepath.Dir(ti.FilePath)
@@ -105,9 +107,10 @@ func main() {
 		pkgName := types[0].File.Name.Name
 
 		if err := writer.WriteEmbedFileForPackage(pkgDir, pkgName, types); err != nil {
-			log.Fatalf("embed file error for package %s: %v", pkgDir, err)
+			slog.Error("write embed file error", "dir", pkgDir, "error", err)
+			os.Exit(1)
 		}
 	}
 
-	fmt.Println("jsonschemagen: completed successfully.")
+	slog.Info("jsonschemagen: completed successfully.")
 }
