@@ -36,6 +36,7 @@ linters:
     - loggercheck
     - mirror
     - mnd
+    - modernize
     - nakedret
     - nestif
     - nilerr

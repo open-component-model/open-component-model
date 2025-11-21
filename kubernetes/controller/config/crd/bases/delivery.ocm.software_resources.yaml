@@ -320,6 +320,7 @@ spec:
               resource:
                 properties:
                   access:
+                    type: object
                     x-kubernetes-preserve-unknown-fields: true
                   digest:
                     type: string

@@ -1,27 +1,39 @@
 ---
-title: ocm
-description: The official Open Component Model (OCM) CLI.
+title: ocm plugin registry get
+description: Get information about specified plugin from a plugin registry.
 suppressTitle: true
 toc: true
 sidebar:
   collapsed: true
 ---
 
-## ocm
+## ocm plugin registry get
 
-The official Open Component Model (OCM) CLI
-
-### Synopsis
-
-The Open Component Model command line client supports the work with OCM
-  artifacts, like Component Archives, Common Transport Archive,
-  Component Repositories, and Component Versions.
+Get information about specified plugin from a plugin registry.
 
 ```
-ocm [sub-command] [flags]
+ocm plugin registry get <plugin-name[:version]> [flags]
+```
+
+### Examples
+
+```
+  # Get information about specified plugin from a plugin registry.
+  ocm plugin registry get helminput
 ```
 
 ### Options
+
+```
+      --component-descriptor   return component descriptors of the plugins
+  -h, --help                   help for get
+  -o, --output enum            output format of the plugin list
+                               (must be one of [json ndjson table yaml]) (default table)
+      --registry string        registry URL to list plugins from
+      --version string         specific version of the plugin to display (default: latest version)
+```
+
+### Options inherited from parent commands
 
 ```
       --config string                      supply configuration by a given configuration file.
@@ -41,7 +53,6 @@ ocm [sub-command] [flags]
                                            - $EXE_DIR/ocm/config
                                            - $EXE_DIR/.ocmconfig
                                            Using the option, this configuration file be used instead of the lookup above.
-  -h, --help                               help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
@@ -64,13 +75,5 @@ ocm [sub-command] [flags]
 
 ### SEE ALSO
 
-* [ocm add]({{< relref "ocm_add.md" >}})	 - Add anything to OCM
-* [ocm completion]({{< relref "ocm_completion.md" >}})	 - Generate the autocompletion script for the specified shell
-* [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
-* [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
-* [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
-* [ocm plugin]({{< relref "ocm_plugin.md" >}})	 - Manage OCM plugins
-* [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
-* [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
-* [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
+* [ocm plugin registry]({{< relref "ocm_plugin_registry.md" >}})	 - Manage plugin registries
 

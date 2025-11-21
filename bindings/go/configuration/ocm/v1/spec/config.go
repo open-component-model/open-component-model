@@ -51,6 +51,7 @@ func init() {
 type Config struct {
 	Type runtime.Type `json:"type"`
 
+	//nolint:gocritic // Deprecated field is okay
 	// With aliases repository alias names can be mapped to a repository specification.
 	// The alias name can be used in a string notation for an OCM repository.
 	// Deprecated: Aliases are deprecated and are ignored with a warning message.
