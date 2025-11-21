@@ -57,7 +57,7 @@ func main() {
 		slog.Warn("No annotated types found. Nothing to do.", "marker", marker)
 		return
 	}
-	slog.Info("discovered annotated types", "types", annotated, "marker", marker)
+	slog.Info("discovered annotated types", "types", len(annotated), "marker", marker)
 
 	///////////////////////////////////////////////////////////////////////////////
 	// 3. Initialize Generator

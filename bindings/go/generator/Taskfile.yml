@@ -12,6 +12,7 @@ tasks:
     desc: "Run all Generator tests"
     cmds:
       - task: ocmtypegen/test
+      - task: jsonschemagen/test
       - go test -v -coverprofile=tmp/coverage.out ./...
 
   ocmtypegen/install:
@@ -48,12 +49,8 @@ tasks:
 
   jsonschemagen/install:
     desc: "Install {{.PKG}} into tmp ({{ .ROOT_DIR }}/tmp/bin) if not already present"
-    vars:
-      PKG: '{{ .TASKFILE_DIR }}/jsonschemagen/...'
-    env:
-      GOBIN: '{{ .ROOT_DIR }}/tmp/bin'
     cmds:
-      - go install {{ .PKG }}
+      - 'go build -o {{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .TASKFILE_DIR }}/jsonschemagen/cmd/main.go'
 
   jsonschemagen/generate:
     deps: ["jsonschemagen/install"]
@@ -63,4 +60,4 @@ tasks:
   jsonschemagen/test:
     desc: "Run OCM JSON Schema Generation test"
     cmds:
-      - cmd: 'go run {{ .TASKFILE_DIR }}/jsonschemagen/... {{ .TASKFILE_DIR }}'
+      - cmd: 'go run {{ .TASKFILE_DIR }}/jsonschemagen/cmd/... {{ .TASKFILE_DIR }}'
