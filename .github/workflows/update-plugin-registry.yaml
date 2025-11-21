@@ -104,7 +104,7 @@ jobs:
         run: |
           echo "REPOSITORY_OWNER=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
-      - name: Fetch current registry version
+      - name: Fetch current registry version and descriptor
         id: registry_version
         env:
           CLI_IMAGE: ghcr.io/open-component-model/cli:main
@@ -117,46 +117,53 @@ jobs:
           echo "Checking for existing registry component..."
 
           # Try to fetch the latest version of the registry component
-          if CURRENT_VERSION=$(docker run --rm \
+          if REGISTRY_DATA=$(docker run --rm \
             -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
             -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
             -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
             "$CLI_IMAGE" \
-              get cv ${OCM_REPOSITORY}//${REGISTRY_COMPONENT} -ojson --loglevel=error --latest --config /.ocmconfig | jq '.[0].component.version' 2>/dev/null) && [ -n "$CURRENT_VERSION" ]; then
+              get cv ${OCM_REPOSITORY}//${REGISTRY_COMPONENT} -ojson --loglevel=error --latest --config /.ocmconfig 2>/dev/null) && [ -n "$REGISTRY_DATA" ]; then
 
+            CURRENT_VERSION=$(echo "$REGISTRY_DATA" | jq -r '.[0].component.version')
+            echo "registry_exists=true" >> "$GITHUB_OUTPUT"
             echo "current_version=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
+
+            # Save the full descriptor to a file for later use
+            echo "$REGISTRY_DATA" | jq '.[0].component' > /tmp/registry-descriptor.json
             echo "Found existing registry at version ${CURRENT_VERSION}"
           else
+            echo "registry_exists=false" >> "$GITHUB_OUTPUT"
             echo "current_version=v0.0.1" >> "$GITHUB_OUTPUT"
-            echo "Registry component not found, will start with v0.0.1"
+            echo "Registry component not found, will create new registry at v0.1.0"
           fi
 
-      - name: Check if plugin is already referenced by the plugin registry
+      - name: Check plugin and detect version conflicts
         id: check_plugin
         env:
-          CLI_IMAGE: ghcr.io/open-component-model/cli:main
-          OCM_REPOSITORY: ${{ env.REPOSITORY_OWNER }}
-          REGISTRY_COMPONENT: ocm.software/plugin-registry
           PLUGIN_NAME: ${{ steps.plugin.outputs.plugin_name }}
-          CURRENT_VERSION: ${{ steps.registry_version.outputs.current_version }}
+          PLUGIN_VERSION: ${{ steps.plugin.outputs.plugin_version }}
+          REGISTRY_EXISTS: ${{ steps.registry_version.outputs.registry_exists }}
         shell: bash
         run: |
           set -euo pipefail
 
-          if [ "$CURRENT_VERSION" = "v0.0.1" ]; then
+          if [ "$REGISTRY_EXISTS" != "true" ]; then
             echo "plugin_exists=false" >> "$GITHUB_OUTPUT"
             echo "Registry doesn't exist, plugin will be new"
             exit 0
           fi
 
-          if docker run --rm \
-            -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
-            -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
-            -v /etc/ssl/certs/:/etc/ssl/certs/:ro \
-            "$CLI_IMAGE" \
-              get cv ${OCM_REPOSITORY}//${REGISTRY_COMPONENT} -ojson --loglevel=error --config /.ocmconfig | jq '.[0].component.componentReferences[] | select(.name == "${PLUGIN_NAME}") | .name'; then
+          # Check if plugin exists and get its current version
+          if CURRENT_PLUGIN_VERSION=$(jq -r ".componentReferences[] | select(.name == \"${PLUGIN_NAME}\") | .version" /tmp/registry-descriptor.json 2>/dev/null) && [ -n "$CURRENT_PLUGIN_VERSION" ]; then
             echo "plugin_exists=true" >> "$GITHUB_OUTPUT"
-            echo "Plugin ${PLUGIN_NAME} exists in registry"
+            echo "current_plugin_version=${CURRENT_PLUGIN_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "Plugin ${PLUGIN_NAME} exists in registry at version ${CURRENT_PLUGIN_VERSION}"
+
+            # Check for version conflict
+            if [ "$CURRENT_PLUGIN_VERSION" = "$PLUGIN_VERSION" ]; then
+              echo "::error::Version conflict: Plugin ${PLUGIN_NAME} version ${PLUGIN_VERSION} already exists in the registry"
+              exit 1
+            fi
           else
             echo "plugin_exists=false" >> "$GITHUB_OUTPUT"
             echo "Plugin ${PLUGIN_NAME} not found in registry"
@@ -187,44 +194,55 @@ jobs:
             core.setOutput('new_version', newVersion);
             core.setOutput('update_type', updateType);
 
-      - name: Substitute templates in constructor
+      - name: Prepare registry constructor
         if: ${{ inputs.dry_run != true && github.event_name != 'pull_request' }}
         env:
           REGISTRY_VERSION: ${{ steps.new_version.outputs.new_version }}
           PLUGIN_NAME: ${{ steps.plugin.outputs.plugin_name }}
           PLUGIN_COMPONENT: ${{ steps.plugin.outputs.plugin_component }}
           PLUGIN_VERSION: ${{ steps.plugin.outputs.plugin_version }}
+          REGISTRY_EXISTS: ${{ steps.registry_version.outputs.registry_exists }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const fs = require('fs');
             const yaml = require('js-yaml');
             const constructorPath = process.env.REGISTRY_CONSTRUCTOR;
+            const registryExists = process.env.REGISTRY_EXISTS === 'true';
+            const pluginName = process.env.PLUGIN_NAME;
+
+            // Always load template as base
+            core.info('Loading constructor template');
             const template = fs.readFileSync(constructorPath, 'utf8');
             const constructor = yaml.load(template);
-            const pluginName = process.env.PLUGIN_NAME;
             constructor.version = process.env.REGISTRY_VERSION;
-            if (!constructor.componentReferences) {
-              constructor.componentReferences = [];
+
+            if (registryExists) {
+              // Load existing componentReferences from descriptor
+              core.info('Loading componentReferences from existing registry descriptor');
+              const descriptor = JSON.parse(fs.readFileSync('/tmp/registry-descriptor.json', 'utf8'));
+              constructor.componentReferences = descriptor.componentReferences || [];
+            } else {
+              // New registry, ensure componentReferences array exists
+              core.info('Creating new registry');
+              if (!constructor.componentReferences) {
+                constructor.componentReferences = [];
+              }
             }
 
-            let plugin = constructor.componentReferences?.find(ref => ref.name === pluginName);
-            if (!plugin) {
-              plugin = {
-                name: pluginName,
-                componentName: process.env.PLUGIN_COMPONENT,
-                version: null
-              };
-              constructor.componentReferences.push(plugin);
-              core.info(`Added new plugin reference: ${pluginName}`);
-            }
+            // add the new plugin version to the references
+            // because if the version already exists we errored in an earlier step.
+            plugin = {
+              name: pluginName,
+              componentName: process.env.PLUGIN_COMPONENT,
+              version: process.env.PLUGIN_VERSION
+            };
+            constructor.componentReferences.push(plugin);
+            core.info(`Added new plugin reference: ${pluginName}`);
 
-            plugin.version = process.env.PLUGIN_VERSION;
-
-            core.info(`Templates substituted`);
             core.info(`Registry version: ${constructor.version}`);
             core.info(`Plugin: ${plugin.name} v${plugin.version}`);
-            
+
             const rendered = yaml.dump(constructor, { lineWidth: -1 });
             fs.writeFileSync(constructorPath, rendered, 'utf8');
             core.info(`Constructor rendered to: ${constructorPath}`);
