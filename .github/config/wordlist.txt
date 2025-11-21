@@ -565,3 +565,9 @@ superset
 dl
 mirza
 kopic
+proxying
+genericocireg
+natively
+colocated
+localblobs
+artifactset
