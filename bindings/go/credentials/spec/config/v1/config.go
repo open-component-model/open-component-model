@@ -33,6 +33,7 @@ func MustRegister(scheme *runtime.Scheme) {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Config struct {
 	// Type specifies the type of the configuration
 	Type runtime.Type `json:"type"`

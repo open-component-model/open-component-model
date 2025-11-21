@@ -18,6 +18,7 @@ const (
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type OCIImage struct {
 	Type runtime.Type `json:"type"`
 	// ImageReference is the actual reference to the oci image repository and tag.
