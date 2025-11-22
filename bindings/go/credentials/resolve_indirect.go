@@ -81,7 +81,8 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 
 	wg.Wait()
 
-	if resolved == nil || len(resolved) == 0 {
+	// Only check for nil, empty credentials might mean resolved but no username, etc. are provided
+	if resolved == nil {
 		if len(errs) > 0 {
 			// If we have errors and no resolved credentials, we have to assume that the credential lookup failed due errors in the plugins.
 			return nil, errors.Join(fmt.Errorf("an error occurred in one or multiple repositories while trying to resolve credentials for identity ... %q: %w", identity.String(), errors.Join(errs...)), ErrUnknown)
