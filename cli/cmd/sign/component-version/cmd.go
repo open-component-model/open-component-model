@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
@@ -227,18 +228,22 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// credentials
-	credentials := map[string]string{}
+	credMap := map[string]string{}
 	if consumerID, err := handler.GetSigningCredentialConsumerIdentity(ctx, signatureName, *unsignedDigest, signerSpec); err == nil {
 		if creds, err := credentialGraph.Resolve(ctx, consumerID); err == nil {
-			credentials = creds
-			logger.DebugContext(ctx, "using discovered credentials", "attributes", slices.Collect(maps.Keys(credentials)))
+			credMap = creds
+			logger.DebugContext(ctx, "using discovered credentials", "attributes", slices.Collect(maps.Keys(credMap)))
 		} else {
-			logger.DebugContext(ctx, "could not resolve credentials", "error", err.Error())
+			if errors.Is(err, repository.ErrCredentialsNotFound) {
+				logger.DebugContext(ctx, "could not resolve credentials", "error", err.Error())
+			} else {
+				return fmt.Errorf("resolving signing credentials failed: %w", err)
+			}
 		}
 	}
 
 	// sign
-	sigBytes, err := handler.Sign(ctx, *unsignedDigest, signerSpec, credentials)
+	sigBytes, err := handler.Sign(ctx, *unsignedDigest, signerSpec, credMap)
 	if err != nil {
 		return fmt.Errorf("signing failed: %w", err)
 	}
