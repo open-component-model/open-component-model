@@ -46,7 +46,7 @@ func (r *resolverProvider) GetComponentVersionRepositoryForComponent(ctx context
 	if err == nil {
 		if r.graph != nil {
 			if credMap, err = r.graph.Resolve(ctx, consumerIdentity); err != nil {
-				if errors.Is(err, credentials.ErrNotFound) {
+				if errors.Is(err, repository.ErrCredentialsNotFound) {
 					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", repoSpec, err.Error()))
 				} else {
 					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", repoSpec, err)

@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
+	"ocm.software/open-component-model/bindings/go/repository"
 
-	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -234,7 +234,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 			var creds map[string]string
 			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, signature, verifierSpec); err == nil {
 				if creds, err = credentialGraph.Resolve(egctx, consumerID); err != nil {
-					if errors.Is(err, credentials.ErrNotFound) {
+					if errors.Is(err, repository.ErrCredentialsNotFound) {
 						logger.DebugContext(egctx, "could not resolve credentials for verification", "error", err.Error())
 					} else {
 						return fmt.Errorf("resolving credentials for verification failed: %w", err)
