@@ -105,6 +105,10 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
 	}
+	if cred == auth.EmptyCredential {
+		return nil, nil
+	}
+
 	credentialMap := map[string]string{}
 	if v := cred.Username; v != "" {
 		credentialMap[CredentialKeyUsername] = v

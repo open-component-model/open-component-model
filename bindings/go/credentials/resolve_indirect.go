@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -61,6 +62,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 
 		switch {
 		case err != nil:
+			slog.WarnContext(ctx, "repository plugin failed to resolve credentials", slog.Any("identity", identity), slog.Any("config", cfg.GetType()), slog.Any("error", err))
 			errs = append(errs, err)
 		case resolved == nil:
 			resolved = credentials
@@ -79,10 +81,16 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 
 	wg.Wait()
 
+	// Only check for nil, empty credentials might mean resolved but no username, etc. are provided
 	if resolved == nil {
+		if len(errs) > 0 {
+			// If we have errors and no resolved credentials, we have to assume that the credential lookup failed due errors in the plugins.
+			return nil, errors.Join(fmt.Errorf("an error occurred in one or multiple repositories while trying to resolve credentials for identity ... %q: %w", identity.String(), errors.Join(errs...)), ErrUnknown)
+		}
+
 		// If we get here, then all repository plugins failed to resolve credentials.
 		// This is not an error, but rather a signal that the identity could not be resolved indirectly.
-		return nil, errors.Join(ErrNoIndirectCredentials, errors.Join(errs...))
+		return nil, errors.Join(fmt.Errorf("no repository plugin could resolve credentials for identity %q", identity.String()), ErrNoIndirectCredentials)
 	}
 
 	// Cache the resolved credentials for future use.
