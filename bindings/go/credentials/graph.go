@@ -8,6 +8,7 @@ import (
 
 	cfgRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -20,12 +21,6 @@ var ErrNoDirectCredentials = errors.New("no direct credentials found in graph")
 // This can happen if no repository plugin is configured or if no repository plugin can resolve
 // credentials for the given identity.
 var ErrNoIndirectCredentials = errors.New("no indirect credentials found in graph")
-
-// ErrNotFound is returned when no credentials could be found for the given identity.
-var ErrNotFound = errors.New("credentials not found")
-
-// ErrUnknown is a generic error indicating an unknown failure during credential resolution.
-var ErrUnknown = errors.New("unknown error occurred")
 
 var scheme = runtime.NewScheme()
 
@@ -79,7 +74,7 @@ type Graph struct {
 // falls back to indirect resolution through plugins.
 func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
 	if _, err := identity.ParseType(); err != nil {
-		err = errors.Join(ErrUnknown, err)
+		err = errors.Join(repository.ErrUnknown, err)
 		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", err)
 	}
 
@@ -95,11 +90,11 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 	if err != nil {
 		if errors.Is(err, ErrNoDirectCredentials) || errors.Is(err, ErrNoIndirectCredentials) {
 			// not found err
-			err = errors.Join(ErrNotFound, err)
+			err = errors.Join(repository.ErrCredentialsNotFound, err)
 			return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 		}
 
-		err = errors.Join(ErrUnknown, err)
+		err = errors.Join(repository.ErrUnknown, err)
 		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 	}
 
