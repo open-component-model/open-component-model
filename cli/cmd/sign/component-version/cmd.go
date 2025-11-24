@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
@@ -234,7 +234,7 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 			credMap = creds
 			logger.DebugContext(ctx, "using discovered credentials", "attributes", slices.Collect(maps.Keys(credMap)))
 		} else {
-			if errors.Is(err, repository.ErrCredentialsNotFound) {
+			if errors.Is(err, credentials.ErrCredentialsNotFound) {
 				logger.DebugContext(ctx, "could not resolve credentials", "error", err.Error())
 			} else {
 				return fmt.Errorf("resolving signing credentials failed: %w", err)
