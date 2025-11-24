@@ -56,17 +56,39 @@ jobs:
 
       - name: Setup ocm
         uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
-        with:
-          version: v0.34.0-rc.1
 
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@4a15fa6a023259353ef750acf1c98fe88407d4d0 # v2.7.2
 
       - name: Setup Local E2E Test Cluster
         run: task kubernetes/controller:test/e2e/setup/local
+
+      - name: Create Docker config.json for GHCR
+        run: |
+          mkdir -p ${HOME}/.docker
+          echo "{\"auths\": {\"ghcr.io\": {\"auth\": \"$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64)\"}}}" > ${HOME}/.docker/config.json
+
+      # Generate OCM config that can be used in the container
+      - name: Generate OCM config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > ${HOME}/.ocmconfig <<EOF
+          type: generic.config.ocm.software/v1
+          configurations:
+            - type: credentials.config.ocm.software
+              repositories:
+                - repository:
+                    type: DockerConfig/v1
+                    dockerConfigFile: /.docker/config.json
+                    propagateConsumerIdentity: true
+          EOF
+
+          echo "Created ${HOME}/.ocmconfig:"
+          cat ${HOME}/.ocmconfig
+
       - name: Run
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: task kubernetes/controller:test/e2e
 
   publish_latest:

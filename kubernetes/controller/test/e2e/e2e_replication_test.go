@@ -1,10 +1,7 @@
 package e2e
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -43,76 +40,12 @@ var _ = Describe("Replication Controller", func() {
 		})
 
 		// This test transfers the test component from a public registry to the one configured in the test environment.
-		// GitHub credentials are required to access ghcr.io/open-component-model/ocm.
+		// The test uses neither explicit transfer options nor credentials.
 		It("should be possible to transfer the test component from its external location to configured OCI registry", func(ctx SpecContext) {
-			By("Setting up GitHub credentials for ghcr.io")
-			user, password, err := getUserAndPasswordForGitHub()
-			if err != nil {
-				Skip(fmt.Sprintf("Skipping test: %v", err))
-			}
-
-			ocmConfig := createGitHubOCMConfig(user, password)
-			tmpDir := GinkgoT().TempDir()
-			ocmConfigFile := filepath.Join(tmpDir, "ghcr-ocmconfig.yaml")
-			Expect(os.WriteFile(ocmConfigFile, []byte(ocmConfig), 0644)).To(Succeed())
-			indentedConfig := "    " + strings.ReplaceAll(strings.TrimSpace(ocmConfig), "\n", "\n    ")
-			configMapYAML := fmt.Sprintf(`apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ghcr-ocm-config
-  namespace: %s
-data:
-  .ocmconfig: |
-%s
-`, testNamespace, indentedConfig)
-
-			configMapFile := filepath.Join(tmpDir, "github-creds-configmap.yaml")
-			Expect(os.WriteFile(configMapFile, []byte(configMapYAML), 0644)).To(Succeed())
-			Expect(utils.DeployResource(ctx, configMapFile)).To(Succeed())
-			sourceRepoYAML := fmt.Sprintf(`apiVersion: delivery.ocm.software/v1alpha1
-kind: Repository
-metadata:
-  name: source-repository1
-  namespace: %s
-spec:
-  ocmConfig:
-    - kind: ConfigMap
-      name: ghcr-ocm-config
-      policy: Propagate
-  interval: 2m0s
-  repositorySpec:
-    baseUrl: ghcr.io/open-component-model/ocm
-    type: OCIRegistry
-`, testNamespace)
-
-			sourceRepoFile := filepath.Join(tmpDir, "Repository-source.yaml")
-			Expect(os.WriteFile(sourceRepoFile, []byte(sourceRepoYAML), 0644)).To(Succeed())
-
-			componentYAML := fmt.Sprintf(`apiVersion: delivery.ocm.software/v1alpha1
-kind: Component
-metadata:
-  name: podinfo1
-  namespace: %s
-spec:
-  component: ocm.software/podinfo
-  interval: 2m0s
-  repositoryRef:
-    name: source-repository1
-  semver: 6.6.2
-  ocmConfig:
-    - apiVersion: delivery.ocm.software/v1alpha1
-      kind: Repository
-      name: source-repository1
-      policy: Propagate
-`, testNamespace)
-
-			componentFile := filepath.Join(tmpDir, "Component.yaml")
-			Expect(os.WriteFile(componentFile, []byte(componentYAML), 0644)).To(Succeed())
-
 			By("Apply manifests to the cluster")
 			manifestDir := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata/replication-no-config")
-			Expect(utils.DeployAndWaitForResource(ctx, sourceRepoFile, "condition=Ready", timeout)).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(ctx, componentFile, "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-source.yaml"), "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Component.yaml"), "condition=Ready", timeout)).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-target.yaml"), "condition=Ready", timeout)).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Replication.yaml"), "condition=Ready", timeout)).To(Succeed())
 
@@ -145,64 +78,24 @@ spec:
 				Expect(internalProtectedRegistry2).NotTo(BeEmpty())
 			})
 
-			By("Setting up GitHub credentials for ghcr.io source")
-			user, password, err := getUserAndPasswordForGitHub()
-			if err != nil {
-				Skip(fmt.Sprintf("Skipping test: %v", err))
-			}
-
-			ocmConfig := createGitHubOCMConfig(user, password)
-			tmpDir := GinkgoT().TempDir()
-
-			indentedConfig := "    " + strings.ReplaceAll(strings.TrimSpace(ocmConfig), "\n", "\n    ")
-			configMapYAML := fmt.Sprintf(`apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ghcr-ocm-config
-  namespace: %s
-data:
-  .ocmconfig: |
-%s
-`, testNamespace, indentedConfig)
-
-			configMapFile := filepath.Join(tmpDir, "github-creds-configmap.yaml")
-			Expect(os.WriteFile(configMapFile, []byte(configMapYAML), 0644)).To(Succeed())
-			Expect(utils.DeployResource(ctx, configMapFile)).To(Succeed())
-
-			sourceRepoYAML := fmt.Sprintf(`apiVersion: delivery.ocm.software/v1alpha1
-kind: Repository
-metadata:
-  name: origin-repository
-  namespace: %s
-spec:
-  ocmConfig:
-    - kind: ConfigMap
-      name: ghcr-ocm-config
-      policy: Propagate
-  interval: 2m0s
-  repositorySpec:
-    baseUrl: ghcr.io/open-component-model/ocm
-    type: OCIRegistry
-`, testNamespace)
-
-			sourceRepoFile := filepath.Join(tmpDir, "Repository-source.yaml")
-			Expect(os.WriteFile(sourceRepoFile, []byte(sourceRepoYAML), 0644)).To(Succeed())
-
 			By("Apply manifests to the cluster, required for the first transfer operation")
 			manifestDir := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata/replication-with-config")
 			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ConfigMap-transfer-opt.yaml"))).To(Succeed())
 			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ConfigMap-creds1.yaml"))).To(Succeed())
-			Expect(utils.DeployAndWaitForResource(ctx, sourceRepoFile, "condition=Ready", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-source.yaml"), "condition=Ready", timeout)).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Component-origin.yaml"), "condition=Ready", timeout)).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-intermediate.yaml"), "condition=Ready", timeout)).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Replication-to-intermediate.yaml"), "condition=Ready", timeout)).To(Succeed())
 
 			By("Double-check that copied component version is present in the intermediate registry")
+			// Credentials are required for the 'ocm check' command to access the protected registry.
 			ocmconfigFile := filepath.Join(manifestDir, "creds1.ocmconfig")
+			// Use external registry URL, because the check connects from outside.
 			componentReference := protectedRegistry + "//" + ocmCompName + ":" + ocmCompVersion
 			Expect(utils.CheckOCMComponent(ctx, componentReference, ocmconfigFile, ocmCheckOptFailOnError)).To(Succeed())
 
 			By("Apply manifests to the cluster, required for the second transfer operation")
+			// The intermediate repo is now the new source. Btw., the resource already exists in the cluster.
 			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ConfigMap-creds2.yaml"))).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Component-intermediate.yaml"), "condition=Ready", timeout)).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-target.yaml"), "condition=Ready", timeout)).To(Succeed())
@@ -225,61 +118,3 @@ spec:
 		})
 	})
 })
-
-// getUserAndPasswordForGitHub safely gets GitHub credentials for testing
-func getUserAndPasswordForGitHub() (string, string, error) {
-	gh, err := exec.LookPath("gh")
-	if err != nil {
-		return "", "", fmt.Errorf("gh CLI not found: %w", err)
-	}
-
-	user, err := getGitHubUsername(gh)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get GitHub username: %w", err)
-	}
-
-	pw := exec.Command("sh", "-c", fmt.Sprintf("%s auth token", gh))
-	out, err := pw.CombinedOutput()
-	if err != nil {
-		return "", "", fmt.Errorf("gh auth token failed: %w (output: %s)", err, out)
-	}
-	password := strings.TrimSpace(string(out))
-
-	return user, password, nil
-}
-
-func getGitHubUsername(gh string) (string, error) {
-	if githubUser := os.Getenv("GITHUB_USER"); githubUser != "" {
-		return githubUser, nil
-	}
-
-	out, err := exec.Command("sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("gh api user failed: %w (output: %s)", err, out)
-	}
-	structured := map[string]interface{}{}
-	if err := json.Unmarshal(out, &structured); err != nil {
-		return "", fmt.Errorf("failed to parse gh output: %w (output: %s)", err, out)
-	}
-
-	return structured["login"].(string), nil
-}
-
-// createGitHubOCMConfig creates an OCM config file with GitHub credentials
-// using the consumer identity format (matching existing test configs)
-func createGitHubOCMConfig(user, password string) string {
-	return fmt.Sprintf(`type: generic.config.ocm.software/v1
-configurations:
-  - type: credentials.config.ocm.software
-    consumers:
-      - identity:
-          type: OCIRepository
-          hostname: ghcr.io
-          port: "443"
-        credentials:
-          - type: Credentials
-            properties:
-              username: %q
-              password: %q
-`, user, password)
-}
