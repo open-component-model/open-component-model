@@ -70,8 +70,20 @@ func NewStoreFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Reposi
 }
 
 // NewFromOCIRepoV1 creates a new [*oci.Repository] instance from an OCI repository v1 specification.
-// It configures the repository with the provided base URL and client, and sets up the appropriate
-// resolver for handling OCI registry operations.
+//
+// # Path Handling vs Old OCM
+//
+// Old OCM path handling:
+//   - ParseRef separates host from path: Host="ghcr.io", Repository="org/repo/artifact"
+//     https://github.com/open-component-model/ocm/blob/2b819e6/api/oci/ref.go#L72
+//   - MapReference builds BaseURL from Host+Scheme only, ignoring Repository path
+//     https://github.com/open-component-model/ocm/blob/2b819e6/api/oci/extensions/repositories/ocireg/uniform.go#L16
+//   - getInfo() re-parses BaseURL inconsistently: with scheme: extracts host only, without scheme: may embed path if manually created,
+//     https://github.com/open-component-model/ocm/blob/2b819e6/api/oci/extensions/repositories/ocireg/type.go#L104
+//   - Validate() uses HostInfo() to extract host, discarding any path
+//     https://github.com/open-component-model/ocm/blob/2b819e6/api/oci/extensions/repositories/ocireg/type.go#L138
+//
+// New OCM: Explicit BaseUrl + SubPath fields, consistent parsing, auto-extraction support
 func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, client remote.Client, options ...oci.RepositoryOption) (*oci.Repository, error) {
 	if repository.BaseUrl == "" {
 		return nil, fmt.Errorf("a base url is required")
