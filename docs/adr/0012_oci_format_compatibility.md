@@ -125,20 +125,6 @@ To solve this, **we propose to change the OCM OCI Repository Mapping to allow re
 
 ---
 
-Below is the **full Markdown**, now with **clear, consistent coloring** for both diagrams.
-
-* **OCM Domain = light yellow**
-* **OCI Domain = light blue**
-* **OCI Clients = light green**
-* **Artifact Set (problem) = light red**
-* **Native OCI Resource Manifest (solution) = light green**
-
-All nodes are styled using Mermaid’s `style` and `classDef` directives.
-
-You can paste this directly into your documentation.
-
----
-
 ## Format Change Proposal
 
 The current OCM format forces all resource access through an **Artifact Set**, an OCM-specific packaging format. 
