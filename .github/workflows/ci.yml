@@ -34,7 +34,7 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -166,7 +166,7 @@ jobs:
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -203,7 +203,7 @@ jobs:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -212,7 +212,7 @@ jobs:
             .github/config/golangci.yml
             .env
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -251,12 +251,12 @@ jobs:
         with:
           app_id: ${{ secrets.OCMBOT_APP_ID }}
           private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -282,14 +282,14 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
           sparse-checkout: |
             ${{ matrix.module }}
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -312,7 +312,7 @@ jobs:
         project: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -337,7 +337,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "Code Generation"
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -347,7 +347,7 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Go (required by some generators)
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version: '1.25.x'
       - name: Run Code Generation
