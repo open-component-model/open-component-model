@@ -14,13 +14,16 @@ env:
   REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
   REPO: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
 
+permissions:
+  contents: read
+  checks: read
+
 jobs:
   discover_modules:
     name: "Discover Go Modules"
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
-      checks: read
     outputs:
       # useful for working directly with modules
       modules_json: ${{ steps.filtered.outputs.modules_json }}
@@ -161,8 +164,6 @@ jobs:
     name: "golangci-lint-verify"
     runs-on: ubuntu-latest
     permissions:
-      # Required: allow read access to the content for analysis.
-      contents: read
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
     steps:
@@ -194,8 +195,6 @@ jobs:
      - golangci_lint_verify
     runs-on: ubuntu-latest
     permissions:
-      # Required: allow read access to the content for analysis.
-      contents: read
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
     if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
@@ -303,7 +302,6 @@ jobs:
     timeout-minutes: 360
     permissions:
       actions: read
-      contents: read
       security-events: write
     if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
     strategy:
