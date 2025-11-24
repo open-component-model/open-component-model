@@ -54,7 +54,7 @@ func (g *Generator) builtinRuntimeRaw() *Schema {
 			"type": {Ref: "#/$defs/runtime.Type"},
 		},
 		Required:             []string{"type"},
-		AdditionalProperties: &SchemaOrBool{Bool: boolPtr(true)},
+		AdditionalProperties: &SchemaOrBool{Bool: Ptr(true)},
 	}
 }
 
@@ -95,11 +95,11 @@ func (g *Generator) buildRootSchema(ti *universe.TypeInfo) *Schema {
 			Type:                 "object",
 			Properties:           g.buildStructProperties(ti.Struct, ti),
 			Required:             g.buildStructRequired(ti.Struct),
-			AdditionalProperties: &SchemaOrBool{Bool: boolPtr(false)},
+			AdditionalProperties: &SchemaOrBool{Bool: Ptr(false)},
 		}
 
 		if deprecated {
-			sch.Deprecated = boolPtr(true)
+			sch.Deprecated = Ptr(true)
 		}
 		return sch
 	}
@@ -123,7 +123,7 @@ func (g *Generator) buildAliasSchema(ti *universe.TypeInfo) *Schema {
 				Type:        prim.Type,
 			}
 			if deprecated {
-				s.Deprecated = boolPtr(true)
+				s.Deprecated = Ptr(true)
 			}
 			// (optional future) enum extraction
 			return s
@@ -180,7 +180,7 @@ func (g *Generator) buildStructProperties(st *ast.StructType, ti *universe.TypeI
 			sch.Description = desc
 		}
 		if deprecated {
-			sch.Deprecated = boolPtr(true)
+			sch.Deprecated = Ptr(true)
 		}
 
 		props[jsonName] = sch
@@ -347,7 +347,7 @@ func (g *Generator) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Type
 			sch.Description = desc
 		}
 		if deprecated {
-			sch.Deprecated = boolPtr(true)
+			sch.Deprecated = Ptr(true)
 		}
 
 		props[jsonName] = sch
@@ -361,7 +361,7 @@ func (g *Generator) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Type
 		Type:                 "object",
 		Properties:           props,
 		Required:             req,
-		AdditionalProperties: &SchemaOrBool{Bool: boolPtr(false)},
+		AdditionalProperties: &SchemaOrBool{Bool: Ptr(false)},
 	}
 }
 
@@ -386,8 +386,8 @@ func primitiveSchema(name string) *Schema {
 func anyObjectSchema() *Schema {
 	return &Schema{
 		Type:                 "object",
-		AdditionalProperties: &SchemaOrBool{Bool: boolPtr(true)},
+		AdditionalProperties: &SchemaOrBool{Bool: Ptr(true)},
 	}
 }
 
-func boolPtr(v bool) *bool { return &v }
+func Ptr[T any](v T) *T { return &v }
