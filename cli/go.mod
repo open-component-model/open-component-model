@@ -22,7 +22,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251118094009-5d448c440041
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1
-	ocm.software/open-component-model/bindings/go/input/file v0.0.1
+	ocm.software/open-component-model/bindings/go/input/file v0.0.2
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251118094009-5d448c440041
 	ocm.software/open-component-model/bindings/go/oci v0.0.12
 	ocm.software/open-component-model/bindings/go/plugin v0.0.10
