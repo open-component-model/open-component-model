@@ -64,8 +64,9 @@ jobs:
 
       - name: Setup Local E2E Test Cluster
         run: task kubernetes/controller:test/e2e/setup/local
-
       - name: Run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: task kubernetes/controller:test/e2e
 
   publish_latest:
