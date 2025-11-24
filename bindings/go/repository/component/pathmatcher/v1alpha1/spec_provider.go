@@ -38,37 +38,36 @@ func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver) *Spe
 // If no matching resolver is found, an error is returned.
 // componentIdentity must contain the key [IdentityKey] containing the name of the component e.g. "ocm.software/core/test".
 func (r *SpecProvider) GetRepositorySpec(ctx context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
+	logger := slogcontext.FromCtx(ctx).With(slog.String("realm", "repository"))
+
 	componentName, ok := componentIdentity[descruntime.IdentityAttributeName]
 	if !ok {
 		return nil, fmt.Errorf("failed to extract component name from identity %s", componentIdentity)
 	}
-	slogcontext.FromCtx(ctx).With(slog.String("realm", "repository")).
-		Log(ctx, slog.LevelDebug, "resolving repository spec for component",
-			slog.String("component", componentName),
-			slog.Int("resolvers", len(r.resolvers)),
-		)
+	logger.Log(ctx, slog.LevelDebug, "resolving repository spec for component",
+		slog.String("component", componentName),
+		slog.Int("resolvers", len(r.resolvers)),
+	)
 
 	for index, resolver := range r.resolvers {
-		slogcontext.FromCtx(ctx).With(slog.String("realm", "repository")).
-			Log(ctx, slog.LevelDebug, "checking resolver",
-				slog.Int("index", index),
-				slog.String("pattern", resolver.ComponentNamePattern),
-			)
+		logger.Log(ctx, slog.LevelDebug, "checking resolver",
+			slog.Int("index", index),
+			slog.String("pattern", resolver.ComponentNamePattern),
+		)
 		g, err := glob.Compile(resolver.ComponentNamePattern)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile glob pattern %q in resolver index %d: %w", resolver.ComponentNamePattern, index, err)
 		}
 		if ok := g.Match(componentName); ok {
-			slogcontext.FromCtx(ctx).With(slog.String("realm", "repository")).
-				Log(ctx, slog.LevelDebug, "matched resolver",
-					slog.String("Repository", resolver.Repository.Name),
-					slog.String("pattern", resolver.ComponentNamePattern),
-				)
+			logger.Log(ctx, slog.LevelDebug, "matched resolver",
+				slog.String("Repository", resolver.Repository.Name),
+				slog.String("pattern", resolver.ComponentNamePattern),
+			)
 			return resolver.Repository, nil
 		}
 	}
 
-	slogcontext.FromCtx(ctx).With(slog.String("realm", "repository")).
+	logger.
 		Log(ctx, slog.LevelDebug, "no matching resolver found for component",
 			slog.String("component", componentName),
 		)
