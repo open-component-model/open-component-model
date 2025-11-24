@@ -122,6 +122,21 @@ func TestNewFromOCIRepoV1(t *testing.T) {
 			wantErr:     true,
 			errContains: "a base url is required",
 		},
+		{
+			name: "base url with path",
+			repository: &ocirepospecv1.Repository{
+				BaseUrl: "https://registry.example.com/my-org/components",
+			},
+			wantErr: false,
+		},
+		{
+			name: "base url with path and explicit subPath",
+			repository: &ocirepospecv1.Repository{
+				BaseUrl: "https://registry.example.com/ignored-path",
+				SubPath: "my-org/components",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

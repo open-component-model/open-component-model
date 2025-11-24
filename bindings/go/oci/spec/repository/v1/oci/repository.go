@@ -25,15 +25,35 @@ const (
 // +ocm:typegen=true
 type Repository struct {
 	Type runtime.Type `json:"type"`
-	// BaseURL is the base url of the repository to resolve artifacts.
+	// BaseURL is the base url of the OCI registry (host + optional port).
+	// Should not include repository paths - use SubPath for that.
 	//
-	// Examples
-	//   - https://registry.example.com
-	//   - https://registry.example.com:5000
-	//   - oci://registry.example.com:5000
-	//   - docker.io
-	//   - ghcr.io/open-component-model/ocm
+	// Examples:
+	//   - "https://registry.example.com"
+	//   - "https://registry.example.com:5000"
+	//   - "oci://registry.example.com:5000"
+	//   - "docker.io"
+	//   - "ghcr.io"
+	//
+	// If BaseUrl contains a path (e.g., "ghcr.io/org/repo"),
+	// the path will be auto-extracted and used as SubPath.
 	BaseUrl string `json:"baseUrl"`
+	// SubPath is an optional repository prefix path used for the OCM repository.
+	// The OCM-based artifacts will use this path as a repository prefix.
+	// An OCI registry may host many OCM repositories with different repository prefixes.
+	//
+	// Auto-extraction: If not specified and BaseUrl contains a path component,
+	// the path will be automatically extracted and used as SubPath.
+	//
+	// Examples:
+	//   Explicit separation:
+	//     BaseUrl="ghcr.io" + SubPath="open-component-model/ocm"
+	//     → Registry: ghcr.io, Repository prefix: open-component-model/ocm
+	//
+	//   Embedded path:
+	//     BaseUrl="ghcr.io/open-component-model/ocm" + SubPath=""
+	//     → Auto-extracts to: BaseUrl="ghcr.io", SubPath="open-component-model/ocm"
+	SubPath string `json:"subPath,omitempty"`
 }
 
 func (spec *Repository) String() string {

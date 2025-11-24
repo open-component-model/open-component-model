@@ -14,6 +14,10 @@ env:
   REF: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
   REPO: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
 
+permissions:
+  contents: read
+  checks: read
+
 jobs:
   discover_modules:
     name: "Discover Go Modules"
@@ -33,7 +37,7 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -160,12 +164,10 @@ jobs:
     name: "golangci-lint-verify"
     runs-on: ubuntu-latest
     permissions:
-      # Required: allow read access to the content for analysis.
-      contents: read
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -193,8 +195,6 @@ jobs:
      - golangci_lint_verify
     runs-on: ubuntu-latest
     permissions:
-      # Required: allow read access to the content for analysis.
-      contents: read
       # Optional: allow write access to checks to allow the action to annotate code in the PR.
       checks: write
     if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
@@ -202,7 +202,7 @@ jobs:
       matrix:
         module: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -211,7 +211,7 @@ jobs:
             .github/config/golangci.yml
             .env
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -250,12 +250,12 @@ jobs:
         with:
           app_id: ${{ secrets.OCMBOT_APP_ID }}
           private_key: ${{ secrets.OCMBOT_PRIV_KEY }}
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -281,14 +281,14 @@ jobs:
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
           sparse-checkout: |
             ${{ matrix.module }}
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -302,7 +302,6 @@ jobs:
     timeout-minutes: 360
     permissions:
       actions: read
-      contents: read
       security-events: write
     if: ${{ fromJSON(needs.discover_modules.outputs.modules_json)[0] != null }} # skip if no modules are found
     strategy:
@@ -311,7 +310,7 @@ jobs:
         project: ${{ fromJSON(needs.discover_modules.outputs.modules_json) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -320,15 +319,15 @@ jobs:
             .github/workflows/ci.yml
             ${{ matrix.project }}
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@f94c9befffa4412c356fb5463a959ab7821dd57e # v3
+        uses: github/codeql-action/init@d3ced5c96c16c4332e2a61eb6f3649d6f1b20bb8 # v3
         with:
           languages: go
           queries: security-extended
       - name: Autobuild
-        uses: github/codeql-action/autobuild@f94c9befffa4412c356fb5463a959ab7821dd57e # v3
+        uses: github/codeql-action/autobuild@d3ced5c96c16c4332e2a61eb6f3649d6f1b20bb8 # v3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@f94c9befffa4412c356fb5463a959ab7821dd57e # v3
+        uses: github/codeql-action/analyze@d3ced5c96c16c4332e2a61eb6f3649d6f1b20bb8 # v3
         with:
           category: "/language:go"
 
@@ -336,7 +335,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "Code Generation"
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           repository: ${{ env.REPO }}
           ref: ${{ env.REF }}
@@ -346,7 +345,7 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Go (required by some generators)
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version: '1.25.x'
       - name: Run Code Generation
