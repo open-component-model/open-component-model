@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/repository"
-
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -413,7 +411,7 @@ func TestResolveCredentials(t *testing.T) {
 			},
 			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
-				require.ErrorIs(t, err, repository.ErrCredentialsNotFound)
+				require.ErrorIs(t, err, credentials.ErrCredentialsNotFound)
 			}),
 		},
 		{
@@ -430,7 +428,7 @@ func TestResolveCredentials(t *testing.T) {
 			},
 			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
-				require.ErrorIs(t, err, repository.ErrUnknown)
+				require.ErrorIs(t, err, credentials.ErrUnknown)
 			}),
 		},
 	} {
