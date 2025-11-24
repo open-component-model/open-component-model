@@ -52,9 +52,19 @@ type RepositoryOptions struct {
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
 func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *RepositoryOptions) (*CacheBackedRepository, error) {
 	// Load OCM configurations
+
+	fmt.Println("FASZOM CONFIG: ", opts.OCMConfigurations)
 	cfg, err := configuration.LoadConfigurations(ctx, r.client, opts.Namespace, opts.OCMConfigurations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
+	}
+
+	if cfg != nil && cfg.Config != nil {
+		for _, c := range cfg.Config.Configurations {
+			fmt.Println("CONFIG MAP FOR REPOSITORY: ", string(c.Data), c.Name, c.Type)
+		}
+	} else {
+		fmt.Println("CONFIG MAP FOR REPOSITORY WAS NIL YO!")
 	}
 
 	repo, err := r.createRepository(ctx, opts.RepositorySpec, cfg)

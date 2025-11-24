@@ -8,10 +8,15 @@ import (
 
 	"github.com/go-logr/logr"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	ocicredentialsspec "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
+	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -43,6 +48,24 @@ func (m *PluginManager) Start(ctx context.Context) error {
 
 	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(m.Scheme, pm.ComponentVersionRepositoryRegistry, m.Provider, &ctfv1.Repository{}); err != nil {
 		return fmt.Errorf("failed to register internal component version repository plugin: %w", err)
+	}
+
+	// Register OCI credential repository plugin to handle credentials for OCI registries
+	credScheme := ocmruntime.NewScheme()
+	// Register both versioned and unversioned types
+	credScheme.MustRegisterWithAlias(
+		&ocicredentialsspecv1.DockerConfig{},
+		ocicredentialsspec.CredentialRepositoryConfigType,                       // DockerConfig/v1
+		ocmruntime.NewUnversionedType(ocicredentialsspec.CredentialRepositoryConfigType.Name), // DockerConfig
+	)
+	if err := credentialrepository.RegisterInternalCredentialRepositoryPlugin(
+		credScheme,
+		pm.CredentialRepositoryRegistry,
+		&ocicredentials.OCICredentialRepository{},
+		&ocicredentialsspecv1.DockerConfig{},
+		[]ocmruntime.Type{credentials.AnyConsumerIdentityType},
+	); err != nil {
+		return fmt.Errorf("failed to register internal OCI credential repository plugin: %w", err)
 	}
 
 	m.PluginManager = pm
