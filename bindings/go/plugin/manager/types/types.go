@@ -40,9 +40,14 @@ const (
 )
 
 // Type defines an endpoint's type and the scheme of the type.
+// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
+// +k8s:deepcopy-gen=true
+// +ocm:typegen=true
 type Type struct {
-	// Type defines the type name that this plugin supports.
+	// Type defines the canonical type name that this plugin supports.
 	Type runtime.Type `json:"type"`
+	// Aliases defines alternative type names that this plugin also supports for the same type.
+	Aliases []runtime.Type
 	// JSONScheme holds the scheme for the type. This scheme corresponds to the type.
 	JSONSchema []byte `json:"jsonSchema"`
 }

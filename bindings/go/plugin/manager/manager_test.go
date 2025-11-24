@@ -107,7 +107,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 	ctx := t.Context()
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
-	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "mytest"), WithConfiguration(config)))
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	typ, err := scheme.TypeForPrototype(&dummyv1.Repository{})
@@ -119,7 +119,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 		}
 	})
 	spec := &dummyv1.Repository{
-		Type: typ,
+		Type:    typ,
 		BaseUrl: "test",
 	}
 	_, err = pm.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, spec, nil)

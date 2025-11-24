@@ -25,6 +25,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ErrNoPluginsFound is returned when a register plugin call finds no plugins.
@@ -128,7 +131,8 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		plugin.Config = *conf
 
 		output := bytes.NewBuffer(nil)
-		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
+		cmd := exec.CommandContext(ctx, "dlv", "exec", cleanPath(plugin.Path), "--headless=true", "--listen=:40000", "--api-version=2", "--accept-multiclient", "--log", "--log-dest=2", "--", "capabilities")
+		//cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
 		cmd.Stdout = output
 		cmd.Stderr = os.Stderr
 
@@ -211,16 +215,24 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 }
 
 func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
+	// if we add another capability type, we need to register it here.
+	scheme := runtime.NewScheme()
+	scheme.MustRegisterScheme(componentversionrepository.Scheme)
+
 	// Determine Configuration requirements.
-	types := &mtypes.Types{}
-	if err := json.Unmarshal(capabilitiesCommandOutput.Bytes(), types); err != nil {
+	rawPluginSpec := spec.PluginSpec{}
+	if err := json.Unmarshal(capabilitiesCommandOutput.Bytes(), &rawPluginSpec); err != nil {
 		return fmt.Errorf("failed to unmarshal capabilities: %w", err)
+	}
+	pluginSpec, err := pluginruntime.ConvertFromSpec(scheme, &rawPluginSpec)
+	if err != nil {
+		return fmt.Errorf("failed to convert plugin spec: %w", err)
 	}
 
 	if ocmConfig != nil {
-		filtered, _ := genericv1.Filter(ocmConfig, &genericv1.FilterOptions{ConfigTypes: types.ConfigTypes})
-		if len(types.ConfigTypes) > 0 && len(filtered.Configurations) == 0 {
-			return fmt.Errorf("no configuration found for plugin %s; requested configuration types: %s", plugin.ID, types.ConfigTypes)
+		filtered, _ := genericv1.Filter(ocmConfig, &genericv1.FilterOptions{ConfigTypes: pluginSpec.SupportedConfigTypes})
+		if len(pluginSpec.SupportedConfigTypes) > 0 && len(filtered.Configurations) == 0 {
+			return fmt.Errorf("no configuration found for plugin %s; requested configuration rawPluginSpec: %s", plugin.ID, pluginSpec.SupportedConfigTypes)
 		}
 
 		plugin.Config.ConfigTypes = append(plugin.Config.ConfigTypes, filtered.Configurations...)
@@ -250,59 +262,71 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 		return fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 	plugin.Stdout = sdtOut
-	plugin.Types = types.Types
 
-	for pType, typs := range plugin.Types {
-		switch pType {
-		case mtypes.ComponentVersionRepositoryPluginType:
-			for _, typ := range typs {
-				slog.DebugContext(ctx, "adding component version repository plugin", "id", plugin.ID)
-				if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, typ.Type); err != nil {
-					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
-				}
-			}
-		case mtypes.ComponentListerPluginType:
-			for _, typ := range typs {
-				slog.DebugContext(ctx, "adding component lister plugin", "id", plugin.ID)
-				if err := pm.ComponentListerRegistry.AddPlugin(plugin, typ.Type); err != nil {
-					return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
-				}
-			}
-		case mtypes.CredentialRepositoryPluginType:
-			slog.DebugContext(ctx, "adding credential repository plugin", "id", plugin.ID)
-			if err := pm.CredentialRepositoryRegistry.AddPlugin(plugin, typs[0].Type, typs[1].Type); err != nil {
-				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
-			}
-		case mtypes.InputPluginType:
-			slog.DebugContext(ctx, "adding construction resource input plugin", "id", plugin.ID)
-			if err := pm.InputRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
-				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
-			}
-		case mtypes.DigestProcessorPluginType:
-			slog.DebugContext(ctx, "adding digest processor plugin", "id", plugin.ID)
-			if err := pm.DigestProcessorRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
-				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
-			}
-		case mtypes.ResourceRepositoryPluginType:
-			slog.DebugContext(ctx, "adding resource repository plugin", "id", plugin.ID)
-			if err := pm.ResourcePluginRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
-				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
-			}
-		case mtypes.BlobTransformerPluginType:
-			slog.DebugContext(ctx, "adding blob transformer plugin", "id", plugin.ID)
-			if err := pm.BlobTransformerRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
-				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
-			}
-		case mtypes.SigningHandlerPluginType:
-			slog.DebugContext(ctx, "adding signing plugin", "id", plugin.ID)
-			if err := pm.SigningRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+	for _, capability := range pluginSpec.CapabilitySpecs {
+		switch capability := capability.(type) {
+		case *componentversionrepository.CapabilitySpec:
+			slog.DebugContext(ctx, "adding component version repository plugin", "id", plugin.ID)
+			if err := pm.ComponentVersionRepositoryRegistry.AddPluginWithAliases(plugin, capability.SupportedRepositorySpecTypes); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		}
 	}
+	//
+	//for pType, typs := range plugin.Types {
+	//	switch pType {
+	//	case mtypes.ComponentVersionRepositoryPluginType:
+	//		for _, typ := range typs {
+	//			slog.DebugContext(ctx, "adding component version repository plugin", "id", plugin.ID)
+	//			if err := pm.ComponentVersionRepositoryRegistry.AddPlugin(plugin, typ.Type); err != nil {
+	//				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+	//			}
+	//		}
+	//	case mtypes.ComponentListerPluginType:
+	//		for _, typ := range typs {
+	//			slog.DebugContext(ctx, "adding component lister plugin", "id", plugin.ID)
+	//			if err := pm.ComponentListerRegistry.AddPlugin(plugin, typ.Type); err != nil {
+	//				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+	//			}
+	//		}
+	//	case mtypes.CredentialRepositoryPluginType:
+	//		slog.DebugContext(ctx, "adding credential repository plugin", "id", plugin.ID)
+	//		if err := pm.CredentialRepositoryRegistry.AddPlugin(plugin, typs[0].Type, typs[1].Type); err != nil {
+	//			return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+	//		}
+	//	case mtypes.InputPluginType:
+	//		slog.DebugContext(ctx, "adding construction resource input plugin", "id", plugin.ID)
+	//		if err := pm.InputRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+	//			return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+	//		}
+	//	case mtypes.DigestProcessorPluginType:
+	//		slog.DebugContext(ctx, "adding digest processor plugin", "id", plugin.ID)
+	//		if err := pm.DigestProcessorRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+	//			return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+	//		}
+	//	case mtypes.ResourceRepositoryPluginType:
+	//		slog.DebugContext(ctx, "adding resource repository plugin", "id", plugin.ID)
+	//		if err := pm.ResourcePluginRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+	//			return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+	//		}
+	//	case mtypes.BlobTransformerPluginType:
+	//		slog.DebugContext(ctx, "adding blob transformer plugin", "id", plugin.ID)
+	//		if err := pm.BlobTransformerRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+	//			return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+	//		}
+	//	case mtypes.SigningHandlerPluginType:
+	//		slog.DebugContext(ctx, "adding signing plugin", "id", plugin.ID)
+	//		if err := pm.SigningRegistry.AddPlugin(plugin, typs[0].Type); err != nil {
+	//			return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
+	//		}
+	//	}
+	//}
 
 	return nil
 }
+
+// map[method]map[input]output
+// []map[input]
 
 func determineConnectionType(ctx context.Context) (mtypes.ConnectionType, error) {
 	// if we can't create a temp folder ( for example we are in a scratch container ) we default to TCP
