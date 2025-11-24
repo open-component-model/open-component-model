@@ -85,12 +85,12 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 	if resolved == nil {
 		if len(errs) > 0 {
 			// If we have errors and no resolved credentials, we have to assume that the credential lookup failed due errors in the plugins.
-			return nil, errors.Join(fmt.Errorf("an error occurred in one or multiple repositories while trying to resolve credentials for identity ... %q: %w", identity.String(), errors.Join(errs...)), ErrUnknown)
+			return nil, errors.Join(ErrUnknown, fmt.Errorf("an error occurred in one or multiple repositories while trying to resolve credentials for identity ... %q: %w", identity.String(), errors.Join(errs...)))
 		}
 
 		// If we get here, then all repository plugins failed to resolve credentials.
 		// This is not an error, but rather a signal that the identity could not be resolved indirectly.
-		return nil, errors.Join(fmt.Errorf("no repository plugin could resolve credentials for identity %q", identity.String()), ErrNoIndirectCredentials)
+		return nil, errors.Join(ErrNoIndirectCredentials, fmt.Errorf("no repository plugin could resolve credentials for identity %q", identity.String()))
 	}
 
 	// Cache the resolved credentials for future use.
