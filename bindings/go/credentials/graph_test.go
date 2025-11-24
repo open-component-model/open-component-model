@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -197,11 +198,11 @@ func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 					}
 				},
 			}, nil
-		case "ErrorPluginResolve":
+		case "ErrorRegistry":
 			return RepositoryPlugin{
 				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
 					return runtime.Identity{
-						runtime.IdentityAttributeType: "ErrorPluginResolve",
+						runtime.IdentityAttributeType: "ErrorRegistry",
 					}, nil
 				},
 				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
@@ -411,14 +412,14 @@ func TestResolveCredentials(t *testing.T) {
 			},
 			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
-				require.ErrorIs(t, err, credentials.ErrCredentialsNotFound)
+				require.ErrorIs(t, err, credentials.ErrNotFound)
 			}),
 		},
 		{
 			"plugin resolution error handling",
 			testYAML,
 			runtime.Identity{
-				"type":     "ErrorPluginResolve",
+				"type":     "ErrorRegistry",
 				"hostname": "quay.io",
 				"path":     "some-owner/some-repo",
 			},
