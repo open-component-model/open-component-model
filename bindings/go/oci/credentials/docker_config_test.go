@@ -149,7 +149,7 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 			wantEmpty: true,
 		},
 		{
-			name:         "hostname noch in dockerconfig",
+			name:         "hostname not in dockerconfig",
 			dockerConfig: credentialsv1.DockerConfig{},
 			identity: runtime.Identity{
 				runtime.IdentityAttributeHostname: "example.com",
