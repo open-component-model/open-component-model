@@ -1694,8 +1694,8 @@ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/objx v0.2.0/go.mod h1:qt09Ya8vawLte6SNmTgCsAVtYtaKzEcn8ATUoHMkEqE=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=
-github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
-github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=
+github.com/stretchr/objx v0.5.3 h1:jmXUvGomnU1o3W/V5h2VEradbpJDwGrzugQQvL0POH4=
+github.com/stretchr/objx v0.5.3/go.mod h1:rDQraq+vQZU7Fde9LOZLr8Tax6zZvy4kuNKF+QYS+U0=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
@@ -2705,12 +2705,12 @@ ocm.software/open-component-model/bindings/go/dag v0.0.6 h1:To76QJAmFD88C101oB/H
 ocm.software/open-component-model/bindings/go/dag v0.0.6/go.mod h1:mQbO95zYvX59VXNJGer4+wGsKY0BVI4FKwlR5BlPugM=
 ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251118094009-5d448c440041 h1:GXtbVnnQj/N3Y3YqKkdeIsIJ5vHVNZi+UBeY7HuuR68=
 ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251118094009-5d448c440041/go.mod h1:J6wd2HgUlGLIzs0ireOgg2o+b/ObWgk1cV+iBZSIANQ=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251118094009-5d448c440041 h1:C0SlbH27v094+hHaVkw0K3YWO8hAjb2l4Op5ZYVSd+Y=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251118094009-5d448c440041/go.mod h1:IOiJBpfhjE/c8UHDBxPM/EOKT+0FhPVWQO7Cu0uYoMc=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251125070618-4b3c50e8c9c7 h1:wYTZiTMoK3TbW0A+wZA1g2CGqN739si4sR+Bqx2q21s=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251125070618-4b3c50e8c9c7/go.mod h1:IOiJBpfhjE/c8UHDBxPM/EOKT+0FhPVWQO7Cu0uYoMc=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 h1:daGC2XnJEJkukGdhvKxobUH+vF5TKYPlVQ6nl5ASdFM=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3/go.mod h1:nnLzPfpD2zy9YUgIuQxA3vCmUUKFQqSCl6jFAQXVE8M=
-ocm.software/open-component-model/bindings/go/oci v0.0.10 h1:xeKTLskunmPDTcnhPVHg/ivEkZddOUdR9ebKc9jRdco=
-ocm.software/open-component-model/bindings/go/oci v0.0.10/go.mod h1:JdbeaXr9vxjwh3C/TlGtymTjuGxctfSus18Tp9HmW3Q=
+ocm.software/open-component-model/bindings/go/oci v0.0.13 h1:dvFldIjjcwfglf4ciWKNtq55mWuWvWjIYmjTEfxZb70=
+ocm.software/open-component-model/bindings/go/oci v0.0.13/go.mod h1:CRlztGKsBq8KziMmApYMXa0N5v8NlluqunKjcfBybPw=
 ocm.software/open-component-model/bindings/go/plugin v0.0.9 h1:2qkT7aDdx7BpQwyt0k0H/pcPjlj8bVrjv9UAAUYrjh4=
 ocm.software/open-component-model/bindings/go/plugin v0.0.9/go.mod h1:uoTX1FnoE13o1ugI2ZVMR5pb48OlzWYzPVe5KRWIDJk=
 ocm.software/open-component-model/bindings/go/repository v0.0.3 h1:Enwxm8XldcsQYqG3P5vAY00Q2MRIdcG/XmWwj0vZjlY=
