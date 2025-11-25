@@ -52,7 +52,6 @@ type RepositoryOptions struct {
 // NewCacheBackedRepository creates a new cache-backed repository wrapper.
 func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *RepositoryOptions) (*CacheBackedRepository, error) {
 	// Load OCM configurations
-
 	cfg, err := configuration.LoadConfigurations(ctx, r.client, opts.Namespace, opts.OCMConfigurations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load OCM configurations: %w", err)
