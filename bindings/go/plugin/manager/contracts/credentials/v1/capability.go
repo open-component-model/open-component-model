@@ -22,5 +22,6 @@ func init() {
 type CapabilitySpec struct {
 	Type                                   runtime.Type      `json:"type"`
 	TypeToJSONSchema                       map[string][]byte `json:"typeToJSONSchema"`
+	SupportedConsumerIdentityTypes         []types.Type      `json:"supportedConsumerIdentityTypes"`
 	SupportedCredentialRepositorySpecTypes []types.Type      `json:"supportedCredentialRepositorySpecTypes"`
 }

@@ -34,7 +34,7 @@ func TestGetGlobalResource(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ResourceRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+	}, server.URL, v1.CapabilitySpec{})
 
 	ctx := context.Background()
 	_, err := plugin.GetGlobalResource(ctx, &v1.GetGlobalResourceRequest{
@@ -78,7 +78,7 @@ func TestAddGlobalResource(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ResourceRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+	}, server.URL, v1.CapabilitySpec{})
 
 	ctx := context.Background()
 	_, err := plugin.AddGlobalResource(ctx, &v1.AddGlobalResourceRequest{
@@ -120,7 +120,7 @@ func TestPing(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ResourceRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+	}, server.URL, v1.CapabilitySpec{})
 
 	ctx := context.Background()
 	err := plugin.Ping(ctx)

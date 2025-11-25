@@ -247,7 +247,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 	if ocmConfig != nil {
 		filtered, _ := genericv1.Filter(ocmConfig, &genericv1.FilterOptions{ConfigTypes: pluginSpec.SupportedConfigTypes})
 		if len(pluginSpec.SupportedConfigTypes) > 0 && len(filtered.Configurations) == 0 {
-			return fmt.Errorf("no configuration found for plugin %s; requested configuration rawPluginSpec: %s", plugin.ID, pluginSpec.SupportedConfigTypes)
+			return fmt.Errorf("no configuration found for plugin %s; requested configuration types: %s", plugin.ID, pluginSpec.SupportedConfigTypes)
 		}
 
 		plugin.Config.ConfigTypes = append(plugin.Config.ConfigTypes, filtered.Configurations...)
@@ -282,42 +282,42 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 		switch capability := capability.(type) {
 		case *ocmrepositoryv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding component version repository plugin", "id", plugin.ID)
-			if err := pm.ComponentVersionRepositoryRegistry.AddPluginWithAliases(plugin, capability.SupportedRepositorySpecTypes); err != nil {
+			if err := pm.ComponentVersionRepositoryRegistry.AddPluginWithAliases(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		case *blobtransformerv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding blob transformer plugin", "id", plugin.ID)
-			if err := pm.BlobTransformerRegistry.AddPluginWithAliases(plugin, capability.SupportedTransformerSpecTypes); err != nil {
+			if err := pm.BlobTransformerRegistry.AddPluginWithAliases(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		case *credentialrepositoryv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding credential repository plugin", "id", plugin.ID)
-			if err := pm.CredentialRepositoryRegistry.AddPluginWithAliases(plugin, capability.SupportedCredentialRepositorySpecTypes); err != nil {
+			if err := pm.CredentialRepositoryRegistry.AddPluginWithAliases(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		case *componentlisterv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding component lister plugin", "id", plugin.ID)
-			if err := pm.ComponentListerRegistry.AddPluginWithAliases(plugin, capability.SupportedRepositorySpecTypes); err != nil {
+			if err := pm.ComponentListerRegistry.AddPluginWithAliases(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		case *digestprocessorv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding digest processor plugin", "id", plugin.ID)
-			if err := pm.DigestProcessorRegistry.AddPluginWithAliases(plugin, capability.SupportedAccessTypes); err != nil {
+			if err := pm.DigestProcessorRegistry.AddPluginWithAliases(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		case *inputv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding construction resource input plugin", "id", plugin.ID)
-			if err := pm.InputRegistry.AddPluginWithAliases(plugin, capability.SupportedInputTypes); err != nil {
+			if err := pm.InputRegistry.AddPluginWithAliases(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		case *resourcev1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding resource repository plugin", "id", plugin.ID)
-			if err := pm.ResourcePluginRegistry.AddPluginWithAliases(plugin, capability.SupportedAccessTypes); err != nil {
+			if err := pm.ResourcePluginRegistry.AddPluginWithAliases(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		case *signinghandlerv1.CapabilitySpec:
 			slog.DebugContext(ctx, "adding signing handler plugin", "id", plugin.ID)
-			if err := pm.SigningRegistry.AddPluginWithAliases(plugin, capability.SupportedSigningSpecTypes); err != nil {
+			if err := pm.SigningRegistry.AddPluginWithAliases(plugin, capability); err != nil {
 				return fmt.Errorf("failed to register plugin %s: %w", plugin.ID, err)
 			}
 		default:

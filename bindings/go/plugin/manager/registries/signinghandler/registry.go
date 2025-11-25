@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"sync"
 
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
+	signingv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -19,7 +19,7 @@ import (
 func NewSigningRegistry(ctx context.Context) *SigningRegistry {
 	return &SigningRegistry{
 		ctx:                ctx,
-		typeRegistry:       make(map[runtime.Type]types.Type),
+		capabilities:       make(map[string]signingv1.CapabilitySpec),
 		registry:           make(map[runtime.Type]types.Plugin),
 		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),
 		internalPlugins:    make(map[runtime.Type]signing.Handler),
@@ -31,7 +31,7 @@ func NewSigningRegistry(ctx context.Context) *SigningRegistry {
 type SigningRegistry struct {
 	ctx                context.Context
 	mu                 sync.Mutex
-	typeRegistry       map[runtime.Type]types.Type
+	capabilities       map[string]signingv1.CapabilitySpec
 	registry           map[runtime.Type]types.Plugin
 	internalPlugins    map[runtime.Type]signing.Handler
 	scheme             *runtime.Scheme
@@ -61,17 +61,25 @@ func (r *SigningRegistry) AddPlugin(plugin types.Plugin, constructionType runtim
 // AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.
-func (r *SigningRegistry) AddPluginWithAliases(plugin types.Plugin, types []types.Type) error {
+func (r *SigningRegistry) AddPluginWithAliases(plugin types.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for _, typ := range types {
+	capability := signingv1.CapabilitySpec{}
+	if err := signingv1.Scheme.Convert(spec, &capability); err != nil {
+		return fmt.Errorf("failed to convert object: %w", err)
+	}
+	if _, ok := r.capabilities[plugin.ID]; ok {
+		return fmt.Errorf("plugin with ID %s already registered", plugin.ID)
+	}
+	r.capabilities[plugin.ID] = capability
+
+	for _, typ := range capability.SupportedSigningSpecTypes {
 		if v, ok := r.registry[typ.Type]; ok {
-			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ, v.ID)
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ.Type, v.ID)
 		}
 		// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
 		r.registry[typ.Type] = plugin
-		r.typeRegistry[typ.Type] = typ
 	}
 
 	return nil
@@ -105,7 +113,7 @@ func (r *SigningRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) (si
 
 // getPlugin returns a plugin for a given type using a specific plugin storage map. It will also first look
 // for existing registered internal plugins based on the type and the same registry name.
-func (r *SigningRegistry) getPlugin(ctx context.Context, spec runtime.Type) (v1.SignatureHandlerContract[runtime.Typed], error) {
+func (r *SigningRegistry) getPlugin(ctx context.Context, spec runtime.Type) (signingv1.SignatureHandlerContract[runtime.Typed], error) {
 	plugin, ok := r.registry[spec]
 	if !ok {
 		return nil, fmt.Errorf("failed to get plugin for typ %q", spec)
@@ -146,7 +154,7 @@ func RegisterInternalComponentSignatureHandler(
 }
 
 type constructedPlugin struct {
-	Plugin v1.SignatureHandlerContract[runtime.Typed]
+	Plugin signingv1.SignatureHandlerContract[runtime.Typed]
 	cmd    *exec.Cmd
 }
 
@@ -167,7 +175,7 @@ func (r *SigningRegistry) Shutdown(ctx context.Context) error {
 	return errs
 }
 
-func startAndReturnPlugin(ctx context.Context, r *SigningRegistry, plugin *types.Plugin) (v1.SignatureHandlerContract[runtime.Typed], error) {
+func startAndReturnPlugin(ctx context.Context, r *SigningRegistry, plugin *types.Plugin) (signingv1.SignatureHandlerContract[runtime.Typed], error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -180,16 +188,7 @@ func startAndReturnPlugin(ctx context.Context, r *SigningRegistry, plugin *types
 	// start log streaming once the plugin is up and running.
 	go plugins.StartLogStreamer(r.ctx, plugin)
 
-	var jsonSchema []byte
-loop:
-	for _, tps := range plugin.Types {
-		for _, tp := range tps {
-			jsonSchema = tp.JSONSchema
-			break loop
-		}
-	}
-
-	instance := NewSigningHandlerPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
+	instance := NewSigningHandlerPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: instance,
 		cmd:    plugin.Cmd,

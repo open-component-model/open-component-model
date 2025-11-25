@@ -9,14 +9,14 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob/transformer"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
+	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type constructedPlugin struct {
-	Plugin v1.BlobTransformerPluginContract[runtime.Typed]
+	Plugin blobtransformerv1.BlobTransformerPluginContract[runtime.Typed]
 
 	cmd *exec.Cmd
 }
@@ -53,7 +53,7 @@ func RegisterInternalBlobTransformerPlugin[T runtime.Typed](
 type Registry struct {
 	ctx                context.Context
 	mu                 sync.Mutex
-	typeRegistry       map[runtime.Type]mtypes.Type
+	capabilities       map[string]blobtransformerv1.CapabilitySpec
 	registry           map[runtime.Type]mtypes.Plugin // Have this as a single plugin for read/write
 	constructedPlugins map[string]*constructedPlugin  // running plugins
 
@@ -104,23 +104,31 @@ func (r *Registry) AddPlugin(plugin mtypes.Plugin, typ runtime.Type) error {
 // AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.
-func (r *Registry) AddPluginWithAliases(plugin mtypes.Plugin, types []mtypes.Type) error {
+func (r *Registry) AddPluginWithAliases(plugin mtypes.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for _, typ := range types {
+	capability := blobtransformerv1.CapabilitySpec{}
+	if err := blobtransformerv1.Scheme.Convert(spec, &capability); err != nil {
+		return fmt.Errorf("failed to convert object: %w", err)
+	}
+	if _, ok := r.capabilities[plugin.ID]; ok {
+		return fmt.Errorf("plugin with ID %s already registered", plugin.ID)
+	}
+	r.capabilities[plugin.ID] = capability
+
+	for _, typ := range capability.SupportedTransformerSpecTypes {
 		if v, ok := r.registry[typ.Type]; ok {
-			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ, v.ID)
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ.Type, v.ID)
 		}
 		// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
 		r.registry[typ.Type] = plugin
-		r.typeRegistry[typ.Type] = typ
 	}
 
 	return nil
 }
 
-func startAndReturnPlugin(ctx context.Context, r *Registry, plugin *mtypes.Plugin) (v1.BlobTransformerPluginContract[runtime.Typed], error) {
+func startAndReturnPlugin(ctx context.Context, r *Registry, plugin *mtypes.Plugin) (blobtransformerv1.BlobTransformerPluginContract[runtime.Typed], error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -134,17 +142,7 @@ func startAndReturnPlugin(ctx context.Context, r *Registry, plugin *mtypes.Plugi
 	// use the baseCtx here from the manager here so the streaming isn't stopped when the request is stopped.
 	go plugins.StartLogStreamer(r.ctx, plugin)
 
-	// think about this better, we have a single json schema, maybe even have different maps for different types + schemas?
-	var jsonSchema []byte
-loop:
-	for _, tps := range plugin.Types {
-		for _, tp := range tps {
-			jsonSchema = tp.JSONSchema
-			break loop
-		}
-	}
-
-	repoPlugin := NewPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
+	repoPlugin := NewPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,
 		cmd:    plugin.Cmd,
@@ -188,7 +186,7 @@ func (r *Registry) GetPlugin(ctx context.Context, spec runtime.Typed) (transform
 	return r.externalToBlobTransformerConverter(plugin, r.scheme), nil
 }
 
-func (r *Registry) getPlugin(ctx context.Context, typ runtime.Type) (v1.BlobTransformerPluginContract[runtime.Typed], error) {
+func (r *Registry) getPlugin(ctx context.Context, typ runtime.Type) (blobtransformerv1.BlobTransformerPluginContract[runtime.Typed], error) {
 	plugin, ok := r.registry[typ]
 	if !ok {
 		return nil, fmt.Errorf("failed to get plugin for typ %q", typ)
@@ -205,7 +203,7 @@ func (r *Registry) getPlugin(ctx context.Context, typ runtime.Type) (v1.BlobTran
 func NewBlobTransformerRegistry(ctx context.Context) *Registry {
 	return &Registry{
 		ctx:                ctx,
-		typeRegistry:       make(map[runtime.Type]mtypes.Type),
+		capabilities:       make(map[string]blobtransformerv1.CapabilitySpec),
 		registry:           make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins: make(map[string]*constructedPlugin),
 		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),

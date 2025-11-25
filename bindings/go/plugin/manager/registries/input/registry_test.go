@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 
 	constructor2 "ocm.software/open-component-model/bindings/go/constructor"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
@@ -31,7 +32,7 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         "test-plugin-1-construction",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.InputPluginType,
+		PluginType: inputv1.InputPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)

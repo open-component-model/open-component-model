@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
@@ -107,7 +109,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 	ctx := t.Context()
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
-	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "mytest"), WithConfiguration(config)))
+	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	typ, err := scheme.TypeForPrototype(&dummyv1.Repository{})
@@ -331,28 +333,37 @@ func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
 	ctx := t.Context()
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
-	pluginTypes := types.Types{
-		Types: map[types.PluginType][]types.Type{
-			types.ComponentVersionRepositoryPluginType: {
-				{
-					Type: runtime.Type{
-						Name:    "OCIRepository",
-						Version: "v1",
-					},
+	capabilitySpec := ocmrepositoryv1.CapabilitySpec{
+		Type:             runtime.NewUnversionedType(string(ocmrepositoryv1.ComponentVersionRepositoryPluginType)),
+		TypeToJSONSchema: nil,
+		SupportedRepositorySpecTypes: []types.Type{
+			{
+				Type: runtime.Type{
+					Name:    "OCIRepository",
+					Version: "v1",
 				},
+				Aliases:    nil,
+				JSONSchema: nil,
 			},
 		},
 	}
+	pluginSpec := pluginruntime.PluginSpec{
+		CapabilitySpecs:      []runtime.Typed{&capabilitySpec},
+		SupportedConfigTypes: nil,
+	}
+	rawPluginSpec, err := pluginruntime.ConvertToSpec(&pluginSpec)
+	require.NoError(t, err)
+
 	testPlugin := types.Plugin{
 		ID:   "test-id",
 		Path: "/tmp/test-plugin-plugin.socket",
 		Config: types.Config{
 			ID:         "test-id",
 			Type:       "unix",
-			PluginType: types.ComponentVersionRepositoryPluginType,
+			PluginType: ocmrepositoryv1.ComponentVersionRepositoryPluginType,
 		},
 	}
-	serialized, err := json.Marshal(pluginTypes)
+	serialized, err := json.Marshal(rawPluginSpec)
 	require.NoError(t, err)
 	config := &genericv1.Config{
 		Type: runtime.Type{

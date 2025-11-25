@@ -9,14 +9,14 @@ import (
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
+	digestprocessorv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type constructedPlugin struct {
-	Plugin v1.ResourceDigestProcessorContract
+	Plugin digestprocessorv1.ResourceDigestProcessorContract
 	cmd    *exec.Cmd
 }
 
@@ -24,7 +24,7 @@ type constructedPlugin struct {
 func NewDigestProcessorRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
 		ctx:                            ctx,
-		typeRegistry:                   make(map[runtime.Type]mtypes.Type),
+		capabilities:                   make(map[string]digestprocessorv1.CapabilitySpec),
 		scheme:                         runtime.NewScheme(runtime.WithAllowUnknown()),
 		registry:                       make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins:             make(map[string]*constructedPlugin),
@@ -65,7 +65,7 @@ type RepositoryRegistry struct {
 	ctx                            context.Context
 	mu                             sync.Mutex
 	scheme                         *runtime.Scheme
-	typeRegistry                   map[runtime.Type]mtypes.Type
+	capabilities                   map[string]digestprocessorv1.CapabilitySpec
 	registry                       map[runtime.Type]mtypes.Plugin
 	constructedPlugins             map[string]*constructedPlugin
 	internalDigestProcessorPlugins map[runtime.Type]constructor.ResourceDigestProcessor
@@ -100,23 +100,31 @@ func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, typ runtime.Type) e
 // AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.
-func (r *RepositoryRegistry) AddPluginWithAliases(plugin mtypes.Plugin, types []mtypes.Type) error {
+func (r *RepositoryRegistry) AddPluginWithAliases(plugin mtypes.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for _, typ := range types {
+	capability := digestprocessorv1.CapabilitySpec{}
+	if err := digestprocessorv1.Scheme.Convert(spec, &capability); err != nil {
+		return fmt.Errorf("failed to convert object: %w", err)
+	}
+	if _, ok := r.capabilities[plugin.ID]; ok {
+		return fmt.Errorf("plugin with ID %s already registered", plugin.ID)
+	}
+	r.capabilities[plugin.ID] = capability
+
+	for _, typ := range capability.SupportedAccessTypes {
 		if v, ok := r.registry[typ.Type]; ok {
-			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ, v.ID)
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ.Type, v.ID)
 		}
 		// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
 		r.registry[typ.Type] = plugin
-		r.typeRegistry[typ.Type] = typ
 	}
 
 	return nil
 }
 
-func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mtypes.Plugin) (v1.ResourceDigestProcessorContract, error) {
+func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mtypes.Plugin) (digestprocessorv1.ResourceDigestProcessorContract, error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -128,16 +136,7 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mt
 
 	go plugins.StartLogStreamer(r.ctx, plugin)
 
-	var jsonSchema []byte
-loop:
-	for _, tps := range plugin.Types {
-		for _, tp := range tps {
-			jsonSchema = tp.JSONSchema
-			break loop
-		}
-	}
-
-	digestPlugin := NewDigestProcessorPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
+	digestPlugin := NewDigestProcessorPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: digestPlugin,
 		cmd:    plugin.Cmd,
@@ -171,7 +170,7 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 	return r.externalToResourceDigestProcessorPluginConverter(plugin, r.scheme), nil
 }
 
-func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (v1.ResourceDigestProcessorContract, error) {
+func (r *RepositoryRegistry) getPlugin(ctx context.Context, typ runtime.Type) (digestprocessorv1.ResourceDigestProcessorContract, error) {
 	plugin, ok := r.registry[typ]
 	if !ok {
 		return nil, fmt.Errorf("failed to get plugin for typ %q", typ)
