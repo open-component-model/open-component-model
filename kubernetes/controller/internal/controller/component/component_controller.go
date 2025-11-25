@@ -378,7 +378,7 @@ func (r *Reconciler) convertCTFOCMv1ToCTFOCMv2(raw *runtime.Raw) (runtime.Typed,
 			Version: "",
 			Name:    "CommonTransportFormat",
 		},
-		Path:       values["filePath"].(string),
+		FilePath:   values["filePath"].(string),
 		AccessMode: ctfv1.AccessModeReadOnly,
 	}
 
