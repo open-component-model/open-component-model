@@ -67,10 +67,6 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4
 
-      - name: Install dependencies
-        run: |
-          npm install js-yaml
-
       - name: Login to GHCR
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
         with:
@@ -135,67 +131,11 @@ jobs:
             echo "Registry component not found, will create new registry at v0.1.0"
           fi
 
-      - name: Check plugin and detect version conflicts
-        id: check_plugin
-        env:
-          PLUGIN_NAME: ${{ steps.plugin.outputs.plugin_name }}
-          PLUGIN_VERSION: ${{ steps.plugin.outputs.plugin_version }}
-          REGISTRY_EXISTS: ${{ steps.registry_version.outputs.registry_exists }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ "$REGISTRY_EXISTS" != "true" ]; then
-            echo "plugin_exists=false" >> "$GITHUB_OUTPUT"
-            echo "Registry doesn't exist, plugin will be new"
-            exit 0
-          fi
-
-          # Check if plugin exists and get its current version (take last if multiple exist)
-          if CURRENT_PLUGIN_VERSION=$(jq -r "[.componentReferences[] | select(.name == \"${PLUGIN_NAME}\") | .version] | last // empty" /tmp/registry-descriptor.json 2>/dev/null) && [ -n "$CURRENT_PLUGIN_VERSION" ]; then
-            echo "plugin_exists=true" >> "$GITHUB_OUTPUT"
-            echo "current_plugin_version=${CURRENT_PLUGIN_VERSION}" >> "$GITHUB_OUTPUT"
-            echo "Plugin ${PLUGIN_NAME} exists in registry at version ${CURRENT_PLUGIN_VERSION}"
-
-            # Check for version conflict
-            if [ "$CURRENT_PLUGIN_VERSION" = "$PLUGIN_VERSION" ]; then
-              echo "::error::Version conflict: Plugin ${PLUGIN_NAME} version ${PLUGIN_VERSION} already exists in the registry"
-              exit 1
-            fi
-          else
-            echo "plugin_exists=false" >> "$GITHUB_OUTPUT"
-            echo "Plugin ${PLUGIN_NAME} not found in registry"
-          fi
-
-      - name: Determine new registry version
-        id: new_version
-        env:
-          CURRENT_VERSION: ${{ steps.registry_version.outputs.current_version }}
-          PLUGIN_EXISTS: ${{ steps.check_plugin.outputs.plugin_exists }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
-        with:
-          script: |
-            const { computeNextVersions } = await import('${{ github.workspace }}/.github/scripts/compute-rc-version.js');
-
-            const currentVersion = process.env.CURRENT_VERSION;
-            const pluginExists = process.env.PLUGIN_EXISTS === 'true';
-
-            // Bumps the current base version. Plugin exists determines if we need to bump minor version or patch version.
-            // If the plugin does NOT exist, we bump the minor version of the registry.
-            const newVersion = computeNextVersions(currentVersion, currentVersion, "", !pluginExists);
-
-            core.info(`Current version: ${currentVersion}`);
-            core.info(`Update type: (${pluginExists ? 'updating existing plugin' : 'adding new plugin'})`);
-            core.info(`New version: ${newVersion.baseVersion}`);
-
-            core.setOutput('old_version', currentVersion);
-            core.setOutput('new_version', newVersion.baseVersion);
-
       - name: Prepare registry constructor
         if: ${{ inputs.dry_run != true && github.event_name != 'pull_request' }}
         env:
           REGISTRY_CONSTRUCTOR: ${{ env.REGISTRY_CONSTRUCTOR }}
-          REGISTRY_VERSION: ${{ steps.new_version.outputs.new_version }}
+          REGISTRY_VERSION: ${{ steps.registry_version.outputs.current_version }}
           PLUGIN_NAME: ${{ steps.plugin.outputs.plugin_name }}
           PLUGIN_COMPONENT: ${{ steps.plugin.outputs.plugin_component }}
           PLUGIN_VERSION: ${{ steps.plugin.outputs.plugin_version }}

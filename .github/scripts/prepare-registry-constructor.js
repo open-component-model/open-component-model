@@ -1,13 +1,15 @@
 // @ts-check
 import fs from 'fs';
 import yaml from 'js-yaml';
+import {computeNextVersions} from "./compute-rc-version.js";
 
 /**
  * Prepare OCM plugin registry constructor file.
  */
 
 /**
- * Prepare registry constructor with updated plugin reference.
+ * Prepare registry constructor with updated plugin reference and calculated new version based on whether the plugin
+ * exists or not in the registry. If the plugin exists, we bump as a patch version if it doesn't we increase the minor version.
  *
  * @param {Object} options - Configuration options
  * @param {string} options.constructorPath - Path to constructor template file
@@ -30,30 +32,31 @@ export function prepareRegistryConstructor(options) {
         descriptorPath
     } = options;
 
-    // Load constructor template
     const template = fs.readFileSync(constructorPath, 'utf8');
     const constructor = yaml.load(template);
     constructor.version = registryVersion;
 
     if (registryExists) {
-        if (!descriptorPath) {
-            throw new Error('descriptorPath is required when registryExists is true');
-        }
-
         const descriptor = JSON.parse(fs.readFileSync(descriptorPath, 'utf8'));
         constructor.componentReferences = descriptor.componentReferences || [];
 
-        // We do this in a previous GitHub action outside, but just to be on the safe side, we check again.
         if (constructor.componentReferences.find(r => {
-            return r.name === options.pluginName && r.version === pluginVersion;
+            return r.name === pluginName && r.version === pluginVersion;
         })) {
             throw new Error(`Plugin with name ${pluginName} and version ${pluginVersion} already exists in reference list`);
         }
+
+        // Compute the new version. If the plugin does not exist we increase the minor version.
+        const pluginExists = constructor.componentReferences.find(r => r.name === pluginName);
+        const nextVersion = computeNextVersions(registryVersion, registryVersion, "", pluginExists);
+        constructor.version = nextVersion.baseVersion;
 
     } else {
         if (!constructor.componentReferences) {
             constructor.componentReferences = [];
         }
+
+        constructor.version = "v0.0.1"
     }
 
     const plugin = {
@@ -117,7 +120,6 @@ export default async function prepareRegistryConstructorAction({ core }) {
             descriptorPath
         });
 
-        // dump the rendered yaml
         const rendered = yaml.dump(constructor, { lineWidth: -1 });
         fs.writeFileSync(constructorPath, rendered, 'utf8');
 

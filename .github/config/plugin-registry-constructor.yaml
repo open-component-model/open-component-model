@@ -5,8 +5,8 @@ provider:
 labels:
   - name: ocm.software/category
     value: plugin-registry
-  - name: registry
-    value: ocm.software/official
+  - name: ocm.software/registry
+    value: official
   - name: ocm.software/description
     value: Official OCM plugin registry
 componentReferences: []

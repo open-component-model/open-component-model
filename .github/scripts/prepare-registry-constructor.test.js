@@ -31,7 +31,7 @@ const result1 = prepareRegistryConstructor({
     registryExists: false
 });
 
-assert.strictEqual(result1.constructor.version, 'v0.1.0', 'Should set registry version');
+assert.strictEqual(result1.constructor.version, 'v0.0.1', 'Should set registry version');
 assert.strictEqual(result1.constructor.componentReferences.length, 1, 'Should have one plugin');
 assert.strictEqual(result1.constructor.componentReferences[0].name, 'helminput', 'Should add plugin');
 assert.strictEqual(result1.constructor.componentReferences[0].version, '1.0.0', 'Should set plugin version');
@@ -63,7 +63,7 @@ const result2 = prepareRegistryConstructor({
     descriptorPath: descriptorPath2
 });
 
-assert.strictEqual(result2.constructor.version, 'v0.2.0', 'Should update registry version');
+assert.strictEqual(result2.constructor.version, '0.2.1', 'Should update registry version');
 assert.strictEqual(result2.constructor.componentReferences.length, 3, 'Should have three plugins');
 
 // Test 3: Existing registry with multiple plugins
@@ -162,6 +162,36 @@ assert.throws(() => {
     /Plugin with name helminput and version 1.0.0 already exists in reference list/,
     'Should throw when descriptorPath missing for existing registry'
 );
+
+// Test 6: Should increase the constructor version
+const constructorTemplate6 = path.join(tmpDir, 'constructor6.yaml');
+fs.writeFileSync(constructorTemplate6, `name: ocm.software/plugin-registry
+version: ((REGISTRY_VERSION))
+provider:
+  name: ocm.software
+componentReferences: []
+`);
+
+const descriptorPath6 = path.join(tmpDir, 'descriptor6.json');
+fs.writeFileSync(descriptorPath6, JSON.stringify({
+    componentReferences: [
+        { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '1.0.0' }
+    ]
+}));
+
+const result6 = prepareRegistryConstructor({
+    constructorPath: constructorTemplate6,
+    registryVersion: 'v0.6.0',
+    pluginName: 'helminput',
+    pluginComponent: 'ocm.software/plugins/helminput',
+    pluginVersion: '2.0.0',
+    registryExists: true,
+    descriptorPath: descriptorPath6
+});
+
+assert.strictEqual(result6.constructor.componentReferences.length, 2, 'Should have two plugins');
+assert.strictEqual(result6.constructor.componentReferences[1].version, '2.0.0', 'Should update version');
+assert.strictEqual(result6.constructor.version, '0.7.0', 'Should update version of the plugin root component version');
 
 // ============================================================================
 // Error handling tests
