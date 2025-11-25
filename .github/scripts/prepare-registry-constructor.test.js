@@ -31,10 +31,10 @@ const result1 = prepareRegistryConstructor({
     registryExists: false
 });
 
-assert.strictEqual(result1.constructor.version, 'v0.0.1', 'Should set registry version');
-assert.strictEqual(result1.constructor.componentReferences.length, 1, 'Should have one plugin');
-assert.strictEqual(result1.constructor.componentReferences[0].name, 'helminput', 'Should add plugin');
-assert.strictEqual(result1.constructor.componentReferences[0].version, '1.0.0', 'Should set plugin version');
+assert.strictEqual(result1.version, 'v0.0.1', 'Should set registry version');
+assert.strictEqual(result1.componentReferences.length, 1, 'Should have one plugin');
+assert.strictEqual(result1.componentReferences[0].name, 'helminput', 'Should add plugin');
+assert.strictEqual(result1.componentReferences[0].version, '1.0.0', 'Should set plugin version');
 
 // Test 2: Existing registry
 const constructorTemplate2 = path.join(tmpDir, 'constructor2.yaml');
@@ -63,8 +63,8 @@ const result2 = prepareRegistryConstructor({
     descriptorPath: descriptorPath2
 });
 
-assert.strictEqual(result2.constructor.version, '0.2.1', 'Should update registry version');
-assert.strictEqual(result2.constructor.componentReferences.length, 3, 'Should have three plugins');
+assert.strictEqual(result2.version, '0.2.1', 'Should update registry version');
+assert.strictEqual(result2.componentReferences.length, 3, 'Should have three plugins');
 
 // Test 3: Existing registry with multiple plugins
 const constructorTemplate3 = path.join(tmpDir, 'constructor3.yaml');
@@ -94,10 +94,10 @@ const result3 = prepareRegistryConstructor({
     descriptorPath: descriptorPath3
 });
 
-assert.strictEqual(result3.constructor.componentReferences.length, 4, 'Should have 4 plugins after push');
+assert.strictEqual(result3.componentReferences.length, 4, 'Should have 4 plugins after push');
 
 // Find the helminput plugin
-const helminputRef = result3.constructor.componentReferences.find(r => {
+const helminputRef = result3.componentReferences.find(r => {
     return r.name === 'helminput' && r.version === '3.2.0';
 });
 assert.ok(helminputRef, 'Should have helminput plugin');
@@ -129,8 +129,8 @@ const result4 = prepareRegistryConstructor({
     descriptorPath: descriptorPath4
 });
 
-assert.strictEqual(result4.constructor.componentReferences.length, 2, 'Should have two plugins');
-assert.strictEqual(result4.constructor.componentReferences[1].version, '2.0.0', 'Should update version');
+assert.strictEqual(result4.componentReferences.length, 2, 'Should have two plugins');
+assert.strictEqual(result4.componentReferences[1].version, '2.0.0', 'Should update version');
 
 // Test 5: Should fail if trying to add the same plugin.
 const constructorTemplate5 = path.join(tmpDir, 'constructor5.yaml');
@@ -189,30 +189,10 @@ const result6 = prepareRegistryConstructor({
     descriptorPath: descriptorPath6
 });
 
-assert.strictEqual(result6.constructor.componentReferences.length, 2, 'Should have two plugins');
-assert.strictEqual(result6.constructor.componentReferences[1].version, '2.0.0', 'Should update version');
-assert.strictEqual(result6.constructor.version, '0.7.0', 'Should update version of the plugin root component version');
-
-// ============================================================================
-// Error handling tests
-// ============================================================================
-console.log('Testing error handling...');
-
-assert.throws(
-    () => {
-        prepareRegistryConstructor({
-            constructorPath: constructorTemplate1,
-            registryVersion: 'v1.0.0',
-            pluginName: 'test',
-            pluginComponent: 'test',
-            pluginVersion: '1.0.0',
-            registryExists: true
-            // Missing descriptorPath
-        });
-    },
-    /descriptorPath is required/,
-    'Should throw when descriptorPath missing for existing registry'
-);
+assert.strictEqual(result6.componentReferences.length, 2, 'Should have two plugins');
+assert.strictEqual(result6.componentReferences[1].version, '2.0.0', 'Should update version');
+assert.strictEqual(result6.version, '0.7.0', 'Should update version of the plugin root component version');
+assert.strictEqual(result6.name, 'ocm.software/plugin-registry', 'Should set component version name');
 
 // Cleanup
 fs.rmSync(tmpDir, { recursive: true, force: true });

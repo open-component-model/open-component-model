@@ -34,7 +34,6 @@ export function prepareRegistryConstructor(options) {
 
     const template = fs.readFileSync(constructorPath, 'utf8');
     const constructor = yaml.load(template);
-    constructor.version = registryVersion;
 
     if (registryExists) {
         const descriptor = JSON.parse(fs.readFileSync(descriptorPath, 'utf8'));
@@ -66,7 +65,7 @@ export function prepareRegistryConstructor(options) {
     };
     constructor.componentReferences.push(plugin)
 
-    return {constructor}
+    return constructor
 }
 
 /**
@@ -110,7 +109,7 @@ export default async function prepareRegistryConstructorAction({ core }) {
     try {
         core.info(`Preparing registry constructor for ${pluginName} v${pluginVersion}`);
 
-        const constructor = prepareRegistryConstructor({
+        const result = prepareRegistryConstructor({
             constructorPath,
             registryVersion,
             pluginName,
@@ -120,7 +119,7 @@ export default async function prepareRegistryConstructorAction({ core }) {
             descriptorPath
         });
 
-        const rendered = yaml.dump(constructor, { lineWidth: -1 });
+        const rendered = yaml.dump(result, { lineWidth: -1 });
         fs.writeFileSync(constructorPath, rendered, 'utf8');
 
         core.info(`Added plugin reference: ${pluginName} v${pluginVersion}`);

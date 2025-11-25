@@ -42,8 +42,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          sparse-checkout: |
+            .github/scripts
+            .github/config
 
       - name: Extract plugin details
         id: plugin
@@ -131,6 +132,10 @@ jobs:
             echo "Registry component not found, will create new registry at v0.1.0"
           fi
 
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ github.workspace }}/.github/scripts
+
       - name: Prepare registry constructor
         if: ${{ inputs.dry_run != true && github.event_name != 'pull_request' }}
         env:
@@ -157,9 +162,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           echo "Publishing registry component version ${NEW_VERSION}"
-
           docker run --rm \
             -v "${HOME}/.docker/config.json:/.docker/config.json:ro" \
             -v "${HOME}/.ocmconfig:/.ocmconfig:ro" \
