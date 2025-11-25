@@ -23,10 +23,11 @@ on:
         default: true
         type: boolean
 
+permissions:
+  contents: read
+
 jobs:
   version:
-    permissions:
-      contents: read
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.version.outputs.new_tag }}

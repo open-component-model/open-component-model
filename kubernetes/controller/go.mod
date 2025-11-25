@@ -37,9 +37,9 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251118094009-5d448c440041
-	ocm.software/open-component-model/bindings/go/oci v0.0.10
-	ocm.software/open-component-model/bindings/go/plugin v0.0.9
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251124222340-4c1b948b736f
+	ocm.software/open-component-model/bindings/go/oci v0.0.11
+	ocm.software/open-component-model/bindings/go/plugin v0.0.10
 	ocm.software/open-component-model/bindings/go/repository v0.0.3
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
@@ -53,7 +53,7 @@ require (
 	cloud.google.com/go/iam v1.5.3 // indirect
 	cloud.google.com/go/longrunning v0.7.0 // indirect
 	cloud.google.com/go/monitoring v1.24.3 // indirect
-	cloud.google.com/go/spanner v1.86.0 // indirect
+	cloud.google.com/go/spanner v1.86.1 // indirect
 	cloud.google.com/go/storage v1.57.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/AliyunContainerService/ack-ram-tool/pkg/credentials/provider v0.18.1 // indirect
@@ -121,7 +121,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/buildkite/agent/v3 v3.109.1 // indirect
+	github.com/buildkite/agent/v3 v3.110.0 // indirect
 	github.com/buildkite/go-pipeline v0.16.0 // indirect
 	github.com/buildkite/interpolate v0.1.5 // indirect
 	github.com/buildkite/roko v1.4.0 // indirect
@@ -253,7 +253,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
-	github.com/letsencrypt/boulder v0.20251014.0 // indirect
+	github.com/letsencrypt/boulder v0.20251021.0 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
@@ -303,8 +303,8 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.1 // indirect
-	github.com/prometheus/procfs v0.17.0 // indirect
-	github.com/redis/go-redis/v9 v9.15.1 // indirect
+	github.com/prometheus/procfs v0.19.1 // indirect
+	github.com/redis/go-redis/v9 v9.16.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
@@ -389,10 +389,10 @@ require (
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.38.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
-	google.golang.org/api v0.252.0 // indirect
+	google.golang.org/api v0.253.0 // indirect
 	google.golang.org/genproto v0.0.0-20250922171735-9219d122eba9 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251002232023-7c0ddcbb5797 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251014184007-4626949a642f // indirect
 	google.golang.org/grpc v1.76.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
@@ -411,9 +411,9 @@ require (
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251024100521-a7be1bf5ce0d // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251118094009-5d448c440041 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251124222340-4c1b948b736f // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251118094009-5d448c440041 // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251124222340-4c1b948b736f // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect
