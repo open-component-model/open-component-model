@@ -259,19 +259,6 @@ func Test_ComponentReference(t *testing.T) {
 			},
 			err: assert.NoError,
 		},
-		{
-			input: "github.com//open-component-model//ocm//ocm.software/ocmcli:0.23.0",
-			expected: &Ref{
-				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
-				Repository: &ociv1.Repository{
-					BaseUrl: "github.com",
-					SubPath: "open-component-model/ocm",
-				},
-				Component: "ocm.software/ocmcli",
-				Version:   "0.23.0",
-			},
-			err: assert.NoError,
-		},
 	}
 
 	for i, tc := range cases {
@@ -369,8 +356,7 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 								// For OCI repositories, need to separate BaseUrl and SubPath
 								ociRepo := &ociv1.Repository{}
 								// Parse the repo.input to extract BaseUrl and SubPath
-								uri, err := runtime.ParseURLAndAllowNoScheme(repo.input)
-								if err == nil {
+								if uri, err := runtime.ParseURLAndAllowNoScheme(repo.input); err == nil {
 									if uri.Scheme != "" {
 										ociRepo.BaseUrl = fmt.Sprintf("%s://%s", uri.Scheme, uri.Host)
 									} else {
@@ -526,28 +512,6 @@ func TestParseRepository(t *testing.T) {
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
 				require.Equal(t, "./local/archive", repo.FilePath)
-			},
-		},
-		{
-			name:         "OCI Registry - double slashes in path (normalization)",
-			repoRef:      "ghcr.io//my-org///my-repo//subpath",
-			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
-			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
-				repo, ok := result.(*ociv1.Repository)
-				require.True(t, ok, "expected *ociv1.Repository")
-				require.Equal(t, "ghcr.io", repo.BaseUrl)
-				require.Equal(t, "my-org/my-repo/subpath", repo.SubPath, "consecutive slashes should be collapsed")
-			},
-		},
-		{
-			name:         "OCI Registry with HTTPS - double slashes in path",
-			repoRef:      "https://registry.example.com//my-org//my-repo",
-			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
-			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
-				repo, ok := result.(*ociv1.Repository)
-				require.True(t, ok, "expected *ociv1.Repository")
-				require.Equal(t, "https://registry.example.com", repo.BaseUrl)
-				require.Equal(t, "my-org/my-repo", repo.SubPath, "consecutive slashes should be collapsed")
 			},
 		},
 	}

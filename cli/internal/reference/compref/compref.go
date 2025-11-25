@@ -291,10 +291,7 @@ func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
 
 		// Extract SubPath from the path component if present
 		if uri.Path != "" && uri.Path != "/" {
-			// Normalize path by collapsing consecutive slashes (e.g., "//my-org//component" -> "/my-org/component")
-			// This handles cases where users mix URL syntax with component paths
-			normalizedPath := regexp.MustCompile(`/+`).ReplaceAllString(uri.Path, "/")
-			t.SubPath = strings.TrimPrefix(normalizedPath, "/")
+			t.SubPath = strings.TrimPrefix(uri.Path, "/")
 		}
 	case *ctfv1.Repository:
 		t.FilePath = input
