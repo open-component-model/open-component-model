@@ -1,5 +1,6 @@
 import assert from "assert";
-import { parseVersion, bumpVersion } from "./bump-semver.js";
+import { parseVersion } from "./semver-utils.js";
+import { bumpVersion } from "./bump-semver.js";
 
 // ----------------------------------------------------------
 // parseVersion tests

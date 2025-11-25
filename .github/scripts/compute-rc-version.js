@@ -1,5 +1,6 @@
 // @ts-check
-import {execSync} from "child_process";
+import { execSync } from "child_process";
+import { parseVersionArray } from './semver-utils.js';
 
 
 // --------------------------
@@ -69,12 +70,6 @@ export function run(core, cmd) {
   }
 }
 
-export function parseVersion(tag) {
-  if (!tag) return [];
-  const version = tag.replace(/^.*v/, "").replace(/-rc\.\d+$/, "");
-  return version.split(".").map(Number);
-}
-
 export function parseBranch(branch) {
   const match = /^releases\/v(0\.\d+)/.exec(branch);
   if (!match) throw new Error(`Invalid branch format: ${branch}`);
@@ -100,12 +95,12 @@ export function parseBranch(branch) {
  *   rcVersion: The computed RC tag (e.g., "0.1.1-rc.3").
  */
 export function computeNextVersions(basePrefix, latestStableTag, latestRcTag) {
-    const parseTag = tag => parseVersion(tag).join(".");
+    const parseTag = tag => parseVersionArray(tag).join(".");
     const extractRcNumber = tag => parseInt(tag?.match(/-rc\.(\d+)/)?.[1] ?? "0", 10);
     const incrementPatch = ([maj, min, pat]) => [maj, min, pat + 1];
 
-    const stableVersionParts = parseVersion(latestStableTag);
-    const rcVersionParts = parseVersion(latestRcTag);
+    const stableVersionParts = parseVersionArray(latestStableTag);
+    const rcVersionParts = parseVersionArray(latestRcTag);
 
     let [major, minor, patch] =
         stableVersionParts.length > 0
@@ -166,8 +161,8 @@ export function isStableNewer(stable, rc) {
     if (!stable) return false;
     if (!rc) return true;
 
-    const stableParts = parseVersion(stable);
-    const rcParts = parseVersion(rc);
+    const stableParts = parseVersionArray(stable);
+    const rcParts = parseVersionArray(rc);
 
     // Compare [major, minor, patch] lexicographically
     for (let i = 0; i < 3; i++) {

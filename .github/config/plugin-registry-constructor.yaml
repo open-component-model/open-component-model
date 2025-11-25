@@ -3,10 +3,10 @@ version: ((REGISTRY_VERSION))
 provider:
   name: ocm.software
 labels:
-  - name: category
+  - name: ocm.software/category
     value: plugin-registry
   - name: registry
-    value: official
-  - name: description
+    value: ocm.software/official
+  - name: ocm.software/description
     value: Official OCM plugin registry
 componentReferences: []
