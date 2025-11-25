@@ -13,6 +13,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
@@ -66,13 +67,19 @@ func ReferenceTagVersionResolver(component string, store interface {
 },
 ) lister.TagVersionResolver {
 	tagResolver := func(ctx context.Context, tag string) (string, error) {
+		// This resolve call's descriptor is a virtual descriptor. It will never have the annotation
+		// we are looking for, and that's why we do a second Fetch inside the switch to get the actual descriptor that
+		// does contain the annotation we are looking for.
 		desc, err := store.Resolve(ctx, tag)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve tag %q: %w", tag, err)
 		}
 
-		var manifestAnnotations map[string]string
-		var data io.ReadCloser
+		var (
+			manifestAnnotations    map[string]string
+			data                   io.ReadCloser
+			oldOCMComponentVersion bool
+		)
 		switch desc.MediaType {
 		case ociImageSpecV1.MediaTypeImageManifest:
 			data, err = store.Fetch(ctx, desc)
@@ -84,6 +91,11 @@ func ReferenceTagVersionResolver(component string, store interface {
 				return "", errors.Join(fmt.Errorf("failed to decode manifest for tag %q: %w", tag, err), data.Close())
 			}
 			manifestAnnotations = manifest.Annotations
+			// Checks for old component versions pre-2024 which didn't have an annotation.
+			// In that case, we check if the manifest has a config of type ocm config and if yes, we can just return
+			// the tag as valid. We only do this for manifest layers and not index layers because pre-2024 component versions
+			// didn't have indexes.
+			oldOCMComponentVersion = manifest.Config.MediaType == componentConfig.MediaType
 		case ociImageSpecV1.MediaTypeImageIndex:
 			data, err = store.Fetch(ctx, desc)
 			if err != nil {
@@ -103,6 +115,10 @@ func ReferenceTagVersionResolver(component string, store interface {
 		}
 		annotation, ok := manifestAnnotations[annotations.OCMComponentVersion]
 		if !ok {
+			if oldOCMComponentVersion {
+				return tag, nil
+			}
+
 			return "", fmt.Errorf("failed to find %q annotation for tag %q: %w", annotations.OCMComponentVersion, tag, lister.ErrSkip)
 		}
 
