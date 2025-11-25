@@ -19,6 +19,7 @@ import (
 func NewSigningRegistry(ctx context.Context) *SigningRegistry {
 	return &SigningRegistry{
 		ctx:                ctx,
+		typeRegistry:       make(map[runtime.Type]types.Type),
 		registry:           make(map[runtime.Type]types.Plugin),
 		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),
 		internalPlugins:    make(map[runtime.Type]signing.Handler),
@@ -30,6 +31,7 @@ func NewSigningRegistry(ctx context.Context) *SigningRegistry {
 type SigningRegistry struct {
 	ctx                context.Context
 	mu                 sync.Mutex
+	typeRegistry       map[runtime.Type]types.Type
 	registry           map[runtime.Type]types.Plugin
 	internalPlugins    map[runtime.Type]signing.Handler
 	scheme             *runtime.Scheme
@@ -52,6 +54,25 @@ func (r *SigningRegistry) AddPlugin(plugin types.Plugin, constructionType runtim
 	}
 
 	r.registry[constructionType] = plugin
+
+	return nil
+}
+
+// AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// This function will return an error if the given capability + type already has a registered plugin.
+// Multiple plugins for the same cap+typ is not allowed.
+func (r *SigningRegistry) AddPluginWithAliases(plugin types.Plugin, types []types.Type) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, typ := range types {
+		if v, ok := r.registry[typ.Type]; ok {
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ, v.ID)
+		}
+		// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
+		r.registry[typ.Type] = plugin
+		r.typeRegistry[typ.Type] = typ
+	}
 
 	return nil
 }

@@ -53,6 +53,7 @@ func RegisterInternalBlobTransformerPlugin[T runtime.Typed](
 type Registry struct {
 	ctx                context.Context
 	mu                 sync.Mutex
+	typeRegistry       map[runtime.Type]mtypes.Type
 	registry           map[runtime.Type]mtypes.Plugin // Have this as a single plugin for read/write
 	constructedPlugins map[string]*constructedPlugin  // running plugins
 
@@ -96,6 +97,25 @@ func (r *Registry) AddPlugin(plugin mtypes.Plugin, typ runtime.Type) error {
 
 	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
 	r.registry[typ] = plugin
+
+	return nil
+}
+
+// AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// This function will return an error if the given capability + type already has a registered plugin.
+// Multiple plugins for the same cap+typ is not allowed.
+func (r *Registry) AddPluginWithAliases(plugin mtypes.Plugin, types []mtypes.Type) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, typ := range types {
+		if v, ok := r.registry[typ.Type]; ok {
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ, v.ID)
+		}
+		// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
+		r.registry[typ.Type] = plugin
+		r.typeRegistry[typ.Type] = typ
+	}
 
 	return nil
 }
@@ -185,6 +205,7 @@ func (r *Registry) getPlugin(ctx context.Context, typ runtime.Type) (v1.BlobTran
 func NewBlobTransformerRegistry(ctx context.Context) *Registry {
 	return &Registry{
 		ctx:                ctx,
+		typeRegistry:       make(map[runtime.Type]mtypes.Type),
 		registry:           make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins: make(map[string]*constructedPlugin),
 		scheme:             runtime.NewScheme(runtime.WithAllowUnknown()),

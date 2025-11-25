@@ -3,7 +3,7 @@ package componentversionrepository
 import (
 	"fmt"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
+	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -16,7 +16,7 @@ import (
 // during lookup the right endpoint + type is used.
 func RegisterComponentVersionRepository[T runtime.Typed](
 	proto T,
-	handler v1.ReadWriteOCMRepositoryPluginContract[T],
+	handler ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[T],
 	c *endpoints.EndpointBuilder,
 ) error {
 	typ, err := c.Scheme.TypeForPrototype(proto)
@@ -65,16 +65,16 @@ func RegisterComponentVersionRepository[T runtime.Typed](
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
 
-	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &CapabilitySpec{
-		Type: runtime.NewUnversionedType(string(types.ComponentVersionRepositoryPluginType)),
+	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &ocmrepositoryv1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(ocmrepositoryv1.ComponentVersionRepositoryPluginType)),
+		TypeToJSONSchema: map[string][]byte{
+			typ.String(): schema,
+		},
 		SupportedRepositorySpecTypes: []types.Type{
 			{
 				Type:    typ,
 				Aliases: nil,
 			},
-		},
-		TypeToJSONSchema: map[string][]byte{
-			typ.String(): schema,
 		},
 	})
 

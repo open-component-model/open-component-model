@@ -1,20 +1,23 @@
-package componentversionrepository
+package v1
 
 import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+const ComponentVersionRepositoryPluginType types.PluginType = "componentVersionRepository"
+
 var Scheme *runtime.Scheme
 
 func init() {
 	Scheme = runtime.NewScheme()
-	Scheme.MustRegisterWithAlias(&CapabilitySpec{}, runtime.NewUnversionedType(string(types.ComponentVersionRepositoryPluginType)))
+	Scheme.MustRegisterWithAlias(&CapabilitySpec{}, runtime.NewUnversionedType(string(ComponentVersionRepositoryPluginType)))
 }
 
-// move to contracts (capabilities as well)
-
-// CapabilitySpec
+// CapabilitySpec specifies the supported types of a plugin for
+// a particular capability type.
+// For the ComponentVersionRepository capability, it specifies the supported
+// repository spec types (e.g. oci, ctf, ...).
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
@@ -29,17 +32,5 @@ type CapabilitySpec struct {
 	// Aliases map[string]runtime.Type `json:"aliases"` // mapping of canonical type (oci/v1alpha) to alias types (oci, oci/v1)
 	// GetComponentVersion only has a dynamic input type (repository spec) and a fixed output type (descriptor).
 	// So, we do not have to create a mapping from input to output types here.
-	SupportedRepositorySpecTypes []types.Type `json:"supportedRepositorySpecTypes"` // the list of types (oci, ctf, ...) supported for get
+	SupportedRepositorySpecTypes []types.Type `json:"supportedRepositorySpecTypes"`
 }
-
-//
-//func (c *CapabilitySpec) RegisterCapability(registry PluginRegistry) error {
-//	if err := registry.RegisterComponentVersionRepositoryPlugin(c); err != nil {
-//		return fmt.Errorf("failed to register component version repository plugin: %w", err)
-//	}
-//	return nil
-//}
-//
-//type PluginRegistry interface {
-//	RegisterComponentVersionRepositoryPlugin(spec *CapabilitySpec) error
-//}

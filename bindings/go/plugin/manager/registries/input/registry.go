@@ -20,7 +20,8 @@ import (
 // NewInputRepositoryRegistry creates a new registry and initializes maps.
 func NewInputRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
-		ctx: ctx,
+		ctx:          ctx,
+		typeRegistry: make(map[runtime.Type]types.Type),
 		// Registry contains external plugins ONLY. Internal plugins that already have the implementation are in internalRepositoryPlugins.
 		registry:                               make(map[runtime.Type]types.Plugin),
 		scheme:                                 runtime.NewScheme(runtime.WithAllowUnknown()),
@@ -34,6 +35,7 @@ func NewInputRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 type RepositoryRegistry struct {
 	ctx                                    context.Context
 	mu                                     sync.Mutex
+	typeRegistry                           map[runtime.Type]types.Type
 	registry                               map[runtime.Type]types.Plugin
 	scheme                                 *runtime.Scheme
 	internalResourceInputRepositoryPlugins map[runtime.Type]constructor.ResourceInputMethod
@@ -57,6 +59,25 @@ func (r *RepositoryRegistry) AddPlugin(plugin types.Plugin, constructionType run
 	}
 
 	r.registry[constructionType] = plugin
+
+	return nil
+}
+
+// AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// This function will return an error if the given capability + type already has a registered plugin.
+// Multiple plugins for the same cap+typ is not allowed.
+func (r *RepositoryRegistry) AddPluginWithAliases(plugin types.Plugin, types []types.Type) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, typ := range types {
+		if v, ok := r.registry[typ.Type]; ok {
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ, v.ID)
+		}
+		// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
+		r.registry[typ.Type] = plugin
+		r.typeRegistry[typ.Type] = typ
+	}
 
 	return nil
 }

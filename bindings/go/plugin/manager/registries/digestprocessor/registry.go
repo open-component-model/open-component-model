@@ -24,6 +24,7 @@ type constructedPlugin struct {
 func NewDigestProcessorRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
 		ctx:                            ctx,
+		typeRegistry:                   make(map[runtime.Type]mtypes.Type),
 		scheme:                         runtime.NewScheme(runtime.WithAllowUnknown()),
 		registry:                       make(map[runtime.Type]mtypes.Plugin),
 		constructedPlugins:             make(map[string]*constructedPlugin),
@@ -64,6 +65,7 @@ type RepositoryRegistry struct {
 	ctx                            context.Context
 	mu                             sync.Mutex
 	scheme                         *runtime.Scheme
+	typeRegistry                   map[runtime.Type]mtypes.Type
 	registry                       map[runtime.Type]mtypes.Plugin
 	constructedPlugins             map[string]*constructedPlugin
 	internalDigestProcessorPlugins map[runtime.Type]constructor.ResourceDigestProcessor
@@ -92,6 +94,25 @@ func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, typ runtime.Type) e
 	}
 
 	r.registry[typ] = plugin
+	return nil
+}
+
+// AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// This function will return an error if the given capability + type already has a registered plugin.
+// Multiple plugins for the same cap+typ is not allowed.
+func (r *RepositoryRegistry) AddPluginWithAliases(plugin mtypes.Plugin, types []mtypes.Type) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, typ := range types {
+		if v, ok := r.registry[typ.Type]; ok {
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ, v.ID)
+		}
+		// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
+		r.registry[typ.Type] = plugin
+		r.typeRegistry[typ.Type] = typ
+	}
+
 	return nil
 }
 
