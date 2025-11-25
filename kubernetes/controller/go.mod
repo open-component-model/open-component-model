@@ -37,10 +37,10 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251118094009-5d448c440041
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251124222340-4c1b948b736f
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251125143528-85806a826a57
 	ocm.software/open-component-model/bindings/go/oci v0.0.14
-	ocm.software/open-component-model/bindings/go/plugin v0.0.9
+	ocm.software/open-component-model/bindings/go/plugin v0.0.10
 	ocm.software/open-component-model/bindings/go/repository v0.0.3
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
@@ -254,7 +254,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
-	github.com/letsencrypt/boulder v0.20251014.0 // indirect
+	github.com/letsencrypt/boulder v0.20251021.0 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
@@ -413,7 +413,7 @@ require (
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251118094009-5d448c440041 // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251124222340-4c1b948b736f // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect
