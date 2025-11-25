@@ -1,5 +1,4 @@
 // @ts-check
-import { escapeRegex } from './semver-utils.js';
 
 /**
  * Unified version computation for OCM components.
@@ -48,6 +47,16 @@ export function computeVersion(ref, tagPrefix) {
         const sanitized = ref.replace(/[\/+#?^%$]/g, "-");
         return `0.0.0-${sanitized}`;
     }
+}
+
+/**
+ * Escape special regex characters in a string.
+ *
+ * @param {string} str - String to escape
+ * @returns {string} Escaped string safe for use in regex
+ */
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

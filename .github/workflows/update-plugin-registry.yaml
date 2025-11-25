@@ -175,22 +175,21 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
-            const { bumpVersion } = await import('${{ github.workspace }}/.github/scripts/bump-semver.js');
+            const { computeNextVersions } = await import('${{ github.workspace }}/.github/scripts/compute-rc-version.js');
 
             const currentVersion = process.env.CURRENT_VERSION;
             const pluginExists = process.env.PLUGIN_EXISTS === 'true';
 
-            // Determine bump type
-            const updateType = pluginExists ? 'patch' : 'minor';
-            const newVersion = bumpVersion(currentVersion, updateType);
+            // Bumps the current base version. Plugin exists determines if we need to bump minor version or patch version.
+            // If the plugin does NOT exist, we bump the minor version of the registry.
+            const newVersion = computeNextVersions(currentVersion, currentVersion, "", !pluginExists);
 
             core.info(`Current version: ${currentVersion}`);
-            core.info(`Update type: ${updateType} (${pluginExists ? 'updating existing plugin' : 'adding new plugin'})`);
-            core.info(`New version: ${newVersion}`);
+            core.info(`Update type: (${pluginExists ? 'updating existing plugin' : 'adding new plugin'})`);
+            core.info(`New version: ${newVersion.baseVersion}`);
 
             core.setOutput('old_version', currentVersion);
-            core.setOutput('new_version', newVersion);
-            core.setOutput('update_type', updateType);
+            core.setOutput('new_version', newVersion.baseVersion);
 
       - name: Prepare registry constructor
         if: ${{ inputs.dry_run != true && github.event_name != 'pull_request' }}
