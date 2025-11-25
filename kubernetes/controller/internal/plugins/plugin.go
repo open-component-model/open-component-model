@@ -55,7 +55,7 @@ func (m *PluginManager) Start(ctx context.Context) error {
 	// Register both versioned and unversioned types
 	credScheme.MustRegisterWithAlias(
 		&ocicredentialsspecv1.DockerConfig{},
-		ocicredentialsspec.CredentialRepositoryConfigType,                       // DockerConfig/v1
+		ocicredentialsspec.CredentialRepositoryConfigType,                                     // DockerConfig/v1
 		ocmruntime.NewUnversionedType(ocicredentialsspec.CredentialRepositoryConfigType.Name), // DockerConfig
 	)
 	if err := credentialrepository.RegisterInternalCredentialRepositoryPlugin(
