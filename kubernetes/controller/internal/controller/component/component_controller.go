@@ -43,9 +43,6 @@ const (
 	LegacyNormalisationAlgo = "jsonNormalisation/v3"
 )
 
-// Matcher is a generic matcher function type
-type Matcher[T any] func(T) bool
-
 // Reconciler reconciles a Component object.
 type Reconciler struct {
 	*ocm.BaseReconciler
@@ -226,7 +223,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	repoSpec, err := r.convertRepositorySpec(repo.Spec.RepositorySpec)
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to convert repository spec: %w", err)
 	}
@@ -237,7 +234,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		Namespace:         component.GetNamespace(),
 	})
 	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.ConfigureContextFailedReason, err.Error())
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
@@ -258,7 +255,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	digestSpec, err := generateDigest(ctx, desc, LegacyNormalisationAlgo, crypto.SHA256.String())
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, component, v1alpha1.CheckVersionFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to generate digest: %w", err)
 	}

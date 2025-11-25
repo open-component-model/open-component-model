@@ -16,12 +16,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -29,6 +25,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
@@ -116,8 +116,9 @@ var _ = BeforeSuite(func() {
 	}()
 
 	ocmscheme := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
+	ocmrepository.MustAddLegacyToScheme(ocmscheme)
 	ocmrepository.MustAddToScheme(ocmscheme)
-	access.MustAddToScheme(ocmscheme)
+
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
 
 	pmLogger := logf.Log.WithName("plugin-manager")
