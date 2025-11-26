@@ -17,9 +17,26 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+var (
+	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+)
+
+func DummyCapability(schema []byte) resourcev1.CapabilitySpec {
+	return resourcev1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(mtypes.ResourceRepositoryPluginType)),
+		TypeToJSONSchema: map[string][]byte{
+			DummyType.String(): schema,
+		},
+		SupportedAccessTypes: []mtypes.Type{{
+			Type: DummyType,
+		}},
+	}
+}
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -36,10 +53,6 @@ func TestPluginFlow(t *testing.T) {
 		PluginType: mtypes.ResourceRepositoryPluginType,
 	}
 	serialized, err := json.Marshal(config)
-	require.NoError(t, err)
-
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
@@ -60,21 +73,12 @@ func TestPluginFlow(t *testing.T) {
 			Type:       mtypes.Socket,
 			PluginType: mtypes.ResourceRepositoryPluginType,
 		},
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.ResourceRepositoryPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
-		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	require.NoError(t, registry.AddPlugin(plugin, typ))
-	p, err := scheme.NewObject(typ)
-	require.NoError(t, err)
-	retrievedPlugin, err := registry.GetResourcePlugin(ctx, p)
+	capability := DummyCapability([]byte(`{}`))
+	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
+	retrievedPlugin, err := registry.GetResourcePlugin(ctx, &runtime.Raw{Type: DummyType})
 	require.NoError(t, err)
 	resource, err := retrievedPlugin.DownloadResource(ctx, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
@@ -86,10 +90,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:     "type",
 		Relation: "local",
 		Access: &runtime.Raw{
-			Type: runtime.Type{
-				Version: "test-access",
-				Name:    "v1",
-			},
+			Type: DummyType,
 			Data: []byte(`{ "access": "v1" }`),
 		},
 	}, map[string]string{})

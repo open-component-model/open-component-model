@@ -12,14 +12,30 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
 	"ocm.software/open-component-model/bindings/go/constructor"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+var (
+	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+)
+
+func DummyCapability(schema []byte) v1.CapabilitySpec {
+	return v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.DigestProcessorPluginType)),
+		TypeToJSONSchema: map[string][]byte{
+			DummyType.String(): schema,
+		},
+		SupportedAccessTypes: []mtypes.Type{{
+			Type: DummyType,
+		}},
+	}
+}
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -38,10 +54,6 @@ func TestPluginFlow(t *testing.T) {
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
-	require.NoError(t, err)
-
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)
@@ -58,21 +70,15 @@ func TestPluginFlow(t *testing.T) {
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-construction",
 			Type:       mtypes.Socket,
-			PluginType: mtypes.ComponentVersionRepositoryPluginType,
-		},
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.ComponentVersionRepositoryPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
+			PluginType: v1.DigestProcessorPluginType,
 		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	require.NoError(t, registry.AddPlugin(plugin, typ))
-	p, err := scheme.NewObject(typ)
+
+	capability := DummyCapability([]byte(`{}`))
+	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
+	p, err := scheme.NewObject(DummyType)
 	require.NoError(t, err)
 	retrievedResourcePlugin, err := registry.GetPlugin(ctx, p)
 	require.NoError(t, err)
@@ -86,10 +92,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:     "type",
 		Relation: "local",
 		Access: &runtime.Raw{
-			Type: runtime.Type{
-				Version: "test-access",
-				Name:    "v1",
-			},
+			Type: DummyType,
 			Data: []byte(`{ "access": "v1" }`),
 		},
 	}, nil)

@@ -3,6 +3,7 @@ package input
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -105,6 +106,9 @@ func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *inputv1.P
 }
 
 func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
+	if obj == nil || obj == (*runtime.Raw)(nil) {
+		return errors.New("nil object provided")
+	}
 	jsonSchema, ok := r.capability.TypeToJSONSchema[obj.GetType().String()]
 	if !ok {
 		return fmt.Errorf("no JSON schema found for type %q in plugin %q", obj.GetType().String(), r.ID)

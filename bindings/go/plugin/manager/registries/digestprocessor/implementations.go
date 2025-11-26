@@ -3,6 +3,7 @@ package digestprocessor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -87,6 +88,10 @@ func (p *RepositoryPlugin) ProcessResourceDigest(ctx context.Context, request *d
 }
 
 func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
+	if obj == nil {
+		return errors.New("nil object provided")
+	}
+
 	jsonSchema, ok := p.capability.TypeToJSONSchema[obj.GetType().String()]
 	if !ok {
 		return fmt.Errorf("no JSON schema found for type %q in plugin %q", obj.GetType().String(), p.ID)

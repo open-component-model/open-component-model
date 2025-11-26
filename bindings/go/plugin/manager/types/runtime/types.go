@@ -1,6 +1,10 @@
 package runtime
 
-import "ocm.software/open-component-model/bindings/go/runtime"
+import (
+	"errors"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
+)
 
 // PluginSpec is the list of plugin capabilities a plugin supports.
 // To determine into what type of plugin we have to unmarshal, we unmarshal
@@ -11,4 +15,12 @@ import "ocm.software/open-component-model/bindings/go/runtime"
 type PluginSpec struct {
 	CapabilitySpecs      []runtime.Typed
 	SupportedConfigTypes []runtime.Type
+}
+
+func (spec *PluginSpec) MarshalJSON() ([]byte, error) {
+	return nil, errors.New("marshalling runtime plugin spec is unsupported, convert to spec plugin spec")
+}
+
+func (spec *PluginSpec) UnmarshalJSON(data []byte) error {
+	return errors.New("unmarshalling runtime plugin spec is unsupported, convert from spec plugin spec")
 }

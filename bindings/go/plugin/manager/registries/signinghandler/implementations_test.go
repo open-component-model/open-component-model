@@ -9,14 +9,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
-
-var DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 
 func TestPing(t *testing.T) {
 	tests := []struct {

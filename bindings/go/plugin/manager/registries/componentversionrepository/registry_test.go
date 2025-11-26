@@ -10,14 +10,31 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+var (
+	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+)
+
+func DummyCapability(schema []byte) v1.CapabilitySpec {
+	return v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.ComponentVersionRepositoryPluginType)),
+		TypeToJSONSchema: map[string][]byte{
+			DummyType.String(): schema,
+		},
+		SupportedRepositorySpecTypes: []mtypes.Type{{
+			Type: DummyType,
+		}},
+	}
+}
 
 func TestPluginFlow(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-component-version")
@@ -32,7 +49,7 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         "test-plugin-1",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.ComponentVersionRepositoryPluginType,
+		PluginType: v1.ComponentVersionRepositoryPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -58,19 +75,12 @@ func TestPluginFlow(t *testing.T) {
 			Type:       mtypes.Socket,
 			PluginType: mtypes.ComponentVersionRepositoryPluginType,
 		},
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.ComponentVersionRepositoryPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
-		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 		Stderr: stderr,
 	}
-	require.NoError(t, registry.AddPlugin(plugin, typ))
+	capability := DummyCapability([]byte(`{}`))
+	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
 	spec := &dummyv1.Repository{
 		Type:    typ,
 		BaseUrl: "ghcr.io/open-component/test-component-version-repository",

@@ -47,7 +47,7 @@ type Type struct {
 	// Type defines the canonical type name that this plugin supports.
 	Type runtime.Type `json:"type"`
 	// Aliases defines alternative type names that this plugin also supports for the same type.
-	Aliases []runtime.Type
+	Aliases []runtime.Type `json:"aliases"`
 	// JSONScheme holds the scheme for the type. This scheme corresponds to the type.
 	JSONSchema []byte `json:"jsonSchema"`
 }

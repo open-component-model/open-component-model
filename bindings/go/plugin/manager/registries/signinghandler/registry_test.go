@@ -22,6 +22,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
+var DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+
 type mockSigningHandler struct{ called bool }
 
 func (m *mockSigningHandler) GetSigningCredentialConsumerIdentity(ctx context.Context, name string, unsigned descruntime.Digest, config runtime.Typed) (runtime.Identity, error) {

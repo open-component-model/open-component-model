@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/blob/transformer"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -24,6 +25,22 @@ import (
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+var (
+	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+)
+
+func DummyCapability(schema []byte) v1.CapabilitySpec {
+	return v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.BlobTransformerPluginType)),
+		TypeToJSONSchema: map[string][]byte{
+			DummyType.String(): schema,
+		},
+		SupportedTransformerSpecTypes: []mtypes.Type{{
+			Type: DummyType,
+		}},
+	}
+}
 
 func TestPluginFlow(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-blobtransformer")
@@ -46,10 +63,6 @@ func TestPluginFlow(t *testing.T) {
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
-	require.NoError(t, err)
-
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	t.Cleanup(func() {
 		assert.NoError(t, pluginCmd.Process.Kill())
@@ -64,26 +77,19 @@ func TestPluginFlow(t *testing.T) {
 		ID:     "test-plugin-blob-transformer",
 		Path:   path,
 		Config: config,
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.BlobTransformerPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
-		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 		Stderr: stderr,
 	}
-	require.NoError(t, registry.AddPlugin(plugin, typ))
-	p, err := scheme.NewObject(typ)
+	capability := DummyCapability([]byte(`{}`))
+	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
+	p, err := scheme.NewObject(DummyType)
 	require.NoError(t, err)
 	retrievedPlugin, err := registry.GetPlugin(ctx, p)
 	require.NoError(t, err)
 
 	transformedBlob, err := retrievedPlugin.TransformBlob(ctx, inmemory.New(strings.NewReader("foobar")), &dummyv1.Repository{
-		Type:    typ,
+		Type:    DummyType,
 		BaseUrl: "test-base-url",
 	}, nil)
 	require.NoError(t, err)

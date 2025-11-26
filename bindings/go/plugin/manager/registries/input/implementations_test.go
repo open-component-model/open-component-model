@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"ocm.software/open-component-model/bindings/go/runtime"
 
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -33,11 +34,18 @@ func TestProcessResourceHandler(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+	}, server.URL, DummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	_, err := plugin.ProcessResource(ctx, &v1.ProcessResourceInputRequest{
-		Resource: &constructorv1.Resource{},
+		Resource: &constructorv1.Resource{
+			AccessOrInput: constructorv1.AccessOrInput{
+				Input: &runtime.Raw{
+					Type: DummyType,
+					Data: []byte(`{}`),
+				},
+			},
+		},
 	}, map[string]string{})
 	require.NoError(t, err)
 }

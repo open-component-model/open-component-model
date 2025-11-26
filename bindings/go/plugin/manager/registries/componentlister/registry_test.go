@@ -15,10 +15,27 @@ import (
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+var (
+	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+)
+
+func DummyCapability(schema []byte) v1.CapabilitySpec {
+	return v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.ComponentListerPluginType)),
+		TypeToJSONSchema: map[string][]byte{
+			DummyType.String(): schema,
+		},
+		SupportedRepositorySpecTypes: []mtypes.Type{{
+			Type: DummyType,
+		}},
+	}
+}
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -41,10 +58,6 @@ func TestPluginFlow(t *testing.T) {
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
-	require.NoError(t, err)
-
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	t.Cleanup(func() {
 		_ = os.Remove(fmt.Sprintf("/tmp/%s-plugin.socket", id))
@@ -58,22 +71,15 @@ func TestPluginFlow(t *testing.T) {
 		ID:     "test-plugin-component-lister",
 		Path:   path,
 		Config: config,
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.ComponentListerPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
-		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 		Stderr: stderr,
 	}
-	require.NoError(t, registry.AddPlugin(plugin, typ))
 
+	capability := DummyCapability([]byte(`{}`))
+	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
 	spec := &dummyv1.Repository{
-		Type:    typ,
+		Type:    DummyType,
 		BaseUrl: "example.com/test-repository",
 	}
 	require.NoError(t, err)

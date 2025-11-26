@@ -31,7 +31,7 @@ func TestPing(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.BlobTransformerPluginType,
-	}, server.URL, []byte(`{}`))
+	}, server.URL, DummyCapability([]byte(`{}`)))
 
 	err := plugin.Ping(context.Background())
 	assert.NoError(t, err)
@@ -66,11 +66,11 @@ func TestTransformBlob(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.BlobTransformerPluginType,
-	}, server.URL, schema)
+	}, server.URL, DummyCapability(schema))
 
 	req := &v1.TransformBlobRequest[runtime.Typed]{
 		Specification: &dummyv1.Repository{
-			Type:    runtime.NewVersionedType("DummyRepository", "v1"),
+			Type:    DummyType,
 			BaseUrl: "ocm.software",
 		},
 	}
@@ -87,10 +87,12 @@ func TestTransformBlobValidationFail(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.BlobTransformerPluginType,
-	}, "", schema)
+	}, "", DummyCapability(schema))
 
 	req := &v1.TransformBlobRequest[runtime.Typed]{
-		Specification: &dummyv1.Repository{}, // missing required fields
+		Specification: &dummyv1.Repository{
+			Type: DummyType,
+		}, // missing required fields
 	}
 	_, err = plugin.TransformBlob(context.Background(), req, map[string]string{})
 	assert.ErrorContains(t, err, "validation")
@@ -116,7 +118,7 @@ func TestGetIdentity(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.BlobTransformerPluginType,
-	}, server.URL, schema)
+	}, server.URL, DummyCapability(schema))
 
 	req := &v1.GetIdentityRequest[runtime.Typed]{
 		Typ: &dummyv1.Repository{
@@ -136,10 +138,12 @@ func TestGetIdentityValidationFail(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: types.BlobTransformerPluginType,
-	}, "", schema)
+	}, "", DummyCapability(schema))
 
 	req := &v1.GetIdentityRequest[runtime.Typed]{
-		Typ: &dummyv1.Repository{}, // missing required fields
+		Typ: &dummyv1.Repository{
+			Type: DummyType,
+		}, // missing required fields
 	}
 	_, err = plugin.GetIdentity(context.Background(), req)
 	assert.ErrorContains(t, err, "validation")
