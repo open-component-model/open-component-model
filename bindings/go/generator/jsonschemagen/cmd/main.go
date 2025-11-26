@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -14,12 +15,41 @@ import (
 const marker = "+ocm:jsonschema-gen=true"
 
 func main() {
-	if len(os.Args) < 2 {
-		slog.Error("Usage: jsonschemagen <root-dir>")
+	// -------------------------------
+	// Logging flag
+	// -------------------------------
+	logLevelFlag := flag.String("loglevel", "info", "debug, info, warn, error")
+	flag.Parse()
+
+	// Apply log level
+	level := slog.LevelInfo
+	switch *logLevelFlag {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		// keep default info
+	}
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})))
+
+	// -------------------------------
+	// Root argument check
+	// -------------------------------
+	args := flag.Args()
+	if len(args) < 1 {
+		slog.Error("Usage: jsonschemagen [--log-level=LEVEL] <root-dir>")
 		os.Exit(1)
 	}
 
-	roots := os.Args[1:]
+	roots := args
 	for i, root := range roots {
 		abs, err := filepath.Abs(root)
 		if err != nil {

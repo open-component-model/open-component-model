@@ -2,6 +2,7 @@ package universe
 
 import (
 	"go/ast"
+	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -136,22 +137,30 @@ func TestResolveSelector(t *testing.T) {
 
 func TestRegisterTypes(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/module\n"), 0o644))
 
+	// Create real go.mod
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "go.mod"),
+		[]byte("module example.com/module\n"),
+		0o644,
+	))
+
+	// Write a real Go file so packages.Load sees a valid buildable module
 	filePath := filepath.Join(dir, "types.go")
-	file := &ast.File{
-		Decls: []ast.Decl{
-			&ast.GenDecl{Tok: token.IMPORT},
-			&ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{
-				&ast.TypeSpec{Name: ast.NewIdent("First"), Type: &ast.StructType{}},
-				&ast.TypeSpec{Name: ast.NewIdent("Second"), Type: &ast.Ident{Name: "string"}},
-			}},
-			&ast.GenDecl{Tok: token.CONST},
-		},
-	}
+	require.NoError(t, os.WriteFile(filePath, []byte(`
+package module
+
+type First struct{}
+type Second string
+`), 0o644))
+
+	// Parse the file into an AST
+	fset := token.NewFileSet()
+	fileAst, err := parser.ParseFile(fset, filePath, nil, 0)
+	require.NoError(t, err)
 
 	u := New()
-	u.RegisterTypes(filePath, file)
+	u.RegisterTypes(filePath, fileAst)
 
 	require.Contains(t, u.Types, TypeKey{PkgPath: "example.com/module", TypeName: "First"})
 	require.Contains(t, u.Types, TypeKey{PkgPath: "example.com/module", TypeName: "Second"})
@@ -174,42 +183,6 @@ func TestIsEligibleGoFile(t *testing.T) {
 			require.Equal(t, tc.eligible, isEligibleGoFile(tc.path))
 		})
 	}
-}
-
-func TestGuessPackagePath(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/module\n"), 0o644))
-
-	pkg := filepath.Join(root, "pkg")
-	require.NoError(t, os.Mkdir(pkg, 0o755))
-
-	path, err := GuessPackagePath(root)
-	require.NoError(t, err)
-	require.Equal(t, "example.com/module", path)
-
-	nested, err := GuessPackagePath(pkg)
-	require.NoError(t, err)
-	require.Equal(t, filepath.ToSlash("example.com/module/pkg"), nested)
-
-	orphanDir := t.TempDir()
-	_, err = GuessPackagePath(orphanDir)
-	require.Error(t, err)
-}
-
-func TestReadModulePath(t *testing.T) {
-	dir := t.TempDir()
-	modPath := filepath.Join(dir, "go.mod")
-	require.NoError(t, os.WriteFile(modPath, []byte("module example.com/module\n"), 0o644))
-
-	module, err := readModulePath(modPath)
-	require.NoError(t, err)
-	require.Equal(t, "example.com/module", module)
-
-	emptyMod := filepath.Join(dir, "empty.mod")
-	require.NoError(t, os.WriteFile(emptyMod, []byte("// no module here\n"), 0o644))
-
-	_, err = readModulePath(emptyMod)
-	require.Error(t, err)
 }
 
 func TestBuildIntegration(t *testing.T) {

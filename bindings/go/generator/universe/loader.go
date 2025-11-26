@@ -1,8 +1,6 @@
 package universe
 
 import (
-	"bufio"
-	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -69,51 +67,6 @@ func isEligibleGoFile(path string) bool {
 	}
 
 	return true
-}
-
-// GuessPackagePath returns the Go import path of the folder
-// containing filePath, based on the nearest go.mod.
-func GuessPackagePath(folder string) (string, error) {
-	abs, _ := filepath.Abs(folder)
-	dir := abs
-
-	for {
-		goMod := filepath.Join(dir, "go.mod")
-		if _, err := os.Stat(goMod); err == nil {
-			module, _ := readModulePath(goMod)
-			rel, _ := filepath.Rel(dir, abs)
-			if rel == "." {
-				return module, nil
-			}
-			return filepath.ToSlash(filepath.Join(module, rel)), nil
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-
-	return "", errors.New("go.mod not found for " + folder)
-}
-
-func readModulePath(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
-		}
-	}
-
-	return "", errors.New("module path not found in " + path)
 }
 
 func (u *Universe) LoadFromGoImport(importPath string) error {

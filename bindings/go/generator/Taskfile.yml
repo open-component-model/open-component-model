@@ -55,9 +55,9 @@ tasks:
   jsonschemagen/generate:
     deps: ["jsonschemagen/install"]
     desc: "Run Type OCM JSON Schema Generation in the Project"
-    cmd: '{{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .ROOT_DIR }}'
+    cmd: '{{ .ROOT_DIR }}/tmp/bin/jsonschemagen {{ .CLI_ARGS }} {{ .ROOT_DIR }}'
 
   jsonschemagen/test:
     desc: "Run OCM JSON Schema Generation test"
     cmds:
-      - cmd: 'go run {{ .TASKFILE_DIR }}/jsonschemagen/cmd/... {{ .TASKFILE_DIR }}'
+      - cmd: 'go run {{ .TASKFILE_DIR }}/jsonschemagen/cmd/... {{ .CLI_ARGS }} {{ .TASKFILE_DIR }}'

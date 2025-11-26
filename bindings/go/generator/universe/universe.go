@@ -2,18 +2,17 @@ package universe
 
 import (
 	"go/ast"
+	"log/slog"
 	"strings"
 )
-
-///////////////////////////////////////////////////////////////////////////////
-// Universe
-///////////////////////////////////////////////////////////////////////////////
 
 // New creates an empty Universe.
 func New() *Universe {
 	return &Universe{
-		Types:      map[TypeKey]*TypeInfo{},
-		ImportMaps: map[string]map[string]string{},
+		Types:            map[TypeKey]*TypeInfo{},
+		ImportMaps:       map[string]map[string]string{},
+		pkgDirImportPath: map[string]string{},
+		moduleCache:      map[string]bool{},
 	}
 }
 
@@ -25,8 +24,10 @@ func New() *Universe {
 //
 // The Universe is immutable after Build() and is consumed by the Generator.
 type Universe struct {
-	Types      map[TypeKey]*TypeInfo        // all named struct types in all scanned packages
-	ImportMaps map[string]map[string]string // filePath → (alias → full package path)
+	Types            map[TypeKey]*TypeInfo        // all named struct types in all scanned packages
+	ImportMaps       map[string]map[string]string // filePath → (alias → full package path)
+	pkgDirImportPath map[string]string            // cache: package dir → resolved import path
+	moduleCache      map[string]bool              // cache: module path → already observed and loaded
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -126,8 +127,12 @@ func (u *Universe) AddType(
 ) {
 	key := TypeKey{PkgPath: pkgPath, TypeName: typeName}
 
-	st, _ := ts.Type.(*ast.StructType)
+	if _, exists := u.Types[key]; exists {
+		slog.Debug("type already registered, skipping", "pkg", pkgPath, "type", typeName)
+		return
+	}
 
+	st, _ := ts.Type.(*ast.StructType)
 	u.Types[key] = &TypeInfo{
 		Key:      key,
 		FilePath: filePath,
