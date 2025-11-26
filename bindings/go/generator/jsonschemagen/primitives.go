@@ -11,7 +11,6 @@ func newPrimitiveSchema(
 	gd *ast.GenDecl,
 	field *ast.Field,
 ) *Schema {
-
 	// baseline primitive (min/max/multipleOf/format/type)
 	s := primitiveBaseForIdent(id)
 	if s == nil {
@@ -75,26 +74,26 @@ func primitiveBaseForIdent(ident *ast.Ident) *Schema {
 	}
 }
 
-func numberWithRange(max float64, format string) *Schema {
+func numberWithRange(maximum float64, format string) *Schema {
 	return &Schema{
 		Type:    "number",
-		Maximum: Ptr(max),
+		Maximum: Ptr(maximum),
 		Format:  format,
 	}
 }
 
-func uintWithRange(max uint64) *Schema {
+func uintWithRange(maximum uint64) *Schema {
 	return &Schema{
 		Type:    "integer",
 		Minimum: Ptr(float64(0)),
-		Maximum: Ptr(float64(max)),
+		Maximum: Ptr(float64(maximum)),
 	}
 }
 
-func intWithRange(min, max int64) *Schema {
+func intWithRange(minimum, maximum int64) *Schema {
 	return &Schema{
 		Type:    "integer",
-		Minimum: Ptr(float64(min)),
-		Maximum: Ptr(float64(max)),
+		Minimum: Ptr(float64(minimum)),
+		Maximum: Ptr(float64(maximum)),
 	}
 }
