@@ -10,6 +10,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// ErrNoIndirectCredentials is returned when no indirect credentials are found in the graph.
+// This can happen if no repository plugin is configured or if no repository plugin can resolve
+// credentials for the given identity.
+var ErrNoIndirectCredentials = errors.New("no indirect credentials found in graph")
+
 // resolveFromRepository is invoked when the DAG does not yield direct credentials.
 // The method ensures that successful resolutions are cached for subsequent calls.
 func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
