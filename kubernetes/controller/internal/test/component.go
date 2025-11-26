@@ -81,26 +81,25 @@ func SignComponent(ctx context.Context, signatureName string, normalised []byte,
 	handler, err := pm.SigningRegistry.GetPlugin(ctx, cfg)
 	Expect(err).ToNot(HaveOccurred())
 
-	// digest
-
 	h := crypto.SHA512.New()
 	_, err = h.Write(normalised)
 	Expect(err).ToNot(HaveOccurred())
 	freshDigest := h.Sum(nil)
 
+	// Create unsigned digest
 	unsignedDigest := &descruntime.Digest{
 		HashAlgorithm:          crypto.SHA512.String(),
 		NormalisationAlgorithm: v4alpha1.Algorithm,
 		Value:                  hex.EncodeToString(freshDigest),
 	}
 
-	// credentials
-	// Generate key
+	// Generate RSA key pair
 	k, err := rsa.GenerateKey(rand.Reader, 2048)
 	Expect(err).ToNot(HaveOccurred())
 
 	// Self-signed cert
 	n, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	Expect(err).ToNot(HaveOccurred())
 	tmpl := &x509.Certificate{
 		SerialNumber:          n,
 		Subject:               pkix.Name{CommonName: "signer"},

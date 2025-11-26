@@ -48,29 +48,30 @@ func Register(pm *manager.PluginManager, scheme *ocmruntime.Scheme) error {
 			&v1alpha1.Config{},
 		),
 
-		//resource.RegisterInternalResourcePlugin(
-		//	scheme,
-		//	pm.ResourcePluginRegistry,
-		//	&resourceRepoPlugin,
-		//	&v1.OCIImage{},
-		//),
-		//digestprocessor.RegisterInternalDigestProcessorPlugin(
-		//	scheme,
-		//	digRegistry,
-		//	&resourceRepoPlugin,
-		//	&v1.OCIImage{},
-		//),
-		//blobtransformer.RegisterInternalBlobTransformerPlugin(
-		//	extractspecv1alpha1.Scheme,
-		//	blobTransformerRegistry,
-		//	ociBlobTransformerPlugin,
-		//	&extractspecv1alpha1.Config{},
-		//),
-		//componentlister.RegisterInternalComponentListerPlugin(
-		//	scheme,
-		//	compListRegistry,
-		//	&CTFComponentListerPlugin{},
-		//	&ctfv1.Repository{},
-		//),
+		// TODO: Enable these plugins when needed
+		//  resource.RegisterInternalResourcePlugin(
+		//  	scheme,
+		//  	pm.ResourcePluginRegistry,
+		//  	&resourceRepoPlugin,
+		//  	&v1.OCIImage{},
+		//  ),
+		//  digestprocessor.RegisterInternalDigestProcessorPlugin(
+		//  	scheme,
+		//  	digRegistry,
+		//  	&resourceRepoPlugin,
+		//  	&v1.OCIImage{},
+		//  ),
+		//  blobtransformer.RegisterInternalBlobTransformerPlugin(
+		//  	extractspecv1alpha1.Scheme,
+		//  	blobTransformerRegistry,
+		//  	ociBlobTransformerPlugin,
+		//  	&extractspecv1alpha1.Config{},
+		//  ),
+		//  componentlister.RegisterInternalComponentListerPlugin(
+		//  	scheme,
+		//  	compListRegistry,
+		//  	&CTFComponentListerPlugin{},
+		//  	&ctfv1.Repository{},
+		//  ),
 	)
 }
