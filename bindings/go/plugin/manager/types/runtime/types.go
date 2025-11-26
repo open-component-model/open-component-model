@@ -9,6 +9,6 @@ import "ocm.software/open-component-model/bindings/go/runtime"
 // Each runtime.Typed of a plugin knows at what kind of registries it can
 // register itself.
 type PluginSpec struct {
-	CapabilitySpecs      []runtime.Typed `json:"capabilitySpecs"`
-	SupportedConfigTypes []runtime.Type  `json:"supportedConfigTypes,omitempty"`
+	CapabilitySpecs      []runtime.Typed
+	SupportedConfigTypes []runtime.Type
 }
