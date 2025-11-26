@@ -16,10 +16,13 @@
       "items": {
         "type": "string"
       }
+    },
+    "type": {
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
     }
   },
   "required": [
-    "-",
+    "type",
     "idleTimeout",
     "locations"
   ],
