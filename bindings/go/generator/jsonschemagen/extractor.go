@@ -56,6 +56,9 @@ func extractContent(s string) string {
 	s = strings.TrimPrefix(s, "/*")
 	s = strings.TrimSuffix(s, "*/")
 
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "*")
+
 	return strings.TrimSpace(s)
 }
 
@@ -92,7 +95,17 @@ func splitCommentText(text string) []string {
 	case strings.HasPrefix(t, "/*"):
 		t = strings.TrimPrefix(t, "/*")
 		t = strings.TrimSuffix(t, "*/")
-		return splitPreserve(t)
+		lines := splitPreserve(t)
+
+		// remove empty first/last lines caused by block comment markers
+		if len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+			lines = lines[1:]
+		}
+		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+			lines = lines[:len(lines)-1]
+		}
+
+		return lines
 
 	case strings.HasPrefix(t, "//"):
 		// keep raw so extractContent can strip markers

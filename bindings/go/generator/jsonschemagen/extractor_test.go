@@ -79,12 +79,16 @@ func TestExtractStructDocFallsBackToGenDecl(t *testing.T) {
 			"//nolint: test",
 			"// From gen decl",
 			"/* Additional info @deprecated soon */",
+			"// Testing",
+			"/*",
+			"* some line",
+			"*/",
 		),
 	}
 
 	desc, deprecated := extractStructDoc(ts, gd)
 
-	require.Equal(t, "From gen decl\nAdditional info @deprecated soon", desc)
+	require.Equal(t, "From gen decl\nAdditional info @deprecated soon\nTesting\nsome line", desc)
 	require.True(t, deprecated)
 }
 
