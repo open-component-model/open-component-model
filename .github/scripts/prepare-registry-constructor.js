@@ -47,7 +47,7 @@ export function prepareRegistryConstructor(options) {
 
         // Compute the new version. If the plugin does not exist we increase the minor version.
         const pluginExists = constructor.componentReferences.find(r => r.name === pluginName);
-        const nextVersion = computeNextVersions(registryVersion, registryVersion, "", pluginExists);
+        const nextVersion = computeNextVersions(registryVersion, registryVersion, "", !pluginExists);
         constructor.version = nextVersion.baseVersion;
 
     } else {
@@ -123,8 +123,11 @@ export default async function prepareRegistryConstructorAction({ core }) {
         fs.writeFileSync(constructorPath, rendered, 'utf8');
 
         core.info(`Added plugin reference: ${pluginName} v${pluginVersion}`);
-        core.info(`Registry version: ${registryVersion}`);
+        core.info(`Registry version: ${result.version}`);
         core.info(`Constructor written to: ${constructorPath}`);
+
+        // set this value for the Summary and the Verify action.
+        core.setOutput("new_version", result.version);
 
         await core.summary
             .addHeading('Registry Constructor Prepared')
@@ -133,7 +136,7 @@ export default async function prepareRegistryConstructorAction({ core }) {
                     { data: 'Field', header: true },
                     { data: 'Value', header: true },
                 ],
-                ['Registry Version', registryVersion],
+                ['New registry Version', result.version],
                 ['Plugin Name', pluginName],
                 ['Plugin Version', pluginVersion],
             ])
