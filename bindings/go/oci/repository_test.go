@@ -1558,7 +1558,8 @@ func TestRepositoryHealthCheck(t *testing.T) {
 		// Test health check - should fail for unreachable URL
 		err = repo.CheckHealth(ctx)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create registry client")
+		// Should fail with ping error containing the domain
+		assert.Contains(t, err.Error(), "failed to ping registry")
 	})
 
 	t.Run("URL resolver health check with malformed URL fails", func(t *testing.T) {
@@ -1574,5 +1575,7 @@ func TestRepositoryHealthCheck(t *testing.T) {
 		// Test health check - should fail for malformed URL
 		err = repo.CheckHealth(ctx)
 		require.Error(t, err)
+		// Should fail with ping error containing the URL
+		assert.Contains(t, err.Error(), "failed to ping registry")
 	})
 }
