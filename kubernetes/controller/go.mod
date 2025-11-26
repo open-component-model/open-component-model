@@ -42,6 +42,7 @@ require (
 	ocm.software/open-component-model/bindings/go/oci v0.0.14
 	ocm.software/open-component-model/bindings/go/plugin v0.0.10
 	ocm.software/open-component-model/bindings/go/repository v0.0.3
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251125192726-a44e4934cd96
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 

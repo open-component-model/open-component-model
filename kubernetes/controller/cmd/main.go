@@ -24,8 +24,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
@@ -157,20 +157,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
-
 	ocmscheme := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
 	ocmrepository.MustAddLegacyToScheme(ocmscheme)
 	ocmrepository.MustAddToScheme(ocmscheme)
 
-	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
-		IdleTimeout: time.Hour,
-		Logger:      &setupLog,
-		Scheme:      ocmscheme,
-		Provider:    repositoryProvider,
-	})
-	if err := mgr.Add(pm); err != nil {
-		setupLog.Error(err, "unable to add plugin manager")
+	pm := manager.NewPluginManager(ctx)
+	if err := plugins.Register(pm, ocmscheme); err != nil {
+		setupLog.Error(err, "unable to register plugins: %w", err)
 		os.Exit(1)
 	}
 

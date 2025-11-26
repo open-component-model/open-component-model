@@ -7,11 +7,11 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/configuration"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/setup"
 )
@@ -21,7 +21,7 @@ var ErrResolutionInProgress = workerpool.ErrResolutionInProgress
 
 // NewResolver creates a new component version resolver.
 // The returned worker pool must be started separately by adding it to the manager.
-func NewResolver(client client.Reader, logger *logr.Logger, workerPool *workerpool.WorkerPool, pluginManager *plugins.PluginManager) *Resolver {
+func NewResolver(client client.Reader, logger *logr.Logger, workerPool *workerpool.WorkerPool, pluginManager *manager.PluginManager) *Resolver {
 	resolver := &Resolver{
 		client:        client,
 		logger:        logger,
@@ -38,7 +38,7 @@ type Resolver struct {
 	client        client.Reader
 	logger        *logr.Logger
 	workerPool    *workerpool.WorkerPool
-	pluginManager *plugins.PluginManager
+	pluginManager *manager.PluginManager
 }
 
 // RepositoryOptions contains all the options the resolution service requires to perform a resolve operation.
@@ -66,7 +66,7 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 }
 
 func (r *Resolver) createRepository(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (repository.ComponentVersionRepository, error) {
-	pm := r.pluginManager.PluginManager
+	pm := r.pluginManager
 	options := setup.RepositoryOptions{
 		Registry: pm.ComponentVersionRepositoryRegistry,
 		Logger:   r.logger,
