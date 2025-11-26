@@ -28,7 +28,8 @@ const result1 = prepareRegistryConstructor({
     pluginName: 'helminput',
     pluginComponent: 'ocm.software/plugins/helminput',
     pluginVersion: '1.0.0',
-    registryExists: false
+    registryExists: false,
+    descriptor: [],
 });
 
 assert.strictEqual(result1.version, 'v0.0.1', 'Should set registry version');
@@ -45,13 +46,10 @@ provider:
 componentReferences: []
 `);
 
-const descriptorPath2 = path.join(tmpDir, 'descriptor2.json');
-fs.writeFileSync(descriptorPath2, JSON.stringify({
-    componentReferences: [
-        { name: 'plugin1', componentName: 'ocm.software/plugins/plugin1', version: '1.0.0' },
-        { name: 'plugin2', componentName: 'ocm.software/plugins/plugin2', version: '2.0.0' }
-    ]
-}));
+let componentReferences2 = [
+    { name: 'plugin1', componentName: 'ocm.software/plugins/plugin1', version: '1.0.0' },
+    { name: 'plugin2', componentName: 'ocm.software/plugins/plugin2', version: '2.0.0' }
+]
 
 const result2 = prepareRegistryConstructor({
     constructorPath: constructorTemplate2,
@@ -60,10 +58,10 @@ const result2 = prepareRegistryConstructor({
     pluginComponent: 'ocm.software/plugins/helminput',
     pluginVersion: '3.0.0',
     registryExists: true,
-    descriptorPath: descriptorPath2
+    descriptor: {componentReferences: componentReferences2},
 });
 
-assert.strictEqual(result2.version, '0.2.1', 'Should update registry version');
+assert.strictEqual(result2.version, '0.3.0', 'Should update registry version');
 assert.strictEqual(result2.componentReferences.length, 3, 'Should have three plugins');
 
 // Test 3: Existing registry with multiple plugins
@@ -75,14 +73,11 @@ provider:
 componentReferences: []
 `);
 
-const descriptorPath3 = path.join(tmpDir, 'descriptor3.json');
-fs.writeFileSync(descriptorPath3, JSON.stringify({
-    componentReferences: [
-        { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '3.0.8' },
-        { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '3.1.0' },
-        { name: 'plugin2', componentName: 'ocm.software/plugins/plugin2', version: '2.0.0' }
-    ]
-}));
+const componentReferences3= [
+    { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '3.0.8' },
+    { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '3.1.0' },
+    { name: 'plugin2', componentName: 'ocm.software/plugins/plugin2', version: '2.0.0' }
+]
 
 const result3 = prepareRegistryConstructor({
     constructorPath: constructorTemplate3,
@@ -91,7 +86,7 @@ const result3 = prepareRegistryConstructor({
     pluginComponent: 'ocm.software/plugins/helminput',
     pluginVersion: '3.2.0',
     registryExists: true,
-    descriptorPath: descriptorPath3
+    descriptor: {componentReferences: componentReferences3}
 });
 
 assert.strictEqual(result3.componentReferences.length, 4, 'Should have 4 plugins after push');
@@ -112,12 +107,9 @@ provider:
 componentReferences: []
 `);
 
-const descriptorPath4 = path.join(tmpDir, 'descriptor4.json');
-fs.writeFileSync(descriptorPath4, JSON.stringify({
-    componentReferences: [
-        { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '1.0.0' }
-    ]
-}));
+const componentReferences4= [
+    { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '1.0.0' },
+]
 
 const result4 = prepareRegistryConstructor({
     constructorPath: constructorTemplate4,
@@ -126,7 +118,7 @@ const result4 = prepareRegistryConstructor({
     pluginComponent: 'ocm.software/plugins/helminput',
     pluginVersion: '2.0.0',
     registryExists: true,
-    descriptorPath: descriptorPath4
+    descriptor: {componentReferences: componentReferences4}
 });
 
 assert.strictEqual(result4.componentReferences.length, 2, 'Should have two plugins');
@@ -141,12 +133,9 @@ provider:
 componentReferences: []
 `);
 
-const descriptorPath5 = path.join(tmpDir, 'descriptor5.json');
-fs.writeFileSync(descriptorPath5, JSON.stringify({
-    componentReferences: [
-        { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '1.0.0' }
-    ]
-}));
+const componentReferences5 = [
+    { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '1.0.0' }
+]
 
 assert.throws(() => {
     prepareRegistryConstructor({
@@ -156,7 +145,7 @@ assert.throws(() => {
         pluginComponent: 'ocm.software/plugins/helminput',
         pluginVersion: '1.0.0',
         registryExists: true,
-        descriptorPath: descriptorPath5
+        descriptor: {componentReferences: componentReferences5}
     });
 },
     /Plugin with name helminput and version 1.0.0 already exists in reference list/,
@@ -172,12 +161,9 @@ provider:
 componentReferences: []
 `);
 
-const descriptorPath6 = path.join(tmpDir, 'descriptor6.json');
-fs.writeFileSync(descriptorPath6, JSON.stringify({
-    componentReferences: [
-        { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '1.0.0' }
-    ]
-}));
+const componentReferences6 = [
+    { name: 'helminput', componentName: 'ocm.software/plugins/helminput', version: '1.0.0' }
+]
 
 const result6 = prepareRegistryConstructor({
     constructorPath: constructorTemplate6,
@@ -186,12 +172,12 @@ const result6 = prepareRegistryConstructor({
     pluginComponent: 'ocm.software/plugins/helminput',
     pluginVersion: '2.0.0',
     registryExists: true,
-    descriptorPath: descriptorPath6
+    descriptor: {componentReferences: componentReferences6},
 });
 
 assert.strictEqual(result6.componentReferences.length, 2, 'Should have two plugins');
 assert.strictEqual(result6.componentReferences[1].version, '2.0.0', 'Should update version');
-assert.strictEqual(result6.version, '0.7.0', 'Should update version of the plugin root component version');
+assert.strictEqual(result6.version, '0.6.1', 'Should update version of the plugin root component version');
 assert.strictEqual(result6.name, 'ocm.software/plugin-registry', 'Should set component version name');
 
 // Cleanup
