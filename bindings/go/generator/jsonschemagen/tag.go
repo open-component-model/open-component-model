@@ -7,24 +7,42 @@ import (
 	"strings"
 )
 
-func jsonTagName(f *ast.Field, fallback string) string {
+// parseJSONTag returns (name, options).
+// For tag `json:"foo,omitempty,string"` → ("foo", ["omitempty","string"])
+// For tag `json:"-"` → ("-", nil)
+// For missing tag → ("", nil)
+func parseJSONTag(f *ast.Field) (string, []string) {
 	if f.Tag == nil {
-		return fallback
+		return "", nil
 	}
 
-	// Remove surrounding quotes/backticks from the literal value
-	tagRaw, err := strconv.Unquote(f.Tag.Value)
+	// The raw literal includes backticks, e.g. `json:"foo"`
+	raw := f.Tag.Value
+
+	// Remove backticks.
+	tagRaw, err := strconv.Unquote(raw)
 	if err != nil {
-		// fallback: trim backticks/quotes manually
-		tagRaw = strings.Trim(f.Tag.Value, "`\"")
+		tagRaw = strings.Trim(raw, "`\"")
 	}
 
 	j := reflect.StructTag(tagRaw).Get("json")
 	if j == "" {
-		return fallback
+		return "", nil
 	}
 
-	name := strings.Split(j, ",")[0]
+	parts := strings.Split(j, ",")
+	name := parts[0]
+	var opts []string
+	if len(parts) > 1 {
+		opts = parts[1:]
+	}
+	return name, opts
+}
+
+// jsonTagName returns the json tag's name, including "-".
+// If the name is empty (e.g. `json:",omitempty"`), it falls back.
+func jsonTagName(f *ast.Field, fallback string) string {
+	name, _ := parseJSONTag(f)
 	if name == "" {
 		return fallback
 	}
@@ -32,24 +50,13 @@ func jsonTagName(f *ast.Field, fallback string) string {
 }
 
 func jsonTagHasOmitEmpty(f *ast.Field) bool {
-	if f.Tag == nil {
+	_, opts := parseJSONTag(f)
+	if len(opts) == 0 {
 		return false
 	}
 
-	// Remove surrounding quotes/backticks from the literal value
-	tagRaw, err := strconv.Unquote(f.Tag.Value)
-	if err != nil {
-		tagRaw = strings.Trim(f.Tag.Value, "`\"")
-	}
-
-	j := reflect.StructTag(tagRaw).Get("json")
-	if j == "" {
-		return false
-	}
-
-	parts := strings.Split(j, ",")
-	for _, p := range parts[1:] {
-		if p == "omitempty" {
+	for _, o := range opts {
+		if o == "omitempty" {
 			return true
 		}
 	}
