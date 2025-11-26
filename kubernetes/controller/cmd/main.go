@@ -215,8 +215,9 @@ func main() {
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMScheme: ocmscheme,
-		Resolver:  resolver,
+		OCMScheme:     ocmscheme,
+		Resolver:      resolver,
+		PluginManager: pm,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)

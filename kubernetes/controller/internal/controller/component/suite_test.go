@@ -23,9 +23,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
@@ -43,6 +44,7 @@ var k8sClient client.Client
 var k8sManager ctrl.Manager
 var testEnv *envtest.Environment
 var recorder record.EventRecorder
+var pm *manager.PluginManager
 
 func TestControllers(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -118,16 +120,8 @@ var _ = BeforeSuite(func() {
 	ocmrepository.MustAddLegacyToScheme(ocmscheme)
 	ocmrepository.MustAddToScheme(ocmscheme)
 
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
-
-	pmLogger := logf.Log.WithName("plugin-manager")
-	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
-		IdleTimeout: 20 * time.Minute,
-		Logger:      &pmLogger,
-		Scheme:      ocmscheme,
-		Provider:    repositoryProvider,
-	})
-	Expect(k8sManager.Add(pm)).To(Succeed())
+	pm = manager.NewPluginManager(ctx)
+	Expect(plugins.Register(pm, ocmscheme)).To(Succeed())
 
 	const unlimited = 0
 	ttl := time.Minute * 30
@@ -153,8 +147,9 @@ var _ = BeforeSuite(func() {
 			Scheme:        testEnv.Scheme,
 			EventRecorder: recorder,
 		},
-		Resolver:  resolver,
-		OCMScheme: ocmscheme,
+		Resolver:      resolver,
+		OCMScheme:     ocmscheme,
+		PluginManager: pm,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
 	go func() {
