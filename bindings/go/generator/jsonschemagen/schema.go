@@ -38,10 +38,6 @@ func (sb SchemaOrBool) MarshalJSON() ([]byte, error) {
 	return json.Marshal(sb.Schema)
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Builtin runtime schemas
-///////////////////////////////////////////////////////////////////////////////
-
 func (g *Generator) builtinRuntimeRaw() *Schema {
 	return &Schema{
 		Schema:      "https://json-schema.org/draft/2020-12/schema",
@@ -70,10 +66,6 @@ func (g *Generator) builtinRuntimeType() *Schema {
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Root schema builder (structs OR alias types)
-///////////////////////////////////////////////////////////////////////////////
-
 func (g *Generator) buildRootSchema(ti *universe.TypeInfo) *Schema {
 	if universe.IsRuntimeRaw(ti) {
 		return g.builtinRuntimeRaw()
@@ -82,7 +74,6 @@ func (g *Generator) buildRootSchema(ti *universe.TypeInfo) *Schema {
 		return g.builtinRuntimeType()
 	}
 
-	// ---------- CASE 1: struct ----------
 	if ti.Struct != nil {
 		desc, deprecated := extractStructDoc(ti.TypeSpec, ti.GenDecl)
 
@@ -104,7 +95,6 @@ func (g *Generator) buildRootSchema(ti *universe.TypeInfo) *Schema {
 		return sch
 	}
 
-	// ---------- CASE 2: alias type ----------
 	return g.buildAliasSchema(ti)
 }
 
@@ -156,10 +146,6 @@ func (g *Generator) buildAliasSchema(ti *universe.TypeInfo) *Schema {
 	return anyObjectSchema()
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Properties
-///////////////////////////////////////////////////////////////////////////////
-
 func (g *Generator) buildStructProperties(st *ast.StructType, ti *universe.TypeInfo) map[string]*Schema {
 	props := map[string]*Schema{}
 
@@ -201,10 +187,6 @@ func (g *Generator) buildStructRequired(st *ast.StructType) []string {
 	}
 	return req
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Expression dispatcher
-///////////////////////////////////////////////////////////////////////////////
 
 func (g *Generator) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo) *Schema {
 	switch t := expr.(type) {
@@ -258,10 +240,6 @@ func (g *Generator) schemaForSelector(sel *ast.SelectorExpr, ctx *universe.TypeI
 	}
 	return anyObjectSchema()
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Reachable types for defs
-///////////////////////////////////////////////////////////////////////////////
 
 func (g *Generator) collectReachableQueue(root *universe.TypeInfo) []*universe.TypeInfo {
 	seen := map[universe.TypeKey]bool{}
@@ -321,10 +299,6 @@ func (g *Generator) collectFromExpr(expr ast.Expr, ctx *universe.TypeInfo, walk 
 		}
 	}
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Anonymous struct
-///////////////////////////////////////////////////////////////////////////////
 
 func (g *Generator) inlineAnonymousStruct(st *ast.StructType, ctx *universe.TypeInfo) *Schema {
 	props := map[string]*Schema{}
