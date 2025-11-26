@@ -183,17 +183,6 @@ spec:
                   digest:
                     description: Digest information of the Component, if available
                       as per OCM specification.
-                    properties:
-                      hashAlgorithm:
-                        type: string
-                      normalisationAlgorithm:
-                        type: string
-                      value:
-                        type: string
-                    required:
-                    - hashAlgorithm
-                    - normalisationAlgorithm
-                    - value
                     type: object
                   repositorySpec:
                     x-kubernetes-preserve-unknown-fields: true

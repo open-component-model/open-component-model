@@ -15,7 +15,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
-	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -273,7 +272,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		RepositorySpec: repo.Spec.RepositorySpec,
 		Component:      component.Spec.Component,
 		Version:        version,
-		Digest: &ocmv1.DigestSpec{
+		Digest: &descruntime.Digest{
 			HashAlgorithm:          digestSpec.HashAlgorithm,
 			NormalisationAlgorithm: digestSpec.NormalisationAlgorithm,
 			Value:                  digestSpec.Value,

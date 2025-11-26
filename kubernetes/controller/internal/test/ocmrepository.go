@@ -7,17 +7,17 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci"
-	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/runtime"
 
 	"github.com/fluxcd/pkg/runtime/conditions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
+	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
