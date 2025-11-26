@@ -20,33 +20,26 @@ func main() {
 	}
 
 	roots := os.Args[1:]
-
 	for i, root := range roots {
-		var err error
-		if roots[i], err = filepath.Abs(root); err != nil {
+		abs, err := filepath.Abs(root)
+		if err != nil {
 			slog.Error("cannot resolve root directory", "root", root, "error", err)
 			os.Exit(1)
 		}
+		roots[i] = abs
 	}
 
 	slog.Info("scanning...", "roots", roots)
 
-	///////////////////////////////////////////////////////////////////////////////
-	// 1. Build Universe (discover all types + imports)
-	///////////////////////////////////////////////////////////////////////////////
-
+	// Build the universe of all discovered types and imports.
 	u, err := universe.Build(roots)
 	if err != nil {
 		slog.Error("universe build failed", "error", err)
 		os.Exit(1)
 	}
 
-	///////////////////////////////////////////////////////////////////////////////
-	// 2. Filter annotated types (annotation is detected by generator)
-	///////////////////////////////////////////////////////////////////////////////
-
+	// Collect all types annotated for schema generation.
 	var annotated []*universe.TypeInfo
-
 	for _, ti := range u.Types {
 		if jsonschemagen.HasMarker(ti.TypeSpec, ti.GenDecl, marker) {
 			annotated = append(annotated, ti)
@@ -59,18 +52,11 @@ func main() {
 	}
 	slog.Info("discovered annotated types", "types", len(annotated), "marker", marker)
 
-	///////////////////////////////////////////////////////////////////////////////
-	// 3. Initialize Generator
-	///////////////////////////////////////////////////////////////////////////////
-
+	// Initialize the schema generator.
 	gen := jsonschemagen.New(u)
 
-	///////////////////////////////////////////////////////////////////////////////
-	// 4. Generate schemas for all annotated types
-	///////////////////////////////////////////////////////////////////////////////
-
-	packageGroups := map[string][]*universe.TypeInfo{}
-
+	// Generate schemas for all annotated types.
+	packageGroups := make(map[string][]*universe.TypeInfo)
 	for _, ti := range annotated {
 		schema := gen.Generate(ti)
 		if schema == nil {
@@ -87,10 +73,7 @@ func main() {
 		packageGroups[pkgDir] = append(packageGroups[pkgDir], ti)
 	}
 
-	///////////////////////////////////////////////////////////////////////////////
-	// 5. Generate embed files per package
-	///////////////////////////////////////////////////////////////////////////////
-
+	// Generate embed files for each package that contains generated schemas.
 	dirs := make([]string, 0, len(packageGroups))
 	for d := range packageGroups {
 		dirs = append(dirs, d)
@@ -103,7 +86,7 @@ func main() {
 			continue
 		}
 
-		// all types in the same dir share a package name
+		// Types from the same directory share a package name.
 		pkgName := types[0].File.Name.Name
 
 		if err := writer.WriteEmbedFileForPackage(pkgDir, pkgName, types); err != nil {
