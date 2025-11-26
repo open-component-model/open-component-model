@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/gobwas/glob v0.2.3
 	github.com/stretchr/testify v1.11.1
+	github.com/veqryn/slog-context v0.8.0
 	golang.org/x/sync v0.18.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
@@ -17,6 +18,7 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
