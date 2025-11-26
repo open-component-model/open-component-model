@@ -10,7 +10,7 @@ func newPrimitiveSchema(
 	ts *ast.TypeSpec,
 	gd *ast.GenDecl,
 	field *ast.Field,
-) *Schema {
+) *JSONSchemaDraft202012 {
 	// baseline primitive (min/max/multipleOf/format/type)
 	s := primitiveBaseForIdent(id)
 	if s == nil {
@@ -34,12 +34,12 @@ func newPrimitiveSchema(
 	return s
 }
 
-func primitiveBaseForIdent(ident *ast.Ident) *Schema {
+func primitiveBaseForIdent(ident *ast.Ident) *JSONSchemaDraft202012 {
 	switch ident.Name {
 	case "string":
-		return &Schema{Type: "string"}
+		return &JSONSchemaDraft202012{Type: "string"}
 	case "bool":
-		return &Schema{Type: "boolean"}
+		return &JSONSchemaDraft202012{Type: "boolean"}
 	// signed ints
 	case "int":
 		return intWithRange(math.MinInt, math.MaxInt)
@@ -68,30 +68,30 @@ func primitiveBaseForIdent(ident *ast.Ident) *Schema {
 	case "float64":
 		return numberWithRange(math.MaxFloat64, "double")
 	case "complex64", "complex128":
-		return &Schema{Type: "string"}
+		return &JSONSchemaDraft202012{Type: "string"}
 	default:
 		return nil
 	}
 }
 
-func numberWithRange(maximum float64, format string) *Schema {
-	return &Schema{
+func numberWithRange(maximum float64, format string) *JSONSchemaDraft202012 {
+	return &JSONSchemaDraft202012{
 		Type:    "number",
 		Maximum: Ptr(maximum),
 		Format:  format,
 	}
 }
 
-func uintWithRange(maximum uint64) *Schema {
-	return &Schema{
+func uintWithRange(maximum uint64) *JSONSchemaDraft202012 {
+	return &JSONSchemaDraft202012{
 		Type:    "integer",
 		Minimum: Ptr(float64(0)),
 		Maximum: Ptr(float64(maximum)),
 	}
 }
 
-func intWithRange(minimum, maximum int64) *Schema {
-	return &Schema{
+func intWithRange(minimum, maximum int64) *JSONSchemaDraft202012 {
+	return &JSONSchemaDraft202012{
 		Type:    "integer",
 		Minimum: Ptr(float64(minimum)),
 		Maximum: Ptr(float64(maximum)),

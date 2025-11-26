@@ -12,12 +12,12 @@ func New(u *universe.Universe) *Generator {
 	return &Generator{U: u}
 }
 
-// Generate builds a JSON Schema for a root type.
-func (g *Generator) Generate(root *universe.TypeInfo) *Schema {
+// GenerateJSONSchemaDraft202012 builds a JSON JSONSchemaDraft202012 for a root type.
+func (g *Generator) GenerateJSONSchemaDraft202012(root *universe.TypeInfo) *JSONSchemaDraft202012 {
 	schema := g.buildRootSchema(root)
 
 	reachable := g.collectReachableQueue(root)
-	defs := map[string]*Schema{}
+	defs := map[string]*JSONSchemaDraft202012{}
 
 	for _, ti := range reachable {
 		key := universe.Definition(ti.Key)

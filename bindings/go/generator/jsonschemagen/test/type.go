@@ -45,3 +45,10 @@ type NestedType struct {
 	// NestedFieldComment
 	NestedField string `json:"nestedField"`
 }
+
+// MonoType is a struct with a single runtime.Typed field.
+// +ocm:jsonschema-gen=true
+type MonoType struct {
+	// MyRuntimeComment
+	MyCustomRuntime runtime.Typed `json:"myRuntime"`
+}

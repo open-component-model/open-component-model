@@ -30,7 +30,7 @@ func collectDoc(cg *ast.CommentGroup) (doc []string, deprecated bool) {
 
 	for _, c := range cg.List {
 		for _, raw := range splitCommentText(c.Text) {
-			line := extractContent(raw)
+			line := extractCommentLine(raw)
 
 			if skipLine(line) {
 				continue
@@ -48,10 +48,9 @@ func collectDoc(cg *ast.CommentGroup) (doc []string, deprecated bool) {
 	return lines, deprecated
 }
 
-func extractContent(s string) string {
+func extractCommentLine(s string) string {
 	s = strings.TrimSpace(s)
 
-	// Remove comment markers
 	s = strings.TrimPrefix(s, "//")
 	s = strings.TrimPrefix(s, "/*")
 	s = strings.TrimSuffix(s, "*/")
@@ -108,7 +107,7 @@ func splitCommentText(text string) []string {
 		return lines
 
 	case strings.HasPrefix(t, "//"):
-		// keep raw so extractContent can strip markers
+		// keep raw so extractCommentLine can strip markers
 		return []string{t}
 
 	default:

@@ -83,10 +83,10 @@ func main() {
 	// Initialize the schema generator.
 	gen := jsonschemagen.New(u)
 
-	// Generate schemas for all annotated types.
+	// GenerateJSONSchemaDraft202012 schemas for all annotated types.
 	packageGroups := make(map[string][]*universe.TypeInfo)
 	for _, ti := range annotated {
-		schema := gen.Generate(ti)
+		schema := gen.GenerateJSONSchemaDraft202012(ti)
 		if schema == nil {
 			slog.Warn("schema generation returned nil", "type", ti.Key.TypeName)
 			continue

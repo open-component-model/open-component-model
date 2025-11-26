@@ -65,7 +65,7 @@ func TestExtractMarkerMap_MergesTypeAndDecl(t *testing.T) {
 }
 
 func TestApplyNumericMarkers(t *testing.T) {
-	s := &Schema{}
+	s := &JSONSchemaDraft202012{}
 	m := map[string]string{
 		"min":              "1",
 		"max":              "5",
@@ -88,7 +88,7 @@ func TestApplyNumericMarkers(t *testing.T) {
 }
 
 func TestApplyNumericMarkers_IgnoresInvalid(t *testing.T) {
-	s := &Schema{}
+	s := &JSONSchemaDraft202012{}
 	m := map[string]string{
 		"min":     "not-a-number",
 		"maximum": "100",

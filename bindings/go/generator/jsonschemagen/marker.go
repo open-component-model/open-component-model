@@ -60,10 +60,7 @@ func ExtractMarkers(cg *ast.CommentGroup, base string) map[string]string {
 
 	for _, c := range cg.List {
 		// normalize comment text
-		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
-		line = strings.TrimSpace(strings.TrimPrefix(line, "/*"))
-		line = strings.TrimSuffix(line, "*/")
-		line = strings.TrimSpace(line)
+		line := extractCommentLine(c.Text)
 
 		// must contain "+ocm:jsonschema-gen:"
 		if !strings.Contains(line, base+":") {
@@ -99,7 +96,7 @@ func ExtractMarkers(cg *ast.CommentGroup, base string) map[string]string {
 	return out
 }
 
-func ApplyNumericMarkers(s *Schema, markers map[string]string) {
+func ApplyNumericMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 	if s == nil || len(markers) == 0 {
 		return
 	}

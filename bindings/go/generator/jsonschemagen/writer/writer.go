@@ -10,7 +10,7 @@ import (
 )
 
 // WriteSchemaJSON writes the final JSON schema for a single TypeInfo.
-func WriteSchemaJSON(ti *universe.TypeInfo, schema *jsonschemagen.Schema) error {
+func WriteSchemaJSON(ti *universe.TypeInfo, schema *jsonschemagen.JSONSchemaDraft202012) error {
 	outDir := filepath.Join(filepath.Dir(ti.FilePath), "schemas")
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err

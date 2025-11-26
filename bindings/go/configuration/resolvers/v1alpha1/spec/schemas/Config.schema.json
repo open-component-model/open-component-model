@@ -53,7 +53,7 @@
       "description": "Raw is used to hold extensions that dynamically define behavior at runtime",
       "properties": {
         "type": {
-          "$ref": "#/$defs/runtime.Type"
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
         }
       },
       "required": [

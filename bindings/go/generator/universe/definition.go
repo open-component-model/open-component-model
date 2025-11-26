@@ -30,3 +30,7 @@ func IsRuntimeType(ti *TypeInfo) bool {
 func IsRuntimeRaw(ti *TypeInfo) bool {
 	return ti.Key.PkgPath == RuntimePackage && ti.Key.TypeName == "Raw"
 }
+
+func IsRuntimeTyped(ti *TypeInfo) bool {
+	return ti.Key.PkgPath == RuntimePackage && ti.Key.TypeName == "Typed"
+}

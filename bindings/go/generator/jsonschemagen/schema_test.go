@@ -29,7 +29,7 @@ func TestSchemaOrBoolMarshalJSONWithBoolFalse(t *testing.T) {
 }
 
 func TestSchemaOrBoolMarshalJSONWithSchema(t *testing.T) {
-	schema := &jsonschemagen.Schema{Type: "string"}
+	schema := &jsonschemagen.JSONSchemaDraft202012{Type: "string"}
 	sb := jsonschemagen.SchemaOrBool{Schema: schema}
 
 	data, err := json.Marshal(sb)
@@ -57,7 +57,7 @@ func TestGenerate_PrimitiveAlias(t *testing.T) {
 	u.Types[root.Key] = root
 
 	g := jsonschemagen.New(u)
-	s := g.Generate(root)
+	s := g.GenerateJSONSchemaDraft202012(root)
 
 	require.Equal(t, "string", s.Type)
 	require.Equal(t, "example.com/pkg/schemas/MyString.schema.json", s.ID)
@@ -70,7 +70,7 @@ func TestGenerate_ArrayAliasItems(t *testing.T) {
 	u.Types[root.Key] = root
 
 	g := jsonschemagen.New(u)
-	s := g.Generate(root)
+	s := g.GenerateJSONSchemaDraft202012(root)
 
 	require.Equal(t, "array", s.Type)
 	require.NotNil(t, s.Items)
@@ -89,7 +89,7 @@ func TestGenerate_MapAliasAdditionalProperties(t *testing.T) {
 	u.Types[root.Key] = root
 
 	g := jsonschemagen.New(u)
-	s := g.Generate(root)
+	s := g.GenerateJSONSchemaDraft202012(root)
 
 	// AdditionalProperties should be a $ref to Other
 	require.NotNil(t, s.AdditionalProperties)
@@ -124,7 +124,7 @@ func TestGenerate_StructPropertiesAndRequired(t *testing.T) {
 	u.Types[root.Key] = root
 
 	g := jsonschemagen.New(u)
-	s := g.Generate(root)
+	s := g.GenerateJSONSchemaDraft202012(root)
 
 	require.Equal(t, "object", s.Type)
 	// properties should include FieldA (name fallback) and fieldB (from tag)
@@ -175,7 +175,7 @@ func TestGenerate_MixedFieldTypes(t *testing.T) {
 	u.Types[root.Key] = root
 
 	g := jsonschemagen.New(u)
-	s := g.Generate(root)
+	s := g.GenerateJSONSchemaDraft202012(root)
 
 	require.Equal(t, "object", s.Type)
 
@@ -237,7 +237,7 @@ func TestSelectorResolutionMissingImportFallsBackToAny(t *testing.T) {
 	u.Types[root.Key] = root
 
 	g := jsonschemagen.New(u)
-	s := g.Generate(root)
+	s := g.GenerateJSONSchemaDraft202012(root)
 
 	p, ok := s.Properties["SelRef"]
 	require.True(t, ok)
@@ -268,7 +268,7 @@ func TestGenerate_CircularReferencesDoesNotLoopAndFlattensDefs(t *testing.T) {
 	u.Types[B.Key] = B
 
 	g := jsonschemagen.New(u)
-	s := g.Generate(A)
+	s := g.GenerateJSONSchemaDraft202012(A)
 
 	// defs should include B but not A
 	keyB := universe.Definition(B.Key)
@@ -292,17 +292,17 @@ func TestBuiltinRuntimeSchemas(t *testing.T) {
 
 	// Raw
 	rawTI := &universe.TypeInfo{Key: universe.TypeKey{PkgPath: universe.RuntimePackage, TypeName: "Raw"}}
-	rawSch := g.Generate(rawTI)
+	rawSch := g.GenerateJSONSchemaDraft202012(rawTI)
 	require.Equal(t, "object", rawSch.Type)
 	require.NotNil(t, rawSch.AdditionalProperties)
 	require.NotNil(t, rawSch.AdditionalProperties.Bool)
 	require.True(t, *rawSch.AdditionalProperties.Bool)
 	require.Contains(t, rawSch.Required, "type")
-	require.Equal(t, "#/$defs/runtime.Type", rawSch.Properties["type"].Ref)
+	require.Equal(t, "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type", rawSch.Properties["type"].Ref)
 
 	// Type
 	typTI := &universe.TypeInfo{Key: universe.TypeKey{PkgPath: universe.RuntimePackage, TypeName: "Type"}}
-	typSch := g.Generate(typTI)
+	typSch := g.GenerateJSONSchemaDraft202012(typTI)
 	require.Equal(t, "string", typSch.Type)
 	require.Equal(t, "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.schema.json", typSch.ID)
 	require.NotEmpty(t, typSch.Pattern)

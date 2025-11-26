@@ -9,11 +9,19 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/MonoType.schema.json
+var schemaMonoType []byte
+
 //go:embed schemas/NestedType.schema.json
 var schemaNestedType []byte
 
 //go:embed schemas/SampleType.schema.json
 var schemaSampleType []byte
+
+// JSONSchema returns the JSON Schema for MonoType.
+func (MonoType) JSONSchema() []byte {
+	return schemaMonoType
+}
 
 // JSONSchema returns the JSON Schema for NestedType.
 func (NestedType) JSONSchema() []byte {
