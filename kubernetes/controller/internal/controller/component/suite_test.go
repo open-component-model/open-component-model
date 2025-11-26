@@ -23,8 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
@@ -118,16 +118,9 @@ var _ = BeforeSuite(func() {
 	ocmrepository.MustAddLegacyToScheme(ocmscheme)
 	ocmrepository.MustAddToScheme(ocmscheme)
 
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
-
-	pmLogger := logf.Log.WithName("plugin-manager")
-	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
-		IdleTimeout: 20 * time.Minute,
-		Logger:      &pmLogger,
-		Scheme:      ocmscheme,
-		Provider:    repositoryProvider,
-	})
-	Expect(k8sManager.Add(pm)).To(Succeed())
+	pm := manager.NewPluginManager(ctx)
+	err = plugins.Register(pm, ocmscheme)
+	Expect(err).ToNot(HaveOccurred())
 
 	const unlimited = 0
 	ttl := time.Minute * 30
