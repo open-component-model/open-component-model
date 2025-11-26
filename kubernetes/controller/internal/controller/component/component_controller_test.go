@@ -18,7 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
@@ -55,20 +57,24 @@ var _ = Describe("Component Controller", func() {
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			By("deleting the repository")
-			Expect(k8sClient.Delete(ctx, repositoryObj)).To(Succeed())
-			Eventually(func(ctx context.Context) error {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(repositoryObj), repositoryObj)
-				if errors.IsNotFound(err) {
-					return nil
-				}
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(repositoryObj), repositoryObj)
+			if !errors.IsNotFound(err) {
 
-				if err != nil {
-					return err
-				}
+				By("deleting the repository")
+				Expect(k8sClient.Delete(ctx, repositoryObj)).To(Succeed())
+				Eventually(func(ctx context.Context) error {
+					err := k8sClient.Get(ctx, client.ObjectKeyFromObject(repositoryObj), repositoryObj)
+					if errors.IsNotFound(err) {
+						return nil
+					}
 
-				return fmt.Errorf("expect not-found error for ocm repository %s, but got no error", repositoryObj.GetName())
-			}, "15s").WithContext(ctx).Should(Succeed())
+					if err != nil {
+						return err
+					}
+
+					return fmt.Errorf("expect not-found error for ocm repository %s, but got no error", repositoryObj.GetName())
+				}, "15s").WithContext(ctx).Should(Succeed())
+			}
 
 			components := &v1alpha1.ComponentList{}
 
@@ -78,16 +84,16 @@ var _ = Describe("Component Controller", func() {
 
 		It("reconcileComponent a component", func(ctx SpecContext) {
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: Version1,
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -124,16 +130,16 @@ var _ = Describe("Component Controller", func() {
 
 		It("does not reconcile when the repository is not ready", func(ctx SpecContext) {
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: Version1,
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -172,16 +178,16 @@ var _ = Describe("Component Controller", func() {
 
 		It("does reconcile when an unready ocm repository gets ready", func(ctx SpecContext) {
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: Version1,
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -229,16 +235,16 @@ var _ = Describe("Component Controller", func() {
 
 		It("grabs the new version when it becomes available", func(ctx SpecContext) {
 			By("creating a component version")
-			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: Version1,
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -270,15 +276,15 @@ var _ = Describe("Component Controller", func() {
 			})
 
 			By("increasing the component version")
-			desc2 := &descriptor.Descriptor{
-				Component: descriptor.Component{
-					ComponentMeta: descriptor.ComponentMeta{
-						ObjectMeta: descriptor.ObjectMeta{
+			desc2 := &descruntime.Descriptor{
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
 							Name:    componentName,
 							Version: Version2,
 						},
 					},
-					Provider: descriptor.Provider{Name: "ocm.software"},
+					Provider: descruntime.Provider{Name: "ocm.software"},
 				},
 			}
 			Expect(repo.AddComponentVersion(ctx, desc2)).To(Succeed())
@@ -294,14 +300,14 @@ var _ = Describe("Component Controller", func() {
 
 		It("grabs lower version if downgrade is allowed", func(ctx SpecContext) {
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: "0.0.3",
-								Labels: []descriptor.Label{
+								Labels: []descruntime.Label{
 									{
 										Name:  v1alpha1.OCMLabelDowngradable,
 										Value: json.RawMessage(`"0.0.2"`),
@@ -309,18 +315,18 @@ var _ = Describe("Component Controller", func() {
 								},
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: "0.0.2",
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -367,14 +373,14 @@ var _ = Describe("Component Controller", func() {
 
 		It("does not grab lower version if downgrade is denied", func(ctx SpecContext) {
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: "0.0.3",
-								Labels: []descriptor.Label{
+								Labels: []descruntime.Label{
 									{
 										Name:  v1alpha1.OCMLabelDowngradable,
 										Value: json.RawMessage(`"0.0.2"`),
@@ -382,18 +388,18 @@ var _ = Describe("Component Controller", func() {
 								},
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: "0.0.2",
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -451,27 +457,27 @@ var _ = Describe("Component Controller", func() {
 
 		It("can force downgrade even if not allowed by the component", func(ctx SpecContext) {
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: "0.0.3",
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: "0.0.2",
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -521,16 +527,16 @@ var _ = Describe("Component Controller", func() {
 			componentVersionPlus := Version1 + "+componentversionsuffix"
 
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: componentVersionPlus,
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -567,16 +573,16 @@ var _ = Describe("Component Controller", func() {
 
 		It("blocks deletion of a component when a resource is referencing it", func(ctx SpecContext) {
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: Version1,
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -645,16 +651,16 @@ var _ = Describe("Component Controller", func() {
 
 		It("returns an error when specified semver is not found", func(ctx SpecContext) {
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: Version2,
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})
@@ -687,10 +693,148 @@ var _ = Describe("Component Controller", func() {
 			test.DeleteObject(ctx, k8sClient, component)
 		})
 
-		PIt("verifies the signing of a component version", func(ctx SpecContext) {
+		It("verifies the signing of a component version", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
 
+			By("signing the component version")
+			signatureName := "test-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, pubKey := test.SignComponent(ctx, signatureName, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					Verify: []v1alpha1.Verification{
+						{
+							Signature: signatureName,
+							Value:     pubKey,
+						},
+					},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": Version1,
+			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
 		})
-		// TODO
+
+		It("verifies the signing of a component version by secret reference", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component version")
+			signatureName := "test-signature"
+
+			desc, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signature, pubKey := test.SignComponent(ctx, signatureName, normalised, pm)
+
+			desc.Signatures = append(desc.Signatures, signature)
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a secret with the public key")
+			secretName := "signature-public-key"
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      secretName,
+				},
+				Data: map[string][]byte{
+					signatureName: []byte(pubKey),
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					Verify: []v1alpha1.Verification{
+						{
+							Signature: signatureName,
+							SecretRef: corev1.LocalObjectReference{secretName},
+						},
+					},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": Version1,
+			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
 	})
 
 	Context("ocm config handling", func() {
@@ -706,16 +850,16 @@ var _ = Describe("Component Controller", func() {
 			componentName = "ocm.software/test-component-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 
 			By("creating a component version")
-			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
-					Component: descriptor.Component{
-						ComponentMeta: descriptor.ComponentMeta{
-							ObjectMeta: descriptor.ObjectMeta{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
 								Name:    componentName,
 								Version: Version1,
 							},
 						},
-						Provider: descriptor.Provider{Name: "ocm.software"},
+						Provider: descruntime.Provider{Name: "ocm.software"},
 					},
 				},
 			})

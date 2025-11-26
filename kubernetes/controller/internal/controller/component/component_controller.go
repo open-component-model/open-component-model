@@ -12,9 +12,11 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/runtime/patch"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,6 +31,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/repository"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
@@ -46,8 +49,9 @@ const (
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	Resolver  *resolution.Resolver
-	OCMScheme *runtime.Scheme
+	Resolver      *resolution.Resolver
+	OCMScheme     *runtime.Scheme
+	PluginManager *manager.PluginManager
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -260,7 +264,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	if len(component.Spec.Verify) > 0 {
-		if err := verifyComponentVersion(ctx, desc, component.Spec.Verify); err != nil {
+		if err := r.verifyComponentVersion(ctx, desc, component.Spec.Verify, component.GetNamespace()); err != nil {
 			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 			return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
@@ -452,9 +456,7 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 }
 
 // verifyComponentVersion verifies the component version signatures.
-// For now, we'll do basic digest verification. Full signature verification will be implemented
-// once we have proper credential handling for the public keys from SecretRef/Value.
-func verifyComponentVersion(ctx context.Context, desc *descruntime.Descriptor, verifications []v1alpha1.Verification) error {
+func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descruntime.Descriptor, verifications []v1alpha1.Verification, namespace string) error {
 	if err := isSafelyDigestible(&desc.Component); err != nil {
 		return err
 	}
@@ -476,10 +478,59 @@ func verifyComponentVersion(ctx context.Context, desc *descruntime.Descriptor, v
 			return fmt.Errorf("digest verification failed for signature %q: %w", verify.Signature, err)
 		}
 
-		// TODO(Skarlso): Implement full signature verification using SecretRef/Value
+		cfg := &signingv1alpha1.Config{
+			SignatureAlgorithm: signature.Signature.Algorithm,
+			// TODO: Will this be configurable in the future?
+			SignatureEncodingPolicy: signingv1alpha1.SignatureEncodingPolicyPlain,
+		}
+
+		hdlr, err := r.PluginManager.SigningRegistry.GetPlugin(ctx, cfg)
+		if err != nil {
+			return fmt.Errorf("failed to get signing handler for signature %q: %w", verify.Signature, err)
+		}
+
+		credentials := make(map[string]string)
+
+		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
+		//       reliable currently. This will probably change, when typed credentials are supported.
+		credKey := getCredentialKeyFromAlgorithm(signature.Signature.Algorithm)
+		if credKey == "" {
+			return fmt.Errorf("unsupported signature algorithm %q for signature %q", signature.Signature.Algorithm, verify.Signature)
+		}
+
+		switch {
+		case verify.Value != "":
+			credentials[credKey] = verify.Value
+		case verify.SecretRef.Name != "":
+			secret := &corev1.Secret{}
+			if err := r.Get(ctx, types.NamespacedName{Name: verify.SecretRef.Name, Namespace: namespace}, secret); err != nil {
+				return fmt.Errorf("failed to get secret %q for signature %q: %w", verify.SecretRef.Name, verify.Signature, err)
+			}
+			data, ok := secret.Data[verify.Signature]
+			if !ok {
+				return fmt.Errorf("secret %q does not contain data for signature %q", verify.SecretRef.Name, verify.Signature)
+			}
+
+			credentials[credKey] = string(data)
+		default:
+			return fmt.Errorf("no provided value or secret reference for verification of signature %q", verify.Signature)
+		}
+
+		if err := hdlr.Verify(ctx, *signature, cfg, credentials); err != nil {
+			return fmt.Errorf("signature verification failed for signature %q: %w", verify.Signature, err)
+		}
 	}
 
 	return nil
+}
+
+func getCredentialKeyFromAlgorithm(algorithm string) string {
+	switch algorithm {
+	case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
+		return "public_key_pem"
+	default:
+		return ""
+	}
 }
 
 // generateDigest computes a new digest for a descriptor with the given
