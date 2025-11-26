@@ -82,7 +82,7 @@ func TestPluginFlow(t *testing.T) {
 		Stderr: stderr,
 	}
 	capability := dummyCapability([]byte(`{}`))
-	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
+	require.NoError(t, registry.AddPlugin(plugin, &capability))
 	p, err := scheme.NewObject(dummyType)
 	require.NoError(t, err)
 	retrievedPlugin, err := registry.GetPlugin(ctx, p)
@@ -177,10 +177,10 @@ func TestAddPluginDuplicate(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
+	require.NoError(t, registry.AddPlugin(plugin, &capability))
 
 	// Second registration should fail
-	err := registry.AddPluginWithAliases(plugin, &capability)
+	err := registry.AddPlugin(plugin, &capability)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "plugin with ID test-plugin-duplicate already registered")
 }

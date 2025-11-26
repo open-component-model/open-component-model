@@ -43,10 +43,10 @@ func (r *SigningRegistry) ResourceScheme() *runtime.Scheme {
 	return r.scheme
 }
 
-// AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.
-func (r *SigningRegistry) AddPluginWithAliases(plugin types.Plugin, spec runtime.Typed) error {
+func (r *SigningRegistry) AddPlugin(plugin types.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

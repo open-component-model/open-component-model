@@ -77,7 +77,7 @@ func TestPluginFlow(t *testing.T) {
 		Stdout: pipe,
 	}
 	capability := dummyCapability([]byte(`{}`))
-	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
+	require.NoError(t, registry.AddPlugin(plugin, &capability))
 	retrievedPlugin, err := registry.GetResourcePlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 	resource, err := retrievedPlugin.DownloadResource(ctx, &descriptor.Resource{

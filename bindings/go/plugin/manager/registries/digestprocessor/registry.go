@@ -84,10 +84,10 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	return errs
 }
 
-// AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.
-func (r *RepositoryRegistry) AddPluginWithAliases(plugin mtypes.Plugin, spec runtime.Typed) error {
+func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

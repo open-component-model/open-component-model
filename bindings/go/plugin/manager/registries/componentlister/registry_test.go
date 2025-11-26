@@ -77,7 +77,7 @@ func TestPluginFlow(t *testing.T) {
 	}
 
 	capability := dummyCapability([]byte(`{}`))
-	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
+	require.NoError(t, registry.AddPlugin(plugin, &capability))
 	spec := &dummyv1.Repository{
 		Type:    dummyType,
 		BaseUrl: "example.com/test-repository",
