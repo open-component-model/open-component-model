@@ -69,6 +69,7 @@ ocm [sub-command] [flags]
 * [ocm download]({{< relref "ocm_download.md" >}})	 - Download anything from OCM
 * [ocm generate]({{< relref "ocm_generate.md" >}})	 - Generate documentation for the OCM CLI
 * [ocm get]({{< relref "ocm_get.md" >}})	 - Get anything from OCM
+* [ocm plugin]({{< relref "ocm_plugin.md" >}})	 - Manage OCM plugins
 * [ocm sign]({{< relref "ocm_sign.md" >}})	 - create signatures for component versions in OCM
 * [ocm verify]({{< relref "ocm_verify.md" >}})	 - verify digests and signatures of component versions in OCM
 * [ocm version]({{< relref "ocm_version.md" >}})	 - Retrieve the build version of the OCM CLI
