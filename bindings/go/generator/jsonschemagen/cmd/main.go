@@ -12,8 +12,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
-const marker = "+ocm:jsonschema-gen=true"
-
 func main() {
 	// -------------------------------
 	// Logging flag
@@ -71,16 +69,16 @@ func main() {
 	// Collect all types annotated for schema generation.
 	var annotated []*universe.TypeInfo
 	for _, ti := range u.Types {
-		if jsonschemagen.HasMarker(ti.TypeSpec, ti.GenDecl, marker) {
+		if jsonschemagen.HasMarkerKey(ti.TypeSpec, ti.GenDecl, jsonschemagen.BaseMarker) {
 			annotated = append(annotated, ti)
 		}
 	}
 
 	if len(annotated) == 0 {
-		slog.Warn("No annotated types found. Nothing to do.", "marker", marker)
+		slog.Warn("No annotated types found. Nothing to do.", "baseMarker", jsonschemagen.BaseMarker)
 		return
 	}
-	slog.Info("discovered annotated types", "types", len(annotated), "marker", marker)
+	slog.Info("discovered annotated types", "types", len(annotated), "baseMarker", jsonschemagen.BaseMarker)
 
 	// Initialize the schema generator.
 	gen := jsonschemagen.New(u)

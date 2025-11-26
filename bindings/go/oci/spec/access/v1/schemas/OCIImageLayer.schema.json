@@ -21,7 +21,9 @@
     },
     "size": {
       "type": "integer",
-      "description": "Size specifies the size in bytes of the blob."
+      "description": "Size specifies the size in bytes of the blob.",
+      "minimum": 0,
+      "maximum": 9223372036854776000
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"

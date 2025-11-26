@@ -36,6 +36,7 @@ type OCIImageLayer struct {
 	// Digest is the digest of the targeted content.
 	Digest digest.Digest `json:"digest"`
 	// Size specifies the size in bytes of the blob.
+	// +ocm:jsonschema-gen:minimum=0
 	Size int64 `json:"size"`
 }
 

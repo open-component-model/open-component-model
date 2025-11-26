@@ -24,10 +24,14 @@
       "type": "boolean"
     },
     "myFloat": {
-      "type": "number"
+      "type": "number",
+      "format": "double",
+      "maximum": 1.7976931348623157e+308
     },
     "myInt": {
-      "type": "integer"
+      "type": "integer",
+      "minimum": -9223372036854776000,
+      "maximum": 9223372036854776000
     },
     "myMap": {
       "type": "object",

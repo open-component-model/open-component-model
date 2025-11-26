@@ -46,7 +46,9 @@
         },
         "priority": {
           "type": "integer",
-          "description": "An optional priority can be used to influence the lookup order. Larger value\nmeans higher priority (default DefaultLookupPriority).\nPointer because this is optional. To default the priority, we need to be\nable to distinguish between \"not set\" and \"set to zero\"."
+          "description": "An optional priority can be used to influence the lookup order. Larger value\nmeans higher priority (default DefaultLookupPriority).\nPointer because this is optional. To default the priority, we need to be\nable to distinguish between \"not set\" and \"set to zero\".",
+          "minimum": 0,
+          "maximum": 9223372036854776000
         },
         "repository": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Raw",

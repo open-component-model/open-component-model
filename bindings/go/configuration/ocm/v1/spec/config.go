@@ -100,6 +100,7 @@ type Resolver struct {
 	// means higher priority (default DefaultLookupPriority).
 	// Pointer because this is optional. To default the priority, we need to be
 	// able to distinguish between "not set" and "set to zero".
+	// +ocm:jsonschema-gen:minimum=0
 	Priority *int `json:"priority,omitempty"`
 }
 
