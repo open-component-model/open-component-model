@@ -139,7 +139,7 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		plugin.Config = *conf
 
 		output := bytes.NewBuffer(nil)
-		//cmd := exec.CommandContext(ctx, "dlv", "exec", cleanPath(plugin.Path), "--headless=true", "--listen=:40000", "--api-version=2", "--accept-multiclient", "--log", "--log-dest=2", "--", "capabilities")
+		// cmd := exec.CommandContext(ctx, "dlv", "exec", cleanPath(plugin.Path), "--headless=true", "--listen=:40000", "--api-version=2", "--accept-multiclient", "--log", "--log-dest=2", "--", "capabilities")
 		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
 		cmd.Stdout = output
 		cmd.Stderr = os.Stderr

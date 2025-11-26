@@ -5,7 +5,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const CredentialRepositoryPluginType types.PluginType = "credentialRepository"
+const CredentialRepositoryPluginType types.PluginType = "credentialRepository" //nolint:gosec // not hardcoded cred
 
 var Scheme *runtime.Scheme
 
