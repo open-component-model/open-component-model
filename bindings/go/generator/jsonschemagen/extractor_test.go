@@ -7,26 +7,62 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtractStructDocPrefersTypeSpecDoc(t *testing.T) {
+func TestExtractStructDoc_WithCodeBlock(t *testing.T) {
 	ts := &ast.TypeSpec{
 		Name: ast.NewIdent("Example"),
 		Doc: commentGroup(
 			"// +marker",
-			"// nolint:revive",
+			"//+marker",
+			"/////////////////////////////",
+			"//nolint:unused",
+			"// nolint:unused",
 			"// Primary description",
 			"//",
-			"// Deprecated: use another type",
+			"// ```",
+			"// func demo() {}",
+			"// ```",
+			"//",
+			"// Deprecated: old version",
 			"// trailing note",
 		),
 	}
 
 	gd := &ast.GenDecl{
-		Doc: commentGroup("// fallback description"),
+		Doc: commentGroup("// fallback"),
 	}
 
 	desc, deprecated := extractStructDoc(ts, gd)
 
-	require.Equal(t, "Primary description\nDeprecated: use another type\ntrailing note", desc)
+	require.Equal(t,
+		"Primary description\n\n```\nfunc demo() {}\n```\n\nDeprecated: old version\ntrailing note",
+		desc,
+	)
+
+	require.True(t, deprecated)
+}
+
+func TestExtractStructDoc_BlockComments(t *testing.T) {
+	ts := &ast.TypeSpec{
+		Name: ast.NewIdent("Example"),
+		Doc: &ast.CommentGroup{
+			List: []*ast.Comment{
+				{Text: "/*\nPrimary description\n\nDeprecated: remove soon\ntrailing note\n*/"},
+			},
+		},
+	}
+
+	gd := &ast.GenDecl{
+		Doc: commentGroup("// fallback"),
+	}
+
+	desc, deprecated := extractStructDoc(ts, gd)
+
+	require.Equal(
+		t,
+		"Primary description\n\nDeprecated: remove soon\ntrailing note",
+		desc,
+	)
+
 	require.True(t, deprecated)
 }
 
@@ -38,7 +74,9 @@ func TestExtractStructDocFallsBackToGenDecl(t *testing.T) {
 	gd := &ast.GenDecl{
 		Doc: commentGroup(
 			"// +build ignore",
+			"//+build ignore",
 			"// nolint",
+			"//nolint: test",
 			"// From gen decl",
 			"/* Additional info @deprecated soon */",
 		),
@@ -64,7 +102,7 @@ func TestExtractFieldDocHandlesDirectivesAndDeprecated(t *testing.T) {
 
 	desc, deprecated := extractFieldDoc(field)
 
-	require.Equal(t, "Field comment\nDeprecated: not used\nAnother line @deprecated soon", desc)
+	require.Equal(t, "Field comment\n\nDeprecated: not used\nAnother line @deprecated soon", desc)
 	require.True(t, deprecated)
 }
 

@@ -8,7 +8,7 @@
   "properties": {
     "baseUrl": {
       "type": "string",
-      "description": "BaseURL is the base url of the repository to resolve artifacts.\nExamples\n- https://registry.example.com\n- https://registry.example.com:5000\n- oci://registry.example.com:5000\n- docker.io\n- ghcr.io/open-component-model/ocm"
+      "description": "BaseURL is the base url of the repository to resolve artifacts.\n\nExamples\n- https://registry.example.com\n- https://registry.example.com:5000\n- oci://registry.example.com:5000\n- docker.io\n- ghcr.io/open-component-model/ocm"
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"

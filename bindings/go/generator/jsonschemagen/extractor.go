@@ -5,79 +5,111 @@ import (
 	"strings"
 )
 
-func extractStructDoc(ts *ast.TypeSpec, gd *ast.GenDecl) (desc string, deprecated bool) {
+func extractStructDoc(ts *ast.TypeSpec, gd *ast.GenDecl) (string, bool) {
+	var deprecated bool
+	lines := collectDoc(ts.Doc, &deprecated)
+	if len(lines) == 0 {
+		lines = collectDoc(gd.Doc, &deprecated)
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n")), deprecated
+}
+
+func extractFieldDoc(f *ast.Field) (string, bool) {
+	var deprecated bool
+	if f.Doc == nil {
+		return "", false
+	}
+	lines := collectDoc(f.Doc, &deprecated)
+	return strings.TrimSpace(strings.Join(lines, "\n")), deprecated
+}
+
+func collectDoc(cg *ast.CommentGroup, deprecated *bool) []string {
+	if cg == nil {
+		return nil
+	}
 	var lines []string
 
-	appendFrom := func(cg *ast.CommentGroup) {
-		if cg == nil {
-			return
-		}
-		for _, c := range cg.List {
-			line := normalizeCommentLine(c.Text)
+	for _, c := range cg.List {
+		for _, raw := range splitCommentText(c.Text) {
+			line := extractContent(raw)
 
-			if line == "" {
-				continue
-			}
-			if strings.HasPrefix(line, "+") {
-				continue // skip markers
-			}
-			if isNolintDirective(line) {
+			if skipLine(line) {
 				continue
 			}
 
-			if strings.HasPrefix(strings.ToLower(line), "deprecated:") ||
-				strings.Contains(strings.ToLower(line), "@deprecated") {
-				deprecated = true
+			l := strings.ToLower(line)
+			if strings.HasPrefix(l, "deprecated:") || strings.Contains(l, "@deprecated") {
+				*deprecated = true
 			}
 
 			lines = append(lines, line)
 		}
 	}
 
-	appendFrom(ts.Doc)
-	if len(lines) == 0 {
-		appendFrom(gd.Doc)
-	}
-
-	return strings.Join(lines, "\n"), deprecated
+	return lines
 }
 
-func extractFieldDoc(f *ast.Field) (desc string, deprecated bool) {
-	if f.Doc == nil {
-		return "", false
-	}
+func extractContent(s string) string {
+	s = strings.TrimSpace(s)
 
-	var out []string
+	// Remove comment markers
+	s = strings.TrimPrefix(s, "//")
+	s = strings.TrimPrefix(s, "/*")
+	s = strings.TrimSuffix(s, "*/")
 
-	for _, c := range f.Doc.List {
-		line := normalizeCommentLine(c.Text)
-
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, "+") {
-			continue
-		}
-		if isNolintDirective(line) {
-			continue
-		}
-
-		if strings.HasPrefix(strings.ToLower(line), "deprecated:") ||
-			strings.Contains(strings.ToLower(line), "@deprecated") {
-			deprecated = true
-		}
-
-		out = append(out, line)
-	}
-
-	return strings.Join(out, "\n"), deprecated
+	return strings.TrimSpace(s)
 }
 
-func normalizeCommentLine(text string) string {
-	line := strings.TrimSpace(strings.TrimPrefix(text, "//"))
-	line = strings.TrimSpace(strings.TrimPrefix(line, "/*"))
-	line = strings.TrimSpace(strings.TrimSuffix(line, "*/"))
-	return strings.TrimSpace(line)
+func skipLine(line string) bool {
+	if line == "" {
+		return false // preserve empty lines
+	}
+
+	// Skip marker-like comment lines
+	if isNoise(line) {
+		return true
+	}
+
+	if strings.HasPrefix(line, "+") {
+		return true
+	}
+
+	if isNolintDirective(line) {
+		return true
+	}
+
+	return false
+}
+
+// Treat punctuation-only comment lines as noise
+func isNoise(line string) bool {
+	return strings.Trim(line, `/\*-_= `) == ""
+}
+
+func splitCommentText(text string) []string {
+	t := strings.TrimSpace(text)
+
+	switch {
+	case strings.HasPrefix(t, "/*"):
+		t = strings.TrimPrefix(t, "/*")
+		t = strings.TrimSuffix(t, "*/")
+		return splitPreserve(t)
+
+	case strings.HasPrefix(t, "//"):
+		// keep raw so extractContent can strip markers
+		return []string{t}
+
+	default:
+		return splitPreserve(t)
+	}
+}
+
+func splitPreserve(s string) []string {
+	parts := strings.Split(s, "\n")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
 }
 
 func isNolintDirective(line string) bool {

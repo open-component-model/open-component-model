@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf/schemas/Repository.schema.json",
   "title": "Repository",
   "type": "object",
-  "description": "Repository is a type that represents an OCI repository backed by a CTF archive.\nThis archive is accessed as if it was a remote OCI repository, but all accesses to it\nare translated into archive-specific operations.\nNote that content stored within this Repository is not necessarily globally accessible so\nthe OCI library does not attempt to interpret global accesses.",
+  "description": "Repository is a type that represents an OCI repository backed by a CTF archive.\nThis archive is accessed as if it was a remote OCI repository, but all accesses to it\nare translated into archive-specific operations.\n\nNote that content stored within this Repository is not necessarily globally accessible so\nthe OCI library does not attempt to interpret global accesses.",
   "properties": {
     "accessMode": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.oci.spec.repository.v1.ctf.AccessMode",
@@ -12,7 +12,7 @@
     },
     "filePath": {
       "type": "string",
-      "description": "Path is the path of the CTF Archive on the filesystem.\nExamples\n- ./relative/path/to/archive.tgz\n- relative/path/to/archive.tar\n- /absolute/path/to/archive-folder"
+      "description": "Path is the path of the CTF Archive on the filesystem.\n\nExamples\n- ./relative/path/to/archive.tgz\n- relative/path/to/archive.tar\n- /absolute/path/to/archive-folder"
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
