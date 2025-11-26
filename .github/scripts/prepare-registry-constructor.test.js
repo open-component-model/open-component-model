@@ -148,8 +148,8 @@ assert.throws(() => {
         descriptor: {componentReferences: componentReferences5}
     });
 },
-    /Plugin with name helminput and version 1.0.0 already exists in reference list/,
-    'Should throw when descriptorPath missing for existing registry'
+    /Plugin helminput v1.0.0 already exists in registry/,
+    'Should throw when plugin version already exists'
 );
 
 // Test 6: Should increase the constructor version

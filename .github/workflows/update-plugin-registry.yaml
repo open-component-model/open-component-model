@@ -82,7 +82,7 @@ jobs:
         run: npm ci
         working-directory: ${{ github.workspace }}/.github/scripts
 
-      - name: Run root component version generation
+      - name: Update plugin registry
         id: new_version
         if: ${{ inputs.dry_run != true && github.event_name != 'pull_request' }}
         env:
@@ -92,43 +92,9 @@ jobs:
           PLUGIN_NAME: ${{ steps.plugin.outputs.plugin_name }}
           PLUGIN_COMPONENT: ${{ steps.plugin.outputs.plugin_component }}
           PLUGIN_VERSION: ${{ steps.plugin.outputs.plugin_version }}
-          WORKSPACE: ${{ github.workspace }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/prepare-registry-constructor.js');
             await script.default({ core });
 
-      - name: Summary
-        env:
-          OLD_VERSION: ${{ steps.new_version.outputs.old_version }}
-          NEW_VERSION: ${{ steps.new_version.outputs.new_version }}
-          PLUGIN_NAME: ${{ steps.plugin.outputs.plugin_name }}
-          PLUGIN_VERSION: ${{ steps.plugin.outputs.plugin_version }}
-          PLUGIN_COMPONENT: ${{ steps.plugin.outputs.plugin_component }}
-          OCM_REPOSITORY: ${{ env.OCM_REPOSITORY }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        shell: bash
-        run: |
-          echo "## Plugin Registry Update" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$DRY_RUN" = "true" ]; then
-            echo "**DRY RUN - No changes published**" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          echo "### Registry Version" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Previous: ${OLD_VERSION}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- New: ${NEW_VERSION}" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "### Plugin Details" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Plugin Name: ${PLUGIN_NAME}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Plugin Version: ${PLUGIN_VERSION}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Plugin Component: ${PLUGIN_COMPONENT}" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$DRY_RUN" != "true" ]; then
-            echo "### Published Location" >> "$GITHUB_STEP_SUMMARY"
-            echo "\`${OCM_REPOSITORY}//ocm.software/plugin-registry:${NEW_VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
-          fi
