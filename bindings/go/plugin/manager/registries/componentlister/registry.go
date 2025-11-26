@@ -96,24 +96,6 @@ func (r *ComponentListerRegistry) Shutdown(ctx context.Context) error {
 	return eg.Wait()
 }
 
-// AddPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
-// tracking the plugin.
-// This function will return an error if the given capability + type already has a registered plugin.
-// Multiple plugins for the same cap+typ is not allowed.
-func (r *ComponentListerRegistry) AddPlugin(plugin types.Plugin, constructionType runtime.Type) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if plugin, ok := r.registry[constructionType]; ok {
-		return fmt.Errorf("plugin for construction type %q already registered with ID: %s", constructionType, plugin.ID)
-	}
-
-	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
-	r.registry[constructionType] = plugin
-
-	return nil
-}
-
 // AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.

@@ -119,10 +119,6 @@ func TestShutdown(t *testing.T) {
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
-	require.NoError(t, err)
-
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)
@@ -144,14 +140,25 @@ func TestShutdown(t *testing.T) {
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	require.NoError(t, registry.AddPlugin(plugin, typ))
-	p, err := scheme.NewObject(typ)
-	require.NoError(t, err)
-	retrievedResourcePlugin, err := registry.GetPlugin(ctx, p)
+	capability := v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.DigestProcessorPluginType)),
+		TypeToJSONSchema: map[string][]byte{
+			dummyType.String(): []byte(`{}`),
+		},
+		SupportedAccessTypes: []mtypes.Type{
+			{
+				Type:    dummyType,
+				Aliases: nil,
+			},
+		},
+	}
+
+	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
+	retrievedPlugin, err := registry.GetPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 	require.NoError(t, registry.Shutdown(ctx))
 	require.Eventually(t, func() bool {
-		_, err = retrievedResourcePlugin.ProcessResourceDigest(ctx, &descriptor.Resource{
+		_, err = retrievedPlugin.ProcessResourceDigest(ctx, &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{
 				ObjectMeta: descriptor.ObjectMeta{
 					Name:    "test-resource-1",

@@ -153,10 +153,6 @@ func TestAddPluginDuplicate(t *testing.T) {
 	dummytype.MustAddToScheme(scheme)
 	registry := NewBlobTransformerRegistry(ctx)
 
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
-	require.NoError(t, err)
-
 	plugin := mtypes.Plugin{
 		ID:   "test-plugin-duplicate",
 		Path: "/path/to/plugin",
@@ -168,13 +164,25 @@ func TestAddPluginDuplicate(t *testing.T) {
 	}
 
 	// First registration should succeed
-	require.NoError(t, registry.AddPlugin(plugin, typ))
+	capability := v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.BlobTransformerPluginType)),
+		TypeToJSONSchema: map[string][]byte{
+			dummyType.String(): []byte(`{}`),
+		},
+		SupportedTransformerSpecTypes: []mtypes.Type{
+			{
+				Type:    dummyType,
+				Aliases: nil,
+			},
+		},
+	}
+
+	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
 
 	// Second registration should fail
-	err = registry.AddPlugin(plugin, typ)
+	err := registry.AddPluginWithAliases(plugin, &capability)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "plugin for type")
-	require.Contains(t, err.Error(), "already registered with ID: test-plugin-duplicate")
+	require.Contains(t, err.Error(), "plugin with ID test-plugin-duplicate already registered")
 }
 
 func TestGetPluginWithEmptyType(t *testing.T) {

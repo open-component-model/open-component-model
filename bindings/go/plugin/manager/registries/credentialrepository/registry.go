@@ -46,23 +46,6 @@ func (r *RepositoryRegistry) RepositoryScheme() *runtime.Scheme {
 	return r.scheme
 }
 
-// AddPlugin takes a credentialGraphPlugin discovered by the manager and adds it to the stored credentialGraphPlugin registry.
-// This function will return an error if the given capability + type already has a registered credentialGraphPlugin.
-// Multiple plugins for the same cap+typ is not allowed.
-func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, consumerIdentityType, configType runtime.Type) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if plugin, ok := r.registry[consumerIdentityType]; ok {
-		return fmt.Errorf("credentialGraphPlugin for consumer identity type %q and config type %q already registered with ID: %s", consumerIdentityType, configType, plugin.ID)
-	}
-
-	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific credentialGraphPlugin here.
-	r.registry[consumerIdentityType] = plugin
-
-	return nil
-}
-
 // AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.

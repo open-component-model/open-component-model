@@ -90,23 +90,6 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	return errs
 }
 
-// AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
-// This function will return an error if the given capability + type already has a registered plugin.
-// Multiple plugins for the same cap+typ is not allowed.
-func (r *RepositoryRegistry) AddPlugin(plugin mtypes.Plugin, typ runtime.Type) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if v, ok := r.registry[typ]; ok {
-		return fmt.Errorf("plugin for type %v already registered with ID: %s", typ, v.ID)
-	}
-
-	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
-	r.registry[typ] = plugin
-
-	return nil
-}
-
 // AddPluginWithAliases takes a plugin discovered by the manager and adds it to the stored plugin registry.
 func (r *RepositoryRegistry) AddPluginWithAliases(plugin mtypes.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
