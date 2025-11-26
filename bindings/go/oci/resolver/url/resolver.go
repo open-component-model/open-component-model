@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func New(opts ...Option) (*CachingResolver, error) {
@@ -62,10 +63,18 @@ func (resolver *CachingResolver) Reference(reference string) (fmt.Stringer, erro
 	return registry.ParseReference(reference)
 }
 
-// Ping does a resolver.Ping that uses OCI specific technology, in our case it's Oras. Oras' Ping
-// does make sure that authentication is working and that the registry is available.
+// Ping checks registry availability and validates authentication credentials.
+// It extracts the host (hostname:port) from baseURL and calls ORAS registry.Ping on the /v2/ endpoint.
+// The subPath is ignored as ORAS only supports pinging the registry root.
 func (resolver *CachingResolver) Ping(ctx context.Context) error {
-	r, err := remote.NewRegistry(resolver.baseURL)
+	// Parse baseURL (with or without scheme) and extract host
+	parsedURL, err := runtime.ParseURLAndAllowNoScheme(resolver.baseURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse base URL: %w", err)
+	}
+
+	// Use only host (hostname:port) for registry ping (discard scheme and path)
+	r, err := remote.NewRegistry(parsedURL.Host)
 	if err != nil {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
@@ -73,7 +82,10 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 	if resolver.baseClient != nil {
 		r.Client = resolver.baseClient
 	}
-	return r.Ping(ctx)
+	if err := r.Ping(ctx); err != nil {
+		return fmt.Errorf("failed to ping registry: %w", err)
+	}
+	return nil
 }
 
 func (resolver *CachingResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
