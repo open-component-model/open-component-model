@@ -2,13 +2,12 @@ package component
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	. "github.com/mandelsoft/goutils/testutils"
-	"github.com/mandelsoft/vfs/pkg/osfs"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -16,13 +15,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	. "ocm.software/ocm/api/helper/builder"
-	environment "ocm.software/ocm/api/helper/env"
-	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
-	"ocm.software/ocm/api/utils/accessio"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/komega"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
@@ -34,16 +30,10 @@ const (
 )
 
 var _ = Describe("Component Controller", func() {
-	var (
-		env     *Builder
-		ctfpath string
-	)
+	var ctfpath string
+
 	BeforeEach(func() {
 		ctfpath = GinkgoT().TempDir()
-		env = NewBuilder(environment.FileSystem(osfs.OsFs))
-	})
-	AfterEach(func() {
-		Expect(env.Cleanup()).To(Succeed())
 	})
 
 	Context("component controller", func() {
@@ -88,14 +78,19 @@ var _ = Describe("Component Controller", func() {
 
 		It("reconcileComponent a component", func(ctx SpecContext) {
 			By("creating a component version")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(Version1)
-				})
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
@@ -129,14 +124,19 @@ var _ = Describe("Component Controller", func() {
 
 		It("does not reconcile when the repository is not ready", func(ctx SpecContext) {
 			By("creating a component version")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(Version1)
-				})
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
@@ -172,14 +172,19 @@ var _ = Describe("Component Controller", func() {
 
 		It("does reconcile when an unready ocm repository gets ready", func(ctx SpecContext) {
 			By("creating a component version")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(Version1)
-				})
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
@@ -224,14 +229,19 @@ var _ = Describe("Component Controller", func() {
 
 		It("grabs the new version when it becomes available", func(ctx SpecContext) {
 			By("creating a component version")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(Version1)
-				})
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
@@ -260,14 +270,18 @@ var _ = Describe("Component Controller", func() {
 			})
 
 			By("increasing the component version")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(Version1)
-				})
-				env.Component(componentName, func() {
-					env.Version(Version2)
-				})
-			})
+			desc2 := &descriptor.Descriptor{
+				Component: descriptor.Component{
+					ComponentMeta: descriptor.ComponentMeta{
+						ObjectMeta: descriptor.ObjectMeta{
+							Name:    componentName,
+							Version: Version2,
+						},
+					},
+					Provider: descriptor.Provider{Name: "ocm.software"},
+				},
+			}
+			Expect(repo.AddComponentVersion(ctx, desc2)).To(Succeed())
 
 			By("checking that the increased version has been discovered successfully")
 			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
@@ -279,19 +293,37 @@ var _ = Describe("Component Controller", func() {
 		})
 
 		It("grabs lower version if downgrade is allowed", func(ctx SpecContext) {
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version("0.0.3", func() {
-						env.Label(v1alpha1.OCMLabelDowngradable, "0.0.2")
-					})
-					env.Version("0.0.2", func() {
-						env.Label(v1alpha1.OCMLabelDowngradable, "0.0.2")
-					})
-				})
+			By("creating a component version")
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: "0.0.3",
+								Labels: []descriptor.Label{
+									{
+										Name:  v1alpha1.OCMLabelDowngradable,
+										Value: json.RawMessage(`"0.0.2"`),
+									},
+								},
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: "0.0.2",
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
@@ -334,19 +366,37 @@ var _ = Describe("Component Controller", func() {
 		})
 
 		It("does not grab lower version if downgrade is denied", func(ctx SpecContext) {
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version("0.0.3", func() {
-						env.Label(v1alpha1.OCMLabelDowngradable, "0.0.2")
-					})
-					env.Version("0.0.2", func() {
-						env.Label(v1alpha1.OCMLabelDowngradable, "0.0.2")
-					})
-				})
+			By("creating a component version")
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: "0.0.3",
+								Labels: []descriptor.Label{
+									{
+										Name:  v1alpha1.OCMLabelDowngradable,
+										Value: json.RawMessage(`"0.0.2"`),
+									},
+								},
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: "0.0.2",
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
@@ -400,15 +450,31 @@ var _ = Describe("Component Controller", func() {
 		})
 
 		It("can force downgrade even if not allowed by the component", func(ctx SpecContext) {
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version("0.0.3")
-					env.Version("0.0.2")
-				})
+			By("creating a component version")
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: "0.0.3",
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: "0.0.2",
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
@@ -455,24 +521,22 @@ var _ = Describe("Component Controller", func() {
 			componentVersionPlus := Version1 + "+componentversionsuffix"
 
 			By("creating a component version")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersionPlus)
-				})
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: componentVersionPlus,
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
-
-			By("creating a component in CTF repository")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(componentVersionPlus)
-				})
-			})
 
 			By("creating a component resource")
 			component := &v1alpha1.Component{
@@ -503,14 +567,19 @@ var _ = Describe("Component Controller", func() {
 
 		It("blocks deletion of a component when a resource is referencing it", func(ctx SpecContext) {
 			By("creating a component version")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(Version1)
-				})
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
@@ -576,14 +645,19 @@ var _ = Describe("Component Controller", func() {
 
 		It("returns an error when specified semver is not found", func(ctx SpecContext) {
 			By("creating a component version")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(Version2)
-				})
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: Version2,
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specData := Must(spec.MarshalJSON())
 
 			By("mocking an ocm repository")
 			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
@@ -612,6 +686,11 @@ var _ = Describe("Component Controller", func() {
 			By("delete resources manually")
 			test.DeleteObject(ctx, k8sClient, component)
 		})
+
+		PIt("verifies the signing of a component version", func(ctx SpecContext) {
+
+		})
+		// TODO
 	})
 
 	Context("ocm config handling", func() {
@@ -626,15 +705,20 @@ var _ = Describe("Component Controller", func() {
 		BeforeEach(func(ctx SpecContext) {
 			componentName = "ocm.software/test-component-" + test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 
-			By("creating a repository with name")
-			env.OCMCommonTransport(ctfpath, accessio.FormatDirectory, func() {
-				env.Component(componentName, func() {
-					env.Version(Version1)
-				})
+			By("creating a component version")
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descriptor.Descriptor{
+				{
+					Component: descriptor.Component{
+						ComponentMeta: descriptor.ComponentMeta{
+							ObjectMeta: descriptor.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descriptor.Provider{Name: "ocm.software"},
+					},
+				},
 			})
-
-			spec := Must(ctf.NewRepositorySpec(ctf.ACC_READONLY, ctfpath))
-			specdata := Must(spec.MarshalJSON())
 
 			namespaceName := test.SanitizeNameForK8s(ctx.SpecReport().LeafNodeText)
 			namespace = &corev1.Namespace{
@@ -646,6 +730,7 @@ var _ = Describe("Component Controller", func() {
 
 			configs, secrets = createTestConfigsAndSecrets(ctx, namespace.GetName())
 
+			By("mocking an ocm repository")
 			repositoryName := "repository"
 			repositoryObj = &v1alpha1.Repository{
 				ObjectMeta: metav1.ObjectMeta{
@@ -654,7 +739,7 @@ var _ = Describe("Component Controller", func() {
 				},
 				Spec: v1alpha1.RepositorySpec{
 					RepositorySpec: &apiextensionsv1.JSON{
-						Raw: specdata,
+						Raw: specData,
 					},
 					OCMConfig: []v1alpha1.OCMConfiguration{
 						{
