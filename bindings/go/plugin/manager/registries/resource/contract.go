@@ -16,3 +16,8 @@ type Repository interface {
 	// DownloadResource downloads a [descriptor.Resource] from the repository.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials map[string]string) (blob.ReadOnlyBlob, error)
 }
+
+type BuiltinResourceRepository interface {
+	Repository
+	GetResourceRepositoryScheme() *runtime.Scheme
+}
