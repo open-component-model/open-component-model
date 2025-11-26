@@ -22,7 +22,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
-var DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+var dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 
 type mockSigningHandler struct{ called bool }
 
@@ -58,7 +58,7 @@ func TestRegisterInternalComponentSignatureHandler(t *testing.T) {
 	retrievedPlugin, err := registry.GetPlugin(ctx, &dummyv1.Repository{})
 	require.NoError(t, err)
 	require.Equal(t, p, retrievedPlugin)
-	_, err = retrievedPlugin.GetSigningCredentialConsumerIdentity(ctx, "name", descruntime.Digest{}, &runtime.Raw{Type: DummyType, Data: []byte(`{}`)})
+	_, err = retrievedPlugin.GetSigningCredentialConsumerIdentity(ctx, "name", descruntime.Digest{}, &runtime.Raw{Type: dummyType, Data: []byte(`{}`)})
 	require.NoError(t, err)
 	require.True(t, p.called)
 }
@@ -76,7 +76,7 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         "test-plugin-signinghandler",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.SigningHandlerPluginType,
+		PluginType: v1.SigningHandlerPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -101,21 +101,21 @@ func TestPluginFlow(t *testing.T) {
 	capability := v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
 		TypeToJSONSchema: map[string][]byte{
-			DummyType.String(): []byte(`{}`),
+			dummyType.String(): []byte(`{}`),
 		},
 		SupportedSigningSpecTypes: []mtypes.Type{
 			{
-				Type:    DummyType,
+				Type:    dummyType,
 				Aliases: nil,
 			},
 		},
 	}
 	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
-	retrievedPlugin, err := registry.GetPlugin(ctx, &runtime.Raw{Type: DummyType})
+	retrievedPlugin, err := registry.GetPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 
 	// Call Sign via the signing.Handler abstraction and validate response
-	sig, err := retrievedPlugin.Sign(ctx, descruntime.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: "abc"}, &dummyv1.Repository{Type: DummyType, BaseUrl: "https://example"}, nil)
+	sig, err := retrievedPlugin.Sign(ctx, descruntime.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: "abc"}, &dummyv1.Repository{Type: dummyType, BaseUrl: "https://example"}, nil)
 	require.NoError(t, err)
 	require.Equal(t, "rsa", sig.Algorithm)
 	require.Equal(t, "sig", sig.Value)
@@ -130,7 +130,7 @@ func TestShutdown(t *testing.T) {
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	registry := NewSigningRegistry(ctx)
-	config := mtypes.Config{ID: "test-plugin-signinghandler", Type: mtypes.Socket, PluginType: mtypes.SigningHandlerPluginType}
+	config := mtypes.Config{ID: "test-plugin-signinghandler", Type: mtypes.Socket, PluginType: v1.SigningHandlerPluginType}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
 
@@ -154,22 +154,22 @@ func TestShutdown(t *testing.T) {
 	capability := v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
 		TypeToJSONSchema: map[string][]byte{
-			DummyType.String(): []byte(`{}`),
+			dummyType.String(): []byte(`{}`),
 		},
 		SupportedSigningSpecTypes: []mtypes.Type{
 			{
-				Type:    DummyType,
+				Type:    dummyType,
 				Aliases: nil,
 			},
 		},
 	}
 
 	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
-	retrievedPlugin, err := registry.GetPlugin(ctx, &runtime.Raw{Type: DummyType})
+	retrievedPlugin, err := registry.GetPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 	require.NoError(t, registry.Shutdown(ctx))
 	require.Eventually(t, func() bool {
-		_, err = retrievedPlugin.Sign(ctx, descruntime.Digest{}, &dummyv1.Repository{Type: DummyType, BaseUrl: "https://example"}, nil)
+		_, err = retrievedPlugin.Sign(ctx, descruntime.Digest{}, &dummyv1.Repository{Type: dummyType, BaseUrl: "https://example"}, nil)
 		if err != nil {
 			if strings.Contains(err.Error(), "failed to send request to plugin") {
 				return true

@@ -23,17 +23,17 @@ import (
 )
 
 var (
-	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 )
 
-func DummyCapability(schema []byte) resourcev1.CapabilitySpec {
+func dummyCapability(schema []byte) resourcev1.CapabilitySpec {
 	return resourcev1.CapabilitySpec{
-		Type: runtime.NewUnversionedType(string(mtypes.ResourceRepositoryPluginType)),
+		Type: runtime.NewUnversionedType(string(resourcev1.ResourceRepositoryPluginType)),
 		TypeToJSONSchema: map[string][]byte{
-			DummyType.String(): schema,
+			dummyType.String(): schema,
 		},
 		SupportedAccessTypes: []mtypes.Type{{
-			Type: DummyType,
+			Type: dummyType,
 		}},
 	}
 }
@@ -50,7 +50,7 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         "test-plugin-1-resource",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.ResourceRepositoryPluginType,
+		PluginType: resourcev1.ResourceRepositoryPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -71,14 +71,14 @@ func TestPluginFlow(t *testing.T) {
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-resource",
 			Type:       mtypes.Socket,
-			PluginType: mtypes.ResourceRepositoryPluginType,
+			PluginType: resourcev1.ResourceRepositoryPluginType,
 		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	capability := DummyCapability([]byte(`{}`))
+	capability := dummyCapability([]byte(`{}`))
 	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
-	retrievedPlugin, err := registry.GetResourcePlugin(ctx, &runtime.Raw{Type: DummyType})
+	retrievedPlugin, err := registry.GetResourcePlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 	resource, err := retrievedPlugin.DownloadResource(ctx, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
@@ -90,7 +90,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:     "type",
 		Relation: "local",
 		Access: &runtime.Raw{
-			Type: DummyType,
+			Type: dummyType,
 			Data: []byte(`{ "access": "v1" }`),
 		},
 	}, map[string]string{})

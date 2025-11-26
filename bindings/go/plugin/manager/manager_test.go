@@ -380,7 +380,6 @@ func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
 	testPlugin.Path = "/tmp/test-other-plugin-plugin.socket"
 	testPlugin.Config.ID = "test-other"
 	testPlugin.Config.Type = "tcp"
-	testPlugin.Types = nil
 	require.ErrorContains(t, pm.addPlugin(ctx, config, testPlugin, bytes.NewBuffer(serialized)), "failed to register plugin test-other: plugin for type OCIRepository/v1 already registered with ID: test-id")
 }
 

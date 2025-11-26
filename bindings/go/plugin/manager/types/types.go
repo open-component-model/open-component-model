@@ -7,17 +7,6 @@ import (
 // PluginType defines the type of the plugin such as, ComponentVersionRepositoryPlugin, Transformation, Credential, Config plugin.
 type PluginType string
 
-var (
-	ComponentVersionRepositoryPluginType PluginType = "componentVersionRepository"
-	CredentialRepositoryPluginType       PluginType = "credentialRepository" //nolint:gosec // not hardcoded cred
-	InputPluginType                      PluginType = "inputRepository"
-	DigestProcessorPluginType            PluginType = "digestProcessorRepository"
-	ResourceRepositoryPluginType         PluginType = "resourceRepository"
-	BlobTransformerPluginType            PluginType = "blobTransformer"
-	SigningHandlerPluginType             PluginType = "signingHandler"
-	ComponentListerPluginType            PluginType = "componentLister"
-)
-
 type Location struct {
 	LocationType `json:"type"`
 	Value        string `json:"value"`

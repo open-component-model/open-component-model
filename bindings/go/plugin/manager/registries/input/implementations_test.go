@@ -33,15 +33,15 @@ func TestProcessResourceHandler(t *testing.T) {
 	plugin := NewConstructionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, DummyCapability([]byte(`{}`)))
+		PluginType: v1.InputPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	_, err := plugin.ProcessResource(ctx, &v1.ProcessResourceInputRequest{
 		Resource: &constructorv1.Resource{
 			AccessOrInput: constructorv1.AccessOrInput{
 				Input: &runtime.Raw{
-					Type: DummyType,
+					Type: dummyType,
 					Data: []byte(`{}`),
 				},
 			},

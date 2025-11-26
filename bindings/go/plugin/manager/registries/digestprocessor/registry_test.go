@@ -17,22 +17,23 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
+	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 var (
-	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 )
 
-func DummyCapability(schema []byte) v1.CapabilitySpec {
+func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.DigestProcessorPluginType)),
 		TypeToJSONSchema: map[string][]byte{
-			DummyType.String(): schema,
+			dummyType.String(): schema,
 		},
 		SupportedAccessTypes: []mtypes.Type{{
-			Type: DummyType,
+			Type: dummyType,
 		}},
 	}
 }
@@ -49,7 +50,7 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         "test-plugin-1-digester",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.InputPluginType,
+		PluginType: inputv1.InputPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -76,9 +77,9 @@ func TestPluginFlow(t *testing.T) {
 		Stdout: pipe,
 	}
 
-	capability := DummyCapability([]byte(`{}`))
+	capability := dummyCapability([]byte(`{}`))
 	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
-	p, err := scheme.NewObject(DummyType)
+	p, err := scheme.NewObject(dummyType)
 	require.NoError(t, err)
 	retrievedResourcePlugin, err := registry.GetPlugin(ctx, p)
 	require.NoError(t, err)
@@ -92,7 +93,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:     "type",
 		Relation: "local",
 		Access: &runtime.Raw{
-			Type: DummyType,
+			Type: dummyType,
 			Data: []byte(`{ "access": "v1" }`),
 		},
 	}, nil)
@@ -113,7 +114,7 @@ func TestShutdown(t *testing.T) {
 	config := mtypes.Config{
 		ID:         "test-plugin-1-digester",
 		Type:       mtypes.Socket,
-		PluginType: mtypes.InputPluginType,
+		PluginType: inputv1.InputPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -138,15 +139,7 @@ func TestShutdown(t *testing.T) {
 		Config: mtypes.Config{
 			ID:         "test-plugin-1-construction",
 			Type:       mtypes.Socket,
-			PluginType: mtypes.ComponentVersionRepositoryPluginType,
-		},
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.ComponentVersionRepositoryPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
+			PluginType: v1.DigestProcessorPluginType,
 		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,

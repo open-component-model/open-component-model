@@ -34,7 +34,7 @@ func TestGetGlobalResource(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: v1.ResourceRepositoryPluginType,
-	}, server.URL, DummyCapability([]byte(`{}`)))
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	_, err := plugin.GetGlobalResource(ctx, &v1.GetGlobalResourceRequest{
@@ -48,7 +48,7 @@ func TestGetGlobalResource(t *testing.T) {
 			Type:     "test",
 			Relation: descriptorv2.LocalRelation,
 			Access: &runtime.Raw{
-				Type: DummyType,
+				Type: dummyType,
 				Data: []byte(`{ "foo": "bar" }`),
 			},
 		},
@@ -75,7 +75,7 @@ func TestAddGlobalResource(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: v1.ResourceRepositoryPluginType,
-	}, server.URL, DummyCapability([]byte(`{}`)))
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	_, err := plugin.AddGlobalResource(ctx, &v1.AddGlobalResourceRequest{
@@ -89,7 +89,7 @@ func TestAddGlobalResource(t *testing.T) {
 			Type:     "test",
 			Relation: descriptorv2.LocalRelation,
 			Access: &runtime.Raw{
-				Type: DummyType,
+				Type: dummyType,
 				Data: []byte(`{ "foo": "bar" }`),
 			},
 		},
@@ -142,11 +142,11 @@ func TestValidateEndpoint(t *testing.T) {
 		ID:         "test-plugin",
 		Type:       types.TCP,
 		PluginType: v1.ResourceRepositoryPluginType,
-	}, server.URL, DummyCapability([]byte(validSchema)))
+	}, server.URL, dummyCapability([]byte(validSchema)))
 
 	// Test valid object
 	validObj := &runtime.Raw{
-		Type: DummyType,
+		Type: dummyType,
 		Data: []byte(`{ "type": "test" }`),
 	}
 	err := plugin.validateEndpoint(validObj)

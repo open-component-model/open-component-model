@@ -53,7 +53,7 @@ func TestPing(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
+				PluginType: v1.SigningHandlerPluginType,
 			}, server.URL, v1.CapabilitySpec{})
 
 			err := plugin.Ping(context.Background())
@@ -75,7 +75,7 @@ func TestGetSignerIdentity(t *testing.T) {
 	}{
 		{
 			name:    "success",
-			request: &v1.GetSignerIdentityRequest[runtime.Typed]{Name: "sig", SignRequest: v1.SignRequest[runtime.Typed]{Config: &runtime.Raw{Type: DummyType, Data: []byte(`{"key":"val"}`)}}},
+			request: &v1.GetSignerIdentityRequest[runtime.Typed]{Name: "sig", SignRequest: v1.SignRequest[runtime.Typed]{Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"key":"val"}`)}}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == GetSignerIdentity {
@@ -99,7 +99,7 @@ func TestGetSignerIdentity(t *testing.T) {
 		},
 		{
 			name:    "call_failed",
-			request: &v1.GetSignerIdentityRequest[runtime.Typed]{Name: "sig", SignRequest: v1.SignRequest[runtime.Typed]{Config: &runtime.Raw{Type: DummyType, Data: []byte(`{"k":1}`)}}},
+			request: &v1.GetSignerIdentityRequest[runtime.Typed]{Name: "sig", SignRequest: v1.SignRequest[runtime.Typed]{Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"k":1}`)}}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -117,15 +117,15 @@ func TestGetSignerIdentity(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
+				PluginType: v1.SigningHandlerPluginType,
 			}, server.URL, v1.CapabilitySpec{
 				Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
 				TypeToJSONSchema: map[string][]byte{
-					DummyType.String(): []byte(`{}`),
+					dummyType.String(): []byte(`{}`),
 				},
 				SupportedSigningSpecTypes: []types.Type{
 					{
-						Type:       DummyType,
+						Type:       dummyType,
 						Aliases:    nil,
 						JSONSchema: nil,
 					},
@@ -152,7 +152,7 @@ func TestGetVerifierIdentity(t *testing.T) {
 		{
 			name: "success",
 			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{VerifyRequest: v1.VerifyRequest[runtime.Typed]{
-				Config: &runtime.Raw{Type: DummyType, Data: []byte(`{"x":true}`)},
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)},
 			}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +178,7 @@ func TestGetVerifierIdentity(t *testing.T) {
 		{
 			name: "call_failed",
 			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{VerifyRequest: v1.VerifyRequest[runtime.Typed]{
-				Config: &runtime.Raw{Type: DummyType, Data: []byte(`{"x":true}`)}}},
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)}}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -196,15 +196,15 @@ func TestGetVerifierIdentity(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
+				PluginType: v1.SigningHandlerPluginType,
 			}, server.URL, v1.CapabilitySpec{
 				Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
 				TypeToJSONSchema: map[string][]byte{
-					DummyType.String(): []byte(`{}`),
+					dummyType.String(): []byte(`{}`),
 				},
 				SupportedSigningSpecTypes: []types.Type{
 					{
-						Type:       DummyType,
+						Type:       dummyType,
 						Aliases:    nil,
 						JSONSchema: nil,
 					},
@@ -233,7 +233,7 @@ func TestSign(t *testing.T) {
 			name: "success",
 			request: &v1.SignRequest[runtime.Typed]{
 				Digest: &v2.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: "abc"},
-				Config: &runtime.Raw{Type: DummyType, Data: []byte(`{"k":"v"}`)},
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"k":"v"}`)},
 			},
 			credentials: map[string]string{"key": "value"},
 			setupMock: func() *httptest.Server {
@@ -249,7 +249,7 @@ func TestSign(t *testing.T) {
 		},
 		{
 			name:        "invalid_credentials",
-			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: DummyType, Data: []byte(`{}`)}},
+			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
 			credentials: map[string]string{"invalid": "creds"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -260,7 +260,7 @@ func TestSign(t *testing.T) {
 		},
 		{
 			name:        "call_failed",
-			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: DummyType, Data: []byte(`{}`)}},
+			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
 			credentials: map[string]string{"key": "value"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -279,15 +279,15 @@ func TestSign(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
+				PluginType: v1.SigningHandlerPluginType,
 			}, server.URL, v1.CapabilitySpec{
 				Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
 				TypeToJSONSchema: map[string][]byte{
-					DummyType.String(): []byte(`{}`),
+					dummyType.String(): []byte(`{}`),
 				},
 				SupportedSigningSpecTypes: []types.Type{
 					{
-						Type:       DummyType,
+						Type:       dummyType,
 						Aliases:    nil,
 						JSONSchema: nil,
 					},
@@ -316,7 +316,7 @@ func TestVerify(t *testing.T) {
 			name: "call_failed",
 			request: &v1.VerifyRequest[runtime.Typed]{
 				Signature: &v2.Signature{Signature: v2.SignatureInfo{Algorithm: "rsa", Value: "sig"}},
-				Config:    &runtime.Raw{Type: DummyType, Data: []byte(`{}`)},
+				Config:    &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 			},
 			credentials: map[string]string{"key": "value"},
 			setupMock: func() *httptest.Server {
@@ -336,15 +336,15 @@ func TestVerify(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
+				PluginType: v1.SigningHandlerPluginType,
 			}, server.URL, v1.CapabilitySpec{
 				Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
 				TypeToJSONSchema: map[string][]byte{
-					DummyType.String(): []byte(`{}`),
+					dummyType.String(): []byte(`{}`),
 				},
 				SupportedSigningSpecTypes: []types.Type{
 					{
-						Type:       DummyType,
+						Type:       dummyType,
 						Aliases:    nil,
 						JSONSchema: nil,
 					},

@@ -20,17 +20,17 @@ import (
 )
 
 var (
-	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 )
 
-func DummyCapability(schema []byte) inputv1.CapabilitySpec {
+func dummyCapability(schema []byte) inputv1.CapabilitySpec {
 	return inputv1.CapabilitySpec{
-		Type: runtime.NewUnversionedType(string(mtypes.ResourceRepositoryPluginType)),
+		Type: runtime.NewUnversionedType(string(inputv1.InputPluginType)),
 		TypeToJSONSchema: map[string][]byte{
-			DummyType.String(): schema,
+			dummyType.String(): schema,
 		},
 		SupportedInputTypes: []mtypes.Type{{
-			Type: DummyType,
+			Type: dummyType,
 		}},
 	}
 }
@@ -73,9 +73,9 @@ func TestPluginFlow(t *testing.T) {
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	capability := DummyCapability([]byte(`{}`))
+	capability := dummyCapability([]byte(`{}`))
 	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
-	retrievedResourcePlugin, err := registry.GetResourceInputPlugin(ctx, &runtime.Raw{Type: DummyType})
+	retrievedResourcePlugin, err := registry.GetResourceInputPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 	resource, err := retrievedResourcePlugin.ProcessResource(ctx, &constructor.Resource{
 		ElementMeta: constructor.ElementMeta{
@@ -88,7 +88,7 @@ func TestPluginFlow(t *testing.T) {
 		Relation: "local",
 		AccessOrInput: constructor.AccessOrInput{
 			Input: &runtime.Raw{
-				Type: DummyType,
+				Type: dummyType,
 				Data: []byte(`{ "access": "v1" }`),
 			},
 		},
@@ -96,7 +96,7 @@ func TestPluginFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "test-resource", resource.ProcessedResource.Name)
 
-	retrievedSourcePlugin, err := registry.GetSourceInputPlugin(ctx, &runtime.Raw{Type: DummyType})
+	retrievedSourcePlugin, err := registry.GetSourceInputPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
 	source, err := retrievedSourcePlugin.ProcessSource(ctx, &constructor.Source{
 		ElementMeta: constructor.ElementMeta{
@@ -108,7 +108,7 @@ func TestPluginFlow(t *testing.T) {
 		Type: "type",
 		AccessOrInput: constructor.AccessOrInput{
 			Input: &runtime.Raw{
-				Type: DummyType,
+				Type: dummyType,
 				Data: []byte(`{ "access": "v1" }`),
 			},
 		},

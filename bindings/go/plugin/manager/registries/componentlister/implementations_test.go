@@ -30,8 +30,8 @@ func TestPing(t *testing.T) {
 	plugin := NewComponentListerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentListerPluginType,
-	}, server.URL, DummyCapability([]byte(`{}`)))
+		PluginType: v1.ComponentListerPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	// Test successful ping
 	err := plugin.Ping(context.Background())
@@ -61,12 +61,12 @@ func TestListComponentsHandler(t *testing.T) {
 	plugin := NewComponentListerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentListerPluginType,
-	}, server.URL, DummyCapability([]byte(`{}`)))
+		PluginType: v1.ComponentListerPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	response, err := plugin.ListComponents(ctx, &v1.ListComponentsRequest[runtime.Typed]{
-		Repository: &runtime.Raw{Type: DummyType, Data: []byte(`{}`)},
+		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Last:       "",
 	}, map[string]string{})
 	require.NoError(t, err)

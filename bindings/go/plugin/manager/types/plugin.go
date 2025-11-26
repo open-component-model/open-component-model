@@ -11,11 +11,7 @@ type Plugin struct {
 	ID     string
 	Path   string
 	Config Config
-	Types  map[PluginType][]Type
-	// []Type{inputTypeFunctionA, outputTypeFunctionA, inputTypeFunctionB, outputTypeFunctionB} <-- we implicitly know because of the plugin type that [0] is input of method a and [1] is output of method a, and so on.
-	//            ^ is this only the typed part (so repository spec for upload component) or the entire request type (so repository spec + component descriptor for upload component)?
-
-	Cmd *exec.Cmd
+	Cmd    *exec.Cmd
 	// Stderr pipe will contain a link to the commands stderr output to stream back
 	// potential more information to the manager or the runtime.
 	Stderr io.ReadCloser

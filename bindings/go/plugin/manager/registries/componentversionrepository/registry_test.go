@@ -21,17 +21,17 @@ import (
 )
 
 var (
-	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 )
 
-func DummyCapability(schema []byte) v1.CapabilitySpec {
+func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.ComponentVersionRepositoryPluginType)),
 		TypeToJSONSchema: map[string][]byte{
-			DummyType.String(): schema,
+			dummyType.String(): schema,
 		},
 		SupportedRepositorySpecTypes: []mtypes.Type{{
-			Type: DummyType,
+			Type: dummyType,
 		}},
 	}
 }
@@ -73,13 +73,13 @@ func TestPluginFlow(t *testing.T) {
 		Config: mtypes.Config{
 			ID:         "test-plugin-1",
 			Type:       mtypes.Socket,
-			PluginType: mtypes.ComponentVersionRepositoryPluginType,
+			PluginType: v1.ComponentVersionRepositoryPluginType,
 		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 		Stderr: stderr,
 	}
-	capability := DummyCapability([]byte(`{}`))
+	capability := dummyCapability([]byte(`{}`))
 	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
 	spec := &dummyv1.Repository{
 		Type:    typ,

@@ -27,17 +27,17 @@ import (
 )
 
 var (
-	DummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
 )
 
-func DummyCapability(schema []byte) v1.CapabilitySpec {
+func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.BlobTransformerPluginType)),
 		TypeToJSONSchema: map[string][]byte{
-			DummyType.String(): schema,
+			dummyType.String(): schema,
 		},
 		SupportedTransformerSpecTypes: []mtypes.Type{{
-			Type: DummyType,
+			Type: dummyType,
 		}},
 	}
 }
@@ -58,7 +58,7 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         id,
 		Type:       mtypes.Socket,
-		PluginType: mtypes.BlobTransformerPluginType,
+		PluginType: v1.BlobTransformerPluginType,
 	}
 	serialized, err := json.Marshal(config)
 	require.NoError(t, err)
@@ -81,15 +81,15 @@ func TestPluginFlow(t *testing.T) {
 		Stdout: pipe,
 		Stderr: stderr,
 	}
-	capability := DummyCapability([]byte(`{}`))
+	capability := dummyCapability([]byte(`{}`))
 	require.NoError(t, registry.AddPluginWithAliases(plugin, &capability))
-	p, err := scheme.NewObject(DummyType)
+	p, err := scheme.NewObject(dummyType)
 	require.NoError(t, err)
 	retrievedPlugin, err := registry.GetPlugin(ctx, p)
 	require.NoError(t, err)
 
 	transformedBlob, err := retrievedPlugin.TransformBlob(ctx, inmemory.New(strings.NewReader("foobar")), &dummyv1.Repository{
-		Type:    DummyType,
+		Type:    dummyType,
 		BaseUrl: "test-base-url",
 	}, nil)
 	require.NoError(t, err)
@@ -163,15 +163,7 @@ func TestAddPluginDuplicate(t *testing.T) {
 		Config: mtypes.Config{
 			ID:         "test-plugin-duplicate",
 			Type:       mtypes.Socket,
-			PluginType: mtypes.BlobTransformerPluginType,
-		},
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.BlobTransformerPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
+			PluginType: v1.BlobTransformerPluginType,
 		},
 	}
 
