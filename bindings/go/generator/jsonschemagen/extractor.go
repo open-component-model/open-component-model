@@ -5,27 +5,26 @@ import (
 	"strings"
 )
 
-func extractStructDoc(ts *ast.TypeSpec, gd *ast.GenDecl) (string, bool) {
-	var deprecated bool
-	lines := collectDoc(ts.Doc, &deprecated)
+func extractStructDoc(ts *ast.TypeSpec, gd *ast.GenDecl) (_ string, deprecated bool) {
+	lines, deprecated := collectDoc(ts.Doc)
 	if len(lines) == 0 {
-		lines = collectDoc(gd.Doc, &deprecated)
+		lines, deprecated = collectDoc(gd.Doc)
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n")), deprecated
 }
 
-func extractFieldDoc(f *ast.Field) (string, bool) {
-	var deprecated bool
+func extractFieldDoc(f *ast.Field) (_ string, deprecated bool) {
+	var lines []string
 	if f.Doc == nil {
 		return "", false
 	}
-	lines := collectDoc(f.Doc, &deprecated)
+	lines, deprecated = collectDoc(f.Doc)
 	return strings.TrimSpace(strings.Join(lines, "\n")), deprecated
 }
 
-func collectDoc(cg *ast.CommentGroup, deprecated *bool) []string {
+func collectDoc(cg *ast.CommentGroup) (doc []string, deprecated bool) {
 	if cg == nil {
-		return nil
+		return nil, false
 	}
 	var lines []string
 
@@ -39,14 +38,14 @@ func collectDoc(cg *ast.CommentGroup, deprecated *bool) []string {
 
 			l := strings.ToLower(line)
 			if strings.HasPrefix(l, "deprecated:") || strings.Contains(l, "@deprecated") {
-				*deprecated = true
+				deprecated = true
 			}
 
 			lines = append(lines, line)
 		}
 	}
 
-	return lines
+	return lines, deprecated
 }
 
 func extractContent(s string) string {
