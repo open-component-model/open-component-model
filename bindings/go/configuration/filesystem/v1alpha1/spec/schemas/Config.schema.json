@@ -12,9 +12,13 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "filesystem.config.ocm.software",
-        "filesystem.config.ocm.software/v1alpha1"
+      "oneOf": [
+        {
+          "const": "filesystem.config.ocm.software"
+        },
+        {
+          "const": "filesystem.config.ocm.software/v1alpha1"
+        }
       ]
     },
     "workingDirectory": {

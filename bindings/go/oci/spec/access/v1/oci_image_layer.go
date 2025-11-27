@@ -28,8 +28,8 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type OCIImageLayer struct {
-	// +ocm:jsonschema-gen:enum=OCIImageLayer,OCIImageLayer/v1
-	// +ocm:jsonschema-gen:enum=ociBlob,ociBlob/v1
+	// +ocm:jsonschema-gen:enum=OCIImageLayer/v1
+	// +ocm:jsonschema-gen:enum:deprecated=OCIImageLayer,ociBlob,ociBlob/v1
 	Type runtime.Type `json:"type"`
 	// Reference is the oci reference to the OCI repository
 	Reference string `json:"ref"`

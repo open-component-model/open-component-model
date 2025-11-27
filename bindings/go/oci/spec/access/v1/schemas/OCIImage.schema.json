@@ -12,15 +12,31 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "OCIImage",
-        "OCIImage/v1",
-        "ociArtifact",
-        "ociArtifact/v1",
-        "ociRegistry",
-        "ociRegistry/v1",
-        "ociImage",
-        "ociImage/v1"
+      "oneOf": [
+        {
+          "const": "OCIImage"
+        },
+        {
+          "const": "OCIImage/v1"
+        },
+        {
+          "const": "ociArtifact"
+        },
+        {
+          "const": "ociArtifact/v1"
+        },
+        {
+          "const": "ociRegistry"
+        },
+        {
+          "const": "ociRegistry/v1"
+        },
+        {
+          "const": "ociImage"
+        },
+        {
+          "const": "ociImage/v1"
+        }
       ]
     }
   },

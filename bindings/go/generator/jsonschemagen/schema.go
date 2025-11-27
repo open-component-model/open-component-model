@@ -24,6 +24,8 @@ type JSONSchemaDraft202012 struct {
 	Description string `json:"description,omitempty"`
 	Format      string `json:"format,omitempty"`
 
+	Const any `json:"const,omitempty"`
+
 	// numeric validation
 	Minimum          *float64 `json:"minimum,omitempty"`
 	Maximum          *float64 `json:"maximum,omitempty"`
@@ -48,6 +50,8 @@ type JSONSchemaDraft202012 struct {
 
 	Required             []string      `json:"required,omitempty"`
 	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitempty"`
+
+	OneOf []*JSONSchemaDraft202012 `json:"oneOf,omitempty"`
 
 	// $defs support
 	Defs map[string]*JSONSchemaDraft202012 `json:"$defs,omitempty"`
@@ -269,11 +273,6 @@ func (g *Generator) schemaForIdentWithField(id *ast.Ident, ctx *universe.TypeInf
 		sch := &JSONSchemaDraft202012{
 			Ref: "#/$defs/" + universe.Definition(ti.Key),
 		}
-
-		// type level markers
-		typeMarkers := ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, BaseMarker)
-		ApplyEnumMarkers(sch, typeMarkers)
-		ApplyNumericMarkers(sch, typeMarkers)
 
 		// field level markers
 		fieldMarkers := ExtractMarkerMapFromField(field, BaseMarker)

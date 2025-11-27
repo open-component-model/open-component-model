@@ -24,13 +24,6 @@ func newPrimitiveSchema(
 		ApplyEnumMarkers(s, typeMarkers)
 	}
 
-	// apply field-level markers (override type-level ones) ---
-	fieldMarkers := ExtractMarkerMapFromField(field, BaseMarker)
-	if len(fieldMarkers) > 0 {
-		ApplyNumericMarkers(s, fieldMarkers)
-		ApplyEnumMarkers(s, fieldMarkers)
-	}
-
 	return s
 }
 

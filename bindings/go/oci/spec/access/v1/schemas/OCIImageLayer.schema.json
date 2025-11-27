@@ -27,11 +27,22 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "OCIImageLayer",
-        "OCIImageLayer/v1",
-        "ociBlob",
-        "ociBlob/v1"
+      "oneOf": [
+        {
+          "const": "OCIImageLayer/v1"
+        },
+        {
+          "deprecated": true,
+          "const": "OCIImageLayer"
+        },
+        {
+          "deprecated": true,
+          "const": "ociBlob"
+        },
+        {
+          "deprecated": true,
+          "const": "ociBlob/v1"
+        }
       ]
     }
   },

@@ -7,25 +7,21 @@
   "description": "Config defines configuration for signing based on AlgorithmRSASSAPSS or AlgorithmRSASSAPKCS1V15.",
   "properties": {
     "signatureAlgorithm": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.rsa.signing.v1alpha1.SignatureAlgorithm",
-      "enum": [
-        "RSASSA-PSS",
-        "RSASSA-PKCS1-V1_5"
-      ]
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.rsa.signing.v1alpha1.SignatureAlgorithm"
     },
     "signatureEncodingPolicy": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.rsa.signing.v1alpha1.SignatureEncodingPolicy",
-      "enum": [
-        "Plain",
-        "PEM"
-      ]
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.rsa.signing.v1alpha1.SignatureEncodingPolicy"
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "description": "Type identifies this configuration object’s runtime type.",
-      "enum": [
-        "RSASigningConfiguration",
-        "RSASigningConfiguration/v1alpha1"
+      "oneOf": [
+        {
+          "const": "RSASigningConfiguration"
+        },
+        {
+          "const": "RSASigningConfiguration/v1alpha1"
+        }
       ]
     }
   },
@@ -41,9 +37,13 @@
       "title": "SignatureAlgorithm",
       "type": "string",
       "description": "SignatureAlgorithm is the signature algorithm to use when creating new signatures.\nThis field is optional and defaults to AlgorithmRSASSAPSS. For verification, this field is ignored\nand the signature algorithm is inferred from the signature specification.",
-      "enum": [
-        "RSASSA-PSS",
-        "RSASSA-PKCS1-V1_5"
+      "oneOf": [
+        {
+          "const": "RSASSA-PSS"
+        },
+        {
+          "const": "RSASSA-PKCS1-V1_5"
+        }
       ]
     },
     "ocm.software.open-component-model.bindings.go.rsa.signing.v1alpha1.SignatureEncodingPolicy": {
@@ -53,9 +53,13 @@
       "title": "SignatureEncodingPolicy",
       "type": "string",
       "description": "SignatureEncodingPolicy defines how signatures are serialized and stored.\nDifferent policies trade off compactness, self-containment, and ease of verification.",
-      "enum": [
-        "Plain",
-        "PEM"
+      "oneOf": [
+        {
+          "const": "Plain"
+        },
+        {
+          "const": "PEM"
+        }
       ]
     },
     "ocm.software.open-component-model.bindings.go.runtime.Type": {

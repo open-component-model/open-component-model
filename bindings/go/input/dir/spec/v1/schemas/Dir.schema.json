@@ -46,11 +46,19 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "Dir",
-        "Dir/v1",
-        "dir",
-        "dir/v1"
+      "oneOf": [
+        {
+          "const": "Dir"
+        },
+        {
+          "const": "Dir/v1"
+        },
+        {
+          "const": "dir"
+        },
+        {
+          "const": "dir/v1"
+        }
       ]
     }
   },

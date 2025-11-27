@@ -30,11 +30,19 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "Helm",
-        "Helm/v1",
-        "helm",
-        "helm/v1"
+      "oneOf": [
+        {
+          "const": "Helm"
+        },
+        {
+          "const": "Helm/v1"
+        },
+        {
+          "const": "helm"
+        },
+        {
+          "const": "helm/v1"
+        }
       ]
     },
     "version": {

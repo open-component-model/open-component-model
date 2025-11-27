@@ -5,8 +5,12 @@
   "title": "SignatureAlgorithm",
   "type": "string",
   "description": "SignatureAlgorithm is the signature algorithm to use when creating new signatures.\nThis field is optional and defaults to AlgorithmRSASSAPSS. For verification, this field is ignored\nand the signature algorithm is inferred from the signature specification.",
-  "enum": [
-    "RSASSA-PSS",
-    "RSASSA-PKCS1-V1_5"
+  "oneOf": [
+    {
+      "const": "RSASSA-PSS"
+    },
+    {
+      "const": "RSASSA-PKCS1-V1_5"
+    }
   ]
 }

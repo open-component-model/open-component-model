@@ -14,9 +14,13 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "generic.config.ocm.software",
-        "generic.config.ocm.software/v1"
+      "oneOf": [
+        {
+          "const": "generic.config.ocm.software"
+        },
+        {
+          "const": "generic.config.ocm.software/v1"
+        }
       ]
     }
   },

@@ -8,21 +8,45 @@
   "properties": {
     "baseUrl": {
       "type": "string",
-      "description": "BaseURL is the base url of the repository to resolve artifacts.\n\nExamples\n- https://registry.example.com\n- https://registry.example.com:5000\n- oci://registry.example.com:5000\n- docker.io\n- ghcr.io/open-component-model/ocm"
+      "description": "BaseURL is the base url of the OCI registry (host + optional port).\nShould not include repository paths - use SubPath for that.\n\nExamples:\n- \"https://registry.example.com\"\n- \"https://registry.example.com:5000\"\n- \"oci://registry.example.com:5000\"\n- \"docker.io\"\n- \"ghcr.io\"\n\nIf BaseUrl contains a path (e.g., \"ghcr.io/org/repo\"),\nthe path will be auto-extracted and used as SubPath."
+    },
+    "subPath": {
+      "type": "string",
+      "description": "SubPath is an optional repository prefix path used for the OCM repository.\nThe OCM-based artifacts will use this path as a repository prefix.\nAn OCI registry may host many OCM repositories with different repository prefixes.\n\nAuto-extraction: If not specified and BaseUrl contains a path component,\nthe path will be automatically extracted and used as SubPath.\n\nExamples:\nExplicit separation:\nBaseUrl=\"ghcr.io\" + SubPath=\"open-component-model/ocm\"\n→ Registry: ghcr.io, Repository prefix: open-component-model/ocm\n\nEmbedded path:\nBaseUrl=\"ghcr.io/open-component-model/ocm\" + SubPath=\"\"\n→ Auto-extracts to: BaseUrl=\"ghcr.io\", SubPath=\"open-component-model/ocm\""
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "OCIRepository",
-        "OCIRepository/v1",
-        "OCI",
-        "OCI/v1",
-        "oci",
-        "oci/v1",
-        "OCIRegistry",
-        "OCIRegistry/v1",
-        "ociRegistry",
-        "ociRegistry/v1"
+      "oneOf": [
+        {
+          "const": "OCIRepository"
+        },
+        {
+          "const": "OCIRepository/v1"
+        },
+        {
+          "const": "OCI"
+        },
+        {
+          "const": "OCI/v1"
+        },
+        {
+          "const": "oci"
+        },
+        {
+          "const": "oci/v1"
+        },
+        {
+          "const": "OCIRegistry"
+        },
+        {
+          "const": "OCIRegistry/v1"
+        },
+        {
+          "const": "ociRegistry"
+        },
+        {
+          "const": "ociRegistry/v1"
+        }
       ]
     }
   },

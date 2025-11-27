@@ -20,11 +20,19 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "File",
-        "File/v1",
-        "file",
-        "file/v1"
+      "oneOf": [
+        {
+          "const": "File"
+        },
+        {
+          "const": "File/v1"
+        },
+        {
+          "const": "file"
+        },
+        {
+          "const": "file/v1"
+        }
       ]
     }
   },

@@ -5,8 +5,12 @@
   "title": "SignatureEncodingPolicy",
   "type": "string",
   "description": "SignatureEncodingPolicy defines how signatures are serialized and stored.\nDifferent policies trade off compactness, self-containment, and ease of verification.",
-  "enum": [
-    "Plain",
-    "PEM"
+  "oneOf": [
+    {
+      "const": "Plain"
+    },
+    {
+      "const": "PEM"
+    }
   ]
 }

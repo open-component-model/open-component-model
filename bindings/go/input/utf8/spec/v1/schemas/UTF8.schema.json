@@ -26,11 +26,19 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "UTF8",
-        "UTF8/v1",
-        "utf8",
-        "utf8/v1"
+      "oneOf": [
+        {
+          "const": "UTF8"
+        },
+        {
+          "const": "UTF8/v1"
+        },
+        {
+          "const": "utf8"
+        },
+        {
+          "const": "utf8/v1"
+        }
       ]
     },
     "yaml": {

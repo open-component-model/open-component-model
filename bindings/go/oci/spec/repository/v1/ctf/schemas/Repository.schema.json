@@ -16,13 +16,25 @@
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
-      "enum": [
-        "CommonTransportFormat",
-        "CommonTransportFormat/v1",
-        "CTF",
-        "CTF/v1",
-        "ctf",
-        "ctf/v1"
+      "oneOf": [
+        {
+          "const": "CommonTransportFormat"
+        },
+        {
+          "const": "CommonTransportFormat/v1"
+        },
+        {
+          "const": "CTF"
+        },
+        {
+          "const": "CTF/v1"
+        },
+        {
+          "const": "ctf"
+        },
+        {
+          "const": "ctf/v1"
+        }
       ]
     }
   },
