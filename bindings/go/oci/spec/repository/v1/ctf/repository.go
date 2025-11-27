@@ -27,6 +27,9 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Repository struct {
+	// +ocm:jsonschema-gen:enum=CommonTransportFormat,CommonTransportFormat/v1
+	// +ocm:jsonschema-gen:enum=CTF,CTF/v1
+	// +ocm:jsonschema-gen:enum=ctf,ctf/v1
 	Type runtime.Type `json:"type"`
 	// Path is the path of the CTF Archive on the filesystem.
 	//

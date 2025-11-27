@@ -11,7 +11,11 @@
       "description": "TempFolder defines places where plugins and other functionalities can put ephemeral files under.\nIf not defined, os.TempDir is used as a default."
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "enum": [
+        "filesystem.config.ocm.software",
+        "filesystem.config.ocm.software/v1alpha1"
+      ]
     },
     "workingDirectory": {
       "type": "string",

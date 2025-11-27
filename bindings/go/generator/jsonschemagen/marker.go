@@ -72,13 +72,11 @@ func ExtractMarkers(cg *ast.CommentGroup, base string) map[string]string {
 	for _, c := range cg.List {
 		line := extractCommentLine(c.Text)
 
-		// find first occurrence of "<base>:"
 		idx := strings.Index(line, base+":")
 		if idx < 0 {
 			continue
 		}
 
-		// everything after "<base>:"
 		rest := strings.TrimSpace(line[idx+len(base+":"):])
 		if rest == "" {
 			continue
@@ -93,19 +91,26 @@ func ExtractMarkers(cg *ast.CommentGroup, base string) map[string]string {
 				continue
 			}
 
-			// new key=value pair?
+			// key=value?
 			if kv := strings.SplitN(seg, "=", 2); len(kv) == 2 {
 				key := strings.TrimSpace(kv[0])
 				val := strings.TrimSpace(kv[1])
 				if key == "" || val == "" {
 					continue
 				}
-				out[key] = val
+
+				// append if key already exists
+				if old, ok := out[key]; ok {
+					out[key] = old + "," + val
+				} else {
+					out[key] = val
+				}
+
 				lastKey = key
 				continue
 			}
 
-			// otherwise: continuation of previous key's value (value contains commas)
+			// continuation
 			if lastKey != "" {
 				out[lastKey] = out[lastKey] + "," + seg
 			}

@@ -25,6 +25,11 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Repository struct {
+	// +ocm:jsonschema-gen:enum=OCIRepository,OCIRepository/v1
+	// +ocm:jsonschema-gen:enum=OCI,OCI/v1
+	// +ocm:jsonschema-gen:enum=oci,oci/v1
+	// +ocm:jsonschema-gen:enum=OCIRegistry,OCIRegistry/v1
+	// +ocm:jsonschema-gen:enum=ociRegistry,ociRegistry/v1
 	Type runtime.Type `json:"type"`
 	// BaseURL is the base url of the repository to resolve artifacts.
 	//

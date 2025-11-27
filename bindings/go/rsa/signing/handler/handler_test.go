@@ -46,14 +46,14 @@ func Test_RSA_Handler(t *testing.T) {
 	} {
 		hashCfg := hashCfg
 		t.Run(hashCfg.String(), func(t *testing.T) {
-			for _, alg := range []string{
+			for _, alg := range []v1alpha1.SignatureAlgorithm{
 				v1alpha1.AlgorithmRSASSAPSS,
 				v1alpha1.AlgorithmRSASSAPKCS1V15,
 			} {
 				alg := alg
 				d := digestHex(hashCfg, testData)
 
-				t.Run(alg, func(t *testing.T) {
+				t.Run(string(alg), func(t *testing.T) {
 					// used for a dynamic root
 					var rootPEM string
 
@@ -252,9 +252,9 @@ func Test_RSA_Handler(t *testing.T) {
 }
 
 func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
-	for _, alg := range []string{v1alpha1.AlgorithmRSASSAPSS, v1alpha1.AlgorithmRSASSAPKCS1V15} {
+	for _, alg := range []v1alpha1.SignatureAlgorithm{v1alpha1.AlgorithmRSASSAPSS, v1alpha1.AlgorithmRSASSAPKCS1V15} {
 		alg := alg
-		t.Run(alg, func(t *testing.T) {
+		t.Run(string(alg), func(t *testing.T) {
 			h, err := New(false)
 			require.NoError(t, err)
 
@@ -346,7 +346,7 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 			})
 
 			t.Run("PEM with mismatched Algorithm header", func(t *testing.T) {
-				bad := strings.Replace(si.Value, "Algorithm: "+alg, "Algorithm: ED25519", 1)
+				bad := strings.Replace(si.Value, string("Algorithm: "+alg), "Algorithm: ED25519", 1)
 				err := h.Verify(t.Context(), descruntime.Signature{
 					Digest: d, Signature: descruntime.SignatureInfo{
 						Algorithm: si.Algorithm,
@@ -371,7 +371,7 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 				s := descruntime.Signature{
 					Digest: d,
 					Signature: descruntime.SignatureInfo{
-						Algorithm: alg,
+						Algorithm: string(alg),
 						MediaType: "application/unknown",
 						Value:     "deadbeef",
 					},
@@ -391,16 +391,16 @@ func Test_RSA_Identity(t *testing.T) {
 	d := descruntime.Digest{HashAlgorithm: "sha256", Value: "00"} // value irrelevant for identity
 
 	t.Run("GetSigningCredentialConsumerIdentity", func(t *testing.T) {
-		for _, alg := range []string{v1alpha1.AlgorithmRSASSAPSS, v1alpha1.AlgorithmRSASSAPKCS1V15} {
+		for _, alg := range []v1alpha1.SignatureAlgorithm{v1alpha1.AlgorithmRSASSAPSS, v1alpha1.AlgorithmRSASSAPKCS1V15} {
 			alg := alg
-			t.Run(alg, func(t *testing.T) {
+			t.Run(string(alg), func(t *testing.T) {
 				cfg := v1alpha1.Config{
 					SignatureAlgorithm:      alg,
 					SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
 				}
 				id, err := h.GetSigningCredentialConsumerIdentity(t.Context(), "sigA", d, &cfg)
 				require.NoError(t, err)
-				require.Equal(t, alg, id[IdentityAttributeAlgorithm])
+				require.Equal(t, string(alg), id[IdentityAttributeAlgorithm])
 				require.Equal(t, "sigA", id[IdentityAttributeSignature])
 			})
 		}
@@ -419,12 +419,12 @@ func Test_RSA_Identity(t *testing.T) {
 					Name:   "pss-plain",
 					Digest: descruntime.Digest{HashAlgorithm: "sha256", Value: "aa"},
 					Signature: descruntime.SignatureInfo{
-						Algorithm: v1alpha1.AlgorithmRSASSAPSS,
+						Algorithm: string(v1alpha1.AlgorithmRSASSAPSS),
 						MediaType: v1alpha1.MediaTypePlainRSASSAPSS,
 						Value:     "deadbeef",
 					},
 				},
-				want: v1alpha1.AlgorithmRSASSAPSS,
+				want: string(v1alpha1.AlgorithmRSASSAPSS),
 			},
 			{
 				name: "plain_pkcs1_infer_algorithm_from_media_when_empty",
@@ -436,7 +436,7 @@ func Test_RSA_Identity(t *testing.T) {
 						Value:     "deadbeef",
 					},
 				},
-				want: v1alpha1.AlgorithmRSASSAPKCS1V15,
+				want: string(v1alpha1.AlgorithmRSASSAPKCS1V15),
 			},
 		}
 
@@ -471,12 +471,12 @@ func Test_RSA_Identity(t *testing.T) {
 					Name:   "pem-pss",
 					Digest: d,
 					Signature: descruntime.SignatureInfo{
-						Algorithm: v1alpha1.AlgorithmRSASSAPSS,
+						Algorithm: string(v1alpha1.AlgorithmRSASSAPSS),
 						MediaType: v1alpha1.MediaTypePEM,
-						Value:     newPEM(t, v1alpha1.AlgorithmRSASSAPSS),
+						Value:     newPEM(t, string(v1alpha1.AlgorithmRSASSAPSS)),
 					},
 				},
-				wantAlg: v1alpha1.AlgorithmRSASSAPSS,
+				wantAlg: string(v1alpha1.AlgorithmRSASSAPSS),
 			},
 			{
 				name: "pem_pkcs1_declared_matches",
@@ -484,12 +484,12 @@ func Test_RSA_Identity(t *testing.T) {
 					Name:   "pem-pkcs1",
 					Digest: d,
 					Signature: descruntime.SignatureInfo{
-						Algorithm: v1alpha1.AlgorithmRSASSAPKCS1V15,
+						Algorithm: string(v1alpha1.AlgorithmRSASSAPKCS1V15),
 						MediaType: v1alpha1.MediaTypePEM,
-						Value:     newPEM(t, v1alpha1.AlgorithmRSASSAPKCS1V15),
+						Value:     newPEM(t, string(v1alpha1.AlgorithmRSASSAPKCS1V15)),
 					},
 				},
-				wantAlg: v1alpha1.AlgorithmRSASSAPKCS1V15,
+				wantAlg: string(v1alpha1.AlgorithmRSASSAPKCS1V15),
 			},
 			{
 				name: "pem_declared_empty_uses_pem_alg",
@@ -499,10 +499,10 @@ func Test_RSA_Identity(t *testing.T) {
 					Signature: descruntime.SignatureInfo{
 						Algorithm: "",
 						MediaType: v1alpha1.MediaTypePEM,
-						Value:     newPEM(t, v1alpha1.AlgorithmRSASSAPSS),
+						Value:     newPEM(t, string(v1alpha1.AlgorithmRSASSAPSS)),
 					},
 				},
-				wantAlg: v1alpha1.AlgorithmRSASSAPSS,
+				wantAlg: string(v1alpha1.AlgorithmRSASSAPSS),
 			},
 			{
 				name: "pem_declared_mismatch_errors",
@@ -510,9 +510,9 @@ func Test_RSA_Identity(t *testing.T) {
 					Name:   "pem-mismatch",
 					Digest: d,
 					Signature: descruntime.SignatureInfo{
-						Algorithm: v1alpha1.AlgorithmRSASSAPSS,
+						Algorithm: string(v1alpha1.AlgorithmRSASSAPSS),
 						MediaType: v1alpha1.MediaTypePEM,
-						Value:     newPEM(t, v1alpha1.AlgorithmRSASSAPKCS1V15),
+						Value:     newPEM(t, string(v1alpha1.AlgorithmRSASSAPKCS1V15)),
 					},
 				},
 				wantErr: "algorithm mismatch",
@@ -523,7 +523,7 @@ func Test_RSA_Identity(t *testing.T) {
 					Name:   "pem-invalid",
 					Digest: d,
 					Signature: descruntime.SignatureInfo{
-						Algorithm: v1alpha1.AlgorithmRSASSAPSS,
+						Algorithm: string(v1alpha1.AlgorithmRSASSAPSS),
 						MediaType: v1alpha1.MediaTypePEM,
 						Value:     "-----BEGIN SIGNATURE-----\nnot-pem\n-----END SIGNATURE-----",
 					},

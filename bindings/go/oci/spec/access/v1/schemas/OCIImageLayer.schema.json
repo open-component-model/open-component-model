@@ -30,8 +30,8 @@
       "enum": [
         "OCIImageLayer",
         "OCIImageLayer/v1",
-        "ociBlob/v1",
-        "ociBlob"
+        "ociBlob",
+        "ociBlob/v1"
       ]
     }
   },

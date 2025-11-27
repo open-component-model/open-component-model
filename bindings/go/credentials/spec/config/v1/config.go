@@ -36,6 +36,7 @@ func MustRegister(scheme *runtime.Scheme) {
 // +ocm:jsonschema-gen=true
 type Config struct {
 	// Type specifies the type of the configuration
+	// +ocm:jsonschema-gen:enum=credentials.config.ocm.software,credentials.config.ocm.software/v1
 	Type runtime.Type `json:"type"`
 	// Repositories contains configuration entries for repositories
 	Repositories []RepositoryConfigEntry `json:"repositories,omitempty"`

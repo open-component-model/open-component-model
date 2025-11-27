@@ -11,6 +11,8 @@ import (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Dir struct {
+	// +ocm:jsonschema-gen:enum=Dir,Dir/v1
+	// +ocm:jsonschema-gen:enum=dir,dir/v1
 	Type runtime.Type `json:"type"`
 
 	// Path is the path to the directory.

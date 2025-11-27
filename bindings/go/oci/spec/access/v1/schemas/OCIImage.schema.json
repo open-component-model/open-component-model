@@ -15,12 +15,12 @@
       "enum": [
         "OCIImage",
         "OCIImage/v1",
-        "ociArtifact/v1",
         "ociArtifact",
-        "ociRegistry/v1",
+        "ociArtifact/v1",
         "ociRegistry",
-        "ociImage/v1",
-        "ociImage"
+        "ociRegistry/v1",
+        "ociImage",
+        "ociImage/v1"
       ]
     }
   },

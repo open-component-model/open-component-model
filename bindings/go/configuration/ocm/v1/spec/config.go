@@ -50,6 +50,7 @@ func init() {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Config struct {
+	// +ocm:jsonschema-gen:enum=ocm.config.ocm.software,ocm.config.ocm.software/v1
 	Type runtime.Type `json:"type"`
 
 	//nolint:gocritic // Deprecated field is okay

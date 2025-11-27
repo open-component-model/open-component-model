@@ -28,6 +28,7 @@ func init() {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Config struct {
+	// +ocm:jsonschema-gen:enum=extract.oci.artifact.ocm.software,extract.oci.artifact.ocm.software/v1alpha1
 	Type runtime.Type `json:"type"`
 	// Rules defines rules for extracting layers to specific files.
 	Rules []Rule `json:"rules,omitempty"`

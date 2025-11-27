@@ -21,6 +21,7 @@ import (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type DockerConfig struct {
+	// +ocm:jsonschema-gen:enum=DockerConfig,DockerConfig/v1
 	Type runtime.Type `json:"type"`
 	// The reference path to the docker config JSON
 	DockerConfigFile string `json:"dockerConfigFile,omitempty"`

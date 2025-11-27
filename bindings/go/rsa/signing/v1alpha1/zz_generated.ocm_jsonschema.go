@@ -12,7 +12,23 @@ import (
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
 
+//go:embed schemas/SignatureAlgorithm.schema.json
+var schemaSignatureAlgorithm []byte
+
+//go:embed schemas/SignatureEncodingPolicy.schema.json
+var schemaSignatureEncodingPolicy []byte
+
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
 	return schemaConfig
+}
+
+// JSONSchema returns the JSON Schema for SignatureAlgorithm.
+func (SignatureAlgorithm) JSONSchema() []byte {
+	return schemaSignatureAlgorithm
+}
+
+// JSONSchema returns the JSON Schema for SignatureEncodingPolicy.
+func (SignatureEncodingPolicy) JSONSchema() []byte {
+	return schemaSignatureEncodingPolicy
 }

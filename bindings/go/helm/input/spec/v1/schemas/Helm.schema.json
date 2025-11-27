@@ -29,7 +29,13 @@
       "description": "Repository is an OCI reference specifying the upload location of the fetched chart.\nThe reference MUST contain a version tag, and it needs to equal the version of the chart."
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "enum": [
+        "Helm",
+        "Helm/v1",
+        "helm",
+        "helm/v1"
+      ]
     },
     "version": {
       "type": "string",

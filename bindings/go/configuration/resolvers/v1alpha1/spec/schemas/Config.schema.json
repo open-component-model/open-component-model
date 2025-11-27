@@ -14,7 +14,11 @@
       }
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "enum": [
+        "resolvers.config.ocm.software",
+        "resolvers.config.ocm.software/v1alpha1"
+      ]
     }
   },
   "required": [

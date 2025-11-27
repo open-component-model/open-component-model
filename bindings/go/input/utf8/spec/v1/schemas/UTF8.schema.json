@@ -25,7 +25,13 @@
       "description": "Text is an UTF-8 string, raw encoded."
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "enum": [
+        "UTF8",
+        "UTF8/v1",
+        "utf8",
+        "utf8/v1"
+      ]
     },
     "yaml": {
       "type": "object",

@@ -28,6 +28,7 @@ func init() {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Config struct {
+	// +ocm:jsonschema-gen:enum=filesystem.config.ocm.software,filesystem.config.ocm.software/v1alpha1
 	Type runtime.Type `json:"type"`
 
 	// TempFolder defines places where plugins and other functionalities can put ephemeral files under.

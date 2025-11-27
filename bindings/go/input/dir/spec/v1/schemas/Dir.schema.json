@@ -45,7 +45,13 @@
       "description": "Reproducible defines that the attributes of the included files have to be normalized.\nThis is important if reproducible generation of blobs is required. In this case the blobs\nneed to be comparable on byte level (e.g. for hashing). So, if Reproducible is set to true,\nto get fully byte-equivalent blobs despite different file modification time, permission bits, etc.,\nthese attributes will be set to fixed values while creating the blob."
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "enum": [
+        "Dir",
+        "Dir/v1",
+        "dir",
+        "dir/v1"
+      ]
     }
   },
   "required": [
