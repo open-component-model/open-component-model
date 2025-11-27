@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -22,6 +23,7 @@ type Handler struct {
 // JSON to the plugin manager.
 type EndpointBuilder struct {
 	CurrentTypes types.Types
+	PluginSpec   pluginruntime.PluginSpec
 	Handlers     []Handler
 	Scheme       *runtime.Scheme
 }
@@ -46,4 +48,5 @@ func (c *EndpointBuilder) GetHandlers() []Handler {
 // AddConfigType adds a configuration type to the list of supported config types.
 func (c *EndpointBuilder) AddConfigType(typ ...runtime.Type) {
 	c.CurrentTypes.ConfigTypes = append(c.CurrentTypes.ConfigTypes, typ...)
+	c.PluginSpec.SupportedConfigTypes = append(c.PluginSpec.SupportedConfigTypes, typ...)
 }

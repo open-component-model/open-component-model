@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/blob/transformer"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -24,6 +25,20 @@ import (
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+var (
+	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+)
+
+func dummyCapability(schema []byte) v1.CapabilitySpec {
+	return v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.BlobTransformerPluginType)),
+		SupportedTransformerSpecTypes: []mtypes.Type{{
+			Type:       dummyType,
+			JSONSchema: schema,
+		}},
+	}
+}
 
 func TestPluginFlow(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-blobtransformer")
@@ -41,13 +56,9 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         id,
 		Type:       mtypes.Socket,
-		PluginType: mtypes.BlobTransformerPluginType,
+		PluginType: v1.BlobTransformerPluginType,
 	}
 	serialized, err := json.Marshal(config)
-	require.NoError(t, err)
-
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
@@ -64,26 +75,19 @@ func TestPluginFlow(t *testing.T) {
 		ID:     "test-plugin-blob-transformer",
 		Path:   path,
 		Config: config,
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.BlobTransformerPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
-		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 		Stderr: stderr,
 	}
-	require.NoError(t, registry.AddPlugin(plugin, typ))
-	p, err := scheme.NewObject(typ)
+	capability := dummyCapability([]byte(`{}`))
+	require.NoError(t, registry.AddPlugin(plugin, &capability))
+	p, err := scheme.NewObject(dummyType)
 	require.NoError(t, err)
 	retrievedPlugin, err := registry.GetPlugin(ctx, p)
 	require.NoError(t, err)
 
 	transformedBlob, err := retrievedPlugin.TransformBlob(ctx, inmemory.New(strings.NewReader("foobar")), &dummyv1.Repository{
-		Type:    typ,
+		Type:    dummyType,
 		BaseUrl: "test-base-url",
 	}, nil)
 	require.NoError(t, err)
@@ -147,36 +151,34 @@ func TestAddPluginDuplicate(t *testing.T) {
 	dummytype.MustAddToScheme(scheme)
 	registry := NewBlobTransformerRegistry(ctx)
 
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
-	require.NoError(t, err)
-
 	plugin := mtypes.Plugin{
 		ID:   "test-plugin-duplicate",
 		Path: "/path/to/plugin",
 		Config: mtypes.Config{
 			ID:         "test-plugin-duplicate",
 			Type:       mtypes.Socket,
-			PluginType: mtypes.BlobTransformerPluginType,
-		},
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.BlobTransformerPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
+			PluginType: v1.BlobTransformerPluginType,
 		},
 	}
 
 	// First registration should succeed
-	require.NoError(t, registry.AddPlugin(plugin, typ))
+	capability := v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.BlobTransformerPluginType)),
+		SupportedTransformerSpecTypes: []mtypes.Type{
+			{
+				Type:       dummyType,
+				Aliases:    nil,
+				JSONSchema: []byte(`{}`),
+			},
+		},
+	}
+
+	require.NoError(t, registry.AddPlugin(plugin, &capability))
 
 	// Second registration should fail
-	err = registry.AddPlugin(plugin, typ)
+	err := registry.AddPlugin(plugin, &capability)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "plugin for type")
-	require.Contains(t, err.Error(), "already registered with ID: test-plugin-duplicate")
+	require.Contains(t, err.Error(), "plugin with ID test-plugin-duplicate already registered")
 }
 
 func TestGetPluginWithEmptyType(t *testing.T) {

@@ -30,8 +30,8 @@ func TestPing(t *testing.T) {
 	plugin := NewPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.BlobTransformerPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: v1.BlobTransformerPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	err := plugin.Ping(context.Background())
 	assert.NoError(t, err)
@@ -65,12 +65,12 @@ func TestTransformBlob(t *testing.T) {
 	plugin := NewPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.BlobTransformerPluginType,
-	}, server.URL, schema)
+		PluginType: v1.BlobTransformerPluginType,
+	}, server.URL, dummyCapability(schema))
 
 	req := &v1.TransformBlobRequest[runtime.Typed]{
 		Specification: &dummyv1.Repository{
-			Type:    runtime.NewVersionedType("DummyRepository", "v1"),
+			Type:    dummyType,
 			BaseUrl: "ocm.software",
 		},
 	}
@@ -86,11 +86,13 @@ func TestTransformBlobValidationFail(t *testing.T) {
 	plugin := NewPlugin(http.DefaultClient, "test-plugin", "", types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.BlobTransformerPluginType,
-	}, "", schema)
+		PluginType: v1.BlobTransformerPluginType,
+	}, "", dummyCapability(schema))
 
 	req := &v1.TransformBlobRequest[runtime.Typed]{
-		Specification: &dummyv1.Repository{}, // missing required fields
+		Specification: &dummyv1.Repository{
+			Type: dummyType,
+		}, // missing required fields
 	}
 	_, err = plugin.TransformBlob(context.Background(), req, map[string]string{})
 	assert.ErrorContains(t, err, "validation")
@@ -115,8 +117,8 @@ func TestGetIdentity(t *testing.T) {
 	plugin := NewPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.BlobTransformerPluginType,
-	}, server.URL, schema)
+		PluginType: v1.BlobTransformerPluginType,
+	}, server.URL, dummyCapability(schema))
 
 	req := &v1.GetIdentityRequest[runtime.Typed]{
 		Typ: &dummyv1.Repository{
@@ -135,11 +137,13 @@ func TestGetIdentityValidationFail(t *testing.T) {
 	plugin := NewPlugin(http.DefaultClient, "test-plugin", "", types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.BlobTransformerPluginType,
-	}, "", schema)
+		PluginType: v1.BlobTransformerPluginType,
+	}, "", dummyCapability(schema))
 
 	req := &v1.GetIdentityRequest[runtime.Typed]{
-		Typ: &dummyv1.Repository{}, // missing required fields
+		Typ: &dummyv1.Repository{
+			Type: dummyType,
+		}, // missing required fields
 	}
 	_, err = plugin.GetIdentity(context.Background(), req)
 	assert.ErrorContains(t, err, "validation")

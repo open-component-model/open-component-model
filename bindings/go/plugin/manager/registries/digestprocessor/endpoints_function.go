@@ -3,7 +3,7 @@ package digestprocessor
 import (
 	"fmt"
 
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
+	digestprocessorv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -23,13 +23,9 @@ const (
 // during lookup the right endpoint + type is used.
 func RegisterDigestProcessor[T runtime.Typed](
 	proto T,
-	handler v1.ResourceDigestProcessorContract,
+	handler digestprocessorv1.ResourceDigestProcessorContract,
 	c *endpoints.EndpointBuilder,
 ) error {
-	if c.CurrentTypes.Types == nil {
-		c.CurrentTypes.Types = map[types.PluginType][]types.Type{}
-	}
-
 	typ, err := c.Scheme.TypeForPrototype(proto)
 	if err != nil {
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
@@ -48,11 +44,16 @@ func RegisterDigestProcessor[T runtime.Typed](
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
 
-	c.CurrentTypes.Types[types.DigestProcessorPluginType] = append(c.CurrentTypes.Types[types.DigestProcessorPluginType],
-		types.Type{
-			Type:       typ,
-			JSONSchema: schema,
-		})
+	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &digestprocessorv1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(digestprocessorv1.DigestProcessorPluginType)),
+		SupportedAccessTypes: []types.Type{
+			{
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
+			},
+		},
+	})
 
 	return nil
 }
