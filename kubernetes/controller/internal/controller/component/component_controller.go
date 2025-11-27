@@ -34,6 +34,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 )
@@ -249,6 +250,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
 	if err != nil {
+		if errors.Is(err, workerpool.ErrResolutionInProgress) {
+			status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+		}
+
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)

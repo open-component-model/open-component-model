@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/fluxcd/pkg/runtime/conditions"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/fluxcd/pkg/apis/meta"
+	"github.com/fluxcd/pkg/runtime/conditions"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -83,7 +84,7 @@ var _ = Describe("Component Controller", func() {
 			Expect(components.Items).To(HaveLen(0))
 		})
 
-		It("reconcileComponent a component", func(ctx SpecContext) {
+		It("reconciles a component", func(ctx SpecContext) {
 			By("creating a component version")
 			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
 				{
@@ -119,6 +120,74 @@ var _ = Describe("Component Controller", func() {
 				Status: v1alpha1.ComponentStatus{},
 			}
 			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": Version1,
+			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("returns a Resolution-in-Prograss error on the first hit", func(ctx SpecContext) {
+			By("creating a component version")
+			_, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    "1.0.0",
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			// This is a bit awkward because we trust that we will be faster than the reconciler (which is most of the
+			// time the case).
+			By("checking that the component returns ResolutionInProgress on first reconciliation")
+			Eventually(func(ctx context.Context) error {
+				comp := &v1alpha1.Component{}
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(component), comp)
+				if err != nil {
+					return err
+				}
+
+				reason := conditions.GetReason(comp, "Ready")
+				if reason != v1alpha1.ResolutionInProgress {
+					return fmt.Errorf(
+						"expected component ready-condition reason to be %s, but it was %s",
+						v1alpha1.ResolutionInProgress,
+						reason,
+					)
+				}
+
+				return nil
+			}, "15s").WithContext(ctx).Should(Succeed())
 
 			By("checking that the component has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
