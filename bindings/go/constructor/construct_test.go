@@ -233,7 +233,7 @@ components:
 
 	// External repository with external descriptor
 	externalRepo, err := ocirepository.NewFromCTFRepoV1(t.Context(), &ctf.Repository{
-		Path:       t.TempDir(),
+		FilePath:   t.TempDir(),
 		AccessMode: ctf.AccessModeReadWrite,
 	})
 	require.NoError(t, err)

@@ -34,7 +34,7 @@ func Test_RSA_Handler(t *testing.T) {
 	bCert := mustSelfSigned(t, "other", bKey)
 	_, bPub := writeKeyAndChain(t, t.TempDir(), bKey, bCert)
 
-	h, err := New(false)
+	h, err := New(v1alpha1.Scheme, false)
 	require.NoError(t, err)
 
 	testData := []byte("hello world")
@@ -255,7 +255,7 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 	for _, alg := range []v1alpha1.SignatureAlgorithm{v1alpha1.AlgorithmRSASSAPSS, v1alpha1.AlgorithmRSASSAPKCS1V15} {
 		alg := alg
 		t.Run(string(alg), func(t *testing.T) {
-			h, err := New(false)
+			h, err := New(v1alpha1.Scheme, false)
 			require.NoError(t, err)
 
 			// Keys and certs.
@@ -385,7 +385,7 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 }
 
 func Test_RSA_Identity(t *testing.T) {
-	h, err := New(false)
+	h, err := New(v1alpha1.Scheme, false)
 	require.NoError(t, err)
 
 	d := descruntime.Digest{HashAlgorithm: "sha256", Value: "00"} // value irrelevant for identity

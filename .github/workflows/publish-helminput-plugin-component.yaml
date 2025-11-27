@@ -47,7 +47,7 @@ jobs:
       attestations: write
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ env.REF }}
           repository: ${{ env.CHECKOUT_REPO }}
@@ -65,7 +65,7 @@ jobs:
             await script.default({ core });
 
       - name: Setup Go
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: bindings/go/helm/go.mod
           cache-dependency-path: bindings/go/helm/go.sum
@@ -125,7 +125,8 @@ jobs:
       group: helm-plugin-publish-${{ github.ref }}
       cancel-in-progress: false
     permissions:
-      contents: read
+      # contents write is required to trigger the plugin registry root component update on successful publishing
+      contents: write
       packages: write
     steps:
       - name: Download build artifacts
@@ -221,6 +222,19 @@ jobs:
               ${OCM_REPOSITORY}//ocm.software/plugins/helminput:${VERSION} \
               --output /tmp/plugin \
               --config "/.ocmconfig"
+
+      - name: Trigger plugin registry update
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: plugin-published
+          client-payload: |
+            {
+              "plugin_name": "helminput",
+              "plugin_version": "${{ needs.build.outputs.version }}",
+              "plugin_component": "ocm.software/plugins/helminput"
+            }
 
       - name: Summary
         env:
