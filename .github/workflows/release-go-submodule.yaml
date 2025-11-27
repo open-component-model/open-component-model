@@ -177,7 +177,8 @@ jobs:
     uses: ./.github/workflows/publish-helminput-plugin-component.yaml
     secrets: inherit
     permissions:
-      contents: read
+      # write is now requested because the helminput flow also triggers the registry update.
+      contents: write
       id-token: write
       attestations: write
       packages: write
