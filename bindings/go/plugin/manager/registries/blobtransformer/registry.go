@@ -21,34 +21,6 @@ type constructedPlugin struct {
 	cmd *exec.Cmd
 }
 
-// RegisterInternalBlobTransformerPlugin can be called by actual implementations in the source.
-// It will register any implementations directly for a given type and capability.
-func RegisterInternalBlobTransformerPlugin[T runtime.Typed](
-	scheme *runtime.Scheme,
-	r *Registry,
-	p transformer.Transformer,
-	prototype T,
-) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	typ, err := scheme.TypeForPrototype(prototype)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", prototype, err)
-	}
-
-	r.internal[typ] = p
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internal[alias] = r.internal[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
-		return fmt.Errorf("failed to register prototype %T: %w", prototype, err)
-	}
-
-	return nil
-}
-
 // Registry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
 type Registry struct {
 	ctx                context.Context
@@ -63,6 +35,28 @@ type Registry struct {
 	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
 	// that their type is registered or not.
 	scheme *runtime.Scheme
+}
+
+// RegisterInternalBlobTransformerPlugin can be called by actual implementations in the source.
+// It will register any implementations directly for a given type and capability.
+func (r *Registry) RegisterInternalBlobTransformerPlugin(
+	plugin BuiltinBlobTransformer,
+) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for providerType, providerTypeAliases := range plugin.GetTransformerScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(plugin.GetTransformerScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
+
+		r.internal[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internal[alias] = r.internal[providerType]
+		}
+	}
+
+	return nil
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
@@ -141,28 +135,21 @@ func (r *Registry) GetPlugin(ctx context.Context, spec runtime.Typed) (transform
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, err := r.scheme.DefaultType(spec); err != nil {
-		return nil, fmt.Errorf("failed to default type for prototype %T: %w", spec, err)
-	}
+	_, _ = r.scheme.DefaultType(spec)
+	typ := spec.GetType()
 	// if we find the type has been registered internally, we look for internal plugins for it.
-	if typ, err := r.scheme.TypeForPrototype(spec); err == nil {
+	if ok := r.scheme.IsRegistered(typ); ok {
 		p, ok := r.internal[typ]
 		if !ok {
 			return nil, fmt.Errorf("no internal plugin registered for type %v", typ)
 		}
-		return p, nil
-	}
 
-	// if we don't find the type registered internally, we look for external plugins by using the type
-	// from the specification.
-	typ := spec.GetType()
-	if typ.IsEmpty() {
-		return nil, fmt.Errorf("external plugins can not be fetched without a type %T", spec)
+		return p, nil
 	}
 
 	plugin, err := r.getPlugin(ctx, typ)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
+		return nil, err
 	}
 
 	return r.externalToBlobTransformerConverter(plugin, r.scheme), nil

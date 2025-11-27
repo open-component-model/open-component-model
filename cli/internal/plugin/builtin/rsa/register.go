@@ -20,17 +20,12 @@ func Register(
 		return err
 	}
 
-	hdlr, err := handler.New(true)
+	hdlr, err := handler.New(scheme, true)
 	if err != nil {
 		return err
 	}
 
 	return errors.Join(
-		signinghandler.RegisterInternalComponentSignatureHandler(
-			scheme,
-			signingHandlerRegistry,
-			hdlr,
-			&v1alpha1.Config{},
-		),
+		signingHandlerRegistry.RegisterInternalComponentSignatureHandler(hdlr),
 	)
 }
