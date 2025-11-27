@@ -44,6 +44,7 @@ type JSONSchemaDraft202012 struct {
 	MinProperties *int                              `json:"minProperties,omitempty"`
 	MaxProperties *int                              `json:"maxProperties,omitempty"`
 	Properties    map[string]*JSONSchemaDraft202012 `json:"properties,omitempty"`
+	Enum          []any                             `json:"enum,omitempty"`
 
 	Required             []string      `json:"required,omitempty"`
 	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitempty"`
@@ -165,7 +166,7 @@ func (g *Generator) buildAliasSchema(ti *universe.TypeInfo) *JSONSchemaDraft2020
 			ID:      g.schemaID(ti),
 			Title:   ti.Key.TypeName,
 			Type:    "array",
-			Items:   g.schemaForExpr(t.Elt, ti),
+			Items:   g.schemaForExprWithOptionalField(t.Elt, ti, nil),
 		}
 	case *ast.MapType: // type Foo map[string]Bar
 		return &JSONSchemaDraft202012{
@@ -175,7 +176,7 @@ func (g *Generator) buildAliasSchema(ti *universe.TypeInfo) *JSONSchemaDraft2020
 			Title:   ti.Key.TypeName,
 			Type:    "object",
 			AdditionalProperties: &SchemaOrBool{
-				Schema: g.schemaForExpr(t.Value, ti),
+				Schema: g.schemaForExprWithOptionalField(t.Value, ti, nil),
 			},
 		}
 	}
@@ -197,7 +198,7 @@ func (g *Generator) buildStructProperties(st *ast.StructType, ti *universe.TypeI
 			continue
 		}
 
-		sch := g.schemaForExprWithField(field.Type, ti, field)
+		sch := g.schemaForExprWithOptionalField(field.Type, ti, field)
 
 		desc, deprecated := extractFieldDoc(field)
 		if desc != "" {
@@ -231,24 +232,28 @@ func (g *Generator) buildStructRequired(st *ast.StructType) []string {
 	return req
 }
 
-func (g *Generator) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo) *JSONSchemaDraft202012 {
+func (g *Generator) schemaForExprWithOptionalField(
+	expr ast.Expr,
+	ctx *universe.TypeInfo,
+	field *ast.Field,
+) *JSONSchemaDraft202012 {
 	switch t := expr.(type) {
 	case *ast.Ident:
-		return g.schemaForExprWithField(t, ctx, nil)
+		return g.schemaForIdentWithField(t, ctx, field)
 	case *ast.SelectorExpr:
-		return g.schemaForSelector(t, ctx)
+		return g.schemaForSelector(t, ctx, field)
 	case *ast.StarExpr:
-		return g.schemaForExpr(t.X, ctx)
+		return g.schemaForExprWithOptionalField(t.X, ctx, field)
 	case *ast.ArrayType:
 		return &JSONSchemaDraft202012{
 			Type:  "array",
-			Items: g.schemaForExpr(t.Elt, ctx),
+			Items: g.schemaForExprWithOptionalField(t.Elt, ctx, field),
 		}
 	case *ast.MapType:
 		return &JSONSchemaDraft202012{
 			Type: "object",
 			AdditionalProperties: &SchemaOrBool{
-				Schema: g.schemaForExpr(t.Value, ctx),
+				Schema: g.schemaForExprWithOptionalField(t.Value, ctx, field),
 			},
 		}
 	case *ast.StructType:
@@ -258,33 +263,24 @@ func (g *Generator) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo) *JSONSc
 	}
 }
 
-func (g *Generator) schemaForExprWithField(expr ast.Expr, ctx *universe.TypeInfo, field *ast.Field) *JSONSchemaDraft202012 {
-	switch t := expr.(type) {
-	case *ast.Ident:
-		return g.schemaForIdentWithField(t, ctx, field)
-	case *ast.StarExpr:
-		return g.schemaForExprWithField(t.X, ctx, field)
-	case *ast.ArrayType:
-		return &JSONSchemaDraft202012{
-			Type:  "array",
-			Items: g.schemaForExprWithField(t.Elt, ctx, field),
-		}
-	case *ast.MapType:
-		return &JSONSchemaDraft202012{
-			Type: "object",
-			AdditionalProperties: &SchemaOrBool{
-				Schema: g.schemaForExprWithField(t.Value, ctx, field),
-			},
-		}
-	default:
-		return g.schemaForExpr(expr, ctx)
-	}
-}
-
 func (g *Generator) schemaForIdentWithField(id *ast.Ident, ctx *universe.TypeInfo, field *ast.Field) *JSONSchemaDraft202012 {
 	// try to resolve named type → $ref
 	if ti, ok := g.U.ResolveIdent(ctx.FilePath, ctx.Key.PkgPath, id); ok {
-		return &JSONSchemaDraft202012{Ref: "#/$defs/" + universe.Definition(ti.Key)}
+		sch := &JSONSchemaDraft202012{
+			Ref: "#/$defs/" + universe.Definition(ti.Key),
+		}
+
+		// type level markers
+		typeMarkers := ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, BaseMarker)
+		ApplyEnumMarkers(sch, typeMarkers)
+		ApplyNumericMarkers(sch, typeMarkers)
+
+		// field level markers
+		fieldMarkers := ExtractMarkerMapFromField(field, BaseMarker)
+		ApplyEnumMarkers(sch, fieldMarkers)
+		ApplyNumericMarkers(sch, fieldMarkers)
+
+		return sch
 	}
 
 	// primitive with field markers
@@ -295,11 +291,23 @@ func (g *Generator) schemaForIdentWithField(id *ast.Ident, ctx *universe.TypeInf
 	return anyObjectSchema()
 }
 
-func (g *Generator) schemaForSelector(sel *ast.SelectorExpr, ctx *universe.TypeInfo) *JSONSchemaDraft202012 {
+func (g *Generator) schemaForSelector(sel *ast.SelectorExpr, ctx *universe.TypeInfo, field *ast.Field) *JSONSchemaDraft202012 {
+	var base *JSONSchemaDraft202012
 	if ti, ok := g.U.ResolveSelector(ctx.FilePath, sel); ok {
-		return &JSONSchemaDraft202012{Ref: "#/$defs/" + universe.Definition(ti.Key)}
+		base = &JSONSchemaDraft202012{Ref: "#/$defs/" + universe.Definition(ti.Key)}
+	} else {
+		base = anyObjectSchema()
 	}
-	return anyObjectSchema()
+	// type level markers
+	typeMarkers := ExtractMarkerMap(ctx.TypeSpec, ctx.GenDecl, BaseMarker)
+	ApplyEnumMarkers(base, typeMarkers)
+	ApplyNumericMarkers(base, typeMarkers)
+
+	// field level markers
+	fieldMarkers := ExtractMarkerMapFromField(field, BaseMarker)
+	ApplyEnumMarkers(base, fieldMarkers)
+	ApplyNumericMarkers(base, fieldMarkers)
+	return base
 }
 
 func (g *Generator) collectReachableQueue(root *universe.TypeInfo) []*universe.TypeInfo {
@@ -379,7 +387,7 @@ func (g *Generator) inlineAnonymousStruct(st *ast.StructType, ctx *universe.Type
 			continue
 		}
 
-		sch := g.schemaForExprWithField(field.Type, ctx, field)
+		sch := g.schemaForExprWithOptionalField(field.Type, ctx, field)
 
 		desc, deprecated := extractFieldDoc(field)
 		if desc != "" {

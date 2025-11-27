@@ -26,7 +26,13 @@
       "maximum": 9223372036854776000
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "enum": [
+        "OCIImageLayer",
+        "OCIImageLayer/v1",
+        "ociBlob/v1",
+        "ociBlob"
+      ]
     }
   },
   "required": [

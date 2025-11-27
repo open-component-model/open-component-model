@@ -11,7 +11,17 @@
       "description": "ImageReference is the actual reference to the oci image repository and tag."
     },
     "type": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type"
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
+      "enum": [
+        "OCIImage",
+        "OCIImage/v1",
+        "ociArtifact/v1",
+        "ociArtifact",
+        "ociRegistry/v1",
+        "ociRegistry",
+        "ociImage/v1",
+        "ociImage"
+      ]
     }
   },
   "required": [

@@ -20,6 +20,7 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type OCIImage struct {
+	// +ocm:jsonschema-gen:enum=OCIImage,OCIImage/v1,ociArtifact/v1,ociArtifact,ociRegistry/v1,ociRegistry,ociImage/v1,ociImage
 	Type runtime.Type `json:"type"`
 	// ImageReference is the actual reference to the oci image repository and tag.
 	ImageReference string `json:"imageReference"`

@@ -2,6 +2,7 @@ package jsonschemagen
 
 import (
 	"go/ast"
+	"maps"
 	"strconv"
 	"strings"
 )
@@ -29,8 +30,18 @@ func commentGroupHasMarker(cg *ast.CommentGroup, marker string) bool {
 	return false
 }
 
-func ExtractMarkerMapFromField(cg *ast.CommentGroup, base string) map[string]string {
-	return ExtractMarkers(cg, base)
+func ExtractMarkerMapFromField(cg *ast.Field, base string) map[string]string {
+	if cg == nil {
+		return map[string]string{}
+	}
+	result := map[string]string{}
+	if cg.Comment != nil {
+		maps.Copy(result, ExtractMarkers(cg.Comment, base))
+	}
+	if cg.Doc != nil {
+		maps.Copy(result, ExtractMarkers(cg.Doc, base))
+	}
+	return result
 }
 
 func ExtractMarkerMap(ts *ast.TypeSpec, gd *ast.GenDecl, base string) map[string]string {
@@ -59,36 +70,44 @@ func ExtractMarkers(cg *ast.CommentGroup, base string) map[string]string {
 	}
 
 	for _, c := range cg.List {
-		// normalize comment text
 		line := extractCommentLine(c.Text)
 
-		// must contain "+ocm:jsonschema-gen:"
-		if !strings.Contains(line, base+":") {
+		// find first occurrence of "<base>:"
+		idx := strings.Index(line, base+":")
+		if idx < 0 {
 			continue
 		}
 
-		// split into fields (spaces may separate multiple)
-		fields := strings.Fields(line)
-		for _, f := range fields {
-			if !strings.HasPrefix(f, base+":") {
+		// everything after "<base>:"
+		rest := strings.TrimSpace(line[idx+len(base+":"):])
+		if rest == "" {
+			continue
+		}
+
+		segments := strings.Split(rest, ",")
+
+		var lastKey string
+		for _, seg := range segments {
+			seg = strings.TrimSpace(seg)
+			if seg == "" {
 				continue
 			}
 
-			// remove "+ocm:jsonschema-gen:"
-			rest := strings.TrimPrefix(f, base+":")
-
-			// allow: key=value,key2=value2
-			entries := strings.Split(rest, ",")
-			for _, e := range entries {
-				kv := strings.SplitN(strings.TrimSpace(e), "=", 2)
-				if len(kv) != 2 {
-					continue
-				}
+			// new key=value pair?
+			if kv := strings.SplitN(seg, "=", 2); len(kv) == 2 {
 				key := strings.TrimSpace(kv[0])
 				val := strings.TrimSpace(kv[1])
-				if key != "" && val != "" {
-					out[key] = val
+				if key == "" || val == "" {
+					continue
 				}
+				out[key] = val
+				lastKey = key
+				continue
+			}
+
+			// otherwise: continuation of previous key's value (value contains commas)
+			if lastKey != "" {
+				out[lastKey] = out[lastKey] + "," + seg
 			}
 		}
 	}
@@ -144,5 +163,51 @@ func ApplyNumericMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 		if set, exists := setters[key]; exists {
 			set(f)
 		}
+	}
+}
+
+func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
+	if s == nil || len(markers) == 0 {
+		return
+	}
+
+	raw, ok := markers["enum"]
+	if !ok {
+		return
+	}
+
+	// Split: enum=foo,bar,baz
+	entries := strings.Split(raw, ",")
+	out := make([]any, 0, len(entries))
+
+	for _, e := range entries {
+		v := strings.TrimSpace(e)
+		if v == "" {
+			continue
+		}
+
+		// Infer type based on schema.Type
+		switch s.Type {
+		case "string":
+			out = append(out, v)
+
+		case "integer":
+			if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+				out = append(out, i)
+			}
+
+		case "number":
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				out = append(out, f)
+			}
+
+		default:
+			// fallback: always string
+			out = append(out, v)
+		}
+	}
+
+	if len(out) > 0 {
+		s.Enum = out
 	}
 }

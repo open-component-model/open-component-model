@@ -21,14 +21,14 @@ func newPrimitiveSchema(
 	typeMarkers := ExtractMarkerMap(ts, gd, BaseMarker)
 	if len(typeMarkers) > 0 {
 		ApplyNumericMarkers(s, typeMarkers)
+		ApplyEnumMarkers(s, typeMarkers)
 	}
 
 	// apply field-level markers (override type-level ones) ---
-	if field != nil && field.Doc != nil {
-		fieldMarkers := ExtractMarkerMapFromField(field.Doc, BaseMarker)
-		if len(fieldMarkers) > 0 {
-			ApplyNumericMarkers(s, fieldMarkers)
-		}
+	fieldMarkers := ExtractMarkerMapFromField(field, BaseMarker)
+	if len(fieldMarkers) > 0 {
+		ApplyNumericMarkers(s, fieldMarkers)
+		ApplyEnumMarkers(s, fieldMarkers)
 	}
 
 	return s
@@ -64,9 +64,9 @@ func primitiveBaseForIdent(ident *ast.Ident) *JSONSchemaDraft202012 {
 		return uintWithRange(math.MaxUint64)
 	// floats, with IEEE-754 smallest representable normal step
 	case "float32":
-		return numberWithRange(math.MaxFloat32, "float")
+		return numberWithRange(math.MaxFloat32)
 	case "float64":
-		return numberWithRange(math.MaxFloat64, "double")
+		return numberWithRange(math.MaxFloat64)
 	case "complex64", "complex128":
 		return &JSONSchemaDraft202012{Type: "string"}
 	default:
@@ -74,11 +74,10 @@ func primitiveBaseForIdent(ident *ast.Ident) *JSONSchemaDraft202012 {
 	}
 }
 
-func numberWithRange(maximum float64, format string) *JSONSchemaDraft202012 {
+func numberWithRange(maximum float64) *JSONSchemaDraft202012 {
 	return &JSONSchemaDraft202012{
 		Type:    "number",
 		Maximum: Ptr(maximum),
-		Format:  format,
 	}
 }
 
