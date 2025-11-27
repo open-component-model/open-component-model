@@ -307,3 +307,26 @@ func TestBuiltinRuntimeSchemas(t *testing.T) {
 	require.Equal(t, "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.schema.json", typSch.ID)
 	require.NotEmpty(t, typSch.Pattern)
 }
+
+func TestGenerate_FieldWithJSONDashExcludedFromRequired(t *testing.T) {
+	u := universe.New()
+	field := &ast.Field{
+		Names: []*ast.Ident{{Name: "Field"}},
+		Type:  &ast.Ident{Name: "string"},
+		Tag:   &ast.BasicLit{Value: "`json:\"-\"`"},
+	}
+
+	st := &ast.StructType{
+		Fields: &ast.FieldList{
+			List: []*ast.Field{field},
+		},
+	}
+
+	root := mkTypeInfo("example.com/pkg", "TestStruct", nil, st)
+	u.Types[root.Key] = root
+
+	g := jsonschemagen.New(u)
+	s := g.GenerateJSONSchemaDraft202012(root)
+
+	require.NotContains(t, s.Required, "-")
+}

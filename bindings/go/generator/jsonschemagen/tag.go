@@ -39,26 +39,15 @@ func parseJSONTag(f *ast.Field) (string, []string) {
 	return name, opts
 }
 
-// jsonTagName returns the json tag's name, including "-".
-// If the name is empty (e.g. `json:",omitempty"`), it falls back.
-func jsonTagName(f *ast.Field, fallback string) string {
-	name, _ := parseJSONTag(f)
+// parseJSONTagWithFieldNameFallback returns (name, options).
+// If the JSON tag name is empty, it falls back to the field name.
+// For tag `json:"foo,omitempty,string"` → ("foo", ["omitempty","string"])
+// For tag `json:"-"` → ("-", nil)
+// For missing tag on field Foo → ("Foo", nil)
+func parseJSONTagWithFieldNameFallback(f *ast.Field) (string, []string) {
+	name, opts := parseJSONTag(f)
 	if name == "" {
-		return fallback
+		return f.Names[0].Name, opts
 	}
-	return name
-}
-
-func jsonTagHasOmitEmpty(f *ast.Field) bool {
-	_, opts := parseJSONTag(f)
-	if len(opts) == 0 {
-		return false
-	}
-
-	for _, o := range opts {
-		if o == "omitempty" {
-			return true
-		}
-	}
-	return false
+	return name, opts
 }

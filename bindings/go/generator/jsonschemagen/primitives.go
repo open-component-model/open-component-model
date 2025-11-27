@@ -17,13 +17,13 @@ func newPrimitiveSchema(
 		return nil
 	}
 
-	// --- apply type-level markers: +ocm:jsonschema-gen:min=...,max=... ---
+	// apply type-level markers: +ocm:jsonschema-gen:min=...,max=... ---
 	typeMarkers := ExtractMarkerMap(ts, gd, BaseMarker)
 	if len(typeMarkers) > 0 {
 		ApplyNumericMarkers(s, typeMarkers)
 	}
 
-	// --- apply field-level markers (override type-level ones) ---
+	// apply field-level markers (override type-level ones) ---
 	if field != nil && field.Doc != nil {
 		fieldMarkers := ExtractMarkerMapFromField(field.Doc, BaseMarker)
 		if len(fieldMarkers) > 0 {
