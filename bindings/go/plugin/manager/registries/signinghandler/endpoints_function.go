@@ -177,13 +177,11 @@ func RegisterPlugin[CONTRACT v1.SignatureHandlerContract[T], T runtime.Typed](
 	// Add resource type to the plugin's types
 	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			typ.String(): schema,
-		},
 		SupportedSigningSpecTypes: []types.Type{
 			{
-				Type:    typ,
-				Aliases: nil,
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
 			},
 		},
 	})

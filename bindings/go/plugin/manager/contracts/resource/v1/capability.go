@@ -19,8 +19,11 @@ func init() {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// TODO(fabianburth): customize / optimize for resource
+//
+//	currently, it uses the general types.Type, but we might want to tailor this
+//	to resource specifically.
 type CapabilitySpec struct {
-	Type                 runtime.Type      `json:"type"`
-	TypeToJSONSchema     map[string][]byte `json:"typeToJSONSchema"`
-	SupportedAccessTypes []types.Type      `json:"supportedAccessTypes"`
+	Type                 runtime.Type `json:"type"`
+	SupportedAccessTypes []types.Type `json:"supportedAccessTypes"`
 }

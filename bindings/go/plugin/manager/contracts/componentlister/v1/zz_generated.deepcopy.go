@@ -14,21 +14,6 @@ import (
 func (in *CapabilitySpec) DeepCopyInto(out *CapabilitySpec) {
 	*out = *in
 	out.Type = in.Type
-	if in.TypeToJSONSchema != nil {
-		in, out := &in.TypeToJSONSchema, &out.TypeToJSONSchema
-		*out = make(map[string][]byte, len(*in))
-		for key, val := range *in {
-			var outVal []byte
-			if val == nil {
-				(*out)[key] = nil
-			} else {
-				in, out := &val, &outVal
-				*out = make([]byte, len(*in))
-				copy(*out, *in)
-			}
-			(*out)[key] = outVal
-		}
-	}
 	if in.SupportedRepositorySpecTypes != nil {
 		in, out := &in.SupportedRepositorySpecTypes, &out.SupportedRepositorySpecTypes
 		*out = make([]types.Type, len(*in))

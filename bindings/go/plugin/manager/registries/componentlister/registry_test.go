@@ -28,11 +28,9 @@ var (
 func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.ComponentListerPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			dummyType.String(): schema,
-		},
 		SupportedRepositorySpecTypes: []mtypes.Type{{
-			Type: dummyType,
+			Type:       dummyType,
+			JSONSchema: schema,
 		}},
 	}
 }

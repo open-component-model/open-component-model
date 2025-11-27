@@ -46,13 +46,11 @@ func RegisterDigestProcessor[T runtime.Typed](
 
 	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &digestprocessorv1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(digestprocessorv1.DigestProcessorPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			typ.String(): schema,
-		},
 		SupportedAccessTypes: []types.Type{
 			{
-				Type:    typ,
-				Aliases: nil,
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
 			},
 		},
 	})

@@ -23,11 +23,9 @@ var (
 func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.CredentialRepositoryPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			dummyType.String(): schema,
-		},
 		SupportedConsumerIdentityTypes: []types.Type{{
-			Type: dummyType,
+			Type:       dummyType,
+			JSONSchema: schema,
 		}},
 	}
 }

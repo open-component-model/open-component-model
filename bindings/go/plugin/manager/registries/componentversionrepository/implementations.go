@@ -307,12 +307,15 @@ func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
 		return errors.New("nil object provided")
 	}
 
-	jsonSchema, ok := r.capability.TypeToJSONSchema[obj.GetType().String()]
-	if !ok {
-		return fmt.Errorf("no JSON schema found for type %q in plugin %q", obj.GetType().String(), r.ID)
+	var schema []byte
+	for _, t := range r.capability.SupportedRepositorySpecTypes {
+		if !(t.Type == obj.GetType()) {
+			continue
+		}
+		schema = t.JSONSchema
 	}
 
-	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
+	valid, err := plugins.ValidatePlugin(obj, schema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)
 	}

@@ -334,8 +334,7 @@ func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
 	baseContext := context.Background()
 	pm := NewPluginManager(baseContext)
 	capabilitySpec := ocmrepositoryv1.CapabilitySpec{
-		Type:             runtime.NewUnversionedType(string(ocmrepositoryv1.ComponentVersionRepositoryPluginType)),
-		TypeToJSONSchema: nil,
+		Type: runtime.NewUnversionedType(string(ocmrepositoryv1.ComponentVersionRepositoryPluginType)),
 		SupportedRepositorySpecTypes: []types.Type{
 			{
 				Type: runtime.Type{

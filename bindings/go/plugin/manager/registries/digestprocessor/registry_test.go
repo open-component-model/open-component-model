@@ -29,11 +29,9 @@ var (
 func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.DigestProcessorPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			dummyType.String(): schema,
-		},
 		SupportedAccessTypes: []mtypes.Type{{
-			Type: dummyType,
+			Type:       dummyType,
+			JSONSchema: schema,
 		}},
 	}
 }
@@ -142,13 +140,11 @@ func TestShutdown(t *testing.T) {
 	}
 	capability := v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.DigestProcessorPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			dummyType.String(): []byte(`{}`),
-		},
 		SupportedAccessTypes: []mtypes.Type{
 			{
-				Type:    dummyType,
-				Aliases: nil,
+				Type:       dummyType,
+				Aliases:    nil,
+				JSONSchema: []byte(`{}`),
 			},
 		},
 	}

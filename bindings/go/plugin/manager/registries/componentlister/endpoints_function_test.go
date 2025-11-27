@@ -56,6 +56,7 @@ func TestRegisterComponentLister(t *testing.T) {
 	r.Len(capabilityList, 1)
 	capability := v1.CapabilitySpec{}
 	r.NoError(v1.Scheme.Convert(capabilityList[0], &capability))
-	r.Equal("DummyRepository/v1", capability.SupportedRepositorySpecTypes[0].Type.String())
-	r.NotEmpty(capability.TypeToJSONSchema["DummyRepository/v1"])
+	typeInfo := capability.SupportedRepositorySpecTypes[0]
+	r.Equal("DummyRepository/v1", typeInfo.Type.String())
+	r.NotEmpty(typeInfo.JSONSchema)
 }

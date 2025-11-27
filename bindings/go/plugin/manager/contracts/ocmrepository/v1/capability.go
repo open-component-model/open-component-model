@@ -16,21 +16,14 @@ func init() {
 
 // CapabilitySpec specifies the supported types of a plugin for
 // a particular capability type.
-// For the ComponentVersionRepository capability, it specifies the supported
-// repository spec types (e.g. oci, ctf, ...).
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// TODO(fabianburth): customize / optimize for ocm repository
+//
+//	currently, it uses the general types.Type, but we might want to tailor this
+//	to ocm repository specifically.
 type CapabilitySpec struct {
-	// Type is the Capability Type of the plugin (e.g. ComponentVersionRepository).
-	Type runtime.Type `json:"type"`
-	// TypeToJSONSchema is a map, mapping type names to their JSON schema definitions.
-	// It is implemented as a separate map instead of embedding it in types.Type
-	// to avoid having to duplicate the schema in cases where plugins may have
-	// input and output types that are the same.
-	TypeToJSONSchema map[string][]byte `json:"typeToJSONSchema"`
-	// Aliases map[string]runtime.Type `json:"aliases"` // mapping of canonical type (oci/v1alpha) to alias types (oci, oci/v1)
-	// GetComponentVersion only has a dynamic input type (repository spec) and a fixed output type (descriptor).
-	// So, we do not have to create a mapping from input to output types here.
+	Type                         runtime.Type `json:"type"`
 	SupportedRepositorySpecTypes []types.Type `json:"supportedRepositorySpecTypes"`
 }

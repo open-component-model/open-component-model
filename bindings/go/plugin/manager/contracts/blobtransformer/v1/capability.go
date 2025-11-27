@@ -19,8 +19,11 @@ func init() {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// TODO(fabianburth): customize / optimize for blob transformers
+//
+//	currently, it uses the general types.Type, but we might want to tailor this
+//	to blob transformers specifically.
 type CapabilitySpec struct {
-	Type                          runtime.Type      `json:"type"`
-	TypeToJSONSchema              map[string][]byte `json:"typeToJSONSchema"`
-	SupportedTransformerSpecTypes []types.Type      `json:"supportedTransformerSpecTypes"`
+	Type                          runtime.Type `json:"type"`
+	SupportedTransformerSpecTypes []types.Type `json:"supportedTransformerSpecTypes"`
 }

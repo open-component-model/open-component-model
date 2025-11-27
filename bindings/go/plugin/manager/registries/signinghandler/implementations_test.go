@@ -54,7 +54,7 @@ func TestPing(t *testing.T) {
 				ID:         "test-plugin",
 				Type:       types.TCP,
 				PluginType: v1.SigningHandlerPluginType,
-			}, server.URL, v1.CapabilitySpec{})
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			err := plugin.Ping(context.Background())
 			if tt.expectErr {
@@ -118,19 +118,7 @@ func TestGetSignerIdentity(t *testing.T) {
 				ID:         "test-plugin",
 				Type:       types.TCP,
 				PluginType: v1.SigningHandlerPluginType,
-			}, server.URL, v1.CapabilitySpec{
-				Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
-				TypeToJSONSchema: map[string][]byte{
-					dummyType.String(): []byte(`{}`),
-				},
-				SupportedSigningSpecTypes: []types.Type{
-					{
-						Type:       dummyType,
-						Aliases:    nil,
-						JSONSchema: nil,
-					},
-				},
-			})
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.GetSignerIdentity(context.Background(), tt.request)
 			if tt.expectErr {
@@ -197,19 +185,7 @@ func TestGetVerifierIdentity(t *testing.T) {
 				ID:         "test-plugin",
 				Type:       types.TCP,
 				PluginType: v1.SigningHandlerPluginType,
-			}, server.URL, v1.CapabilitySpec{
-				Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
-				TypeToJSONSchema: map[string][]byte{
-					dummyType.String(): []byte(`{}`),
-				},
-				SupportedSigningSpecTypes: []types.Type{
-					{
-						Type:       dummyType,
-						Aliases:    nil,
-						JSONSchema: nil,
-					},
-				},
-			})
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.GetVerifierIdentity(context.Background(), tt.request)
 			if tt.expectErr {
@@ -280,19 +256,7 @@ func TestSign(t *testing.T) {
 				ID:         "test-plugin",
 				Type:       types.TCP,
 				PluginType: v1.SigningHandlerPluginType,
-			}, server.URL, v1.CapabilitySpec{
-				Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
-				TypeToJSONSchema: map[string][]byte{
-					dummyType.String(): []byte(`{}`),
-				},
-				SupportedSigningSpecTypes: []types.Type{
-					{
-						Type:       dummyType,
-						Aliases:    nil,
-						JSONSchema: nil,
-					},
-				},
-			})
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.Sign(context.Background(), tt.request, tt.credentials)
 			if tt.expectErr {
@@ -337,19 +301,7 @@ func TestVerify(t *testing.T) {
 				ID:         "test-plugin",
 				Type:       types.TCP,
 				PluginType: v1.SigningHandlerPluginType,
-			}, server.URL, v1.CapabilitySpec{
-				Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
-				TypeToJSONSchema: map[string][]byte{
-					dummyType.String(): []byte(`{}`),
-				},
-				SupportedSigningSpecTypes: []types.Type{
-					{
-						Type:       dummyType,
-						Aliases:    nil,
-						JSONSchema: nil,
-					},
-				},
-			})
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.Verify(context.Background(), tt.request, tt.credentials)
 			if tt.expectErr {

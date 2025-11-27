@@ -43,13 +43,11 @@ func RegisterBlobTransformer[T runtime.Typed](
 
 	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &blobtransformerv1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(blobtransformerv1.BlobTransformerPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			typ.String(): schema,
-		},
 		SupportedTransformerSpecTypes: []types.Type{
 			{
-				Type:    typ,
-				Aliases: nil,
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
 			},
 		},
 	})

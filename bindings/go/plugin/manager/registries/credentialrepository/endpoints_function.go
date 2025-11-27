@@ -43,13 +43,11 @@ func RegisterCredentialRepository[T runtime.Typed](
 
 	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.CredentialRepositoryPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			typ.String(): schema,
-		},
 		SupportedCredentialRepositorySpecTypes: []types.Type{
 			{
-				Type:    typ,
-				Aliases: nil,
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
 			},
 		},
 	})

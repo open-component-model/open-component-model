@@ -67,13 +67,11 @@ func RegisterComponentVersionRepository[T runtime.Typed](
 
 	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &ocmrepositoryv1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(ocmrepositoryv1.ComponentVersionRepositoryPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			typ.String(): schema,
-		},
 		SupportedRepositorySpecTypes: []types.Type{
 			{
-				Type:    typ,
-				Aliases: nil,
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
 			},
 		},
 	})

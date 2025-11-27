@@ -126,13 +126,11 @@ func RegisterResourcePlugin[T runtime.Typed](
 	// Add resource type to the plugin's types
 	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.ResourceRepositoryPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			typ.String(): schema,
-		},
 		SupportedAccessTypes: []types.Type{
 			{
-				Type:    typ,
-				Aliases: nil,
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
 			},
 		},
 	})

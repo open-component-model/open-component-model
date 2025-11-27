@@ -26,11 +26,9 @@ var (
 func dummyCapability(schema []byte) inputv1.CapabilitySpec {
 	return inputv1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(inputv1.InputPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			dummyType.String(): schema,
-		},
 		SupportedInputTypes: []mtypes.Type{{
-			Type: dummyType,
+			Type:       dummyType,
+			JSONSchema: schema,
 		}},
 	}
 }

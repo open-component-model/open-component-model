@@ -12,17 +12,27 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
 var dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+
+func dummyCapability(schema []byte) v1.CapabilitySpec {
+	return v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
+		SupportedSigningSpecTypes: []mtypes.Type{{
+			Type:       dummyType,
+			JSONSchema: schema,
+		}},
+	}
+}
 
 type mockSigningHandler struct{ called bool }
 
@@ -98,18 +108,7 @@ func TestPluginFlow(t *testing.T) {
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	capability := v1.CapabilitySpec{
-		Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			dummyType.String(): []byte(`{}`),
-		},
-		SupportedSigningSpecTypes: []mtypes.Type{
-			{
-				Type:    dummyType,
-				Aliases: nil,
-			},
-		},
-	}
+	capability := dummyCapability([]byte(`{}`))
 	require.NoError(t, registry.AddPlugin(plugin, &capability))
 	retrievedPlugin, err := registry.GetPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)
@@ -151,19 +150,8 @@ func TestShutdown(t *testing.T) {
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 	}
-	capability := v1.CapabilitySpec{
-		Type: runtime.NewUnversionedType(string(v1.SigningHandlerPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			dummyType.String(): []byte(`{}`),
-		},
-		SupportedSigningSpecTypes: []mtypes.Type{
-			{
-				Type:    dummyType,
-				Aliases: nil,
-			},
-		},
-	}
 
+	capability := dummyCapability([]byte(`{}`))
 	require.NoError(t, registry.AddPlugin(plugin, &capability))
 	retrievedPlugin, err := registry.GetPlugin(ctx, &runtime.Raw{Type: dummyType})
 	require.NoError(t, err)

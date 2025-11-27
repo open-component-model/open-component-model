@@ -19,9 +19,12 @@ func init() {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// TODO(fabianburth): customize / optimize for credentials
+//
+//	currently, it uses the general types.Type, but we might want to tailor this
+//	to credentials specifically.
 type CapabilitySpec struct {
-	Type                                   runtime.Type      `json:"type"`
-	TypeToJSONSchema                       map[string][]byte `json:"typeToJSONSchema"`
-	SupportedConsumerIdentityTypes         []types.Type      `json:"supportedConsumerIdentityTypes"`
-	SupportedCredentialRepositorySpecTypes []types.Type      `json:"supportedCredentialRepositorySpecTypes"`
+	Type                                   runtime.Type `json:"type"`
+	SupportedConsumerIdentityTypes         []types.Type `json:"supportedConsumerIdentityTypes"`
+	SupportedCredentialRepositorySpecTypes []types.Type `json:"supportedCredentialRepositorySpecTypes"`
 }

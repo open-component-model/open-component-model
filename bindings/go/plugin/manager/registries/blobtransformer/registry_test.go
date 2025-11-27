@@ -33,11 +33,9 @@ var (
 func dummyCapability(schema []byte) v1.CapabilitySpec {
 	return v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.BlobTransformerPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			dummyType.String(): schema,
-		},
 		SupportedTransformerSpecTypes: []mtypes.Type{{
-			Type: dummyType,
+			Type:       dummyType,
+			JSONSchema: schema,
 		}},
 	}
 }
@@ -166,13 +164,11 @@ func TestAddPluginDuplicate(t *testing.T) {
 	// First registration should succeed
 	capability := v1.CapabilitySpec{
 		Type: runtime.NewUnversionedType(string(v1.BlobTransformerPluginType)),
-		TypeToJSONSchema: map[string][]byte{
-			dummyType.String(): []byte(`{}`),
-		},
 		SupportedTransformerSpecTypes: []mtypes.Type{
 			{
-				Type:    dummyType,
-				Aliases: nil,
+				Type:       dummyType,
+				Aliases:    nil,
+				JSONSchema: []byte(`{}`),
 			},
 		},
 	}
