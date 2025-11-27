@@ -112,6 +112,12 @@ func (r *Scheme) RegisterScheme(scheme *Scheme) error {
 	return nil
 }
 
+func (r *Scheme) MustRegisterScheme(scheme *Scheme) {
+	if err := r.RegisterScheme(scheme); err != nil {
+		panic(err)
+	}
+}
+
 // RegisterSchemeType adds a single type from the given scheme to the current scheme
 func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
 	r.mu.Lock()

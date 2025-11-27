@@ -11,22 +11,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ErrNoDirectCredentials is returned when a node in the graph does not have any directly
-// attached credentials. There might still be credentials available through
-// plugins which can be resolved at runtime.
-var ErrNoDirectCredentials = errors.New("no direct credentials found in graph")
-
-// ErrNoIndirectCredentials is returned when no indirect credentials are found in the graph.
-// This can happen if no repository plugin is configured or if no repository plugin can resolve
-// credentials for the given identity.
-var ErrNoIndirectCredentials = errors.New("no indirect credentials found in graph")
-
-// ErrNotFound is returned when no credentials could be found for the given identity.
-var ErrNotFound = errors.New("credentials not found")
-
-// ErrUnknown is a generic error indicating an unknown failure during credential resolution.
-var ErrUnknown = errors.New("unknown error occurred")
-
 var scheme = runtime.NewScheme()
 
 func init() {
@@ -38,10 +22,6 @@ type Options struct {
 	RepositoryPluginProvider
 	CredentialPluginProvider
 	CredentialRepositoryTypeScheme *runtime.Scheme
-}
-
-type GraphResolver interface {
-	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
 }
 
 // ToGraph creates a new credential graph from the provided configuration and options.

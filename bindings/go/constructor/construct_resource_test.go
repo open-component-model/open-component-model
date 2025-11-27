@@ -24,6 +24,10 @@ type mockInputMethod struct {
 	processedBlob     blob.ReadOnlyBlob
 }
 
+func (m *mockInputMethod) GetInputMethodScheme() *runtime.Scheme {
+	return runtime.NewScheme()
+}
+
 func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	id := runtime.Identity{}
 	id.SetType(runtime.NewVersionedType("mock", "v1"))
@@ -118,6 +122,10 @@ func (m *mockAccess) DeepCopyTyped() runtime.Typed {
 // mockDigestProcessor implements ResourceDigestProcessor for testing
 type mockDigestProcessor struct {
 	processedDigest *descriptor.Digest
+}
+
+func (m *mockDigestProcessor) GetResourceRepositoryScheme() *runtime.Scheme {
+	return runtime.NewScheme()
 }
 
 func (m *mockDigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
