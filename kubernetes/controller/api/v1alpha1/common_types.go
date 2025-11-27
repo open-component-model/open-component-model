@@ -6,7 +6,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 
-	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 )
 
 type ConfigurationPolicy string
@@ -84,7 +84,7 @@ type ComponentInfo struct {
 	Version string `json:"version,omitempty"`
 	// Digest information of the Component, if available as per OCM specification.
 	// +optional
-	Digest *descruntime.Digest `json:"digest,omitempty"`
+	Digest *v2.Digest `json:"digest,omitempty"`
 }
 
 type ResourceInfo struct {
