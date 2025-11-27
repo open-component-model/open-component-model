@@ -309,7 +309,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		SourceInputMethodProvider:           instance,
 		ResourceInputMethodProvider:         instance,
 		ExternalComponentRepositoryProvider: instance,
-		GraphResolver:                       instance.graph,
+		CredentialProvider:                  instance.graph,
 		ConcurrencyLimit:                    concurrencyLimit,
 		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 		ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicy(evCopyPolicy).ToConstructorPolicy(),
