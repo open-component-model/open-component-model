@@ -1,6 +1,5 @@
 // @ts-check
-import {execSync} from "child_process";
-
+import { execSync } from "child_process";
 
 // --------------------------
 // GitHub Actions entrypoint
@@ -21,7 +20,7 @@ export default async function computeRcVersion({ core }) {
     const latestStable = run(core, `git tag --list '${tagPrefix}${basePrefix}.*' | sort -V | tail -n1`);
     const latestRc = run(core, `git tag --list '${tagPrefix}${basePrefix}.*-rc.*' | sort -V | tail -n1`);
 
-    const { baseVersion, rcVersion } = computeNextVersions(basePrefix, latestStable, latestRc);
+    const { baseVersion, rcVersion } = computeNextVersions(basePrefix, latestStable, latestRc, false);
 
     const rcTag = `${tagPrefix}${rcVersion}`;
     const promotionTag = `${tagPrefix}${baseVersion}`;
@@ -69,12 +68,6 @@ export function run(core, cmd) {
   }
 }
 
-export function parseVersion(tag) {
-  if (!tag) return [];
-  const version = tag.replace(/^.*v/, "").replace(/-rc\.\d+$/, "");
-  return version.split(".").map(Number);
-}
-
 export function parseBranch(branch) {
   const match = /^releases\/v(0\.\d+)/.exec(branch);
   if (!match) throw new Error(`Invalid branch format: ${branch}`);
@@ -95,14 +88,21 @@ export function parseBranch(branch) {
  * @param {string} basePrefix - Branch base prefix (e.g., "0.1" from "releases/v0.1").
  * @param {string} [latestStableTag] - Most recent stable tag (e.g., "cli/v0.1.0").
  * @param {string} [latestRcTag] - Most recent RC tag (e.g., "cli/v0.1.1-rc.2").
+ * @param {boolean} [bumpMinorVersion] - Bump minor version instead of patch version.
  * @returns {{ baseVersion: string, rcVersion: string }}
  *   baseVersion: The semantic base version (e.g., "0.1.1").
  *   rcVersion: The computed RC tag (e.g., "0.1.1-rc.3").
  */
-export function computeNextVersions(basePrefix, latestStableTag, latestRcTag) {
+export function computeNextVersions(basePrefix, latestStableTag, latestRcTag, bumpMinorVersion) {
     const parseTag = tag => parseVersion(tag).join(".");
     const extractRcNumber = tag => parseInt(tag?.match(/-rc\.(\d+)/)?.[1] ?? "0", 10);
-    const incrementPatch = ([maj, min, pat]) => [maj, min, pat + 1];
+    const incrementVersion = ([maj, min, pat]) => {
+        if (bumpMinorVersion) {
+            return [maj, min + 1, 0];
+        }
+
+        return [maj, min, pat + 1];
+    };
 
     const stableVersionParts = parseVersion(latestStableTag);
     const rcVersionParts = parseVersion(latestRcTag);
@@ -122,7 +122,7 @@ export function computeNextVersions(basePrefix, latestStableTag, latestRcTag) {
 
         // First RC after last stable release
         case latestStableTag && !latestRcTag:
-            [major, minor, patch] = incrementPatch([major, minor, patch]);
+            [major, minor, patch] = incrementVersion([major, minor, patch]);
             nextBaseVersion = `${major}.${minor}.${patch}`;
             break;
 
@@ -141,7 +141,7 @@ export function computeNextVersions(basePrefix, latestStableTag, latestRcTag) {
 
         // Stable newer → start new patch RC
         case isStableNewer(latestStableTag, latestRcTag):
-            [major, minor, patch] = incrementPatch([major, minor, patch]);
+            [major, minor, patch] = incrementVersion([major, minor, patch]);
             nextBaseVersion = `${major}.${minor}.${patch}`;
             nextRcNumber = 1;
             break;
@@ -179,4 +179,17 @@ export function isStableNewer(stable, rc) {
 
     // Same base version → stable is not newer than RC
     return false;
+}
+
+/**
+ * Parse a version tag into an array of version components.
+ * Useful for version comparison and manipulation.
+ *
+ * @param {string} tag - Version tag (e.g., "cli/v0.1.2" or "cli/v0.1.2-rc.3")
+ * @returns {number[]} Array of [major, minor, patch]
+ */
+export function parseVersion(tag) {
+    if (!tag) return [];
+    const version = tag.replace(/^.*v/, "").replace(/-rc\.\d+$/, "");
+    return version.split(".").map(Number);
 }

@@ -1,5 +1,8 @@
 {
   "type": "module",
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
   "devDependencies": {
     "@actions/github-script": "github:actions/github-script"
   }

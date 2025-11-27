@@ -100,6 +100,10 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 	return provider
 }
 
+func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	return b.scheme
+}
+
 // GetComponentVersionRepositoryCredentialConsumerIdentity implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves the consumer identity for a given repository specification.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
