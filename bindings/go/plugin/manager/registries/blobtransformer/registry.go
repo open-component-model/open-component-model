@@ -149,7 +149,7 @@ func (r *Registry) GetPlugin(ctx context.Context, spec runtime.Typed) (transform
 
 	plugin, err := r.getPlugin(ctx, typ)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get plugin: %w", err)
 	}
 
 	return r.externalToBlobTransformerConverter(plugin, r.scheme), nil
