@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -28,7 +27,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
@@ -350,11 +348,6 @@ func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
-	// TODO: Handle CTF v1 to v2 conversion if needed
-	if raw.GetType().Name == ctfv1.Type {
-		return r.convertCTFOCMv1ToCTFOCMv2(raw)
-	}
-
 	obj, err := r.OCMScheme.NewObject(raw.Type)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new object: %w", err)
@@ -365,24 +358,6 @@ func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.
 	}
 
 	return obj, nil
-}
-
-func (r *Reconciler) convertCTFOCMv1ToCTFOCMv2(raw *runtime.Raw) (runtime.Typed, error) {
-	values := make(map[string]interface{})
-	if err := json.Unmarshal(raw.Data, &values); err != nil {
-		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
-	}
-
-	ctfType := &ctfv1.Repository{
-		Type: runtime.Type{
-			Version: "",
-			Name:    "CommonTransportFormat",
-		},
-		FilePath:   values["filePath"].(string),
-		AccessMode: ctfv1.AccessModeReadOnly,
-	}
-
-	return ctfType, nil
 }
 
 func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, component *v1alpha1.Component,
