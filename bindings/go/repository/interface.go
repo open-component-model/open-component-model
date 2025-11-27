@@ -116,13 +116,6 @@ type SourceRepository interface {
 	DownloadSource(ctx context.Context, res *descriptor.Source) (content blob.ReadOnlyBlob, err error)
 }
 
-// CredentialProvider defines the interface for resolving credentials based on
-// a given identity.
-type CredentialProvider interface {
-	// Resolve attempts to resolve credentials for the given identity.
-	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
-}
-
 // ResourceDigestProcessor defines the interface for processing resource digests.
 type ResourceDigestProcessor interface {
 	// ProcessResourceDigest processes, verifies and appends the [*descriptor.Resource.Digest] with information fetched
