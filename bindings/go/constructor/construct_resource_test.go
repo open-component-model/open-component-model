@@ -362,7 +362,7 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		CredentialProvider:          mockCredProvider,
+		GraphResolver:               mockCredProvider,
 	}
 
 	constructorInstance := NewDefaultConstructor(constructor, opts)
@@ -653,7 +653,7 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		CredentialProvider:          mockCredProvider,
+		GraphResolver:               mockCredProvider,
 	}
 
 	constructorInstance := NewDefaultConstructor(constructor, opts)
