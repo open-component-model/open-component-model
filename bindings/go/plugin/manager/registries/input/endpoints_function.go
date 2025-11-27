@@ -28,10 +28,6 @@ func RegisterInputProcessor[T runtime.Typed](
 	handler v1.InputPluginContract,
 	c *endpoints.EndpointBuilder,
 ) error {
-	if c.CurrentTypes.Types == nil {
-		c.CurrentTypes.Types = map[types.PluginType][]types.Type{}
-	}
-
 	typ, err := c.Scheme.TypeForPrototype(proto)
 	if err != nil {
 		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
@@ -50,11 +46,16 @@ func RegisterInputProcessor[T runtime.Typed](
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
 
-	c.CurrentTypes.Types[types.InputPluginType] = append(c.CurrentTypes.Types[types.InputPluginType],
-		types.Type{
-			Type:       typ,
-			JSONSchema: schema,
-		})
+	c.PluginSpec.CapabilitySpecs = append(c.PluginSpec.CapabilitySpecs, &v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.InputPluginType)),
+		SupportedInputTypes: []types.Type{
+			{
+				Type:       typ,
+				Aliases:    nil,
+				JSONSchema: schema,
+			},
+		},
+	})
 
 	return nil
 }

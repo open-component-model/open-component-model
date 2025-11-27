@@ -6,13 +6,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -87,13 +86,15 @@ func TestRegisterSigningHandler(t *testing.T) {
 			}
 			r.NoError(err)
 
+			rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
+			r.NoError(err)
 			// Validate registered types
-			content, err := json.Marshal(builder)
+			content, err := json.Marshal(rawPluginSpec)
 			r.NoError(err)
 			if tt.expectedTypes > 0 {
-				r.Contains(string(content), `"types"`)
+				r.Contains(string(content), `"capabilities"`)
 			} else {
-				r.NotContains(string(content), `"types"`)
+				r.NotContains(string(content), `"capabilities"`)
 			}
 
 			// Validate handler count
@@ -101,9 +102,10 @@ func TestRegisterSigningHandler(t *testing.T) {
 			r.Len(handlers, tt.expectedHandlers)
 
 			// Additionally ensure exactly one plugin type bucket is present
-			var tps types.Types
-			r.NoError(json.Unmarshal(content, &tps))
-			r.Equal(tt.expectedTypes, len(tps.Types))
+			r.NoError(json.Unmarshal(content, rawPluginSpec))
+			pluginSpec, err := pluginruntime.ConvertFromSpec(v1.Scheme, rawPluginSpec)
+			r.NoError(err)
+			r.Equal(tt.expectedTypes, len(pluginSpec.CapabilitySpecs))
 		})
 	}
 }
