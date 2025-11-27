@@ -15,6 +15,12 @@ import (
 // mockRepositoryProvider implements repository.ComponentVersionRepositoryProvider for testing
 type mockRepositoryProvider struct{}
 
+func (m *mockRepositoryProvider) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	return nil
+}
+
+var _ repository.ComponentVersionRepositoryProvider = (*mockRepositoryProvider)(nil)
+
 func (m *mockRepositoryProvider) GetComponentVersionRepository(ctx context.Context, spec runtime.Typed, attrs map[string]string) (repository.ComponentVersionRepository, error) {
 	return nil, nil
 }

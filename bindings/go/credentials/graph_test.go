@@ -62,6 +62,10 @@ type RepositoryPlugin struct {
 	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
 }
 
+func (s RepositoryPlugin) GetCredentialRepositoryScheme() *runtime.Scheme {
+	return runtime.NewScheme()
+}
+
 func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config runtime.Typed) (runtime.Identity, error) {
 	return s.RepositoryIdentityFunc(config)
 }
