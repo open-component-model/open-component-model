@@ -356,16 +356,7 @@ func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
-	obj, err := r.OCMScheme.NewObject(raw.Type)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new object: %w", err)
-	}
-
-	if err := r.OCMScheme.Convert(raw, obj); err != nil {
-		return nil, fmt.Errorf("failed to convert repository spec: %w", err)
-	}
-
-	return obj, nil
+	return raw, nil
 }
 
 func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, component *v1alpha1.Component,
