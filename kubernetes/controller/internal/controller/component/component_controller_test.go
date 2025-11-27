@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/test"
 )
@@ -717,7 +718,7 @@ var _ = Describe("Component Controller", func() {
 
 			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
 			Expect(err).ToNot(HaveOccurred())
-			signature, pubKey := test.SignComponent(ctx, signatureName, normalised, pm)
+			signature, pubKey := test.SignComponent(ctx, signatureName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
 
 			desc.Signatures = append(desc.Signatures, signature)
 			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
@@ -782,7 +783,7 @@ var _ = Describe("Component Controller", func() {
 
 			normalised, err := normalisation.Normalise(desc, v4alpha1.Algorithm)
 			Expect(err).ToNot(HaveOccurred())
-			signature, pubKey := test.SignComponent(ctx, signatureName, normalised, pm)
+			signature, pubKey := test.SignComponent(ctx, signatureName, signingv1alpha1.AlgorithmRSASSAPSS, normalised, pm)
 
 			desc.Signatures = append(desc.Signatures, signature)
 			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
@@ -820,6 +821,101 @@ var _ = Describe("Component Controller", func() {
 						{
 							Signature: signatureName,
 							SecretRef: corev1.LocalObjectReference{secretName},
+						},
+					},
+				},
+				Status: v1alpha1.ComponentStatus{},
+			}
+			Expect(k8sClient.Create(ctx, component)).To(Succeed())
+
+			By("checking that the component has been reconciled successfully")
+			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
+				"Status.Component.Version": Version1,
+			})
+
+			By("delete resources manually")
+			test.DeleteObject(ctx, k8sClient, component)
+		})
+
+		It("verifies the signing of a component version using more than one verification", func(ctx SpecContext) {
+			By("creating a component version")
+			repo, specData := test.SetupCTFComponentVersionRepository(ctx, ctfpath, []*descruntime.Descriptor{
+				{
+					Component: descruntime.Component{
+						ComponentMeta: descruntime.ComponentMeta{
+							ObjectMeta: descruntime.ObjectMeta{
+								Name:    componentName,
+								Version: Version1,
+							},
+						},
+						Provider: descruntime.Provider{Name: "ocm.software"},
+					},
+				},
+			})
+
+			By("signing the component version for a secret")
+			signatureNameSecret := "test-signature-secret"
+
+			descSecret, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalisedSecret, err := normalisation.Normalise(descSecret, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signatureSecret, pubKeySecret := test.SignComponent(ctx, signatureNameSecret, signingv1alpha1.AlgorithmRSASSAPSS, normalisedSecret, pm)
+
+			descSecret.Signatures = append(descSecret.Signatures, signatureSecret)
+			Expect(repo.AddComponentVersion(ctx, descSecret)).To(Succeed())
+
+			By("creating a secret with the public key")
+			secretNameSecret := "signature-public-key"
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      secretNameSecret,
+				},
+				Data: map[string][]byte{
+					signatureNameSecret: []byte(pubKeySecret),
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
+
+			By("signing the component version for a value")
+			signatureNameValue := "test-signature-value"
+
+			descValue, err := repo.GetComponentVersion(ctx, componentName, Version1)
+			Expect(err).ToNot(HaveOccurred())
+
+			normalisedValue, err := normalisation.Normalise(descValue, v4alpha1.Algorithm)
+			Expect(err).ToNot(HaveOccurred())
+			signatureValue, pubKeyValue := test.SignComponent(ctx, signatureNameValue, signingv1alpha1.AlgorithmRSASSAPKCS1V15, normalisedValue, pm)
+
+			descValue.Signatures = append(descValue.Signatures, signatureValue)
+			Expect(repo.AddComponentVersion(ctx, descValue)).To(Succeed())
+
+			By("mocking an ocm repository")
+			repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), repositoryName, specData)
+
+			By("creating a component")
+			component := &v1alpha1.Component{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace.GetName(),
+					Name:      ComponentObj,
+				},
+				Spec: v1alpha1.ComponentSpec{
+					RepositoryRef: corev1.LocalObjectReference{
+						Name: repositoryObj.GetName(),
+					},
+					Component: componentName,
+					Semver:    Version1,
+					Interval:  metav1.Duration{Duration: time.Minute * 10},
+					Verify: []v1alpha1.Verification{
+						{
+							Signature: signatureNameSecret,
+							SecretRef: corev1.LocalObjectReference{secretNameSecret},
+						},
+						{
+							Signature: signatureNameValue,
+							Value:     pubKeyValue,
 						},
 					},
 				},

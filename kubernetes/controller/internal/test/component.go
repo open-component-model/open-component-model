@@ -70,11 +70,11 @@ func MockComponent(
 	return component
 }
 
-func SignComponent(ctx context.Context, signatureName string, normalised []byte, pm *manager.PluginManager) (descruntime.Signature, string) {
+func SignComponent(ctx context.Context, signatureName, signAlgo string, normalised []byte, pm *manager.PluginManager) (descruntime.Signature, string) {
 	GinkgoHelper()
 
 	cfg := &signingv1alpha1.Config{
-		SignatureAlgorithm:      signingv1alpha1.AlgorithmRSASSAPSS,
+		SignatureAlgorithm:      signAlgo,
 		SignatureEncodingPolicy: signingv1alpha1.SignatureEncodingPolicyPlain,
 	}
 
