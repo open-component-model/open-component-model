@@ -37,7 +37,8 @@ func init() {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Config struct {
-	// +ocm:jsonschema-gen:enum=resolvers.config.ocm.software,resolvers.config.ocm.software/v1alpha1
+	// +ocm:jsonschema-gen:enum=resolvers.config.ocm.software/v1alpha1
+	// +ocm:jsonschema-gen:enum:deprecated=resolvers.config.ocm.software
 	Type runtime.Type `json:"type"`
 
 	// Resolvers define a list of OCM repository specifications to be used to resolve

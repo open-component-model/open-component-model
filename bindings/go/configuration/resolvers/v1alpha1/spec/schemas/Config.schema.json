@@ -17,10 +17,11 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "resolvers.config.ocm.software"
+          "const": "resolvers.config.ocm.software/v1alpha1"
         },
         {
-          "const": "resolvers.config.ocm.software/v1alpha1"
+          "deprecated": true,
+          "const": "resolvers.config.ocm.software"
         }
       ]
     }

@@ -16,10 +16,11 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "generic.config.ocm.software"
+          "const": "generic.config.ocm.software/v1"
         },
         {
-          "const": "generic.config.ocm.software/v1"
+          "deprecated": true,
+          "const": "generic.config.ocm.software"
         }
       ]
     }

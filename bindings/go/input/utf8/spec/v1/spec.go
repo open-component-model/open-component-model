@@ -19,8 +19,8 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type UTF8 struct {
-	// +ocm:jsonschema-gen:enum=UTF8,UTF8/v1
-	// +ocm:jsonschema-gen:enum=utf8,utf8/v1
+	// +ocm:jsonschema-gen:enum=utf8/v1,UTF8/v1
+	// +ocm:jsonschema-gen:enum:deprecated=utf8,UTF8
 	Type runtime.Type `json:"type"`
 	// Text is an UTF-8 string, raw encoded.
 	Text string `json:"text,omitempty"`

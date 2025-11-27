@@ -32,16 +32,15 @@
           "const": "OCIImageLayer/v1"
         },
         {
+          "const": "ociBlob/v1"
+        },
+        {
           "deprecated": true,
           "const": "OCIImageLayer"
         },
         {
           "deprecated": true,
           "const": "ociBlob"
-        },
-        {
-          "deprecated": true,
-          "const": "ociBlob/v1"
         }
       ]
     }

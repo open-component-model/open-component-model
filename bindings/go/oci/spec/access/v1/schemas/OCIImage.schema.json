@@ -14,28 +14,32 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "OCIImage"
-        },
-        {
           "const": "OCIImage/v1"
-        },
-        {
-          "const": "ociArtifact"
         },
         {
           "const": "ociArtifact/v1"
         },
         {
-          "const": "ociRegistry"
-        },
-        {
           "const": "ociRegistry/v1"
         },
         {
-          "const": "ociImage"
+          "const": "ociImage/v1"
         },
         {
-          "const": "ociImage/v1"
+          "deprecated": true,
+          "const": "OCIImage"
+        },
+        {
+          "deprecated": true,
+          "const": "ociArtifact"
+        },
+        {
+          "deprecated": true,
+          "const": "ociRegistry"
+        },
+        {
+          "deprecated": true,
+          "const": "ociImage"
         }
       ]
     }

@@ -17,10 +17,11 @@
       "description": "Type identifies this configuration object’s runtime type.",
       "oneOf": [
         {
-          "const": "RSASigningConfiguration"
+          "const": "RSASigningConfiguration/v1alpha1"
         },
         {
-          "const": "RSASigningConfiguration/v1alpha1"
+          "deprecated": true,
+          "const": "RSASigningConfiguration"
         }
       ]
     }

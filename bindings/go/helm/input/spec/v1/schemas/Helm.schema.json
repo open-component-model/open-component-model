@@ -32,16 +32,18 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "Helm"
+          "const": "helm/v1"
         },
         {
           "const": "Helm/v1"
         },
         {
+          "deprecated": true,
           "const": "helm"
         },
         {
-          "const": "helm/v1"
+          "deprecated": true,
+          "const": "Helm"
         }
       ]
     },

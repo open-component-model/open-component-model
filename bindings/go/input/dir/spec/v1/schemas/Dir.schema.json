@@ -48,16 +48,18 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "Dir"
+          "const": "dir/v1"
         },
         {
           "const": "Dir/v1"
         },
         {
+          "deprecated": true,
           "const": "dir"
         },
         {
-          "const": "dir/v1"
+          "deprecated": true,
+          "const": "Dir"
         }
       ]
     }

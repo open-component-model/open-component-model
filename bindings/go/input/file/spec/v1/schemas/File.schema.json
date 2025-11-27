@@ -22,16 +22,18 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "File"
+          "const": "file/v1"
         },
         {
           "const": "File/v1"
         },
         {
+          "deprecated": true,
           "const": "file"
         },
         {
-          "const": "file/v1"
+          "deprecated": true,
+          "const": "File"
         }
       ]
     }

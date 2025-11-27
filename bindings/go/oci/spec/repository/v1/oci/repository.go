@@ -25,11 +25,8 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Repository struct {
-	// +ocm:jsonschema-gen:enum=OCIRepository,OCIRepository/v1
-	// +ocm:jsonschema-gen:enum=OCI,OCI/v1
-	// +ocm:jsonschema-gen:enum=oci,oci/v1
-	// +ocm:jsonschema-gen:enum=OCIRegistry,OCIRegistry/v1
-	// +ocm:jsonschema-gen:enum=ociRegistry,ociRegistry/v1
+	// +ocm:jsonschema-gen:enum=OCIRepository/v1,OCI/v1,oci/v1,OCIRegistry/v1,ociRegistry/v1
+	// +ocm:jsonschema-gen:enum:deprecated=OCIRepository,OCI,oci,OCIRegistry,ociRegistry
 	Type runtime.Type `json:"type"`
 	// BaseURL is the base url of the OCI registry (host + optional port).
 	// Should not include repository paths - use SubPath for that.

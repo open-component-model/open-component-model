@@ -22,7 +22,8 @@ const (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type Config struct {
-	// +ocm:jsonschema-gen:enum=generic.config.ocm.software,generic.config.ocm.software/v1
+	// +ocm:jsonschema-gen:enum=generic.config.ocm.software/v1
+	// +ocm:jsonschema-gen:enum:deprecated=generic.config.ocm.software
 	Type           runtime.Type   `json:"type"`
 	Configurations []*runtime.Raw `json:"configurations"`
 }

@@ -17,10 +17,11 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "extract.oci.artifact.ocm.software"
+          "const": "extract.oci.artifact.ocm.software/v1alpha1"
         },
         {
-          "const": "extract.oci.artifact.ocm.software/v1alpha1"
+          "deprecated": true,
+          "const": "extract.oci.artifact.ocm.software"
         }
       ]
     }

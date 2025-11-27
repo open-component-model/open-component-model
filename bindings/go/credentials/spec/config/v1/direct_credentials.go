@@ -13,8 +13,8 @@ import (
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type DirectCredentials struct {
-	// +ocm:jsonschema-gen:enum=DirectCredentials,DirectCredentials/v1
-	// +ocm:jsonschema-gen:enum=Credentials,Credentials/v1
+	// +ocm:jsonschema-gen:enum=DirectCredentials/v1,Credentials/v1
+	// +ocm:jsonschema-gen:enum:deprecated=Credentials,DirectCredentials,
 	Type       runtime.Type      `json:"type"`
 	Properties map[string]string `json:"properties"`
 }

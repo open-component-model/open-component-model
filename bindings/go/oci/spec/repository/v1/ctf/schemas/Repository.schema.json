@@ -18,22 +18,25 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "CommonTransportFormat"
-        },
-        {
           "const": "CommonTransportFormat/v1"
-        },
-        {
-          "const": "CTF"
         },
         {
           "const": "CTF/v1"
         },
         {
-          "const": "ctf"
+          "const": "ctf/v1"
         },
         {
-          "const": "ctf/v1"
+          "deprecated": true,
+          "const": "CommonTransportFormat"
+        },
+        {
+          "deprecated": true,
+          "const": "CTF"
+        },
+        {
+          "deprecated": true,
+          "const": "ctf"
         }
       ]
     }

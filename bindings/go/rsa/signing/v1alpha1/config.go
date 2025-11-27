@@ -23,7 +23,8 @@ func init() {
 // +ocm:jsonschema-gen=true
 type Config struct {
 	// Type identifies this configuration object’s runtime type.
-	// +ocm:jsonschema-gen:enum=RSASigningConfiguration,RSASigningConfiguration/v1alpha1
+	// +ocm:jsonschema-gen:enum=RSASigningConfiguration/v1alpha1
+	// +ocm:jsonschema-gen:enum:deprecated=RSASigningConfiguration
 	Type runtime.Type `json:"type"`
 
 	SignatureEncodingPolicy SignatureEncodingPolicy `json:"signatureEncodingPolicy,omitempty"`
