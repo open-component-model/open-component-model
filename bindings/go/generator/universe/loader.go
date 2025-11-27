@@ -38,6 +38,7 @@ func Build(roots []string) (*Universe, error) {
 
 			u.RecordImports(path, file)
 			u.RegisterTypes(path, file)
+			u.RegisterConstsFromFile(path, file)
 
 			return nil
 		})

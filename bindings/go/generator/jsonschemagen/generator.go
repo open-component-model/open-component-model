@@ -26,6 +26,11 @@ func (g *Generator) GenerateJSONSchemaDraft202012(root *universe.TypeInfo) *JSON
 		full := g.buildRootSchema(ti)
 		full.Defs = nil // Flatten: no nested defs
 
+		typeMarkers := ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, BaseMarker)
+		ApplyNumericMarkers(full, typeMarkers)
+		ApplyEnumMarkers(full, typeMarkers)
+		ApplyConstEnum(full, ti.Consts)
+
 		defs[key] = full
 	}
 

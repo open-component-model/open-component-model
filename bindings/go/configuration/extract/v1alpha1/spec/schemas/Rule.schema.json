@@ -51,7 +51,25 @@
       "$id": "ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec/schemas/LayerSelectorOperator.schema.json",
       "title": "LayerSelectorOperator",
       "type": "string",
-      "description": "LayerSelectorOperator represents the operator for selection expressions."
+      "description": "LayerSelectorOperator represents the operator for selection expressions.",
+      "oneOf": [
+        {
+          "description": "LayerSelectorOpIn - the value is in the set of values",
+          "const": "In"
+        },
+        {
+          "description": "LayerSelectorOpNotIn - the value is not in the set of values",
+          "const": "NotIn"
+        },
+        {
+          "description": "LayerSelectorOpExists - the key exists",
+          "const": "Exists"
+        },
+        {
+          "description": "LayerSelectorOpDoesNotExist - the key does not exist",
+          "const": "DoesNotExist"
+        }
+      ]
     },
     "ocm.software.open-component-model.bindings.go.configuration.extract.v1alpha1.spec.LayerSelectorRequirement": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

@@ -2,7 +2,9 @@ package universe
 
 import (
 	"go/ast"
+	"go/token"
 	"log/slog"
+	"strconv"
 	"strings"
 )
 
@@ -56,6 +58,9 @@ type TypeKey struct {
 //
 // TypeInfo does NOT store whether the type should be emitted — that is
 // determined by the generator (root type) or by reference tracking.
+//
+// Extended: Consts holds constants explicitly declared with this type,
+// detected via AST-based analysis in RegisterConstsFromFile.
 type TypeInfo struct {
 	Key      TypeKey
 	Expr     ast.Expr
@@ -64,6 +69,33 @@ type TypeInfo struct {
 	FilePath string
 	TypeSpec *ast.TypeSpec
 	GenDecl  *ast.GenDecl
+	Consts   []*ConstInfo
+}
+
+// ConstInfo stores AST information about a single constant belonging to a type.
+//
+// The Value field may be nil if the constant declaration does not include
+// an explicit RHS for this name (e.g., `const ( A = "x"; B )`).
+type ConstInfo struct {
+	Name    string   // identifier name (e.g. "SignatureEncodingPolicyPlain")
+	Value   ast.Expr // literal/expression assigned (may be nil)
+	Doc     *ast.CommentGroup
+	Comment *ast.CommentGroup
+}
+
+func (c *ConstInfo) Literal() (string, bool) {
+	bl, ok := c.Value.(*ast.BasicLit)
+	if !ok {
+		return "", false
+	}
+	if bl.Kind != token.STRING {
+		return "", false
+	}
+	s, err := strconv.Unquote(bl.Value)
+	if err != nil {
+		return "", false
+	}
+	return s, true
 }
 
 // RecordImports collects the import alias mapping for a file.

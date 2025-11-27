@@ -273,12 +273,6 @@ func (g *Generator) schemaForIdentWithField(id *ast.Ident, ctx *universe.TypeInf
 		sch := &JSONSchemaDraft202012{
 			Ref: "#/$defs/" + universe.Definition(ti.Key),
 		}
-
-		// field level markers
-		fieldMarkers := ExtractMarkerMapFromField(field, BaseMarker)
-		ApplyEnumMarkers(sch, fieldMarkers)
-		ApplyNumericMarkers(sch, fieldMarkers)
-
 		return sch
 	}
 
