@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	_ "embed"
 )
 
 // Typed is any object that is defined by a type that is versioned.
@@ -119,4 +121,11 @@ func (t *Type) UnmarshalJSON(data []byte) error {
 
 	*t = parsed
 	return nil
+}
+
+//go:embed schemas/Type.schema.json
+var schemaType []byte
+
+func (t Type) JSONSchema() []byte {
+	return schemaType
 }

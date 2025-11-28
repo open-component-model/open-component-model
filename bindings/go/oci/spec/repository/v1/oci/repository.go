@@ -23,7 +23,10 @@ const (
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Repository struct {
+	// +ocm:jsonschema-gen:enum=OCIRepository/v1,OCI/v1,oci/v1,OCIRegistry/v1,ociRegistry/v1
+	// +ocm:jsonschema-gen:enum:deprecated=OCIRepository,OCI,oci,OCIRegistry,ociRegistry
 	Type runtime.Type `json:"type"`
 	// BaseURL is the base url of the OCI registry (host + optional port).
 	// Should not include repository paths - use SubPath for that.

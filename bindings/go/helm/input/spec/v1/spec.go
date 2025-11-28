@@ -11,7 +11,10 @@ import (
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Helm struct {
+	// +ocm:jsonschema-gen:enum=helm/v1,Helm/v1
+	// +ocm:jsonschema-gen:enum:deprecated=helm,Helm
 	Type runtime.Type `json:"type"`
 
 	// Path is the path to the directory or tgz file containing the chart.

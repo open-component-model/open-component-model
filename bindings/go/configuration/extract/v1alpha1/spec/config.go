@@ -26,7 +26,10 @@ func init() {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Config struct {
+	// +ocm:jsonschema-gen:enum=extract.oci.artifact.ocm.software/v1alpha1
+	// +ocm:jsonschema-gen:enum:deprecated=extract.oci.artifact.ocm.software
 	Type runtime.Type `json:"type"`
 	// Rules defines rules for extracting layers to specific files.
 	Rules []Rule `json:"rules,omitempty"`
@@ -36,6 +39,7 @@ type Config struct {
 // Multiple layer selectors can be specified to select different layers that should
 // be merged into the same output file. For now, the first matching selector is used.
 // +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
 type Rule struct {
 	// Filename is the target filename for the extracted layers.
 	Filename string `json:"filename,omitempty"`

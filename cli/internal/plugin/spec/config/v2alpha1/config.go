@@ -26,8 +26,9 @@ func init() {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Config struct {
-	Type runtime.Type `json:"-"`
+	Type runtime.Type `json:"type"`
 	// IdleTimeout on startup. If the plugin is orphaned (e.g. due to a panic of the CLI)
 	// and a plugin is inactive for this duration, it will automatically shut itself down.
 	IdleTimeout Duration `json:"idleTimeout"`
