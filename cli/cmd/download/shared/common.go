@@ -23,7 +23,7 @@ import (
 )
 
 // GetContextItems extracts common dependencies from cobra command
-func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.GraphResolver, *slog.Logger, error) {
+func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Resolver, *slog.Logger, error) {
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return nil, nil, nil, fmt.Errorf("could not retrieve plugin manager from context")
@@ -43,7 +43,7 @@ func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Gr
 }
 
 // DownloadResourceData handles the actual data download from repository
-func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.GraphResolver, component, version string, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
+func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, component, version string, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
 	access := res.GetAccess()
 	var data blob.ReadOnlyBlob
 	var err error

@@ -309,7 +309,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		SourceInputMethodProvider:           instance,
 		ResourceInputMethodProvider:         instance,
 		ExternalComponentRepositoryProvider: instance,
-		CredentialProvider:                  instance.graph,
+		Resolver:                            instance.graph,
 		ConcurrencyLimit:                    concurrencyLimit,
 		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 		ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicy(evCopyPolicy).ToConstructorPolicy(),
@@ -396,7 +396,7 @@ type constructorProvider struct {
 	targetRepoSpec     runtime.Typed
 	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
 	pluginManager      *manager.PluginManager
-	graph              credentials.GraphResolver
+	graph              credentials.Resolver
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
