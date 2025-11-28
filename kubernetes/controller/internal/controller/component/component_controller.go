@@ -249,13 +249,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	desc, err := cacheBackedRepo.GetComponentVersion(ctx, component.Spec.Component, version)
+	// TODO: Adjust when https://github.com/open-component-model/ocm-project/issues/784 is merged (@frewilhelm @
+	if errors.Is(err, workerpool.ErrResolutionInProgress) {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
+	}
 	if err != nil {
-		if errors.Is(err, workerpool.ErrResolutionInProgress) {
-			status.MarkNotReady(r.EventRecorder, component, v1alpha1.ResolutionInProgress, err.Error())
-
-			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
-		}
-
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
@@ -460,34 +460,9 @@ func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descrunti
 			return fmt.Errorf("failed to get signing handler for signature %q: %w", verify.Signature, err)
 		}
 
-		credentials := make(map[string]string)
-
-		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
-		//       reliable currently. This will probably change, when typed credentials are supported.
-		var credKey string
-		switch signature.Signature.Algorithm {
-		case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
-			credKey = "public_key_pem"
-		default:
-			return fmt.Errorf("unsupported signature algorithm: %q", signature.Signature.Algorithm)
-		}
-
-		switch {
-		case verify.Value != "":
-			credentials[credKey] = verify.Value
-		case verify.SecretRef.Name != "":
-			secret := &corev1.Secret{}
-			if err := r.Get(ctx, types.NamespacedName{Name: verify.SecretRef.Name, Namespace: namespace}, secret); err != nil {
-				return fmt.Errorf("failed to get secret %q for signature %q: %w", verify.SecretRef.Name, verify.Signature, err)
-			}
-			data, ok := secret.Data[verify.Signature]
-			if !ok {
-				return fmt.Errorf("secret %q does not contain data for signature %q", verify.SecretRef.Name, verify.Signature)
-			}
-
-			credentials[credKey] = string(data)
-		default:
-			return fmt.Errorf("no provided value or secret reference for verification of signature %q", verify.Signature)
+		credentials, err := r.createCredentials(ctx, verify, signature.Signature.Algorithm, namespace)
+		if err != nil {
+			return fmt.Errorf("failed to create credentials for signature %q: %w", verify.Signature, err)
 		}
 
 		if err := hdlr.Verify(ctx, *signature, cfg, credentials); err != nil {
@@ -496,6 +471,43 @@ func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descrunti
 	}
 
 	return nil
+}
+
+// createCredentials generates a map of credentials required for verifying a component version's signature.
+// It supports retrieving the credentials either from a provided value or from a Kubernetes Secret.
+func (r *Reconciler) createCredentials(ctx context.Context, verify v1alpha1.Verification, algo, namespace string) (map[string]string, error) {
+	credentials := make(map[string]string)
+
+	// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
+	//       reliable currently. This will probably change, when typed credentials are supported.
+	var key string
+	switch algo {
+	case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
+		key = "public_key_pem"
+	default:
+		return nil, fmt.Errorf("unsupported signature algorithm: %q", algo)
+	}
+
+	switch {
+	case verify.Value != "":
+		credentials[key] = verify.Value
+	case verify.SecretRef.Name != "":
+		secret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{Name: verify.SecretRef.Name, Namespace: namespace}, secret); err != nil {
+			return nil, fmt.Errorf("failed to get secret %q for signature %q: %w", verify.SecretRef.Name, verify.Signature, err)
+		}
+
+		data, ok := secret.Data[verify.Signature]
+		if !ok {
+			return nil, fmt.Errorf("secret %q does not contain data for signature %q", verify.SecretRef.Name, verify.Signature)
+		}
+
+		credentials[key] = string(data)
+	default:
+		return nil, fmt.Errorf("no provided value or secret reference for verification of signature %q", verify.Signature)
+	}
+
+	return credentials, nil
 }
 
 // generateDigest computes a new digest for a descriptor with the given
