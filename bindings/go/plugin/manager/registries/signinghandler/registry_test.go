@@ -21,45 +21,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
-type mockSigningHandler struct{ called bool }
-
-func (m *mockSigningHandler) GetSigningCredentialConsumerIdentity(ctx context.Context, name string, unsigned descruntime.Digest, config runtime.Typed) (runtime.Identity, error) {
-	m.called = true
-	return runtime.Identity{"id": "x"}, nil
-}
-
-func (m *mockSigningHandler) Sign(ctx context.Context, unsigned descruntime.Digest, config runtime.Typed, credentials map[string]string) (descruntime.SignatureInfo, error) {
-	m.called = true
-	return descruntime.SignatureInfo{}, nil
-}
-
-func (m *mockSigningHandler) GetVerifyingCredentialConsumerIdentity(ctx context.Context, signed descruntime.Signature, config runtime.Typed) (runtime.Identity, error) {
-	m.called = true
-	return runtime.Identity{"id": "y"}, nil
-}
-
-func (m *mockSigningHandler) Verify(ctx context.Context, signed descruntime.Signature, config runtime.Typed, credentials map[string]string) error {
-	m.called = true
-	return nil
-}
-
-var _ signing.Handler = &mockSigningHandler{}
-
-func TestRegisterInternalComponentSignatureHandler(t *testing.T) {
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
-	registry := NewSigningRegistry(ctx)
-	p := &mockSigningHandler{}
-	require.NoError(t, RegisterInternalComponentSignatureHandler(scheme, registry, p, &dummyv1.Repository{}))
-	retrievedPlugin, err := registry.GetPlugin(ctx, &dummyv1.Repository{})
-	require.NoError(t, err)
-	require.Equal(t, p, retrievedPlugin)
-	_, err = retrievedPlugin.GetSigningCredentialConsumerIdentity(ctx, "name", descruntime.Digest{}, &runtime.Raw{Type: runtime.NewVersionedType("dummy", "v1"), Data: []byte(`{}`)})
-	require.NoError(t, err)
-	require.True(t, p.called)
-}
-
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-signinghandler")
@@ -171,4 +132,94 @@ func TestShutdown(t *testing.T) {
 		}
 		return false
 	}, 1*time.Second, 100*time.Millisecond)
+}
+
+func TestRegisterInternalComponentSignatureHandler(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	registry := NewSigningRegistry(ctx)
+	plugin := &mockSigningHandler{}
+	r.NoError(registry.RegisterInternalComponentSignatureHandler(plugin))
+
+	tests := []struct {
+		name          string
+		signingConfig runtime.Typed
+		err           require.ErrorAssertionFunc
+	}{
+		{
+			name:          "prototype",
+			signingConfig: &dummyv1.Repository{},
+			err:           require.NoError,
+		},
+		{
+			name: "canonical type",
+			signingConfig: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.Type,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "short type",
+			signingConfig: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.ShortType,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "invalid type",
+			signingConfig: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "NonExistingType",
+					Version: "v1",
+				},
+			},
+			err: require.Error,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resourceRepository, err := registry.GetPlugin(ctx, tc.signingConfig)
+			tc.err(t, err)
+			if err != nil {
+				return
+			}
+			r.NotNil(resourceRepository)
+		})
+	}
+}
+
+type mockSigningHandler struct{ called bool }
+
+var _ signing.Handler = &mockSigningHandler{}
+
+func (m *mockSigningHandler) GetSigningHandlerScheme() *runtime.Scheme {
+	return dummytype.Scheme
+}
+
+func (m *mockSigningHandler) GetSigningCredentialConsumerIdentity(ctx context.Context, name string, unsigned descruntime.Digest, config runtime.Typed) (runtime.Identity, error) {
+	m.called = true
+	return runtime.Identity{"id": "x"}, nil
+}
+
+func (m *mockSigningHandler) Sign(ctx context.Context, unsigned descruntime.Digest, config runtime.Typed, credentials map[string]string) (descruntime.SignatureInfo, error) {
+	m.called = true
+	return descruntime.SignatureInfo{}, nil
+}
+
+func (m *mockSigningHandler) GetVerifyingCredentialConsumerIdentity(ctx context.Context, signed descruntime.Signature, config runtime.Typed) (runtime.Identity, error) {
+	m.called = true
+	return runtime.Identity{"id": "y"}, nil
+}
+
+func (m *mockSigningHandler) Verify(ctx context.Context, signed descruntime.Signature, config runtime.Typed, credentials map[string]string) error {
+	m.called = true
+	return nil
 }
