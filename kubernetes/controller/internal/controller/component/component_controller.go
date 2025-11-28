@@ -453,8 +453,6 @@ func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descrunti
 
 		cfg := &signingv1alpha1.Config{
 			SignatureAlgorithm: signature.Signature.Algorithm,
-			// TODO: Will this be configurable in the future?
-			SignatureEncodingPolicy: signingv1alpha1.SignatureEncodingPolicyPlain,
 		}
 
 		hdlr, err := r.PluginManager.SigningRegistry.GetPlugin(ctx, cfg)
