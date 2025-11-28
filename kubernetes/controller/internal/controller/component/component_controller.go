@@ -466,9 +466,12 @@ func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descrunti
 
 		// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
 		//       reliable currently. This will probably change, when typed credentials are supported.
-		credKey := getCredentialKeyFromAlgorithm(signature.Signature.Algorithm)
-		if credKey == "" {
-			return fmt.Errorf("unsupported signature algorithm %q for signature %q", signature.Signature.Algorithm, verify.Signature)
+		var credKey string
+		switch signature.Signature.Algorithm {
+		case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
+			credKey = "public_key_pem"
+		default:
+			return fmt.Errorf("unsupported signature algorithm: %q", signature.Signature.Algorithm)
 		}
 
 		switch {
@@ -495,15 +498,6 @@ func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descrunti
 	}
 
 	return nil
-}
-
-func getCredentialKeyFromAlgorithm(algorithm string) string {
-	switch algorithm {
-	case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
-		return "public_key_pem"
-	default:
-		return ""
-	}
 }
 
 // generateDigest computes a new digest for a descriptor with the given
