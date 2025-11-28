@@ -63,7 +63,7 @@ func (r *SigningRegistry) AddPlugin(plugin types.Plugin, spec runtime.Typed) err
 		if v, ok := r.registry[typ.Type]; ok {
 			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ.Type, v.ID)
 		}
-		// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
+		// Note: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
 		r.registry[typ.Type] = plugin
 	}
 
