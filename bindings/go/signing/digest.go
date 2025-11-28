@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
@@ -138,7 +139,7 @@ func IsSafelyDigestible(cd *descruntime.Component) error {
 	}
 
 	for _, res := range cd.Resources {
-		if HasUsableAccess(res) {
+		if hasUsableAccess(res) {
 			if res.Digest == nil ||
 				res.Digest.HashAlgorithm == "" ||
 				res.Digest.NormalisationAlgorithm == "" ||
@@ -152,8 +153,8 @@ func IsSafelyDigestible(cd *descruntime.Component) error {
 	return nil
 }
 
-// HasUsableAccess checks if a resource has an access type other than "None".
-func HasUsableAccess(res descruntime.Resource) bool {
+// hasUsableAccess checks if a resource has an access type other than "None".
+func hasUsableAccess(res descruntime.Resource) bool {
 	return res.Access != nil && res.Access.GetType().String() != AccessTypeNone
 }
 
@@ -182,9 +183,11 @@ var supportedHashes = map[string]crypto.Hash{
 // getSupportedHash looks up a crypto.Hash from its string identifier.
 // Returns an error if the identifier is not in supportedHashes.
 func getSupportedHash(name string) (crypto.Hash, error) {
-	h, ok := supportedHashes[name]
+	n := strings.ToUpper(name)
+	h, ok := supportedHashes[n]
 	if !ok {
-		return 0, fmt.Errorf("unsupported hash algorithm %q", name)
+		return 0, fmt.Errorf("unsupported hash algorithm %q (use: %q)", n, supportedHashes)
 	}
+
 	return h, nil
 }
