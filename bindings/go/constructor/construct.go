@@ -412,7 +412,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 				if digestProcessor, err = c.opts.GetDigestProcessor(ctx, res); err == nil {
 					logger.Debug("processing resource digest")
 					var creds map[string]string
-					if c.opts.GraphResolver != nil {
+					if c.opts.Resolver != nil {
 						identity, err := digestProcessor.GetResourceDigestProcessorCredentialConsumerIdentity(ctx, res)
 						if err != nil {
 							return nil, fmt.Errorf("error getting credential consumer identity of access type %q: %w", resource.Access.GetType(), err)
@@ -457,7 +457,7 @@ func (c *DefaultConstructor) processResourceByValue(ctx context.Context, targetR
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
 	if identity, err := repo.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
-		if creds, err = resolveCredentials(ctx, c.opts.GraphResolver, identity); err != nil {
+		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource by-value processing %w", err)
 		}
 	}
@@ -513,7 +513,7 @@ func (c *DefaultConstructor) processSourceWithInput(ctx context.Context, targetR
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
 	if identity, err := method.GetSourceCredentialConsumerIdentity(ctx, src); err == nil {
-		if creds, err = resolveCredentials(ctx, c.opts.GraphResolver, identity); err != nil {
+		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for source input method: %w", err)
 		}
 	}
@@ -554,7 +554,7 @@ func (c *DefaultConstructor) processResourceWithInput(ctx context.Context, targe
 	// if no identity is resolved, we assume resolution is simply skipped.
 	var creds map[string]string
 	if identity, err := method.GetResourceCredentialConsumerIdentity(ctx, resource); err == nil {
-		if creds, err = resolveCredentials(ctx, c.opts.GraphResolver, identity); err != nil {
+		if creds, err = resolveCredentials(ctx, c.opts.Resolver, identity); err != nil {
 			return nil, fmt.Errorf("error resolving credentials for resource input method: %w", err)
 		}
 	}
@@ -739,7 +739,7 @@ func newConcurrencyGroup(ctx context.Context, limit int) (*errgroup.Group, conte
 // resolveCredentials attempts to resolve credentials for a given credential consumerIdentity.
 // It returns the resolved credentials and any error that occurred during resolution.
 // If no credentials are needed or available, it returns nil credentials and no error.
-func resolveCredentials(ctx context.Context, provider credentials.GraphResolver, consumerIdentity ocmruntime.Identity) (map[string]string, error) {
+func resolveCredentials(ctx context.Context, provider credentials.Resolver, consumerIdentity ocmruntime.Identity) (map[string]string, error) {
 	logger := log.Base().With("identity", consumerIdentity)
 
 	if provider == nil {

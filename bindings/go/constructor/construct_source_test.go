@@ -253,7 +253,7 @@ func TestConstructWithSourceCredentialResolution(t *testing.T) {
 	opts := Options{
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
-		GraphResolver:             mockCredProvider,
+		Resolver:                  mockCredProvider,
 	}
 
 	// Process the constructor
@@ -466,7 +466,7 @@ func TestConstructWithSourceCredentialResolutionError(t *testing.T) {
 	opts := Options{
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
-		GraphResolver:             mockCredProvider,
+		Resolver:                  mockCredProvider,
 	}
 
 	ctor := NewDefaultConstructor(constructor, opts)

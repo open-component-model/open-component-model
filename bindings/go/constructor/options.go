@@ -44,8 +44,8 @@ type Options struct {
 
 	// While constructing a component version, the constructor library will use the given credential provider
 	// to resolve credentials for the input methods.
-	// The GraphResolver is OPTIONAL, if not provided, the constructor library will not resolve credentials.
-	credentials.GraphResolver
+	// The Resolver is OPTIONAL, if not provided, the constructor library will not resolve credentials.
+	credentials.Resolver
 
 	// While constructing a component version, the constructor library will use the given concurrency limit
 	// to limit the number of concurrent operations.
