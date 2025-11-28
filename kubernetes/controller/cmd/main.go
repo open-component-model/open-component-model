@@ -55,7 +55,7 @@ func init() {
 	ocm.MustRegisterMetrics(metrics.Registry)
 }
 
-//nolint:funlen,maintidx // the main function is complex enough as it is - we don't want to separate the initialization
+//nolint:funlen // the main function is complex enough as it is - we don't want to separate the initialization
 func main() {
 	var (
 		metricsAddr               string
@@ -156,12 +156,6 @@ func main() {
 	}
 
 	pm := manager.NewPluginManager(ctx)
-	defer func() {
-		if err := pm.Shutdown(ctx); err != nil {
-			setupLog.Error(err, "error during plugin manager shutdown")
-			os.Exit(1)
-		}
-	}()
 
 	if err := plugins.Register(pm); err != nil {
 		setupLog.Error(err, "unable to register plugins: %w", err)

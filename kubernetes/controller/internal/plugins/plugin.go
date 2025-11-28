@@ -8,9 +8,7 @@ import (
 	ocicredentialsspec "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
@@ -27,26 +25,26 @@ func Register(pm *manager.PluginManager) error {
 	ocmrepository.Scheme = runtime.NewScheme()
 
 	// TODO: Remove when RegisterWithAlias is fixed
-	ocmrepository.Scheme.MustRegisterWithAlias(&oci.Repository{},
-		runtime.NewVersionedType(oci.Type, oci.Version),
-		runtime.NewUnversionedType(oci.Type),
-		runtime.NewVersionedType(oci.ShortType, oci.Version),
-		runtime.NewUnversionedType(oci.ShortType),
-		runtime.NewVersionedType(oci.ShortType2, oci.Version),
-		runtime.NewUnversionedType(oci.ShortType2),
-		runtime.NewVersionedType(oci.LegacyRegistryType, oci.Version),
-		runtime.NewUnversionedType(oci.LegacyRegistryType),
-		runtime.NewVersionedType(oci.LegacyRegistryType2, oci.Version),
-		runtime.NewUnversionedType(oci.LegacyRegistryType2),
+	ocmrepository.Scheme.MustRegisterWithAlias(&ociv1.Repository{},
+		runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.Type),
+		runtime.NewVersionedType(ociv1.ShortType, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.ShortType),
+		runtime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.ShortType2),
+		runtime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.LegacyRegistryType),
+		runtime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.LegacyRegistryType2),
 	)
 
-	ocmrepository.Scheme.MustRegisterWithAlias(&ctf.Repository{},
-		runtime.NewVersionedType(ctf.Type, ctf.Version),
-		runtime.NewUnversionedType(ctf.Type),
-		runtime.NewVersionedType(ctf.ShortType, ctf.Version),
-		runtime.NewUnversionedType(ctf.ShortType),
-		runtime.NewVersionedType(ctf.ShortType2, ctf.Version),
-		runtime.NewUnversionedType(ctf.ShortType2),
+	ocmrepository.Scheme.MustRegisterWithAlias(&ctfv1.Repository{},
+		runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+		runtime.NewUnversionedType(ctfv1.Type),
+		runtime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
+		runtime.NewUnversionedType(ctfv1.ShortType),
+		runtime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
+		runtime.NewUnversionedType(ctfv1.ShortType2),
 	)
 
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
