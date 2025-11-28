@@ -493,6 +493,10 @@ type mockPlugin struct {
 	version   string
 }
 
+func (p *mockPlugin) GetJSONSchemaForRepositorySpecification(typ ocmruntime.Type) ([]byte, error) {
+	return nil, nil
+}
+
 func (p *mockPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
 	_ context.Context,
 	repositorySpecification ocmruntime.Typed,

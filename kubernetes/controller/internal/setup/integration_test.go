@@ -280,6 +280,10 @@ type simpleOCIPlugin struct {
 	version   string
 }
 
+func (p *simpleOCIPlugin) GetJSONSchemaForRepositorySpecification(typ ocmruntime.Type) ([]byte, error) {
+	return nil, nil
+}
+
 func (p *simpleOCIPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
 	_ context.Context,
 	repositorySpecification ocmruntime.Typed,

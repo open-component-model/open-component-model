@@ -35,8 +35,8 @@ func TestPing(t *testing.T) {
 	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: repov1.ComponentVersionRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	// Test successful ping
 	err := plugin.Ping(context.Background())
@@ -64,14 +64,12 @@ func TestAddComponentVersion(t *testing.T) {
 	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: repov1.ComponentVersionRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	err := plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{
-			BaseUrl: "ocm.software",
-		},
+		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{"baseUrl":"ocm.software"}`)},
 		Descriptor: defaultDescriptor(),
 	}, map[string]string{})
 	assert.NoError(t, err)
@@ -99,13 +97,13 @@ func TestAddComponentVersionValidationFail(t *testing.T) {
 	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, schemaOCIRegistry)
+		PluginType: repov1.ComponentVersionRepositoryPluginType,
+	}, server.URL, dummyCapability(schemaOCIRegistry))
 
 	ctx := context.Background()
 
 	err = plugin.AddComponentVersion(ctx, repov1.PostComponentVersionRequest[runtime.Typed]{
-		Repository: repository,
+		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{"baseUrl":"ocm.software"}`)},
 		Descriptor: defaultDescriptor(),
 	}, map[string]string{})
 	assert.ErrorContains(t, err, "jsonschema validation failed")
@@ -129,12 +127,12 @@ func TestGetComponentVersion(t *testing.T) {
 	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: repov1.ComponentVersionRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	desc, err := plugin.GetComponentVersion(ctx, repov1.GetComponentVersionRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{},
+		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 	}, map[string]string{})
@@ -160,12 +158,12 @@ func TestListComponentVersions(t *testing.T) {
 	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: repov1.ComponentVersionRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	list, err := plugin.ListComponentVersions(ctx, repov1.ListComponentVersionsRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{},
+		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 	}, map[string]string{})
 	require.NoError(t, err)
@@ -192,12 +190,12 @@ func TestAddLocalResource(t *testing.T) {
 	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: repov1.ComponentVersionRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	gotResource, err := plugin.AddLocalResource(ctx, repov1.PostLocalResourceRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{},
+		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 		Resource:   &resource,
@@ -254,8 +252,8 @@ func TestGetLocalResource(t *testing.T) {
 	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: repov1.ComponentVersionRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	t.Cleanup(func() {
 		require.NoError(t, f.Close())
@@ -264,7 +262,7 @@ func TestGetLocalResource(t *testing.T) {
 
 	ctx := context.Background()
 	resp, err := plugin.GetLocalResource(ctx, repov1.GetLocalResourceRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{},
+		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 	}, map[string]string{})
@@ -319,8 +317,8 @@ func TestGetLocalSource(t *testing.T) {
 	plugin := NewComponentVersionRepositoryPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentVersionRepositoryPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: repov1.ComponentVersionRepositoryPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	t.Cleanup(func() {
 		require.NoError(t, f.Close())
@@ -329,7 +327,7 @@ func TestGetLocalSource(t *testing.T) {
 
 	ctx := context.Background()
 	resp, err := plugin.GetLocalSource(ctx, repov1.GetLocalSourceRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{},
+		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Name:       "test-plugin",
 		Version:    "v1.0.0",
 	}, map[string]string{})

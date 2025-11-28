@@ -148,7 +148,7 @@ const invalidRecursionYAML = testYAML + `
         secretId: "recursive-creds"
 `
 
-func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
+func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 	t.Helper()
 	r := require.New(t)
 	scheme := runtime.NewScheme()
