@@ -86,12 +86,16 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		options.UserAgent = DefaultCreator
 	}
 
+	if options.Scheme == nil {
+		options.Scheme = repoSpec.Scheme
+	}
+
 	provider := &CachingComponentVersionRepositoryProvider{
 		creator:            options.UserAgent,
-		scheme:             repoSpec.Scheme,
+		scheme:             options.Scheme,
 		storeCache:         &storeCache{store: make(map[string]*ocictf.Store)},
 		credentialCache:    &credentialCache{},
-		ociCache:           &ociCache{scheme: repoSpec.Scheme},
+		ociCache:           &ociCache{scheme: options.Scheme},
 		authorizationCache: auth.NewCache(),
 		httpClient:         retry.DefaultClient,
 		tempDir:            options.TempDir,
@@ -102,6 +106,23 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryScheme() *runtime.Scheme {
 	return b.scheme
+}
+
+// GetJSONSchemaForRepositorySpecification provides the JSON schema for OCI and CTF repository specifications.
+func (b *CachingComponentVersionRepositoryProvider) GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error) {
+	obj, err := b.scheme.NewObject(typ)
+	if err != nil {
+		return nil, err
+	}
+	var schema []byte
+	switch obj := obj.(type) {
+	case *ocirepospecv1.Repository:
+		schema = obj.JSONSchema()
+	case *ctfrepospecv1.Repository:
+		schema = obj.JSONSchema()
+	}
+
+	return schema, nil
 }
 
 // GetComponentVersionRepositoryCredentialConsumerIdentity implements the repository.ComponentVersionRepositoryProvider interface.
