@@ -14,7 +14,7 @@ import (
 // RepositoryOptions configures OCM repository creation.
 type RepositoryOptions struct {
 	Registry        repository.ComponentVersionRepositoryProvider
-	CredentialGraph credentials.GraphResolver
+	CredentialGraph credentials.Resolver
 	Logger          *logr.Logger
 }
 

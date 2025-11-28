@@ -20,12 +20,11 @@ import (
 )
 
 func Register(pm *manager.PluginManager) error {
-	// TODO: Replace global variable when options are supported in repository providers
-	//       https://github.com/open-component-model/open-component-model/pull/1282
-	ocmrepository.Scheme = runtime.NewScheme()
+	scheme := runtime.NewScheme()
 
 	// TODO: Remove when RegisterWithAlias is fixed
-	ocmrepository.Scheme.MustRegisterWithAlias(&ociv1.Repository{},
+	//       https://github.com/open-component-model/open-component-model/pull/1284
+	scheme.MustRegisterWithAlias(&ociv1.Repository{},
 		runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 		runtime.NewUnversionedType(ociv1.Type),
 		runtime.NewVersionedType(ociv1.ShortType, ociv1.Version),
@@ -38,7 +37,7 @@ func Register(pm *manager.PluginManager) error {
 		runtime.NewUnversionedType(ociv1.LegacyRegistryType2),
 	)
 
-	ocmrepository.Scheme.MustRegisterWithAlias(&ctfv1.Repository{},
+	scheme.MustRegisterWithAlias(&ctfv1.Repository{},
 		runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 		runtime.NewUnversionedType(ctfv1.Type),
 		runtime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
@@ -47,7 +46,7 @@ func Register(pm *manager.PluginManager) error {
 		runtime.NewUnversionedType(ctfv1.ShortType2),
 	)
 
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
 
 	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 		ocmrepository.Scheme,
