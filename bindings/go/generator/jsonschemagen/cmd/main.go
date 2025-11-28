@@ -43,7 +43,7 @@ func main() {
 	// -------------------------------
 	args := flag.Args()
 	if len(args) < 1 {
-		slog.Error("Usage: jsonschemagen [--log-level=LEVEL] <root-dir>")
+		slog.Error("Usage: jsonschemagen [-loglevel=LEVEL] <root-dir> [<root-dir>...] [--help]")
 		os.Exit(1)
 	}
 
