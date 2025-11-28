@@ -67,7 +67,7 @@ func (r *Scheme) GetTypesIter() iter.Seq2[Type, iter.Seq[Type]] {
 	return func(yield func(Type, iter.Seq[Type]) bool) {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
-		for typ := range r.defaults.Keys() {
+		for typ := range r.defaults.Iter() {
 			if !yield(typ, r.AliasesIter(typ)) {
 				return
 			}
@@ -103,10 +103,10 @@ func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
 
 	// check if the type is registered as default type in the source scheme
 	// or get its default type if it's an alias
-	rt, exists := scheme.defaults.Get(typ)
+	rt, exists := scheme.defaults.GetLeft(typ)
 	if !exists {
 		if aliasFor, ok := scheme.aliases[typ]; ok {
-			rt, _ = scheme.defaults.Get(aliasFor)
+			rt, _ = scheme.defaults.GetLeft(aliasFor)
 		} else {
 			return fmt.Errorf("type %q is not registered in the scheme", typ)
 		}
@@ -164,7 +164,7 @@ func (r *Scheme) RegisterScheme(scheme *Scheme) error {
 	defer scheme.mu.RUnlock()
 
 	// Register each type from the source scheme
-	for defaultType := range scheme.defaults.Keys() {
+	for defaultType := range scheme.defaults.Iter() {
 		if err := r.RegisterSchemeType(scheme, defaultType); err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
 	defer r.mu.Unlock()
 
 	rt := reflect.TypeOf(prototype).Elem()
-	defaultTyp, defaultExists := r.defaults.GetByValue(rt)
+	defaultTyp, defaultExists := r.defaults.GetRight(rt)
 	if !defaultExists {
 		r.defaults.Set(types[0], rt)
 		r.instances[rt] = prototype.DeepCopyTyped()
@@ -214,7 +214,7 @@ func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
 		types = types[1:]
 	}
 	for _, typ := range types {
-		if _, exists := r.defaults.Get(typ); exists {
+		if _, exists := r.defaults.GetLeft(typ); exists {
 			return fmt.Errorf("%w: as default for %T", TypeAlreadyRegisteredError(typ), prototype)
 		}
 		if def, ok := r.aliases[typ]; ok {
@@ -259,7 +259,7 @@ func (r *Scheme) IsRegistered(typ Type) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	_, exists := r.defaults.Get(typ)
+	_, exists := r.defaults.GetLeft(typ)
 	if exists {
 		return true
 	}
@@ -282,14 +282,14 @@ func (r *Scheme) NewObject(typ Type) (Typed, error) {
 	defer r.mu.RUnlock()
 
 	// construct by full type if present in defaults
-	if proto, exists := r.defaults.Get(typ); exists {
+	if proto, exists := r.defaults.GetLeft(typ); exists {
 		instance := r.instances[proto].DeepCopyTyped()
 		instance.SetType(typ)
 		return instance, nil
 	}
 	// construct by alias if present
 	if def, ok := r.aliases[typ]; ok {
-		rt, _ := r.defaults.Get(def)
+		rt, _ := r.defaults.GetLeft(def)
 		instance := r.instances[rt].DeepCopyTyped()
 		instance.SetType(typ)
 		return instance, nil
