@@ -112,27 +112,21 @@ func (r *SigningRegistry) getPlugin(ctx context.Context, spec runtime.Type) (sig
 }
 
 // RegisterInternalComponentSignatureHandler is called to register an internal implementation for a plugin.
-func RegisterInternalComponentSignatureHandler(
-	scheme *runtime.Scheme,
-	r *SigningRegistry,
-	plugin signing.Handler,
-	proto runtime.Typed,
+func (r *SigningRegistry) RegisterInternalComponentSignatureHandler(
+	plugin BuiltinSigningHandler,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(proto)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetSigningHandlerScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(plugin.GetSigningHandlerScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
 
-	r.internalPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalPlugins[alias] = r.internalPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+		r.internalPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalPlugins[alias] = r.internalPlugins[providerType]
+		}
 	}
 
 	return nil

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -148,54 +149,84 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) 
 }
 
 // RegisterInternalResourceInputPlugin is called to register an internal implementation for an input plugin.
-func RegisterInternalResourceInputPlugin(
-	scheme *runtime.Scheme,
-	r *RepositoryRegistry,
-	plugin constructor.ResourceInputMethod,
-	proto runtime.Typed,
+func (r *RepositoryRegistry) RegisterInternalResourceInputPlugin(
+	plugin BuiltinResourceInputMethod,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(proto)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetInputMethodScheme().GetTypes() {
+		if !r.scheme.IsRegistered(providerType) {
+			if err := r.scheme.RegisterSchemeType(plugin.GetInputMethodScheme(), providerType); err != nil {
+				return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+			}
+		} else {
+			aliases := r.scheme.GetTypes()[providerType]
+			for _, alias := range providerTypeAliases {
+				if slices.Contains(aliases, alias) {
+					continue
+				}
+				return fmt.Errorf("provider type %q already registered with different aliases: %s", providerType, alias)
+			}
+			registeredObj, err := r.scheme.NewObject(providerType)
+			if err != nil {
+				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
+			}
+			newObject, err := plugin.GetInputMethodScheme().NewObject(providerType)
+			if err != nil {
+				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
+			}
+			if err := r.scheme.Convert(newObject, registeredObj); err != nil {
+				return fmt.Errorf("provider type %q already registered with different object type, expected %T, got %T: %w", providerType, registeredObj, newObject, err)
+			}
+		}
 
-	r.internalResourceInputRepositoryPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalResourceInputRepositoryPlugins[alias] = r.internalResourceInputRepositoryPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+		r.internalResourceInputRepositoryPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalResourceInputRepositoryPlugins[alias] = r.internalResourceInputRepositoryPlugins[providerType]
+		}
 	}
 
 	return nil
 }
 
-// RegisterInternalSourcePlugin is called to register an internal implementation for an input plugin.
-func RegisterInternalSourcePlugin(
-	scheme *runtime.Scheme,
-	r *RepositoryRegistry,
-	plugin constructor.SourceInputMethod,
-	proto runtime.Typed,
+// RegisterInternalSourceInputPlugin is called to register an internal implementation for an input plugin.
+func (r *RepositoryRegistry) RegisterInternalSourceInputPlugin(
+	plugin BuiltinSourceInputMethod,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(proto)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetInputMethodScheme().GetTypes() {
+		if !r.scheme.IsRegistered(providerType) {
+			if err := r.scheme.RegisterSchemeType(plugin.GetInputMethodScheme(), providerType); err != nil {
+				return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+			}
+		} else {
+			aliases := r.scheme.GetTypes()[providerType]
+			for _, alias := range providerTypeAliases {
+				if slices.Contains(aliases, alias) {
+					continue
+				}
+				return fmt.Errorf("provider type %q already registered with different aliases: %s", providerType, alias)
+			}
+			registeredObj, err := r.scheme.NewObject(providerType)
+			if err != nil {
+				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
+			}
+			newObject, err := plugin.GetInputMethodScheme().NewObject(providerType)
+			if err != nil {
+				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
+			}
+			if err := r.scheme.Convert(newObject, registeredObj); err != nil {
+				return fmt.Errorf("provider type %q already registered with different object type, expected %T, got %T: %w", providerType, registeredObj, newObject, err)
+			}
+		}
 
-	r.internalSourceInputRepositoryPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalSourceInputRepositoryPlugins[alias] = r.internalSourceInputRepositoryPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+		r.internalSourceInputRepositoryPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalSourceInputRepositoryPlugins[alias] = r.internalSourceInputRepositoryPlugins[providerType]
+		}
 	}
 
 	return nil

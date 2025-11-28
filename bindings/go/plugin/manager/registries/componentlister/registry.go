@@ -24,27 +24,21 @@ type constructedPlugin struct {
 }
 
 // RegisterInternalComponentListerPlugin is called to register an internal implementation for a component lister plugin.
-func RegisterInternalComponentListerPlugin[T runtime.Typed](
-	scheme *runtime.Scheme,
-	r *ComponentListerRegistry,
-	plugin InternalComponentListerPluginContract,
-	proto T,
+func (r *ComponentListerRegistry) RegisterInternalComponentListerPlugin(
+	plugin BuiltinComponentListerPluginContract,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(proto)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetComponentVersionRepositoryScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(plugin.GetComponentVersionRepositoryScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
 
-	r.internalComponentListerPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalComponentListerPlugins[alias] = r.internalComponentListerPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+		r.internalComponentListerPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalComponentListerPlugins[alias] = r.internalComponentListerPlugins[providerType]
+		}
 	}
 
 	return nil
@@ -59,6 +53,10 @@ type ComponentListerRegistry struct {
 	constructedPlugins             map[string]*constructedPlugin // running plugins
 	internalComponentListerPlugins map[runtime.Type]InternalComponentListerPluginContract
 	scheme                         *runtime.Scheme
+}
+
+func (r *ComponentListerRegistry) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	return r.scheme
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.

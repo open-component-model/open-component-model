@@ -183,22 +183,78 @@ func TestShutdown(t *testing.T) {
 }
 
 func TestRegisterInternalDigestProcessorPlugin(t *testing.T) {
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
+	ctx := t.Context()
+	r := require.New(t)
+
 	registry := NewDigestProcessorRegistry(ctx)
-	p := &mockDigestProcessorPlugin{}
-	require.NoError(t, RegisterInternalDigestProcessorPlugin(scheme, registry, p, &dummyv1.Repository{}))
-	retrievedPlugin, err := registry.GetPlugin(ctx, &dummyv1.Repository{})
-	require.NoError(t, err)
-	require.Equal(t, p, retrievedPlugin)
-	_, err = retrievedPlugin.ProcessResourceDigest(ctx, &descriptor.Resource{}, nil)
-	require.NoError(t, err)
-	require.True(t, p.called)
+	plugin := &mockDigestProcessorPlugin{}
+	r.NoError(registry.RegisterInternalDigestProcessorPlugin(plugin))
+
+	tests := []struct {
+		name       string
+		accessSpec runtime.Typed
+		err        require.ErrorAssertionFunc
+	}{
+		{
+			name:       "prototype",
+			accessSpec: &dummyv1.Repository{},
+			err:        require.NoError,
+		},
+		{
+			name: "canonical type",
+			accessSpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.Type,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "short type",
+			accessSpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.ShortType,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "invalid type",
+			accessSpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "NonExistingType",
+					Version: "v1",
+				},
+			},
+			err: require.Error,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name+"resource input", func(t *testing.T) {
+			digesterProcessorPlugin, err := registry.GetPlugin(ctx, tc.accessSpec)
+			tc.err(t, err)
+			if err != nil {
+				return
+			}
+			r.NotNil(digesterProcessorPlugin)
+			r.Equal(plugin, digesterProcessorPlugin)
+
+			_, err = digesterProcessorPlugin.ProcessResourceDigest(ctx, &descriptor.Resource{}, nil)
+			require.NoError(t, err)
+			require.True(t, plugin.called)
+		})
+	}
 }
 
 type mockDigestProcessorPlugin struct {
 	called bool
+}
+
+func (m *mockDigestProcessorPlugin) GetResourceRepositoryScheme() *runtime.Scheme {
+	return dummytype.Scheme
 }
 
 func (m *mockDigestProcessorPlugin) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {

@@ -123,28 +123,73 @@ func TestSchemeDoesNotExist(t *testing.T) {
 }
 
 func TestInternalPluginRegistry(t *testing.T) {
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
-	registry := NewBlobTransformerRegistry(ctx)
-	proto := &dummyv1.Repository{
-		Type: runtime.Type{
-			Name:    "DummyRepository",
-			Version: "v1",
-		},
-		BaseUrl: "",
-	}
-	mockPlugin := &mockBlobTransformerPlugin{}
-	require.NoError(t, RegisterInternalBlobTransformerPlugin(scheme, registry, mockPlugin, proto))
-	retrievedPlugin, err := registry.GetPlugin(ctx, proto)
-	require.NoError(t, err)
-	require.Equal(t, mockPlugin, retrievedPlugin)
+	ctx := t.Context()
+	r := require.New(t)
 
-	transformedBlob, err := retrievedPlugin.TransformBlob(ctx, inmemory.New(strings.NewReader("foobar")), proto, nil)
-	require.NoError(t, err)
-	require.True(t, mockPlugin.called)
-	require.NotNil(t, transformedBlob)
+	registry := NewBlobTransformerRegistry(ctx)
+	mockPlugin := &mockBlobTransformerPlugin{}
+	r.NoError(registry.RegisterInternalBlobTransformerPlugin(mockPlugin))
+
+	tests := []struct {
+		name              string
+		transformerConfig runtime.Typed
+		err               require.ErrorAssertionFunc
+	}{
+		{
+			name:              "prototype",
+			transformerConfig: &dummyv1.Repository{},
+			err:               require.NoError,
+		},
+		{
+			name: "canonical type",
+			transformerConfig: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.Type,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "short type",
+			transformerConfig: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.ShortType,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "invalid type",
+			transformerConfig: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "NonExistingType",
+					Version: "v1",
+				},
+			},
+			err: require.Error,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			transformerPlugin, err := registry.GetPlugin(ctx, tc.transformerConfig)
+			tc.err(t, err)
+			if err != nil {
+				return
+			}
+			r.NotNil(transformerPlugin)
+			r.Equal(mockPlugin, transformerPlugin)
+
+			transformedBlob, err := transformerPlugin.TransformBlob(ctx, inmemory.New(strings.NewReader("foobar")), nil, nil)
+			require.NoError(t, err)
+			require.True(t, mockPlugin.called)
+			require.NotNil(t, transformedBlob)
+		})
+	}
 }
+
 func TestAddPluginDuplicate(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
@@ -191,13 +236,16 @@ func TestGetPluginWithEmptyType(t *testing.T) {
 
 	_, err := registry.GetPlugin(ctx, proto)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "external plugins can not be fetched without a type")
 }
 
 // Mock implementations for testing
 
 type mockBlobTransformerPlugin struct {
 	called bool
+}
+
+func (m *mockBlobTransformerPlugin) GetTransformerScheme() *runtime.Scheme {
+	return dummytype.Scheme
 }
 
 func (m *mockBlobTransformerPlugin) GetBlobTransformerCredentialConsumerIdentity(ctx context.Context, spec runtime.Typed) (runtime.Identity, error) {
