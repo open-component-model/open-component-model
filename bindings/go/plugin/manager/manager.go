@@ -139,6 +139,11 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		plugin.Config = *conf
 
 		output := bytes.NewBuffer(nil)
+		// TODO(fabianburth): provide developer documentation on how to debug
+		//   plugins.
+		// The commented command below can be used to start the plugin in headless mode with Delve for debugging purposes.
+		// Depending on your IDE, you can create a remote debugging configuration that connects to the specified port.
+		// The execution will wait for a debugger to attach before proceeding.
 		// cmd := exec.CommandContext(ctx, "dlv", "exec", cleanPath(plugin.Path), "--headless=true", "--listen=:40000", "--api-version=2", "--accept-multiclient", "--log", "--log-dest=2", "--", "capabilities")
 		cmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "capabilities") //nolint:gosec // G204 does not apply
 		cmd.Stdout = output
