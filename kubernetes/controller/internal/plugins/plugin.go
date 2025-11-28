@@ -7,7 +7,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocicredentialsspec "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
-	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -20,11 +19,12 @@ import (
 )
 
 func Register(pm *manager.PluginManager) error {
-	scheme := runtime.NewScheme()
+	// Repository Plugin
+	repositoryScheme := runtime.NewScheme()
 
 	// TODO: Remove when RegisterWithAlias is fixed
 	//       https://github.com/open-component-model/open-component-model/pull/1284
-	scheme.MustRegisterWithAlias(&ociv1.Repository{},
+	repositoryScheme.MustRegisterWithAlias(&ociv1.Repository{},
 		runtime.NewVersionedType(ociv1.Type, ociv1.Version),
 		runtime.NewUnversionedType(ociv1.Type),
 		runtime.NewVersionedType(ociv1.ShortType, ociv1.Version),
@@ -37,7 +37,7 @@ func Register(pm *manager.PluginManager) error {
 		runtime.NewUnversionedType(ociv1.LegacyRegistryType2),
 	)
 
-	scheme.MustRegisterWithAlias(&ctfv1.Repository{},
+	repositoryScheme.MustRegisterWithAlias(&ctfv1.Repository{},
 		runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
 		runtime.NewUnversionedType(ctfv1.Type),
 		runtime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
@@ -46,10 +46,10 @@ func Register(pm *manager.PluginManager) error {
 		runtime.NewUnversionedType(ctfv1.ShortType2),
 	)
 
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(repositoryScheme))
 
 	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-		ocmrepository.Scheme,
+		repositoryScheme,
 		pm.ComponentVersionRepositoryRegistry,
 		repositoryProvider,
 		&ociv1.Repository{},
@@ -58,7 +58,7 @@ func Register(pm *manager.PluginManager) error {
 	}
 
 	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-		ocmrepository.Scheme,
+		repositoryScheme,
 		pm.ComponentVersionRepositoryRegistry,
 		repositoryProvider,
 		&ctfv1.Repository{},
@@ -66,6 +66,7 @@ func Register(pm *manager.PluginManager) error {
 		return err
 	}
 
+	// Credential Plugin
 	credScheme := runtime.NewScheme()
 	credScheme.MustRegisterWithAlias(
 		&ocicredentialsspecv1.DockerConfig{},
@@ -102,32 +103,6 @@ func Register(pm *manager.PluginManager) error {
 	); err != nil {
 		return err
 	}
-
-	// TODO: Enable these plugins when needed
-	//  resource.RegisterInternalResourcePlugin(
-	//  	scheme,
-	//  	pm.ResourcePluginRegistry,
-	//  	&resourceRepoPlugin,
-	//  	&v1.OCIImage{},
-	//  ),
-	//  digestprocessor.RegisterInternalDigestProcessorPlugin(
-	//  	scheme,
-	//  	digRegistry,
-	//  	&resourceRepoPlugin,
-	//  	&v1.OCIImage{},
-	//  ),
-	//  blobtransformer.RegisterInternalBlobTransformerPlugin(
-	//  	extractspecv1alpha1.Scheme,
-	//  	blobTransformerRegistry,
-	//  	ociBlobTransformerPlugin,
-	//  	&extractspecv1alpha1.Config{},
-	//  ),
-	//  componentlister.RegisterInternalComponentListerPlugin(
-	//  	scheme,
-	//  	compListRegistry,
-	//  	&CTFComponentListerPlugin{},
-	//  	&ctfv1.Repository{},
-	//  ),
 
 	return nil
 }
