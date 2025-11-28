@@ -14,15 +14,15 @@ func init() {
 	Scheme.MustRegisterWithAlias(&CapabilitySpec{}, runtime.NewUnversionedType(string(InputPluginType)))
 }
 
+// TODO(fabianburth): customize / optimize for input
+//  currently, it uses the general types.Type, but we might want to tailor this
+//  to input specifically.
+
 // CapabilitySpec specifies the supported types of a plugin for
 // a particular capability type.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
-// TODO(fabianburth): customize / optimize for input
-//
-//	currently, it uses the general types.Type, but we might want to tailor this
-//	to input specifically.
 type CapabilitySpec struct {
 	Type                runtime.Type `json:"type"`
 	SupportedInputTypes []types.Type `json:"supportedInputTypes"`

@@ -14,15 +14,15 @@ func init() {
 	Scheme.MustRegisterWithAlias(&CapabilitySpec{}, runtime.NewUnversionedType(string(ComponentListerPluginType)))
 }
 
+// TODO(fabianburth): customize / optimize for component listers
+//  currently, it uses the general types.Type, but we might want to tailor this
+//  to component listers specifically.
+
 // CapabilitySpec specifies the supported types of a plugin for
 // a particular capability type.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
-// TODO(fabianburth): customize / optimize for component listers
-//
-//	currently, it uses the general types.Type, but we might want to tailor this
-//	to component listers specifically.
 type CapabilitySpec struct {
 	Type                         runtime.Type `json:"type"`
 	SupportedRepositorySpecTypes []types.Type `json:"supportedRepositorySpecTypes"`
