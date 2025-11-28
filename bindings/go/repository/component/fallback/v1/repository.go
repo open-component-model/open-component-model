@@ -42,7 +42,7 @@ type FallbackRepository struct {
 	goRoutineLimit int
 
 	repositoryProvider  repository.ComponentVersionRepositoryProvider
-	credentialsResolver credentials.GraphResolver
+	credentialsResolver credentials.Resolver
 
 	// The resolvers slice is a list of resolvers sorted by priority (highest first).
 	// The order in this list determines the order in which repositories are
@@ -77,7 +77,7 @@ type FallbackRepositoryOptions struct {
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
 // and only added for backwards compatibility.
 // New concepts will likely be introduced in the future (contributions welcome!).
-func NewFallbackRepository(_ context.Context, repositoryProvider repository.ComponentVersionRepositoryProvider, credentialsResolver credentials.GraphResolver, res []*resolverruntime.Resolver, opts ...FallbackRepositoryOption) (*FallbackRepository, error) {
+func NewFallbackRepository(_ context.Context, repositoryProvider repository.ComponentVersionRepositoryProvider, credentialsResolver credentials.Resolver, res []*resolverruntime.Resolver, opts ...FallbackRepositoryOption) (*FallbackRepository, error) {
 	options := &FallbackRepositoryOptions{}
 	for _, opt := range opts {
 		opt(options)
