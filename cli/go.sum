@@ -85,6 +85,7 @@ ocm.software/open-component-model/bindings/go/configuration v0.0.9 h1:bfgPD2G3fg
 ocm.software/open-component-model/bindings/go/configuration v0.0.9/go.mod h1:VZ8jQ3a6oTWyOpY09C7V3L0CfzKe9i1/Z4uJjLAVjN4=
 ocm.software/open-component-model/bindings/go/constructor v0.0.2 h1:nVNpJHdOX5wMi/GcpA7rW67acVkUG7bS7Dp5fx7ilU4=
 ocm.software/open-component-model/bindings/go/constructor v0.0.2/go.mod h1:HCOtFIoIMUw36ncn+hUnU6RjfQEQubTe0+oLo2jekN0=
+ocm.software/open-component-model/bindings/go/credentials v0.0.5 h1:5ydDbH0kf1VVkTZ7ck1nX2Qy7SijQ6xS8v7SJDEcWGw=
 ocm.software/open-component-model/bindings/go/credentials v0.0.5/go.mod h1:hGguMD6I9HnjI0GBBv8BfFpfBSZmLzEMnAJ4eOUMLmc=
 ocm.software/open-component-model/bindings/go/ctf v0.3.0 h1:u1B26OgUvR+gzTwY0hTVdZgFIXv5uwdI8reEvCcjNV4=
 ocm.software/open-component-model/bindings/go/ctf v0.3.0/go.mod h1:skMxA1l7rZFhKsjn8CysSVG31zjmV95WaFqMVKRjHug=
