@@ -23,6 +23,9 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: read
+
 env:
   # Repository selection for checkout
   REGISTRY_CONSTRUCTOR: ${{ github.workspace }}/.github/config/plugin-registry-constructor.yaml

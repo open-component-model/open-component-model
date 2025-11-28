@@ -107,9 +107,9 @@ func (h *Handler) Sign(
 		if err != nil {
 			return descruntime.SignatureInfo{}, fmt.Errorf("read certificate chain: %w", err)
 		}
-		pem := rsasignature.SignatureBytesToPem(algorithm, rawSig, chain...)
+		pem := rsasignature.SignatureBytesToPem(string(algorithm), rawSig, chain...)
 		return descruntime.SignatureInfo{
-			Algorithm: algorithm,
+			Algorithm: string(algorithm),
 			MediaType: v1alpha1.MediaTypePEM,
 			Value:     string(pem),
 		}, nil
@@ -117,7 +117,7 @@ func (h *Handler) Sign(
 		fallthrough
 	default:
 		return descruntime.SignatureInfo{
-			Algorithm: algorithm,
+			Algorithm: string(algorithm),
 			MediaType: supported.GetDefaultMediaType(),
 			Value:     hex.EncodeToString(rawSig),
 		}, nil
@@ -182,7 +182,7 @@ func (h *Handler) Verify(
 			return fmt.Errorf("issuer verification based on underlying certificate failed: %w", err)
 		}
 
-		return verifyRSA(algFromPEM, rsaPub, hash, dig, sig)
+		return verifyRSA(v1alpha1.SignatureAlgorithm(algFromPEM), rsaPub, hash, dig, sig)
 
 	default:
 		return fmt.Errorf("unsupported media type %q", signed.Signature.MediaType)
@@ -230,11 +230,11 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 		}
 	} else if alg == "" {
 		if inferred, err := algorithmFromPlainMedia(signature.Signature.MediaType); err == nil {
-			alg = inferred
+			alg = string(inferred)
 		}
 	}
 
-	id := baseIdentity(alg)
+	id := baseIdentity(v1alpha1.SignatureAlgorithm(alg))
 	id[IdentityAttributeSignature] = signature.Name
 	return id, nil
 }
@@ -242,7 +242,7 @@ func (*Handler) GetVerifyingCredentialConsumerIdentity(
 // ---- internal helpers ----
 
 // algorithmFromPlainMedia infers the RSA algorithm from a plain media type.
-func algorithmFromPlainMedia(mt string) (string, error) {
+func algorithmFromPlainMedia(mt string) (v1alpha1.SignatureAlgorithm, error) {
 	switch mt {
 	case v1alpha1.MediaTypePlainRSASSAPSS:
 		return v1alpha1.AlgorithmRSASSAPSS, nil
@@ -316,8 +316,8 @@ func verifyIssuerForUnderlyingCert(signed descruntime.Signature, underlyingCert 
 }
 
 // baseIdentity builds a credential consumer identity for RSA handlers.
-func baseIdentity(algorithm string) runtime.Identity {
-	id := runtime.Identity{IdentityAttributeAlgorithm: algorithm}
+func baseIdentity(algorithm v1alpha1.SignatureAlgorithm) runtime.Identity {
+	id := runtime.Identity{IdentityAttributeAlgorithm: string(algorithm)}
 	id.SetType(rsacredentials.IdentityTypeRSA)
 	return id
 }

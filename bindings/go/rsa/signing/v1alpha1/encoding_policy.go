@@ -2,6 +2,7 @@ package v1alpha1
 
 // SignatureEncodingPolicy defines how signatures are serialized and stored.
 // Different policies trade off compactness, self-containment, and ease of verification.
+// +ocm:jsonschema-gen:enum=Plain,PEM
 type SignatureEncodingPolicy string
 
 const (
