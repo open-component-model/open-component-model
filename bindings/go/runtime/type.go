@@ -25,6 +25,11 @@ type Type struct {
 	Name    string
 }
 
+// CompareTypesLexicographically compares two Types lexicographically based on their string representations.
+func CompareTypesLexicographically(a, b Type) int {
+	return strings.Compare(a.String(), b.String())
+}
+
 // NewUnversionedType creates a new Type instance without a version.
 func NewUnversionedType(name string) Type {
 	return Type{Name: name}
@@ -71,7 +76,7 @@ func (t Type) Equal(other Type) bool {
 // - Versioned: "name/version"
 func (t Type) String() string {
 	if t.Version != "" {
-		return fmt.Sprintf("%s/%s", t.Name, t.Version)
+		return t.Name + "/" + t.Version
 	}
 	return t.Name // Unversioned type
 }
