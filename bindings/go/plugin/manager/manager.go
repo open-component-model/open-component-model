@@ -245,7 +245,6 @@ func init() {
 }
 
 func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
-
 	// Determine Configuration requirements.
 	rawPluginSpec := spec.PluginSpec{}
 	if err := json.Unmarshal(capabilitiesCommandOutput.Bytes(), &rawPluginSpec); err != nil {
