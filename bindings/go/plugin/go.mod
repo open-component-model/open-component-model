@@ -14,7 +14,7 @@ require (
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251124222340-4c1b948b736f
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
 	ocm.software/open-component-model/bindings/go/repository v0.0.3
-	ocm.software/open-component-model/bindings/go/runtime v0.0.2
+	ocm.software/open-component-model/bindings/go/runtime v0.0.3
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251124222340-4c1b948b736f
 )
 

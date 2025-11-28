@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -31,8 +30,8 @@ func TestPing(t *testing.T) {
 	plugin := NewComponentListerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentListerPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: v1.ComponentListerPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	// Test successful ping
 	err := plugin.Ping(context.Background())
@@ -62,12 +61,12 @@ func TestListComponentsHandler(t *testing.T) {
 	plugin := NewComponentListerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 		ID:         "test-plugin",
 		Type:       types.TCP,
-		PluginType: types.ComponentListerPluginType,
-	}, server.URL, []byte(`{}`))
+		PluginType: v1.ComponentListerPluginType,
+	}, server.URL, dummyCapability([]byte(`{}`)))
 
 	ctx := context.Background()
 	response, err := plugin.ListComponents(ctx, &v1.ListComponentsRequest[runtime.Typed]{
-		Repository: &dummyv1.Repository{},
+		Repository: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 		Last:       "",
 	}, map[string]string{})
 	require.NoError(t, err)

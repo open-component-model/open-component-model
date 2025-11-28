@@ -70,8 +70,8 @@ func TestProcessResourceDigest(t *testing.T) {
 			plugin := NewDigestProcessorPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.DigestProcessorPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.DigestProcessorPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.ProcessResourceDigest(context.Background(), tt.request, tt.credentials)
 			if tt.expectErr {
@@ -121,8 +121,8 @@ func TestPing(t *testing.T) {
 			plugin := NewDigestProcessorPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.DigestProcessorPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.DigestProcessorPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			err := plugin.Ping(context.Background())
 			if tt.expectErr {
@@ -143,7 +143,7 @@ func TestGetIdentity(t *testing.T) {
 	}{
 		{
 			name:    "success",
-			request: &v1.GetIdentityRequest[runtime.Typed]{},
+			request: &v1.GetIdentityRequest[runtime.Typed]{Typ: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == Identity {
@@ -158,7 +158,7 @@ func TestGetIdentity(t *testing.T) {
 		},
 		{
 			name:    "validation_failed",
-			request: &v1.GetIdentityRequest[runtime.Typed]{},
+			request: &v1.GetIdentityRequest[runtime.Typed]{Typ: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
@@ -168,7 +168,7 @@ func TestGetIdentity(t *testing.T) {
 		},
 		{
 			name:    "call_failed",
-			request: &v1.GetIdentityRequest[runtime.Typed]{},
+			request: &v1.GetIdentityRequest[runtime.Typed]{Typ: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -186,8 +186,8 @@ func TestGetIdentity(t *testing.T) {
 			plugin := NewDigestProcessorPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.DigestProcessorPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.DigestProcessorPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.GetIdentity(context.Background(), tt.request)
 			if tt.expectErr {
