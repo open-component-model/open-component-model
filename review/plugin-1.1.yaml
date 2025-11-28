@@ -1,5 +1,0 @@
----
-name: ocm.software/plugins/plugin-one
-version: v1.1.0
-provider:
-  name: ocm.software
