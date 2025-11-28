@@ -154,8 +154,10 @@ func TestGetVerifierIdentity(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:    "validation_failed",
-			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{},
+			name: "validation_failed",
+			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{VerifyRequest: v1.VerifyRequest[runtime.Typed]{
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)},
+			}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
@@ -280,7 +282,7 @@ func TestVerify(t *testing.T) {
 			name: "call_failed",
 			request: &v1.VerifyRequest[runtime.Typed]{
 				Signature: &v2.Signature{Signature: v2.SignatureInfo{Algorithm: "rsa", Value: "sig"}},
-				Config:    nil,
+				Config:    &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 			},
 			credentials: map[string]string{"key": "value"},
 			setupMock: func() *httptest.Server {
