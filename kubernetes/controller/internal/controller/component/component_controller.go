@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -24,14 +25,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
@@ -261,7 +261,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	digestSpec, err := generateDigest(ctx, desc, LegacyNormalisationAlgo, crypto.SHA256.String())
+	digestSpec, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)), LegacyNormalisationAlgo, crypto.SHA256.String())
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
@@ -430,7 +430,10 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 
 // verifyComponentVersion verifies the component version signatures.
 func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descruntime.Descriptor, verifications []v1alpha1.Verification, namespace string) error {
-	if err := isSafelyDigestible(&desc.Component); err != nil {
+	logger := log.FromContext(ctx)
+	logger.Info("verifying component version signatures", "verifications", len(verifications))
+
+	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 		return err
 	}
 
@@ -447,7 +450,7 @@ func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descrunti
 			return fmt.Errorf("signature %q not found in component version", verify.Signature)
 		}
 
-		if err := verifyDigestMatchesDescriptor(ctx, desc, *signature); err != nil {
+		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *signature, slog.New(logr.ToSlogHandler(logger))); err != nil {
 			return fmt.Errorf("digest verification failed for signature %q: %w", verify.Signature, err)
 		}
 
@@ -508,129 +511,4 @@ func (r *Reconciler) createCredentials(ctx context.Context, verify v1alpha1.Veri
 	}
 
 	return credentials, nil
-}
-
-// generateDigest computes a new digest for a descriptor with the given
-// normalisation and hashing algorithms.
-func generateDigest(
-	ctx context.Context,
-	desc *descruntime.Descriptor,
-	normalisationAlgorithm string,
-	hashAlgorithm string,
-) (*descruntime.Digest, error) {
-	normalisationAlgorithm = ensureNormalisationAlgo(ctx, normalisationAlgorithm)
-
-	normalised, err := normalisation.Normalise(desc, normalisationAlgorithm)
-	if err != nil {
-		return nil, fmt.Errorf("normalising component version failed: %w", err)
-	}
-
-	hash, err := getSupportedHash(hashAlgorithm)
-	if err != nil {
-		return nil, err
-	}
-
-	h := hash.New()
-	if _, err := h.Write(normalised); err != nil {
-		return nil, fmt.Errorf("hashing component version failed: %w", err)
-	}
-	freshDigest := h.Sum(nil)
-
-	return &descruntime.Digest{
-		HashAlgorithm:          hash.String(),
-		NormalisationAlgorithm: normalisationAlgorithm,
-		Value:                  hex.EncodeToString(freshDigest),
-	}, nil
-}
-
-// verifyDigestMatchesDescriptor ensures that a descriptor matches a digest
-// provided by a signature.
-func verifyDigestMatchesDescriptor(
-	ctx context.Context,
-	desc *descruntime.Descriptor,
-	signature descruntime.Signature,
-) error {
-	signature.Digest.NormalisationAlgorithm = ensureNormalisationAlgo(ctx, signature.Digest.NormalisationAlgorithm)
-
-	normalised, err := normalisation.Normalise(desc, signature.Digest.NormalisationAlgorithm)
-	if err != nil {
-		return fmt.Errorf("normalising component version failed: %w", err)
-	}
-
-	hash, err := getSupportedHash(signature.Digest.HashAlgorithm)
-	if err != nil {
-		return err
-	}
-
-	h := hash.New()
-	if _, err := h.Write(normalised); err != nil {
-		return fmt.Errorf("hashing component version failed: %w", err)
-	}
-	freshDigest := h.Sum(nil)
-
-	digestFromSignature, err := hex.DecodeString(signature.Digest.Value)
-	if err != nil {
-		return fmt.Errorf("decoding digest from signature failed: %w", err)
-	}
-
-	if !bytes.Equal(freshDigest, digestFromSignature) {
-		return fmt.Errorf("digest mismatch: descriptor %x vs signature %x", freshDigest, digestFromSignature)
-	}
-	return nil
-}
-
-// isSafelyDigestible validates that a component's references and resources
-// contain consistent digests according rules.
-func isSafelyDigestible(cd *descruntime.Component) error {
-	for _, reference := range cd.References {
-		if reference.Digest.HashAlgorithm == "" ||
-			reference.Digest.NormalisationAlgorithm == "" ||
-			reference.Digest.Value == "" {
-			return fmt.Errorf("missing digest in componentReference for %s:%s", reference.Name, reference.Version)
-		}
-	}
-
-	const AccessTypeNone = "None"
-	for _, res := range cd.Resources {
-		hasUsableAccess := res.Access != nil && res.Access.GetType().String() != AccessTypeNone
-		if hasUsableAccess {
-			if res.Digest == nil ||
-				res.Digest.HashAlgorithm == "" ||
-				res.Digest.NormalisationAlgorithm == "" ||
-				res.Digest.Value == "" {
-				return fmt.Errorf("missing digest in resource for %s:%s", res.Name, res.Version)
-			}
-		} else if res.Digest != nil {
-			return fmt.Errorf("digest for resource with empty access not allowed %s:%s", res.Name, res.Version)
-		}
-	}
-	return nil
-}
-
-// ensureNormalisationAlgo resolves the effective normalisation algorithm.
-func ensureNormalisationAlgo(ctx context.Context, algo string) string {
-	logger := log.FromContext(ctx).WithName("ensureNormalisationAlgo")
-	if algo == LegacyNormalisationAlgo {
-		logger.V(1).Info("legacy normalisation algorithm detected, using v4alpha1",
-			"legacy", LegacyNormalisationAlgo,
-			"new", v4alpha1.Algorithm,
-		)
-		return v4alpha1.Algorithm
-	}
-	return algo
-}
-
-// supportedHashes lists supported hashing algorithms keyed by their identifier
-var supportedHashes = map[string]crypto.Hash{
-	crypto.SHA256.String(): crypto.SHA256,
-	crypto.SHA512.String(): crypto.SHA512,
-}
-
-// getSupportedHash looks up a crypto.Hash from its string identifier.
-func getSupportedHash(name string) (crypto.Hash, error) {
-	h, ok := supportedHashes[name]
-	if !ok {
-		return 0, fmt.Errorf("unsupported hash algorithm %q", name)
-	}
-	return h, nil
 }
