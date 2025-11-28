@@ -41,6 +41,21 @@ type RepositoryRegistry struct {
 	scheme *runtime.Scheme
 }
 
+// GetJSONSchemaForRepositorySpecification provides the JSON schema for OCI and CTF repository specifications.
+func (r *RepositoryRegistry) GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error) {
+	plugin, ok := r.registry[typ]
+	if !ok {
+		return nil, fmt.Errorf("plugin for type %v not found", typ)
+	}
+	capability := r.capabilities[plugin.ID]
+	for _, specType := range capability.SupportedRepositorySpecTypes {
+		if specType.Type == typ {
+			return specType.JSONSchema, nil
+		}
+	}
+	return nil, fmt.Errorf("JSON schema for type %v not found", typ)
+}
+
 // RegisterInternalComponentVersionRepositoryPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
 func (r *RepositoryRegistry) RegisterInternalComponentVersionRepositoryPlugin(
