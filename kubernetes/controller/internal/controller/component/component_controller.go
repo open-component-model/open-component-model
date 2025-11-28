@@ -13,7 +13,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -218,11 +217,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
-	repoSpec, err := r.convertRepositorySpec(repo.Spec.RepositorySpec)
-	if err != nil {
+	repoSpec := &runtime.Raw{}
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(repo.Spec.RepositorySpec.Raw), repoSpec); err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetRepositoryFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to convert repository spec: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
 	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
@@ -335,20 +334,6 @@ func (r *Reconciler) reconcileDelete(ctx context.Context, component *v1alpha1.Co
 	)
 
 	return nil
-}
-
-// convertRepositorySpec converts a JSON repository spec to a typed spec.
-func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.Typed, error) {
-	if spec == nil {
-		return nil, fmt.Errorf("repository spec is nil")
-	}
-
-	raw := &runtime.Raw{}
-	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(spec.Raw), raw); err != nil {
-		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
-	}
-
-	return raw, nil
 }
 
 func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, component *v1alpha1.Component,
