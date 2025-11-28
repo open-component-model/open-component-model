@@ -20,16 +20,16 @@ func init() {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Config struct {
 	// Type identifies this configuration object’s runtime type.
+	// +ocm:jsonschema-gen:enum=RSASigningConfiguration/v1alpha1
+	// +ocm:jsonschema-gen:enum:deprecated=RSASigningConfiguration
 	Type runtime.Type `json:"type"`
 
 	SignatureEncodingPolicy SignatureEncodingPolicy `json:"signatureEncodingPolicy,omitempty"`
 
-	// SignatureAlgorithm is the signature algorithm to use when creating new signatures.
-	// This field is optional and defaults to AlgorithmRSASSAPSS. For verification, this field is ignored
-	// and the signature algorithm is inferred from the signature specification.
-	SignatureAlgorithm string `json:"signatureAlgorithm,omitempty"`
+	SignatureAlgorithm SignatureAlgorithm `json:"signatureAlgorithm,omitempty"`
 }
 
 func (cfg *Config) GetSignatureEncodingPolicy() SignatureEncodingPolicy {
@@ -39,7 +39,7 @@ func (cfg *Config) GetSignatureEncodingPolicy() SignatureEncodingPolicy {
 	return cfg.SignatureEncodingPolicy
 }
 
-func (cfg *Config) GetSignatureAlgorithm() string {
+func (cfg *Config) GetSignatureAlgorithm() SignatureAlgorithm {
 	if cfg == nil || cfg.SignatureAlgorithm == "" {
 		return AlgorithmRSASSAPSS
 	}
