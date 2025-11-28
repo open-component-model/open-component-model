@@ -215,6 +215,10 @@ func (m *mockPluginProvider) GetComponentVersionRepositoryScheme() *runtime.Sche
 	return dummytype.Scheme
 }
 
+func (m *mockPluginProvider) GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error) {
+	return dummyv1.Repository{}.JSONSchema(), nil
+}
+
 var _ repository.ComponentVersionRepositoryProvider = (*mockPluginProvider)(nil)
 
 func (m *mockPluginProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {

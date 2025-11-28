@@ -104,6 +104,23 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	return b.scheme
 }
 
+// GetJSONSchemaForRepositorySpecification provides the JSON schema for OCI and CTF repository specifications.
+func (b *CachingComponentVersionRepositoryProvider) GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error) {
+	obj, err := b.scheme.NewObject(typ)
+	if err != nil {
+		return nil, err
+	}
+	var schema []byte
+	switch obj := obj.(type) {
+	case *ocirepospecv1.Repository:
+		schema = obj.JSONSchema()
+	case *ctfrepospecv1.Repository:
+		schema = obj.JSONSchema()
+	}
+
+	return schema, nil
+}
+
 // GetComponentVersionRepositoryCredentialConsumerIdentity implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves the consumer identity for a given repository specification.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
