@@ -40,11 +40,6 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
 )
 
-const (
-	// LegacyNormalisationAlgo identifies the deprecated v3 JSON normalisation algorithm.
-	LegacyNormalisationAlgo = "jsonNormalisation/v3"
-)
-
 // Reconciler reconciles a Component object.
 type Reconciler struct {
 	*ocm.BaseReconciler
@@ -261,7 +256,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 	}
 
-	digestSpec, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)), LegacyNormalisationAlgo, crypto.SHA256.String())
+	digestSpec, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)), signing.LegacyNormalisationAlgo, crypto.SHA256.String())
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
