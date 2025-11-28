@@ -1,0 +1,5 @@
+---
+name: ocm.software/plugins/plugin-three
+version: v1.0.0
+provider:
+  name: ocm.software

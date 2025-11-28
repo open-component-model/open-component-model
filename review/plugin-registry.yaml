@@ -1,0 +1,96 @@
+name: ocm.software/plugin-registry
+version: v1.0.0
+provider:
+  name: ocm.software
+labels:
+  - name: registry
+    value: official
+  - name: description
+    value: Whatever
+
+componentReferences:
+  - name: a-plugin
+    version: v1.0.0
+    componentName: ocm.software/plugins/plugin-one
+    labels:
+      - name: ocm.software/pluginInfo
+        value:
+          description: "A plugin that supports multiple platforms"
+          platforms:
+            - linux/amd64
+            - darwin/arm64
+  - name: a-plugin
+    version: v1.1.0
+    componentName: ocm.software/plugins/plugin-one
+    labels:
+      - name: ocm.software/pluginInfo
+        value:
+          description: "A plugin that supports multiple platforms"
+          platforms:
+            - linux/amd64
+            - darwin/arm64
+            - windows/amd64
+  - name: a-plugin
+    version: v1.2.0
+    componentName: ocm.software/plugins/plugin-one
+    labels:
+      - name: ocm.software/pluginInfo
+        value:
+          description: "A plugin that supports multiple platforms"
+          platforms:
+            - linux/amd64
+            - darwin/arm64
+            - windows/amd64
+            - linux/arm64
+  - name: a-plugin
+    version: v1.3.0
+    componentName: ocm.software/plugins/plugin-one
+    labels:
+      - name: ocm.software/pluginInfo
+        value:
+          description: "A plugin that supports multiple platforms"
+          platforms:
+            - linux/amd64
+            - darwin/arm64
+            - windows/amd64
+            - linux/arm64
+            - darwin/amd64
+  - name: b-plugin
+    version: v1.0.0
+    componentName: ocm.software/plugins/plugin-two
+    labels:
+      - name: ocm.software/pluginInfo
+        value:
+          description: "Sample Plugin Two"
+          platforms:
+            - linux/amd64
+            - darwin/arm64
+            - windows/amd64
+            - linux/arm64
+            - darwin/amd64
+  - name: c-plugin
+    version: v1.0.0
+    componentName: ocm.software/plugins/plugin-three
+    labels:
+      - name: ocm.software/pluginInfo
+        value:
+          description: "A fancy description for plugin three"
+          platforms:
+            - linux/amd64
+            - darwin/arm64
+            - windows/amd64
+            - linux/arm64
+            - darwin/amd64
+  - name: d-plugin
+    version: v1.0.0
+    componentName: ocm.software/plugins/plugin-four
+    labels:
+      - name: ocm.software/pluginInfo
+        value:
+          description: "Hello World Plugin"
+          platforms:
+            - linux/amd64
+            - darwin/arm64
+            - windows/amd64
+            - linux/arm64
+            - darwin/amd64

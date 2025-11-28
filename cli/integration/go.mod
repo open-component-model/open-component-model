@@ -4,6 +4,9 @@ go 1.25.3
 
 replace ocm.software/open-component-model/cli => ../
 
+// TODO: Remove when signing module version is bumped (https://github.com/open-component-model/open-component-model/pull/1280)
+replace ocm.software/open-component-model/bindings/go/signing => ../../bindings/go/signing
+
 require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
@@ -105,12 +108,12 @@ require (
 	ocm.software/open-component-model/bindings/go/credentials v0.0.2 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251124222340-4c1b948b736f // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251128114647-c2e82904a5d3 // indirect
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/input/file v0.0.2 // indirect
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251124222340-4c1b948b736f // indirect
 	ocm.software/open-component-model/bindings/go/plugin v0.0.10 // indirect
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251124222340-4c1b948b736f // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251124222340-4c1b948b736f // indirect
+	ocm.software/open-component-model/bindings/go/signing v1.2.3 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
