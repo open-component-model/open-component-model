@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -111,10 +112,10 @@ func AddDescriptorToStore(ctx context.Context, store spec.Store, descriptor *des
 			annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation(component, version),
 			annotations.OCMCreator:          opts.Author,
 			ociImageSpecV1.AnnotationTitle:  fmt.Sprintf("OCM Component Descriptor OCI Artifact Manifest for %s in version %s", component, version),
-			ociImageSpecV1.AnnotationDescription: fmt.Sprintf(`
+			ociImageSpecV1.AnnotationDescription: strings.TrimSpace(fmt.Sprintf(`
 This is an OCM OCI Artifact Manifest that contains the component descriptor for the component %[1]s.
 It is used to store the component descriptor in an OCI registry and can be referrenced by the official OCM Binding Library.
-`, component),
+`, component)),
 			ociImageSpecV1.AnnotationAuthors:       opts.Author,
 			ociImageSpecV1.AnnotationURL:           "https://ocm.software",
 			ociImageSpecV1.AnnotationDocumentation: "https://ocm.software",
@@ -162,10 +163,10 @@ It is used to store the component descriptor in an OCI registry and can be refer
 			annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation(component, version),
 			annotations.OCMCreator:          opts.Author,
 			ociImageSpecV1.AnnotationTitle:  fmt.Sprintf("OCM Component Descriptor OCI Artifact Manifest Index for %s in version %s", component, version),
-			ociImageSpecV1.AnnotationDescription: fmt.Sprintf(`
+			ociImageSpecV1.AnnotationDescription: strings.TrimSpace(fmt.Sprintf(`
 This is an OCM OCI Artifact Manifest Index that contains the component descriptor manifest for the component %[1]s.
 It is used to store the component descriptor manifest and other related blob manifests in an OCI registry and can be referrenced by the official OCM Binding Library.
-`, component),
+`, component)),
 			ociImageSpecV1.AnnotationAuthors:       opts.Author,
 			ociImageSpecV1.AnnotationURL:           "https://ocm.software",
 			ociImageSpecV1.AnnotationDocumentation: "https://ocm.software",
