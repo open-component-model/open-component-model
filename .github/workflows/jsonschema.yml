@@ -1,0 +1,28 @@
+name: JSON Schema
+on:
+  push:
+    branches:
+    - main
+    paths:
+    - '**/schemas/*.schema.json'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**/schemas/*.schema.json'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+    - name: Setup JSON Schema
+      uses: sourcemeta/jsonschema@8f163c81ee4d1e59321067de0b3c134b7120175e # v12.7.1
+    - name: Lint JSON Schemas
+      run: |
+        jsonschema lint $(git ls-files '*.schema.json') \
+          --verbose \
+          --strict \
+          --exclude additional_properties_default # we want to explicitly set additional properties to avoid confusion
