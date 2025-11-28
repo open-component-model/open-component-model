@@ -263,12 +263,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to generate digest: %w", err)
 	}
 
-	if len(component.Spec.Verify) > 0 {
-		if err := r.verifyComponentVersion(ctx, desc, component.Spec.Verify, component.GetNamespace()); err != nil {
-			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+	if err := r.verifyComponentVersion(ctx, desc, component.Spec.Verify, component.GetNamespace()); err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
-			return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
-		}
+		return ctrl.Result{}, fmt.Errorf("failed to verify component version: %w", err)
 	}
 
 	logger.Info("updating status")
@@ -426,6 +424,13 @@ func (r *Reconciler) DetermineEffectiveVersionFromRepo(ctx context.Context, comp
 // verifyComponentVersion verifies the component version signatures.
 func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descruntime.Descriptor, verifications []v1alpha1.Verification, namespace string) error {
 	logger := log.FromContext(ctx)
+
+	if len(verifications) == 0 {
+		logger.Info("no verifications configured, skipping signature verification")
+
+		return nil
+	}
+
 	logger.Info("verifying component version signatures", "verifications", len(verifications))
 
 	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
