@@ -5,5 +5,4 @@
 // canonical JSON form and hashing the result with a supported algorithm.
 // These functions are used to guarantee integrity, support signature checks,
 // and validate component graph consistency.
-
 package signing
