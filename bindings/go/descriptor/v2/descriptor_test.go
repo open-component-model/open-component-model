@@ -1244,6 +1244,34 @@ func TestComponent_DeepCopy(t *testing.T) {
 				Relation: descriptorv2.LocalRelation,
 			},
 		},
+		Sources: []descriptorv2.Source{
+			{
+				ElementMeta: descriptorv2.ElementMeta{
+					ObjectMeta: descriptorv2.ObjectMeta{
+						Name:    "test-source",
+						Version: "1.0.0",
+					},
+				},
+				Type: "git",
+				Access: &runtime.Raw{
+					Type: runtime.Type{
+						Name: "github",
+					},
+					Data: []byte(`{"type":"github","repoUrl":"https://github.com/test/repo"}`),
+				},
+			},
+		},
+		References: []descriptorv2.Reference{
+			{
+				ElementMeta: descriptorv2.ElementMeta{
+					ObjectMeta: descriptorv2.ObjectMeta{
+						Name:    "test-reference",
+						Version: "2.0.0",
+					},
+				},
+				Component: "referenced-component",
+			},
+		},
 	}
 
 	// Test
@@ -1255,12 +1283,18 @@ func TestComponent_DeepCopy(t *testing.T) {
 	assert.Equal(t, original.Version, copied.Version)
 	assert.Equal(t, original.Provider, copied.Provider)
 	assert.Equal(t, len(original.Resources), len(copied.Resources))
+	assert.Equal(t, len(original.Sources), len(copied.Sources))
+	assert.Equal(t, len(original.References), len(copied.References))
 
 	// Modify original to ensure deep copy
 	original.Name = "modified"
 	original.Resources[0].Name = "modified-resource"
+	original.Sources[0].Name = "modified-source"
+	original.References[0].Name = "modified-reference"
 	assert.NotEqual(t, original.Name, copied.Name, "Modifying original should not affect copy")
-	assert.NotEqual(t, original.Resources[0].Name, copied.Resources[0].Name, "Modifying nested structures should not affect copy")
+	assert.NotEqual(t, original.Resources[0].Name, copied.Resources[0].Name, "Modifying nested resources should not affect copy")
+	assert.NotEqual(t, original.Sources[0].Name, copied.Sources[0].Name, "Modifying nested sources should not affect copy")
+	assert.NotEqual(t, original.References[0].Name, copied.References[0].Name, "Modifying nested references should not affect copy")
 }
 
 func TestComponent_DeepCopy_Nil(t *testing.T) {
