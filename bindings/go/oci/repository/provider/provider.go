@@ -95,7 +95,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		scheme:             options.Scheme,
 		storeCache:         &storeCache{store: make(map[string]*ocictf.Store)},
 		credentialCache:    &credentialCache{},
-		ociCache:           &ociCache{scheme: repoSpec.Scheme},
+		ociCache:           &ociCache{scheme: options.Scheme},
 		authorizationCache: auth.NewCache(),
 		httpClient:         retry.DefaultClient,
 		tempDir:            options.TempDir,
