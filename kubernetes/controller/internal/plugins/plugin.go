@@ -22,6 +22,8 @@ import (
 )
 
 func Register(pm *manager.PluginManager) error {
+	// TODO: Replace global variable when options are supported in repository providers
+	//       https://github.com/open-component-model/open-component-model/pull/1282
 	ocmrepository.Scheme = runtime.NewScheme()
 
 	// TODO: Remove when RegisterWithAlias is fixed
