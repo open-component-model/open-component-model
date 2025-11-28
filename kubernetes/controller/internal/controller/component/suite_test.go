@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -23,10 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
-
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
@@ -116,12 +114,8 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	ocmscheme := ocmruntime.NewScheme(ocmruntime.WithAllowUnknown())
-	ocmrepository.MustAddLegacyToScheme(ocmscheme)
-	ocmrepository.MustAddToScheme(ocmscheme)
-
 	pm = manager.NewPluginManager(ctx)
-	Expect(plugins.Register(pm, ocmscheme)).To(Succeed())
+	Expect(plugins.Register(pm)).To(Succeed())
 
 	const unlimited = 0
 	ttl := time.Minute * 30
@@ -148,7 +142,6 @@ var _ = BeforeSuite(func() {
 			EventRecorder: recorder,
 		},
 		Resolver:      resolver,
-		OCMScheme:     ocmscheme,
 		PluginManager: pm,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 

@@ -50,7 +50,6 @@ type Reconciler struct {
 	*ocm.BaseReconciler
 
 	Resolver      *resolution.Resolver
-	OCMScheme     *runtime.Scheme
 	PluginManager *manager.PluginManager
 }
 
@@ -352,7 +351,7 @@ func (r *Reconciler) convertRepositorySpec(spec *apiextensionsv1.JSON) (runtime.
 	}
 
 	raw := &runtime.Raw{}
-	if err := r.OCMScheme.Decode(bytes.NewReader(spec.Raw), raw); err != nil {
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(spec.Raw), raw); err != nil {
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)
 	}
 
