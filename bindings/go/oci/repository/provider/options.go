@@ -1,5 +1,7 @@
 package provider
 
+import "ocm.software/open-component-model/bindings/go/runtime"
+
 // Options holds configuration options for the OCI repository provider.
 type Options struct {
 	// TempDir is the shared default temporary filesystem directory for any
@@ -9,6 +11,9 @@ type Options struct {
 	// UserAgent is the User-Agent string to be used in HTTP requests by all the
 	// repositories provided by the provider.
 	UserAgent string
+
+	// Scheme is the runtime scheme used by the repositories.
+	Scheme *runtime.Scheme
 }
 
 type Option func(*Options)
@@ -24,5 +29,11 @@ func WithTempDir(dir string) Option {
 func WithUserAgent(userAgent string) Option {
 	return func(o *Options) {
 		o.UserAgent = userAgent
+	}
+}
+
+func WithScheme(scheme *runtime.Scheme) Option {
+	return func(o *Options) {
+		o.Scheme = scheme
 	}
 }
