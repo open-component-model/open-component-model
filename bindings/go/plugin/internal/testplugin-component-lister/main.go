@@ -16,7 +16,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
-	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -72,12 +71,7 @@ func main() {
 	logger.Info("registered test plugin")
 
 	if len(args) > 0 && args[0] == "capabilities" {
-		pluginSpec, err := pluginruntime.ConvertToSpec(&capabilities.PluginSpec)
-		if err != nil {
-			logger.Error("failed to convert to spec", "error", err)
-			os.Exit(1)
-		}
-		content, err := json.Marshal(pluginSpec)
+		content, err := capabilities.MarshalJSON()
 		if err != nil {
 			logger.Error("failed to marshal capabilities", "error", err)
 			os.Exit(1)
