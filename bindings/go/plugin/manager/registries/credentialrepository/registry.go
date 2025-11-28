@@ -101,32 +101,26 @@ func (r *RepositoryRegistry) GetPlugin(ctx context.Context, spec runtime.Typed) 
 
 // RegisterInternalCredentialRepositoryPlugin can be called by actual implementations in the source.
 // It will register any implementations directly for a given type and capability.
-func RegisterInternalCredentialRepositoryPlugin[T runtime.Typed](
-	scheme *runtime.Scheme,
-	r *RepositoryRegistry,
-	plugin credentials.RepositoryPlugin,
-	cfg T,
+func (r *RepositoryRegistry) RegisterInternalCredentialRepositoryPlugin(
+	plugin BuiltinCredentialRepositoryPlugin,
 	consumerTypes []runtime.Type,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", cfg, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetCredentialRepositoryScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(plugin.GetCredentialRepositoryScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
 
-	r.internalCredentialRepositoryPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalCredentialRepositoryPlugins[alias] = r.internalCredentialRepositoryPlugins[typ]
-	}
+		r.internalCredentialRepositoryPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalCredentialRepositoryPlugins[alias] = r.internalCredentialRepositoryPlugins[providerType]
+		}
 
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", cfg, typ, err)
-	}
-
-	for _, consumerType := range consumerTypes {
-		r.consumerTypeRegistrations[consumerType] = typ
+		for _, consumerType := range consumerTypes {
+			r.consumerTypeRegistrations[consumerType] = providerType
+		}
 	}
 
 	return nil

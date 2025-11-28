@@ -97,27 +97,19 @@ func (r *ResourceRegistry) getPlugin(ctx context.Context, spec runtime.Type) (v1
 }
 
 // RegisterInternalResourcePlugin is called to register an internal implementation for a resource plugin.
-func RegisterInternalResourcePlugin(
-	scheme *runtime.Scheme,
-	r *ResourceRegistry,
-	plugin Repository,
-	proto runtime.Typed,
-) error {
+func (r *ResourceRegistry) RegisterInternalResourcePlugin(plugin BuiltinResourceRepository) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(proto)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetResourceRepositoryScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(plugin.GetResourceRepositoryScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
 
-	r.internalPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalPlugins[alias] = r.internalPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+		r.internalPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalPlugins[alias] = r.internalPlugins[providerType]
+		}
 	}
 
 	return nil
