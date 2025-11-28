@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
+
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestPing(t *testing.T) {
@@ -53,8 +53,8 @@ func TestPing(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.SigningHandlerPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			err := plugin.Ping(context.Background())
 			if tt.expectErr {
@@ -75,7 +75,7 @@ func TestGetSignerIdentity(t *testing.T) {
 	}{
 		{
 			name:    "success",
-			request: &v1.GetSignerIdentityRequest[runtime.Typed]{Name: "sig", SignRequest: v1.SignRequest[runtime.Typed]{Config: &runtime.Raw{Type: runtime.NewVersionedType("dummy", "v1"), Data: []byte(`{"key":"val"}`)}}},
+			request: &v1.GetSignerIdentityRequest[runtime.Typed]{Name: "sig", SignRequest: v1.SignRequest[runtime.Typed]{Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"key":"val"}`)}}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == GetSignerIdentity {
@@ -89,7 +89,7 @@ func TestGetSignerIdentity(t *testing.T) {
 		},
 		{
 			name:    "validation_failed",
-			request: &v1.GetSignerIdentityRequest[runtime.Typed]{},
+			request: &v1.GetSignerIdentityRequest[runtime.Typed]{Name: "sig", SignRequest: v1.SignRequest[runtime.Typed]{Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"key":"val"}`)}}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
@@ -99,7 +99,7 @@ func TestGetSignerIdentity(t *testing.T) {
 		},
 		{
 			name:    "call_failed",
-			request: &v1.GetSignerIdentityRequest[runtime.Typed]{Name: "sig", SignRequest: v1.SignRequest[runtime.Typed]{Config: &runtime.Raw{Type: runtime.NewVersionedType("dummy", "v1"), Data: []byte(`{"k":1}`)}}},
+			request: &v1.GetSignerIdentityRequest[runtime.Typed]{Name: "sig", SignRequest: v1.SignRequest[runtime.Typed]{Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"k":1}`)}}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -117,8 +117,8 @@ func TestGetSignerIdentity(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.SigningHandlerPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.GetSignerIdentity(context.Background(), tt.request)
 			if tt.expectErr {
@@ -140,7 +140,7 @@ func TestGetVerifierIdentity(t *testing.T) {
 		{
 			name: "success",
 			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{VerifyRequest: v1.VerifyRequest[runtime.Typed]{
-				Config: &runtime.Raw{Type: runtime.NewVersionedType("dummy", "v1"), Data: []byte(`{"x":true}`)},
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)},
 			}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -154,8 +154,10 @@ func TestGetVerifierIdentity(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:    "validation_failed",
-			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{},
+			name: "validation_failed",
+			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{VerifyRequest: v1.VerifyRequest[runtime.Typed]{
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)},
+			}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
@@ -166,7 +168,7 @@ func TestGetVerifierIdentity(t *testing.T) {
 		{
 			name: "call_failed",
 			request: &v1.GetVerifierIdentityRequest[runtime.Typed]{VerifyRequest: v1.VerifyRequest[runtime.Typed]{
-				Config: &runtime.Raw{Type: runtime.NewVersionedType("dummy", "v1"), Data: []byte(`{"x":true}`)}}},
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"x":true}`)}}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
@@ -184,8 +186,8 @@ func TestGetVerifierIdentity(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.SigningHandlerPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.GetVerifierIdentity(context.Background(), tt.request)
 			if tt.expectErr {
@@ -209,7 +211,7 @@ func TestSign(t *testing.T) {
 			name: "success",
 			request: &v1.SignRequest[runtime.Typed]{
 				Digest: &v2.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: "ociArtifactDigest/v1", Value: "abc"},
-				Config: &runtime.Raw{Type: runtime.NewVersionedType("dummy", "v1"), Data: []byte(`{"k":"v"}`)},
+				Config: &runtime.Raw{Type: dummyType, Data: []byte(`{"k":"v"}`)},
 			},
 			credentials: map[string]string{"key": "value"},
 			setupMock: func() *httptest.Server {
@@ -225,7 +227,7 @@ func TestSign(t *testing.T) {
 		},
 		{
 			name:        "invalid_credentials",
-			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: runtime.NewVersionedType("dummy", "v1"), Data: []byte(`{}`)}},
+			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
 			credentials: map[string]string{"invalid": "creds"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -236,7 +238,7 @@ func TestSign(t *testing.T) {
 		},
 		{
 			name:        "call_failed",
-			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: runtime.NewVersionedType("dummy", "v1"), Data: []byte(`{}`)}},
+			request:     &v1.SignRequest[runtime.Typed]{Digest: &v2.Digest{}, Config: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
 			credentials: map[string]string{"key": "value"},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -255,8 +257,8 @@ func TestSign(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.SigningHandlerPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.Sign(context.Background(), tt.request, tt.credentials)
 			if tt.expectErr {
@@ -280,7 +282,7 @@ func TestVerify(t *testing.T) {
 			name: "call_failed",
 			request: &v1.VerifyRequest[runtime.Typed]{
 				Signature: &v2.Signature{Signature: v2.SignatureInfo{Algorithm: "rsa", Value: "sig"}},
-				Config:    &runtime.Raw{Type: runtime.NewVersionedType("dummy", "v1"), Data: []byte(`{}`)},
+				Config:    &runtime.Raw{Type: dummyType, Data: []byte(`{}`)},
 			},
 			credentials: map[string]string{"key": "value"},
 			setupMock: func() *httptest.Server {
@@ -300,8 +302,8 @@ func TestVerify(t *testing.T) {
 			plugin := NewSigningHandlerPlugin(server.Client(), "test-plugin", server.URL, types.Config{
 				ID:         "test-plugin",
 				Type:       types.TCP,
-				PluginType: types.SigningHandlerPluginType,
-			}, server.URL, []byte(`{}`))
+				PluginType: v1.SigningHandlerPluginType,
+			}, server.URL, dummyCapability([]byte(`{}`)))
 
 			_, err := plugin.Verify(context.Background(), tt.request, tt.credentials)
 			if tt.expectErr {

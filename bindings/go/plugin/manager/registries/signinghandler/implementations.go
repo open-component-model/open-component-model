@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
+	signingv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -22,14 +22,13 @@ type SigningHandlerPlugin struct {
 	path   string
 	client *http.Client
 
-	// jsonSchema is the schema for all endpoints for this plugin.
-	jsonSchema []byte
+	capability signingv1.CapabilitySpec
 
 	// location is where the plugin started listening.
 	location string
 }
 
-var _ v1.SignatureHandlerContract[runtime.Typed] = (*SigningHandlerPlugin)(nil)
+var _ signingv1.SignatureHandlerContract[runtime.Typed] = (*SigningHandlerPlugin)(nil)
 
 // NewSigningHandlerPlugin creates a new SigningHandlerPlugin.
 func NewSigningHandlerPlugin(
@@ -38,14 +37,14 @@ func NewSigningHandlerPlugin(
 	path string,
 	config types.Config,
 	location string,
-	jsonSchema []byte,
+	capability signingv1.CapabilitySpec,
 ) *SigningHandlerPlugin {
 	return &SigningHandlerPlugin{
 		ID:         id,
 		path:       path,
 		config:     config,
 		client:     client,
-		jsonSchema: jsonSchema,
+		capability: capability,
 		location:   location,
 	}
 }
@@ -60,12 +59,12 @@ func (p *SigningHandlerPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (p *SigningHandlerPlugin) GetSignerIdentity(ctx context.Context, request *v1.GetSignerIdentityRequest[runtime.Typed]) (*v1.IdentityResponse, error) {
-	if err := p.validateEndpoint(request.Config, p.jsonSchema); err != nil {
+func (p *SigningHandlerPlugin) GetSignerIdentity(ctx context.Context, request *signingv1.GetSignerIdentityRequest[runtime.Typed]) (*signingv1.IdentityResponse, error) {
+	if err := p.validateEndpoint(request.Config); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 
-	identity := v1.IdentityResponse{}
+	identity := signingv1.IdentityResponse{}
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, GetSignerIdentity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", p.ID, err)
 	}
@@ -73,12 +72,12 @@ func (p *SigningHandlerPlugin) GetSignerIdentity(ctx context.Context, request *v
 	return &identity, nil
 }
 
-func (p *SigningHandlerPlugin) GetVerifierIdentity(ctx context.Context, request *v1.GetVerifierIdentityRequest[runtime.Typed]) (*v1.IdentityResponse, error) {
-	if err := p.validateEndpoint(request.Config, p.jsonSchema); err != nil {
+func (p *SigningHandlerPlugin) GetVerifierIdentity(ctx context.Context, request *signingv1.GetVerifierIdentityRequest[runtime.Typed]) (*signingv1.IdentityResponse, error) {
+	if err := p.validateEndpoint(request.Config); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 
-	identity := v1.IdentityResponse{}
+	identity := signingv1.IdentityResponse{}
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, GetVerifierIdentity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", p.ID, err)
 	}
@@ -86,8 +85,8 @@ func (p *SigningHandlerPlugin) GetVerifierIdentity(ctx context.Context, request 
 	return &identity, nil
 }
 
-func (p *SigningHandlerPlugin) Sign(ctx context.Context, request *v1.SignRequest[runtime.Typed], credentials map[string]string) (*v1.SignResponse, error) {
-	if err := p.validateEndpoint(request.Config, p.jsonSchema); err != nil {
+func (p *SigningHandlerPlugin) Sign(ctx context.Context, request *signingv1.SignRequest[runtime.Typed], credentials map[string]string) (*signingv1.SignResponse, error) {
+	if err := p.validateEndpoint(request.Config); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 
@@ -96,7 +95,7 @@ func (p *SigningHandlerPlugin) Sign(ctx context.Context, request *v1.SignRequest
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	var response v1.SignResponse
+	var response signingv1.SignResponse
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, Sign, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to sign from plugin %q: %w", p.ID, err)
 	}
@@ -104,8 +103,8 @@ func (p *SigningHandlerPlugin) Sign(ctx context.Context, request *v1.SignRequest
 	return &response, nil
 }
 
-func (p *SigningHandlerPlugin) Verify(ctx context.Context, request *v1.VerifyRequest[runtime.Typed], credentials map[string]string) (*v1.VerifyResponse, error) {
-	if err := p.validateEndpoint(request.Config, p.jsonSchema); err != nil {
+func (p *SigningHandlerPlugin) Verify(ctx context.Context, request *signingv1.VerifyRequest[runtime.Typed], credentials map[string]string) (*signingv1.VerifyResponse, error) {
+	if err := p.validateEndpoint(request.Config); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", p.ID, err)
 	}
 
@@ -114,7 +113,7 @@ func (p *SigningHandlerPlugin) Verify(ctx context.Context, request *v1.VerifyReq
 		return nil, fmt.Errorf("error converting credentials: %w", err)
 	}
 
-	var response v1.VerifyResponse
+	var response signingv1.VerifyResponse
 	if err := plugins.Call(ctx, p.client, p.config.Type, p.location, Verify, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&response), plugins.WithHeader(credHeader)); err != nil {
 		return nil, fmt.Errorf("failed to verify from plugin %q: %w", p.ID, err)
 	}
@@ -122,8 +121,17 @@ func (p *SigningHandlerPlugin) Verify(ctx context.Context, request *v1.VerifyReq
 	return &response, nil
 }
 
-func (p *SigningHandlerPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
-	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
+func (p *SigningHandlerPlugin) validateEndpoint(obj runtime.Typed) error {
+	var schema []byte
+	for _, t := range p.capability.SupportedSigningSpecTypes {
+		if t.Type != obj.GetType() {
+			continue
+		}
+		schema = t.JSONSchema
+	}
+
+	valid, err := plugins.ValidatePlugin(obj, schema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", p.ID, err)
 	}
