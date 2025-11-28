@@ -15,6 +15,10 @@ import (
 // mockRepositoryProvider implements repository.ComponentVersionRepositoryProvider for testing
 type mockRepositoryProvider struct{}
 
+func (m *mockRepositoryProvider) GetJSONSchemaForRepositorySpecification(typ runtime.Type) ([]byte, error) {
+	return nil, nil
+}
+
 func (m *mockRepositoryProvider) GetComponentVersionRepositoryScheme() *runtime.Scheme {
 	return nil
 }
