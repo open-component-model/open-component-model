@@ -39,6 +39,8 @@ gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntN
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251128114647-c2e82904a5d3 h1:T9SiG1UxIHWWGDnk6k+FOrgdXMQIJpV2HaduqCuih1M=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251128114647-c2e82904a5d3/go.mod h1:Bq5v4nk2c2upsk20ZEfwS5jzpmsIpGo33GWohJyEi3g=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251124222340-4c1b948b736f h1:AyjyL1IDY3R7vcpTpJ/q0bsC6YDE8XQHjpnF/NJwJdQ=
 ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251124222340-4c1b948b736f/go.mod h1:IOiJBpfhjE/c8UHDBxPM/EOKT+0FhPVWQO7Cu0uYoMc=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 h1:daGC2XnJEJkukGdhvKxobUH+vF5TKYPlVQ6nl5ASdFM=
