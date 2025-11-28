@@ -3,7 +3,6 @@ package blobtransformer
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -100,11 +99,8 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *blobtransfo
 
 // validateEndpoint uses the provided JSON schema and the runtime.Typed and, using the JSON schema, validates that the
 // underlying runtime.Type conforms to the provided schema.
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
 func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
-	if obj == nil {
-		return errors.New("nil object provided")
-	}
-
 	var schema []byte
 	for _, t := range r.capability.SupportedTransformerSpecTypes {
 		if t.Type != obj.GetType() {

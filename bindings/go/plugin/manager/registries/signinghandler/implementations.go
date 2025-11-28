@@ -3,7 +3,6 @@ package signinghandler
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -122,11 +121,8 @@ func (p *SigningHandlerPlugin) Verify(ctx context.Context, request *signingv1.Ve
 	return &response, nil
 }
 
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
 func (p *SigningHandlerPlugin) validateEndpoint(obj runtime.Typed) error {
-	if obj == nil {
-		return errors.New("nil object provided")
-	}
-
 	var schema []byte
 	for _, t := range p.capability.SupportedSigningSpecTypes {
 		if t.Type != obj.GetType() {

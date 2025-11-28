@@ -3,7 +3,6 @@ package input
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -105,10 +104,8 @@ func (r *RepositoryPlugin) ProcessSource(ctx context.Context, request *inputv1.P
 	return &body, nil
 }
 
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
 func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
-	if obj == nil || obj == (*runtime.Raw)(nil) {
-		return errors.New("nil object provided")
-	}
 	var schema []byte
 	for _, t := range r.capability.SupportedInputTypes {
 		if t.Type != obj.GetType() {

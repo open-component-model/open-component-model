@@ -3,7 +3,6 @@ package credentialrepository
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -102,11 +101,8 @@ func (r *RepositoryPlugin) Resolve(ctx context.Context, cfg credentialsv1.Resolv
 
 // validateEndpoint uses the provided JSON schema and the runtime.Typed and, using the JSON schema, validates that the
 // underlying runtime.Type conforms to the provided schema.
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
 func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
-	if obj == nil {
-		return errors.New("nil object provided")
-	}
-
 	var schema []byte
 	for _, t := range append(r.capability.SupportedConsumerIdentityTypes, r.capability.SupportedCredentialRepositorySpecTypes...) {
 		if t.Type != obj.GetType() {

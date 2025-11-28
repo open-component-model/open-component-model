@@ -3,7 +3,6 @@ package componentlister
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -97,11 +96,8 @@ func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *com
 	return response, nil
 }
 
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
 func (r *ComponentListerPlugin) validateEndpoint(obj runtime.Typed) error {
-	if obj == nil {
-		return errors.New("nil object provided")
-	}
-
 	var schema []byte
 	for _, t := range r.capability.SupportedRepositorySpecTypes {
 		if t.Type != obj.GetType() {

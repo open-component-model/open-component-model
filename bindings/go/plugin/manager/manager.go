@@ -227,14 +227,24 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 	return plugins, nil
 }
 
+var scheme *runtime.Scheme
+
+// if we add another capability type, we need to register it here.
+// ATTENTION: keep in sync with switch case statement below
+// if you add a new capability type, make sure to register its scheme here.
+func init() {
+	scheme = runtime.NewScheme()
+	scheme.MustRegisterScheme(ocmrepositoryv1.Scheme)
+	scheme.MustRegisterScheme(blobtransformerv1.Scheme)
+	scheme.MustRegisterScheme(credentialrepositoryv1.Scheme)
+	scheme.MustRegisterScheme(componentlisterv1.Scheme)
+	scheme.MustRegisterScheme(digestprocessorv1.Scheme)
+	scheme.MustRegisterScheme(inputv1.Scheme)
+	scheme.MustRegisterScheme(resourcev1.Scheme)
+	scheme.MustRegisterScheme(signinghandlerv1.Scheme)
+}
+
 func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Config, plugin mtypes.Plugin, capabilitiesCommandOutput *bytes.Buffer) error {
-	// if we add another capability type, we need to register it here.
-	// ATTENTION: keep in sync with switch case statement below
-	// if you add a new capability type, make sure to register its scheme here.
-	scheme, err := pm.setupPluginScheme()
-	if err != nil {
-		return fmt.Errorf("failed to setup plugin scheme: %w", err)
-	}
 
 	// Determine Configuration requirements.
 	rawPluginSpec := spec.PluginSpec{}
@@ -330,37 +340,6 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 	}
 
 	return nil
-}
-
-func (pm *PluginManager) setupPluginScheme() (*runtime.Scheme, error) {
-	scheme := runtime.NewScheme()
-
-	if err := scheme.RegisterScheme(ocmrepositoryv1.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to register ocm repository plugin scheme: %w", err)
-	}
-	if err := scheme.RegisterScheme(blobtransformerv1.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to register blob transformer plugin scheme: %w", err)
-	}
-	if err := scheme.RegisterScheme(credentialrepositoryv1.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to register credential repository plugin scheme: %w", err)
-	}
-	if err := scheme.RegisterScheme(componentlisterv1.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to register component lister plugin scheme: %w", err)
-	}
-	if err := scheme.RegisterScheme(digestprocessorv1.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to register digest processor plugin scheme: %w", err)
-	}
-	if err := scheme.RegisterScheme(inputv1.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to register input plugin scheme: %w", err)
-	}
-	if err := scheme.RegisterScheme(resourcev1.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to register resource plugin scheme: %w", err)
-	}
-	if err := scheme.RegisterScheme(signinghandlerv1.Scheme); err != nil {
-		return nil, fmt.Errorf("failed to register signing handler plugin scheme: %w", err)
-	}
-
-	return scheme, nil
 }
 
 func determineConnectionType(ctx context.Context) (mtypes.ConnectionType, error) {

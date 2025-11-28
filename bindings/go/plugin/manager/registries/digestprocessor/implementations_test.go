@@ -158,7 +158,7 @@ func TestGetIdentity(t *testing.T) {
 		},
 		{
 			name:    "validation_failed",
-			request: &v1.GetIdentityRequest[runtime.Typed]{},
+			request: &v1.GetIdentityRequest[runtime.Typed]{Typ: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
@@ -168,7 +168,7 @@ func TestGetIdentity(t *testing.T) {
 		},
 		{
 			name:    "call_failed",
-			request: &v1.GetIdentityRequest[runtime.Typed]{},
+			request: &v1.GetIdentityRequest[runtime.Typed]{Typ: &runtime.Raw{Type: dummyType, Data: []byte(`{}`)}},
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)

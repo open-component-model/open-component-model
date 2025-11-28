@@ -3,7 +3,6 @@ package digestprocessor
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -87,11 +86,8 @@ func (p *RepositoryPlugin) ProcessResourceDigest(ctx context.Context, request *d
 	return result, nil
 }
 
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
 func (p *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
-	if obj == nil {
-		return errors.New("nil object provided")
-	}
-
 	var schema []byte
 	for _, t := range p.capability.SupportedAccessTypes {
 		if t.Type != obj.GetType() {
