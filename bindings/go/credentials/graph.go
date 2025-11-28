@@ -27,7 +27,7 @@ type Options struct {
 // ToGraph creates a new credential graph from the provided configuration and options.
 // It initializes the graph structure and ingests the configuration into the graph.
 // Returns an error if the configuration cannot be properly ingested.
-func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (GraphResolver, error) {
+func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (Resolver, error) {
 	g := &Graph{
 		syncedDag:                newSyncedDag(),
 		credentialPluginProvider: opts.CredentialPluginProvider,
