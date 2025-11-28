@@ -21,7 +21,7 @@ type Context struct {
 	mu              sync.RWMutex
 	configuration   *genericv1.Config
 	pluginManager   *manager.PluginManager
-	credentialGraph credentials.GraphResolver
+	credentialGraph credentials.Resolver
 }
 
 // WithConfiguration creates a new context with the given configuration.
@@ -43,7 +43,7 @@ func WithPluginManager(ctx context.Context, pm *manager.PluginManager) context.C
 }
 
 // WithCredentialGraph creates a new context with the given credential graph.
-func WithCredentialGraph(ctx context.Context, graph credentials.GraphResolver) context.Context {
+func WithCredentialGraph(ctx context.Context, graph credentials.Resolver) context.Context {
 	ctx, octx := retrieveOrCreateContext(ctx)
 	octx.mu.Lock()
 	defer octx.mu.Unlock()
@@ -75,7 +75,7 @@ func (c *Context) PluginManager() *manager.PluginManager {
 
 // CredentialGraph returns the credential graph from the context.
 // Returns nil if no credential graph has been set.
-func (c *Context) CredentialGraph() credentials.GraphResolver {
+func (c *Context) CredentialGraph() credentials.Resolver {
 	if c == nil {
 		return nil
 	}
