@@ -25,7 +25,10 @@ const (
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Repository struct {
+	// +ocm:jsonschema-gen:enum=CommonTransportFormat/v1,CTF/v1,ctf/v1
+	// +ocm:jsonschema-gen:enum:deprecated=CommonTransportFormat,CTF,ctf
 	Type runtime.Type `json:"type"`
 	// Path is the path of the CTF Archive on the filesystem.
 	//

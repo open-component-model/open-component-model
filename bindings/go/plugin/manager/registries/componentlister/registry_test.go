@@ -15,10 +15,25 @@ import (
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+var (
+	dummyType = runtime.NewVersionedType(dummyv1.Type, dummyv1.Version)
+)
+
+func dummyCapability(schema []byte) v1.CapabilitySpec {
+	return v1.CapabilitySpec{
+		Type: runtime.NewUnversionedType(string(v1.ComponentListerPluginType)),
+		SupportedRepositorySpecTypes: []mtypes.Type{{
+			Type:       dummyType,
+			JSONSchema: schema,
+		}},
+	}
+}
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
@@ -36,13 +51,9 @@ func TestPluginFlow(t *testing.T) {
 	config := mtypes.Config{
 		ID:         id,
 		Type:       mtypes.Socket,
-		PluginType: mtypes.ComponentListerPluginType,
+		PluginType: v1.ComponentListerPluginType,
 	}
 	serialized, err := json.Marshal(config)
-	require.NoError(t, err)
-
-	proto := &dummyv1.Repository{}
-	typ, err := scheme.TypeForPrototype(proto)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
@@ -58,22 +69,15 @@ func TestPluginFlow(t *testing.T) {
 		ID:     "test-plugin-component-lister",
 		Path:   path,
 		Config: config,
-		Types: map[mtypes.PluginType][]mtypes.Type{
-			mtypes.ComponentListerPluginType: {
-				{
-					Type:       typ,
-					JSONSchema: []byte(`{}`),
-				},
-			},
-		},
 		Cmd:    pluginCmd,
 		Stdout: pipe,
 		Stderr: stderr,
 	}
-	require.NoError(t, registry.AddPlugin(plugin, typ))
 
+	capability := dummyCapability([]byte(`{}`))
+	require.NoError(t, registry.AddPlugin(plugin, &capability))
 	spec := &dummyv1.Repository{
-		Type:    typ,
+		Type:    dummyType,
 		BaseUrl: "example.com/test-repository",
 	}
 	require.NoError(t, err)
@@ -102,24 +106,77 @@ func TestPluginFlow(t *testing.T) {
 }
 
 func TestRegisterInternalComponentListerPlugin(t *testing.T) {
-	ctx := context.Background()
-	scheme := runtime.NewScheme()
-	dummytype.MustAddToScheme(scheme)
+	ctx := t.Context()
+	r := require.New(t)
+
 	registry := NewComponentListerRegistry(ctx)
-	p := &mockInternalPlugin{}
-	require.NoError(t, RegisterInternalComponentListerPlugin(scheme, registry, p, &dummyv1.Repository{}))
-	retrievedLister, err := registry.GetComponentLister(ctx, &dummyv1.Repository{}, nil)
-	require.NoError(t, err)
-	err = retrievedLister.ListComponents(ctx, "", func(names []string) error {
-		return nil
-	})
-	require.NoError(t, err)
-	require.True(t, retrievedLister.(*mockInternalLister).called)
+	plugin := &mockInternalPlugin{}
+	r.NoError(registry.RegisterInternalComponentListerPlugin(plugin))
+
+	tests := []struct {
+		name           string
+		repositorySpec runtime.Typed
+		err            require.ErrorAssertionFunc
+	}{
+		{
+			name:           "prototype",
+			repositorySpec: &dummyv1.Repository{},
+			err:            require.NoError,
+		},
+		{
+			name: "canonical type",
+			repositorySpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.Type,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "short type",
+			repositorySpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    dummyv1.ShortType,
+					Version: dummyv1.Version,
+				},
+			},
+			err: require.NoError,
+		},
+		{
+			name: "invalid type",
+			repositorySpec: &runtime.Raw{
+				Type: runtime.Type{
+					Name:    "NonExistingType",
+					Version: "v1",
+				},
+			},
+			err: require.Error,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			componentLister, err := registry.GetComponentLister(ctx, tc.repositorySpec, nil)
+			tc.err(t, err)
+			if err != nil {
+				return
+			}
+			r.NotNil(componentLister)
+
+			r.NoError(componentLister.ListComponents(ctx, "", nil))
+			r.True(componentLister.(*mockInternalLister).called)
+		})
+	}
 }
 
 type mockInternalPlugin struct{}
 
 var _ InternalComponentListerPluginContract = (*mockInternalPlugin)(nil)
+
+func (m *mockInternalPlugin) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	return dummytype.Scheme
+}
 
 func (m *mockInternalPlugin) GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (identity runtime.Identity, err error) {
 	panic("not implemented")

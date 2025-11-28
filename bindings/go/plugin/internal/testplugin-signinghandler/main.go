@@ -56,11 +56,12 @@ func main() {
 	}
 
 	if len(args) > 0 && args[0] == "capabilities" {
-		content, err := json.Marshal(capabilities)
+		content, err := capabilities.MarshalJSON()
 		if err != nil {
 			logger.Error("failed to marshal capabilities", "error", err)
 			os.Exit(1)
 		}
+
 		if _, err := fmt.Fprintln(os.Stdout, string(content)); err != nil {
 			logger.Error("failed print capabilities", "error", err)
 			os.Exit(1)

@@ -11,7 +11,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
+	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -50,26 +50,25 @@ type RepositoryPlugin struct {
 	path   string
 	client *http.Client
 
-	// jsonSchema is the schema for all endpoints for this plugin.
-	jsonSchema []byte
+	capability ocmrepositoryv1.CapabilitySpec
 	// location is where the plugin started listening.
 	location string
 }
 
 // This plugin implements all the given contracts.
 var (
-	_ v1.ReadWriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
+	_ ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed] = &RepositoryPlugin{}
 )
 
 // NewComponentVersionRepositoryPlugin creates a new component version repository plugin instance with the provided configuration.
 // It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
-func NewComponentVersionRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *RepositoryPlugin {
+func NewComponentVersionRepositoryPlugin(client *http.Client, id string, path string, config types.Config, loc string, capability ocmrepositoryv1.CapabilitySpec) *RepositoryPlugin {
 	return &RepositoryPlugin{
 		ID:         id,
 		path:       path,
 		config:     config,
 		client:     client,
-		jsonSchema: jsonSchema,
+		capability: capability,
 		location:   loc,
 	}
 }
@@ -84,14 +83,14 @@ func (r *RepositoryPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request v1.PostComponentVersionRequest[runtime.Typed], credentials map[string]string) error {
+func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request ocmrepositoryv1.PostComponentVersionRequest[runtime.Typed], credentials map[string]string) error {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Repository); err != nil {
 		return err
 	}
 
@@ -102,7 +101,7 @@ func (r *RepositoryPlugin) AddComponentVersion(ctx context.Context, request v1.P
 	return nil
 }
 
-func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request v1.GetComponentVersionRequest[runtime.Typed], credentials map[string]string) (*descriptor.Descriptor, error) {
+func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request ocmrepositoryv1.GetComponentVersionRequest[runtime.Typed], credentials map[string]string) (*descriptor.Descriptor, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -116,7 +115,7 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request v1.G
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Repository); err != nil {
 		return nil, err
 	}
 
@@ -133,7 +132,7 @@ func (r *RepositoryPlugin) GetComponentVersion(ctx context.Context, request v1.G
 	return desc, nil
 }
 
-func (r *RepositoryPlugin) ListComponentVersions(ctx context.Context, request v1.ListComponentVersionsRequest[runtime.Typed], credentials map[string]string) ([]string, error) {
+func (r *RepositoryPlugin) ListComponentVersions(ctx context.Context, request ocmrepositoryv1.ListComponentVersionsRequest[runtime.Typed], credentials map[string]string) ([]string, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -146,7 +145,7 @@ func (r *RepositoryPlugin) ListComponentVersions(ctx context.Context, request v1
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Repository); err != nil {
 		return nil, err
 	}
 
@@ -158,14 +157,14 @@ func (r *RepositoryPlugin) ListComponentVersions(ctx context.Context, request v1
 	return result, nil
 }
 
-func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request v1.PostLocalResourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Resource, error) {
+func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request ocmrepositoryv1.PostLocalResourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Resource, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Repository); err != nil {
 		return nil, err
 	}
 
@@ -182,7 +181,7 @@ func (r *RepositoryPlugin) AddLocalResource(ctx context.Context, request v1.Post
 	return &resources[0], nil
 }
 
-func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalResourceResponse, error) {
+func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request ocmrepositoryv1.GetLocalResourceRequest[runtime.Typed], credentials map[string]string) (ocmrepositoryv1.GetLocalResourceResponse, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -190,7 +189,7 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetL
 	addParam("name", request.Name)
 	addParam("version", request.Version)
 	identityEncoded, err := json.Marshal(request.Identity)
-	var response v1.GetLocalResourceResponse
+	var response ocmrepositoryv1.GetLocalResourceResponse
 	if err != nil {
 		return response, err
 	}
@@ -203,7 +202,7 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetL
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Repository); err != nil {
 		return response, err
 	}
 
@@ -214,14 +213,14 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request v1.GetL
 	return response, nil
 }
 
-func (r *RepositoryPlugin) AddLocalSource(ctx context.Context, request v1.PostLocalSourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Source, error) {
+func (r *RepositoryPlugin) AddLocalSource(ctx context.Context, request ocmrepositoryv1.PostLocalSourceRequest[runtime.Typed], credentials map[string]string) (*descriptor.Source, error) {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return nil, err
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Repository); err != nil {
 		return nil, err
 	}
 
@@ -238,7 +237,7 @@ func (r *RepositoryPlugin) AddLocalSource(ctx context.Context, request v1.PostLo
 	return &sources[0], nil
 }
 
-func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request v1.GetLocalSourceRequest[runtime.Typed], credentials map[string]string) (v1.GetLocalSourceResponse, error) {
+func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request ocmrepositoryv1.GetLocalSourceRequest[runtime.Typed], credentials map[string]string) (ocmrepositoryv1.GetLocalSourceResponse, error) {
 	var params []plugins.KV
 	addParam := func(k, v string) {
 		params = append(params, plugins.KV{Key: k, Value: v})
@@ -246,7 +245,7 @@ func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request v1.GetLoc
 	addParam("name", request.Name)
 	addParam("version", request.Version)
 	identityEncoded, err := json.Marshal(request.Identity)
-	var response v1.GetLocalSourceResponse
+	var response ocmrepositoryv1.GetLocalSourceResponse
 	if err != nil {
 		return response, err
 	}
@@ -259,7 +258,7 @@ func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request v1.GetLoc
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Repository); err != nil {
 		return response, err
 	}
 
@@ -270,12 +269,12 @@ func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request v1.GetLoc
 	return response, nil
 }
 
-func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
-	if err := r.validateEndpoint(request.Typ, r.jsonSchema); err != nil {
+func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *ocmrepositoryv1.GetIdentityRequest[runtime.Typed]) (*ocmrepositoryv1.GetIdentityResponse, error) {
+	if err := r.validateEndpoint(request.Typ); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
 	}
 
-	identity := v1.GetIdentityResponse{}
+	identity := ocmrepositoryv1.GetIdentityResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
 	}
@@ -283,14 +282,14 @@ func (r *RepositoryPlugin) GetIdentity(ctx context.Context, request *v1.GetIdent
 	return &identity, nil
 }
 
-func (r *RepositoryPlugin) CheckHealth(ctx context.Context, request v1.PostCheckHealthRequest[runtime.Typed], credentials map[string]string) error {
+func (r *RepositoryPlugin) CheckHealth(ctx context.Context, request ocmrepositoryv1.PostCheckHealthRequest[runtime.Typed], credentials map[string]string) error {
 	credHeader, err := toCredentials(credentials)
 	if err != nil {
 		return err
 	}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Repository); err != nil {
 		return err
 	}
 
@@ -303,8 +302,17 @@ func (r *RepositoryPlugin) CheckHealth(ctx context.Context, request v1.PostCheck
 
 // validateEndpoint uses the provided JSON schema and the runtime.Typed and, using the JSON schema, validates that the
 // underlying runtime.Type conforms to the provided schema.
-func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
-	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
+func (r *RepositoryPlugin) validateEndpoint(obj runtime.Typed) error {
+	var schema []byte
+	for _, t := range r.capability.SupportedRepositorySpecTypes {
+		if t.Type != obj.GetType() {
+			continue
+		}
+		schema = t.JSONSchema
+	}
+
+	valid, err := plugins.ValidatePlugin(obj, schema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)
 	}

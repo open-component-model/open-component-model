@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/tools v0.39.0
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
@@ -19,6 +20,8 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
