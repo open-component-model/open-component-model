@@ -24,10 +24,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer"
@@ -38,6 +35,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
@@ -57,7 +55,7 @@ func init() {
 	ocm.MustRegisterMetrics(metrics.Registry)
 }
 
-//nolint:funlen,maintidx // the main function is complex enough as it is - we don't want to separate the initialization
+//nolint:funlen // the main function is complex enough as it is - we don't want to separate the initialization
 func main() {
 	var (
 		metricsAddr               string
@@ -157,20 +155,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
+	pm := manager.NewPluginManager(ctx)
 
-	ocmscheme := ocmruntime.NewScheme()
-	ocmrepository.MustAddToScheme(ocmscheme)
-	access.MustAddToScheme(ocmscheme)
-
-	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
-		IdleTimeout: time.Hour,
-		Logger:      &setupLog,
-		Scheme:      ocmscheme,
-		Provider:    repositoryProvider,
-	})
-	if err := mgr.Add(pm); err != nil {
-		setupLog.Error(err, "unable to add plugin manager")
+	if err := plugins.Register(pm); err != nil {
+		setupLog.Error(err, "unable to register plugins: %w", err)
 		os.Exit(1)
 	}
 
@@ -215,13 +203,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	resolver := resolution.NewResolver(mgr.GetClient(), &setupLog, workerPool, pm)
 	if err = (&component.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMContextCache: ocmContextCache,
+		Resolver:      resolver,
+		PluginManager: pm,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)
