@@ -2,6 +2,7 @@ package ocm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -16,14 +17,14 @@ import (
 
 // resolverProvider provides a [repository.ComponentVersionRepository] based on a set of path matcher resolvers.
 // It uses the [manager.PluginManager] to access the [repository.ComponentVersionRepository] and a
-// [credentials.GraphResolver] to resolve credentials for the repository.
+// [credentials.Resolver] to resolve credentials for the repository.
 type resolverProvider struct {
 	// repoProvider is the repository.ComponentVersionRepositoryForComponentProvider used to
 	// get the repositories based on the repository specs in the resolvers.
 	repoProvider repository.ComponentVersionRepositoryProvider
-	// graph is the [credentials.GraphResolver] used to resolve credentials for the repository.
+	// graph is the [credentials.Resolver] used to resolve credentials for the repository.
 	// It can be nil, if no credential graph is available.
-	graph credentials.GraphResolver
+	graph credentials.Resolver
 	// provider is the [pathmatcher.SpecProvider] used to get the repository spec for a given identity.
 	// It is configured with a set of path matcher resolvers.
 	provider *pathmatcher.SpecProvider
@@ -45,7 +46,11 @@ func (r *resolverProvider) GetComponentVersionRepositoryForComponent(ctx context
 	if err == nil {
 		if r.graph != nil {
 			if credMap, err = r.graph.Resolve(ctx, consumerIdentity); err != nil {
-				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", repoSpec, err.Error()))
+				if errors.Is(err, credentials.ErrNotFound) {
+					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", repoSpec, err.Error()))
+				} else {
+					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", repoSpec, err)
+				}
 			}
 		}
 	} else {

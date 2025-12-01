@@ -23,6 +23,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -1470,6 +1471,145 @@ configurations:
 		test.WithOutput(logs),
 	)
 	r.NoError(err, "failed to verify component version")
+}
+
+// Test_Add_Component_Version_Docker_Credentials tests the use of docker credentials in the add cv command
+func Test_Add_Component_Version_Docker_Credentials(t *testing.T) {
+	tmp := t.TempDir()
+
+	// Create a test file to be added to the component version
+	testFilePath := filepath.Join(tmp, "test-file.txt")
+	require.NoError(t, os.WriteFile(testFilePath, []byte("foobar"), 0o600), "could not create test file")
+
+	constructorYAML := fmt.Sprintf(`
+name: ocm.software/examples-docker-creds
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+	constructorPath := filepath.Join(tmp, "component-constructor.yaml")
+	require.NoError(t, os.WriteFile(constructorPath, []byte(constructorYAML), 0o600))
+
+	t.Run("valid credentials", func(t *testing.T) {
+		r := require.New(t)
+		// Create a dummy docker config file
+		dockerConfigContent := `{
+		"auths": {
+			"localhost": {
+				"auth": "dXNlcm5hbWU6cGFzc3dvcmQ="
+			}
+		}
+	}`
+		dockerConfigPath := filepath.Join(tmp, "docker-config-valid.json")
+		r.NoError(os.WriteFile(dockerConfigPath, []byte(dockerConfigContent), 0o600))
+
+		// Create OCM config file referencing the docker config
+		ocmConfigContent := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  repositories:
+  - repository:
+      type: DockerConfig/v1
+      dockerConfigFile: %[1]s
+      propagateConsumerIdentity: true
+`, dockerConfigPath)
+		ocmConfigPath := filepath.Join(tmp, "ocm-config-valid.yaml")
+		r.NoError(os.WriteFile(ocmConfigPath, []byte(ocmConfigContent), 0o600))
+
+		// Run command with config
+		logs := test.NewJSONLogReader()
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorPath,
+			"--repository", "localhost:12345/test-repo",
+			"--config", ocmConfigPath,
+		), test.WithErrorOutput(logs))
+
+		// We expect an error because localhost:12345 is not reachable, but we should not see the "missing hostname" error
+		r.Error(err)
+		r.NotContains(err.Error(), "missing \"hostname\" in identity", "should not fail with missing hostname in identity")
+	})
+
+	t.Run("missing credentials in docker config", func(t *testing.T) {
+		r := require.New(t)
+		// Create a dummy docker config file with unrelated auths
+		dockerConfigContent := `{
+		"auths": {
+			"otherhost": {
+				"auth": "dXNlcm5hbWU6cGFzc3dvcmQ="
+			}
+		}
+	}`
+		dockerConfigPath := filepath.Join(tmp, "docker-config-missing.json")
+		r.NoError(os.WriteFile(dockerConfigPath, []byte(dockerConfigContent), 0o600))
+
+		// Create OCM config file referencing the docker config
+		ocmConfigContent := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  repositories:
+  - repository:
+      type: DockerConfig/v1
+      dockerConfigFile: %[1]s
+      propagateConsumerIdentity: true
+`, dockerConfigPath)
+		ocmConfigPath := filepath.Join(tmp, "ocm-config-missing.yaml")
+		r.NoError(os.WriteFile(ocmConfigPath, []byte(ocmConfigContent), 0o600))
+
+		// Run command with config
+		logs := test.NewJSONLogReader()
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorPath,
+			"--repository", "localhost:12345/test-repo",
+			"--config", ocmConfigPath,
+		), test.WithErrorOutput(logs))
+
+		// We expect an error because localhost:12345 is not reachable.
+		// ResolveV1DockerConfigCredentials should return nil, nil
+		// and the process should continue to try to connect (and fail).
+		r.Error(err)
+		r.NotContains(err.Error(), "missing \"hostname\" in identity", "should not fail with missing hostname in identity")
+		r.NotErrorIs(err, credentials.ErrNoIndirectCredentials, "should not fail with ErrNoIndirectCredentials")
+	})
+
+	t.Run("invalid inline docker config", func(t *testing.T) {
+		r := require.New(t)
+		// Create OCM config file referencing invalid inline docker config
+		ocmConfigContent := `
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  repositories:
+  - repository:
+      type: DockerConfig/v1
+      dockerConfig: "{ invalid json"
+      propagateConsumerIdentity: true
+`
+		ocmConfigPath := filepath.Join(tmp, "ocm-config-invalid-inline.yaml")
+		r.NoError(os.WriteFile(ocmConfigPath, []byte(ocmConfigContent), 0o600))
+
+		// Run command with config
+		logs := test.NewJSONLogReader()
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorPath,
+			"--repository", "localhost:12345/test-repo",
+			"--config", ocmConfigPath,
+		), test.WithErrorOutput(logs))
+
+		// We expect an error due to invalid JSON configuration
+		r.Error(err)
+		r.NotContains(err.Error(), "missing \"hostname\" in identity", "should not fail with missing hostname in identity")
+		r.Contains(err.Error(), "failed to create inline config store", "should fail with inline config creation error")
+		r.ErrorIs(err, credentials.ErrUnknown, "should fail with ErrUnknown from inline config creation")
+	})
 }
 
 func mustKey(t *testing.T) *rsa.PrivateKey {
