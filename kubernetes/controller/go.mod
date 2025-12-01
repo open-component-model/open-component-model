@@ -357,7 +357,7 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
-	gitlab.com/gitlab-org/api/client-go v0.157.0 // indirect
+	gitlab.com/gitlab-org/api/client-go v0.157.1 // indirect
 	go.mongodb.org/mongo-driver v1.17.4 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
