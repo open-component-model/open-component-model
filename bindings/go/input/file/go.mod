@@ -3,7 +3,7 @@ module ocm.software/open-component-model/bindings/go/input/file
 go 1.25.0
 
 require (
-	github.com/gabriel-vasile/mimetype v1.4.10
+	github.com/gabriel-vasile/mimetype v1.4.11
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251024100521-a7be1bf5ce0d
