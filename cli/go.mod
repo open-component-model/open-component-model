@@ -34,8 +34,6 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
-replace ocm.software/open-component-model/bindings/go/oci => ../bindings/go/oci
-
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect

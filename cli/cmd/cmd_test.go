@@ -1533,7 +1533,6 @@ configurations:
 		), test.WithErrorOutput(logs))
 
 		// We expect an error because localhost:12345 is not reachable, but we should not see the "missing hostname" error
-		// which indicates that credentials resolution failed due to identity mismatch.
 		r.Error(err)
 		r.NotContains(err.Error(), "missing \"hostname\" in identity", "should not fail with missing hostname in identity")
 	})
@@ -1579,6 +1578,37 @@ configurations:
 		r.Error(err)
 		r.NotContains(err.Error(), "missing \"hostname\" in identity", "should not fail with missing hostname in identity")
 		r.NotErrorIs(err, credentials.ErrNoIndirectCredentials, "should not fail with ErrNoIndirectCredentials")
+	})
+
+	t.Run("invalid inline docker config", func(t *testing.T) {
+		r := require.New(t)
+		// Create OCM config file referencing invalid inline docker config
+		ocmConfigContent := `
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  repositories:
+  - repository:
+      type: DockerConfig/v1
+      dockerConfig: "{ invalid json"
+      propagateConsumerIdentity: true
+`
+		ocmConfigPath := filepath.Join(tmp, "ocm-config-invalid-inline.yaml")
+		r.NoError(os.WriteFile(ocmConfigPath, []byte(ocmConfigContent), 0o600))
+
+		// Run command with config
+		logs := test.NewJSONLogReader()
+		_, err := test.OCM(t, test.WithArgs("add", "cv",
+			"--constructor", constructorPath,
+			"--repository", "localhost:12345/test-repo",
+			"--config", ocmConfigPath,
+		), test.WithErrorOutput(logs))
+
+		// We expect an error due to invalid JSON configuration
+		r.Error(err)
+		r.NotContains(err.Error(), "missing \"hostname\" in identity", "should not fail with missing hostname in identity")
+		r.Contains(err.Error(), "failed to create inline config store", "should fail with inline config creation error")
+		r.ErrorIs(err, credentials.ErrUnknown, "should fail with ErrUnknown from inline config creation")
 	})
 }
 

@@ -9,7 +9,7 @@ vars:
   NAME: cli
   DEFAULT_VERSION:
     sh: |
-      echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)" | tr '_' '-'
+      echo "0.0.0-$(date -u +%Y%m%d%H%M%S)-$(git rev-parse --short=12 HEAD)"
   VERSION: '{{ .VERSION | default .DEFAULT_VERSION }}'
   COMPONENT_CONSTRUCTOR_FILE: "{{ .TASKFILE_DIR }}/tmp/component-constructor.yaml"
   CTF_LOCATION: '{{ .TASKFILE_DIR }}/tmp/transport-archive'
