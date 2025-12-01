@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	runtime2 "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor"
@@ -34,17 +36,24 @@ func TestHelmPluginCapabilities(t *testing.T) {
 	output, err := cmd.Output()
 	require.NoError(t, err, "capabilities command should succeed")
 
-	var capabilities mtypes.Types
-	err = json.Unmarshal(output, &capabilities)
-	require.NoError(t, err, "capabilities output should be valid JSON")
+	rawPluginSpec := spec.PluginSpec{}
+	require.NoError(t, json.Unmarshal(output, &rawPluginSpec), "capabilities output should be valid JSON")
 
-	require.Contains(t, capabilities.Types, v1.InputPluginType, "should contain input plugin type")
-	helmTypes := capabilities.Types[v1.InputPluginType]
-	require.Len(t, helmTypes, 1, "should have exactly one helm input type")
+	pluginSpec, err := runtime2.ConvertFromSpec(v1.Scheme, &rawPluginSpec)
+	require.NoError(t, err, "should convert plugin spec from raw spec")
 
-	helmType := helmTypes[0]
-	require.Equal(t, helmv1.Type, helmType.Type.Name, "type name should be 'helm'")
-	require.Equal(t, helmv1.Version, helmType.Type.Version, "type version should be 'v1'")
+	capabilityTypes := make([]string, len(pluginSpec.CapabilitySpecs))
+	for index, capability := range pluginSpec.CapabilitySpecs {
+		capabilityTypes[index] = capability.GetType().String()
+	}
+
+	require.Contains(t, capabilityTypes, string(v1.InputPluginType), "should contain input plugin type")
+	inputCapability := pluginSpec.CapabilitySpecs[0]
+	require.Len(t, inputCapability.(*v1.CapabilitySpec).SupportedInputTypes, 1, "should have exactly one helm input type")
+
+	helmInputType := inputCapability.(*v1.CapabilitySpec).SupportedInputTypes[0]
+	require.Equal(t, helmv1.Type, helmInputType.Type.Name, "type name should be 'helm'")
+	require.Equal(t, helmv1.Version, helmInputType.Type.Version, "type version should be 'v1'")
 }
 
 func TestHelmPluginLifecycle(t *testing.T) {
