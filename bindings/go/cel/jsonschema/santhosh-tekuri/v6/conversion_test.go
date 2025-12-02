@@ -335,7 +335,7 @@ func TestSchemas(t *testing.T) {
 				{"instance.spec.options[0]", NoIssues, NoIssues},
 				{"instance.spec.options[0].flag", NoIssues, NoIssues},
 				{"instance.spec.options[0].threshold", NoIssues, NoIssues},
-				{"instance.spec.options[0].threshold == 3.14", NoIssues, NoIssues},
+				{"instance.spec.options[0].threshold == 3", NoIssues, NoIssues},
 				{"instance.spec.options[0].threshold == \"foo\"", NoIssues, IssuesExist},
 
 				// invalid field --------------------------------------

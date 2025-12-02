@@ -8,7 +8,11 @@ import (
 
 // NewSchemaDeclType creates a DeclType wrapping the given santhosh-tekuri/jsonschema Schema.
 func NewSchemaDeclType(s *jsonschema.Schema) *DeclType {
-	return NewDeclType(&Schema{Schema: s})
+	base := NewDeclType(&Schema{Schema: s})
+	if s.ID != "" {
+		base.Type = base.Type.MaybeAssignTypeName(s.ID)
+	}
+	return base
 }
 
 // Schema wraps a santhosh-tekuri/jsonschema Schema to provide accessors for use in introspection
@@ -25,8 +29,11 @@ func (s *Schema) Type() string {
 }
 
 func (s *Schema) Items() *Schema {
-	if s.Schema == nil || s.Schema.Items == nil {
+	if s.Schema == nil || (s.Schema.Items == nil && s.Schema.Items2020 == nil) {
 		return nil
+	}
+	if s.Schema.Items2020 != nil {
+		return &Schema{Schema: s.Schema.Items2020}
 	}
 	switch s.Schema.Items.(type) {
 	case *jsonschema.Schema:

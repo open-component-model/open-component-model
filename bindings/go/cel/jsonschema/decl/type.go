@@ -1,6 +1,8 @@
 package decl
 
 import (
+	"fmt"
+
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 )
@@ -72,4 +74,68 @@ func (t *Type) IsObject() bool {
 // type, but not a parameterized key type or fields.
 func (t *Type) IsList() bool {
 	return t.KeyType == nil && t.ElemType != nil && t.Fields == nil
+}
+
+// MaybeAssignTypeName attempts to set the DeclType name to a fully qualified name, if the type
+// is of `object` type.
+//
+// The DeclType must return true for `IsObject` or this assignment will error.
+func (t *Type) MaybeAssignTypeName(name string) *Type {
+	if t.IsObject() {
+		objUpdated := false
+		if t.name != "object" {
+			name = t.name
+		} else {
+			objUpdated = true
+		}
+		fieldMap := make(map[string]*Field, len(t.Fields))
+		for fieldName, field := range t.Fields {
+			fieldType := field.Type
+			fieldTypeName := fmt.Sprintf("%s.%s", name, fieldName)
+			updated := fieldType.MaybeAssignTypeName(fieldTypeName)
+			if updated == fieldType {
+				fieldMap[fieldName] = field
+				continue
+			}
+			objUpdated = true
+			fieldMap[fieldName] = &Field{
+				Name:         fieldName,
+				Type:         updated,
+				Required:     field.Required,
+				enumValues:   field.enumValues,
+				defaultValue: field.defaultValue,
+			}
+		}
+		if !objUpdated {
+			return t
+		}
+		return &Type{
+			name:              name,
+			Fields:            fieldMap,
+			KeyType:           t.KeyType,
+			ElemType:          t.ElemType,
+			Metadata:          t.Metadata,
+			celType:           cel.ObjectType(name),
+			traitMask:         t.traitMask,
+			defaultValue:      t.defaultValue,
+			MinSerializedSize: t.MinSerializedSize,
+		}
+	}
+	if t.IsMap() {
+		elemTypeName := fmt.Sprintf("%s.@elem", name)
+		updated := t.ElemType.MaybeAssignTypeName(elemTypeName)
+		if updated == t.ElemType {
+			return t
+		}
+		return NewMapType(t.KeyType, updated, t.MaxElements)
+	}
+	if t.IsList() {
+		elemTypeName := fmt.Sprintf("%s.@idx", name)
+		updated := t.ElemType.MaybeAssignTypeName(elemTypeName)
+		if updated == t.ElemType {
+			return t
+		}
+		return NewListType(updated, t.MaxElements)
+	}
+	return t
 }

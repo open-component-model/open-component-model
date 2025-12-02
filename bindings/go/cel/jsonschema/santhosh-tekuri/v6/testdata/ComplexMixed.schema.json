@@ -54,7 +54,7 @@
           "type": "boolean"
         },
         "threshold": {
-          "type": "number"
+          "type": "integer"
         }
       }
     }

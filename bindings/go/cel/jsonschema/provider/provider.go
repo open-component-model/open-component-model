@@ -1,94 +1,110 @@
 package provider
 
 import (
+	"fmt"
+
+	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
 )
 
+func allTypesForDecl(declTypes []*decl.Type) map[string]*decl.Type {
+	if declTypes == nil {
+		return nil
+	}
+	allTypes := map[string]*decl.Type{}
+	for _, declType := range declTypes {
+		for k, t := range FieldTypeMap(declType.TypeName(), declType) {
+			allTypes[k] = t
+		}
+	}
+
+	return allTypes
+}
+
 // New returns a JSON Schema-based type-system which is CEL compatible.
-func New(rootTypes ...*decl.Type) *Provider {
-	typs := allTypesForDecl(rootTypes...)
-	return &Provider{
-		registeredTypes:     typs,
-		defaultTypeProvider: types.NewEmptyRegistry(),
+func New(rootTypes ...*decl.Type) *DeclTypeProvider {
+	// Note, if the schema indicates that it's actually based on another proto
+	// then prefer the proto definition. For expressions in the proto, a new field
+	// annotation will be needed to indicate the expected environment and type of
+	// the expression.
+	allTypes := allTypesForDecl(rootTypes)
+	return &DeclTypeProvider{
+		registeredTypes: allTypes,
+		typeProvider:    types.NewEmptyRegistry(),
 	}
 }
 
-func allTypesForDecl(rootTypes ...*decl.Type) map[string]*decl.Type {
-	types := make(map[string]*decl.Type)
-	for _, t := range rootTypes {
-		if t == nil {
-			continue
-		}
-		collectDeclTypes(t.TypeName(), t, types)
-	}
-	return types
-}
-
-// collectDeclTypes adds the given type and all nested types to types.
-func collectDeclTypes(path string, t *decl.Type, types map[string]*decl.Type) {
-	if t == nil {
-		return
-	}
-
-	// Object types
-	if t.IsObject() {
-		// Prefer the declared type name as the logical path if it's not the generic "object".
-		if t.TypeName() != "object" {
-			path = t.TypeName()
-		}
-
-		// Register the object type under its type name.
-		types[t.TypeName()] = t
-
-		// Recurse into fields.
-		for name, field := range t.Fields {
-			collectDeclTypes(path+"."+name, field.Type, types)
-		}
-		return
-	}
-
-	// Map element types
-	if t.IsMap() {
-		types[path] = t
-		collectDeclTypes(path+".@elem", t.ElemType, types)
-		return
-	}
-
-	// List element types
-	if t.IsList() {
-		types[path] = t
-		collectDeclTypes(path+".@idx", t.ElemType, types)
-		return
-	}
-}
-
-// Provider extends the CEL [types.Provider] interface and provides a JSONSchema-based
+// DeclTypeProvider extends the CEL ref.TypeProvider interface and provides an Open API Schema-based
 // type-system.
-type Provider struct {
-	registeredTypes map[string]*decl.Type
-
-	defaultTypeProvider types.Provider
-
+type DeclTypeProvider struct {
+	registeredTypes             map[string]*decl.Type
+	typeProvider                types.Provider
+	typeAdapter                 types.Adapter
 	recognizeKeywordAsFieldName bool
-
-	enums map[string]ref.Val
 }
 
-var _ types.Provider = (*Provider)(nil)
-
-func (p *Provider) EnumValue(enumName string) ref.Val {
-	return p.defaultTypeProvider.EnumValue(enumName)
+func (rt *DeclTypeProvider) SetRecognizeKeywordAsFieldName(recognize bool) {
+	rt.recognizeKeywordAsFieldName = recognize
 }
 
-func (p *Provider) FindIdent(identName string) (ref.Val, bool) {
-	return p.defaultTypeProvider.FindIdent(identName)
+func (rt *DeclTypeProvider) EnumValue(enumName string) ref.Val {
+	return rt.typeProvider.EnumValue(enumName)
 }
 
-func (p *Provider) SetRecognizeKeywordAsFieldName(recognize bool) {
-	p.recognizeKeywordAsFieldName = recognize
+func (rt *DeclTypeProvider) FindIdent(identName string) (ref.Val, bool) {
+	return rt.typeProvider.FindIdent(identName)
+}
+
+// EnvOptions returns a set of cel.EnvOption values which includes the declaration set
+// as well as a custom ref.TypeProvider.
+//
+// If the DeclTypeProvider value is nil, an empty []cel.EnvOption set is returned.
+func (rt *DeclTypeProvider) EnvOptions(tp types.Provider) ([]cel.EnvOption, error) {
+	if rt == nil {
+		return []cel.EnvOption{}, nil
+	}
+	rtWithTypes, err := rt.WithTypeProvider(tp)
+	if err != nil {
+		return nil, err
+	}
+	return []cel.EnvOption{
+		cel.CustomTypeProvider(rtWithTypes),
+		cel.CustomTypeAdapter(rtWithTypes),
+	}, nil
+}
+
+// WithTypeProvider returns a new DeclTypeProvider that sets the given TypeProvider
+// If the original DeclTypeProvider is nil, the returned DeclTypeProvider is still nil.
+func (rt *DeclTypeProvider) WithTypeProvider(tp types.Provider) (*DeclTypeProvider, error) {
+	if rt == nil {
+		return nil, nil
+	}
+	var ta types.Adapter = types.DefaultTypeAdapter
+	tpa, ok := tp.(types.Adapter)
+	if ok {
+		ta = tpa
+	}
+	rtWithTypes := &DeclTypeProvider{
+		typeProvider:                tp,
+		typeAdapter:                 ta,
+		registeredTypes:             rt.registeredTypes,
+		recognizeKeywordAsFieldName: rt.recognizeKeywordAsFieldName,
+	}
+	for name, declType := range rt.registeredTypes {
+		tpType, found := tp.FindStructType(name)
+		// cast celType to types.type
+
+		expT := declType.CelType()
+		if found && !expT.IsExactType(tpType) {
+			return nil, fmt.Errorf(
+				"type %s definition differs between CEL environment and type provider", name)
+		}
+
+	}
+	return rtWithTypes, nil
 }
 
 // FindStructType attempts to resolve the typeName provided from the rule's rule-schema, or if not
@@ -98,91 +114,95 @@ func (p *Provider) SetRecognizeKeywordAsFieldName(recognize bool) {
 //
 // Note, when the type name is based on the Open API Schema, the name will reflect the object path
 // where the type definition appears.
-func (p *Provider) FindStructType(structType string) (*types.Type, bool) {
-	if p == nil {
+func (rt *DeclTypeProvider) FindStructType(typeName string) (*types.Type, bool) {
+	if rt == nil {
 		return nil, false
 	}
-	declType, found := p.findType(structType)
+	declType, found := rt.findDeclType(typeName)
 	if found {
 		expT := declType.CelType()
 		return types.NewTypeTypeWithParam(expT), found
 	}
-	return p.defaultTypeProvider.FindStructType(structType)
+	if rt.typeProvider == nil {
+		return nil, false
+	}
+	return rt.typeProvider.FindStructType(typeName)
 }
 
-func (p *Provider) FindStructFieldNames(structType string) ([]string, bool) {
-	st, found := p.findDeclType(structType)
+// FindDeclType returns the CPT type description which can be mapped to a CEL type.
+func (rt *DeclTypeProvider) FindDeclType(typeName string) (*decl.Type, bool) {
+	if rt == nil {
+		return nil, false
+	}
+	return rt.findDeclType(typeName)
+}
+
+// FindStructFieldNames returns the field names associated with the type, if the type
+// is found.
+func (rt *DeclTypeProvider) FindStructFieldNames(typeName string) ([]string, bool) {
+	return []string{}, false
+}
+
+// FindStructFieldType returns a field type given a type name and field name, if found.
+//
+// Note, the type name for an Open API Schema type is likely to be its qualified object path.
+// If, in the future an object instance rather than a type name were provided, the field
+// resolution might more accurately reflect the expected type model. However, in this case
+// concessions were made to align with the existing CEL interfaces.
+func (rt *DeclTypeProvider) FindStructFieldType(typeName, fieldName string) (*types.FieldType, bool) {
+	st, found := rt.findDeclType(typeName)
 	if !found {
-		return p.defaultTypeProvider.FindStructFieldNames(structType)
+		return rt.typeProvider.FindStructFieldType(typeName, fieldName)
 	}
 
-	// If this is a map type, we do NOT return the element object's fields.
-	// Returning any names would imply the map has static field names, which it does not.
+	f, found := st.Fields[fieldName]
+	if rt.recognizeKeywordAsFieldName && !found && jsonschema.ReservedSymbols.Has(fieldName) {
+		f, found = st.Fields["__"+fieldName+"__"]
+	}
+
+	if found {
+		ft := f.Type
+		expT := ft.CelType()
+		return &types.FieldType{
+			Type: expT,
+		}, true
+	}
+	// This could be a dynamic map.
 	if st.IsMap() {
-		// No static field names on map objects.
-		return []string{}, true
+		et := st.ElemType
+		expT := et.CelType()
+		return &types.FieldType{
+			Type: expT,
+		}, true
 	}
-
-	names := make([]string, 0, len(st.Fields))
-	for name := range st.Fields {
-		names = append(names, name)
-	}
-	return names, true
+	return nil, false
 }
 
-func (p *Provider) FindStructFieldType(structType, fieldName string) (*types.FieldType, bool) {
-	st, found := p.findDeclType(structType)
-	if !found {
-		// fallback to base CEL provider
-		return p.defaultTypeProvider.FindStructFieldType(structType, fieldName)
-	}
-
-	// --- CASE 1: Non-map object with named fields ---
-	if !st.IsMap() {
-		// standard lookup: instance.<field>
-		if f, ok := st.Fields[fieldName]; ok {
-			return &types.FieldType{
-				Type: f.Type.CelType(),
-			}, true
-		}
-
-		// support escaped keyword fields, if enabled
-		if p.recognizeKeywordAsFieldName && jsonschema.ReservedSymbols.Has(fieldName) {
-			if f, ok := st.Fields["__"+fieldName+"__"]; ok {
-				return &types.FieldType{
-					Type: f.Type.CelType(),
-				}, true
-			}
-		}
-
-		// unknown field on typed object → error
-		return nil, false
-	}
-
-	// --- CASE 2: Map type ---
-	// Dot-access is allowed and treated like key lookup.
-	// instance.foo → element type
-	elem := st.ElemType
-	return &types.FieldType{
-		Type: elem.CelType(),
-	}, true
+// NativeToValue is an implementation of the ref.TypeAdapater interface which supports conversion
+// of rule values to CEL ref.Val instances.
+func (rt *DeclTypeProvider) NativeToValue(val interface{}) ref.Val {
+	return rt.typeAdapter.NativeToValue(val)
 }
 
-func (p *Provider) NewValue(typeName string, fields map[string]ref.Val) ref.Val {
-	// TODO: implement for JSON Schema types to enable CEL object instantiation
-	return p.defaultTypeProvider.NewValue(typeName, fields)
+func (rt *DeclTypeProvider) NewValue(typeName string, fields map[string]ref.Val) ref.Val {
+	// TODO: implement for OpenAPI types to enable CEL object instantiation, which is needed
+	// for mutating admission.
+	return rt.typeProvider.NewValue(typeName, fields)
 }
 
-// FindType returns the CPT type description which can be mapped to a CEL type.
-func (p *Provider) FindType(typeName string) (*decl.Type, bool) {
-	if p == nil {
-		return nil, false
+// TypeNames returns the list of type names declared within the DeclTypeProvider object.
+func (rt *DeclTypeProvider) TypeNames() []string {
+	typeNames := make([]string, len(rt.registeredTypes))
+	i := 0
+	for name := range rt.registeredTypes {
+		typeNames[i] = name
+		i++
 	}
-	return p.findType(typeName)
+	return typeNames
 }
 
-func (p *Provider) findType(typeName string) (*decl.Type, bool) {
-	declType, found := p.registeredTypes[typeName]
+func (rt *DeclTypeProvider) findDeclType(typeName string) (*decl.Type, bool) {
+	declType, found := rt.registeredTypes[typeName]
 	if found {
 		return declType, true
 	}
@@ -190,11 +210,38 @@ func (p *Provider) findType(typeName string) (*decl.Type, bool) {
 	return declType, declType != nil
 }
 
-func (p *Provider) findDeclType(typeName string) (*decl.Type, bool) {
-	declType, found := p.registeredTypes[typeName]
-	if found {
-		return declType, true
+// FieldTypeMap constructs a map of the field and object types nested within a given type.
+func FieldTypeMap(path string, t *decl.Type) map[string]*decl.Type {
+	if t.IsObject() && t.TypeName() != "object" {
+		path = t.TypeName()
 	}
-	declType = decl.Scalar(typeName)
-	return declType, declType != nil
+	types := make(map[string]*decl.Type)
+	buildDeclTypes(path, t, types)
+	return types
+}
+
+func buildDeclTypes(path string, t *decl.Type, types map[string]*decl.Type) {
+	// Ensure object types are properly named according to where they appear in the schema.
+	if t.IsObject() {
+		// Hack to ensure that names are uniquely qualified and work well with the type
+		// resolution steps which require fully qualified type names for field resolution
+		// to function properly.
+		types[t.TypeName()] = t
+		for name, field := range t.Fields {
+			fieldPath := fmt.Sprintf("%s.%s", path, name)
+			buildDeclTypes(fieldPath, field.Type, types)
+		}
+	}
+	// Map element properties to type names if needed.
+	if t.IsMap() {
+		mapElemPath := fmt.Sprintf("%s.@elem", path)
+		buildDeclTypes(mapElemPath, t.ElemType, types)
+		types[path] = t
+	}
+	// List element properties.
+	if t.IsList() {
+		listIdxPath := fmt.Sprintf("%s.@idx", path)
+		buildDeclTypes(listIdxPath, t.ElemType, types)
+		types[path] = t
+	}
 }

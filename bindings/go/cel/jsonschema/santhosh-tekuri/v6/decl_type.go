@@ -32,13 +32,11 @@ func NewDeclType(s *Schema) *DeclType {
 	}
 
 	switch s.Type() {
-
 	case "array":
 		if s.Items() == nil {
 			// JSON Schema default: "items": {}
 			return declTypeForSchema(decl.NewListType(decl.DynType, decl.NoMaxLength), s)
 		}
-
 		itemsType := NewDeclType(s.Items())
 		if itemsType == nil {
 			// Fallback: treat unknown array items as dyn
