@@ -401,10 +401,8 @@ func Test_Integration_CTF(t *testing.T) {
 		r := require.New(t)
 		repoProvider := provider.NewComponentVersionRepositoryProvider()
 		repoSpec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
-		id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
-		r.NoError(err)
-
-		r.Equal(id[ocmruntime.IdentityAttributePath], fs.String())
+		_, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
+		r.Error(err)
 
 		repo, err := repoProvider.GetComponentVersionRepository(t.Context(), repoSpec, nil)
 		r.NoError(err)
