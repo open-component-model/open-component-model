@@ -169,7 +169,7 @@ func RegisterPlugin[CONTRACT v1.SignatureHandlerContract[T], T runtime.Typed](
 		},
 	)
 
-	schema, err := runtime.GenerateJSONSchemaForType(proto)
+	schema, err := plugins.GenerateJSONSchemaForType(proto)
 	if err != nil {
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}
