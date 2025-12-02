@@ -17,11 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"ocm.software/open-component-model/bindings/go/credentials"
-	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
-	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -29,8 +24,13 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer"
@@ -60,7 +60,7 @@ func init() {
 	ocm.MustRegisterMetrics(metrics.Registry)
 }
 
-//nolint:funlen // the main function is complex enough as it is - we don't want to separate the initialization
+//nolint:funlen,maintidx // the main function is complex enough as it is - we don't want to separate the initialization
 func main() {
 	var (
 		metricsAddr               string

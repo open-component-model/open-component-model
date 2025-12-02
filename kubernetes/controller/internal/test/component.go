@@ -125,7 +125,7 @@ func SignComponent(ctx context.Context, signatureName string, signAlgo signingv1
 	Expect(err).ToNot(HaveOccurred())
 
 	return descruntime.Signature{
-		Name:      string(signatureName),
+		Name:      signatureName,
 		Digest:    *unsignedDigest,
 		Signature: sigBytes,
 	}, pubKey
