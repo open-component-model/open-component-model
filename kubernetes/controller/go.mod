@@ -121,7 +121,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.39.0 // indirect
-	github.com/aws/smithy-go v1.23.1 // indirect
+	github.com/aws/smithy-go v1.23.2 // indirect
 	github.com/awslabs/amazon-ecr-credential-helper/ecr-login v0.10.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -155,7 +155,7 @@ require (
 	github.com/containers/ocicrypt v1.2.1 // indirect
 	github.com/containers/storage v1.59.1 // indirect
 	github.com/coreos/go-oidc/v3 v3.16.0 // indirect
-	github.com/cyphar/filepath-securejoin v0.5.0 // indirect
+	github.com/cyphar/filepath-securejoin v0.5.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20250730155240-ffadbf3f398c // indirect
@@ -311,7 +311,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.2 // indirect
-	github.com/prometheus/procfs v0.19.1 // indirect
+	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/redis/go-redis/v9 v9.16.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
