@@ -12,12 +12,12 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.39.0
 	golang.org/x/crypto v0.45.0
 	helm.sh/helm/v3 v3.19.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.9
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251128170812-81b92bc4adf4
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/oci v0.0.15
+	ocm.software/open-component-model/bindings/go/blob v0.0.10
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251202160704-cecb9e60721d
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4
+	ocm.software/open-component-model/bindings/go/oci v0.0.16
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
-	ocm.software/open-component-model/bindings/go/runtime v0.0.2
+	ocm.software/open-component-model/bindings/go/runtime v0.0.4
 	ocm.software/open-component-model/cli v0.0.0-20251124222340-4c1b948b736f
 	oras.land/oras-go/v2 v2.6.0
 )
@@ -55,7 +55,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
-	github.com/jedib0t/go-pretty/v6 v6.6.9 // indirect
+	github.com/jedib0t/go-pretty/v6 v6.7.5 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
@@ -106,12 +106,12 @@ require (
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251128170812-81b92bc4adf4 // indirect
-	ocm.software/open-component-model/bindings/go/input/dir v0.0.1 // indirect
-	ocm.software/open-component-model/bindings/go/input/file v0.0.2 // indirect
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251124222340-4c1b948b736f // indirect
-	ocm.software/open-component-model/bindings/go/plugin v0.0.10 // indirect
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251124222340-4c1b948b736f // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251128170812-81b92bc4adf4 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251202160704-cecb9e60721d // indirect
+	ocm.software/open-component-model/bindings/go/input/dir v0.0.2 // indirect
+	ocm.software/open-component-model/bindings/go/input/file v0.0.3 // indirect
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251202160704-cecb9e60721d // indirect
+	ocm.software/open-component-model/bindings/go/plugin v0.0.12 // indirect
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251202160704-cecb9e60721d // indirect
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251202160704-cecb9e60721d // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )

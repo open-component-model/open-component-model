@@ -27,7 +27,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
@@ -115,7 +114,6 @@ var _ = BeforeSuite(func() {
 	}()
 
 	pm = manager.NewPluginManager(ctx)
-	Expect(plugins.Register(pm)).To(Succeed())
 
 	const unlimited = 0
 	ttl := time.Minute * 30

@@ -20,7 +20,6 @@ import (
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -234,20 +233,14 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 func registerOCIPlugin(t *testing.T, pm *manager.PluginManager, component, version string) {
 	t.Helper()
 
-	scheme := ocmruntime.NewScheme()
-	ocirepository.MustAddToScheme(scheme)
-
 	// Register a simple component version repository plugin
 	cvRepoPlugin := &simpleOCIPlugin{
 		component: component,
 		version:   version,
 	}
 
-	err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-		scheme,
-		pm.ComponentVersionRepositoryRegistry,
+	err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(
 		cvRepoPlugin,
-		&ociv1.Repository{},
 	)
 
 	require.NoError(t, err)
@@ -283,6 +276,12 @@ type simpleOCIPlugin struct {
 func (p *simpleOCIPlugin) GetJSONSchemaForRepositorySpecification(typ ocmruntime.Type) ([]byte, error) {
 	return nil, nil
 }
+
+func (p *simpleOCIPlugin) GetComponentVersionRepositoryScheme() *ocmruntime.Scheme {
+	return ocirepository.Scheme
+}
+
+var _ repository.ComponentVersionRepositoryProvider = (*simpleOCIPlugin)(nil)
 
 func (p *simpleOCIPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
 	_ context.Context,

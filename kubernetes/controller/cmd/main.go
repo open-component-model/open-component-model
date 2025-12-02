@@ -10,6 +10,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 
 	"github.com/fluxcd/pkg/runtime/events"
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -24,6 +25,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
@@ -34,8 +36,6 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
-	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
@@ -156,10 +156,9 @@ func main() {
 	}
 
 	pm := manager.NewPluginManager(ctx)
-
-	if err := plugins.Register(pm); err != nil {
-		setupLog.Error(err, "unable to register plugins: %w", err)
-		os.Exit(1)
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
+	if err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider); err != nil {
+		setupLog.Error(err, "failed to register internal component version repository plugin")
 	}
 
 	const unlimited = 0
