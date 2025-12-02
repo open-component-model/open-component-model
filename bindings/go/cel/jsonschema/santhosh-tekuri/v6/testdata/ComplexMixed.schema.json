@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test/ComplexMixed.schema.json",
+  "title": "ComplexMixed",
+  "type": "object",
+  "required": ["kind", "metadata"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "oneOf": [
+        { "const": "Example/v1" },
+        { "const": "Example" }
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 20
+          }
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["fast", "slow"]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Option"
+          }
+        },
+        "schedule": {
+          "type": "string",
+          "format": "duration"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Option": {
+      "type": "object",
+      "properties": {
+        "flag": {
+          "type": "boolean"
+        },
+        "threshold": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

@@ -1,21 +1,31 @@
-package jsonschema
+package decl
 
 import (
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 )
 
-// DeclField describes the name, ordinal, and optionality of a field declaration within a type.
-type DeclField struct {
+func NewField(name string, declType *Type, required bool, enumValues []interface{}, defaultValue interface{}) *Field {
+	return &Field{
+		Name:         name,
+		Type:         declType,
+		Required:     required,
+		enumValues:   enumValues,
+		defaultValue: defaultValue,
+	}
+}
+
+// Field describes the name, ordinal, and optionality of a field declaration within a type.
+type Field struct {
 	Name         string
-	Type         *DeclType
+	Type         *Type
 	Required     bool
 	enumValues   []any
 	defaultValue any
 }
 
 // DefaultValue returns the zero value associated with the field.
-func (f *DeclField) DefaultValue() ref.Val {
+func (f *Field) DefaultValue() ref.Val {
 	if f.defaultValue != nil {
 		return types.DefaultTypeAdapter.NativeToValue(f.defaultValue)
 	}
@@ -23,12 +33,12 @@ func (f *DeclField) DefaultValue() ref.Val {
 }
 
 // TypeName returns the string type name of the field.
-func (f *DeclField) TypeName() string {
+func (f *Field) TypeName() string {
 	return f.Type.TypeName()
 }
 
 // EnumValues returns the set of values that this field may take.
-func (f *DeclField) EnumValues() []ref.Val {
+func (f *Field) EnumValues() []ref.Val {
 	if f.enumValues == nil || len(f.enumValues) == 0 {
 		return []ref.Val{}
 	}

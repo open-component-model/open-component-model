@@ -1,4 +1,4 @@
-package jsonschema
+package decl
 
 import (
 	"math"
@@ -12,7 +12,6 @@ import (
 
 const (
 	MaxRequestSizeBytes = uint64(3 * 1024 * 1024)
-
 	// DefaultMaxRequestSizeBytes is the size of the largest request that will be accepted
 	DefaultMaxRequestSizeBytes = MaxRequestSizeBytes
 
@@ -45,11 +44,13 @@ const (
 	// MaxFormatSize is the maximum size we allow for format strings
 	MaxFormatSize          = 64
 	MaxNameFormatRegexSize = 128
+
+	NoMaxLength = math.MaxInt
 )
 
-const noMaxLength = math.MaxInt
-
-func findScalar(typename string) *DeclType {
+// Scalar returns the scalar type declaration for the given CEL type name.
+// If the type name does not correspond to a known scalar type, nil is returned.
+func Scalar(typename string) *Type {
 	switch typename {
 	case BoolType.TypeName():
 		return BoolType
@@ -95,9 +96,6 @@ var (
 	// DurationType is equivalent to the CEL 'duration' type.
 	DurationType = NewSimpleTypeWithMinSize("duration", cel.DurationType, types.Duration{Duration: time.Duration(0)}, MinDurationSizeJSON)
 
-	// DateType is equivalent to the CEL 'date' type.
-	DateType = NewSimpleTypeWithMinSize("date", cel.TimestampType, types.Timestamp{Time: time.Time{}}, JSONDateSize)
-
 	// DynType is the equivalent of the CEL 'dyn' concept which indicates that the type will be
 	// determined at runtime rather than compile time.
 	DynType = NewSimpleTypeWithMinSize("dyn", cel.DynType, nil, 1)
@@ -117,37 +115,24 @@ var (
 	// labeled as Timestamp will necessarily have the same MinSerializedSize.
 	TimestampType = NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, JSONDateSize)
 
-	// QuantityDeclType wraps a [QuantityType] and makes it usable with functions that expect
-	// a [DeclType].
-	//QuantityDeclType = NewSimpleTypeWithMinSize("quantity", QuantityType, Quantity{Quantity: resource.NewQuantity(0, resource.DecimalSI)}, 8)
-
 	// UintType is equivalent to the CEL 'uint' type.
 	UintType = NewSimpleTypeWithMinSize("uint", cel.UintType, types.Uint(0), 1)
 
 	// ListType is equivalent to the CEL 'list' type.
-	ListType = NewListType(AnyType, noMaxLength)
+	ListType = NewListType(AnyType, NoMaxLength)
 
 	// MapType is equivalent to the CEL 'map' type.
-	MapType = NewMapType(AnyType, AnyType, noMaxLength)
+	MapType = NewMapType(AnyType, AnyType, NoMaxLength)
 )
 
-func NewSimpleTypeWithMinSize(name string, celType *cel.Type, zeroVal ref.Val, minSize uint64) *DeclType {
-	return &DeclType{
-		name:              name,
-		celType:           celType,
-		defaultValue:      zeroVal,
-		MinSerializedSize: minSize,
-	}
-}
-
 // NewListType returns a parameterized list type with a specified element type.
-func NewListType(elem *DeclType, maxItems uint64) *DeclType {
-	return &DeclType{
+func NewListType(elem *Type, maxItems uint64) *Type {
+	return &Type{
 		name:         "list",
-		ElemType:     elem,
-		MaxElements:  maxItems,
 		celType:      cel.ListType(elem.CelType()),
 		defaultValue: NewListValue(),
+		ElemType:     elem,
+		MaxElements:  maxItems,
 		// a list can always be represented as [] in JSON, so hardcode the min size
 		// to 2
 		MinSerializedSize: 2,
@@ -155,14 +140,14 @@ func NewListType(elem *DeclType, maxItems uint64) *DeclType {
 }
 
 // NewMapType returns a parameterized map type with the given key and element types.
-func NewMapType(key, elem *DeclType, maxProperties uint64) *DeclType {
-	return &DeclType{
+func NewMapType(key, elem *Type, maxProperties uint64) *Type {
+	return &Type{
 		name:         "map",
+		celType:      cel.MapType(key.CelType(), elem.CelType()),
+		defaultValue: NewMapValue(),
 		KeyType:      key,
 		ElemType:     elem,
 		MaxElements:  maxProperties,
-		celType:      cel.MapType(key.CelType(), elem.CelType()),
-		defaultValue: NewMapValue(),
 		// a map can always be represented as {} in JSON, so hardcode the min size
 		// to 2
 		MinSerializedSize: 2,
@@ -170,11 +155,11 @@ func NewMapType(key, elem *DeclType, maxProperties uint64) *DeclType {
 }
 
 // NewObjectType creates an object type with a qualified name and a set of field declarations.
-func NewObjectType(name string, fields map[string]*DeclField) *DeclType {
-	t := &DeclType{
+func NewObjectType(name string, fields map[string]*Field) *Type {
+	t := &Type{
 		name:      name,
-		Fields:    fields,
 		celType:   cel.ObjectType(name),
+		Fields:    fields,
 		traitMask: traits.FieldTesterType | traits.IndexerType,
 		// an object could potentially be larger than the min size we default to here ({}),
 		// but we rely upon the caller to change MinSerializedSize accordingly if they add
@@ -183,4 +168,13 @@ func NewObjectType(name string, fields map[string]*DeclField) *DeclType {
 	}
 	t.defaultValue = NewObjectValue(t)
 	return t
+}
+
+func NewSimpleTypeWithMinSize(name string, celType *cel.Type, zeroVal ref.Val, minSize uint64) *Type {
+	return &Type{
+		name:              name,
+		celType:           celType,
+		defaultValue:      zeroVal,
+		MinSerializedSize: minSize,
+	}
 }
