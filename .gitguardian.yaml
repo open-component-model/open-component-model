@@ -2,4 +2,6 @@ secret:
   ignored_matches:
   - match: 49db867cf050c9cba4e74099609e6836bc8fc56d8aebc1c7f5aaf9c7feebd0f9
     name: kubernetes/controller/examples/helm-signing/ocm.software
+  - match: c41c71837a9ffbb3eb165eb1fb62ebed35c129c9597ee17460a831a66a372422
+    name: cli/cmd/cmd_test.go
 version: 2
