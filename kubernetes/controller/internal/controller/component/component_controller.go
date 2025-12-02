@@ -43,7 +43,12 @@ import (
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	Resolver      *resolution.Resolver
+	// Resolver provides repository resolution and caching for component reconciliation.
+	// It ensures that repository access is efficient and consistent during reconciliation operations.
+	Resolver *resolution.Resolver
+
+	// PluginManager manages signature verification plugins for component version validation.
+	// It enables dynamic loading and execution of signature algorithms required for verifying component authenticity.
 	PluginManager *manager.PluginManager
 }
 
