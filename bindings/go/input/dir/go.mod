@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251024100521-a7be1bf5ce0d
+	ocm.software/open-component-model/bindings/go/constructor v0.0.1
 	ocm.software/open-component-model/bindings/go/runtime v0.0.2
 )
 
