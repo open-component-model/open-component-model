@@ -6,6 +6,9 @@ go 1.25.1
 // xref: https://github.com/opencontainers/go-digest/pull/66
 replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20250813155314-89707e38ad1a
 
+// TODO: Remove when conflicts are resolved
+replace ocm.software/open-component-model/bindings/go/runtime => ocm.software/open-component-model/bindings/go/runtime v0.0.2
+
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/fluxcd/pkg/apis/event v0.20.0
@@ -34,14 +37,18 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/ocm v0.32.0
-	ocm.software/open-component-model/bindings/go/blob v0.0.9
+	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
-	ocm.software/open-component-model/bindings/go/credentials v0.0.2
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251124222340-4c1b948b736f
-	ocm.software/open-component-model/bindings/go/oci v0.0.11
+	ocm.software/open-component-model/bindings/go/credentials v0.0.5
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251128162057-1ad9197516b8
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251128170812-81b92bc4adf4
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
+	ocm.software/open-component-model/bindings/go/oci v0.0.16
 	ocm.software/open-component-model/bindings/go/plugin v0.0.10
-	ocm.software/open-component-model/bindings/go/repository v0.0.3
-	ocm.software/open-component-model/bindings/go/runtime v0.0.2
+	ocm.software/open-component-model/bindings/go/repository v0.0.4
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251125192726-a44e4934cd96
+	ocm.software/open-component-model/bindings/go/runtime v0.0.4
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251128162057-1ad9197516b8
 )
 
 require (
@@ -411,9 +418,6 @@ require (
 	ocm.software/open-component-model/bindings/go/constructor v0.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251124222340-4c1b948b736f // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3 // indirect
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251124222340-4c1b948b736f // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect
