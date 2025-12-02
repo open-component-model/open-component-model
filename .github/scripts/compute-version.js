@@ -44,7 +44,7 @@ export function computeVersion(ref, tagPrefix) {
     } else {
         // Convert ref to semver-safe pseudo version
         // Replace slashes and other problematic chars with hyphens
-        const sanitized = ref.replace(/[\/+#?^%$]/g, "-");
+        const sanitized = ref.replace(/[\/+#?_^%$]/g, "-").toLocaleLowerCase();
         return `0.0.0-${sanitized}`;
     }
 }

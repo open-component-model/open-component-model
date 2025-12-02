@@ -9,7 +9,7 @@ require (
 	helm.sh/helm/v3 v3.19.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.9
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
-	ocm.software/open-component-model/bindings/go/constructor v0.0.0-20251024100521-a7be1bf5ce0d
+	ocm.software/open-component-model/bindings/go/constructor v0.0.1
 	ocm.software/open-component-model/bindings/go/oci v0.0.11
 	ocm.software/open-component-model/bindings/go/plugin v0.0.11
 	ocm.software/open-component-model/bindings/go/runtime v0.0.3
@@ -123,6 +123,6 @@ require (
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.20.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
