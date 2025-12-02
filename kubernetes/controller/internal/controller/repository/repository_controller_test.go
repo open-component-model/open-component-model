@@ -3,6 +3,10 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -55,6 +59,42 @@ var _ = Describe("Repository Controller", func() {
 
 		Context("When correct RepositorySpec is provided", func() {
 			It("Repository can be reconciled", func(ctx SpecContext) {
+				user, password := getUserAndPasswordForTest()
+				if user == "" || password == "" {
+					Skip("GitHub credentials not available (gh CLI not found or not authenticated)")
+				}
+
+				By("creating a ConfigMap with OCIRepository credentials")
+				cfg := fmt.Sprintf(`
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: OCIRepository
+      hostname: ghcr.io
+      port: "443"
+      scheme: https
+    credentials:
+    - type: Credentials/v1
+      properties:
+        username: %q
+        password: %q
+`, user, password)
+
+				ocmConfig := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: TestNamespaceOCMRepo,
+						Name:      "ghcr-credentials",
+					},
+					Data: map[string]string{
+						v1alpha1.OCMConfigKey: cfg,
+					},
+				}
+				Expect(k8sClient.Create(ctx, ocmConfig)).To(Succeed())
+				DeferCleanup(func(ctx SpecContext) {
+					Expect(k8sClient.Delete(ctx, ocmConfig)).To(Succeed())
+				})
 
 				By("creating a OCI repository with existing host")
 				spec := &oci.Repository{
@@ -66,6 +106,18 @@ var _ = Describe("Repository Controller", func() {
 				Expect(err).NotTo(HaveOccurred())
 				repoName := TestRepositoryObj + "-passing"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, repoName, &specdata)
+
+				By("adding ConfigMap reference to Repository")
+				ocmRepo.Spec.OCMConfig = []v1alpha1.OCMConfiguration{
+					{
+						NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+							APIVersion: corev1.SchemeGroupVersion.String(),
+							Kind:       "ConfigMap",
+							Name:       ocmConfig.Name,
+						},
+					},
+				}
+
 				Expect(k8sClient.Create(ctx, ocmRepo)).To(Succeed())
 
 				By("check that repository status has been updated successfully")
@@ -535,4 +587,43 @@ func cleanupTestConfigsAndSecrets(ctx context.Context, configs []*corev1.ConfigM
 	for _, secret := range secrets {
 		Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
 	}
+}
+
+// getUserAndPasswordForTest safely gets GitHub credentials for testing
+func getUserAndPasswordForTest() (string, string) {
+	gh, err := exec.LookPath("gh")
+	if err != nil {
+		return "", ""
+	}
+
+	user, err := getUsername(gh)
+	if err != nil {
+		return "", ""
+	}
+
+	pw := exec.Command("sh", "-c", fmt.Sprintf("%s auth token", gh))
+	out, err := pw.CombinedOutput()
+	if err != nil {
+		return "", ""
+	}
+	password := strings.TrimSpace(string(out))
+
+	return user, password
+}
+
+func getUsername(gh string) (string, error) {
+	if githubUser := os.Getenv("GITHUB_USER"); githubUser != "" {
+		return githubUser, nil
+	}
+
+	out, err := exec.Command("sh", "-c", fmt.Sprintf("%s api user", gh)).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("gh CLI for user failed: %w", err)
+	}
+	structured := map[string]interface{}{}
+	if err := json.Unmarshal(out, &structured); err != nil {
+		return "", fmt.Errorf("gh failed to parse output: %w", err)
+	}
+
+	return structured["login"].(string), nil
 }
