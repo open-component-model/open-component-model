@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/invopop/jsonschema"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
