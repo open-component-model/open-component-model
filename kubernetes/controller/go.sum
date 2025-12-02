@@ -2713,12 +2713,12 @@ ocm.software/open-component-model/bindings/go/plugin v0.0.12 h1:nio+sgQlS/QGHQN0
 ocm.software/open-component-model/bindings/go/plugin v0.0.12/go.mod h1:lqKv1KelirpYTm36XuUB1QNboMmyD7qb5qPBx0sfid8=
 ocm.software/open-component-model/bindings/go/repository v0.0.4 h1:pDh8tHTaE8PtBwiX/JTb/E3+n0bPpZAexvfvrNO9ASI=
 ocm.software/open-component-model/bindings/go/repository v0.0.4/go.mod h1:v1ROvp4Hmq5q3t4Mg2gPUqoOJn4ENFaOVmd1XBXKdj4=
-ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251125192726-a44e4934cd96 h1:Th7LdNiz7Yt9Qv0bbf1HsLBGBZwr9xG9f50nkHA6ihM=
-ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251125192726-a44e4934cd96/go.mod h1:AMZrQJ410HKW+G0SlGMYwpnXLV3ffHLp/kDw92YCUNI=
+ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251202182934-0c8ad3c6f961 h1:RaNe+j3VGcwFTNXe9/SZQp2bLYNI0HarkmEmvS7kPX4=
+ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251202182934-0c8ad3c6f961/go.mod h1:AMZrQJ410HKW+G0SlGMYwpnXLV3ffHLp/kDw92YCUNI=
 ocm.software/open-component-model/bindings/go/runtime v0.0.4 h1:Z4r5MKj8tDXATzZNNnfJuTIpDw0/bvQ1XzuqcAcSRcE=
 ocm.software/open-component-model/bindings/go/runtime v0.0.4/go.mod h1:iokVCXI30cn36PM05bBBaDGeXpz0hbgU9ObTtdP26Eo=
-ocm.software/open-component-model/bindings/go/signing v0.0.0-20251202063600-c6103e0cea0f h1:ulxoTz/l23Ki5TqtPVWgce3k8NOM2SOf/oOgDTLS27s=
-ocm.software/open-component-model/bindings/go/signing v0.0.0-20251202063600-c6103e0cea0f/go.mod h1:jMpKHJPuU7izTwps6RcoBU3Qf485GqK2tOT0TW1TIc8=
+ocm.software/open-component-model/bindings/go/signing v0.0.0-20251202182934-0c8ad3c6f961 h1:N8ERTbvtESVGCDsMrZr890J2xW6/Am7UIrLWTfK3xHE=
+ocm.software/open-component-model/bindings/go/signing v0.0.0-20251202182934-0c8ad3c6f961/go.mod h1:jMpKHJPuU7izTwps6RcoBU3Qf485GqK2tOT0TW1TIc8=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
 oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=

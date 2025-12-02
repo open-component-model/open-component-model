@@ -11,6 +11,12 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -114,6 +120,12 @@ var _ = BeforeSuite(func() {
 	}()
 
 	pm = manager.NewPluginManager(ctx)
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
+	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
+	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
+	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}))
 
 	const unlimited = 0
 	ttl := time.Minute * 30
