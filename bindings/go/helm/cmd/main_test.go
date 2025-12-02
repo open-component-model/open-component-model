@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	runtime2 "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/constructor"
@@ -23,6 +21,8 @@ import (
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -39,7 +39,7 @@ func TestHelmPluginCapabilities(t *testing.T) {
 	rawPluginSpec := spec.PluginSpec{}
 	require.NoError(t, json.Unmarshal(output, &rawPluginSpec), "capabilities output should be valid JSON")
 
-	pluginSpec, err := runtime2.ConvertFromSpec(v1.Scheme, &rawPluginSpec)
+	pluginSpec, err := pluginruntime.ConvertFromSpec(v1.Scheme, &rawPluginSpec)
 	require.NoError(t, err, "should convert plugin spec from raw spec")
 
 	capabilityTypes := make([]string, len(pluginSpec.CapabilitySpecs))
