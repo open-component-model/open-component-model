@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/cli/integration
 
-go 1.25.3
+go 1.25.4
 
 replace ocm.software/open-component-model/cli => ../
 
@@ -15,7 +15,7 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251202160704-cecb9e60721d
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4
-	ocm.software/open-component-model/bindings/go/oci v0.0.16
+	ocm.software/open-component-model/bindings/go/oci v0.0.17
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
 	ocm.software/open-component-model/bindings/go/runtime v0.0.4
 	ocm.software/open-component-model/cli v0.0.0-20251124222340-4c1b948b736f
