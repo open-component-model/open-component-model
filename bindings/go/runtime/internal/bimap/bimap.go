@@ -9,7 +9,7 @@ import "iter"
 // Each Left maps to exactly one Right and vice-versa.
 type Map[L, R comparable] struct {
 	pairs []pair[L, R]
-	index[L, R]
+	index index[L, R]
 }
 
 type index[L, R comparable] struct {
