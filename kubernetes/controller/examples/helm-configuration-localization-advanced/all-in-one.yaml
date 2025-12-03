@@ -1,0 +1,97 @@
+---
+apiVersion: kro.run/v1alpha1
+kind: HelmConfigurationLocalizationAdvanced
+metadata:
+  name: helm-configuration-localization-advanced
+spec:
+  podinfo:
+    message: "helm-configuration-localization-advanced"
+    releaseName: "helm-configuration-localization-advanced"
+---
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: helm-configuration-localization-advanced
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: HelmConfigurationLocalizationAdvanced
+    spec:
+      prefix: string | default="helm-configuration-localization-advanced"
+      podinfo:
+        message: string | default="hello world"
+        releaseName: string | default="podinfo"
+  resources:
+    - id: resourceChart
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-chart-name"
+        spec:
+          componentRef:
+            name: helm-configuration-localization-advanced-component
+          resource:
+            byReference:
+              resource:
+                name: helm-resource
+          additionalStatusFields:
+            registry: resource.access.imageReference.toOCI().registry
+            repository: resource.access.imageReference.toOCI().repository
+            digest: resource.access.imageReference.toOCI().digest
+          interval: 10m
+    - id: resourceImage
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-image-name"
+        spec:
+          componentRef:
+            name: helm-configuration-localization-advanced-component
+          resource:
+            byReference:
+              resource:
+                name: image-resource
+          additionalStatusFields:
+            registry: resource.access.imageReference.toOCI().registry
+            repository: resource.access.imageReference.toOCI().repository
+            tag: resource.access.imageReference.toOCI().tag
+          interval: 10m
+    - id: ocirepository
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        kind: OCIRepository
+        metadata:
+          name: "${schema.spec.prefix}-oci-repository-name"
+        spec:
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: oci://${resourceChart.status.additional.?registry}/${resourceChart.status.additional.?repository}
+          ref:
+            digest: ${resourceChart.status.additional.?digest}
+    - id: helmrelease
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: "${schema.spec.podinfo.releaseName}"
+        spec:
+          releaseName: "${schema.spec.podinfo.releaseName}"
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${ocirepository.metadata.name}
+            namespace: default
+          values:
+            # Localization
+            image:
+              repository: ${resourceImage.status.additional.?registry}/${resourceImage.status.additional.?repository}
+              tag: ${resourceImage.status.additional.?tag} # Using the tag for e2e-tests but the reference can be used as well
+            # Configuration
+            ui:
+              message: ${schema.spec.podinfo.message}

@@ -28,3 +28,9 @@ components:
         input:
           type: file
           path: ./k8s-manifest.yaml
+      - name: all-in-one
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./all-in-one.yaml
