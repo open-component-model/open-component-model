@@ -109,15 +109,12 @@ func buildResolver(client remote.Client, repository *ocirepospecv1.Repository) (
 	if subPath == "" && purl.Path != "" && purl.Path != "/" {
 		// Use path as SubPath and Host as BaseURL.
 		subPath = strings.TrimPrefix(purl.Path, "/")
-		if purl.Scheme != "" {
-			baseURL = purl.Scheme + "://" + purl.Host
-		} else {
-			baseURL = purl.Host
-		}
+		baseURL = purl.Host
 	}
 
 	var opts []urlresolver.Option
 	if purl.Scheme != "" {
+		// Note, baseURL here might already be trimmed, but to keep this if simple and clean, we call trim anyways.
 		opts = append(opts, urlresolver.WithBaseURL(strings.TrimPrefix(baseURL, purl.Scheme+"://")))
 		if purl.Scheme == "http" {
 			opts = append(opts, urlresolver.WithPlainHTTP(true))
