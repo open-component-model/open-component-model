@@ -12,11 +12,8 @@ import (
 func Register(registry *credentialrepository.RepositoryRegistry) error {
 	scheme := runtime.NewScheme()
 	scheme.MustRegisterWithAlias(&ocicredentialsspecv1.DockerConfig{}, ocicredentialsspec.CredentialRepositoryConfigType)
-	return credentialrepository.RegisterInternalCredentialRepositoryPlugin(
-		scheme,
-		registry,
+	return registry.RegisterInternalCredentialRepositoryPlugin(
 		&ocicredentials.OCICredentialRepository{},
-		&ocicredentialsspecv1.DockerConfig{},
 		[]runtime.Type{credentials.AnyConsumerIdentityType},
 	)
 }

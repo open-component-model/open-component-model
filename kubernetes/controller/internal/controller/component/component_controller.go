@@ -445,7 +445,7 @@ func (r *Reconciler) verifyComponentVersion(ctx context.Context, desc *descrunti
 		}
 
 		cfg := &signingv1alpha1.Config{
-			SignatureAlgorithm: signature.Signature.Algorithm,
+			SignatureAlgorithm: signingv1alpha1.SignatureAlgorithm(signature.Signature.Algorithm),
 		}
 
 		hdlr, err := r.PluginManager.SigningRegistry.GetPlugin(ctx, cfg)
@@ -474,7 +474,7 @@ func (r *Reconciler) createCredentials(ctx context.Context, verify v1alpha1.Veri
 	// TODO: We need to derive the expected credential key from the signature algorithm. This does not look that
 	//       reliable currently. This will probably change, when typed credentials are supported.
 	var key string
-	switch algo {
+	switch signingv1alpha1.SignatureAlgorithm(algo) {
 	case signingv1alpha1.AlgorithmRSASSAPSS, signingv1alpha1.AlgorithmRSASSAPKCS1V15:
 		key = "public_key_pem"
 	default:
