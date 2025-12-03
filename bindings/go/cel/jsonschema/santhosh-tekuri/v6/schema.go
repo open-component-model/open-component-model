@@ -10,7 +10,7 @@ import (
 func NewSchemaDeclType(s *jsonschema.Schema) *DeclType {
 	base := NewDeclType(&Schema{Schema: s})
 	if s.ID != "" {
-		base.Type = base.Type.MaybeAssignTypeName(s.ID)
+		base.Type = base.MaybeAssignTypeName(s.ID)
 	}
 	return base
 }
@@ -35,14 +35,14 @@ func (s *Schema) Items() *Schema {
 	if s.Schema.Items2020 != nil {
 		return &Schema{Schema: s.Schema.Items2020}
 	}
-	switch s.Schema.Items.(type) {
+	switch items := s.Schema.Items.(type) {
 	case *jsonschema.Schema:
-		return &Schema{Schema: s.Schema.Items.(*jsonschema.Schema)}
+		return &Schema{Schema: items}
 	case []*jsonschema.Schema:
-		if len(s.Schema.Items.([]*jsonschema.Schema)) == 0 {
+		if len(items) == 0 {
 			return nil
 		}
-		return &Schema{Schema: s.Schema.Items.([]*jsonschema.Schema)[0]}
+		return &Schema{Schema: items[0]}
 	default:
 		return nil
 	}
@@ -100,7 +100,7 @@ func (s *Schema) MaxItems() *uint64 {
 	if s.Schema == nil || s.Schema.MaxItems == nil {
 		return nil
 	}
-	v := uint64(*s.Schema.MaxItems)
+	v := safeIntToInt(s.Schema.MaxItems)
 	return &v
 }
 
@@ -108,7 +108,7 @@ func (s *Schema) MaxProperties() *uint64 {
 	if s.Schema == nil || s.Schema.MaxProperties == nil {
 		return nil
 	}
-	v := uint64(*s.Schema.MaxProperties)
+	v := safeIntToInt(s.Schema.MaxProperties)
 	return &v
 }
 
@@ -116,7 +116,7 @@ func (s *Schema) MaxLength() *uint64 {
 	if s.Schema == nil || s.Schema.MaxLength == nil {
 		return nil
 	}
-	v := uint64(*s.Schema.MaxLength)
+	v := safeIntToInt(s.Schema.MaxLength)
 	return &v
 }
 
@@ -150,9 +150,7 @@ func (s *Schema) Const() any {
 
 func (s *Schema) OneOf() iter.Seq2[int, *Schema] {
 	if s.Schema == nil || s.Schema.OneOf == nil {
-		return func(yield func(int, *Schema) bool) {
-			return
-		}
+		return func(yield func(int, *Schema) bool) {}
 	}
 	return func(yield func(int, *Schema) bool) {
 		for i, sch := range s.Schema.OneOf {
@@ -164,4 +162,14 @@ func (s *Schema) OneOf() iter.Seq2[int, *Schema] {
 			}
 		}
 	}
+}
+
+func safeIntToInt(u *int) uint64 {
+	if u == nil {
+		return 0
+	}
+	if *u > 0 {
+		return uint64(*u)
+	}
+	return 0
 }

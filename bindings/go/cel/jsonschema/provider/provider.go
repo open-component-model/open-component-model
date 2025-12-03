@@ -6,6 +6,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
 )
@@ -102,7 +103,6 @@ func (rt *DeclTypeProvider) WithTypeProvider(tp types.Provider) (*DeclTypeProvid
 			return nil, fmt.Errorf(
 				"type %s definition differs between CEL environment and type provider", name)
 		}
-
 	}
 	return rtWithTypes, nil
 }

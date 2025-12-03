@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/google/cel-go/common/types/traits"
@@ -296,7 +297,7 @@ type ObjectValue struct {
 // ConvertToType is an implementation of the CEL ref.Val interface method.
 func (o *ObjectValue) ConvertToType(t ref.Type) ref.Val {
 	if t == types.TypeType {
-		return types.NewObjectTypeValue(o.objectType.TypeName())
+		return cel.ObjectType(o.objectType.TypeName())
 	}
 	if t.TypeName() == o.objectType.TypeName() {
 		return o
@@ -622,14 +623,14 @@ func (lv *ListValue) ConvertToNative(typeDesc reflect.Type) (interface{}, error)
 
 	// Allow the element ConvertToNative() function to determine whether conversion is possible.
 	sz := len(lv.Entries)
-	nativeList := reflect.MakeSlice(typeDesc, int(sz), int(sz))
+	nativeList := reflect.MakeSlice(typeDesc, sz, sz)
 	for i := 0; i < sz; i++ {
 		elem := lv.Entries[i]
 		nativeElemVal, err := elem.ConvertToNative(otherElem)
 		if err != nil {
 			return nil, err
 		}
-		nativeList.Index(int(i)).Set(reflect.ValueOf(nativeElemVal))
+		nativeList.Index(i).Set(reflect.ValueOf(nativeElemVal))
 	}
 	return nativeList.Interface(), nil
 }

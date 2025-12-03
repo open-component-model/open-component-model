@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
+
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
 )
@@ -47,7 +48,7 @@ func NewDeclType(s *Schema) *DeclType {
 		if s.MaxItems() != nil {
 			maxItems = *s.MaxItems()
 		} else {
-			maxItems = estimateMaxArrayItemsFromMinSize(itemsType.Type.MinSerializedSize)
+			maxItems = estimateMaxArrayItemsFromMinSize(itemsType.MinSerializedSize)
 		}
 
 		return declTypeForSchema(
@@ -66,7 +67,7 @@ func NewDeclType(s *Schema) *DeclType {
 				if s.MaxProperties() != nil {
 					maxProperties = *s.MaxProperties()
 				} else {
-					maxProperties = estimateMaxAdditionalPropertiesFromMinSize(propsType.Type.MinSerializedSize)
+					maxProperties = estimateMaxAdditionalPropertiesFromMinSize(propsType.MinSerializedSize)
 				}
 				return declTypeForSchema(
 					decl.NewMapType(decl.StringType, propsType.Type, maxProperties),
@@ -119,7 +120,7 @@ func NewDeclType(s *Schema) *DeclType {
 			// Required field with no default contributes to minSerializedSize
 			if required[name] && prop.Default() == nil {
 				// colon, quotes, comma, etc. approx +4
-				minSerializedSize += uint64(len(name)) + fieldType.Type.MinSerializedSize + 4
+				minSerializedSize += uint64(len(name)) + fieldType.MinSerializedSize + 4
 			}
 		}
 
@@ -168,13 +169,15 @@ func NewDeclType(s *Schema) *DeclType {
 
 		str := decl.NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), decl.MinStringSize)
 
-		if s.MaxLength() != nil {
-			str.MaxElements = estimateMaxElementsFromMaxLength(s)
-		} else if len(s.Enum()) > 0 {
+		switch {
+		case s.MaxLength() != nil:
+			str.MaxElements = *s.MaxLength()
+		case len(s.Enum()) > 0:
 			str.MaxElements = estimateMaxStringEnumLength(s)
-		} else {
+		default:
 			str.MaxElements = estimateMaxStringLengthPerRequest(s)
 		}
+
 		return declTypeForSchema(str, s)
 
 	case "boolean":
@@ -240,16 +243,6 @@ func estimateMaxAdditionalPropertiesFromMinSize(minSize uint64) uint64 {
 	keyValuePairSize := minSize + 6
 	// subtract 2 to account for { and }
 	return (decl.MaxRequestSizeBytes - 2) / keyValuePairSize
-}
-
-// estimateMaxElementsFromMaxLength estimates the maximum number of elements for a string schema
-// that is bound with a maxLength constraint.
-func estimateMaxElementsFromMaxLength(s *Schema) uint64 {
-	// multiply the user-provided max length by 4 in the case of an otherwise-untyped string
-	// we do this because the OpenAPIv3 spec indicates that maxLength is specified in runes/code points,
-	// but we need to reason about length for things like request size, so we use bytes in this code (and an individual
-	// unicode code point can be up to 4 bytes long)
-	return *s.MaxLength() * 4
 }
 
 // collectEnumAndConstValues extracts a deduplicated list of literal values
