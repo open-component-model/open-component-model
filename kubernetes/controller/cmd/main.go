@@ -27,6 +27,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	repospec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
@@ -161,19 +162,26 @@ func main() {
 	}
 
 	pm := manager.NewPluginManager(ctx)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
+	scheme := ocmruntime.NewScheme()
+	repospec.MustAddToScheme(scheme)
+	repospec.MustAddLegacyToScheme(scheme)
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
 	if err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider); err != nil {
 		setupLog.Error(err, "failed to register internal component version repository plugin")
+		os.Exit(1)
 	}
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	if err != nil {
 		setupLog.Error(err, "failed to create signing handler")
+		os.Exit(1)
 	}
 	if err := pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler); err != nil {
 		setupLog.Error(err, "failed to register internal signing plugin")
+		os.Exit(1)
 	}
 	if err := pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}); err != nil {
 		setupLog.Error(err, "failed to register internal credential repository plugin")
+		os.Exit(1)
 	}
 
 	const unlimited = 0
