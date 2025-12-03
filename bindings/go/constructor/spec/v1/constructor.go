@@ -22,6 +22,10 @@ func (c *ComponentConstructor) UnmarshalJSON(data []byte) error {
 	var alias Alias // use an alias because that won't cause recursion into UnmarshalJSON
 	var errs []error
 
+	if err := ValidateRawJSON(data); err != nil {
+		return fmt.Errorf("component constructor validation failed: %w", err)
+	}
+
 	if err := json.Unmarshal(data, &alias); err == nil && len(alias.Components) > 0 {
 		c.Components = alias.Components
 		return nil
