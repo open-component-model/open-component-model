@@ -95,20 +95,26 @@ func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, c
 	}
 
 	// Extract SubPath from BaseUrl if not explicitly set
+	baseURL := repository.BaseUrl
 	subPath := repository.SubPath
 	if subPath == "" && purl.Path != "" && purl.Path != "/" {
-		// Use the path from BaseUrl as SubPath
+		// Use path as SubPath and Host as BaseURL.
 		subPath = strings.TrimPrefix(purl.Path, "/")
+		if purl.Scheme != "" {
+			baseURL = purl.Scheme + "://" + purl.Host
+		} else {
+			baseURL = purl.Host
+		}
 	}
 
 	var opts []urlresolver.Option
 	if purl.Scheme != "" {
-		opts = append(opts, urlresolver.WithBaseURL(strings.TrimPrefix(purl.String(), purl.Scheme+"://")))
+		opts = append(opts, urlresolver.WithBaseURL(strings.TrimPrefix(baseURL, purl.Scheme+"://")))
 		if purl.Scheme == "http" {
 			opts = append(opts, urlresolver.WithPlainHTTP(true))
 		}
 	} else {
-		opts = append(opts, urlresolver.WithBaseURL(repository.BaseUrl))
+		opts = append(opts, urlresolver.WithBaseURL(baseURL))
 	}
 
 	if subPath != "" {
