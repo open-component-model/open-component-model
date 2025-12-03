@@ -89,38 +89,45 @@ func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, c
 		return nil, fmt.Errorf("a base url is required")
 	}
 
-	purl, err := runtime.ParseURLAndAllowNoScheme(repository.BaseUrl)
+	resolver, err := buildResolver(repository.BaseUrl, repository.SubPath, client)
 	if err != nil {
-		return nil, fmt.Errorf("could not parse OCI repository URL %q: %w", repository.BaseUrl, err)
+		return nil, err
+	}
+
+	return oci.NewRepository(append(options, oci.WithResolver(resolver))...)
+}
+
+// BuildResolver creates a URL resolver from a base URL and optional subPath.
+// It handles URLs with or without schemes and extracts subPath from the URL path
+// if not explicitly provided.
+func buildResolver(baseUrl, subPath string, client remote.Client) (*urlresolver.CachingResolver, error) {
+	purl, err := runtime.ParseURLAndAllowNoScheme(baseUrl)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse OCI repository URL %q: %w", baseUrl, err)
 	}
 
 	// Extract SubPath from BaseUrl if not explicitly set
-	subPath := repository.SubPath
 	if subPath == "" && purl.Path != "" && purl.Path != "/" {
-		// Use the path from BaseUrl as SubPath
 		subPath = strings.TrimPrefix(purl.Path, "/")
 	}
 
 	var opts []urlresolver.Option
-	if purl.Scheme != "" {
-		opts = append(opts, urlresolver.WithBaseURL(strings.TrimPrefix(purl.String(), purl.Scheme+"://")))
-		if purl.Scheme == "http" {
-			opts = append(opts, urlresolver.WithPlainHTTP(true))
-		}
-	} else {
-		opts = append(opts, urlresolver.WithBaseURL(repository.BaseUrl))
+	opts = append(opts, urlresolver.WithBaseURL(purl.Host))
+	if purl.Scheme == "http" {
+		opts = append(opts, urlresolver.WithPlainHTTP(true))
 	}
 
 	if subPath != "" {
 		opts = append(opts, urlresolver.WithSubPath(subPath))
 	}
 
-	opts = append(opts, urlresolver.WithBaseClient(client))
+	if client != nil {
+		opts = append(opts, urlresolver.WithBaseClient(client))
+	}
 
 	resolver, err := urlresolver.New(opts...)
 	if err != nil {
-		return nil, fmt.Errorf("could not create URL resolver for OCI repository %q: %w", repository.BaseUrl, err)
+		return nil, fmt.Errorf("could not create URL resolver for OCI repository %q: %w", baseUrl, err)
 	}
-
-	return oci.NewRepository(append(options, oci.WithResolver(resolver))...)
+	return resolver, nil
 }

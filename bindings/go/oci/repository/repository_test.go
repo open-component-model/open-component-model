@@ -159,3 +159,46 @@ func TestNewFromOCIRepoV1(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildResolver_SubPathNotDuplicated(t *testing.T) {
+	tests := []struct {
+		name        string
+		baseUrl     string
+		subPath     string
+		expectedRef string // Expected ComponentVersionReference for test-component:v1.0.0
+	}{
+		{
+			name:        "base url without scheme but with path should not duplicate",
+			baseUrl:     "ghcr.io/open-component-model",
+			expectedRef: "ghcr.io/open-component-model/component-descriptors/test-component:v1.0.0",
+		},
+		{
+			name:        "base url with https scheme and path should not duplicate",
+			baseUrl:     "https://ghcr.io/open-component-model",
+			expectedRef: "ghcr.io/open-component-model/component-descriptors/test-component:v1.0.0",
+		},
+		{
+			name:        "base url with nested path should not duplicate",
+			baseUrl:     "ghcr.io/org/team/project",
+			expectedRef: "ghcr.io/org/team/project/component-descriptors/test-component:v1.0.0",
+		},
+		{
+			name:        "base url without path uses explicit subPath",
+			baseUrl:     "ghcr.io",
+			subPath:     "open-component-model",
+			expectedRef: "ghcr.io/open-component-model/component-descriptors/test-component:v1.0.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver, err := buildResolver(tt.baseUrl, tt.subPath, nil)
+			assert.NoError(t, err)
+			assert.NotNil(t, resolver)
+
+			// Use ComponentVersionReference to verify the path is correctly built
+			ref := resolver.ComponentVersionReference(t.Context(), "test-component", "v1.0.0")
+			assert.Equal(t, tt.expectedRef, ref, "SubPath should not be duplicated in reference")
+		})
+	}
+}
