@@ -109,8 +109,6 @@ vars:
   GO_MODULES:
     sh: find '{{ .ROOT_DIR }}' -name go.mod -exec dirname {} \; | sed 's|{{ .ROOT_DIR }}/||'
 
-
-
 tasks:
   default:
     deps: ["cli:build", "kubernetes/controller:build"]
@@ -146,10 +144,17 @@ tasks:
       - for: { var: GO_MODULES }
         cmd: 'go work use {{.ITEM}}'
 
+  tidy:
+    desc: "Run go mod tidy on all Go modules in the project"
+    cmds:
+      - for: { var: GO_MODULES }
+        cmd: 'cd {{.ITEM}} && go mod tidy'
+
   generate:
     desc: "Run all Code Generators in the project"
     deps:
       - task: 'bindings/go/generator:ocmtypegen/generate'
+      - task: 'bindings/go/generator:jsonschemagen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
       - task: 'kubernetes/controller:manifests'
       - task: 'kubernetes/controller:generate'

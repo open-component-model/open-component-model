@@ -33,6 +33,23 @@ const (
 	runtimeTypeFieldName = "Type"
 )
 
+var Logger = slog.Default()
+
+func init() {
+	var level slog.Level
+	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+	slog.SetLogLoggerLevel(level)
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		slog.Info("Usage: generator <root-folder>")
@@ -55,7 +72,7 @@ func main() {
 		if len(types) == 0 {
 			continue
 		}
-		slog.Info("Generating", "pkg", pkgName, "dir", pkgDir, "types", types)
+		slog.Debug("Generating", "pkg", pkgName, "dir", pkgDir, "types", types)
 
 		err = generateCode(pkgDir, pkgName, types)
 		if err != nil {

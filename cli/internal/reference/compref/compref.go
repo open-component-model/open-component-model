@@ -276,18 +276,25 @@ func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
 		// For OCI repositories, we accept URLs with or without a scheme.
 		// If a scheme is provided (e.g., https, http, oci), keep it in the resulting string.
 		// If no scheme is provided, return a string without scheme containing host, optional port, and path.
+		// The path component is extracted as SubPath.
 		uri, err := runtime.ParseURLAndAllowNoScheme(input)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse repository URI %q: %w", input, err)
 		}
 		if uri.Scheme != "" {
-			// Preserve the full URL including scheme if it was explicitly set
-			t.BaseUrl = uri.String()
+			// Include scheme in BaseUrl: "https://registry.io:443"
+			t.BaseUrl = fmt.Sprintf("%s://%s", uri.Scheme, uri.Host)
 		} else {
-			t.BaseUrl = fmt.Sprintf("%s%s", uri.Host, uri.EscapedPath())
+			// No scheme, just hostname and optional port: "registry.io:443"
+			t.BaseUrl = uri.Host
+		}
+
+		// Extract SubPath from the path component if present
+		if uri.Path != "" && uri.Path != "/" {
+			t.SubPath = strings.TrimPrefix(uri.Path, "/")
 		}
 	case *ctfv1.Repository:
-		t.Path = input
+		t.FilePath = input
 		if options.CTFAccessMode != "" {
 			Base.Debug("overriding ctf access mode for repository reference", "mode", options.CTFAccessMode, "ref", repoRef)
 			t.AccessMode = options.CTFAccessMode

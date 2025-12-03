@@ -131,6 +131,7 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 		identity     runtime.Identity
 		wantErr      bool
 		wantEmpty    bool
+		wantNil      bool
 	}{
 		{
 			name:         "missing hostname in identity",
@@ -147,6 +148,14 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 			wantErr:   false,
 			wantEmpty: true,
 		},
+		{
+			name:         "hostname not in dockerconfig",
+			dockerConfig: credentialsv1.DockerConfig{},
+			identity: runtime.Identity{
+				runtime.IdentityAttributeHostname: "example.com",
+			},
+			wantNil: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -161,6 +170,11 @@ func TestResolveV1DockerConfigCredentials(t *testing.T) {
 			require.NoError(t, err)
 			if tt.wantEmpty {
 				assert.Empty(t, creds)
+				return
+			}
+
+			if tt.wantNil {
+				assert.Nil(t, creds)
 				return
 			}
 

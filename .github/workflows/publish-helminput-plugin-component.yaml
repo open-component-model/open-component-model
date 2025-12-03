@@ -47,7 +47,7 @@ jobs:
       attestations: write
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ env.REF }}
           repository: ${{ env.CHECKOUT_REPO }}
@@ -65,7 +65,7 @@ jobs:
             await script.default({ core });
 
       - name: Setup Go
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: bindings/go/helm/go.mod
           cache-dependency-path: bindings/go/helm/go.sum
@@ -125,7 +125,8 @@ jobs:
       group: helm-plugin-publish-${{ github.ref }}
       cancel-in-progress: false
     permissions:
-      contents: read
+      # contents write is required to trigger the plugin registry root component update on successful publishing
+      contents: write
       packages: write
     steps:
       - name: Download build artifacts
@@ -142,10 +143,13 @@ jobs:
           test -d bindings/go/helm/tmp/bin || (echo "❌ bin directory missing" && exit 1)
           echo "✅ All required artifacts present"
 
-      - name: Create Docker config.json for GHCR
-        run: |
-          mkdir -p ${HOME}/.docker
-          echo "{\"auths\": {\"ghcr.io\": {\"auth\": \"$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64)\"}}}" > ${HOME}/.docker/config.json
+      - name: Login to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef #v3
+        with:
+          registry-auth: |
+            - registry: ghcr.io
+              username: ${{ github.actor }}
+              password: ${{ secrets.GITHUB_TOKEN }}
 
       # Generate OCM config that can be used in the container
       - name: Generate OCM config
@@ -169,7 +173,7 @@ jobs:
 
       - name: Repository Owner
         run: |
-          echo "REPOSITORY_OWNER=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/plugins" >> $GITHUB_ENV
+          echo "REPOSITORY_OWNER=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
       # Publish component version using CLI image
       # TODO: replace with github action workflow call so it runs in a container.
@@ -217,8 +221,20 @@ jobs:
               download plugin \
               ${OCM_REPOSITORY}//ocm.software/plugins/helminput:${VERSION} \
               --output /tmp/plugin \
-              --config "/.ocmconfig" \
-              --resource-name binary
+              --config "/.ocmconfig"
+
+      - name: Trigger plugin registry update
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: plugin-published
+          client-payload: |
+            {
+              "plugin_name": "helminput",
+              "plugin_version": "${{ needs.build.outputs.version }}",
+              "plugin_component": "ocm.software/plugins/helminput"
+            }
 
       - name: Summary
         env:
@@ -230,8 +246,3 @@ jobs:
           echo "- OCM Repository: ${OCM_REPOSITORY}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Component Name: ocm.software/plugins/helminput" >> "$GITHUB_STEP_SUMMARY"
           echo "- Component Version: ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm ${HOME}/.docker/config.json || true

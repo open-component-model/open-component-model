@@ -74,6 +74,8 @@ componentversionaccess
 componentversionaccessimpl
 componentversions
 compvers
+composability
+composable
 config
 configfile
 configmap
@@ -458,6 +460,9 @@ typehandler
 typename
 uncommenting
 unmarshaller
+unmarshal
+unmarshalling
+unmarshalled
 unmodifiable
 untrusted
 updatevendorhash
@@ -558,3 +563,11 @@ rbac
 zulip
 superset
 dl
+mirza
+kopic
+proxying
+genericocireg
+natively
+colocated
+localblobs
+artifactset

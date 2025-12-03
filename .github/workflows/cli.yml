@@ -73,13 +73,13 @@ jobs:
           ref: ${{ env.REF }}
 
       - name: Setup Go
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum  # Cache dependencies by go.sum
 
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           version: 3.x
@@ -101,7 +101,7 @@ jobs:
 
       # Generate and verify the Component Transport Format (CTF) resulting in all artifacts
       # use a version that includes the branch name to ensure uniqueness
-      # make sure that the version doesnt contain invalid semver characters
+      # make sure that the version doesn't contain invalid semver characters
       - name: Generate & Verify CTF
         run: |
           task cli:generate/ctf VERSION="${VERSION}"
@@ -132,7 +132,7 @@ jobs:
       # Upload CLI binaries and OCI layout only if branch is eligible for push
       - name: Upload Artifacts
         if: ${{ steps.branch-check.outputs.should_push_oci_image }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         id: upload-artifacts
         with:
           if-no-files-found: 'error'
@@ -156,7 +156,7 @@ jobs:
     steps:
       # Retrieve artifacts produced by the build job
       - name: Download build artifacts
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: ${{ env.ARTIFACT_NAME }}
 

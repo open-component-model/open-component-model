@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -13,6 +14,11 @@ const (
 	//nolint:gosec // gosec thinks this is a hardcoded credential, but it's not.
 	attributeCredentials = "attributes.ocm.software/credentials"
 )
+
+// ErrNoDirectCredentials is returned when a node in the graph does not have any directly
+// attached credentials. There might still be credentials available through
+// plugins which can be resolved at runtime.
+var ErrNoDirectCredentials = errors.New("no direct credentials found in graph")
 
 func newSyncedDag() *syncedDag {
 	return &syncedDag{

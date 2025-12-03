@@ -11,7 +11,8 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Test_Provider_Smoke(t *testing.T) {
@@ -22,11 +23,9 @@ func Test_Provider_Smoke(t *testing.T) {
 	prov := provider.NewComponentVersionRepositoryProvider()
 
 	r := require.New(t)
-	repoSpec := &ctfrepospecv1.Repository{Path: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
-	id, err := prov.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
-	r.NoError(err)
-
-	r.Equal(id[ocmruntime.IdentityAttributePath], fs.String())
+	repoSpec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
+	_, err = prov.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
+	r.Error(err)
 
 	t.Run("access provider concurrently", func(t *testing.T) {
 		r := require.New(t)
@@ -115,4 +114,44 @@ func Test_Provider_Smoke(t *testing.T) {
 		})
 	})
 
+}
+
+func Test_JSON_Schema_For_Repository_Specification(t *testing.T) {
+	r := require.New(t)
+	prov := provider.NewComponentVersionRepositoryProvider()
+
+	cases := []struct {
+		name               string
+		inputType          runtime.Type
+		expectErr          require.ErrorAssertionFunc
+		expectedJSONSchema []byte
+	}{
+		{
+			name:               "OCIRepository/v1 primary type",
+			inputType:          runtime.NewVersionedType(ocirepospecv1.Type, "v1"),
+			expectedJSONSchema: ocirepospecv1.Repository{}.JSONSchema(),
+		},
+		{
+			name:               "CTF/v1 primary type",
+			inputType:          runtime.NewVersionedType(ctfrepospecv1.Type, "v1"),
+			expectedJSONSchema: ctfrepospecv1.Repository{}.JSONSchema(),
+		},
+		{
+			name:      "Unknown type returns error",
+			inputType: runtime.NewVersionedType("UnknownRepo", "v1"),
+			expectErr: require.Error,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			schema, err := prov.GetJSONSchemaForRepositorySpecification(tc.inputType)
+			if err != nil {
+				tc.expectErr(t, err)
+				return
+			}
+			r.NotEmpty(t, schema, "schema should not be empty for type %s", tc.inputType.String())
+			r.Equal(tc.expectedJSONSchema, schema, "schema does not match expected for type %s", tc.inputType.String())
+		})
+	}
 }

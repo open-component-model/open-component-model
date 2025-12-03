@@ -2,85 +2,107 @@
 package plugins
 
 import (
-	"context"
-	"fmt"
-	"time"
-
-	"github.com/go-logr/logr"
-
+	"ocm.software/open-component-model/bindings/go/credentials"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ocicredentialsspec "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
+	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialrepository"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/signinghandler"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type PluginManagerOptions struct {
-	Locations   []string
-	IdleTimeout time.Duration
-	Logger      logr.Logger
-}
+func Register(pm *manager.PluginManager) error {
+	// Repository Plugin
+	repositoryScheme := runtime.NewScheme()
 
-// DefaultPluginManagerOptions returns default options for plugin manager setup.
-func DefaultPluginManagerOptions(log logr.Logger) PluginManagerOptions {
-	return PluginManagerOptions{
-		Locations:   []string{}, // TODO: Set up temp?
-		IdleTimeout: time.Hour,
-		Logger:      log,
-	}
-}
+	// TODO: Remove when RegisterWithAlias is fixed
+	//       https://github.com/open-component-model/open-component-model/pull/1284
+	repositoryScheme.MustRegisterWithAlias(&ociv1.Repository{},
+		runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.Type),
+		runtime.NewVersionedType(ociv1.ShortType, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.ShortType),
+		runtime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.ShortType2),
+		runtime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.LegacyRegistryType),
+		runtime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
+		runtime.NewUnversionedType(ociv1.LegacyRegistryType2),
+	)
 
-// PluginManager contains settings for the plugin manager.
-type PluginManager struct {
-	IdleTimeout   time.Duration
-	Logger        logr.Logger
-	Locations     []string
-	PluginManager *manager.PluginManager
-}
+	repositoryScheme.MustRegisterWithAlias(&ctfv1.Repository{},
+		runtime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+		runtime.NewUnversionedType(ctfv1.Type),
+		runtime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
+		runtime.NewUnversionedType(ctfv1.ShortType),
+		runtime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
+		runtime.NewUnversionedType(ctfv1.ShortType2),
+	)
 
-// Start will start the plugin manager with the given configuration. Start will BLOCK until the
-// context is cancelled. It's designed to be called by the controller manager.
-func (m *PluginManager) Start(ctx context.Context) error {
-	pm := manager.NewPluginManager(ctx)
-	for _, location := range m.Locations {
-		err := pm.RegisterPlugins(ctx, location,
-			manager.WithIdleTimeout(m.IdleTimeout),
-		)
-		if err != nil {
-			// Log but don't fail - plugins are optional
-			m.Logger.V(1).Info("failed to register plugins from location",
-				"location", location,
-				"error", err.Error())
-		}
-	}
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(repositoryScheme))
 
-	m.PluginManager = pm
-
-	<-ctx.Done() // block until context is done ( expected by the manager )
-
-	// We use context background here because the Start context has been cancelled.
-	return pm.Shutdown(context.Background())
-}
-
-func (m *PluginManager) Shutdown(ctx context.Context) error {
-	if m.PluginManager == nil {
-		return nil
+	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
+		repositoryScheme,
+		pm.ComponentVersionRepositoryRegistry,
+		repositoryProvider,
+		&ociv1.Repository{},
+	); err != nil {
+		return err
 	}
 
-	if err := m.PluginManager.Shutdown(ctx); err != nil {
-		m.Logger.Error(err, "failed to shutdown plugin manager")
-		return fmt.Errorf("plugin manager shutdown failed: %w", err)
+	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
+		repositoryScheme,
+		pm.ComponentVersionRepositoryRegistry,
+		repositoryProvider,
+		&ctfv1.Repository{},
+	); err != nil {
+		return err
+	}
+
+	// Credential Plugin
+	credScheme := runtime.NewScheme()
+	credScheme.MustRegisterWithAlias(
+		&ocicredentialsspecv1.DockerConfig{},
+		ocicredentialsspec.CredentialRepositoryConfigType,                                  // DockerConfig/v1
+		runtime.NewUnversionedType(ocicredentialsspec.CredentialRepositoryConfigType.Name), // DockerConfig
+	)
+
+	if err := credentialrepository.RegisterInternalCredentialRepositoryPlugin(
+		credScheme,
+		pm.CredentialRepositoryRegistry,
+		&ocicredentials.OCICredentialRepository{},
+		&ocicredentialsspecv1.DockerConfig{},
+		[]runtime.Type{credentials.AnyConsumerIdentityType},
+	); err != nil {
+		return err
+	}
+
+	// Signing Plugin
+	signingScheme := runtime.NewScheme()
+	if err := signingScheme.RegisterScheme(signingv1alpha1.Scheme); err != nil {
+		return err
+	}
+
+	signingHandler, err := handler.New(true)
+	if err != nil {
+		return err
+	}
+
+	if err := signinghandler.RegisterInternalComponentSignatureHandler(
+		signingScheme,
+		pm.SigningRegistry,
+		signingHandler,
+		&signingv1alpha1.Config{},
+	); err != nil {
+		return err
 	}
 
 	return nil
-}
-
-// NewPluginManager creates and initializes a plugin manager with the given configuration.
-// It registers plugins from the configured Locations and built-in plugins.
-func NewPluginManager(opts PluginManagerOptions) *PluginManager {
-	if opts.Logger.GetSink() == nil {
-		opts.Logger = logr.Discard()
-	}
-
-	return &PluginManager{
-		Logger:      opts.Logger,
-		Locations:   opts.Locations,
-		IdleTimeout: opts.IdleTimeout,
-	}
 }

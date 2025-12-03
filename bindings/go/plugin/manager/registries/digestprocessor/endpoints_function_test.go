@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/digestprocessor/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -90,12 +91,15 @@ func TestRegisterInputProcessor(t *testing.T) {
 			r.NoError(err)
 
 			// Validate registered types
-			content, err := json.Marshal(builder)
+			rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
+			r.NoError(err)
+			// Validate registered types
+			content, err := json.Marshal(rawPluginSpec)
 			r.NoError(err)
 			if tt.expectedTypes > 0 {
-				r.Contains(string(content), `"types":{"digestProcessorRepository"`)
+				r.Contains(string(content), `"capabilities"`)
 			} else {
-				r.NotContains(string(content), `"types":{"digestProcessorRepository"`)
+				r.NotContains(string(content), `"capabilities"`)
 			}
 
 			// Validate handler count

@@ -3,8 +3,10 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/gobwas/glob"
+	slogcontext "github.com/veqryn/slog-context"
 
 	resolverspec "ocm.software/open-component-model/bindings/go/configuration/resolvers/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -35,21 +37,39 @@ func NewSpecProvider(_ context.Context, resolvers []*resolverspec.Resolver) *Spe
 // the first matching repository specification.
 // If no matching resolver is found, an error is returned.
 // componentIdentity must contain the key [IdentityKey] containing the name of the component e.g. "ocm.software/core/test".
-func (r *SpecProvider) GetRepositorySpec(_ context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
+func (r *SpecProvider) GetRepositorySpec(ctx context.Context, componentIdentity runtime.Identity) (runtime.Typed, error) {
+	logger := slogcontext.FromCtx(ctx).With(slog.String("realm", "repository"))
+
 	componentName, ok := componentIdentity[descruntime.IdentityAttributeName]
 	if !ok {
 		return nil, fmt.Errorf("failed to extract component name from identity %s", componentIdentity)
 	}
+	logger.Log(ctx, slog.LevelDebug, "resolving repository spec for component",
+		slog.String("component", componentName),
+		slog.Int("resolvers", len(r.resolvers)),
+	)
 
 	for index, resolver := range r.resolvers {
+		logger.Log(ctx, slog.LevelDebug, "checking resolver",
+			slog.Int("index", index),
+			slog.String("pattern", resolver.ComponentNamePattern),
+		)
 		g, err := glob.Compile(resolver.ComponentNamePattern)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile glob pattern %q in resolver index %d: %w", resolver.ComponentNamePattern, index, err)
 		}
 		if ok := g.Match(componentName); ok {
+			logger.Log(ctx, slog.LevelDebug, "matched resolver",
+				slog.String("Repository", resolver.Repository.Name),
+				slog.String("pattern", resolver.ComponentNamePattern),
+			)
 			return resolver.Repository, nil
 		}
 	}
 
+	logger.
+		Log(ctx, slog.LevelDebug, "no matching resolver found for component",
+			slog.String("component", componentName),
+		)
 	return nil, repository.ErrNotFound
 }

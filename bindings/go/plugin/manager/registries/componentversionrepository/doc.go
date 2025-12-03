@@ -11,7 +11,7 @@
 //	if err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
 //		scheme,
 //		registry,
-//		&Plugin{scheme: scheme, memory: inmemory.New()},
+//		&CapabilitySpec{scheme: scheme, memory: inmemory.New()},
 //		&v1.OCIRepository{},
 //	); err != nil {
 //		panic(err)
@@ -20,12 +20,12 @@
 // Functionality:
 //   - Component version lifecycle management (add, get, list)
 //   - Local resource and source storage with blob handling
-//   - Plugin discovery and credential consumer identity resolution
+//   - CapabilitySpec discovery and credential consumer identity resolution
 //   - External plugin communication with automatic lifecycle management
 //   - Type conversion between internal runtime types and plugin contract types
 //
 // Architecture components:
-//   - Registry: Plugin registration, lifecycle management, and thread-safe access
+//   - Registry: CapabilitySpec registration, lifecycle management, and thread-safe access
 //   - Handlers: HTTP request/response processing with authentication and validation
 //   - Converters: Data transformation between internal and external plugin formats
 //   - Contracts: Type-safe interfaces defining plugin capabilities

@@ -15,6 +15,10 @@ import (
 // MockResourceInputMethod is a mock implementation of ResourceInputMethod
 type MockResourceInputMethod struct{}
 
+func (m *MockResourceInputMethod) GetInputMethodScheme() *runtime.Scheme {
+	return runtime.NewScheme()
+}
+
 func (m *MockResourceInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	return runtime.Identity{}, nil
 }
@@ -35,6 +39,10 @@ func (m *MockResourceInputMethod) ProcessResource(ctx context.Context, resource 
 
 // MockSourceInputMethod is a mock implementation of SourceInputMethod
 type MockSourceInputMethod struct{}
+
+func (m *MockSourceInputMethod) GetInputMethodScheme() *runtime.Scheme {
+	return runtime.NewScheme()
+}
 
 func (m *MockSourceInputMethod) GetSourceCredentialConsumerIdentity(ctx context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
 	return runtime.Identity{}, nil

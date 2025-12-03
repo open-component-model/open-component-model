@@ -44,6 +44,7 @@ type LayerSelectorRequirement struct {
 
 // LayerSelector allows selecting layers based on index, mediatype, and annotations.
 // +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
 type LayerSelector struct {
 	// MatchProperties is a map of {key,value} pairs. A single {key,value} in the matchLabels
 	// map is equivalent to an element of matchExpressions, whose key field is "key", the

@@ -36,7 +36,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "valid repository with read access",
 			repository: &ctfrepospecv1.Repository{
-				Path:       t.TempDir(),
+				FilePath:   t.TempDir(),
 				AccessMode: ctfrepospecv1.AccessModeReadOnly,
 			},
 			wantErr: false,
@@ -44,7 +44,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "valid repository with write access",
 			repository: &ctfrepospecv1.Repository{
-				Path:       t.TempDir(),
+				FilePath:   t.TempDir(),
 				AccessMode: ctfrepospecv1.AccessModeReadWrite,
 			},
 			wantErr: false,
@@ -52,7 +52,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "valid repository with readwrite access",
 			repository: &ctfrepospecv1.Repository{
-				Path:       t.TempDir(),
+				FilePath:   t.TempDir(),
 				AccessMode: ctfrepospecv1.AccessModeReadWrite,
 			},
 			wantErr: false,
@@ -60,7 +60,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "invalid path",
 			repository: &ctfrepospecv1.Repository{
-				Path:       "/nonexistent/path",
+				FilePath:   "/nonexistent/path",
 				AccessMode: ctfrepospecv1.AccessModeReadOnly,
 			},
 			wantErr:     true,
@@ -69,7 +69,7 @@ func TestNewFromCTFRepoV1(t *testing.T) {
 		{
 			name: "empty path",
 			repository: &ctfrepospecv1.Repository{
-				Path:       "",
+				FilePath:   "",
 				AccessMode: ctfrepospecv1.AccessModeReadOnly,
 			},
 			wantErr:     true,
@@ -121,6 +121,21 @@ func TestNewFromOCIRepoV1(t *testing.T) {
 			},
 			wantErr:     true,
 			errContains: "a base url is required",
+		},
+		{
+			name: "base url with path",
+			repository: &ocirepospecv1.Repository{
+				BaseUrl: "https://registry.example.com/my-org/components",
+			},
+			wantErr: false,
+		},
+		{
+			name: "base url with path and explicit subPath",
+			repository: &ocirepospecv1.Repository{
+				BaseUrl: "https://registry.example.com/ignored-path",
+				SubPath: "my-org/components",
+			},
+			wantErr: false,
 		},
 	}
 

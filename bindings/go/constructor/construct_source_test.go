@@ -23,6 +23,10 @@ type mockSourceInputMethod struct {
 	processedBlob   blob.ReadOnlyBlob
 }
 
+func (m *mockSourceInputMethod) GetInputMethodScheme() *runtime.Scheme {
+	return runtime.NewScheme()
+}
+
 func (m *mockSourceInputMethod) GetSourceCredentialConsumerIdentity(ctx context.Context, source *constructorruntime.Source) (identity runtime.Identity, err error) {
 	id := runtime.Identity{}
 	id.SetType(runtime.NewVersionedType("mock", "v1"))
@@ -249,7 +253,7 @@ func TestConstructWithSourceCredentialResolution(t *testing.T) {
 	opts := Options{
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
-		CredentialProvider:        mockCredProvider,
+		Resolver:                  mockCredProvider,
 	}
 
 	// Process the constructor
@@ -462,7 +466,7 @@ func TestConstructWithSourceCredentialResolutionError(t *testing.T) {
 	opts := Options{
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
-		CredentialProvider:        mockCredProvider,
+		Resolver:                  mockCredProvider,
 	}
 
 	ctor := NewDefaultConstructor(constructor, opts)
@@ -548,7 +552,7 @@ components:
 		SourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:  &mockTargetRepositoryProvider{repo: mockRepo},
 	}
-	
+
 	constructorInstance := NewDefaultConstructor(converted, opts)
 	graph := constructorInstance.GetGraph()
 

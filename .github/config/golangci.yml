@@ -36,6 +36,7 @@ linters:
     - loggercheck
     - mirror
     - mnd
+    - modernize
     - nakedret
     - nestif
     - nilerr
@@ -75,7 +76,14 @@ linters:
     recvcheck:
       disable-builtin: true
       exclusions:
-        - '*.UnmarshalJSON'
+        - "*.MarshalJSON"
+        - "*.UnmarshalJSON"
+        - "*.JSONSchema"
+        - "*.SetType"
+        - "*.GetType"
+        - "*.DeepCopy"
+        - "*.DeepCopyInto"
+        - "*.DeepCopyTyped"
         - '*.String'
     varnamelen:
       ignore-names:

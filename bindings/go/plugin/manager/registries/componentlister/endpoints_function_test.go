@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
@@ -39,7 +39,11 @@ func TestRegisterComponentLister(t *testing.T) {
 	typ := &dummyv1.Repository{}
 	plugin := &mockPlugin{}
 	r.NoError(RegisterComponentLister(typ, plugin, builder))
-	content, err := json.Marshal(builder)
+
+	rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
+	r.NoError(err)
+	// Validate registered types
+	content, err := json.Marshal(rawPluginSpec)
 	r.NoError(err)
 	r.Contains(string(content), "componentLister")
 
@@ -48,8 +52,11 @@ func TestRegisterComponentLister(t *testing.T) {
 	r.Equal(ListComponents, handlers[0].Location)
 	r.Equal(Identity, handlers[1].Location)
 
-	typesList := builder.CurrentTypes.Types[types.ComponentListerPluginType]
-	r.Len(typesList, 1)
-	r.Equal("DummyRepository/v1", typesList[0].Type.String())
-	r.NotEmpty(typesList[0].JSONSchema)
+	capabilityList := builder.PluginSpec.CapabilitySpecs
+	r.Len(capabilityList, 1)
+	capability := v1.CapabilitySpec{}
+	r.NoError(v1.Scheme.Convert(capabilityList[0], &capability))
+	typeInfo := capability.SupportedRepositorySpecTypes[0]
+	r.Equal("DummyRepository/v1", typeInfo.Type.String())
+	r.NotEmpty(typeInfo.JSONSchema)
 }

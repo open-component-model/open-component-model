@@ -15,3 +15,14 @@ type InternalComponentListerPluginContract interface {
 	// can be used to lookup credentials for the repository.
 	GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error)
 }
+
+// The BuiltinComponentListerPluginContract has the primary purpose to allow plugin
+// registries to register internal plugins without requiring callers to
+// explicitly provide a scheme with their supported types.
+// A scheme is mapping types to their go types. As the go types of external
+// plugins are not compiled in, they cannot have a scheme and therefore, cannot
+// implement this interface.
+type BuiltinComponentListerPluginContract interface {
+	InternalComponentListerPluginContract
+	GetComponentVersionRepositoryScheme() *runtime.Scheme
+}

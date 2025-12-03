@@ -37,7 +37,7 @@ func Register(
 
 	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithUserAgent(Creator), provider.WithTempDir(filesystemConfig.TempFolder))
 
-	resourceRepoPlugin := ResourceRepositoryPlugin{scheme: scheme, manifests: inmemory.New(), layers: inmemory.New(), filesystemConfig: filesystemConfig}
+	resourceRepoPlugin := ResourceRepositoryPlugin{manifests: inmemory.New(), layers: inmemory.New(), filesystemConfig: filesystemConfig}
 	ociBlobTransformerPlugin := transformer.New(logger)
 
 	return errors.Join(

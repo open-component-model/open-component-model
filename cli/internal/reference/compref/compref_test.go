@@ -24,7 +24,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
 				Repository: &ociv1.Repository{
-					BaseUrl: "github.com/open-component-model/ocm",
+					BaseUrl: "github.com",
+					SubPath: "open-component-model/ocm",
 				},
 				Component: "ocm.software/ocmcli",
 				Version:   "0.23.0",
@@ -36,7 +37,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
 				Repository: &ociv1.Repository{
-					BaseUrl: "github.com/open-component-model/ocm",
+					BaseUrl: "github.com",
+					SubPath: "open-component-model/ocm",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/ocmcli",
@@ -49,7 +51,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: "oci",
 				Repository: &ociv1.Repository{
-					BaseUrl: "github.com/open-component-model/ocm",
+					BaseUrl: "github.com",
+					SubPath: "open-component-model/ocm",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/ocmcli",
@@ -62,7 +65,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: "oci",
 				Repository: &ociv1.Repository{
-					BaseUrl: "http://github.com/open-component-model/ocm",
+					BaseUrl: "http://github.com",
+					SubPath: "open-component-model/ocm",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/ocmcli",
@@ -75,7 +79,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: "oci",
 				Repository: &ociv1.Repository{
-					BaseUrl: "github.com:8080/open-component-model/ocm",
+					BaseUrl: "github.com:8080",
+					SubPath: "open-component-model/ocm",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/ocmcli",
@@ -88,7 +93,7 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(),
 				Repository: &ctfv1.Repository{
-					Path: "./my-path",
+					FilePath: "./my-path",
 				},
 				Component: "ocm.software/ocmcli",
 				Version:   "0.23.0",
@@ -100,7 +105,7 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: "ctf",
 				Repository: &ctfv1.Repository{
-					Path: "./my-path",
+					FilePath: "./my-path",
 				},
 				Component: "ocm.software/ocmcli",
 				Version:   "0.23.0",
@@ -112,7 +117,7 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: "ctf",
 				Repository: &ctfv1.Repository{
-					Path: "./my-path",
+					FilePath: "./my-path",
 				},
 				Component: "ocm.software/ocmcli",
 			},
@@ -124,7 +129,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: "oci",
 				Repository: &ociv1.Repository{
-					BaseUrl: "https://ghcr.io/open-component-model/ocm",
+					BaseUrl: "https://ghcr.io",
+					SubPath: "open-component-model/ocm",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/cli",
@@ -137,7 +143,7 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: "ctf",
 				Repository: &ctfv1.Repository{
-					Path: "/tmp/ctfrepo",
+					FilePath: "/tmp/ctfrepo",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/cli",
@@ -150,7 +156,7 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(),
 				Repository: &ctfv1.Repository{
-					Path: "./relative/path",
+					FilePath: "./relative/path",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/component",
@@ -163,7 +169,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
 				Repository: &ociv1.Repository{
-					BaseUrl: "github.com/mandelsoft/ocm",
+					BaseUrl: "github.com",
+					SubPath: "mandelsoft/ocm",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/component",
@@ -175,7 +182,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: "oci",
 				Repository: &ociv1.Repository{
-					BaseUrl: "ghcr.io/project",
+					BaseUrl: "ghcr.io",
+					SubPath: "project",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/cmp",
@@ -188,7 +196,7 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(),
 				Repository: &ctfv1.Repository{
-					Path: "/absolute/path",
+					FilePath: "/absolute/path",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/cmp",
@@ -201,7 +209,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: "oci",
 				Repository: &ociv1.Repository{
-					BaseUrl: "localhost:5000/open-component-model/ocm",
+					BaseUrl: "localhost:5000",
+					SubPath: "open-component-model/ocm",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/test",
@@ -214,7 +223,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
 				Repository: &ociv1.Repository{
-					BaseUrl: "localhost:5000/open-component-model/ocm",
+					BaseUrl: "localhost:5000",
+					SubPath: "open-component-model/ocm",
 				},
 				Prefix:    "component-descriptors",
 				Component: "ocm.software/test",
@@ -227,7 +237,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
 				Repository: &ociv1.Repository{
-					BaseUrl: "github.com/open-component-model/ocm",
+					BaseUrl: "github.com",
+					SubPath: "open-component-model/ocm",
 				},
 				Component: "ocm.software/ocmcli",
 				Version:   "0.23.0",
@@ -240,7 +251,8 @@ func Test_ComponentReference(t *testing.T) {
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
 				Repository: &ociv1.Repository{
-					BaseUrl: "github.com/open-component-model/ocm",
+					BaseUrl: "github.com",
+					SubPath: "open-component-model/ocm",
 				},
 				Component: "ocm.software/ocmcli",
 				Digest:    "sha256:5b0bcabd1ed22e9fb1310cf6c2dec7cdef19f0ad69efa1f392e94a4333501270",
@@ -341,9 +353,25 @@ func Test_ComponentReference_Permutations(t *testing.T) {
 							var expectedRepository runtime.Typed
 							switch typ {
 							case "oci", runtime.NewVersionedType(ociv1.Type, ociv1.Version).String():
-								expectedRepository = &ociv1.Repository{BaseUrl: repo.input}
+								// For OCI repositories, need to separate BaseUrl and SubPath
+								ociRepo := &ociv1.Repository{}
+								// Parse the repo.input to extract BaseUrl and SubPath
+								if uri, err := runtime.ParseURLAndAllowNoScheme(repo.input); err == nil {
+									if uri.Scheme != "" {
+										ociRepo.BaseUrl = fmt.Sprintf("%s://%s", uri.Scheme, uri.Host)
+									} else {
+										ociRepo.BaseUrl = uri.Host
+									}
+									if uri.Path != "" && uri.Path != "/" {
+										ociRepo.SubPath = strings.TrimPrefix(uri.Path, "/")
+									}
+								} else {
+									// Fallback to original input if parsing fails
+									ociRepo.BaseUrl = repo.input
+								}
+								expectedRepository = ociRepo
 							case "ctf", runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String():
-								expectedRepository = &ctfv1.Repository{Path: repo.input}
+								expectedRepository = &ctfv1.Repository{FilePath: repo.input}
 							}
 
 							expected := &Ref{
@@ -398,7 +426,8 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
-				require.Equal(t, repoSpec, repo.BaseUrl)
+				require.Equal(t, "ghcr.io", repo.BaseUrl)
+				require.Equal(t, "my-org/my-repo", repo.SubPath)
 			},
 		},
 		{
@@ -408,7 +437,8 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
-				require.Equal(t, repoSpec, repo.BaseUrl)
+				require.Equal(t, "localhost:5000", repo.BaseUrl)
+				require.Equal(t, "my-repo", repo.SubPath)
 			},
 		},
 		{
@@ -418,7 +448,8 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
-				require.Equal(t, repoSpec, repo.BaseUrl)
+				require.Equal(t, "1.2.3.4:5000", repo.BaseUrl)
+				require.Equal(t, "my-repo", repo.SubPath)
 			},
 		},
 		{
@@ -428,7 +459,8 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
-				require.Equal(t, repoSpec, repo.BaseUrl)
+				require.Equal(t, "https://registry.example.com", repo.BaseUrl)
+				require.Equal(t, "my-repo", repo.SubPath)
 			},
 		},
 		{
@@ -438,7 +470,7 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
-				require.Equal(t, repoSpec, repo.Path)
+				require.Equal(t, repoSpec, repo.FilePath)
 			},
 		},
 		{
@@ -448,7 +480,7 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
-				require.Equal(t, repoSpec, repo.Path)
+				require.Equal(t, repoSpec, repo.FilePath)
 			},
 		},
 		{
@@ -458,7 +490,7 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
-				require.Equal(t, repoSpec, repo.Path)
+				require.Equal(t, repoSpec, repo.FilePath)
 			},
 		},
 		{
@@ -468,7 +500,8 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ociv1.Repository)
 				require.True(t, ok, "expected *ociv1.Repository")
-				require.Equal(t, "ghcr.io/my-org/my-repo", repo.BaseUrl)
+				require.Equal(t, "ghcr.io", repo.BaseUrl)
+				require.Equal(t, "my-org/my-repo", repo.SubPath)
 			},
 		},
 		{
@@ -478,7 +511,7 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
-				require.Equal(t, "./local/archive", repo.Path)
+				require.Equal(t, "./local/archive", repo.FilePath)
 			},
 		},
 	}
@@ -498,7 +531,7 @@ func TestParseRepository(t *testing.T) {
 			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
 				repo, ok := result.(*ctfv1.Repository)
 				require.True(t, ok, "expected *ctfv1.Repository")
-				require.Equal(t, repoPath, repo.Path)
+				require.Equal(t, repoPath, repo.FilePath)
 			},
 		})
 	}

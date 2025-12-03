@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	"ocm.software/open-component-model/kubernetes/controller/test/utils"
 )
 
@@ -101,7 +102,7 @@ var _ = Describe("controller", func() {
 					By("creating an instance of the example")
 					Expect(utils.DeployAndWaitForResource(
 						ctx, filepath.Join(examplesDir, example.Name(), Instance),
-						"condition=InstanceSynced=true",
+						"condition=Ready=true",
 						timeout,
 					)).To(Succeed())
 				}

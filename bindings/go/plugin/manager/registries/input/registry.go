@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
+	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -20,7 +21,8 @@ import (
 // NewInputRepositoryRegistry creates a new registry and initializes maps.
 func NewInputRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 	return &RepositoryRegistry{
-		ctx: ctx,
+		ctx:          ctx,
+		capabilities: make(map[string]inputv1.CapabilitySpec),
 		// Registry contains external plugins ONLY. Internal plugins that already have the implementation are in internalRepositoryPlugins.
 		registry:                               make(map[runtime.Type]types.Plugin),
 		scheme:                                 runtime.NewScheme(runtime.WithAllowUnknown()),
@@ -34,6 +36,7 @@ func NewInputRepositoryRegistry(ctx context.Context) *RepositoryRegistry {
 type RepositoryRegistry struct {
 	ctx                                    context.Context
 	mu                                     sync.Mutex
+	capabilities                           map[string]inputv1.CapabilitySpec
 	registry                               map[runtime.Type]types.Plugin
 	scheme                                 *runtime.Scheme
 	internalResourceInputRepositoryPlugins map[runtime.Type]constructor.ResourceInputMethod
@@ -46,17 +49,26 @@ func (r *RepositoryRegistry) InputRepositoryScheme() *runtime.Scheme {
 	return r.scheme
 }
 
-// AddPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
-// tracking the plugin.
-func (r *RepositoryRegistry) AddPlugin(plugin types.Plugin, constructionType runtime.Type) error {
+// AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
+// This function will return an error if the given capability + type already has a registered plugin.
+// Multiple plugins for the same cap+typ is not allowed.
+func (r *RepositoryRegistry) AddPlugin(plugin types.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if plugin, ok := r.registry[constructionType]; ok {
-		return fmt.Errorf("plugin for construction type %q already registered with ID: %s", constructionType, plugin.ID)
+	capability := inputv1.CapabilitySpec{}
+	if err := inputv1.Scheme.Convert(spec, &capability); err != nil {
+		return fmt.Errorf("failed to convert object: %w", err)
 	}
+	r.capabilities[plugin.ID] = capability
 
-	r.registry[constructionType] = plugin
+	for _, typ := range capability.SupportedInputTypes {
+		if v, ok := r.registry[typ.Type]; ok {
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ.Type, v.ID)
+		}
+		// Note: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
+		r.registry[typ.Type] = plugin
+	}
 
 	return nil
 }
@@ -116,7 +128,7 @@ func (r *RepositoryRegistry) GetSourceInputPlugin(ctx context.Context, spec runt
 
 // getPlugin returns a Construction plugin for a given type using a specific plugin storage map. It will also first look
 // for existing registered internal plugins based on the type and the same registry name.
-func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (v1.InputPluginContract, error) {
+func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) (inputv1.InputPluginContract, error) {
 	// if we don't find the type registered internally, we look for external plugins by using the type
 	// from the specification.
 	typ := spec.GetType()
@@ -137,54 +149,84 @@ func (r *RepositoryRegistry) getPlugin(ctx context.Context, spec runtime.Typed) 
 }
 
 // RegisterInternalResourceInputPlugin is called to register an internal implementation for an input plugin.
-func RegisterInternalResourceInputPlugin(
-	scheme *runtime.Scheme,
-	r *RepositoryRegistry,
-	plugin constructor.ResourceInputMethod,
-	proto runtime.Typed,
+func (r *RepositoryRegistry) RegisterInternalResourceInputPlugin(
+	plugin BuiltinResourceInputMethod,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(proto)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetInputMethodScheme().GetTypes() {
+		if !r.scheme.IsRegistered(providerType) {
+			if err := r.scheme.RegisterSchemeType(plugin.GetInputMethodScheme(), providerType); err != nil {
+				return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+			}
+		} else {
+			aliases := r.scheme.GetTypes()[providerType]
+			for _, alias := range providerTypeAliases {
+				if slices.Contains(aliases, alias) {
+					continue
+				}
+				return fmt.Errorf("provider type %q already registered with different aliases: %s", providerType, alias)
+			}
+			registeredObj, err := r.scheme.NewObject(providerType)
+			if err != nil {
+				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
+			}
+			newObject, err := plugin.GetInputMethodScheme().NewObject(providerType)
+			if err != nil {
+				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
+			}
+			if err := r.scheme.Convert(newObject, registeredObj); err != nil {
+				return fmt.Errorf("provider type %q already registered with different object type, expected %T, got %T: %w", providerType, registeredObj, newObject, err)
+			}
+		}
 
-	r.internalResourceInputRepositoryPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalResourceInputRepositoryPlugins[alias] = r.internalResourceInputRepositoryPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+		r.internalResourceInputRepositoryPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalResourceInputRepositoryPlugins[alias] = r.internalResourceInputRepositoryPlugins[providerType]
+		}
 	}
 
 	return nil
 }
 
-// RegisterInternalSourcePlugin is called to register an internal implementation for an input plugin.
-func RegisterInternalSourcePlugin(
-	scheme *runtime.Scheme,
-	r *RepositoryRegistry,
-	plugin constructor.SourceInputMethod,
-	proto runtime.Typed,
+// RegisterInternalSourceInputPlugin is called to register an internal implementation for an input plugin.
+func (r *RepositoryRegistry) RegisterInternalSourceInputPlugin(
+	plugin BuiltinSourceInputMethod,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(proto)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetInputMethodScheme().GetTypes() {
+		if !r.scheme.IsRegistered(providerType) {
+			if err := r.scheme.RegisterSchemeType(plugin.GetInputMethodScheme(), providerType); err != nil {
+				return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+			}
+		} else {
+			aliases := r.scheme.GetTypes()[providerType]
+			for _, alias := range providerTypeAliases {
+				if slices.Contains(aliases, alias) {
+					continue
+				}
+				return fmt.Errorf("provider type %q already registered with different aliases: %s", providerType, alias)
+			}
+			registeredObj, err := r.scheme.NewObject(providerType)
+			if err != nil {
+				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
+			}
+			newObject, err := plugin.GetInputMethodScheme().NewObject(providerType)
+			if err != nil {
+				return fmt.Errorf("failed to create new object for type %v: %w", providerType, err)
+			}
+			if err := r.scheme.Convert(newObject, registeredObj); err != nil {
+				return fmt.Errorf("provider type %q already registered with different object type, expected %T, got %T: %w", providerType, registeredObj, newObject, err)
+			}
+		}
 
-	r.internalSourceInputRepositoryPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalSourceInputRepositoryPlugins[alias] = r.internalSourceInputRepositoryPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+		r.internalSourceInputRepositoryPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalSourceInputRepositoryPlugins[alias] = r.internalSourceInputRepositoryPlugins[providerType]
+		}
 	}
 
 	return nil
@@ -192,7 +234,7 @@ func RegisterInternalSourcePlugin(
 
 // constructedPlugin only contains EXTERNAL plugins that have been started and need to be shut down.
 type constructedPlugin struct {
-	Plugin v1.InputPluginContract
+	Plugin inputv1.InputPluginContract
 	cmd    *exec.Cmd
 }
 
@@ -231,7 +273,7 @@ func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	return eg.Wait()
 }
 
-func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (v1.InputPluginContract, error) {
+func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (inputv1.InputPluginContract, error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -245,17 +287,7 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *ty
 	// use the baseCtx here from the manager here so the streaming isn't stopped when the request is stopped.
 	go plugins.StartLogStreamer(context.TODO(), plugin)
 
-	// think about this better, we have a single json schema, maybe even have different maps for different types + schemas?
-	var jsonSchema []byte
-loop:
-	for _, tps := range plugin.Types {
-		for _, tp := range tps {
-			jsonSchema = tp.JSONSchema
-			break loop
-		}
-	}
-
-	repoPlugin := NewConstructionRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
+	repoPlugin := NewConstructionRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: repoPlugin,
 		cmd:    plugin.Cmd,

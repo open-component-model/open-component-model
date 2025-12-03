@@ -33,8 +33,11 @@ func MustRegister(scheme *runtime.Scheme) {
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type Config struct {
 	// Type specifies the type of the configuration
+	// +ocm:jsonschema-gen:enum=credentials.config.ocm.software/v1
+	// +ocm:jsonschema-gen:enum:deprecated=credentials.config.ocm.software
 	Type runtime.Type `json:"type"`
 	// Repositories contains configuration entries for repositories
 	Repositories []RepositoryConfigEntry `json:"repositories,omitempty"`

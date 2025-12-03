@@ -52,9 +52,9 @@ spec:
           namespace: default
         spec:
           interval: 5m
-          url: ${resourceKustomization.status.resource.access.?repoUrl}
+          url: ${resourceKustomization.status.resource.access.repoUrl}
           ref:
-            commit: ${resourceKustomization.status.resource.access.?commit}
+            commit: ${resourceKustomization.status.resource.access.commit}
     - id: kustomization
       template:
         apiVersion: kustomize.toolkit.fluxcd.io/v1
@@ -74,7 +74,7 @@ spec:
             - patch: |
                 - op: replace
                   path: /spec/template/spec/containers/0/image
-                  value: ${resourceImage.status.additional.?registry}/${resourceImage.status.additional.?repository}:${resourceImage.status.additional.?tag}
+                  value: ${resourceImage.status.additional.registry}/${resourceImage.status.additional.repository}:${resourceImage.status.additional.tag}
               target:
                 kind: Deployment
                 name: .*

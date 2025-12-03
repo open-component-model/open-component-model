@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
+	componentlisterv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -19,32 +19,26 @@ import (
 
 // constructedPlugin only contains EXTERNAL plugins that have been started and need to be shut down.
 type constructedPlugin struct {
-	Plugin v1.ComponentListerPluginContract[runtime.Typed]
+	Plugin componentlisterv1.ComponentListerPluginContract[runtime.Typed]
 	cmd    *exec.Cmd
 }
 
 // RegisterInternalComponentListerPlugin is called to register an internal implementation for a component lister plugin.
-func RegisterInternalComponentListerPlugin[T runtime.Typed](
-	scheme *runtime.Scheme,
-	r *ComponentListerRegistry,
-	plugin InternalComponentListerPluginContract,
-	proto T,
+func (r *ComponentListerRegistry) RegisterInternalComponentListerPlugin(
+	plugin BuiltinComponentListerPluginContract,
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	typ, err := scheme.TypeForPrototype(proto)
-	if err != nil {
-		return fmt.Errorf("failed to get type for prototype %T: %w", proto, err)
-	}
+	for providerType, providerTypeAliases := range plugin.GetComponentVersionRepositoryScheme().GetTypes() {
+		if err := r.scheme.RegisterSchemeType(plugin.GetComponentVersionRepositoryScheme(), providerType); err != nil {
+			return fmt.Errorf("failed to register provider type %v: %w", providerType, err)
+		}
 
-	r.internalComponentListerPlugins[typ] = plugin
-	for _, alias := range scheme.GetTypes()[typ] {
-		r.internalComponentListerPlugins[alias] = r.internalComponentListerPlugins[typ]
-	}
-
-	if err := r.scheme.RegisterSchemeType(scheme, typ); err != nil && !runtime.IsTypeAlreadyRegisteredError(err) {
-		return fmt.Errorf("failed to register type %T with alias %s: %w", proto, typ, err)
+		r.internalComponentListerPlugins[providerType] = plugin
+		for _, alias := range providerTypeAliases {
+			r.internalComponentListerPlugins[alias] = r.internalComponentListerPlugins[providerType]
+		}
 	}
 
 	return nil
@@ -54,10 +48,15 @@ func RegisterInternalComponentListerPlugin[T runtime.Typed](
 type ComponentListerRegistry struct {
 	ctx                            context.Context
 	mu                             sync.Mutex
+	capabilities                   map[string]componentlisterv1.CapabilitySpec
 	registry                       map[runtime.Type]types.Plugin
 	constructedPlugins             map[string]*constructedPlugin // running plugins
 	internalComponentListerPlugins map[runtime.Type]InternalComponentListerPluginContract
 	scheme                         *runtime.Scheme
+}
+
+func (r *ComponentListerRegistry) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	return r.scheme
 }
 
 // Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
@@ -95,25 +94,34 @@ func (r *ComponentListerRegistry) Shutdown(ctx context.Context) error {
 	return eg.Wait()
 }
 
-// AddPlugin takes a plugin discovered by the manager and puts it into the relevant internal map for
-// tracking the plugin.
+// AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
 // This function will return an error if the given capability + type already has a registered plugin.
 // Multiple plugins for the same cap+typ is not allowed.
-func (r *ComponentListerRegistry) AddPlugin(plugin types.Plugin, constructionType runtime.Type) error {
+func (r *ComponentListerRegistry) AddPlugin(plugin types.Plugin, spec runtime.Typed) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if plugin, ok := r.registry[constructionType]; ok {
-		return fmt.Errorf("plugin for construction type %q already registered with ID: %s", constructionType, plugin.ID)
+	capability := componentlisterv1.CapabilitySpec{}
+	if err := componentlisterv1.Scheme.Convert(spec, &capability); err != nil {
+		return fmt.Errorf("failed to convert object: %w", err)
 	}
+	if _, ok := r.capabilities[plugin.ID]; ok {
+		return fmt.Errorf("plugin with ID %s already registered", plugin.ID)
+	}
+	r.capabilities[plugin.ID] = capability
 
-	// _Note_: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
-	r.registry[constructionType] = plugin
+	for _, typ := range capability.SupportedRepositorySpecTypes {
+		if v, ok := r.registry[typ.Type]; ok {
+			return fmt.Errorf("plugin for type %v already registered with ID: %s", typ.Type, v.ID)
+		}
+		// Note: No need to be more intricate because we know the endpoints, and we have a specific plugin here.
+		r.registry[typ.Type] = plugin
+	}
 
 	return nil
 }
 
-func startAndReturnPlugin(ctx context.Context, r *ComponentListerRegistry, plugin *types.Plugin) (v1.ComponentListerPluginContract[runtime.Typed], error) {
+func startAndReturnPlugin(ctx context.Context, r *ComponentListerRegistry, plugin *types.Plugin) (componentlisterv1.ComponentListerPluginContract[runtime.Typed], error) {
 	if err := plugin.Cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start plugin: %s, %w", plugin.ID, err)
 	}
@@ -127,17 +135,7 @@ func startAndReturnPlugin(ctx context.Context, r *ComponentListerRegistry, plugi
 	// use the baseCtx here from the manager here so the streaming isn't stopped when the request is stopped.
 	go plugins.StartLogStreamer(r.ctx, plugin)
 
-	// think about this better, we have a single json schema, maybe even have different maps for different types + schemas?
-	var jsonSchema []byte
-loop:
-	for _, tps := range plugin.Types {
-		for _, tp := range tps {
-			jsonSchema = tp.JSONSchema
-			break loop
-		}
-	}
-
-	listerPlugin := NewComponentListerPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, jsonSchema)
+	listerPlugin := NewComponentListerPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
 		Plugin: listerPlugin,
 		cmd:    plugin.Cmd,
@@ -178,7 +176,7 @@ func (r *ComponentListerRegistry) GetComponentListerCredentialConsumerIdentity(c
 		return nil, fmt.Errorf("failed to get plugin for typ %q: %w", typ, err)
 	}
 
-	request := &v1.GetIdentityRequest[runtime.Typed]{
+	request := &componentlisterv1.GetIdentityRequest[runtime.Typed]{
 		Typ: repositorySpecification,
 	}
 
@@ -227,7 +225,7 @@ func (r *ComponentListerRegistry) GetComponentLister(ctx context.Context,
 
 // getPlugin returns a Construction plugin for a given type using a specific plugin storage map. It will also first look
 // for existing registered internal plugins based on the type and the same registry name.
-func (r *ComponentListerRegistry) getPlugin(ctx context.Context, typ runtime.Type) (v1.ComponentListerPluginContract[runtime.Typed], error) {
+func (r *ComponentListerRegistry) getPlugin(ctx context.Context, typ runtime.Type) (componentlisterv1.ComponentListerPluginContract[runtime.Typed], error) {
 	plugin, ok := r.registry[typ]
 	if !ok {
 		return nil, fmt.Errorf("failed to get plugin for typ %q", typ)
@@ -243,7 +241,8 @@ func (r *ComponentListerRegistry) getPlugin(ctx context.Context, typ runtime.Typ
 // NewComponentListerRegistry creates a new registry and initializes maps.
 func NewComponentListerRegistry(ctx context.Context) *ComponentListerRegistry {
 	return &ComponentListerRegistry{
-		ctx: ctx,
+		ctx:          ctx,
+		capabilities: make(map[string]componentlisterv1.CapabilitySpec),
 		// Registry contains external plugins ONLY. Internal plugins that already have the implementation are in internalRepositoryPlugins.
 		registry:                       make(map[runtime.Type]types.Plugin),
 		constructedPlugins:             make(map[string]*constructedPlugin),

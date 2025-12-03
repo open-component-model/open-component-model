@@ -48,11 +48,15 @@ type InputMethod struct {
 // LegacyHelmChartConsumerType is the type of the identity for remote helm repositories.
 const LegacyHelmChartConsumerType = "HelmChartRepository"
 
+func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
+	return Scheme
+}
+
 // GetResourceCredentialConsumerIdentity returns credentials consumer identity for remote helm repositories
 // or nil for local helm inputs. Remote repositories may require authentication credentials.
 func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	helm := v1.Helm{}
-	if err := Scheme.Convert(resource.Input, &helm); err != nil {
+	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 
@@ -78,7 +82,7 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 // For remote charts (helmRepository specified): Returns both ProcessedResource (remote access) and ProcessedBlobData
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials map[string]string) (result *constructor.ResourceInputMethodResult, err error) {
 	helm := v1.Helm{}
-	if err := Scheme.Convert(resource.Input, &helm); err != nil {
+	if err := i.GetInputMethodScheme().Convert(resource.Input, &helm); err != nil {
 		return nil, fmt.Errorf("error converting resource input spec: %w", err)
 	}
 

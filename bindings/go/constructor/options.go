@@ -4,6 +4,7 @@ import (
 	"context"
 
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
@@ -43,8 +44,8 @@ type Options struct {
 
 	// While constructing a component version, the constructor library will use the given credential provider
 	// to resolve credentials for the input methods.
-	// The CredentialProvider is OPTIONAL, if not provided, the constructor library will not resolve credentials.
-	CredentialProvider
+	// The Resolver is OPTIONAL, if not provided, the constructor library will not resolve credentials.
+	credentials.Resolver
 
 	// While constructing a component version, the constructor library will use the given concurrency limit
 	// to limit the number of concurrent operations.

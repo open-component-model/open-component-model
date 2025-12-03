@@ -309,7 +309,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 		SourceInputMethodProvider:           instance,
 		ResourceInputMethodProvider:         instance,
 		ExternalComponentRepositoryProvider: instance,
-		CredentialProvider:                  instance.graph,
+		Resolver:                            instance.graph,
 		ConcurrencyLimit:                    concurrencyLimit,
 		ComponentVersionConflictPolicy:      ComponentVersionConflictPolicy(cvConflictPolicy).ToConstructorConflictPolicy(),
 		ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicy(evCopyPolicy).ToConstructorPolicy(),
@@ -342,10 +342,10 @@ func GetRepositorySpec(cmd *cobra.Command) (runtime.Typed, error) {
 			return nil, fmt.Errorf("getting base logger failed: %w", err)
 		}
 
-		logger.Debug("setting access mode for CTF repository", "path", ctfRepo.Path, "ref", repositoryRef)
+		logger.Debug("setting access mode for CTF repository", "path", ctfRepo.FilePath, "ref", repositoryRef)
 
 		var accessMode ctfv1.AccessMode = ctfv1.AccessModeReadWrite
-		if _, err := os.Stat(ctfRepo.Path); os.IsNotExist(err) {
+		if _, err := os.Stat(ctfRepo.FilePath); os.IsNotExist(err) {
 			accessMode += "|" + ctfv1.AccessModeCreate
 		}
 		ctfRepo.AccessMode = accessMode
@@ -396,7 +396,7 @@ type constructorProvider struct {
 	targetRepoSpec     runtime.Typed
 	repositoryProvider ocm.ComponentVersionRepositoryForComponentProvider
 	pluginManager      *manager.PluginManager
-	graph              credentials.GraphResolver
+	graph              credentials.Resolver
 }
 
 func (prov *constructorProvider) GetExternalRepository(ctx context.Context, name, version string) (repository.ComponentVersionRepository, error) {
@@ -444,7 +444,11 @@ func (prov *constructorProvider) GetTargetRepository(ctx context.Context, _ *con
 	if err == nil {
 		if prov.graph != nil {
 			if creds, err = prov.graph.Resolve(ctx, identity); err != nil {
-				slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", prov.targetRepoSpec, err.Error()))
+				if errors.Is(err, credentials.ErrNotFound) {
+					slog.DebugContext(ctx, fmt.Sprintf("resolving credentials for repository %q failed: %s", prov.targetRepoSpec, err.Error()))
+				} else {
+					return nil, fmt.Errorf("resolving credentials for repository %q failed: %w", prov.targetRepoSpec, err)
+				}
 			}
 		}
 	} else {

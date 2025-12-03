@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -88,12 +89,15 @@ func TestRegisterCredentialRepository(t *testing.T) {
 			r.NoError(err)
 
 			// Validate registered types
-			content, err := json.Marshal(builder)
+			rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
+			r.NoError(err)
+			// Validate registered types
+			content, err := json.Marshal(rawPluginSpec)
 			r.NoError(err)
 			if tt.expectedTypes > 0 {
-				r.Contains(string(content), `"types":{"credentialRepository"`)
+				r.Contains(string(content), `"capabilities"`)
 			} else {
-				r.NotContains(string(content), `"types":{"credentialRepository"`)
+				r.NotContains(string(content), `"capabilities"`)
 			}
 
 			// Validate handler count
@@ -133,7 +137,11 @@ func TestRegisterCredentialRepository_MultipleTypes(t *testing.T) {
 	r.Len(handlers, 4)
 
 	// Should have 2 types registered
-	content, err := json.Marshal(builder)
+	// Validate registered types
+	rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
+	r.NoError(err)
+	// Validate registered types
+	content, err := json.Marshal(rawPluginSpec)
 	r.NoError(err)
 	r.Contains(string(content), `"credentialRepository"`)
 }

@@ -3,11 +3,17 @@ package credentials
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// ErrNoIndirectCredentials is returned when no indirect credentials are found in the graph.
+// This can happen if no repository plugin is configured or if no repository plugin can resolve
+// credentials for the given identity.
+var ErrNoIndirectCredentials = errors.New("no indirect credentials found in graph")
 
 // resolveFromRepository is invoked when the DAG does not yield direct credentials.
 // The method ensures that successful resolutions are cached for subsequent calls.
@@ -61,6 +67,7 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 
 		switch {
 		case err != nil:
+			slog.DebugContext(ctx, "repository plugin failed to resolve credentials", slog.Any("identity", identity), slog.Any("config", cfg.GetType()), slog.Any("error", err))
 			errs = append(errs, err)
 		case resolved == nil:
 			resolved = credentials
@@ -79,10 +86,16 @@ func (g *Graph) resolveFromRepository(ctx context.Context, identity runtime.Iden
 
 	wg.Wait()
 
+	// Only check for nil, empty credentials might mean resolved but no username, etc. are provided
 	if resolved == nil {
+		if len(errs) > 0 {
+			// If we have errors and no resolved credentials, we have to assume that the credential lookup failed due errors in the plugins.
+			return nil, errors.Join(ErrUnknown, fmt.Errorf("an error occurred in one or multiple repositories while trying to resolve credentials for identity ... %q: %w", identity.String(), errors.Join(errs...)))
+		}
+
 		// If we get here, then all repository plugins failed to resolve credentials.
 		// This is not an error, but rather a signal that the identity could not be resolved indirectly.
-		return nil, errors.Join(ErrNoIndirectCredentials, errors.Join(errs...))
+		return nil, errors.Join(ErrNoIndirectCredentials, fmt.Errorf("no repository plugin could resolve credentials for identity %q", identity.String()))
 	}
 
 	// Cache the resolved credentials for future use.

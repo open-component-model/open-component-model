@@ -11,16 +11,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// ErrNoDirectCredentials is returned when a node in the graph does not have any directly
-// attached credentials. There might still be credentials available through
-// plugins which can be resolved at runtime.
-var ErrNoDirectCredentials = errors.New("no direct credentials found in graph")
-
-// ErrNoIndirectCredentials is returned when no indirect credentials are found in the graph.
-// This can happen if no repository plugin is configured or if no repository plugin can resolve
-// credentials for the given identity.
-var ErrNoIndirectCredentials = errors.New("no indirect credentials found in graph")
-
 var scheme = runtime.NewScheme()
 
 func init() {
@@ -34,14 +24,10 @@ type Options struct {
 	CredentialRepositoryTypeScheme *runtime.Scheme
 }
 
-type GraphResolver interface {
-	Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error)
-}
-
 // ToGraph creates a new credential graph from the provided configuration and options.
 // It initializes the graph structure and ingests the configuration into the graph.
 // Returns an error if the configuration cannot be properly ingested.
-func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (GraphResolver, error) {
+func ToGraph(ctx context.Context, config *cfgRuntime.Config, opts Options) (Resolver, error) {
 	g := &Graph{
 		syncedDag:                newSyncedDag(),
 		credentialPluginProvider: opts.CredentialPluginProvider,
@@ -73,6 +59,7 @@ type Graph struct {
 // falls back to indirect resolution through plugins.
 func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[string]string, error) {
 	if _, err := identity.ParseType(); err != nil {
+		err = errors.Join(ErrUnknown, err)
 		return nil, fmt.Errorf("to be resolved from the credential graph, a consumer identity type is required: %w", err)
 	}
 
@@ -86,6 +73,13 @@ func (g *Graph) Resolve(ctx context.Context, identity runtime.Identity) (map[str
 	}
 
 	if err != nil {
+		if errors.Is(err, ErrNoDirectCredentials) || errors.Is(err, ErrNoIndirectCredentials) {
+			// not found err
+			err = errors.Join(ErrNotFound, err)
+			return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
+		}
+
+		err = errors.Join(ErrUnknown, err)
 		return nil, fmt.Errorf("failed to resolve credentials for identity %q: %w", identity.String(), err)
 	}
 

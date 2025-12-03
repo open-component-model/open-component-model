@@ -62,6 +62,10 @@ type RepositoryPlugin struct {
 	ResolveFunc            func(ctx context.Context, cfg runtime.Typed, identity runtime.Identity, credentials map[string]string) (map[string]string, error)
 }
 
+func (s RepositoryPlugin) GetCredentialRepositoryScheme() *runtime.Scheme {
+	return runtime.NewScheme()
+}
+
 func (s RepositoryPlugin) ConsumerIdentityForConfig(_ context.Context, config runtime.Typed) (runtime.Identity, error) {
 	return s.RepositoryIdentityFunc(config)
 }
@@ -144,7 +148,7 @@ const invalidRecursionYAML = testYAML + `
         secretId: "recursive-creds"
 `
 
-func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
+func GetGraph(t testing.TB, yaml string) (credentials.Resolver, error) {
 	t.Helper()
 	r := require.New(t)
 	scheme := runtime.NewScheme()
@@ -187,9 +191,22 @@ func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
 							"username": "test1",
 							"password": "bar",
 						}, nil
+					case "notfound.io":
+						return nil, nil
 					default:
 						return nil, fmt.Errorf("failed access")
 					}
+				},
+			}, nil
+		case "ErrorRegistry":
+			return RepositoryPlugin{
+				RepositoryIdentityFunc: func(config runtime.Typed) (runtime.Identity, error) {
+					return runtime.Identity{
+						runtime.IdentityAttributeType: "ErrorRegistry",
+					}, nil
+				},
+				ResolveFunc: func(ctx context.Context, config runtime.Typed, identity runtime.Identity, credentials map[string]string) (resolved map[string]string, err error) {
+					return nil, fmt.Errorf("some internal plugin error")
 				},
 			}, nil
 		case credentials.AnyConsumerIdentityType.String():
@@ -323,10 +340,11 @@ func GetGraph(t testing.TB, yaml string) (credentials.GraphResolver, error) {
 // TestResolveCredentials ensures credentials are correctly resolved
 func TestResolveCredentials(t *testing.T) {
 	for _, tc := range []struct {
-		name     string
-		yaml     string
-		identity runtime.Identity
-		expected map[string]string
+		name        string
+		yaml        string
+		identity    runtime.Identity
+		expected    map[string]string
+		expectedErr require.ErrorAssertionFunc
 	}{
 		{
 			"direct graph resolution",
@@ -339,6 +357,7 @@ func TestResolveCredentials(t *testing.T) {
 				"username": "foo",
 				"password": "bar",
 			},
+			require.NoError,
 		},
 		{
 			"docker config based resolution",
@@ -351,6 +370,7 @@ func TestResolveCredentials(t *testing.T) {
 				"username": "test1",
 				"password": "bar",
 			},
+			require.NoError,
 		},
 		{
 			"indirect resolution through repository",
@@ -362,6 +382,7 @@ func TestResolveCredentials(t *testing.T) {
 			map[string]string{
 				"something-from-vault-repo": "some-value-from-vault",
 			},
+			require.NoError,
 		},
 		{
 			"indirect resolution through repository",
@@ -375,6 +396,41 @@ func TestResolveCredentials(t *testing.T) {
 				"username": "some-owner",
 				"password": "abc",
 			},
+			require.NoError,
+		},
+		{
+			"credential resolution not found handling",
+			testYAML,
+			runtime.Identity{
+				"type":     "OCIRegistry",
+				"hostname": "notfound.io",
+				"path":     "another-owner/another-repo",
+			},
+			map[string]string{
+				"username": "some-owner",
+				"password": "abc",
+			},
+			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, credentials.ErrNotFound)
+			}),
+		},
+		{
+			"plugin resolution error handling",
+			testYAML,
+			runtime.Identity{
+				"type":     "ErrorRegistry",
+				"hostname": "quay.io",
+				"path":     "some-owner/some-repo",
+			},
+			map[string]string{
+				"username": "some-owner",
+				"password": "abc",
+			},
+			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
+				require.Error(t, err)
+				require.ErrorIs(t, err, credentials.ErrUnknown)
+			}),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -382,7 +438,10 @@ func TestResolveCredentials(t *testing.T) {
 			graph, err := GetGraph(t, tc.yaml)
 			r.NoError(err)
 			credsByIdentity, err := graph.Resolve(t.Context(), tc.identity)
-			r.NoError(err, "Failed to resolveFromGraph credentials")
+			tc.expectedErr(t, err)
+			if err != nil {
+				return
+			}
 			r.Equal(tc.expected, credsByIdentity)
 		})
 	}
@@ -500,7 +559,8 @@ func TestResolutionErrors(t *testing.T) {
 	r.Empty(creds)
 	r.Error(err)
 	r.ErrorIs(err, credentials.ErrNoDirectCredentials)
-	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: failed to match any node: no direct credentials found in graph", id.String()))
+	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: credentials not found", id.String()))
+	r.ErrorContains(err, "failed to match any node: no direct credentials found in graph")
 
 	g, err = credentials.ToGraph(t.Context(), &credentialruntime.Config{}, credentials.Options{
 		RepositoryPluginProvider: credentials.GetRepositoryPluginFn(func(ctx context.Context, repoType runtime.Typed) (credentials.RepositoryPlugin, error) {
@@ -516,5 +576,6 @@ func TestResolutionErrors(t *testing.T) {
 	r.Empty(creds)
 	r.Error(err)
 	r.ErrorIs(err, credentials.ErrNoIndirectCredentials)
-	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: no indirect credentials found in graph", id.String()))
+	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: credentials not found", id.String()))
+	r.ErrorContains(err, "no indirect credentials found in graph")
 }

@@ -9,7 +9,10 @@ import (
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
+// +ocm:jsonschema-gen=true
 type File struct {
+	// +ocm:jsonschema-gen:enum=file/v1,File/v1
+	// +ocm:jsonschema-gen:enum:deprecated=file,File
 	Type runtime.Type `json:"type"`
 	// Path is the path to the file.
 	Path string `json:"path"`

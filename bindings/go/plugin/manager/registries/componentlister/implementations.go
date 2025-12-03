@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
+	componentlisterv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -29,7 +29,7 @@ type ComponentListerPlugin struct {
 	client *http.Client
 
 	// jsonSchema is the schema for all endpoints for this plugin.
-	jsonSchema []byte
+	capability componentlisterv1.CapabilitySpec
 
 	// location is where the plugin started listening.
 	location string
@@ -37,18 +37,18 @@ type ComponentListerPlugin struct {
 
 // This plugin implements all the given contracts.
 var (
-	_ v1.ComponentListerPluginContract[runtime.Typed] = &ComponentListerPlugin{}
+	_ componentlisterv1.ComponentListerPluginContract[runtime.Typed] = &ComponentListerPlugin{}
 )
 
 // NewComponentListerPlugin creates a new component lister plugin instance with the provided configuration.
 // It initializes the plugin with an HTTP client, unique ID, path, configuration, location, and JSON schema.
-func NewComponentListerPlugin(client *http.Client, id string, path string, config types.Config, loc string, jsonSchema []byte) *ComponentListerPlugin {
+func NewComponentListerPlugin(client *http.Client, id string, path string, config types.Config, loc string, capability componentlisterv1.CapabilitySpec) *ComponentListerPlugin {
 	return &ComponentListerPlugin{
 		ID:         id,
 		path:       path,
 		config:     config,
 		client:     client,
-		jsonSchema: jsonSchema,
+		capability: capability,
 		location:   loc,
 	}
 }
@@ -63,12 +63,12 @@ func (r *ComponentListerPlugin) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (r *ComponentListerPlugin) GetIdentity(ctx context.Context, request *v1.GetIdentityRequest[runtime.Typed]) (*v1.GetIdentityResponse, error) {
-	if err := r.validateEndpoint(request.Typ, r.jsonSchema); err != nil {
+func (r *ComponentListerPlugin) GetIdentity(ctx context.Context, request *componentlisterv1.GetIdentityRequest[runtime.Typed]) (*componentlisterv1.GetIdentityResponse, error) {
+	if err := r.validateEndpoint(request.Typ); err != nil {
 		return nil, fmt.Errorf("failed to validate type %q: %w", r.ID, err)
 	}
 
-	identity := v1.GetIdentityResponse{}
+	identity := componentlisterv1.GetIdentityResponse{}
 	if err := plugins.Call(ctx, r.client, r.config.Type, r.location, Identity, http.MethodPost, plugins.WithPayload(request), plugins.WithResult(&identity)); err != nil {
 		return nil, fmt.Errorf("failed to get identity from plugin %q: %w", r.ID, err)
 	}
@@ -76,11 +76,11 @@ func (r *ComponentListerPlugin) GetIdentity(ctx context.Context, request *v1.Get
 	return &identity, nil
 }
 
-func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *v1.ListComponentsRequest[runtime.Typed], credentials map[string]string) (*v1.ListComponentsResponse, error) {
-	response := &v1.ListComponentsResponse{}
+func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *componentlisterv1.ListComponentsRequest[runtime.Typed], credentials map[string]string) (*componentlisterv1.ListComponentsResponse, error) {
+	response := &componentlisterv1.ListComponentsResponse{}
 
 	// We know we only have this single schema for all endpoints which require validation.
-	if err := r.validateEndpoint(request.Repository, r.jsonSchema); err != nil {
+	if err := r.validateEndpoint(request.Repository); err != nil {
 		return response, err
 	}
 
@@ -96,8 +96,16 @@ func (r *ComponentListerPlugin) ListComponents(ctx context.Context, request *v1.
 	return response, nil
 }
 
-func (r *ComponentListerPlugin) validateEndpoint(obj runtime.Typed, jsonSchema []byte) error {
-	valid, err := plugins.ValidatePlugin(obj, jsonSchema)
+// TODO(fabianburth): this method looks essentially the same for all plugin make it reusable!
+func (r *ComponentListerPlugin) validateEndpoint(obj runtime.Typed) error {
+	var schema []byte
+	for _, t := range r.capability.SupportedRepositorySpecTypes {
+		if t.Type != obj.GetType() {
+			continue
+		}
+		schema = t.JSONSchema
+	}
+	valid, err := plugins.ValidatePlugin(obj, schema)
 	if err != nil {
 		return fmt.Errorf("failed to validate plugin %q: %w", r.ID, err)
 	}

@@ -1,5 +1,5 @@
 import assert from "assert";
-import {computeNextVersions, isStableNewer, parseBranch, parseVersion,} from "./compute-rc-version.js";
+import { computeNextVersions, isStableNewer, parseBranch, parseVersion } from "./compute-rc-version.js";
 
 // ----------------------------------------------------------
 // parseVersion tests
@@ -25,14 +25,14 @@ assert.throws(() => parseBranch("releases/1.0"), /Invalid branch/);
 // ----------------------------------------------------------
 
 // 1. New RC from a stable version (patch bumps)
-const v1 = computeNextVersions("0.1", "cli/v0.1.0", "");
+const v1 = computeNextVersions("0.1", "cli/v0.1.0", "", false);
 assert.deepStrictEqual(v1, {
     baseVersion: "0.1.1",
     rcVersion: "0.1.1-rc.1",
 }, "RC version should be bumped when starting from a stable version");
 
 // 2. New RC from existing RC (RC increments)
-const v2 = computeNextVersions("0.1", "cli/v0.1.1", "cli/v0.1.1-rc.4");
+const v2 = computeNextVersions("0.1", "cli/v0.1.1", "cli/v0.1.1-rc.4", false);
 assert.deepStrictEqual(v2, {
     baseVersion: "0.1.1",
     rcVersion: "0.1.1-rc.5",
@@ -46,25 +46,41 @@ assert.deepStrictEqual(v3, {
 }, "RC version should be bumped and base version should start with 0 when starting without a tag");
 
 // 4. Stable newer than RC (patch bump)
-const v4 = computeNextVersions("0.1", "cli/v0.1.2", "cli/v0.1.1-rc.7");
+const v4 = computeNextVersions("0.1", "cli/v0.1.2", "cli/v0.1.1-rc.7", false);
 assert.deepStrictEqual(v4, {
     baseVersion: "0.1.3",
     rcVersion: "0.1.3-rc.1",
 }, "latest stable should bump patch and start new RC sequence");
 
 // 5. RC newer than stable (RC increment with new base version)
-const v5 = computeNextVersions("0.1", "cli/v0.1.2", "cli/v0.1.3-rc.9");
+const v5 = computeNextVersions("0.1", "cli/v0.1.2", "cli/v0.1.3-rc.9", false);
 assert.deepStrictEqual(v5, {
     baseVersion: "0.1.2",
     rcVersion: "0.1.3-rc.10",
 }, "RC should be incremented and base version should be bumped when last RC is newer than last stable");
 
 // 6. Malformed tag causes bump
-const v6 = computeNextVersions("0.1", "cli/v0.1.1", "cli/v0.1.1-rc.");
+const v6 = computeNextVersions("0.1", "cli/v0.1.1", "cli/v0.1.1-rc.", false);
 assert.deepStrictEqual(v6, {
     baseVersion: "0.1.2",
     rcVersion: "0.1.2-rc.1",
 }, "Should default to bump when malformed tag is discovered");
+
+// 7. New Version bump without RC version.
+const v7 = computeNextVersions("0.1.1", "v0.1.1", "", false);
+assert.deepStrictEqual(v7, {
+    baseVersion: "0.1.2", // this should be increased
+    rcVersion: "0.1.2-rc.1",
+}, "Base version should be increased.");
+
+
+// 8. New version minor bump.
+const v8 = computeNextVersions("0.2.2", "v0.2.2", "", true);
+assert.deepStrictEqual(v8, {
+    baseVersion: "0.3.0",
+    rcVersion: "0.3.0-rc.1",
+}, "Base version should be increased.");
+
 
 // ----------------------------------------------------------
 // isStableNewer tests

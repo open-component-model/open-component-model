@@ -24,6 +24,10 @@ type mockInputMethod struct {
 	processedBlob     blob.ReadOnlyBlob
 }
 
+func (m *mockInputMethod) GetInputMethodScheme() *runtime.Scheme {
+	return runtime.NewScheme()
+}
+
 func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *constructorruntime.Resource) (identity runtime.Identity, err error) {
 	id := runtime.Identity{}
 	id.SetType(runtime.NewVersionedType("mock", "v1"))
@@ -118,6 +122,10 @@ func (m *mockAccess) DeepCopyTyped() runtime.Typed {
 // mockDigestProcessor implements ResourceDigestProcessor for testing
 type mockDigestProcessor struct {
 	processedDigest *descriptor.Digest
+}
+
+func (m *mockDigestProcessor) GetResourceRepositoryScheme() *runtime.Scheme {
+	return runtime.NewScheme()
 }
 
 func (m *mockDigestProcessor) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
@@ -354,7 +362,7 @@ func TestConstructWithCredentialResolution(t *testing.T) {
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		CredentialProvider:          mockCredProvider,
+		Resolver:                    mockCredProvider,
 	}
 
 	constructorInstance := NewDefaultConstructor(constructor, opts)
@@ -645,7 +653,7 @@ func TestConstructWithCredentialResolutionFailure(t *testing.T) {
 	opts := Options{
 		ResourceInputMethodProvider: mockProvider,
 		TargetRepositoryProvider:    &mockTargetRepositoryProvider{repo: mockRepo},
-		CredentialProvider:          mockCredProvider,
+		Resolver:                    mockCredProvider,
 	}
 
 	constructorInstance := NewDefaultConstructor(constructor, opts)

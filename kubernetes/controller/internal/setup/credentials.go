@@ -23,16 +23,12 @@ func init() {
 // CredentialGraphOptions configures credential graph initialization.
 type CredentialGraphOptions struct {
 	PluginManager *manager.PluginManager
-	Logger        logr.Logger
+	Logger        *logr.Logger
 }
 
 // NewCredentialGraph creates a credential graph from the given configuration.
 // The graph resolves credentials based on consumer identities using configured repositories.
-func NewCredentialGraph(ctx context.Context, config *genericv1.Config, opts CredentialGraphOptions) (credentials.GraphResolver, error) {
-	if opts.Logger.GetSink() == nil {
-		opts.Logger = logr.Discard()
-	}
-
+func NewCredentialGraph(ctx context.Context, config *genericv1.Config, opts CredentialGraphOptions) (credentials.Resolver, error) {
 	if opts.PluginManager == nil {
 		return nil, fmt.Errorf("plugin manager is required for credential graph")
 	}

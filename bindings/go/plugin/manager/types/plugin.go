@@ -11,9 +11,7 @@ type Plugin struct {
 	ID     string
 	Path   string
 	Config Config
-	Types  map[PluginType][]Type
-
-	Cmd *exec.Cmd
+	Cmd    *exec.Cmd
 	// Stderr pipe will contain a link to the commands stderr output to stream back
 	// potential more information to the manager or the runtime.
 	Stderr io.ReadCloser

@@ -7,6 +7,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/ctf"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -21,6 +22,10 @@ var _ componentlister.InternalComponentListerPluginContract = (*CTFComponentList
 
 var ErrWrongUsage = errors.New("wrong usage of CTF component lister plugin")
 
+func (l *CTFComponentListerPlugin) GetComponentVersionRepositoryScheme() *runtime.Scheme {
+	return ocirepository.Scheme
+}
+
 // GetComponentLister returns a component lister for the given CTF repository specification.
 // If the provided specification is not of type *ctfv1.Repository, an error is returned.
 func (l *CTFComponentListerPlugin) GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, _ map[string]string) (repository.ComponentLister, error) {
@@ -29,7 +34,7 @@ func (l *CTFComponentListerPlugin) GetComponentLister(ctx context.Context, repos
 		return nil, errors.Join(ErrWrongUsage, fmt.Errorf("not a CTF repository type: %T", repositorySpecification))
 	}
 
-	archive, err := ctf.OpenCTFFromOSPath(ctfRepoSpec.Path, ctf.O_RDONLY)
+	archive, err := ctf.OpenCTFFromOSPath(ctfRepoSpec.FilePath, ctf.O_RDONLY)
 	if err != nil {
 		return nil, fmt.Errorf("error opening CTF archive: %w", err)
 	}

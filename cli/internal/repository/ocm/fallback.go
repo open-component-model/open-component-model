@@ -20,9 +20,9 @@ type fallbackProvider struct {
 	// repoProvider is the repository.ComponentVersionRepositoryForComponentProvider used to
 	// get the repositories based on the repository specs in the resolvers.
 	repoProvider repository.ComponentVersionRepositoryProvider
-	// graph is the [credentials.GraphResolver] used to resolve credentials for the repository.
+	// graph is the [credentials.Resolver] used to resolve credentials for the repository.
 	// It can be nil, if no credential graph is available.
-	graph credentials.GraphResolver
+	graph credentials.Resolver
 	// resolvers is the list of [resolverruntime.Resolver] used to access the [repository.ComponentVersionRepository].
 	resolvers []*resolverruntime.Resolver
 }

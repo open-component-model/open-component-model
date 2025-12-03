@@ -76,27 +76,21 @@ func TestIntegration_CompleteFlow(t *testing.T) {
 
 	credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
 		PluginManager: pm,
-		Logger:        logger,
+		Logger:        &logger,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, credGraph)
 
 	// TODO: I haven't configured any resolvers yet, so this is just empty.
-	_, err = setup.GetResolvers(cfg.Config, setup.ResolverOptions{
-		Logger: logger,
-	})
+	_, err = setup.GetResolvers(cfg.Config)
 	require.NoError(t, err)
 
 	t.Run("repository creation", func(t *testing.T) {
 		opts := setup.RepositoryOptions{
-			PluginManager:   pm,
+			Registry:        pm.ComponentVersionRepositoryRegistry,
 			CredentialGraph: credGraph,
-			Logger:          logger,
+			Logger:          &logger,
 		}
-
-		assert.NotNil(t, opts.PluginManager)
-		assert.NotNil(t, opts.CredentialGraph)
-		assert.NotNil(t, opts.Logger)
 
 		// Create a simple OCI repository spec
 		repoSpec := &ociv1.Repository{
@@ -230,7 +224,7 @@ func TestIntegration_ErrorHandling(t *testing.T) {
 	t.Run("nil plugin manager", func(t *testing.T) {
 		_, err := setup.NewCredentialGraph(ctx, nil, setup.CredentialGraphOptions{
 			PluginManager: nil,
-			Logger:        logger,
+			Logger:        &logger,
 		})
 		assert.Error(t, err)
 	})
@@ -284,6 +278,10 @@ func (m *mockRepository) GetComponentVersion(ctx context.Context, component, ver
 type simpleOCIPlugin struct {
 	component string
 	version   string
+}
+
+func (p *simpleOCIPlugin) GetJSONSchemaForRepositorySpecification(typ ocmruntime.Type) ([]byte, error) {
+	return nil, nil
 }
 
 func (p *simpleOCIPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(

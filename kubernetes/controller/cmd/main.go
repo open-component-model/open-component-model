@@ -24,6 +24,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer"
@@ -35,6 +36,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
 var (
@@ -153,32 +155,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	pm := plugins.NewPluginManager(plugins.DefaultPluginManagerOptions(setupLog))
-	if err := mgr.Add(pm); err != nil {
-		setupLog.Error(err, "unable to add plugin manager")
+	pm := manager.NewPluginManager(ctx)
+
+	if err := plugins.Register(pm); err != nil {
+		setupLog.Error(err, "unable to register plugins: %w", err)
 		os.Exit(1)
 	}
 
 	const unlimited = 0
 	ttl := time.Minute * 30
-	resolverCache := expirable.NewLRU[string, *resolution.Result](unlimited, nil, ttl)
+	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
 
 	// Create worker pool with its own dependencies
-	workerPool := resolution.NewWorkerPool(resolution.WorkerPoolOptions{
-		WorkerCount:   resolverWorkerCount,
-		QueueSize:     resolverWorkerQueueLength,
-		Logger:        setupLog,
-		Client:        mgr.GetClient(),
-		PluginManager: pm, // plugin manager is passed in here as the manager is started with the controller manager
-		Cache:         resolverCache,
+	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
+		WorkerCount: resolverWorkerCount,
+		QueueSize:   resolverWorkerQueueLength,
+		Logger:      &setupLog,
+		Client:      mgr.GetClient(),
+		Cache:       resolverCache,
 	})
 	if err := mgr.Add(workerPool); err != nil {
 		setupLog.Error(err, "unable to add worker pool")
 		os.Exit(1)
 	}
-
-	// resolver will be used in the controller
-	_ = resolution.NewResolver(mgr.GetClient(), setupLog, workerPool)
 
 	var eventsRecorder *events.Recorder
 	if eventsRecorder, err = events.NewRecorder(mgr, ctrl.Log, eventsAddr, "ocm-k8s-toolkit"); err != nil {
@@ -204,13 +203,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	resolver := resolution.NewResolver(mgr.GetClient(), &setupLog, workerPool, pm)
 	if err = (&component.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMContextCache: ocmContextCache,
+		Resolver:      resolver,
+		PluginManager: pm,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)
