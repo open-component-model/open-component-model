@@ -85,6 +85,15 @@ func NewStoreFromCTFRepoV1(ctx context.Context, repository *ctfrepospecv1.Reposi
 //
 // New OCM: Explicit BaseUrl + SubPath fields, consistent parsing, auto-extraction support
 func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, client remote.Client, options ...oci.RepositoryOption) (*oci.Repository, error) {
+	resolver, err := buildResolver(client, repository)
+	if err != nil {
+		return nil, fmt.Errorf("could not create OCI resolver for OCI repository %q: %w", repository.BaseUrl, err)
+	}
+
+	return oci.NewRepository(append(options, oci.WithResolver(resolver))...)
+}
+
+func buildResolver(client remote.Client, repository *ocirepospecv1.Repository) (*urlresolver.CachingResolver, error) {
 	if repository.BaseUrl == "" {
 		return nil, fmt.Errorf("a base url is required")
 	}
@@ -128,5 +137,5 @@ func NewFromOCIRepoV1(_ context.Context, repository *ocirepospecv1.Repository, c
 		return nil, fmt.Errorf("could not create URL resolver for OCI repository %q: %w", repository.BaseUrl, err)
 	}
 
-	return oci.NewRepository(append(options, oci.WithResolver(resolver))...)
+	return resolver, nil
 }
