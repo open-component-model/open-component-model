@@ -66,14 +66,13 @@ func (r *Resolver) NewCacheBackedRepository(ctx context.Context, opts *Repositor
 }
 
 func (r *Resolver) createRepository(ctx context.Context, spec runtime.Typed, cfg *configuration.Configuration) (repository.ComponentVersionRepository, error) {
-	pm := r.pluginManager
 	options := setup.RepositoryOptions{
-		Registry: pm.ComponentVersionRepositoryRegistry,
+		Registry: r.pluginManager.ComponentVersionRepositoryRegistry,
 		Logger:   r.logger,
 	}
 	if cfg != nil {
 		credGraph, err := setup.NewCredentialGraph(ctx, cfg.Config, setup.CredentialGraphOptions{
-			PluginManager: pm,
+			PluginManager: r.pluginManager,
 			Logger:        r.logger,
 		})
 		if err != nil {
