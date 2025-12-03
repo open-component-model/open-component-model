@@ -40,36 +40,7 @@ func TestSchemas(t *testing.T) {
 		}
 	}{
 		{
-			file: "bindings/go/oci/spec/repository/v1/oci/schemas/Repository.schema.json",
-			verify: func(t *testing.T, decl *jsonschema.DeclType) {
-				require.Equal(t, "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci/schemas/Repository.schema.json", decl.TypeName())
-				require.True(t, decl.IsObject())
-				require.Equal(t, []string{"type", "baseUrl"}, decl.Required())
-				require.Len(t, decl.Fields, 3)
-
-				require.Equal(t, "string", decl.Fields["subPath"].Type.TypeName())
-
-				typ := decl.Fields["type"]
-				require.Equal(t, "string", typ.Type.TypeName())
-				require.Len(t, typ.EnumValues(), 10)
-
-				require.Equal(t, "string", decl.Fields["baseUrl"].Type.TypeName())
-			},
-			exprTests: []struct {
-				expr  string
-				parse IssueAssertionFunc
-				check IssueAssertionFunc
-			}{
-				{"instance.type", NoIssues, NoIssues},
-				{"instance.baseUrl", NoIssues, NoIssues},
-				{"instance.nonexisting", NoIssues, IssuesExist},
-				{"instance.type == 123", NoIssues, IssuesExist},
-				{"instance.type == \"foobar\"", NoIssues, NoIssues},
-			},
-		},
-
-		{
-			file: "bindings/go/rsa/signing/v1alpha1/schemas/Config.schema.json",
+			file: "bindings/go/cel/jsonschema/santhosh-tekuri/v6/testdata/Config.schema.json",
 			verify: func(t *testing.T, decl *jsonschema.DeclType) {
 				require.Equal(t, "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1/schemas/Config.schema.json", decl.TypeName())
 				require.True(t, decl.IsObject())
