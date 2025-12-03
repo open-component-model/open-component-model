@@ -21,6 +21,8 @@ import (
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/input/spec/v1"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -34,17 +36,24 @@ func TestHelmPluginCapabilities(t *testing.T) {
 	output, err := cmd.Output()
 	require.NoError(t, err, "capabilities command should succeed")
 
-	var capabilities mtypes.Types
-	err = json.Unmarshal(output, &capabilities)
-	require.NoError(t, err, "capabilities output should be valid JSON")
+	rawPluginSpec := spec.PluginSpec{}
+	require.NoError(t, json.Unmarshal(output, &rawPluginSpec), "capabilities output should be valid JSON")
 
-	require.Contains(t, capabilities.Types, mtypes.InputPluginType, "should contain input plugin type")
-	helmTypes := capabilities.Types[mtypes.InputPluginType]
-	require.Len(t, helmTypes, 1, "should have exactly one helm input type")
+	pluginSpec, err := pluginruntime.ConvertFromSpec(v1.Scheme, &rawPluginSpec)
+	require.NoError(t, err, "should convert plugin spec from raw spec")
 
-	helmType := helmTypes[0]
-	require.Equal(t, helmv1.Type, helmType.Type.Name, "type name should be 'helm'")
-	require.Equal(t, helmv1.Version, helmType.Type.Version, "type version should be 'v1'")
+	capabilityTypes := make([]string, len(pluginSpec.CapabilitySpecs))
+	for index, capability := range pluginSpec.CapabilitySpecs {
+		capabilityTypes[index] = capability.GetType().String()
+	}
+
+	require.Contains(t, capabilityTypes, string(v1.InputPluginType), "should contain input plugin type")
+	inputCapability := pluginSpec.CapabilitySpecs[0]
+	require.Len(t, inputCapability.(*v1.CapabilitySpec).SupportedInputTypes, 1, "should have exactly one helm input type")
+
+	helmInputType := inputCapability.(*v1.CapabilitySpec).SupportedInputTypes[0]
+	require.Equal(t, helmv1.Type, helmInputType.Type.Name, "type name should be 'helm'")
+	require.Equal(t, helmv1.Version, helmInputType.Type.Version, "type version should be 'v1'")
 }
 
 func TestHelmPluginLifecycle(t *testing.T) {
@@ -301,7 +310,7 @@ func TestProcessHelmResourceWithMediaTypeAware(t *testing.T) {
 			known:     true,
 		},
 	}
-	
+
 	// Test the media type extraction logic directly
 	var mediaType string
 	if mtAware, ok := mockResult.ProcessedBlobData.(blob.MediaTypeAware); ok {
@@ -309,7 +318,7 @@ func TestProcessHelmResourceWithMediaTypeAware(t *testing.T) {
 			mediaType = mt
 		}
 	}
-	
+
 	require.Equal(t, testMediaType, mediaType, "media type should be extracted from MediaTypeAware blob")
 }
 
@@ -322,7 +331,7 @@ func TestProcessHelmResourceWithUnknownMediaType(t *testing.T) {
 			known:     false, // media type is not known
 		},
 	}
-	
+
 	// Test the media type extraction logic directly
 	var mediaType string
 	if mtAware, ok := mockResult.ProcessedBlobData.(blob.MediaTypeAware); ok {
@@ -330,7 +339,7 @@ func TestProcessHelmResourceWithUnknownMediaType(t *testing.T) {
 			mediaType = mt
 		}
 	}
-	
+
 	require.Empty(t, mediaType, "media type should be empty when known=false")
 }
 
@@ -343,7 +352,7 @@ func TestProcessHelmResourceWithEmptyMediaType(t *testing.T) {
 			known:     true,
 		},
 	}
-	
+
 	// Test the media type extraction logic directly
 	var mediaType string
 	if mtAware, ok := mockResult.ProcessedBlobData.(blob.MediaTypeAware); ok {
@@ -351,7 +360,7 @@ func TestProcessHelmResourceWithEmptyMediaType(t *testing.T) {
 			mediaType = mt
 		}
 	}
-	
+
 	require.Empty(t, mediaType, "media type should be empty when media type is empty string")
 }
 
@@ -361,7 +370,7 @@ func TestProcessHelmResourceWithoutMediaTypeAware(t *testing.T) {
 	mockResult := &constructor.ResourceInputMethodResult{
 		ProcessedBlobData: &mockBlobWithoutMediaType{},
 	}
-	
+
 	// Test the media type extraction logic directly
 	var mediaType string
 	if mtAware, ok := mockResult.ProcessedBlobData.(blob.MediaTypeAware); ok {
@@ -369,6 +378,6 @@ func TestProcessHelmResourceWithoutMediaTypeAware(t *testing.T) {
 			mediaType = mt
 		}
 	}
-	
+
 	require.Empty(t, mediaType, "media type should be empty when blob doesn't implement MediaTypeAware")
 }
