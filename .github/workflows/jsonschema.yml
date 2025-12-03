@@ -11,6 +11,9 @@ on:
     paths:
       - '**/schemas/*.schema.json'
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
