@@ -217,6 +217,12 @@ func TestBuildResolver_SubPathExtraction(t *testing.T) {
 			expectedBasePath: "ghcr.io/platform-mesh/component-descriptors",
 			expectedCVRef:    "ghcr.io/platform-mesh/component-descriptors/test-component:1.0.0",
 		},
+		{
+			name:             "avoid duplicates",
+			baseURL:          "https://registry.example.com/my-org/components",
+			expectedBasePath: "registry.example.com/my-org/components/component-descriptors",
+			expectedCVRef:    "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -234,25 +240,4 @@ func TestBuildResolver_SubPathExtraction(t *testing.T) {
 			assert.Equal(t, tt.expectedCVRef, resolver.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
 		})
 	}
-}
-
-func TestBuildResolver_NoDuplicatePath(t *testing.T) {
-	repository := &ocirepospecv1.Repository{
-		BaseUrl: "https://registry.example.com/my-org/components",
-		SubPath: "",
-	}
-
-	resolver, err := buildResolver(nil, repository)
-	require.NoError(t, err)
-
-	basePath := resolver.BasePath()
-	cvRef := resolver.ComponentVersionReference(t.Context(), "test-component", "1.0.0")
-
-	// BasePath should contain the path only once
-	assert.Equal(t, "registry.example.com/my-org/components/component-descriptors", basePath)
-	assert.NotContains(t, basePath, "/my-org/components/my-org/components")
-
-	// ComponentVersionReference should also not have duplicates
-	assert.Equal(t, "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0", cvRef)
-	assert.NotContains(t, cvRef, "/my-org/components/my-org/components")
 }
