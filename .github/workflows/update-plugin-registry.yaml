@@ -31,11 +31,12 @@ jobs:
   update-registry:
     name: Update Plugin Registry
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     concurrency:
       group: plugin-registry-publish
       cancel-in-progress: false  # Queue updates, don't cancel
-    permissions:
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
@@ -97,4 +98,3 @@ jobs:
           script: |
             const script = await import('${{ github.workspace }}/.github/scripts/prepare-registry-constructor.js');
             await script.default({ core });
-
