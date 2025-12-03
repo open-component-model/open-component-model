@@ -27,6 +27,10 @@ type Type struct {
 	defaultValue ref.Val
 }
 
+func (t *Type) String() string {
+	return t.name
+}
+
 // TypeName returns the fully qualified type name for the DeclType.
 func (t *Type) TypeName() string {
 	return t.name
