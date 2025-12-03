@@ -369,7 +369,8 @@
             "input": {
               "description": "Input specification for the resource",
               "$ref": "#/$defs/input"
-            }
+            },
+            "relation": false
           }
         }
       ]
