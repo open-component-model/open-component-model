@@ -180,7 +180,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 
 func processComponentReference(cmd *cobra.Command,
 	pluginManager *manager.PluginManager,
-	credentialGraph credentials.GraphResolver,
+	credentialGraph credentials.Resolver,
 	config *genericv1.Config,
 	params Params,
 	ref *compref.Ref,
@@ -402,7 +402,7 @@ type Params struct {
 // processRepositoryReference implements the logic for the `get cv <ref>` command, where <ref> is a repository reference.
 func processRepositoryReference(cmd *cobra.Command,
 	pluginManager *manager.PluginManager,
-	credentialGraph credentials.GraphResolver,
+	credentialGraph credentials.Resolver,
 	config *genericv1.Config,
 	params Params,
 	repository runtime.Typed,
@@ -454,7 +454,7 @@ func processRepositoryReference(cmd *cobra.Command,
 func listComponentsFromRepository(ctx context.Context,
 	pluginManager *manager.PluginManager,
 	repository runtime.Typed,
-	_ credentials.GraphResolver,
+	_ credentials.Resolver,
 ) ([]string, error) {
 	// TODO(ikhandamirov): git rid of this type check. Use credentials in case of OCI.
 	_, ok := repository.(*ctfv1.Repository)
@@ -486,7 +486,7 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 	repository runtime.Typed,
 	componentNames []string,
 	params Params,
-	_ credentials.GraphResolver,
+	_ credentials.Resolver,
 ) ([]string, error) {
 	constraint := params.constraint
 	latestOnly := params.latestOnly
