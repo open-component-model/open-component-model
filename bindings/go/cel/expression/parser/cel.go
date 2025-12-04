@@ -77,9 +77,10 @@ func scanExpression(str string, startIdx int) (string, int, error) {
 
 		// Inside string literal
 		if inString {
-			if ch == '\\' {
+			switch ch {
+			case '\\':
 				escape = true
-			} else if ch == '"' {
+			case '"':
 				inString = false
 			}
 			endIdx++
