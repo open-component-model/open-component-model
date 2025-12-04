@@ -11,6 +11,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -111,6 +115,30 @@ var _ = BeforeSuite(func() {
 	}()
 
 	pm := manager.NewPluginManager(ctx)
+	scheme := ocmruntime.NewScheme()
+	scheme.MustRegisterWithAlias(&ociv1.Repository{},
+		ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.Type),
+		ocmruntime.NewVersionedType(ociv1.ShortType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType),
+		ocmruntime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType2),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType2),
+	)
+	scheme.MustRegisterWithAlias(&ctfv1.Repository{},
+		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.Type),
+		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType),
+		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
+	)
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
+	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
+
 	const unlimited = 0
 	ttl := time.Minute * 30
 	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
