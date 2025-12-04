@@ -6,9 +6,6 @@ go 1.25.1
 // xref: https://github.com/opencontainers/go-digest/pull/66
 replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20250813155314-89707e38ad1a
 
-// TODO: Remove when conflicts are resolved
-replace ocm.software/open-component-model/bindings/go/runtime => ocm.software/open-component-model/bindings/go/runtime v0.0.2
-
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/fluxcd/pkg/apis/event v0.20.0
@@ -40,15 +37,15 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251128162057-1ad9197516b8
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251128170812-81b92bc4adf4
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251203131433-062018ef40ad
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251203131433-062018ef40ad
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4
 	ocm.software/open-component-model/bindings/go/oci v0.0.16
-	ocm.software/open-component-model/bindings/go/plugin v0.0.10
+	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251125192726-a44e4934cd96
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251203131433-062018ef40ad
 	ocm.software/open-component-model/bindings/go/runtime v0.0.4
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251128162057-1ad9197516b8
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251203131433-062018ef40ad
 )
 
 require (
@@ -415,7 +412,7 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/kubectl v0.34.1 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.1 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.2 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
