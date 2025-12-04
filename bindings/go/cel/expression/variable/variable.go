@@ -18,6 +18,7 @@ import (
 	"slices"
 
 	"github.com/google/cel-go/cel"
+	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 )
 
 // FieldDescriptor represents a field that contains CEL expressions in it. It
@@ -25,11 +26,9 @@ import (
 // and the expected type of the field. The field may contain multiple
 // expressions.
 type FieldDescriptor struct {
-	// Path is the path of the field in the resource (JSONPath-like)
-	// example: spec.template.spec.containers[0].env[0].value
-	// Since the object's we're dealing with are mainly made up of maps,
-	// arrays and native types, we can use a string to represent the path.
-	Path string
+	// Path is the path of the field in the resource.
+	Path fieldpath.Path
+
 	// Expressions is a list of CEL expressions in the field.
 	Expressions []string
 
