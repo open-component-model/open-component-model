@@ -25,37 +25,6 @@ func areEqualExpressionFields(a, b []variable.FieldDescriptor) bool {
 	return true
 }
 
-// areEqualSlices checks if two string slices contain the same elements, regardless of order.
-// It returns true if both slices have the same length and contain the same set of unique elements,
-// and false otherwise. This function treats the slices as sets, so duplicate elements are ignored.
-//
-// Parameters:
-//   - slice1
-//   - slice2
-//
-// Returns:
-//   - bool: true if the slices contain the same elements, false otherwise
-func areEqualSlices(slice1, slice2 []string) bool {
-	if len(slice1) != len(slice2) {
-		return false
-	}
-
-	elementSet := make(map[string]bool)
-	for _, s := range slice1 {
-		elementSet[s] = true
-	}
-
-	// Check if all elements from slice2 are in the set
-	for _, s := range slice2 {
-		if !elementSet[s] {
-			return false
-		}
-		// Remove the element to ensure uniqueness
-		delete(elementSet, s)
-	}
-	return len(elementSet) == 0
-}
-
 func TestParseSchemalessResource(t *testing.T) {
 	tests := []struct {
 		name     string
