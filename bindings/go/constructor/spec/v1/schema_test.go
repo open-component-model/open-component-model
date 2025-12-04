@@ -70,6 +70,24 @@ func TestComponentConstructorSchema(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "valid version format with suffix",
+			json: `{
+				"name": "github.com/acme.org/component",
+				"version": "0.0.0-main",
+				"provider": { "name": "acme" }
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "invalid version format with suffix",
+			json: `{
+				"name": "github.com/acme.org/component",
+				"version": "0.0.0_main",
+				"provider": { "name": "acme" }
+			}`,
+			wantErr: true,
+		},
+		{
 			name: "missing provider",
 			json: `{
 				"name": "github.com/acme.org/component",
