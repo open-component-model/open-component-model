@@ -45,6 +45,7 @@ var _ = Describe("Replication Controller", func() {
 		It("should be possible to transfer the test component from its external location to configured OCI registry", func(ctx SpecContext) {
 			By("Apply manifests to the cluster")
 			manifestDir := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata/replication-no-config")
+			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ghcr-mock-creds.yaml"))).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-source.yaml"), "condition=Ready", timeout)).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Component.yaml"), "condition=Ready", timeout)).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-target.yaml"), "condition=Ready", timeout)).To(Succeed())
@@ -81,6 +82,7 @@ var _ = Describe("Replication Controller", func() {
 
 			By("Apply manifests to the cluster, required for the first transfer operation")
 			manifestDir := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata/replication-with-config")
+			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ghcr-mock-creds.yaml"))).To(Succeed())
 			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ConfigMap-transfer-opt.yaml"))).To(Succeed())
 			Expect(utils.DeployResource(ctx, filepath.Join(manifestDir, "ConfigMap-creds1.yaml"))).To(Succeed())
 			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(manifestDir, "Repository-source.yaml"), "condition=Ready", timeout)).To(Succeed())

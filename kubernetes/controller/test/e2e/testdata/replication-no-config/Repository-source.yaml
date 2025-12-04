@@ -10,3 +10,6 @@ spec:
     componentNameMapping: urlPath
     subPath: open-component-model
     type: OCIRegistry
+  ocmConfig:
+    - kind: ConfigMap
+      name: ghcr-mock-creds

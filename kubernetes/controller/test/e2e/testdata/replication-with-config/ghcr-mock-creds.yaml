@@ -1,0 +1,22 @@
+# OCI registries do not allow unauthenticated access, even for pings. However, ghcr.io accepts a mock token
+# See https://distribution.github.io/distribution/spec/api/#base
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ghcr-mock-creds
+  namespace: e2e-replication-controller-test
+data:
+  .ocmconfig: |2
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: credentials.config.ocm.software
+        consumers:
+          - identity:
+              type: OCIRepository
+              hostname: ghcr.io
+              port: "443"
+              scheme: https
+            credentials:
+              - type: Credentials
+                properties:
+                  access_token: QQ==
