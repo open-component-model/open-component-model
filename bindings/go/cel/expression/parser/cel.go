@@ -35,9 +35,16 @@ func extractExpressions(str string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if expr != "" {
-			expressions = append(expressions, expr)
+
+		// Incomplete expression: scanExpression returns next == startIdx+1.
+		// In that case, skip and keep scanning.
+		if next == startIdx+1 {
+			i = next
+			continue
 		}
+
+		// Complete expression (possibly empty, e.g. "${}")
+		expressions = append(expressions, expr)
 		i = next
 	}
 
