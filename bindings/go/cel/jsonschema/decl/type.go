@@ -143,3 +143,38 @@ func (t *Type) MaybeAssignTypeName(name string) *Type {
 	}
 	return t
 }
+
+func (t *Type) AddMetadata(key string, value any) {
+	if t.Metadata == nil {
+		t.Metadata = make(map[string]string)
+	}
+	t.Metadata[key] = fmt.Sprintf("%v", value)
+}
+
+func (t *Type) GetMetadata(key string) string {
+	if t.Metadata == nil {
+		return ""
+	}
+	return t.Metadata[key]
+}
+
+// Key used to annotate whether additionalProperties is allowed on an object type, even
+// if fields are defined.
+const additionalPropertiesKey = "additionalProperties"
+
+// SetAdditionalPropertiesMetadata sets a flag indicating whether additional properties
+// are allowed on the object type.
+func (t *Type) SetAdditionalPropertiesMetadata(allowed bool) {
+	t.AddMetadata(additionalPropertiesKey, allowed)
+}
+
+func (t *Type) AllowsAdditionalProperties() bool {
+	if t.Metadata == nil {
+		return false
+	}
+	val, found := t.Metadata[additionalPropertiesKey]
+	if !found {
+		return false
+	}
+	return val == "true"
+}

@@ -58,11 +58,8 @@ func NewDeclType(s *Schema) *DeclType {
 
 	case "object":
 		// If additionalProperties is itself a schema → treat as map<string, X>
-		// NEW: literal constraints of the additionalProperties schema must apply to all values
 		if s.AdditionalProperties() != nil {
-			propsSchema := s.AdditionalProperties()
-			propsType := NewDeclType(propsSchema)
-			if propsType != nil {
+			if propsType := NewDeclType(s.AdditionalProperties()); propsType != nil {
 				var maxProperties uint64
 				if s.MaxProperties() != nil {
 					maxProperties = *s.MaxProperties()
@@ -74,8 +71,8 @@ func NewDeclType(s *Schema) *DeclType {
 					s,
 				)
 			}
-			// Fallback: additionalProperties = true/false or unknown → Dyn
-			// NEW: this allows *any* key with dyn value
+			// Fallback: additionalProperties = unknown → Dyn
+			// this allows *any* key with dyn value
 			return declTypeForSchema(decl.NewMapType(decl.StringType, decl.DynType, decl.NoMaxLength), s)
 		}
 
@@ -130,7 +127,6 @@ func NewDeclType(s *Schema) *DeclType {
 				decl.NewMapType(decl.StringType, decl.DynType, decl.NoMaxLength), s,
 			)
 		}
-
 		id := "object"
 		if s.Schema.ID != "" {
 			// if we have a unique schema ID, use that
@@ -138,8 +134,13 @@ func NewDeclType(s *Schema) *DeclType {
 		}
 		objType := decl.NewObjectType(id, fields)
 		objType.MinSerializedSize = minSerializedSize
-		return declTypeForSchema(objType, s)
-
+		base := declTypeForSchema(objType, s)
+		if anyAdditionalProperties := base.AdditionalPropertiesAsBool(); anyAdditionalProperties != nil {
+			// if additionalProperties is explicitly allowed/denied, reflect that in the type
+			base.SetAdditionalPropertiesMetadata(*anyAdditionalProperties)
+			base.MaxElements = decl.NoMaxLength
+		}
+		return base
 	case "string":
 		switch s.Format() {
 		case "byte":

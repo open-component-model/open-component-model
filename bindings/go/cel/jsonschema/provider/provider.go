@@ -167,6 +167,12 @@ func (rt *DeclTypeProvider) FindStructFieldType(typeName, fieldName string) (*ty
 			Type: expT,
 		}, true
 	}
+	// Handle additionalProperties as a dynamic map.
+	if st.AllowsAdditionalProperties() {
+		return &types.FieldType{
+			Type: types.DynType,
+		}, true
+	}
 	// This could be a dynamic map.
 	if st.IsMap() {
 		et := st.ElemType
@@ -185,8 +191,7 @@ func (rt *DeclTypeProvider) NativeToValue(val interface{}) ref.Val {
 }
 
 func (rt *DeclTypeProvider) NewValue(typeName string, fields map[string]ref.Val) ref.Val {
-	// TODO: implement for OpenAPI types to enable CEL object instantiation, which is needed
-	// for mutating admission.
+	// TODO: implement to enable CEL object instantiation
 	return rt.typeProvider.NewValue(typeName, fields)
 }
 
