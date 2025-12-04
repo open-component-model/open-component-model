@@ -2,11 +2,11 @@ package fieldpath
 
 import "strings"
 
-func NewNamedSegment(name string) Segment {
+func NamedSegment(name string) Segment {
 	return Segment{Name: name}
 }
 
-func NewIndexedSegment(index int) Segment {
+func IndexedSegment(index int) Segment {
 	return Segment{Index: &index}
 }
 
@@ -15,25 +15,29 @@ type Segment struct {
 	Index *int
 }
 
+func New(segments ...Segment) Path {
+	return segments
+}
+
 type Path []Segment
 
 func (p Path) String() string {
 	return Build(p)
 }
 
-func (p Path) Add(segment Segment) Path {
-	return append(p, segment)
+func (p Path) Add(segment ...Segment) Path {
+	return append(p, segment...)
 }
 
 func (p Path) AddNamed(name string) Path {
-	return append(p, NewNamedSegment(name))
+	return append(p, NamedSegment(name))
 }
 
 func (p Path) AddIndexed(index int) Path {
-	return append(p, NewIndexedSegment(index))
+	return append(p, IndexedSegment(index))
 }
 
-func ComparePaths(p1, p2 Path) int {
+func Compare(p1, p2 Path) int {
 	return strings.Compare(p1.String(), p2.String())
 }
 

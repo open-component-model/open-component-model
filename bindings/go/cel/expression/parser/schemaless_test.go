@@ -13,7 +13,7 @@ func areEqualExpressionFields(a, b []variable.FieldDescriptor) bool {
 		return false
 	}
 	sort := func(x, y variable.FieldDescriptor) int {
-		return fieldpath.ComparePaths(x.Path, y.Path)
+		return fieldpath.Compare(x.Path, y.Path)
 	}
 	slices.SortFunc(a, sort)
 	slices.SortFunc(b, sort)
