@@ -15,7 +15,7 @@
     enabled: true,
   },
   'schedule': [
-    '* * * * 0' // At every minute on Sunday it is allowed to created branches
+    '* * * * 0' // At every minute on Sunday it is allowed to create branches
   ],
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
@@ -31,6 +31,12 @@
   separateMinorPatch: true,
   separateMultipleMajor: true,
   packageRules: [
+    {
+      "matchDatasources": ["golang-version"],
+      "rangeStrategy": "bump",
+      "groupName": "Golang versions",
+      "groupSlug": "golang-versions"
+    },
     {
       matchManagers: [
         'gomod',
@@ -110,6 +116,9 @@
       matchPackageNames: [
         'ocm.software/open-component-model/**',
       ],
+      'schedule': [
+        '* 22,0-6 * * *' // At every minute past hour 22 and every hour from 0 through 6.
+      ]
     },
   ],
   customDatasources: {

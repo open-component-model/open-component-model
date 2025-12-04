@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -86,12 +87,16 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		options.UserAgent = DefaultCreator
 	}
 
+	if options.Scheme == nil {
+		options.Scheme = repoSpec.Scheme
+	}
+
 	provider := &CachingComponentVersionRepositoryProvider{
 		creator:            options.UserAgent,
-		scheme:             repoSpec.Scheme,
+		scheme:             options.Scheme,
 		storeCache:         &storeCache{store: make(map[string]*ocictf.Store)},
 		credentialCache:    &credentialCache{},
-		ociCache:           &ociCache{scheme: repoSpec.Scheme},
+		ociCache:           &ociCache{scheme: options.Scheme},
 		authorizationCache: auth.NewCache(),
 		httpClient:         retry.DefaultClient,
 		tempDir:            options.TempDir,
@@ -124,12 +129,23 @@ func (b *CachingComponentVersionRepositoryProvider) GetJSONSchemaForRepositorySp
 // GetComponentVersionRepositoryCredentialConsumerIdentity implements the repository.ComponentVersionRepositoryProvider interface.
 // It retrieves the consumer identity for a given repository specification.
 func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	return GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, b.scheme, repositorySpecification)
+	obj, err := getConvertedTypedSpec(b.scheme, repositorySpecification)
+	if err != nil {
+		return nil, err
+	}
+	switch obj := obj.(type) {
+	case *ocirepospecv1.Repository:
+		return v1.IdentityFromOCIRepository(obj)
+	case *ctfrepospecv1.Repository:
+		return nil, errors.New("cannot resolve consumer identity for ctf: credentials not supported")
+	default:
+		return nil, fmt.Errorf("unsupported repository specification type for identity generation %T", obj)
+	}
 }
 
-// GetComponentVersionRepositoryCredentialConsumerIdentity is a helper function that extracts the consumer identity
+// getCacheIdentity is a helper function that extracts the consumer identity
 // from a repository specification. It supports both OCI and CTF repository types.
-func GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, scheme *runtime.Scheme, repositorySpecification runtime.Typed) (runtime.Identity, error) {
+func getCacheIdentity(_ context.Context, scheme *runtime.Scheme, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	obj, err := getConvertedTypedSpec(scheme, repositorySpecification)
 	if err != nil {
 		return nil, err

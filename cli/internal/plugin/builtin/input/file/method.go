@@ -5,7 +5,6 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/input/file"
-	filev1 "ocm.software/open-component-model/bindings/go/input/file/spec/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/input"
 )
 
@@ -21,11 +20,10 @@ func RegisterFileInputV1(inputRegistry *input.RepositoryRegistry, filesystemConf
 		WorkingDirectory: filesystemConfig.WorkingDirectory,
 	}
 
-	spec := &filev1.File{}
-	if err := input.RegisterInternalResourceInputPlugin(file.Scheme, inputRegistry, method, spec); err != nil {
+	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register file resource input method: %w", err)
 	}
-	if err := input.RegisterInternalSourcePlugin(file.Scheme, inputRegistry, method, spec); err != nil {
+	if err := inputRegistry.RegisterInternalSourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register file source input method: %w", err)
 	}
 	return nil

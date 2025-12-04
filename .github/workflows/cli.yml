@@ -101,7 +101,7 @@ jobs:
 
       # Generate and verify the Component Transport Format (CTF) resulting in all artifacts
       # use a version that includes the branch name to ensure uniqueness
-      # make sure that the version doesnt contain invalid semver characters
+      # make sure that the version doesn't contain invalid semver characters
       - name: Generate & Verify CTF
         run: |
           task cli:generate/ctf VERSION="${VERSION}"

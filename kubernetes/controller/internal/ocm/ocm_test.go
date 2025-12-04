@@ -1,11 +1,14 @@
 package ocm
 
 import (
+	"encoding/json"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/mandelsoft/vfs/pkg/vfs"
 	"ocm.software/ocm/api/ocm/extensions/repositories/ctf"
 	"ocm.software/ocm/api/utils/accessobj"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 
 	. "github.com/mandelsoft/goutils/testutils"
 	. "github.com/onsi/ginkgo/v2"
@@ -18,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 
 	ocmctx "ocm.software/ocm/api/ocm"
@@ -544,52 +548,53 @@ var _ = Describe("ocm utility", func() {
 	})
 
 	Context("is downgradable", func() {
-		const (
-			CTFPath       = "/ctf"
-			TestComponent = "ocm.software/test"
-		)
 		var (
-			env *Builder
-
-			repo ocmctx.Repository
-			cv1  ocmctx.ComponentVersionAccess
-			cv2  ocmctx.ComponentVersionAccess
-			cv3  ocmctx.ComponentVersionAccess
+			cv1 *descruntime.Descriptor
+			cv2 *descruntime.Descriptor
+			cv3 *descruntime.Descriptor
 		)
 		BeforeEach(func(ctx SpecContext) {
-			env = NewBuilder()
+			cv1 = &descruntime.Descriptor{
+				Meta: descruntime.Meta{},
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    "ocm.software/test",
+							Version: "2.0.0",
+							Labels: []descruntime.Label{
+								{
+									Name:  v1alpha1.OCMLabelDowngradable,
+									Value: json.RawMessage(`"> 1.0.0"`),
+								},
+							},
+						},
+					},
+				},
+			}
 
-			v1 := "2.0.0"
-			v2 := "1.1.0"
-			v3 := "0.9.0"
-			env.OCMCommonTransport(CTFPath, accessio.FormatDirectory, func() {
-				env.Component(TestComponent, func() {
-					env.Version(v1, func() {
-						env.Label(v1alpha1.OCMLabelDowngradable, `> 1.0.0`)
-					})
-				})
-				env.Component(TestComponent, func() {
-					env.Version(v2, func() {
-					})
-				})
-				env.Component(TestComponent, func() {
-					env.Version(v3, func() {
-					})
-				})
-			})
+			cv2 = &descruntime.Descriptor{
+				Meta: descruntime.Meta{},
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    "ocm.software/test",
+							Version: "1.1.0",
+						},
+					},
+				},
+			}
 
-			repo = Must(ctf.Open(env, accessobj.ACC_WRITABLE, CTFPath, vfs.FileMode(vfs.O_RDWR), env))
-			cv1 = Must(repo.LookupComponentVersion(TestComponent, v1))
-			cv2 = Must(repo.LookupComponentVersion(TestComponent, v2))
-			cv3 = Must(repo.LookupComponentVersion(TestComponent, v3))
-		})
-
-		AfterEach(func() {
-			Close(cv1)
-			Close(cv2)
-			Close(cv3)
-			Close(repo)
-			MustBeSuccessful(env.Cleanup())
+			cv3 = &descruntime.Descriptor{
+				Meta: descruntime.Meta{},
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{
+						ObjectMeta: descruntime.ObjectMeta{
+							Name:    "ocm.software/test",
+							Version: "0.9.0",
+						},
+					},
+				},
+			}
 		})
 
 		It("true", func(ctx SpecContext) {

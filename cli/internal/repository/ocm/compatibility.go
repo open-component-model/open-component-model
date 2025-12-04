@@ -37,7 +37,7 @@ import (
 func NewComponentRepositoryProvider(
 	ctx context.Context,
 	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.GraphResolver,
+	credentialGraph credentials.Resolver,
 	opts ...RepositoryResolverOption,
 ) (ComponentVersionRepositoryForComponentProvider, error) {
 	options := &RepositoryResolverOptions{}
@@ -89,7 +89,7 @@ func NewComponentRepositoryProvider(
 func createSimplePathMatcherProvider(
 	ctx context.Context,
 	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.GraphResolver,
+	credentialGraph credentials.Resolver,
 	repository runtime.Typed,
 ) (ComponentVersionRepositoryForComponentProvider, error) {
 	raw := runtime.Raw{}
@@ -116,7 +116,7 @@ func createSimplePathMatcherProvider(
 func createFallbackProvider(
 	ctx context.Context,
 	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.GraphResolver,
+	credentialGraph credentials.Resolver,
 	repository runtime.Typed,
 	fallbackResolvers []*resolverruntime.Resolver,
 ) (ComponentVersionRepositoryForComponentProvider, error) {
@@ -143,7 +143,7 @@ func createFallbackProvider(
 func createPathMatcherProvider(
 	ctx context.Context,
 	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.GraphResolver,
+	credentialGraph credentials.Resolver,
 	repository runtime.Typed,
 	componentPatterns []string,
 	pathMatchers []*resolverspec.Resolver,
@@ -246,7 +246,7 @@ func WithComponentRef(ref *compref.Ref) RepositoryResolverOption {
 // Returns an error if neither a componentReference nor a configuration is provided
 func NewComponentVersionRepositoryForComponentProvider(ctx context.Context,
 	repoProvider repository.ComponentVersionRepositoryProvider,
-	credentialGraph credentials.GraphResolver,
+	credentialGraph credentials.Resolver,
 	config *genericv1.Config,
 	ref *compref.Ref,
 ) (ComponentVersionRepositoryForComponentProvider, error) {

@@ -24,10 +24,8 @@ func Test_Provider_Smoke(t *testing.T) {
 
 	r := require.New(t)
 	repoSpec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
-	id, err := prov.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
-	r.NoError(err)
-
-	r.Equal(id[runtime.IdentityAttributePath], fs.String())
+	_, err = prov.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
+	r.Error(err)
 
 	t.Run("access provider concurrently", func(t *testing.T) {
 		r := require.New(t)
