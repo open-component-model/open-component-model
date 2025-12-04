@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"slices"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -36,7 +35,6 @@ import (
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
-	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
@@ -248,6 +246,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if !deployer.GetDeletionTimestamp().IsZero() {
 		if err := r.Untrack(ctx, deployer); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to untrack deployer: %w", err)
+		}
+
+		// TODO check for --prune flag in deployer spec to decide whether to delete deployed resources or not
+		if err := r.Delete(ctx, deployer); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete deployer: %w", err)
 		}
 
 		return ctrl.Result{}, fmt.Errorf("deployer is being deleted, waiting for resource watches to be removed")
@@ -496,17 +499,6 @@ func digestSpec(s string) (v1.DigestSpec, error) {
 //
 // See Apply for more details on how the objects are applied.
 func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
-	if len(objs) > 1 {
-		// TODO(jakobmoellerdev): remove once https://github.com/open-component-model/ocm-k8s-toolkit/issues/273#issue-3201709052
-		//  is implemented in the deployer controller. We need proper apply detection so we can support pruning diffs.
-		//  Otherwise we can orphan resources.
-		msg := "multiple objects found in manifest," +
-			"the current deployer implementation does not officially support this yet," +
-			"and will not prune diffs properly."
-		event.New(r, deployer, nil, eventv1.EventSeverityInfo, msg)
-		log.FromContext(ctx).Info(msg)
-	}
-
 	eg, egctx := errgroup.WithContext(ctx)
 
 	for i := range objs {
