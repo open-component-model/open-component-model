@@ -108,6 +108,22 @@ func TestExtractExpressions(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "Nested expression but with quotes (single quotes)",
+			input:   "${outer('${inner}')}",
+			want:    []string{"outer('${inner}')"},
+			wantErr: false,
+		},
+		{
+			name:    "Nested expression but with quotes (single quotes)",
+			input:   "${outer('${inner}\")}",
+			wantErr: true,
+		},
+		{
+			name:    "Nested expression but with quotes (single quotes)",
+			input:   "${outer(\"${inner}')}",
+			wantErr: true,
+		},
+		{
 			name:    "Nested closing brace without opening one",
 			input:   "${\"text with }} inside\"}",
 			want:    []string{"\"text with }} inside\""},

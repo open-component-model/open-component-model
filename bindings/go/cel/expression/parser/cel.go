@@ -57,7 +57,7 @@ func extractExpressions(str string) ([]string, error) {
 func scanExpression(str string, startIdx int) (string, int, error) {
 	endIdx := startIdx + len(exprStart)
 	braces := 1
-	inString := false
+	var inString *uint8
 	escape := false
 
 	for endIdx < len(str) {
@@ -71,17 +71,17 @@ func scanExpression(str string, startIdx int) (string, int, error) {
 		}
 
 		// Detect nested ${ BEFORE handling strings or braces
-		if !inString && endIdx+1 < len(str) && str[endIdx:endIdx+2] == exprStart {
+		if inString == nil && endIdx+1 < len(str) && str[endIdx:endIdx+2] == exprStart {
 			return "", 0, ErrNestedExpression
 		}
 
 		// Inside string literal
-		if inString {
+		if inString != nil {
 			switch ch {
 			case '\\':
 				escape = true
-			case '"':
-				inString = false
+			case *inString:
+				inString = nil
 			}
 			endIdx++
 			continue
@@ -89,8 +89,8 @@ func scanExpression(str string, startIdx int) (string, int, error) {
 
 		// Outside string literal
 		switch ch {
-		case '"':
-			inString = true
+		case '"', '\'':
+			inString = &ch
 		case '{':
 			braces++
 		case '}':
@@ -105,7 +105,7 @@ func scanExpression(str string, startIdx int) (string, int, error) {
 	}
 
 	// If we exit the loop and were still inside a string literal → error
-	if inString {
+	if inString != nil {
 		return "", 0, ErrNestedExpression
 	}
 
