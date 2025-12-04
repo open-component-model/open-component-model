@@ -49,7 +49,7 @@ type Variable struct {
 	// FieldDescriptor is the object that contains the expression, the path, and
 	// the expected type.
 	FieldDescriptor
-	// VariableKind is the kind of the variable (static or dynamic).
+	// Kind is the kind of the variable (static or dynamic).
 	Kind Kind
 	// Dependencies is a list of resources this variable depends on. We need
 	// this information to wait for the dependencies to be resolved before
