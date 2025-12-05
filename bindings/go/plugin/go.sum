@@ -69,10 +69,10 @@ ocm.software/open-component-model/bindings/go/ctf v0.3.0 h1:u1B26OgUvR+gzTwY0hTV
 ocm.software/open-component-model/bindings/go/ctf v0.3.0/go.mod h1:skMxA1l7rZFhKsjn8CysSVG31zjmV95WaFqMVKRjHug=
 ocm.software/open-component-model/bindings/go/dag v0.0.6 h1:To76QJAmFD88C101oB/HgYvtomp8mm0270ewDLcVncw=
 ocm.software/open-component-model/bindings/go/dag v0.0.6/go.mod h1:mQbO95zYvX59VXNJGer4+wGsKY0BVI4FKwlR5BlPugM=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251203135830-24b8f8099d9e h1:IrGgtYkFp0SsRt8cR4JhdtX+G1D/8OjdqOWJd5vTI6Y=
-ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251203135830-24b8f8099d9e/go.mod h1:NRB1OJcpQl1yLf4geQvdTOwjZGx8o8852cUWOL5MIl4=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251203135830-24b8f8099d9e h1:e11Af2gDwHcMVG5B82clgJWsOYrbcXeP5qDuFKeTXlY=
-ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251203135830-24b8f8099d9e/go.mod h1:qG0wDZOvJHhln6pl9wtyamch3sM966VS9Ya3Sc8P7Wc=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251204125915-cb295d402227 h1:LXavtH+MfsHqe5R+LhPH0IE4D6BABQH7G5b/595tNwY=
+ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251204125915-cb295d402227/go.mod h1:XCwo9v9yxkXs+m6VOy0Pnl9t3WyrP1lnfpRTXm+ogT8=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251204125915-cb295d402227 h1:BrCvsj0/w/qc/ALGfaZmADEiUru0Kg9McQ8AiMbnRtI=
+ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251204125915-cb295d402227/go.mod h1:qG0wDZOvJHhln6pl9wtyamch3sM966VS9Ya3Sc8P7Wc=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4 h1:4kOvjb18s/OU0xAnFqDbZyQ21FYMxhZKCfL3h10h8GQ=
 ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4/go.mod h1:JtwbzfsuN7kmzu79unMgJVQDmPwTM0dL3NMLAIwoD1k=
 ocm.software/open-component-model/bindings/go/oci v0.0.15 h1:GYizzQ2pcDYDaYxJzbjHsXIYBRkjOAVime3ORFEGNu4=
@@ -81,8 +81,8 @@ ocm.software/open-component-model/bindings/go/repository v0.0.4 h1:pDh8tHTaE8PtB
 ocm.software/open-component-model/bindings/go/repository v0.0.4/go.mod h1:v1ROvp4Hmq5q3t4Mg2gPUqoOJn4ENFaOVmd1XBXKdj4=
 ocm.software/open-component-model/bindings/go/runtime v0.0.4 h1:Z4r5MKj8tDXATzZNNnfJuTIpDw0/bvQ1XzuqcAcSRcE=
 ocm.software/open-component-model/bindings/go/runtime v0.0.4/go.mod h1:iokVCXI30cn36PM05bBBaDGeXpz0hbgU9ObTtdP26Eo=
-ocm.software/open-component-model/bindings/go/signing v0.0.0-20251203135830-24b8f8099d9e h1:hM8yawSZN4Qshv2qQoDsrS7HsLktsDIDsBw7iryEIM0=
-ocm.software/open-component-model/bindings/go/signing v0.0.0-20251203135830-24b8f8099d9e/go.mod h1:vM4IGXqOkDTiwaCBaY2I/hFhe9Jve8uC4Bm3qsxo9q8=
+ocm.software/open-component-model/bindings/go/signing v0.0.0-20251204125915-cb295d402227 h1:6nVRVoPEnK6DA3n+5XtNIXyJEeM/S833vpgI1P6TNh0=
+ocm.software/open-component-model/bindings/go/signing v0.0.0-20251204125915-cb295d402227/go.mod h1:+QR/3GRsKLdA63aSmqE/ajOnvp+2GH7D05iyBnXDQIo=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
 oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
 sigs.k8s.io/yaml v1.6.0 h1:G8fkbMSAFqgEFgh4b1wmtzDnioxFCUgTZhlbj5P9QYs=
