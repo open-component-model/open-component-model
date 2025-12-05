@@ -11,6 +11,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -24,10 +25,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
@@ -115,7 +122,33 @@ var _ = BeforeSuite(func() {
 	}()
 
 	pm = manager.NewPluginManager(ctx)
-	Expect(plugins.Register(pm)).To(Succeed())
+	scheme := ocmruntime.NewScheme()
+	scheme.MustRegisterWithAlias(&ociv1.Repository{},
+		ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.Type),
+		ocmruntime.NewVersionedType(ociv1.ShortType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType),
+		ocmruntime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType2),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType2),
+	)
+	scheme.MustRegisterWithAlias(&ctfv1.Repository{},
+		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.Type),
+		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType),
+		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
+	)
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
+	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
+	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
+	Expect(err).ToNot(HaveOccurred())
+	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
+	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}))
 
 	const unlimited = 0
 	ttl := time.Minute * 30
