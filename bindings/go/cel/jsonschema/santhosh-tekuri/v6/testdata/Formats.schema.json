@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test/Formats.schema.json",
+  "title": "Formats",
+  "type": "object",
+  "properties": {
+    "duration": { "type": "string", "format": "duration" },
+    "date": { "type": "string", "format": "date" },
+    "datetime": { "type": "string", "format": "date-time" },
+    "binary": { "type": "string", "format": "byte", "maxLength": 32 },
+    "enumFmt": {
+      "type": "string",
+      "format": "date-time",
+      "enum": ["2020-01-01T00:00:00Z", "2021-05-03T12:05:10Z"]
+    }
+  }
+}
