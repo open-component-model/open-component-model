@@ -102,7 +102,7 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.3-0.20251205090143-40ef3dda2ab1 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.3 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
