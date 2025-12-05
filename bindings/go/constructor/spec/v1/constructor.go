@@ -46,6 +46,34 @@ func (c *ComponentConstructor) UnmarshalJSON(data []byte) error {
 	return errors.Join(errs...)
 }
 
+// UnmarshalJSONUnsafe is a variant of UnmarshalJSON that does not perform schema validation.
+// It is intended for use cases where partial or potentially invalid data needs to be processed.
+func (c *ComponentConstructor) UnmarshalJSONUnsafe(data []byte) error {
+	// Try to unmarshal as a struct with "components" field (array form)
+	type Alias ComponentConstructor
+	var alias Alias // use an alias because that won't cause recursion into UnmarshalJSON
+	var errs []error
+
+	if err := json.Unmarshal(data, &alias); err == nil && len(alias.Components) > 0 {
+		c.Components = alias.Components
+		return nil
+	} else {
+		errs = append(errs, err)
+	}
+
+	// Try to unmarshal as a single component (object form)
+	var single Component
+	if err := json.Unmarshal(data, &single); err == nil {
+		c.Components = []Component{single}
+		return nil
+	} else {
+		errs = append(errs, err)
+	}
+
+	// If both fail, return an error
+	return errors.Join(errs...)
+}
+
 // These constants describe identity attributes predefined by the
 // model used to identify elements (resources, sources and references)
 // in a component version.

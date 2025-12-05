@@ -167,3 +167,62 @@ func TestComponentConstructorSchema(t *testing.T) {
 		})
 	}
 }
+
+func TestUnmarshalJSONUnsafe(t *testing.T) {
+	tests := []struct {
+		name    string
+		json    string
+		wantErr bool
+	}{
+		{
+			name: "valid component constructor",
+			json: `{
+				"name": "github.com/acme.org/component",
+				"version": "1.0.0",
+				"provider": {
+					"name": "acme"
+				}
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "partial component constructor (missing provider)",
+			json: `{
+				"name": "github.com/acme.org/component",
+				"version": "1.0.0"
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "invalid component name format",
+			json: `{
+				"name": "InvalidName",
+				"version": "1.0.0",
+				"provider": { "name": "acme" }
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "malformed json",
+			json: `{
+				"name": "github.com/acme.org/component",
+				"version": "1.0.0",
+			}`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var cc ComponentConstructor
+			err := cc.UnmarshalJSONUnsafe([]byte(tt.json))
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotEmpty(t, cc.Components)
+				assert.Equal(t, "1.0.0", cc.Components[0].Version)
+			}
+		})
+	}
+}
