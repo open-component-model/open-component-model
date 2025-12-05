@@ -1,0 +1,58 @@
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: basic-auth-repository
+spec:
+  repositorySpec:
+    baseUrl: http://protected-registry1-internal.default.svc.cluster.local:5002
+    scheme: http
+    port: 5002
+    type: OCIRegistry # ocm lib v1 type
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: basic-auth
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: basic-auth-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/basic-auth
+  repositoryRef:
+    name: basic-auth-repository
+  semver: 1.0.0
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: basic-auth
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: basic-auth-resource-rgd
+spec:
+  componentRef:
+    name: basic-auth-component
+  resource:
+    byReference:
+      resource:
+        name: kro-rgd
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: basic-auth
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: basic-auth-deployer
+spec:
+  resourceRef:
+    name: basic-auth-resource-rgd
+    namespace: default
+  ocmConfig:
+    - kind: Secret
+      name: basic-auth
+      namespace: default

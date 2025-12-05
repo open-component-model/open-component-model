@@ -1,0 +1,48 @@
+type: generic.config.ocm.software/v1
+configurations:
+  # The credentials are configured for both consumer identity types OCIRegistry and OCIRepository, because the currently
+  # the controllers still work with the ocm lib v1 and ocm lib v2 which causes mismatches.
+  - type: credentials.config.ocm.software
+    consumers:
+      # Required for transfer to the registry (outside the cluster)
+      - identity:
+          type: OCIRegistry
+          hostname: localhost
+          scheme: http
+          port: "31002"
+        credentials:
+          - type: Credentials
+            properties:
+              username: admin
+              password: admin
+      - identity:
+          type: OCIRepository
+          hostname: localhost
+          scheme: http
+          port: "31002"
+        credentials:
+          - type: Credentials
+            properties:
+              username: admin
+              password: admin
+      # Required for authentication inside the cluster
+      - identity:
+          type: OCIRegistry
+          hostname: protected-registry1-internal.default.svc.cluster.local
+          scheme: http
+          port: "5002"
+        credentials:
+          - type: Credentials
+            properties:
+              username: admin
+              password: admin
+      - identity:
+          type: OCIRepository
+          hostname: protected-registry1-internal.default.svc.cluster.local
+          scheme: http
+          port: "5002"
+        credentials:
+          - type: Credentials
+            properties:
+              username: admin
+              password: admin

@@ -1,0 +1,18 @@
+components:
+  - name: ocm.software/ocm-k8s-toolkit/basic-auth
+    version: "1.0.0"
+    provider:
+      name: ocm.software
+    resources:
+      - name: helm-resource
+        type: helmChart
+        version: "1.0.0"
+        access:
+           type: ociArtifact
+           imageReference: "ghcr.io/stefanprodan/charts/podinfo:6.9.1@sha256:565d310746f1fa4be7f93ba7965bb393153a2d57a15cfe5befc909b790a73f8a"
+      - name: kro-rgd
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./rgd.yaml
