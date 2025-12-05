@@ -812,6 +812,37 @@ resources:
 		r.Equal("foobar", buf.String(), "expected resource content to match test file content")
 
 		t.Run("expect failure on existing component version", func(t *testing.T) {
+			constructorYAML = fmt.Sprintf(`
+name: ocm.software/examples-01
+version: invalid_1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file-replaced
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+			// Create a replacement test file to be added to the component version
+			testFilePath := filepath.Join(tmp, "test-file.txt")
+			r.NoError(os.WriteFile(testFilePath, []byte("replaced"), 0o600), "could not create test file")
+
+			constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-replace.yaml")
+			r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err := test.OCM(t, test.WithArgs("add", "cv",
+				"--constructor", constructorYAMLFilePath,
+				"--repository", archiveFilePath,
+				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
+			), test.WithErrorOutput(logs), test.WithOutput(result))
+
+			r.Error(err, "expected error on invalid component version semver")
+		})
+
+		t.Run("expect failure on invalid semver in constructor", func(t *testing.T) {
 
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
