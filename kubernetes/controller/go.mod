@@ -25,7 +25,7 @@ require (
 	k8s.io/apimachinery v0.34.2
 	k8s.io/apiserver v0.34.1
 	k8s.io/client-go v0.34.1
-	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
+	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	sigs.k8s.io/controller-runtime v0.22.3
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -37,15 +37,15 @@ require (
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251203135830-24b8f8099d9e
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251203135830-24b8f8099d9e
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251204125915-cb295d402227
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251204125915-cb295d402227
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4
 	ocm.software/open-component-model/bindings/go/oci v0.0.16
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251203135830-24b8f8099d9e
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251204125915-cb295d402227
 	ocm.software/open-component-model/bindings/go/runtime v0.0.4
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251203135830-24b8f8099d9e
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251204125915-cb295d402227
 )
 
 require (
