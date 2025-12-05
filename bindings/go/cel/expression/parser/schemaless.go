@@ -1,0 +1,76 @@
+package parser
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/google/cel-go/cel"
+
+	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
+)
+
+// ParseSchemaless extracts CEL expressions without a schema
+func ParseSchemaless(resource map[string]any) ([]variable.FieldDescriptor, error) {
+	return parseSchemalessResource(resource, "")
+}
+
+// parseSchemalessResource is a helper function that recursively
+// extracts expressions from a resource. It uses a depth first search to traverse
+// the resource and extract expressions from string fields
+func parseSchemalessResource(resource any, path string) ([]variable.FieldDescriptor, error) {
+	var expressionsFields []variable.FieldDescriptor
+	switch field := resource.(type) {
+	case map[string]any:
+		for field, value := range field {
+			fieldPath := joinPathAndFieldName(path, field)
+			fieldExpressions, err := parseSchemalessResource(value, fieldPath)
+			if err != nil {
+				return nil, err
+			}
+			expressionsFields = append(expressionsFields, fieldExpressions...)
+		}
+	case []any:
+		for i, item := range field {
+			itemPath := fmt.Sprintf("%s[%d]", path, i)
+			itemExpressions, err := parseSchemalessResource(item, itemPath)
+			if err != nil {
+				return nil, err
+			}
+			expressionsFields = append(expressionsFields, itemExpressions...)
+		}
+	case string:
+		ok, err := isStandaloneExpression(field)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			expr := strings.TrimPrefix(field, "${")
+			expr = strings.TrimSuffix(expr, "}")
+			expressionsFields = append(expressionsFields, variable.FieldDescriptor{
+				Expressions:          []string{expr},
+				ExpectedType:         cel.DynType, // No schema, so we use dynamic type
+				Path:                 path,
+				StandaloneExpression: true,
+			})
+		} else {
+			expressions, err := extractExpressions(field)
+			if err != nil {
+				return nil, err
+			}
+			if len(expressions) > 0 {
+				// String template in schemaless parsing
+				// StandaloneExpression=false tells builder to set ExpectedType to cel.StringType
+				expressionsFields = append(expressionsFields, variable.FieldDescriptor{
+					Expressions:          expressions,
+					ExpectedType:         nil, // Builder will set this to cel.StringType
+					Path:                 path,
+					StandaloneExpression: false, // String template - always string
+				})
+			}
+		}
+
+	default:
+		// Ignore other types
+	}
+	return expressionsFields, nil
+}
