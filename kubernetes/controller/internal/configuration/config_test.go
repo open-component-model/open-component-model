@@ -41,6 +41,26 @@ func TestGetConfigFromSecret(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid docker-config-json secret",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte(`{
+						"auths": {
+							"my-registry.io": {
+								"username": "user",
+								"password": "pass",
+								"email": ""
+							}`),
+				},
+			},
+			wantNil: false,
+			wantErr: false,
+		},
+		{
 			name: "no ocm config key",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -67,7 +87,21 @@ func TestGetConfigFromSecret(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid json",
+			name: "empty docker-config-json secret",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: {},
+				},
+			},
+			wantNil: true,
+			wantErr: true,
+		},
+		{
+			name: "invalid json ocm config",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-secret",

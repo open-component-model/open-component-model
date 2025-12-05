@@ -17,24 +17,54 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
 // GetConfigFromSecret extracts and decodes OCM configuration from a Kubernetes Secret.
 // It looks for configuration data under the OCMConfigKey.
 func GetConfigFromSecret(secret *corev1.Secret) (*genericv1.Config, error) {
-	data, ok := secret.Data[v1alpha1.OCMConfigKey]
-	if !ok || len(data) == 0 {
-		return nil, errors.New("no ocm config found in secret")
-	}
-
 	var cfg genericv1.Config
-	if err := genericv1.Scheme.Decode(bytes.NewReader(data), &cfg); err != nil {
-		return nil, fmt.Errorf("failed to decode ocm config from secret %s/%s: %w",
-			secret.Namespace, secret.Name, err)
+
+	if data, ok := secret.Data[v1alpha1.OCMConfigKey]; ok {
+		if len(data) == 0 {
+			return nil, errors.New("no OCM config data found in secret")
+		}
+
+		if err := genericv1.Scheme.Decode(bytes.NewReader(data), &cfg); err != nil {
+			return nil, fmt.Errorf("failed to decode ocm config from secret %s/%s: %w",
+				secret.Namespace, secret.Name, err)
+		}
+
+		return &cfg, nil
 	}
 
-	return &cfg, nil
+	if data, ok := secret.Data[corev1.DockerConfigJsonKey]; ok {
+		if len(data) == 0 {
+			return nil, errors.New("no docker config found in secret")
+		}
+
+		dockerConfig := v1.DockerConfig{
+			Type:         runtime.Type{Version: v1.Version, Name: "DockerConfig"},
+			DockerConfig: string(data),
+		}
+
+		dockerConfigData, err := json.Marshal(dockerConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal docker config from secret %s/%s: %w",
+				secret.Namespace, secret.Name, err)
+		}
+
+		if err := genericv1.Scheme.Decode(bytes.NewReader(dockerConfigData), &cfg); err != nil {
+			return nil, fmt.Errorf("failed to decode ocm config from secret %s/%s: %w",
+				secret.Namespace, secret.Name, err)
+		}
+
+		return &cfg, nil
+	}
+
+	return nil, fmt.Errorf("secret does not contain supported keys %q", []string{v1alpha1.OCMConfigKey, corev1.DockerConfigJsonKey})
 }
 
 // GetConfigFromConfigMap extracts and decodes OCM configuration from a Kubernetes ConfigMap.
