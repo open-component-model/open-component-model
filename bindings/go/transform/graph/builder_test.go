@@ -20,10 +20,10 @@ func newTestBuilder(t *testing.T) *Builder {
 		&transformations.DownloadComponentTransformation{},
 		runtime.NewUnversionedType(transformations.DownloadComponentTransformationType),
 	))
-	require.NoError(t, transformerScheme.RegisterWithAlias(
-		&transformations.UploadComponentTransformation{},
-		runtime.NewUnversionedType(transformations.UploadComponentTransformationType),
-	))
+	//require.NoError(t, transformerScheme.RegisterWithAlias(
+	//	&transformations.UploadComponentTransformation{},
+	//	runtime.NewUnversionedType(transformations.UploadComponentTransformationType),
+	//))
 
 	pm := manager.NewPluginManager(t.Context())
 	repoProvider := provider.NewComponentVersionRepositoryProvider()
@@ -33,9 +33,11 @@ func newTestBuilder(t *testing.T) *Builder {
 		repoProvider,
 	))
 
+	registry, err := NewRegistry(t.Context(), repoProvider)
+	require.NoError(t, err)
+
 	return &Builder{
-		transformerScheme:                  transformerScheme,
-		componentVersionRepositoryProvider: repoProvider,
+		transformationRegistry: registry,
 	}
 }
 

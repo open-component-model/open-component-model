@@ -1,28 +1,28 @@
 package parser
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/google/cel-go/cel"
 
+	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 )
 
 // ParseSchemaless extracts CEL expressions without a schema
 func ParseSchemaless(resource map[string]any) ([]variable.FieldDescriptor, error) {
-	return parseSchemalessResource(resource, "")
+	return parseSchemalessResource(resource, fieldpath.Path{})
 }
 
 // parseSchemalessResource is a helper function that recursively
 // extracts expressions from a resource. It uses a depth first search to traverse
 // the resource and extract expressions from string fields
-func parseSchemalessResource(resource any, path string) ([]variable.FieldDescriptor, error) {
+func parseSchemalessResource(resource any, path fieldpath.Path) ([]variable.FieldDescriptor, error) {
 	var expressionsFields []variable.FieldDescriptor
 	switch field := resource.(type) {
 	case map[string]any:
 		for field, value := range field {
-			fieldPath := joinPathAndFieldName(path, field)
+			fieldPath := path.AddNamed(field)
 			fieldExpressions, err := parseSchemalessResource(value, fieldPath)
 			if err != nil {
 				return nil, err
@@ -31,7 +31,7 @@ func parseSchemalessResource(resource any, path string) ([]variable.FieldDescrip
 		}
 	case []any:
 		for i, item := range field {
-			itemPath := fmt.Sprintf("%s[%d]", path, i)
+			itemPath := path.AddIndexed(i)
 			itemExpressions, err := parseSchemalessResource(item, itemPath)
 			if err != nil {
 				return nil, err

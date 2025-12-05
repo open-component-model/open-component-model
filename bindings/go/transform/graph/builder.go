@@ -1,12 +1,13 @@
 package graph
 
 import (
+	"fmt"
+
 	inspector "ocm.software/open-component-model/bindings/go/cel/expression/inspector"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 	"ocm.software/open-component-model/bindings/go/dag"
-	"ocm.software/open-component-model/bindings/go/repository"
-	"ocm.software/open-component-model/bindings/go/runtime"
+	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
@@ -25,8 +26,8 @@ type Transformation struct {
 }
 
 type Builder struct {
-	transformerScheme                  *runtime.Scheme
-	componentVersionRepositoryProvider repository.ComponentVersionRepositoryProvider
+	// holds all possible transformations
+	transformationRegistry *Registry
 }
 
 type Graph struct {
@@ -34,34 +35,30 @@ type Graph struct {
 }
 
 func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinition) (*Graph, error) {
-
 	tgd := original.DeepCopy()
 
 	nodes, err := getTransformationNodes(tgd)
 	if err != nil {
 		return nil, err
 	}
-	_ = nodes
 
-	//graph := dag.NewDirectedAcyclicGraph[string]()
-	//for _, node := range nodes {
-	//	if err := graph.AddVertex(node.ID, map[string]any{syncdag.AttributeValue: node}); err != nil {
-	//		return nil, err
-	//	}
-	//}
-	//
-	//builder, err := NewEnvBuilder(tgd.GetEnvironmentData())
-	//if err != nil {
-	//	return nil, err
-	//}
-	//env, _, err := builder.CurrentEnv()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//if err := discoverDependencies(graph, env); err != nil {
-	//	return nil, fmt.Errorf("error discovering dependencies: %v", err)
-	//}
+	graph := dag.NewDirectedAcyclicGraph[string]()
+	for _, node := range nodes {
+		if err := graph.AddVertex(node.ID, map[string]any{syncdag.AttributeValue: node}); err != nil {
+			return nil, err
+		}
+	}
+	builder, err := NewEnvBuilder(tgd.GetEnvironmentData())
+	if err != nil {
+		return nil, err
+	}
+	env, _, err := builder.CurrentEnv()
+	if err != nil {
+		return nil, err
+	}
+	if err := discoverDependencies(graph, env); err != nil {
+		return nil, fmt.Errorf("error discovering dependencies: %v", err)
+	}
 	//
 	//synced := syncdag.ToSyncedGraph(graph)
 	//

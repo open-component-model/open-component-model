@@ -35,5 +35,12 @@ func (g *Generator) GenerateJSONSchemaDraft202012(root *universe.TypeInfo) *JSON
 	}
 
 	schema.Defs = defs
+
+	// TODO (jakob): we need to decide if we actually drop nested schema ids because technically
+	//   they cannot be used for resolution anymore. For now, we drop them to avoid confusion.
+	for _, def := range schema.Defs {
+		def.ID = ""
+	}
+
 	return schema
 }

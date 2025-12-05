@@ -17,6 +17,10 @@ func (in *GenericTransformation) DeepCopyInto(out *GenericTransformation) {
 		in, out := &in.Spec, &out.Spec
 		*out = (*in).DeepCopy()
 	}
+	if in.Output != nil {
+		in, out := &in.Output, &out.Output
+		*out = (*in).DeepCopy()
+	}
 	return
 }
 

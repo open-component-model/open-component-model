@@ -1,51 +1,63 @@
 package graph
 
-//type EnvBuilder struct {
-//	declTypes  []*jsonschema.DeclType
-//	envOptions []cel.EnvOption
-//}
-//
-//func NewEnvBuilder(staticEnvironment map[string]interface{}) (*EnvBuilder, error) {
-//	schema, err := jsonschema.InferFromGoValue(staticEnvironment)
-//	if err != nil {
-//		return nil, err
-//	}
-//	envDeclType := jsonschema.DeclTypeFromInvopop(schema)
-//	envDeclType = envDeclType.MaybeAssignTypeName("__type_environment")
-//	staticEnvVal := types.DefaultTypeAdapter.NativeToValue(staticEnvironment)
-//	staticEnvConstant := cel.Constant("environment", envDeclType.CelType(), staticEnvVal)
-//
-//	return &EnvBuilder{
-//		declTypes:  []*jsonschema.DeclType{envDeclType},
-//		envOptions: []cel.EnvOption{staticEnvConstant},
-//	}, nil
-//}
-//
-//func (envBuilder *EnvBuilder) RegisterDeclTypes(declTypes ...*jsonschema.DeclType) *EnvBuilder {
-//	envBuilder.declTypes = append(envBuilder.declTypes, declTypes...)
-//	return envBuilder
-//}
-//
-//func (envBuilder *EnvBuilder) RegisterEnvOption(envOptions ...cel.EnvOption) *EnvBuilder {
-//	envBuilder.envOptions = append(envBuilder.envOptions, envOptions...)
-//	return envBuilder
-//}
-//
-//func (envBuilder *EnvBuilder) CurrentEnv() (*cel.Env, *jsonschema.DeclTypeProvider, error) {
-//	baseEnv, err := cel.NewEnv(
-//		cel.OptionalTypes(),
-//	)
-//	if err != nil {
-//		return nil, nil, err
-//	}
-//	provider := jsonschema.NewDeclTypeProvider(envBuilder.declTypes...)
-//	opts, err := provider.EnvOptions(baseEnv.CELTypeProvider())
-//	if err != nil {
-//		return nil, nil, err
-//	}
-//	newEnv, err := baseEnv.Extend(append(opts, envBuilder.envOptions...)...)
-//	if err != nil {
-//		return nil, nil, err
-//	}
-//	return newEnv, provider, nil
-//}
+import (
+	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
+	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
+	"ocm.software/open-component-model/bindings/go/cel/jsonschema/provider"
+	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
+)
+
+type EnvBuilder struct {
+	declTypes  []*stv6jsonschema.DeclType
+	envOptions []cel.EnvOption
+}
+
+func NewEnvBuilder(staticEnvironment map[string]interface{}) (*EnvBuilder, error) {
+	schema, err := stv6jsonschema.InferFromGoValue(staticEnvironment)
+	if err != nil {
+		return nil, err
+	}
+	schema.ID = "__type_environment"
+	declType := stv6jsonschema.NewSchemaDeclType(schema)
+	staticEnvVal := types.DefaultTypeAdapter.NativeToValue(staticEnvironment)
+	staticEnvConstant := cel.Constant("environment", declType.CelType(), staticEnvVal)
+
+	return &EnvBuilder{
+		declTypes:  []*stv6jsonschema.DeclType{declType},
+		envOptions: []cel.EnvOption{staticEnvConstant},
+	}, nil
+}
+
+func (envBuilder *EnvBuilder) RegisterDeclTypes(declTypes ...*stv6jsonschema.DeclType) *EnvBuilder {
+	envBuilder.declTypes = append(envBuilder.declTypes, declTypes...)
+	return envBuilder
+}
+
+func (envBuilder *EnvBuilder) RegisterEnvOption(envOptions ...cel.EnvOption) *EnvBuilder {
+	envBuilder.envOptions = append(envBuilder.envOptions, envOptions...)
+	return envBuilder
+}
+
+func (envBuilder *EnvBuilder) CurrentEnv() (*cel.Env, *provider.DeclTypeProvider, error) {
+	baseEnv, err := cel.NewEnv(
+		cel.OptionalTypes(),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	declTypes := make([]*decl.Type, len(envBuilder.declTypes))
+	for i, t := range envBuilder.declTypes {
+		declTypes[i] = t.Type
+	}
+	provider := provider.New(declTypes...)
+	opts, err := provider.EnvOptions(baseEnv.CELTypeProvider())
+	if err != nil {
+		return nil, nil, err
+	}
+	newEnv, err := baseEnv.Extend(append(opts, envBuilder.envOptions...)...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return newEnv, provider, nil
+}
