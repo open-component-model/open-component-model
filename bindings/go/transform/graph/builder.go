@@ -1,10 +1,13 @@
 package graph
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/google/cel-go/cel"
 	inspector "ocm.software/open-component-model/bindings/go/cel/expression/inspector"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
+	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl/check"
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -59,24 +62,23 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 	if err := discoverDependencies(graph, env); err != nil {
 		return nil, fmt.Errorf("error discovering dependencies: %v", err)
 	}
-	//
-	//synced := syncdag.ToSyncedGraph(graph)
-	//
-	//pluginProcessor := &StaticPluginAnalysisProcessor{
-	//	builder:                            builder,
-	//	transformerScheme:                  b.transformerScheme,
-	//	componentVersionRepositoryProvider: b.componentVersionRepositoryProvider,
-	//	analyzedTransformations:            make(map[string]Transformation),
-	//}
-	//
-	//staticAnalysisProcessor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, Transformation]{
-	//	Processor:   pluginProcessor,
-	//	Concurrency: 1,
-	//})
-	//
-	//if err := staticAnalysisProcessor.Process(context.TODO()); err != nil {
-	//	return nil, err
-	//}
+
+	synced := syncdag.ToSyncedGraph(graph)
+
+	pluginProcessor := &StaticPluginAnalysisProcessor{
+		registry:                b.transformationRegistry,
+		builder:                 builder,
+		analyzedTransformations: make(map[string]Transformation),
+	}
+
+	staticAnalysisProcessor := syncdag.NewGraphProcessor(synced, &syncdag.GraphProcessorOptions[string, Transformation]{
+		Processor:   pluginProcessor,
+		Concurrency: 1,
+	})
+
+	if err := staticAnalysisProcessor.Process(context.TODO()); err != nil {
+		return nil, err
+	}
 	//
 	//for _, vertex := range graph.Vertices {
 	//	vertex.Attributes[syncdag.AttributeValue] = pluginProcessor.analyzedTransformations[vertex.ID]
@@ -100,146 +102,131 @@ func (b *Builder) NewTransferGraph(original *v1alpha1.TransformationGraphDefinit
 	return nil, nil
 }
 
-//
-//type RuntimeEvaluationProcessor struct {
-//	builder                  *EnvBuilder
-//	transformations          map[string]Transformation
-//	evaluatedExpressionCache map[string]any
-//	evaluatedTransformations map[string]any
-//}
-//
-//func (b *RuntimeEvaluationProcessor) ProcessValue(ctx context.Context, transformation Transformation) error {
-//	env, _, err := b.builder.CurrentEnv()
-//	if err != nil {
-//		return err
+//	type RuntimeEvaluationProcessor struct {
+//		builder                  *EnvBuilder
+//		transformations          map[string]Transformation
+//		evaluatedExpressionCache map[string]any
+//		evaluatedTransformations map[string]any
 //	}
-//	for _, fieldDescriptor := range transformation.fieldDescriptors {
-//		for _, expression := range fieldDescriptor.Expressions {
-//			if _, found := b.evaluatedExpressionCache[expression.String]; found {
-//				continue
-//			}
-//			program, err := env.Program(expression.AST)
-//			if err != nil {
-//				return fmt.Errorf(": %w", err)
-//			}
-//			result, _, err := program.Eval(b.evaluatedTransformations)
-//			if err != nil {
-//				return fmt.Errorf("failed to evaluate expression %q: %w", expression.String, err)
-//			}
-//			val, err := environment.GoNativeType(result)
-//			if err != nil {
-//				return fmt.Errorf("failed to convert result of expression %q to go native type: %w", expression.String, err)
-//			}
-//			b.evaluatedExpressionCache[expression.String] = val
+//
+//	func (b *RuntimeEvaluationProcessor) ProcessValue(ctx context.Context, transformation Transformation) error {
+//		env, _, err := b.builder.CurrentEnv()
+//		if err != nil {
+//			return err
 //		}
-//	}
-//	res := resolver.NewResolver(transformation.Spec.Data, b.evaluatedExpressionCache)
-//	summary := res.Resolve(transformation.fieldDescriptors)
-//	if len(summary.Errors) > 0 {
-//		return fmt.Errorf("failed to resolve transformation %q: %w", transformation.ID, errors.Join(summary.Errors...))
-//	}
-//
-//	if err := transformation.prototype.FromGeneric(&transformation.GenericTransformation); err != nil {
-//		return err
-//	}
-//	output, err := transformation.prototype.Transform(ctx, nil)
-//	if err != nil {
-//		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
-//	}
-//	evaluatedTransformation := map[string]any{
-//		"spec":   transformation.Spec.Data,
-//		"output": output,
-//	}
-//	b.evaluatedTransformations[transformation.ID] = evaluatedTransformation
-//	return nil
-//}
-//
-//type StaticPluginAnalysisProcessor struct {
-//	transformerScheme                  *runtime.Scheme
-//	componentVersionRepositoryProvider repository.ComponentVersionRepositoryProvider
-//	builder                            *EnvBuilder
-//	analyzedTransformations            map[string]Transformation
-//}
-//
-//func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transformation Transformation) error {
-//	env, provider, err := b.builder.CurrentEnv()
-//	if err != nil {
-//		return err
-//	}
-//
-//	for i, fieldDescriptor := range transformation.fieldDescriptors {
-//		for j, expression := range fieldDescriptor.Expressions {
-//			ast, issues := env.Compile(expression.String)
-//			if issues.Err() != nil {
-//				return issues.Err()
+//		for _, fieldDescriptor := range transformation.fieldDescriptors {
+//			for _, expression := range fieldDescriptor.Expressions {
+//				if _, found := b.evaluatedExpressionCache[expression.String]; found {
+//					continue
+//				}
+//				program, err := env.Program(expression.AST)
+//				if err != nil {
+//					return fmt.Errorf(": %w", err)
+//				}
+//				result, _, err := program.Eval(b.evaluatedTransformations)
+//				if err != nil {
+//					return fmt.Errorf("failed to evaluate expression %q: %w", expression.String, err)
+//				}
+//				val, err := environment.GoNativeType(result)
+//				if err != nil {
+//					return fmt.Errorf("failed to convert result of expression %q to go native type: %w", expression.String, err)
+//				}
+//				b.evaluatedExpressionCache[expression.String] = val
 //			}
-//			fieldDescriptor.Expressions[j].AST = ast
 //		}
-//		transformation.fieldDescriptors[i] = fieldDescriptor
-//	}
-//
-//	typ := transformation.GetType()
-//	if typ.IsEmpty() {
-//		return fmt.Errorf("transformation type after render is empty")
-//	}
-//	typedTransformation, err := b.transformerScheme.NewObject(typ)
-//	if err != nil {
-//		return fmt.Errorf("failed to create object for transformation type %s: %w", typ, err)
-//	}
-//	v1alpha1Transformation, ok := typedTransformation.(v1alpha1.Transformation)
-//	if !ok {
-//		return fmt.Errorf("transformation type %s is not a valid spec transformation", typ)
-//	}
-//	v1alpha1Transformation.GetTransformationMeta().ID = transformation.ID
-//	transformation.prototype = v1alpha1Transformation
-//
-//	switch typedPrototype := transformation.prototype.(type) {
-//	case *transformations.DownloadComponentTransformation:
-//		typedPrototype.Provider = b.componentVersionRepositoryProvider
-//	case *transformations.UploadComponentTransformation:
-//		typedPrototype.Provider = b.componentVersionRepositoryProvider
-//	}
-//
-//	runtimeTypes, err := runtimeTypesFromTransformation(env, transformation, v1alpha1Transformation, provider)
-//	if err != nil {
-//		return err
-//	}
-//
-//	// Shared schema construction + registration.
-//	declType, err := v1alpha1Transformation.NewDeclType(runtimeTypes)
-//	if err != nil {
-//		return err
-//	}
-//	b.builder.RegisterDeclTypes(declType)
-//	b.builder.RegisterEnvOption(cel.Variable(transformation.ID, declType.CelType()))
-//	transformation.declType = declType
-//
-//	specSchema, ok := declType.JSONSchema.Properties.Get("spec")
-//	if !ok {
-//		return fmt.Errorf("transformation declType has no spec property")
-//	}
-//	validatedFieldDescriptors, err := parser.ParseResource(transformation.Spec.Data, specSchema)
-//	if err != nil {
-//		return fmt.Errorf("validate transformation resource against schema: %w", err)
-//	}
-//	for i, fieldDescriptor := range transformation.fieldDescriptors {
-//		for j, expression := range fieldDescriptor.Expressions {
-//			if !environment.WouldMatchIfUnwrapped(expression.AST.OutputType(), validatedFieldDescriptors[i].ExpectedType) {
-//				return fmt.Errorf("expression output type %s is not assignable to expected type %s for path %s based on schema",
-//					expression.AST.OutputType().TypeName(),
-//					validatedFieldDescriptors[i].ExpectedType.TypeName(),
-//					fieldDescriptor.Path,
-//				)
-//			}
-//			validatedFieldDescriptors[i].Expressions[j].AST = expression.AST
+//		res := resolver.NewResolver(transformation.Spec.Data, b.evaluatedExpressionCache)
+//		summary := res.Resolve(transformation.fieldDescriptors)
+//		if len(summary.Errors) > 0 {
+//			return fmt.Errorf("failed to resolve transformation %q: %w", transformation.ID, errors.Join(summary.Errors...))
 //		}
+//
+//		if err := transformation.prototype.FromGeneric(&transformation.GenericTransformation); err != nil {
+//			return err
+//		}
+//		output, err := transformation.prototype.Transform(ctx, nil)
+//		if err != nil {
+//			return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
+//		}
+//		evaluatedTransformation := map[string]any{
+//			"spec":   transformation.Spec.Data,
+//			"output": output,
+//		}
+//		b.evaluatedTransformations[transformation.ID] = evaluatedTransformation
+//		return nil
 //	}
-//	transformation.fieldDescriptors = validatedFieldDescriptors
-//
-//	b.analyzedTransformations[transformation.ID] = transformation
-//
-//	return nil
-//}
+type StaticPluginAnalysisProcessor struct {
+	registry                *Registry
+	builder                 *EnvBuilder
+	analyzedTransformations map[string]Transformation
+}
+
+func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transformation Transformation) error {
+	env, provider, err := b.builder.CurrentEnv()
+	if err != nil {
+		return err
+	}
+
+	asts := map[string]*cel.Ast{}
+
+	for i, fieldDescriptor := range transformation.fieldDescriptors {
+		for _, expression := range fieldDescriptor.Expressions {
+			ast, issues := env.Compile(expression)
+			if issues.Err() != nil {
+				return issues.Err()
+			}
+			asts[expression] = ast
+		}
+		transformation.fieldDescriptors[i] = fieldDescriptor
+	}
+
+	typ := transformation.GetType()
+	if typ.IsEmpty() {
+		return fmt.Errorf("transformation type after render is empty")
+	}
+
+	stepRunner, ok := b.registry.transformations[typ]
+	if !ok {
+		return fmt.Errorf("no transformation registered for type %q", typ.String())
+	}
+	declType := stepRunner.GetDeclType()
+
+	b.builder.RegisterDeclTypes(declType)
+	b.builder.RegisterEnvOption(cel.Variable(transformation.ID, declType.CelType()))
+	transformation.declType = declType
+
+	specSchema, ok := declType.Schema.Schema.Properties["spec"]
+	if !ok {
+		return fmt.Errorf("transformation declType has no spec property")
+	}
+	validatedFieldDescriptors, err := stv6jsonschema.ParseResource(transformation.Spec.Data, specSchema)
+	if err != nil {
+		return fmt.Errorf("validate transformation resource against schema: %w", err)
+	}
+	for i, fieldDescriptor := range transformation.fieldDescriptors {
+		validatedFieldDescriptors[i].ASTs = make(map[string]*cel.Ast, len(fieldDescriptor.Expressions))
+		for _, expression := range fieldDescriptor.Expressions {
+			celAST := asts[expression]
+			ok, err := check.AreTypesStructurallyCompatible(celAST.OutputType(), validatedFieldDescriptors[i].ExpectedType, provider)
+			if err != nil {
+				return fmt.Errorf("checking type compatibility for expression %q at path %s failed: %w", expression, fieldDescriptor.Path, err)
+			}
+			if !ok {
+				return fmt.Errorf("expression output type %s is not assignable to expected type %s for path %s based on schema",
+					celAST.OutputType().TypeName(),
+					validatedFieldDescriptors[i].ExpectedType.TypeName(),
+					fieldDescriptor.Path,
+				)
+			}
+			validatedFieldDescriptors[i].ASTs[expression] = celAST
+		}
+	}
+	transformation.fieldDescriptors = validatedFieldDescriptors
+
+	b.analyzedTransformations[transformation.ID] = transformation
+
+	return nil
+}
+
 //
 //// ResolveRuntimeType determines the runtime.Type for a typed field
 //// given a declType schema, the typed field path, the descriptor path, and their match relation.

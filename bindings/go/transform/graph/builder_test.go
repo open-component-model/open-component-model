@@ -247,27 +247,25 @@ func TestGraphBuilder_EvaluateGraph(t *testing.T) {
 	yamlSrc := `
 environment:
   repository:
-    type: ctf
-    path: "/home/jakob/Projects/open-component-model/bindings/go/transform/graph/test/transport-archive"
-    accessMode: "readwrite"
+    type: oci
+    baseUrl: "ghcr.io/test"
 transformations:
 - id: download1
-  type: ocm.software.download.component
+  type: ocm.software.download.component.oci
   spec:
     repository:
       type: ${environment.repository.type}
-      path: ${environment.repository.path}
-      accessMode: ${environment.repository.accessMode}
+      baseUrl: ${environment.repository.baseUrl}
     component: "github.com/acme.org/helloworld"
     version: "1.0.0"
 - id: download2
-  type: ocm.software.upload.component
+  type: ocm.software.download.component.oci
   spec:
     repository:
       type: ${download1.spec.repository.type}
-      path: ${download1.spec.repository.path}
-      accessMode: ${environment.repository.accessMode}
-    descriptor: "${download1.output}"
+      baseUrl: ${download1.spec.repository.baseUrl}
+    component: "github.com/acme.org/helloworld"
+    version: "1.0.0"
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))

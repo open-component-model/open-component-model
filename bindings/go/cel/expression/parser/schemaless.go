@@ -39,7 +39,7 @@ func parseSchemalessResource(resource any, path fieldpath.Path) ([]variable.Fiel
 			expressionsFields = append(expressionsFields, itemExpressions...)
 		}
 	case string:
-		ok, err := isStandaloneExpression(field)
+		ok, err := IsStandaloneExpression(field)
 		if err != nil {
 			return nil, err
 		}
@@ -53,7 +53,7 @@ func parseSchemalessResource(resource any, path fieldpath.Path) ([]variable.Fiel
 				StandaloneExpression: true,
 			})
 		} else {
-			expressions, err := extractExpressions(field)
+			expressions, err := ExtractExpressions(field)
 			if err != nil {
 				return nil, err
 			}

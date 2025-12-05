@@ -16,10 +16,10 @@ const (
 	DefaultMaxRequestSizeBytes = MaxRequestSizeBytes
 
 	// MaxDurationSizeJSON
-	// OpenAPI duration strings follow RFC 3339, section 5.6 - see the comment on maxDatetimeSizeJSON
+	// duration strings follow RFC 3339, section 5.6 - see the comment on maxDatetimeSizeJSON
 	MaxDurationSizeJSON = 32
 	// MaxDatetimeSizeJSON
-	// OpenAPI datetime strings follow RFC 3339, section 5.6, and the longest possible
+	// datetime strings follow RFC 3339, section 5.6, and the longest possible
 	// such string is 9999-12-31T23:59:59.999999999Z, which has length 30 - we add 2
 	// to allow for quotation marks
 	MaxDatetimeSizeJSON = 32
@@ -111,7 +111,7 @@ var (
 	StringType = NewSimpleTypeWithMinSize("string", cel.StringType, types.String(""), MinStringSize)
 
 	// TimestampType corresponds to the well-known protobuf.Timestamp type supported within CEL.
-	// Note that both the OpenAPI date and date-time types map onto TimestampType, so not all types
+	// Note that both the date and date-time types map onto TimestampType, so not all types
 	// labeled as Timestamp will necessarily have the same MinSerializedSize.
 	TimestampType = NewSimpleTypeWithMinSize("timestamp", cel.TimestampType, types.Timestamp{Time: time.Time{}}, JSONDateSize)
 

@@ -317,13 +317,13 @@ func TestExtractExpressions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := extractExpressions(tt.input)
+			got, err := ExtractExpressions(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("extractExpressions() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ExtractExpressions() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !equalStrings(got, tt.want) {
-				t.Errorf("extractExpressions() = %v, want %v", got, tt.want)
+				t.Errorf("ExtractExpressions() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -369,7 +369,7 @@ func TestIsOneShotExpression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := isStandaloneExpression(tt.input)
+			got, err := IsStandaloneExpression(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("isOneShotExpression() error = %v, wantErr %v", err, tt.wantErr)
 				return

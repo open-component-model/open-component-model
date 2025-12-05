@@ -18,13 +18,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
+const DownloadComponentTransformationType = "ocm.software.download.component"
+
 type ComponentVersionDownloadTransformation struct {
 	declType     *stv6jsonschema.DeclType
 	repoProvider repository.ComponentVersionRepositoryProvider
 }
 
 func (t *ComponentVersionDownloadTransformation) GetType() runtime.Type {
-	return runtime.NewUnversionedType(DownloadComponentTransformationType + "/oci")
+	return runtime.NewUnversionedType(DownloadComponentTransformationType + ".oci")
 }
 
 func (t *ComponentVersionDownloadTransformation) GetDeclType() *stv6jsonschema.DeclType {
@@ -151,8 +153,6 @@ func (t *ComponentVersionDownloadTransformation) Transform(
 
 	return step, nil
 }
-
-const DownloadComponentTransformationType = "ocm.software.download.component"
 
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true

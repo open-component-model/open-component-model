@@ -33,6 +33,8 @@ type FieldDescriptor struct {
 	//   true:  "${foo}" - single expression, type derived from schema
 	//   false: "hello-${foo}" or "${foo}-${bar}" - string template, always produces string
 	StandaloneExpression bool
+
+	ASTs map[string]*cel.Ast // Optional parsed ASTs for the expressions
 }
 
 // Variable is any field that is not a constant
