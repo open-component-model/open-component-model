@@ -7,10 +7,16 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -23,8 +29,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
 // +kubebuilder:scaffold:imports
@@ -88,21 +97,75 @@ var _ = BeforeSuite(func() {
 	ctx, cancel := context.WithCancel(context.Background())
 	DeferCleanup(cancel)
 
-	ocmContextCache := ocm.NewContextCache("shared_ocm_context_cache", 100, 100, k8sManager.GetClient(), GinkgoLogr)
-	Expect(k8sManager.Add(ocmContextCache)).To(Succeed())
+	events := make(chan string)
+	recorder := &record.FakeRecorder{
+		Events:        events,
+		IncludeObject: true,
+	}
+
+	go func() {
+		for {
+			select {
+			case event := <-events:
+				GinkgoLogr.Info("Event received", "event", event)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	pm := manager.NewPluginManager(ctx)
+	scheme := ocmruntime.NewScheme()
+	scheme.MustRegisterWithAlias(&ociv1.Repository{},
+		ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.Type),
+		ocmruntime.NewVersionedType(ociv1.ShortType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType),
+		ocmruntime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType2),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType2),
+	)
+	scheme.MustRegisterWithAlias(&ctfv1.Repository{},
+		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.Type),
+		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType),
+		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
+	)
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
+	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
+
+	const unlimited = 0
+	ttl := time.Minute * 30
+	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
+
+	// Create worker pool with its own dependencies
+	workerLogger := logf.Log.WithName("worker-pool")
+	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
+		WorkerCount: 10,
+		QueueSize:   100,
+		Logger:      &workerLogger,
+		Client:      k8sManager.GetClient(),
+		Cache:       resolverCache,
+	})
+	Expect(k8sManager.Add(workerPool)).To(Succeed())
+
+	resolutionLogger := logf.Log.WithName("resolution")
+	resolver := resolution.NewResolver(k8sClient, &resolutionLogger, workerPool, pm)
 
 	repositoryKey = "metadata.name"
 	// Register reconcilers
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client: k8sClient,
-			Scheme: testEnv.Scheme,
-			EventRecorder: &record.FakeRecorder{
-				Events:        make(chan string, 32),
-				IncludeObject: true,
-			},
+			Client:        k8sClient,
+			Scheme:        testEnv.Scheme,
+			EventRecorder: recorder,
 		},
-		OCMContextCache: ocmContextCache,
+		Resolver: resolver,
 	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
 
 	go func() {
