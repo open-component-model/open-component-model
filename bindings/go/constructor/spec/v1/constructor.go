@@ -17,33 +17,11 @@ type ComponentConstructor struct {
 }
 
 func (c *ComponentConstructor) UnmarshalJSON(data []byte) error {
-	// Try to unmarshal as a struct with "components" field (array form)
-	type Alias ComponentConstructor
-	var alias Alias // use an alias because that won't cause recursion into UnmarshalJSON
-	var errs []error
-
 	if err := ValidateRawJSON(data); err != nil {
 		return fmt.Errorf("component constructor validation failed: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &alias); err == nil && len(alias.Components) > 0 {
-		c.Components = alias.Components
-		return nil
-	} else {
-		errs = append(errs, err)
-	}
-
-	// Try to unmarshal as a single component (object form)
-	var single Component
-	if err := json.Unmarshal(data, &single); err == nil {
-		c.Components = []Component{single}
-		return nil
-	} else {
-		errs = append(errs, err)
-	}
-
-	// If both fail, return an error
-	return errors.Join(errs...)
+	return c.UnmarshalJSONUnsafe(data)
 }
 
 // UnmarshalJSONUnsafe is a variant of UnmarshalJSON that does not perform schema validation.
