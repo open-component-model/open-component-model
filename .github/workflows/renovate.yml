@@ -72,7 +72,7 @@ jobs:
         run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
 
       - name: Run
-        uses: renovatebot/github-action@a3c115cd6676c8a5bc72f9715f108759e570daf5 # v43.0.19
+        uses: renovatebot/github-action@ea850436a5fe75c0925d583c7a02c60a5865461d # v43.0.20
         with:
           env-regex: |
             ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|GONOPROXY|GOPRIVATE|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$
