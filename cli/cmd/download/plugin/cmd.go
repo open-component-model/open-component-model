@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/cli/cmd/download/shared"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
@@ -339,18 +339,16 @@ func validatePlugin(pluginPath string, logger *slog.Logger) error {
 		return fmt.Errorf("plugin capabilities command failed: %w", err)
 	}
 
-	var capabilities types.Types
+	var capabilities spec.PluginSpec
 	if err := json.Unmarshal(output, &capabilities); err != nil {
 		return fmt.Errorf("plugin capabilities returned invalid JSON: %w", err)
 	}
 
-	if len(capabilities.Types) == 0 {
+	if len(capabilities.CapabilitySpecs) == 0 {
 		return fmt.Errorf("plugin capabilities missing required 'types' field or is empty")
 	}
 
-	logger.Info("plugin validation successful",
-		slog.Int("plugin_types", len(capabilities.Types)),
-		slog.Int("config_types", len(capabilities.ConfigTypes)))
+	logger.Info("plugin validation successful")
 
 	return nil
 }

@@ -341,7 +341,7 @@ func TestRegistry_RegisterScheme(t *testing.T) {
 		err := targetScheme.RegisterScheme(nil)
 		r.NoError(err)
 		// Registering nil scheme should not change the target scheme
-		r.Len(targetScheme.defaults, 0)
+		r.Equal(targetScheme.defaults.Len(), 0)
 		r.Len(targetScheme.aliases, 0)
 	})
 
@@ -405,7 +405,7 @@ func TestRegistry_RegisterSchemeType(t *testing.T) {
 		targetScheme := NewScheme()
 		err := targetScheme.RegisterSchemeType(nil, typ1)
 		r.Error(err)
-		r.Contains(err.Error(), "cannot add to nil scheme")
+		r.Contains(err.Error(), "cannot register type from nil scheme")
 	})
 
 	t.Run("type not found in source scheme", func(t *testing.T) {
@@ -414,7 +414,7 @@ func TestRegistry_RegisterSchemeType(t *testing.T) {
 		unknownType := NewVersionedType("unknown", "v1")
 		err := targetScheme.RegisterSchemeType(sourceScheme, unknownType)
 		r.Error(err)
-		r.Contains(err.Error(), "not found in the provided scheme")
+		r.Contains(err.Error(), "type \"unknown/v1\" is not registered in the scheme")
 	})
 
 	t.Run("duplicate registration", func(t *testing.T) {
@@ -500,9 +500,9 @@ func TestScheme_GetTypes(t *testing.T) {
 			},
 			expected: map[Type][]Type{
 				NewVersionedType("Foobar", "v1"): {
+					NewVersionedType("Config", "v1"),
 					NewVersionedType("Foobar", "v1alpha1"),
 				},
-				NewVersionedType("Config", "v1"): nil,
 			},
 		},
 		{
