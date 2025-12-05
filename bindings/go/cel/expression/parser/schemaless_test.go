@@ -8,6 +8,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 )
 
+func expressionsEqual(a, b variable.Expression) bool {
+	return a.Value == b.Value
+}
+
 func areEqualExpressionFields(a, b []variable.FieldDescriptor) bool {
 	if len(a) != len(b) {
 		return false
@@ -19,7 +23,7 @@ func areEqualExpressionFields(a, b []variable.FieldDescriptor) bool {
 	slices.SortFunc(b, sort)
 
 	for i := range a {
-		if !equalStrings(a[i].Expressions, b[i].Expressions) || !a[i].Path.Equals(b[i].Path) ||
+		if !slices.EqualFunc(a[i].Expressions, b[i].Expressions, expressionsEqual) || !a[i].Path.Equals(b[i].Path) ||
 			a[i].StandaloneExpression != b[i].StandaloneExpression {
 			return false
 		}
@@ -41,7 +45,7 @@ func TestParseSchemalessResource(t *testing.T) {
 			},
 			want: []variable.FieldDescriptor{
 				{
-					Expressions:          []string{"resource.value"},
+					Expressions:          []variable.Expression{{Value: "resource.value"}},
 					Path:                 fieldpath.MustParse("field"),
 					StandaloneExpression: true,
 				},
@@ -57,7 +61,7 @@ func TestParseSchemalessResource(t *testing.T) {
 			},
 			want: []variable.FieldDescriptor{
 				{
-					Expressions:          []string{"nested.value"},
+					Expressions:          []variable.Expression{{Value: "nested.value"}},
 					Path:                 fieldpath.MustParse("outer.inner"),
 					StandaloneExpression: true,
 				},
@@ -74,12 +78,12 @@ func TestParseSchemalessResource(t *testing.T) {
 			},
 			want: []variable.FieldDescriptor{
 				{
-					Expressions:          []string{"array[0]"},
+					Expressions:          []variable.Expression{{Value: "array[0]"}},
 					Path:                 fieldpath.MustParse("array[0]"),
 					StandaloneExpression: true,
 				},
 				{
-					Expressions:          []string{"array[1]"},
+					Expressions:          []variable.Expression{{Value: "array[1]"}},
 					Path:                 fieldpath.MustParse("array[1]"),
 					StandaloneExpression: true,
 				},
@@ -93,8 +97,11 @@ func TestParseSchemalessResource(t *testing.T) {
 			},
 			want: []variable.FieldDescriptor{
 				{
-					Expressions: []string{"expr1", "expr2"},
-					Path:        fieldpath.MustParse("field"),
+					Expressions: []variable.Expression{
+						{Value: "expr1"},
+						{Value: "expr2"},
+					},
+					Path: fieldpath.MustParse("field"),
 				},
 			},
 			wantErr: false,
@@ -114,12 +121,12 @@ func TestParseSchemalessResource(t *testing.T) {
 			},
 			want: []variable.FieldDescriptor{
 				{
-					Expressions:          []string{"string.value"},
+					Expressions:          []variable.Expression{{Value: "string.value"}},
 					Path:                 fieldpath.MustParse("string"),
 					StandaloneExpression: true,
 				},
 				{
-					Expressions:          []string{"array.value"},
+					Expressions:          []variable.Expression{{Value: "array.value"}},
 					Path:                 fieldpath.MustParse("nested.array[0]"),
 					StandaloneExpression: true,
 				},
@@ -176,7 +183,7 @@ func TestParseSchemalessResourceEdgeCases(t *testing.T) {
 			},
 			want: []variable.FieldDescriptor{
 				{
-					Expressions:          []string{"deeply.nested.value"},
+					Expressions:          []variable.Expression{{Value: "deeply.nested.value"}},
 					Path:                 fieldpath.MustParse("level1.level2.level3.level4"),
 					StandaloneExpression: true,
 				},
@@ -197,12 +204,12 @@ func TestParseSchemalessResourceEdgeCases(t *testing.T) {
 			},
 			want: []variable.FieldDescriptor{
 				{
-					Expressions:          []string{"expr1"},
+					Expressions:          []variable.Expression{{Value: "expr1"}},
 					Path:                 fieldpath.MustParse("array[0]"),
 					StandaloneExpression: true,
 				},
 				{
-					Expressions:          []string{"expr2"},
+					Expressions:          []variable.Expression{{Value: "expr2"}},
 					Path:                 fieldpath.MustParse("array[3].nested"),
 					StandaloneExpression: true,
 				},
@@ -217,12 +224,12 @@ func TestParseSchemalessResourceEdgeCases(t *testing.T) {
 			},
 			want: []variable.FieldDescriptor{
 				{
-					Expressions:          []string{""},
+					Expressions:          []variable.Expression{{Value: ""}},
 					Path:                 fieldpath.MustParse("empty1"),
 					StandaloneExpression: true,
 				},
 				{
-					Expressions:          []string{"    "},
+					Expressions:          []variable.Expression{{Value: "    "}},
 					Path:                 fieldpath.MustParse("empty2"),
 					StandaloneExpression: true,
 				},
@@ -265,31 +272,31 @@ func TestParseSchemalessResourceEdgeCases(t *testing.T) {
 			},
 			want: []variable.FieldDescriptor{
 				{
-					Expressions:          []string{"string.value"},
+					Expressions:          []variable.Expression{{Value: "string.value"}},
 					Path:                 fieldpath.MustParse("string"),
 					StandaloneExpression: true,
 				},
 				{
-					Expressions:          []string{"array.value"},
+					Expressions:          []variable.Expression{{Value: "array.value"}},
 					Path:                 fieldpath.MustParse("nested.array[0]"),
 					StandaloneExpression: true,
 				},
 				{
-					Expressions: []string{"expr1", "expr2"},
+					Expressions: []variable.Expression{{Value: "expr1"}, {Value: "expr2"}},
 					Path:        fieldpath.MustParse("complex.field"),
 				},
 				{
-					Expressions:          []string{"nested.value"},
+					Expressions:          []variable.Expression{{Value: "nested.value"}},
 					Path:                 fieldpath.MustParse("complex.nested.inner"),
 					StandaloneExpression: true,
 				},
 				{
-					Expressions:          []string{"expr4"},
+					Expressions:          []variable.Expression{{Value: "expr4"}},
 					Path:                 fieldpath.MustParse("complex.array[1]"),
 					StandaloneExpression: true,
 				},
 				{
-					Expressions:          []string{"expr5"},
+					Expressions:          []variable.Expression{{Value: "expr5"}},
 					Path:                 fieldpath.MustParse("complex.array[2]"),
 					StandaloneExpression: true,
 				},

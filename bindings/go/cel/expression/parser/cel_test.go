@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -322,23 +323,11 @@ func TestExtractExpressions(t *testing.T) {
 				t.Errorf("extractExpressions() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !equalStrings(got, tt.want) {
+			if !slices.Equal(got, tt.want) {
 				t.Errorf("extractExpressions() = %v, want %v", got, tt.want)
 			}
 		})
 	}
-}
-
-func equalStrings(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, s := range a {
-		if s != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func TestIsOneShotExpression(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/google/cel-go/cel"
+	celast "github.com/google/cel-go/common/ast"
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 )
@@ -17,7 +18,7 @@ type FieldDescriptor struct {
 	Path fieldpath.Path
 
 	// Expressions is a list of CEL expressions in the field.
-	Expressions []string
+	Expressions []Expression
 
 	// ExpectedType is the expected CEL type of the field.
 	// Set by: builder.setExpectedTypeOnDescriptor() - the single place where types are determined.
@@ -33,6 +34,20 @@ type FieldDescriptor struct {
 	//   true:  "${foo}" - single expression, type derived from schema
 	//   false: "hello-${foo}" or "${foo}-${bar}" - string template, always produces string
 	StandaloneExpression bool
+}
+
+// Expression represents a CEL expression string and its potentially parsed AST.
+type Expression struct {
+	// Value is the CEL expression string.
+	Value string
+	// AST is the parsed CEL AST of the expression.
+	// This can be nil if the expression has not been parsed yet.
+	// If the expression is parsed, this AST can be used for further analysis
+	AST *celast.AST
+}
+
+func (e Expression) String() string {
+	return e.Value
 }
 
 // Variable is any field that is not a constant

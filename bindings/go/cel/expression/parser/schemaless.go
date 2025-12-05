@@ -47,7 +47,7 @@ func parseSchemalessResource(resource any, path fieldpath.Path) ([]variable.Fiel
 			expr := strings.TrimPrefix(field, "${")
 			expr = strings.TrimSuffix(expr, "}")
 			expressionsFields = append(expressionsFields, variable.FieldDescriptor{
-				Expressions:          []string{expr},
+				Expressions:          []variable.Expression{{Value: expr}},
 				ExpectedType:         cel.DynType, // No schema, so we use dynamic type
 				Path:                 path,
 				StandaloneExpression: true,
@@ -58,10 +58,15 @@ func parseSchemalessResource(resource any, path fieldpath.Path) ([]variable.Fiel
 				return nil, err
 			}
 			if len(expressions) > 0 {
+				var variableExpressions []variable.Expression
+				for _, expression := range expressions {
+					// we only extract expressions here, parsing is deferred
+					variableExpressions = append(variableExpressions, variable.Expression{Value: expression})
+				}
 				// String template in schemaless parsing
 				// StandaloneExpression=false tells builder to set ExpectedType to cel.StringType
 				expressionsFields = append(expressionsFields, variable.FieldDescriptor{
-					Expressions:          expressions,
+					Expressions:          variableExpressions,
 					ExpectedType:         nil, // Builder will set this to cel.StringType
 					Path:                 path,
 					StandaloneExpression: false, // String template - always string
