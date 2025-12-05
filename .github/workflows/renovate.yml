@@ -19,6 +19,9 @@ on:
       - .github/renovate.json5
       - .github/workflows/renovate.yml
 
+permissions:
+  contents: read
+
 env:
   cache_archive: renovate_cache.tar.gz
   cache_dir: /tmp/renovate/cache/renovate/repository
