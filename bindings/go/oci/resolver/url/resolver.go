@@ -2,11 +2,14 @@ package url
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 
 	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
@@ -83,6 +86,19 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 		r.Client = resolver.baseClient
 	}
 	if err := r.Ping(ctx); err != nil {
+		errResp := &errcode.ErrorResponse{}
+		if ok := errors.As(err, &errResp); ok {
+			switch errResp.StatusCode {
+			case http.StatusForbidden, http.StatusUnauthorized:
+				// According to the distribution spec the registry might opt for credentials
+				// for pinging the Base. We consider that as a success, because at least the
+				// registry responded and is available regardless of access or configured credentials.
+				// References:
+				//   - https://distribution.github.io/distribution/spec/api/#base
+				return nil
+			}
+		}
+
 		return fmt.Errorf("failed to ping registry: %w", err)
 	}
 	return nil
