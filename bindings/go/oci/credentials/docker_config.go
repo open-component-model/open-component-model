@@ -91,6 +91,9 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 //   - Match the credentials against the provided identity
 //   - Return a map of credential key-value pairs
 func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (map[string]string, error) {
+	// The docker server specified in the docker config should not contain a port part as the store will only
+	// sanitize for scheme and (sub) paths. Thus, there will be a mismatch below when the hostname is used from
+	// the identity.
 	credStore, err := getStore(ctx, dockerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve credentials store: %w", err)

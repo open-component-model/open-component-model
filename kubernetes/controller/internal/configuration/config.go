@@ -17,6 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
@@ -25,13 +27,12 @@ import (
 // GetConfigFromSecret extracts and decodes OCM configuration from a Kubernetes Secret.
 // It looks for configuration data under the OCMConfigKey.
 func GetConfigFromSecret(secret *corev1.Secret) (*genericv1.Config, error) {
-	var cfg genericv1.Config
-
 	if data, ok := secret.Data[v1alpha1.OCMConfigKey]; ok {
 		if len(data) == 0 {
 			return nil, errors.New("no OCM config data found in secret")
 		}
 
+		var cfg genericv1.Config
 		if err := genericv1.Scheme.Decode(bytes.NewReader(data), &cfg); err != nil {
 			return nil, fmt.Errorf("failed to decode ocm config from secret %s/%s: %w",
 				secret.Namespace, secret.Name, err)
@@ -45,20 +46,43 @@ func GetConfigFromSecret(secret *corev1.Secret) (*genericv1.Config, error) {
 			return nil, errors.New("no docker config found in secret")
 		}
 
-		dockerConfig := v1.DockerConfig{
-			Type:         runtime.Type{Version: v1.Version, Name: "DockerConfig"},
-			DockerConfig: string(data),
+		// Add docker config to a generic OCM configuration
+		dockerConfig := &v1.DockerConfig{}
+
+		if _, err := credentials.Scheme.DefaultType(dockerConfig); err != nil {
+			return nil, fmt.Errorf("failed to get default type for docker config type")
 		}
 
-		dockerConfigData, err := json.Marshal(dockerConfig)
+		dockerConfig.DockerConfig = string(data)
+
+		raw := &runtime.Raw{}
+		if err := credentials.Scheme.Convert(dockerConfig, raw); err != nil {
+			return nil, fmt.Errorf("failed to convert docker config to raw from secret %s/%s: %w",
+				secret.Namespace, secret.Name, err)
+		}
+
+		credConfig := credentialsv1.Config{
+			Type: runtime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
+			Repositories: []credentialsv1.RepositoryConfigEntry{
+				{
+					Repository: raw,
+				},
+			},
+		}
+
+		credConfigData, err := json.Marshal(credConfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal docker config from secret %s/%s: %w",
-				secret.Namespace, secret.Name, err)
+			return nil, fmt.Errorf("failed to marshal credential config")
 		}
 
-		if err := genericv1.Scheme.Decode(bytes.NewReader(dockerConfigData), &cfg); err != nil {
-			return nil, fmt.Errorf("failed to decode ocm config from secret %s/%s: %w",
-				secret.Namespace, secret.Name, err)
+		cfg := genericv1.Config{
+			Type: runtime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+			Configurations: []*runtime.Raw{
+				{
+					Type: runtime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
+					Data: credConfigData,
+				},
+			},
 		}
 
 		return &cfg, nil
