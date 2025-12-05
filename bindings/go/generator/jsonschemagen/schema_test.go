@@ -311,7 +311,7 @@ func TestBuiltinRuntimeSchemas(t *testing.T) {
 func TestGenerate_FieldWithJSONDashExcludedFromRequired(t *testing.T) {
 	u := universe.New()
 	field := &ast.Field{
-		Names: []*ast.Ident{{Name: "Field"}},
+		Names: []*ast.Ident{{Name: "Name"}},
 		Type:  &ast.Ident{Name: "string"},
 		Tag:   &ast.BasicLit{Value: "`json:\"-\"`"},
 	}
