@@ -14,9 +14,6 @@
   'git-submodules': {
     enabled: true,
   },
-  'schedule': [
-    '* * * * 0' // At every minute on Sunday it is allowed to create branches
-  ],
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
   'branchPrefix': 'renovate/',
@@ -32,10 +29,13 @@
   separateMultipleMajor: true,
   packageRules: [
     {
-      "matchDatasources": ["golang-version"],
-      "rangeStrategy": "bump",
-      "groupName": "Golang versions",
-      "groupSlug": "golang-versions"
+      matchDatasources: ["golang-version"],
+      rangeStrategy: "bump",
+      groupName: "Golang versions",
+      groupSlug: "golang-versions",
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
     },
     {
       matchManagers: [
@@ -50,6 +50,9 @@
       ],
       groupName: 'Kubernetes dependencies',
       groupSlug: 'kubernetes-deps',
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ]
     },
     {
       groupName: 'Docker dependencies',
@@ -57,12 +60,18 @@
       matchPackageNames: [
         'github.com/docker/{/,}**',
       ],
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ]
     },
     {
       groupName: 'Golang X Repositories',
       groupSlug: 'golang-x-repos',
       matchPackageNames: [
         'golang.org/x/{/,}**'
+      ],
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
     },
     {
@@ -70,6 +79,9 @@
       groupSlug: 'google-golang-repos',
       matchPackageNames: [
         'google.golang.org/{/,}**'
+      ],
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
     },
     {
@@ -77,6 +89,9 @@
       groupSlug: 'sigstore',
       matchPackageNames: [
         'github.com/sigstore/{/,}**'
+      ],
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
     },
     {
@@ -84,6 +99,9 @@
       groupSlug: 'spf13',
       matchPackageNames: [
         'github.com/spf13/{/,}**'
+      ],
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
     },
     {
@@ -94,6 +112,9 @@
         'gomodTidy',
       ],
       enabled: true,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ]
     },
     {
       matchManagers: [
@@ -106,6 +127,9 @@
         'major',
       ],
       enabled: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ]
     },
     {
       matchManagers: [
