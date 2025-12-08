@@ -16,6 +16,26 @@ type DeclType struct {
 	*Schema
 }
 
+// DeclTypeFromProperty creates a DeclType for a specific property of the DeclType's Schema.
+// It returns nil if the property does not exist.
+func (t *DeclType) DeclTypeFromProperty(property string) *DeclType {
+	if t == nil || t.Schema == nil {
+		return nil
+	}
+	field, ok := t.Fields[property]
+	if !ok {
+		return nil
+	}
+	schemaProperty, ok := t.Properties()[property]
+	if !ok {
+		return nil
+	}
+	return &DeclType{
+		Type:   field.Type,
+		Schema: &Schema{Schema: schemaProperty.Schema},
+	}
+}
+
 // declTypeForSchema creates a DeclType from the provided decl.Type and Schema.
 func declTypeForSchema(t *decl.Type, schema *Schema) *DeclType {
 	return &DeclType{
@@ -96,9 +116,6 @@ func NewDeclType(s *Schema) *DeclType {
 
 			// Resolve type (including ref fallback)
 			fieldType := NewDeclType(prop)
-			if fieldType == nil && prop.Ref() != nil {
-				fieldType = NewDeclType(prop.Ref())
-			}
 			if fieldType == nil {
 				continue
 			}
@@ -191,6 +208,15 @@ func NewDeclType(s *Schema) *DeclType {
 	// Ref-only schemas
 	if s.Ref() != nil {
 		return NewDeclType(s.Ref())
+	}
+
+	if s.OneOf() != nil {
+		if len(s.OneOf()) > 1 {
+			// in the future we can think of offering a parameterized union type for all branches of oneOf
+			// for now, we treat as dyn and defer evaluation to the runtime.
+			return declTypeForSchema(decl.DynType, s)
+		}
+		return NewDeclType(s.OneOf()[0])
 	}
 
 	return nil

@@ -1,386 +1,166 @@
-// Copyright 2025 The Kubernetes Authors.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package jsonschema
 
 import (
+	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/google/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/expression/parser"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 )
 
-const (
-	schemaTypeAny = "any"
-)
-
-// ParseResource extracts CEL expressions from a resource based on
-// the schema. The resource is expected to be a map[string]interface{}.
-//
-// Note that this function will also validate the resource against the schema
-// and return an error if the resource does not match the schema. When CEL
-// expressions are found, they are extracted and returned with the expected
-// type of the field (inferred from the schema).
-func ParseResource(resource map[string]interface{}, resourceSchema *jsonschema.Schema) ([]variable.FieldDescriptor, error) {
-	return parseResource(resource, resourceSchema, nil)
-}
-
-// parseResource is a helper function that recursively extracts CEL expressions
-// from a resource. It uses a depth first search to traverse the resource and
-// extract expressions from string fields
-func parseResource(resource interface{}, schema *jsonschema.Schema, path fieldpath.Path) ([]variable.FieldDescriptor, error) {
-	if schema == nil {
-		return nil, fmt.Errorf("schema is nil for path %s", path)
-	}
-	if schema.Ref != nil {
-		return parseResource(resource, schema.Ref, path)
-	}
-	if err := validateSchema(schema, path); err != nil {
-		return nil, err
-	}
-
-	expectedTypes, err := getExpectedTypes(schema)
-	if err != nil {
-		return nil, err
-	}
-
-	switch field := resource.(type) {
-	case map[string]interface{}:
-		return parseObject(field, schema, path, expectedTypes)
-	case []interface{}:
-		return parseArray(field, schema, path, expectedTypes)
-	case string:
-		return parseString(field, schema, path, expectedTypes)
-	case nil:
-		return nil, nil
-	default:
-		return parseScalarTypes(field, schema, path, expectedTypes)
-	}
-}
-
-// getCelType converts an OpenAPI schema to a CEL type using the Kubernetes OpenAPI library.
-// This replaces manual type conversion with the library's schema-to-CEL type conversion.
-func getCelType(schema *jsonschema.Schema) *cel.Type {
-	if schema == nil {
-		return cel.DynType
-	}
-
-	// Use the library to convert schema to CEL type
+func ParseResource(resource map[string]interface{}, schema *jsonschema.Schema) ([]variable.FieldDescriptor, error) {
+	// Create DeclType from schema, deriving CEL type information.
 	declType := NewSchemaDeclType(schema)
 	if declType == nil {
-		return cel.DynType
+		return nil, fmt.Errorf("cannot create type information from schema, unsupported schema structure")
 	}
-
-	return declType.CelType()
+	return ParseResourceFromDeclType(resource, declType)
 }
 
-// getExpectedTypes extracts the expected types from a schema for validation purposes.
-// This is used for non-CEL values to ensure proper type validation.
-func getExpectedTypes(schema *jsonschema.Schema) ([]string, error) {
-	// Handle composite schemas (like OneOf, AnyOf)
-	if types, found := handleCompositeSchemas(schema); found {
-		return types, nil
+// ParseResourceFromDeclType performs a 3-phase parse:
+//  1. Schemaless extraction of all CEL expressions from the resource.
+//  2. Type annotation of the extracted expressions using the DeclType.
+//  3. Validation of the resource against the original schema, with
+//     expression-related validation errors filtered out.
+//
+// It returns the list of field descriptors representing the extracted
+// expressions with expected types.
+func ParseResourceFromDeclType(resource map[string]interface{}, declType *DeclType) ([]variable.FieldDescriptor, error) {
+	// Phase 1: schemaless extraction — for any field with a CEL expression,
+	// extract it without schema validation.
+	schemalessDescs, err := parser.ParseSchemaless(resource)
+	if err != nil {
+		return nil, err
 	}
 
-	// Handle direct type definitions
-	// if schema.ID != "" {
-	//	return []string{string(schema.ID)}, nil
-	//}
-	if !schema.Types.IsEmpty() {
-		return schema.Types.ToStrings(), nil
+	// Phase 2: type annotation — for every field descriptor we found, derive
+	// its expected CEL type from the DeclType.
+	annotated, err := setExpectedTypes(schemalessDescs, declType)
+	if err != nil {
+		return nil, err
 	}
 
-	// Handle additional properties
-	if isBooleanSchema(schema.AdditionalProperties, true) {
-		// NOTE(a-hilaly): I don't like the type "any", we might want to change this to "object"
-		// in the future; just haven't really thought about it yet.
-		// Basically "any" means that the field can be of any type.
-		return []string{schemaTypeAny}, nil
-	}
-
-	return nil, fmt.Errorf("unknown schema type")
-}
-
-// handleCompositeSchemas processes OneOf and AnyOf schemas
-// and returns collected types if present.
-func handleCompositeSchemas(schema *jsonschema.Schema) ([]string, bool) {
-	// Handle OneOf schemas
-	if len(schema.OneOf) > 0 {
-		types := collectTypesFromSubSchemas(schema.OneOf)
-		if len(types) > 0 {
-			return types, true
-		}
-	}
-
-	// Handle AnyOf schemas
-	if len(schema.AnyOf) > 0 {
-		types := collectTypesFromSubSchemas(schema.AnyOf)
-		if len(types) > 0 {
-			return types, true
-		}
-	}
-
-	return nil, false
-}
-
-// collectTypesFromSubSchemas extracts types from a slice of schemas,
-// handling structural constraints like Required and Not.
-func collectTypesFromSubSchemas(subSchemas []*jsonschema.Schema) []string {
-	var types []string
-
-	for _, subSchema := range subSchemas {
-		// If there are structural constraints, inject object type
-		if len(subSchema.Required) > 0 || subSchema.Not != nil {
-			if !slices.Contains(types, ObjectType) {
-				types = append(types, ObjectType)
-			}
-		}
-		// Collect types if present
-		if !subSchema.Types.IsEmpty() {
-			if !slices.Contains(types, subSchema.Types.ToStrings()[0]) {
-				types = append(types, subSchema.Types.ToStrings()[0])
-			}
-		}
-	}
-
-	return types
-}
-
-func validateSchema(schema *jsonschema.Schema, path fieldpath.Path) error {
-	if schema == nil {
-		return fmt.Errorf("schema is nil for path %s", path)
-	}
-	hasValidType := schema.Types != nil && len(schema.Types.ToStrings()) > 0
-	hasValidOneOf := len(schema.OneOf) != 0
-	hasValidAnyOf := len(schema.AnyOf) != 0
-	hasValidAdditionalProperties := schema.AdditionalProperties != nil
-	isValid := hasValidType || hasValidOneOf || hasValidAnyOf || hasValidAdditionalProperties
-	// Ensure the schema has at least one valid construct
-	if !isValid {
-		return fmt.Errorf("schema at path %q has no valid type, OneOf, AnyOf, or AdditionalProperties", path)
-	}
-	return nil
-}
-
-func parseObject(field map[string]interface{}, schema *jsonschema.Schema, path fieldpath.Path, expectedTypes []string) ([]variable.FieldDescriptor, error) {
-	if !slices.Contains(expectedTypes, ObjectType) && !slices.Contains(expectedTypes, schemaTypeAny) {
-		return nil, fmt.Errorf("expected %s type for path %q to be object or any", strings.Join(expectedTypes, " or "), path)
-	}
-
-	var expressionsFields []variable.FieldDescriptor
-	for fieldName, value := range field {
-		fieldSchema, err := getFieldSchema(schema, fieldName)
-		if err != nil {
-			return nil, fmt.Errorf("error getting field schema for path %s: %w", path.AddNamed(fieldName), err)
-		}
-		fieldPath := path.AddNamed(fieldName)
-		switch fieldSchema := fieldSchema.(type) {
-		case *jsonschema.Schema:
-			fieldExpressions, err := parseResource(value, fieldSchema, fieldPath)
-			if err != nil {
-				return nil, err
-			}
-			expressionsFields = append(expressionsFields, fieldExpressions...)
-		case bool:
-			if !fieldSchema {
-				return nil, fmt.Errorf("additional properties are not allowed at path %s", fieldPath)
-			}
-			fieldExpressions, err := parseResource(value, &jsonschema.Schema{
-				Types:                TypeForSchema(schemaTypeAny),
-				AdditionalProperties: true,
-			}, fieldPath)
-			if err != nil {
-				return nil, err
-			}
-			expressionsFields = append(expressionsFields, fieldExpressions...)
-		}
-	}
-
-	slices.SortFunc(expressionsFields, func(a, b variable.FieldDescriptor) int {
+	// Stable sorting based on paths.
+	slices.SortFunc(annotated, func(a, b variable.FieldDescriptor) int {
 		return fieldpath.Compare(a.Path, b.Path)
 	})
-	return expressionsFields, nil
+
+	// Phase 3: validate the resource against the original schema. Any
+	// validation errors at expression locations are filtered out.
+	if err := declType.Schema.Schema.Validate(resource); err != nil {
+		err = filterExpressionErrors(err, annotated)
+		return annotated, err
+	}
+
+	return annotated, nil
 }
 
-func parseArray(field []interface{}, schema *jsonschema.Schema, path fieldpath.Path, expectedTypes []string) ([]variable.FieldDescriptor, error) {
-	if !slices.Contains(expectedTypes, ArrayType) {
-		return nil, fmt.Errorf("expected %s type for path %s, got array", strings.Join(expectedTypes, " or "), path)
-	}
+// setExpectedTypes sets ExpectedType on each descriptor based on the DeclType:
+//   - For string templates (non-standalone), the CEL result type is always string.
+//   - For standalone expressions, it resolves the path in the DeclType and
+//     uses the corresponding CEL type, or dyn if resolution fails. Note that
+//     this can be best effort.
+func setExpectedTypes(
+	descs []variable.FieldDescriptor,
+	declType *DeclType,
+) ([]variable.FieldDescriptor, error) {
+	out := make([]variable.FieldDescriptor, len(descs))
+	for i, d := range descs {
+		var celType *cel.Type
 
-	itemSchema, err := getArrayItemSchema(schema, path)
-	if err != nil {
-		return nil, err
-	}
-
-	var expressionsFields []variable.FieldDescriptor
-	for i, item := range field {
-		itemPath := path.AddIndexed(i)
-		itemExpressions, err := parseResource(item, itemSchema, itemPath)
-		if err != nil {
-			return nil, err
-		}
-		expressionsFields = append(expressionsFields, itemExpressions...)
-	}
-	return expressionsFields, nil
-}
-
-func parseString(field string, schema *jsonschema.Schema, path fieldpath.Path, expectedTypes []string) ([]variable.FieldDescriptor, error) {
-	ok, err := parser.IsStandaloneExpression(field)
-	if err != nil {
-		return nil, err
-	}
-
-	if ok {
-		// For CEL expressions, get the CEL type from the schema
-		expectedType := getCelType(schema)
-		expr := strings.TrimPrefix(field, "${")
-		expr = strings.TrimSuffix(expr, "}")
-		return []variable.FieldDescriptor{{
-			Expressions:          []variable.Expression{{Value: expr}},
-			ExpectedType:         expectedType,
-			Path:                 path,
-			StandaloneExpression: true,
-		}}, nil
-	}
-
-	if !slices.Contains(expectedTypes, StringType) && !slices.Contains(expectedTypes, schemaTypeAny) {
-		return nil, fmt.Errorf("expected %s type for path %s, got string", strings.Join(expectedTypes, " or "), path)
-	}
-
-	expressions, err := parser.ExtractExpressions(field)
-	if err != nil {
-		return nil, err
-	}
-	exprs := make([]variable.Expression, len(expressions))
-	for i, expr := range expressions {
-		exprs[i] = variable.Expression{Value: expr}
-	}
-	if len(expressions) > 0 {
-		// String templates always produce strings
-		return []variable.FieldDescriptor{{
-			Expressions:  exprs,
-			ExpectedType: cel.StringType,
-			Path:         path,
-		}}, nil
-	}
-	return nil, nil
-}
-
-func parseScalarTypes(field interface{}, _ *jsonschema.Schema, path fieldpath.Path, expectedTypes []string) ([]variable.FieldDescriptor, error) {
-	// If "any" type is expected, skip validation
-	if slices.Contains(expectedTypes, schemaTypeAny) {
-		return nil, nil
-	}
-
-	// Check if the value matches any of the expected types
-	actualType := getSchemaTypeName(field)
-	for _, expected := range expectedTypes {
-		switch expected {
-		case NumType:
-			if isNumber(field) {
-				return nil, nil
-			}
-		case IntegerType:
-			if isInteger(field) {
-				return nil, nil
-			}
-		case BooleanType:
-			if _, ok := field.(bool); ok {
-				return nil, nil
+		if !d.StandaloneExpression {
+			// String templates always evaluate to strings.
+			celType = cel.StringType
+		} else {
+			fieldDecl, err := declType.Resolve(d.Path)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to resolve CEL type: expression %q, path %q, root type %q: %w",
+					d.Expressions[0].Value,
+					d.Path.String(),
+					declType.TypeName(),
+					err,
+				)
+			} else {
+				celType = fieldDecl.CelType()
 			}
 		}
-	}
 
-	// No match found - return error with all expected types
-	return nil, fmt.Errorf("expected %s type for path %s, got %s", strings.Join(expectedTypes, " or "), path, actualType)
+		d.ExpectedType = celType
+		out[i] = d
+	}
+	return out, nil
 }
 
-// getSchemaTypeName converts a Go type to its OpenAPI schema type name
-func getSchemaTypeName(v interface{}) string {
-	switch v.(type) {
-	case bool:
-		return BooleanType
-	case int, int8, int16, int32, int64:
-		return IntegerType
-	default:
-		// For other types (including float), use the Go type name
-		return fmt.Sprintf("%T", v)
+// filterExpressionErrors removes validation errors that point to known
+// expression locations from the given error. If all errors are filtered out,
+// it returns nil.
+func filterExpressionErrors(err error, exprDescs []variable.FieldDescriptor) error {
+	var valErr *jsonschema.ValidationError
+	if !errors.As(err, &valErr) {
+		return err
 	}
+
+	exprPaths := make(map[string]struct{}, len(exprDescs))
+	for _, d := range exprDescs {
+		exprPaths[d.Path.String()] = struct{}{}
+	}
+
+	if suppressErrors(valErr, exprPaths) {
+		return nil
+	}
+	return valErr
 }
 
-func getFieldSchema(schema *jsonschema.Schema, field string) (any, error) {
-	if schema.Properties != nil {
-		if fieldSchema, ok := schema.Properties[field]; ok {
-			return fieldSchema, nil
-		}
-	}
-	if schema.AdditionalProperties != nil {
-		return schema.AdditionalProperties, nil
-	} else {
-		return true, nil // By default, additional properties are allowed
-	}
-}
-
-func getArrayItemSchema(schema *jsonschema.Schema, path fieldpath.Path) (*jsonschema.Schema, error) {
-	if schema.Items != nil {
-		switch items := schema.Items.(type) {
-		case *jsonschema.Schema:
-			return items, nil
-		case []*jsonschema.Schema:
-			if len(items) == 0 {
-				return nil, fmt.Errorf("invalid array schema for path %s: items array is empty", path)
-			}
-			return items[0], nil
-		default:
-			return nil, fmt.Errorf("invalid array schema for path %s: unknown items type", path)
-		}
-	}
-	if schema.Items2020 != nil {
-		return schema.Items2020, nil
-	}
-	return nil, fmt.Errorf("invalid array schema for path %s: no items schema defined", path)
-}
-
-func isNumber(v interface{}) bool {
-	return isInteger(v) || isFloat(v)
-}
-
-func isFloat(v interface{}) bool {
-	switch v.(type) {
-	case float32, float64:
-		return true
-	default:
+// suppressErrors walks the ValidationError tree and removes causes that
+// point to known expression locations. It returns true if the error itself
+// should be fully suppressed.
+func suppressErrors(err *jsonschema.ValidationError, exprPaths map[string]struct{}) bool {
+	if err == nil {
 		return false
 	}
-}
 
-func isInteger(v interface{}) bool {
-	switch v.(type) {
-	case int, int8, int32, int64:
+	instPath := instanceLocationToString(err.InstanceLocation)
+	if _, ok := exprPaths[instPath]; ok {
+		// Directly at an expression location: suppress.
 		return true
-	default:
-		return false
 	}
+
+	// Recurse into causes and keep only those that should not be suppressed.
+	cleaned := make([]*jsonschema.ValidationError, 0, len(err.Causes))
+	for _, c := range err.Causes {
+		if !suppressErrors(c, exprPaths) {
+			cleaned = append(cleaned, c)
+		}
+	}
+	err.Causes = cleaned
+
+	if len(err.Causes) == 0 {
+		// Leaf errors at expression paths can be suppressed for these kinds.
+		// there may be other kinds that could be added here as needed.
+		// for now we focus on the most common errors that can have leafs:
+		// 1. schema errors, which can encompass N actual errors
+		// 2. oneOf errors, which can encompass N errors based on each one of branch
+		// 3. reference errors, which can encompass 1 error from the referenced schema
+		switch err.ErrorKind.(type) {
+		case *kind.Schema, *kind.OneOf, *kind.Reference:
+			return true
+		}
+	}
+
+	return false
 }
 
-func isBooleanSchema(sch any, val bool) bool {
-	b, ok := sch.(bool)
-	return ok && (b == val)
+func instanceLocationToString(loc []string) string {
+	fp := fieldpath.New()
+	for _, l := range loc {
+		fp = fp.AddNamed(l)
+	}
+	return fp.String()
 }

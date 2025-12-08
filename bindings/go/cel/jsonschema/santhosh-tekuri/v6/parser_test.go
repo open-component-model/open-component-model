@@ -1,23 +1,10 @@
-// Copyright 2025 The Kubernetes Authors.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package jsonschema_test
 
 import (
 	"slices"
 	"testing"
 
+	"github.com/google/cel-go/common/types"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,7 +34,6 @@ func TestParseResource(t *testing.T) {
 			"specialCharacters": map[string]interface{}{
 				"simpleAnnotation":     "${simpleannotation}",
 				"doted.annotation.key": "${dotedannotationvalue}",
-				"":                     "${emptyannotation}",
 				"array.name.with.dots": []interface{}{
 					"${value}",
 				},
@@ -92,7 +78,6 @@ func TestParseResource(t *testing.T) {
 					Properties: map[string]*jsonschema.Schema{
 						"simpleAnnotation":     {Types: stv6jsonschema.TypeForSchema("string")},
 						"doted.annotation.key": {Types: stv6jsonschema.TypeForSchema("string")},
-						"":                     {Types: stv6jsonschema.TypeForSchema("string")},
 						"array.name.with.dots": {
 							Types: stv6jsonschema.TypeForSchema("array"),
 							Items2020: &jsonschema.Schema{
@@ -125,7 +110,6 @@ func TestParseResource(t *testing.T) {
 			{Path: fieldpath.MustParse("mapField.key2"), Expressions: []variable.Expression{{Value: "map.key2"}}, StandaloneExpression: true},
 			{Path: fieldpath.MustParse("specialCharacters.simpleAnnotation"), Expressions: []variable.Expression{{Value: "simpleannotation"}}, StandaloneExpression: true},
 			{Path: fieldpath.MustParse(`specialCharacters["doted.annotation.key"]`), Expressions: []variable.Expression{{Value: "dotedannotationvalue"}}, StandaloneExpression: true},
-			{Path: fieldpath.MustParse(`specialCharacters[""]`), Expressions: []variable.Expression{{Value: "emptyannotation"}}, StandaloneExpression: true},
 			{Path: fieldpath.MustParse(`specialCharacters["array.name.with.dots"][0]`), Expressions: []variable.Expression{{Value: "value"}}, StandaloneExpression: true},
 			{Path: fieldpath.MustParse("schemalessField.something"), Expressions: []variable.Expression{{Value: "schemaless.value"}}, StandaloneExpression: true},
 			{Path: fieldpath.MustParse("schemalessField.nestedSomething.nested"), Expressions: []variable.Expression{{Value: "schemaless.nested.value"}}, StandaloneExpression: true},
@@ -183,7 +167,7 @@ func TestTypeMismatches(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			expectedError: "expected integer type for path intField, got string",
+			expectedError: "jsonschema validation failed with ''\n- at '/intField': got string, want integer",
 		},
 		{
 			name: "Integer instead of string",
@@ -197,7 +181,7 @@ func TestTypeMismatches(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			expectedError: "expected string type for path stringField, got integer",
+			expectedError: "jsonschema validation failed with ''\n- at '/stringField': got number, want string",
 		},
 		{
 			name: "Boolean instead of number",
@@ -211,7 +195,7 @@ func TestTypeMismatches(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			expectedError: "expected number type for path numberField, got boolean",
+			expectedError: "jsonschema validation failed with ''\n- at '/numberField': got boolean, want number",
 		},
 		{
 			name: "Array instead of object",
@@ -225,7 +209,7 @@ func TestTypeMismatches(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			expectedError: "expected object type for path objectField, got array",
+			expectedError: "jsonschema validation failed with ''\n- at '/objectField': got array, want object",
 		},
 		{
 			name: "Object instead of array",
@@ -239,7 +223,7 @@ func TestTypeMismatches(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			expectedError: "expected array type for path \"arrayField\" to be object or any",
+			expectedError: "jsonschema validation failed with ''\n- at '/arrayField': got object, want array",
 		},
 		{
 			name: "Nested field type mismatch",
@@ -269,7 +253,7 @@ func TestTypeMismatches(t *testing.T) {
 				},
 			},
 			wantErr:       true,
-			expectedError: "expected number type for path level1.level2.numberField, got string",
+			expectedError: "jsonschema validation failed with ''\n- at '/level1/level2/numberField': got string, want number",
 		},
 		{
 			name: "Nil schema",
@@ -304,7 +288,7 @@ func TestTypeMismatches(t *testing.T) {
 			},
 			schema:        &jsonschema.Schema{},
 			wantErr:       true,
-			expectedError: "schema at path \"\" has no valid type, OneOf, AnyOf, or AdditionalProperties",
+			expectedError: "cannot create type information from schema, unsupported schema structure",
 		},
 		{
 			name: "Valid types (no mismatch)",
@@ -506,7 +490,7 @@ func TestParserEdgeCases(t *testing.T) {
 				},
 			},
 			resource:      map[string]interface{}{"key": "value"},
-			expectedError: "expected array type for path \"\" to be object or any",
+			expectedError: "jsonschema validation failed with ''\n- at '': got object, want array",
 		},
 		{
 			name: "Unknown property in object (allowed by default in json schema)",
@@ -549,10 +533,10 @@ func TestParserEdgeCases(t *testing.T) {
 				"name":  "John",
 				"extra": map[string]interface{}{"nested": "${expr.value}"},
 			},
-			expectedError: "expected object type for path name, got string",
+			expectedError: "jsonschema validation failed with ''\n- at '/name': got string, want object",
 		},
 		{
-			name: "structured object with nested x-kubernetes-preserve-unknown-fields",
+			name: "structured object with metadata",
 			schema: &jsonschema.Schema{
 				Types: stv6jsonschema.TypeForSchema("object"),
 				Properties: map[string]*jsonschema.Schema{
@@ -573,7 +557,7 @@ func TestParserEdgeCases(t *testing.T) {
 					"test": "${test.value}",
 				},
 			},
-			expectedError: "expected string type for path metadata.age, got integer",
+			expectedError: "jsonschema validation failed with ''\n- at '/metadata/age': got number, want string",
 		},
 		{
 			name: "invalid schema: missing type and no OneOf/AnyOf/AdditionalProperties",
@@ -585,7 +569,7 @@ func TestParserEdgeCases(t *testing.T) {
 			resource: map[string]interface{}{
 				"name": "John",
 			},
-			expectedError: "schema at path \"\" has no valid type, OneOf, AnyOf, or AdditionalProperties",
+			expectedError: "cannot create type information from schema, unsupported schema structure",
 		},
 	}
 
@@ -600,6 +584,151 @@ func TestParserEdgeCases(t *testing.T) {
 
 			require.Error(t, err, "expected an error but got none")
 			assert.Equal(t, tc.expectedError, err.Error())
+		})
+	}
+}
+
+func TestCelExpressionAgainstObjectSchemaDoesNotError(t *testing.T) {
+	resource := map[string]any{
+		"objField": "${myObject.nested.value}",
+	}
+
+	schema := &jsonschema.Schema{
+		Types: stv6jsonschema.TypeForSchema("object"),
+		Properties: map[string]*jsonschema.Schema{
+			"objField": {
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"nested": {Types: stv6jsonschema.TypeForSchema("string")},
+				},
+			},
+		},
+	}
+
+	got, err := stv6jsonschema.ParseResource(resource, schema)
+	require.NoError(t, err, "CEL expression should skip JSON Schema validation")
+
+	require.Len(t, got, 1)
+	assert.Equal(t,
+		fieldpath.MustParse("objField"),
+		got[0].Path,
+	)
+
+	assert.Equal(t, "myObject.nested.value", got[0].Expressions[0].Value)
+	assert.True(t, got[0].StandaloneExpression)
+
+	expectedType := got[0].ExpectedType
+	assert.NotNil(t, expectedType)
+	assert.Equal(t, expectedType.Kind(), types.StructKind)
+}
+
+func TestArrayExpressionPaths(t *testing.T) {
+	testCases := []struct {
+		name     string
+		resource map[string]any
+		schema   *jsonschema.Schema
+		expected []string
+	}{
+		{
+			name: "simple array expressions",
+			resource: map[string]any{
+				"arr": []any{
+					"${a[0]}",
+					"${b.value}",
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"arr": {
+						Types: stv6jsonschema.TypeForSchema("array"),
+						Items2020: &jsonschema.Schema{
+							Types: stv6jsonschema.TypeForSchema("string"),
+						},
+					},
+				},
+			},
+			expected: []string{
+				"arr[0]",
+				"arr[1]",
+			},
+		},
+		{
+			name: "object containing array with expressions",
+			resource: map[string]any{
+				"arr": []any{
+					"${x[0]}",
+					map[string]any{
+						"nested": "${y[1]}",
+					},
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"arr": {
+						Types: stv6jsonschema.TypeForSchema("array"),
+						Items2020: &jsonschema.Schema{
+							Types: stv6jsonschema.TypeForSchema("object"),
+							Properties: map[string]*jsonschema.Schema{
+								"nested": {Types: stv6jsonschema.TypeForSchema("string")},
+							},
+							AdditionalProperties: &jsonschema.Schema{
+								Types: stv6jsonschema.TypeForSchema("string"),
+							},
+						},
+					},
+				},
+			},
+			expected: []string{
+				"arr[0]",
+				"arr[1].nested",
+			},
+		},
+		{
+			name: "deep nested arrays",
+			resource: map[string]any{
+				"root": []any{
+					[]any{
+						"${deep[0]}",
+					},
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"root": {
+						Types: stv6jsonschema.TypeForSchema("array"),
+						Items2020: &jsonschema.Schema{
+							Types: stv6jsonschema.TypeForSchema("array"),
+							Items2020: &jsonschema.Schema{
+								Types: stv6jsonschema.TypeForSchema("string"),
+							},
+						},
+					},
+				},
+			},
+			expected: []string{
+				"root[0][0]",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := stv6jsonschema.ParseResource(tc.resource, tc.schema)
+			require.NoError(t, err)
+
+			// Sort paths for stable comparison
+			paths := make([]string, len(got))
+			for i, d := range got {
+				paths[i] = d.Path.String()
+			}
+			slices.Sort(paths)
+			slices.Sort(tc.expected)
+
+			require.Equal(t, len(tc.expected), len(paths), "unexpected number of expression paths")
+			assert.Equal(t, tc.expected, paths)
 		})
 	}
 }

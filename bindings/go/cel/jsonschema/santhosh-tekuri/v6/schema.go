@@ -1,8 +1,6 @@
 package jsonschema
 
 import (
-	"iter"
-
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -151,20 +149,18 @@ func (s *Schema) Const() any {
 	return *s.Schema.Const
 }
 
-func (s *Schema) OneOf() iter.Seq2[int, *Schema] {
+func (s *Schema) OneOf() []*Schema {
 	if s.Schema == nil || s.Schema.OneOf == nil {
-		return func(yield func(int, *Schema) bool) {}
+		return nil
 	}
-	return func(yield func(int, *Schema) bool) {
-		for i, sch := range s.Schema.OneOf {
-			if sch == nil {
-				continue
-			}
-			if !yield(i, &Schema{Schema: sch}) {
-				return
-			}
+	res := make([]*Schema, 0, len(s.Schema.OneOf))
+	for _, sch := range s.Schema.OneOf {
+		if sch == nil {
+			continue
 		}
+		res = append(res, &Schema{Schema: sch})
 	}
+	return res
 }
 
 func safeIntToInt(u *int) uint64 {
