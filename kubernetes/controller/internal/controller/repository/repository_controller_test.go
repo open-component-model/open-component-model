@@ -59,7 +59,7 @@ var _ = Describe("Repository Controller", func() {
 				spec := &ctf.Repository{
 					Type:       runtime.NewVersionedType(ctf.Type, "v1"),
 					FilePath:   ctfPath,
-					AccessMode: ctf.AccessModeReadWrite,
+					AccessMode: ctf.AccessModeReadOnly,
 				}
 				specdata, err := json.Marshal(spec)
 				Expect(err).NotTo(HaveOccurred())
@@ -144,7 +144,7 @@ var _ = Describe("Repository Controller", func() {
 				spec := &ctf.Repository{
 					Type:       runtime.NewVersionedType(ctf.Type, "v1"),
 					FilePath:   ctfPath,
-					AccessMode: ctf.AccessModeReadWrite,
+					AccessMode: ctf.AccessModeReadOnly,
 				}
 				specdata, err := json.Marshal(spec)
 				Expect(err).NotTo(HaveOccurred())
@@ -283,7 +283,7 @@ var _ = Describe("Repository Controller", func() {
 				spec := &ctf.Repository{
 					Type:       runtime.NewVersionedType(ctf.Type, "v1"),
 					FilePath:   ctfpath,
-					AccessMode: ctf.AccessModeReadWrite,
+					AccessMode: ctf.AccessModeReadOnly,
 				}
 				specdata, err := json.Marshal(spec)
 				Expect(err).NotTo(HaveOccurred())
