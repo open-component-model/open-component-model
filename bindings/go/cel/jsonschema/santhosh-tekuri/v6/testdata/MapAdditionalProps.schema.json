@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test/MapAdditionalProps.schema.json",
+  "title": "MapAdditionalProps",
+  "type": "object",
+  "additionalProperties": {
+    "type": "object",
+    "properties": {
+      "value": { "type": "number" },
+      "flags": {
+        "type": "array",
+        "items": { "type": "string", "enum": ["x", "y", "z"] }
+      }
+    },
+    "required": ["value"]
+  }
+}

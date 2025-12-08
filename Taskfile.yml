@@ -8,6 +8,10 @@ output: prefixed
 includes:
   tools:
     taskfile: ./tools.Taskfile.yml
+  bindings/go/cel:
+    optional: true
+    taskfile: ./bindings/go/cel/Taskfile.yml
+    dir: ./bindings/go/cel
   bindings/go/credentials:
     optional: true
     taskfile: ./bindings/go/credentials/Taskfile.yml
