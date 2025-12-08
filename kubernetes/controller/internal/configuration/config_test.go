@@ -13,6 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
@@ -581,6 +583,82 @@ func TestLoadConfigurationsInOrder(t *testing.T) {
 			cfgB, err := LoadConfigurations(context.Background(), client, tt.namespace, tt.ocmConfigs[1])
 			tt.errorCheck(t, err)
 			tt.equal(t, cfgA, cfgB)
+		})
+	}
+}
+
+func TestCreateConfigFromDockerConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    []byte
+		want    *genericv1.Config
+		wantErr bool
+	}{
+		{
+			name: "valid docker config returns generic config",
+			data: []byte(`{"auths": {"my-registry.io": {"username":"user","password":"pass","email":""}}}`),
+			want: &genericv1.Config{
+				Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+				Configurations: []*ocmruntime.Raw{
+					{
+						Type: ocmruntime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
+						Data: []byte(`{"type":"credentials.config.ocm.software/v1","repositories":[{"repository":{"dockerConfig":"{\"auths\": {\"my-registry.io\": {\"username\":\"user\",\"password\":\"pass\",\"email\":\"\"}}}","type":"DockerConfig/v1"}}]}`),
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "empty docker config returns error",
+			data:    []byte{},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "invalid docker config returns error",
+			data:    []byte(`helloworld`),
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "docker config with multiple registries",
+			data: []byte(`{"auths":{"registry1.io":{"username": "user1", "password": "pass1"},"registry2.io":{"username":"user2","password":"pass2"}}}`),
+			want: &genericv1.Config{
+				Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+				Configurations: []*ocmruntime.Raw{
+					{
+						Type: ocmruntime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
+						Data: []byte(`{"type":"credentials.config.ocm.software/v1","repositories":[{"repository":{"dockerConfig":"{\"auths\":{\"registry1.io\":{\"username\": \"user1\", \"password\": \"pass1\"},\"registry2.io\":{\"username\":\"user2\",\"password\":\"pass2\"}}}","type":"DockerConfig/v1"}}]}`),
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "docker config with auth token",
+			data: []byte(`{"auths":{"my-registry.io":{"auth": "dXNlcjpwYXNz"}}}`),
+			want: &genericv1.Config{
+				Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+				Configurations: []*ocmruntime.Raw{
+					{
+						Type: ocmruntime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
+						Data: []byte(`{"type":"credentials.config.ocm.software/v1","repositories":[{"repository":{"dockerConfig":"{\"auths\":{\"my-registry.io\":{\"auth\": \"dXNlcjpwYXNz\"}}}","type":"DockerConfig/v1"}}]}`),
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := createConfigFromDockerConfig(tt.data)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, cfg)
 		})
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/docker/cli/cli/config/configfile"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -46,49 +47,64 @@ func GetConfigFromSecret(secret *corev1.Secret) (*genericv1.Config, error) {
 			return nil, errors.New("no docker config found in secret")
 		}
 
-		// Add docker config to a generic OCM configuration
-		dockerConfig := &v1.DockerConfig{}
-
-		if _, err := credentials.Scheme.DefaultType(dockerConfig); err != nil {
-			return nil, fmt.Errorf("failed to get default type for docker config type")
-		}
-
-		dockerConfig.DockerConfig = string(data)
-
-		raw := &runtime.Raw{}
-		if err := credentials.Scheme.Convert(dockerConfig, raw); err != nil {
-			return nil, fmt.Errorf("failed to convert docker config to raw from secret %s/%s: %w",
-				secret.Namespace, secret.Name, err)
-		}
-
-		credConfig := credentialsv1.Config{
-			Type: runtime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
-			Repositories: []credentialsv1.RepositoryConfigEntry{
-				{
-					Repository: raw,
-				},
-			},
-		}
-
-		credConfigData, err := json.Marshal(credConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal credential config")
-		}
-
-		cfg := genericv1.Config{
-			Type: runtime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
-			Configurations: []*runtime.Raw{
-				{
-					Type: runtime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
-					Data: credConfigData,
-				},
-			},
-		}
-
-		return &cfg, nil
+		return createConfigFromDockerConfig(data)
 	}
 
 	return nil, fmt.Errorf("secret does not contain supported keys %q", []string{v1alpha1.OCMConfigKey, corev1.DockerConfigJsonKey})
+}
+
+// createConfigFromDockerConfig creates a generic OCM configuration from a Docker configuration.
+// It takes the raw Docker configuration data as input, processes it, and returns a genericv1.Config object.
+func createConfigFromDockerConfig(data []byte) (*genericv1.Config, error) {
+	// Validate that data is valid Docker config JSON
+	if err := json.Unmarshal(data, &configfile.ConfigFile{}); err != nil {
+		return nil, fmt.Errorf("invalid docker config: %w", err)
+	}
+
+	dockerConfig := &v1.DockerConfig{}
+
+	// Set the default type for the DockerConfig object.
+	if _, err := credentials.Scheme.DefaultType(dockerConfig); err != nil {
+		return nil, fmt.Errorf("failed to get default type for docker config type")
+	}
+
+	// Assign the raw Docker configuration data to the DockerConfig object.
+	dockerConfig.DockerConfig = string(data)
+
+	// Convert the DockerConfig object into a runtime.Raw object.
+	raw := &runtime.Raw{}
+	if err := credentials.Scheme.Convert(dockerConfig, raw); err != nil {
+		return nil, fmt.Errorf("failed to convert docker config to raw")
+	}
+
+	// Create a config object containing the converted Docker configuration.
+	credConfig := credentialsv1.Config{
+		Type: runtime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
+		Repositories: []credentialsv1.RepositoryConfigEntry{
+			{
+				Repository: raw,
+			},
+		},
+	}
+
+	// Marshal the credential configuration into JSON format.
+	credConfigData, err := json.Marshal(credConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal credential config")
+	}
+
+	// Construct the final genericv1.Config object embedding the credential configuration.
+	cfg := genericv1.Config{
+		Type: runtime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+		Configurations: []*runtime.Raw{
+			{
+				Type: runtime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
+				Data: credConfigData,
+			},
+		},
+	}
+
+	return &cfg, nil
 }
 
 // GetConfigFromConfigMap extracts and decodes OCM configuration from a Kubernetes ConfigMap.
