@@ -94,6 +94,13 @@ jobs:
             Taskfile.yml
           # Make sure the value of GITHUB_TOKEN will not be persisted in repo's config
           persist-credentials: false
+      - name: Compute Version
+        id: version
+        run: |
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          VERSION="0.0.0-${SHORT_SHA}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Computed version: ${VERSION}"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
       - name: Docker Login
@@ -103,4 +110,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build & Push
+        env:
+          CONTROLLER_IMG: ghcr.io/open-component-model/kubernetes/controller:${{ steps.version.outputs.version }}
         run: task kubernetes/controller:docker-build/multi-arch PUSH=true
