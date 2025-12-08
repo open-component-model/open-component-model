@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/runtime
 
-go 1.25.0
+go 1.25.4
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467

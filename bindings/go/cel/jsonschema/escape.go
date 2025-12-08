@@ -15,8 +15,8 @@ var ReservedSymbols = newStringSet(
 
 type stringSet map[string]struct{}
 
-func (stringSet) Has(item string) bool {
-	_, found := ReservedSymbols[item]
+func (s stringSet) Has(item string) bool {
+	_, found := s[item]
 	return found
 }
 
@@ -65,7 +65,7 @@ func Escape(ident string) (string, bool) {
 			return "__dash__"
 		case "/":
 			return "__slash__"
-		default: // matched a unsupported supported
+		default: // matched an unsupported supported
 			ok = false
 			return ""
 		}
@@ -92,7 +92,7 @@ type escapeCheck struct {
 func skipRegexCheck(ident string) escapeCheck {
 	escapeCheck := escapeCheck{canSkipRegex: true, invalidCharFound: false}
 	// skip escape if possible
-	previous_underscore := false
+	previousUnderscore := false
 	for _, c := range ident {
 		if c == '/' || c == '-' || c == '.' {
 			escapeCheck.canSkipRegex = false
@@ -103,12 +103,12 @@ func skipRegexCheck(ident string) escapeCheck {
 			escapeCheck.invalidCharFound = true
 			return escapeCheck
 		}
-		if c == '_' && previous_underscore {
+		if c == '_' && previousUnderscore {
 			escapeCheck.canSkipRegex = false
 			return escapeCheck
 		}
 
-		previous_underscore = c == '_'
+		previousUnderscore = c == '_'
 	}
 	return escapeCheck
 }

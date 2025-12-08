@@ -33,7 +33,7 @@ func NewDeclType(s *Schema) *DeclType {
 	}
 
 	switch s.Type() {
-	case "array":
+	case ArrayType:
 		if s.Items() == nil {
 			// JSON Schema default: "items": {}
 			return declTypeForSchema(decl.NewListType(decl.DynType, decl.NoMaxLength), s)
@@ -56,7 +56,7 @@ func NewDeclType(s *Schema) *DeclType {
 			s,
 		)
 
-	case "object":
+	case ObjectType:
 		// If additionalProperties is itself a schema → treat as map<string, X>
 		if s.AdditionalProperties() != nil {
 			if propsType := NewDeclType(s.AdditionalProperties()); propsType != nil {
@@ -127,7 +127,7 @@ func NewDeclType(s *Schema) *DeclType {
 				decl.NewMapType(decl.StringType, decl.DynType, decl.NoMaxLength), s,
 			)
 		}
-		id := "object"
+		id := ObjectType
 		if s.Schema.ID != "" {
 			// if we have a unique schema ID, use that
 			id = s.Schema.ID
@@ -141,7 +141,7 @@ func NewDeclType(s *Schema) *DeclType {
 			base.MaxElements = decl.NoMaxLength
 		}
 		return base
-	case "string":
+	case StringType:
 		switch s.Format() {
 		case "byte":
 			t := decl.NewSimpleTypeWithMinSize("bytes", cel.BytesType, types.Bytes([]byte{}), decl.MinStringSize)
@@ -180,14 +180,11 @@ func NewDeclType(s *Schema) *DeclType {
 		}
 
 		return declTypeForSchema(str, s)
-
-	case "boolean":
+	case BooleanType:
 		return declTypeForSchema(decl.BoolType, s)
-
-	case "number":
+	case NumType:
 		return declTypeForSchema(decl.DoubleType, s)
-
-	case "integer":
+	case IntegerType:
 		return declTypeForSchema(decl.IntType, s)
 	}
 

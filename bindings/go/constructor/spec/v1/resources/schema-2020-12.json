@@ -362,6 +362,16 @@
               "$ref": "#/$defs/input"
             }
           }
+        },
+        {
+          "required": ["input"],
+          "properties": {
+            "input": {
+              "description": "Input specification for the resource",
+              "$ref": "#/$defs/input"
+            },
+            "relation": false
+          }
         }
       ]
     },

@@ -9,7 +9,10 @@ import (
 // NewSchemaDeclType creates a DeclType wrapping the given santhosh-tekuri/jsonschema Schema.
 func NewSchemaDeclType(s *jsonschema.Schema) *DeclType {
 	base := NewDeclType(&Schema{Schema: s})
-	if s.ID != "" {
+	if base == nil {
+		return nil
+	}
+	if s != nil && s.ID != "" {
 		base.Type = base.MaybeAssignTypeName(s.ID)
 	}
 	return base

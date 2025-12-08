@@ -530,14 +530,15 @@ type DynField struct {
 // NewListValue returns an empty ListValue instance.
 func NewListValue() *ListValue {
 	return &ListValue{
-		Entries: []*DynValue{},
+		Entries:      []*DynValue{},
+		initValueSet: new(sync.Once),
 	}
 }
 
 // ListValue contains a list of dynamically typed entries.
 type ListValue struct {
 	Entries      []*DynValue
-	initValueSet sync.Once
+	initValueSet *sync.Once
 	valueSet     map[ref.Val]struct{}
 }
 
@@ -564,7 +565,7 @@ func (lv *ListValue) Add(other ref.Val) ref.Val {
 func (lv *ListValue) Append(entry *DynValue) {
 	lv.Entries = append(lv.Entries, entry)
 	// The append resets all previously built indices.
-	lv.initValueSet = sync.Once{}
+	lv.initValueSet = new(sync.Once)
 }
 
 // Contains returns whether the input `val` is equal to an element in the list.
