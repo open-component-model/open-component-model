@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/descriptor/v2
 
-go 1.25.0
+go 1.25.4
 
 require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
