@@ -11,8 +11,8 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/test/utils"
 )
 
-var _ = Describe("Controller functionality", func() {
-	Context("using credentials", func() {
+var _ = Describe("Credentials E2E Tests", func() {
+	Context("simple use-cases", func() {
 
 		testdata := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata")
 
