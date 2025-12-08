@@ -11,16 +11,10 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/test/utils"
 )
 
-var _ = Describe("Replication Controller", func() {
+var _ = Describe("Controller functionality", func() {
 	Context("using credentials", func() {
 
-		//internalPrivateRegistry := os.Getenv("INTERNAL_PROTECTED_REGISTRY_URL")
-		//Expect(privateRegistry).NotTo(Equal(""), "INTERNAL_PROTECTED_REGISTRY_URL must be set for credentials tests")
-
 		testdata := filepath.Join(os.Getenv("PROJECT_DIR"), "test/e2e/testdata")
-
-		BeforeEach(func(ctx SpecContext) {
-		})
 
 		It("basic-auth", func(ctx SpecContext) {
 			testName := ctx.SpecReport().LeafNodeText
