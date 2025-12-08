@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/oci
 
-go 1.25.0
+go 1.25.4
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
