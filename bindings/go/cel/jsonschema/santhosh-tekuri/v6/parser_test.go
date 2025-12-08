@@ -1,17 +1,3 @@
-// Copyright 2025 The Kubernetes Authors.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package jsonschema_test
 
 import (
@@ -634,4 +620,115 @@ func TestCelExpressionAgainstObjectSchemaDoesNotError(t *testing.T) {
 	expectedType := got[0].ExpectedType
 	assert.NotNil(t, expectedType)
 	assert.Equal(t, expectedType.Kind(), types.StructKind)
+}
+
+func TestArrayExpressionPaths(t *testing.T) {
+	testCases := []struct {
+		name     string
+		resource map[string]any
+		schema   *jsonschema.Schema
+		expected []string
+	}{
+		{
+			name: "simple array expressions",
+			resource: map[string]any{
+				"arr": []any{
+					"${a[0]}",
+					"${b.value}",
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"arr": {
+						Types: stv6jsonschema.TypeForSchema("array"),
+						Items2020: &jsonschema.Schema{
+							Types: stv6jsonschema.TypeForSchema("string"),
+						},
+					},
+				},
+			},
+			expected: []string{
+				"arr[0]",
+				"arr[1]",
+			},
+		},
+		{
+			name: "object containing array with expressions",
+			resource: map[string]any{
+				"arr": []any{
+					"${x[0]}",
+					map[string]any{
+						"nested": "${y[1]}",
+					},
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"arr": {
+						Types: stv6jsonschema.TypeForSchema("array"),
+						Items2020: &jsonschema.Schema{
+							Types: stv6jsonschema.TypeForSchema("object"),
+							Properties: map[string]*jsonschema.Schema{
+								"nested": {Types: stv6jsonschema.TypeForSchema("string")},
+							},
+							AdditionalProperties: &jsonschema.Schema{
+								Types: stv6jsonschema.TypeForSchema("string"),
+							},
+						},
+					},
+				},
+			},
+			expected: []string{
+				"arr[0]",
+				"arr[1].nested",
+			},
+		},
+		{
+			name: "deep nested arrays",
+			resource: map[string]any{
+				"root": []any{
+					[]any{
+						"${deep[0]}",
+					},
+				},
+			},
+			schema: &jsonschema.Schema{
+				Types: stv6jsonschema.TypeForSchema("object"),
+				Properties: map[string]*jsonschema.Schema{
+					"root": {
+						Types: stv6jsonschema.TypeForSchema("array"),
+						Items2020: &jsonschema.Schema{
+							Types: stv6jsonschema.TypeForSchema("array"),
+							Items2020: &jsonschema.Schema{
+								Types: stv6jsonschema.TypeForSchema("string"),
+							},
+						},
+					},
+				},
+			},
+			expected: []string{
+				"root[0][0]",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := stv6jsonschema.ParseResource(tc.resource, tc.schema)
+			require.NoError(t, err)
+
+			// Sort paths for stable comparison
+			paths := make([]string, len(got))
+			for i, d := range got {
+				paths[i] = d.Path.String()
+			}
+			slices.Sort(paths)
+			slices.Sort(tc.expected)
+
+			require.Equal(t, len(tc.expected), len(paths), "unexpected number of expression paths")
+			assert.Equal(t, tc.expected, paths)
+		})
+	}
 }

@@ -155,16 +155,20 @@ func (t *Type) Resolve(path fieldpath.Path) (*Type, error) {
 	}
 
 	current := t
+pathLoop:
 	for i, seg := range path {
 		switch {
+		case current.CelType() == cel.DynType:
+			// dyn type will never restrict further and is always valid for all sub-paths to index into
+			break pathLoop
 		case current.IsObject():
 			name, ok := jsonschema.Escape(seg.Name)
 			if !ok {
-				return nil, fmt.Errorf("invalid field name %q at segment %d in %q", seg.Name, i, path)
+				return nil, fmt.Errorf("invalid field name %q at segment %d", seg.Name, i)
 			}
 			field, ok := current.Fields[name]
 			if !ok {
-				return nil, fmt.Errorf("field %q not found at segment %d in %q", seg.Name, i, path)
+				return nil, fmt.Errorf("field %q not found at segment %d", seg.Name, i)
 			}
 			current = field.Type
 		case current.IsList():
@@ -173,11 +177,11 @@ func (t *Type) Resolve(path fieldpath.Path) (*Type, error) {
 		case current.IsMap():
 			// any key maps to the same value type
 			if current.ElemType == nil {
-				return nil, fmt.Errorf("map value type is nil at segment %d in %q", i, path)
+				return nil, fmt.Errorf("map value type is nil at segment %d", i)
 			}
 			current = current.ElemType
 		default:
-			return nil, fmt.Errorf("type %q is not indexable at segment %d in %q", current.ElemType, i, path)
+			return nil, fmt.Errorf("type %q is not resolvable at segment %d", current.ElemType, i)
 		}
 	}
 
