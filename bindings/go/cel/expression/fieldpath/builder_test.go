@@ -78,7 +78,7 @@ func TestBuild(t *testing.T) {
 				NamedSegment("subfield"),
 				IndexedSegment(0),
 				NamedSegment("kubernetes.io/config"),
-				NamedSegment(""),
+				NamedSegment(""), // ignored as empty
 				NamedSegment("field"),
 				IndexedSegment(1),
 			},

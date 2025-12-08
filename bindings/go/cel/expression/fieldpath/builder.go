@@ -25,9 +25,9 @@ func Build(segments []Segment) string {
 		if i > 0 {
 			b.WriteRune('.')
 		}
-		if strings.Contains(segment.Name, ".") ||
-			strings.Contains(segment.Name, "[") ||
-			strings.Contains(segment.Name, "]") {
+		if strings.ContainsRune(segment.Name, '.') ||
+			strings.ContainsRune(segment.Name, '[') ||
+			strings.ContainsRune(segment.Name, ']') {
 			b.WriteString(strconv.Quote(segment.Name))
 		} else {
 			b.WriteString(segment.Name)
