@@ -1720,8 +1720,8 @@ github.com/thales-e-security/pool v0.0.2 h1:RAPs4q2EbWsTit6tpzuvTFlgFRJ3S8Evf5gt
 github.com/thales-e-security/pool v0.0.2/go.mod h1:qtpMm2+thHtqhLzTwgDBj/OuNnMpupY8mv0Phz0gjhU=
 github.com/theupdateframework/go-tuf v0.7.1-0.20240116141818-3dd2ccac05e1 h1:lSUkTt5+isbanY9kspRfdYbSRAhUjBf/uLRNjTDRel8=
 github.com/theupdateframework/go-tuf v0.7.1-0.20240116141818-3dd2ccac05e1/go.mod h1:uEB7WSY+7ZIugK6R1hiBMBjQftaFzn7ZCDJcp1tCUug=
-github.com/theupdateframework/go-tuf/v2 v2.2.0 h1:Hmb+Azgd7IKOZeNJFT2C91y+YZ+F+TeloSIvQIaXCQw=
-github.com/theupdateframework/go-tuf/v2 v2.2.0/go.mod h1:CubcJiJlBHQ2YkA5j9hlBO4B+tHFlLjRbWCJCT7EIKU=
+github.com/theupdateframework/go-tuf/v2 v2.3.0 h1:gt3X8xT8qu/HT4w+n1jgv+p7koi5ad8XEkLXXZqG9AA=
+github.com/theupdateframework/go-tuf/v2 v2.3.0/go.mod h1:xW8yNvgXRncmovMLvBxKwrKpsOwJZu/8x+aB0KtFcdw=
 github.com/theupdateframework/notary v0.7.0 h1:QyagRZ7wlSpjT5N2qQAh/pN+DVqgekv4DzbAiAiEL3c=
 github.com/theupdateframework/notary v0.7.0/go.mod h1:c9DRxcmhHmVLDay4/2fUYdISnHqbFDGRSlXPO0AhYWw=
 github.com/tidwall/gjson v1.18.0 h1:FIDeeyB800efLX89e5a8Y0BNH+LOngJyGrIWxG2FKQY=
