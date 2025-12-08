@@ -62,11 +62,11 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	pluginRegistryVersionA := "v1.0.0"
 	pluginRegistryURLA := fmt.Sprintf("http://%s//%s:%s", registryURLA, pluginRegistryComponentA, pluginRegistryVersionA)
 	pluginsA := []list.PluginInfo{
-		{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
-		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
-		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
-		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
-		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-one.io/myplugin", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
+		{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
+		{"plugin-two.io/myplugin", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two.io/myplugin", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two.io/myplugin", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
 	}
 
 	// Create plugin constructors and add them to the registry
@@ -84,10 +84,10 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	pluginRegistryVersionB := "v1.0.0"
 	pluginRegistryURLB := fmt.Sprintf("http://%s//%s:%s", registryURLB, pluginRegistryComponentB, pluginRegistryVersionB)
 	pluginsB := []list.PluginInfo{
-		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
-		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
-		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
-		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
+		{"plugin-two.io/myplugin", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two.io/myplugin", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two.io/myplugin", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLB, ""},
 	}
 
 	// Create plugin constructors and add them to the registry

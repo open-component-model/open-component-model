@@ -60,11 +60,11 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	pluginRegistryVersionA := "v1.0.0"
 	pluginRegistryURLA := fmt.Sprintf("http://%s//%s:%s", registryURLA, pluginRegistryComponentA, pluginRegistryVersionA)
 	pluginsA := []list.PluginInfo{
-		{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
-		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
-		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
-		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
-		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-one.io/myplugin", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
+		{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
+		{"plugin-two.io/myplugin", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two.io/myplugin", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two.io/myplugin", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
 	}
 
 	// Create plugin constructors and add them to the registry
@@ -82,10 +82,10 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 	pluginRegistryVersionB := "v1.0.0"
 	pluginRegistryURLB := fmt.Sprintf("http://%s//%s:%s", registryURLB, pluginRegistryComponentB, pluginRegistryVersionB)
 	pluginsB := []list.PluginInfo{
-		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
-		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
-		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
-		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
+		{"plugin-two.io/myplugin", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two.io/myplugin", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two.io/myplugin", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLB, ""},
 	}
 
 	// Create plugin constructors and add them to the registry
@@ -107,45 +107,45 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 		result           []list.PluginInfo
 	}{
 		{
-			name:             "get plugin-one with version",
-			plugin:           "plugin-one",
+			name:             "get plugin-one.io/myplugin with version",
+			plugin:           "plugin-one.io/myplugin",
 			version:          "v1.7.0",
 			pluginRegistries: []string{pluginRegistryURLA},
 			withVersion:      true,
 			result: []list.PluginInfo{
-				{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
+				{"plugin-one.io/myplugin", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
 			},
 		},
 		{
-			name:             "get plugin-one with version (without registry version)",
-			plugin:           "plugin-one",
+			name:             "get plugin-one.io/myplugin with version (without registry version)",
+			plugin:           "plugin-one.io/myplugin",
 			version:          "v1.7.0",
 			pluginRegistries: []string{strings.Split(pluginRegistryURLA, ":"+pluginRegistryVersionA)[0]},
 			withVersion:      true,
 			result: []list.PluginInfo{
-				{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
+				{"plugin-one.io/myplugin", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
 			},
 		},
 		{
-			name:             "get plugin-two without version",
-			plugin:           "plugin-two",
+			name:             "get plugin-two.io/myplugin without version",
+			plugin:           "plugin-two.io/myplugin",
 			pluginRegistries: []string{pluginRegistryURLA},
 			withVersion:      false,
 			result: []list.PluginInfo{
-				{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
-				{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
-				{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
+				{"plugin-two.io/myplugin", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+				{"plugin-two.io/myplugin", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+				{"plugin-two.io/myplugin", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
 			},
 		},
 		{
-			name:             "get plugin-one from two remote plugin registries",
-			plugin:           "plugin-one",
+			name:             "get plugin-one.io/myplugin from two remote plugin registries",
+			plugin:           "plugin-one.io/myplugin",
 			pluginRegistries: []string{pluginRegistryURLA, pluginRegistryURLB},
 			withVersion:      false,
 			result: []list.PluginInfo{
-				{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
-				{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
-				{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
+				{"plugin-one.io/myplugin", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
+				{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
+				{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
 			},
 		},
 		{
