@@ -17,7 +17,6 @@ package jsonschema
 import (
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/google/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -31,141 +30,219 @@ const (
 	schemaTypeAny = "any"
 )
 
-// ParseResource extracts CEL expressions from a resource based on
-// the schema. The resource is expected to be a map[string]interface{}.
-//
-// Note that this function will also validate the resource against the schema
-// and return an error if the resource does not match the schema. When CEL
-// expressions are found, they are extracted and returned with the expected
-// type of the field (inferred from the schema).
-func ParseResource(resource map[string]interface{}, resourceSchema *jsonschema.Schema) ([]variable.FieldDescriptor, error) {
-	return parseResource(resource, resourceSchema, nil)
+func ParseResource(resource map[string]interface{}, schema *jsonschema.Schema) ([]variable.FieldDescriptor, error) {
+	// Create DeclType from schema, deriving CEL Type Information.
+	declType := NewSchemaDeclType(schema)
+	if declType == nil {
+		return nil, fmt.Errorf("cannot create type information from schema, unsupported schema structure")
+	}
+	return ParseResourceFromDeclType(resource, declType)
 }
 
-// parseResource is a helper function that recursively extracts CEL expressions
-// from a resource. It uses a depth first search to traverse the resource and
-// extract expressions from string fields
-func parseResource(resource interface{}, schema *jsonschema.Schema, path fieldpath.Path) ([]variable.FieldDescriptor, error) {
-	if schema == nil {
-		return nil, fmt.Errorf("schema is nil for path %s", path)
-	}
-	if schema.Ref != nil {
-		return parseResource(resource, schema.Ref, path)
-	}
-	if err := validateSchema(schema, path); err != nil {
-		return nil, err
-	}
+// ParseResourceFromDeclType performs a 3-phase parse:
+//  1. Schemaless extraction of all CEL expressions from the resource.
+//  2. Schema projection and type annotation of the extracted expressions.
+//  3. Validation of the resource against the expression-safe schema.
+//
+// It returns the list of field descriptors representing the extracted expressions with expected types.
+func ParseResourceFromDeclType(resource map[string]interface{}, declType *DeclType) ([]variable.FieldDescriptor, error) {
+	// because we modify the scheme of the decl type to be safe for expression-based values,
+	// we need to work on a copy of the decl type and its schema.
+	mutatedDeclType := *declType
+	mutatedScheme := *declType.Schema.Schema
+	mutatedDeclType.Schema = &Schema{Schema: &mutatedScheme}
+	declType = &mutatedDeclType
 
-	expectedTypes, err := getExpectedTypes(schema)
+	// Phase 1: schemaless extraction
+	// for any field with a CEL expression, extract it without schema validation
+	schemalessDescs, err := parser.ParseSchemaless(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	switch field := resource.(type) {
-	case map[string]interface{}:
-		return parseObject(field, schema, path, expectedTypes)
-	case []interface{}:
-		return parseArray(field, schema, path, expectedTypes)
-	case string:
-		return parseString(field, schema, path, expectedTypes)
-	case nil:
-		return nil, nil
-	default:
-		return parseScalarTypes(field, schema, path, expectedTypes)
+	if err := validateSchema(declType.Schema.Schema); err != nil {
+		return nil, err
 	}
+
+	// Phase 2: schema projection + type annotation
+	// for every field descriptor we found, derive its expected type from the decl type
+	// and make sure that the expression conforms to a validatable scheme that
+	// is valid even when the expression is not yet resolved.
+	annotated, err := makeSchemaExpressionSafeAndDeriveExpectedTypes(schemalessDescs, declType)
+	if err != nil {
+		return nil, err
+	}
+
+	// Phase 3: validate the resource against the modified schema
+	// this ensures that non-CEL values are valid according to the schema.
+	if err := declType.Schema.Schema.Validate(resource); err != nil {
+		return nil, err
+	}
+
+	// Stable sorting based on paths
+	slices.SortFunc(annotated, func(a, b variable.FieldDescriptor) int {
+		return fieldpath.Compare(a.Path, b.Path)
+	})
+
+	return annotated, nil
 }
 
-// getCelType converts an OpenAPI schema to a CEL type using the Kubernetes OpenAPI library.
-// This replaces manual type conversion with the library's schema-to-CEL type conversion.
-func getCelType(schema *jsonschema.Schema) *cel.Type {
-	if schema == nil {
-		return cel.DynType
-	}
-
-	// Use the library to convert schema to CEL type
-	declType := NewSchemaDeclType(schema)
-	if declType == nil {
-		return cel.DynType
-	}
-
-	return declType.CelType()
-}
-
-// getExpectedTypes extracts the expected types from a schema for validation purposes.
-// This is used for non-CEL values to ensure proper type validation.
-func getExpectedTypes(schema *jsonschema.Schema) ([]string, error) {
-	// Handle composite schemas (like OneOf, AnyOf)
-	if types, found := handleCompositeSchemas(schema); found {
-		return types, nil
-	}
-
-	// Handle direct type definitions
-	// if schema.ID != "" {
-	//	return []string{string(schema.ID)}, nil
-	//}
-	if !schema.Types.IsEmpty() {
-		return schema.Types.ToStrings(), nil
-	}
-
-	// Handle additional properties
-	if isBooleanSchema(schema.AdditionalProperties, true) {
-		// NOTE(a-hilaly): I don't like the type "any", we might want to change this to "object"
-		// in the future; just haven't really thought about it yet.
-		// Basically "any" means that the field can be of any type.
-		return []string{schemaTypeAny}, nil
-	}
-
-	return nil, fmt.Errorf("unknown schema type")
-}
-
-// handleCompositeSchemas processes OneOf and AnyOf schemas
-// and returns collected types if present.
-func handleCompositeSchemas(schema *jsonschema.Schema) ([]string, bool) {
-	// Handle OneOf schemas
-	if len(schema.OneOf) > 0 {
-		types := collectTypesFromSubSchemas(schema.OneOf)
-		if len(types) > 0 {
-			return types, true
+// makeSchemaExpressionSafeAndDeriveExpectedTypes walks the schema for each descriptor and sets ExpectedType.
+// It also validates non-CEL values if needed.
+// because CEL expressions are always strings, it modifies the schema to expect strings at those paths.
+// It returns a new slice of descriptors with the updated ExpectedType. The given declType has its
+// schema mutated in place to respect the field descriptors.
+func makeSchemaExpressionSafeAndDeriveExpectedTypes(
+	descs []variable.FieldDescriptor,
+	declType *DeclType,
+) ([]variable.FieldDescriptor, error) {
+	out := make([]variable.FieldDescriptor, len(descs))
+	for i, d := range descs {
+		sch, err := lookupSchemaForPath(declType.Schema.Schema, d.Path)
+		if err != nil {
+			return nil, fmt.Errorf("path %s was not found in the schema: %w", d.Path, err)
 		}
-	}
 
-	// Handle AnyOf schemas
-	if len(schema.AnyOf) > 0 {
-		types := collectTypesFromSubSchemas(schema.AnyOf)
-		if len(types) > 0 {
-			return types, true
-		}
-	}
-
-	return nil, false
-}
-
-// collectTypesFromSubSchemas extracts types from a slice of schemas,
-// handling structural constraints like Required and Not.
-func collectTypesFromSubSchemas(subSchemas []*jsonschema.Schema) []string {
-	var types []string
-
-	for _, subSchema := range subSchemas {
-		// If there are structural constraints, inject object type
-		if len(subSchema.Required) > 0 || subSchema.Not != nil {
-			if !slices.Contains(types, ObjectType) {
-				types = append(types, ObjectType)
+		var celType *cel.Type
+		if !d.StandaloneExpression {
+			// String templates *always* evaluate to strings
+			celType = cel.StringType
+		} else {
+			if declType, err := declType.Resolve(d.Path); err != nil {
+				if sch.AdditionalProperties == true {
+					// treat unknown fields as dyn
+					celType = cel.DynType
+				} else {
+					// For now, if we are not on a guaranteed path where additionalProperties is allowed,
+					// fail out. We can be more lenient as we discover new paths
+					return nil, fmt.Errorf("path %s: %w", d.Path, err)
+				}
+			} else {
+				celType = declType.CelType()
 			}
 		}
-		// Collect types if present
-		if !subSchema.Types.IsEmpty() {
-			if !slices.Contains(types, subSchema.Types.ToStrings()[0]) {
-				types = append(types, subSchema.Types.ToStrings()[0])
+
+		d.ExpectedType = celType
+		out[i] = d
+
+		*sch = jsonschema.Schema{
+			// Because the expression is always a string
+			// we dont expect the actual value but instead
+			// the string containing the expression(s).
+			Types: TypeForSchema(StringType),
+		}
+	}
+	return out, nil
+}
+
+// lookupSchemaForPath returns the schema node that corresponds to a resource path.
+func lookupSchemaForPath(schema *jsonschema.Schema, path fieldpath.Path) (*jsonschema.Schema, error) {
+	current := schema
+
+	for _, seg := range path {
+		// Follow $ref if required
+		if current.Ref != nil {
+			current = current.Ref
+		}
+
+		switch {
+		case seg.Index != nil:
+			// Array index
+			itemSchema, err := getArrayItemSchema(current, path)
+			if err != nil {
+				return nil, err
+			}
+			current = itemSchema
+		case seg.Name != "":
+			// Object property
+			next, err := getFieldSchema(current, seg.Name)
+			if err != nil {
+				return nil, err
+			}
+			switch t := next.(type) {
+			case *jsonschema.Schema:
+				current = t
+			case bool:
+				// AdditionalProperties = true → treat as "any"
+				if t {
+					current = &jsonschema.Schema{
+						Types:                TypeForSchema(schemaTypeAny),
+						AdditionalProperties: true,
+					}
+				} else {
+					return nil, fmt.Errorf("field %q not allowed by schema", seg.Name)
+				}
+			default:
+				return nil, fmt.Errorf("invalid schema for field %q", seg.Name)
 			}
 		}
 	}
 
-	return types
+	// Resolve terminal $ref
+	if current != nil && current.Ref != nil {
+		return current.Ref, nil
+	}
+	return current, nil
 }
 
-func validateSchema(schema *jsonschema.Schema, path fieldpath.Path) error {
+func getArrayItemSchema(schema *jsonschema.Schema, path fieldpath.Path) (*jsonschema.Schema, error) {
 	if schema == nil {
-		return fmt.Errorf("schema is nil for path %s", path)
+		return nil, fmt.Errorf("nil schema for path %s", path)
+	}
+
+	// JSON Schema draft uses two fields depending on dialect.
+	// Simple case: items: { ... }
+	if schema.Items != nil {
+		switch items := schema.Items.(type) {
+		case *jsonschema.Schema:
+			// Single schema for all items
+			return items, nil
+
+		case []*jsonschema.Schema:
+			// Tuple validation: items=[s1, s2, ...]
+			if len(items) == 0 {
+				return nil, fmt.Errorf("array schema at %s has empty items list", path)
+			}
+			// Kubernetes OpenAPI does not use tuple, so we pick items[0]
+			return items[0], nil
+
+		default:
+			return nil, fmt.Errorf("invalid items type %T at path %s", items, path)
+		}
+	}
+
+	if schema.Items2020 != nil {
+		return schema.Items2020, nil
+	}
+
+	return nil, fmt.Errorf("array at %s has no item schema", path)
+}
+
+func getFieldSchema(schema *jsonschema.Schema, field string) (any, error) {
+	if schema == nil {
+		return nil, fmt.Errorf("nil schema when resolving field %q", field)
+	}
+
+	// First priority: explicit properties
+	if schema.Properties != nil {
+		if sub, ok := schema.Properties[field]; ok {
+			return sub, nil
+		}
+	}
+
+	// If AdditionalProperties is present, it defines the schema for unknown fields
+	if schema.AdditionalProperties != nil {
+		// It can be *jsonschema.Schema or bool
+		return schema.AdditionalProperties, nil
+	}
+
+	// If AdditionalProperties is absent, default is: additionalProperties = true
+	return true, nil
+}
+
+func validateSchema(schema *jsonschema.Schema) error {
+	if schema == nil {
+		return fmt.Errorf("schema is nil")
 	}
 	hasValidType := schema.Types != nil && len(schema.Types.ToStrings()) > 0
 	hasValidOneOf := len(schema.OneOf) != 0
@@ -174,213 +251,7 @@ func validateSchema(schema *jsonschema.Schema, path fieldpath.Path) error {
 	isValid := hasValidType || hasValidOneOf || hasValidAnyOf || hasValidAdditionalProperties
 	// Ensure the schema has at least one valid construct
 	if !isValid {
-		return fmt.Errorf("schema at path %q has no valid type, OneOf, AnyOf, or AdditionalProperties", path)
+		return fmt.Errorf("schema has no valid type, OneOf, AnyOf, or AdditionalProperties")
 	}
 	return nil
-}
-
-func parseObject(field map[string]interface{}, schema *jsonschema.Schema, path fieldpath.Path, expectedTypes []string) ([]variable.FieldDescriptor, error) {
-	if !slices.Contains(expectedTypes, ObjectType) && !slices.Contains(expectedTypes, schemaTypeAny) {
-		return nil, fmt.Errorf("expected %s type for path %q to be object or any", strings.Join(expectedTypes, " or "), path)
-	}
-
-	var expressionsFields []variable.FieldDescriptor
-	for fieldName, value := range field {
-		fieldSchema, err := getFieldSchema(schema, fieldName)
-		if err != nil {
-			return nil, fmt.Errorf("error getting field schema for path %s: %w", path.AddNamed(fieldName), err)
-		}
-		fieldPath := path.AddNamed(fieldName)
-		switch fieldSchema := fieldSchema.(type) {
-		case *jsonschema.Schema:
-			fieldExpressions, err := parseResource(value, fieldSchema, fieldPath)
-			if err != nil {
-				return nil, err
-			}
-			expressionsFields = append(expressionsFields, fieldExpressions...)
-		case bool:
-			if !fieldSchema {
-				return nil, fmt.Errorf("additional properties are not allowed at path %s", fieldPath)
-			}
-			fieldExpressions, err := parseResource(value, &jsonschema.Schema{
-				Types:                TypeForSchema(schemaTypeAny),
-				AdditionalProperties: true,
-			}, fieldPath)
-			if err != nil {
-				return nil, err
-			}
-			expressionsFields = append(expressionsFields, fieldExpressions...)
-		}
-	}
-
-	slices.SortFunc(expressionsFields, func(a, b variable.FieldDescriptor) int {
-		return fieldpath.Compare(a.Path, b.Path)
-	})
-	return expressionsFields, nil
-}
-
-func parseArray(field []interface{}, schema *jsonschema.Schema, path fieldpath.Path, expectedTypes []string) ([]variable.FieldDescriptor, error) {
-	if !slices.Contains(expectedTypes, ArrayType) {
-		return nil, fmt.Errorf("expected %s type for path %s, got array", strings.Join(expectedTypes, " or "), path)
-	}
-
-	itemSchema, err := getArrayItemSchema(schema, path)
-	if err != nil {
-		return nil, err
-	}
-
-	var expressionsFields []variable.FieldDescriptor
-	for i, item := range field {
-		itemPath := path.AddIndexed(i)
-		itemExpressions, err := parseResource(item, itemSchema, itemPath)
-		if err != nil {
-			return nil, err
-		}
-		expressionsFields = append(expressionsFields, itemExpressions...)
-	}
-	return expressionsFields, nil
-}
-
-func parseString(field string, schema *jsonschema.Schema, path fieldpath.Path, expectedTypes []string) ([]variable.FieldDescriptor, error) {
-	ok, err := parser.IsStandaloneExpression(field)
-	if err != nil {
-		return nil, err
-	}
-
-	if ok {
-		// For CEL expressions, get the CEL type from the schema
-		expectedType := getCelType(schema)
-		expr := strings.TrimPrefix(field, "${")
-		expr = strings.TrimSuffix(expr, "}")
-		return []variable.FieldDescriptor{{
-			Expressions:          []variable.Expression{{Value: expr}},
-			ExpectedType:         expectedType,
-			Path:                 path,
-			StandaloneExpression: true,
-		}}, nil
-	}
-
-	if !slices.Contains(expectedTypes, StringType) && !slices.Contains(expectedTypes, schemaTypeAny) {
-		return nil, fmt.Errorf("expected %s type for path %s, got string", strings.Join(expectedTypes, " or "), path)
-	}
-
-	expressions, err := parser.ExtractExpressions(field)
-	if err != nil {
-		return nil, err
-	}
-	exprs := make([]variable.Expression, len(expressions))
-	for i, expr := range expressions {
-		exprs[i] = variable.Expression{Value: expr}
-	}
-	if len(expressions) > 0 {
-		// String templates always produce strings
-		return []variable.FieldDescriptor{{
-			Expressions:  exprs,
-			ExpectedType: cel.StringType,
-			Path:         path,
-		}}, nil
-	}
-	return nil, nil
-}
-
-func parseScalarTypes(field interface{}, _ *jsonschema.Schema, path fieldpath.Path, expectedTypes []string) ([]variable.FieldDescriptor, error) {
-	// If "any" type is expected, skip validation
-	if slices.Contains(expectedTypes, schemaTypeAny) {
-		return nil, nil
-	}
-
-	// Check if the value matches any of the expected types
-	actualType := getSchemaTypeName(field)
-	for _, expected := range expectedTypes {
-		switch expected {
-		case NumType:
-			if isNumber(field) {
-				return nil, nil
-			}
-		case IntegerType:
-			if isInteger(field) {
-				return nil, nil
-			}
-		case BooleanType:
-			if _, ok := field.(bool); ok {
-				return nil, nil
-			}
-		}
-	}
-
-	// No match found - return error with all expected types
-	return nil, fmt.Errorf("expected %s type for path %s, got %s", strings.Join(expectedTypes, " or "), path, actualType)
-}
-
-// getSchemaTypeName converts a Go type to its OpenAPI schema type name
-func getSchemaTypeName(v interface{}) string {
-	switch v.(type) {
-	case bool:
-		return BooleanType
-	case int, int8, int16, int32, int64:
-		return IntegerType
-	default:
-		// For other types (including float), use the Go type name
-		return fmt.Sprintf("%T", v)
-	}
-}
-
-func getFieldSchema(schema *jsonschema.Schema, field string) (any, error) {
-	if schema.Properties != nil {
-		if fieldSchema, ok := schema.Properties[field]; ok {
-			return fieldSchema, nil
-		}
-	}
-	if schema.AdditionalProperties != nil {
-		return schema.AdditionalProperties, nil
-	} else {
-		return true, nil // By default, additional properties are allowed
-	}
-}
-
-func getArrayItemSchema(schema *jsonschema.Schema, path fieldpath.Path) (*jsonschema.Schema, error) {
-	if schema.Items != nil {
-		switch items := schema.Items.(type) {
-		case *jsonschema.Schema:
-			return items, nil
-		case []*jsonschema.Schema:
-			if len(items) == 0 {
-				return nil, fmt.Errorf("invalid array schema for path %s: items array is empty", path)
-			}
-			return items[0], nil
-		default:
-			return nil, fmt.Errorf("invalid array schema for path %s: unknown items type", path)
-		}
-	}
-	if schema.Items2020 != nil {
-		return schema.Items2020, nil
-	}
-	return nil, fmt.Errorf("invalid array schema for path %s: no items schema defined", path)
-}
-
-func isNumber(v interface{}) bool {
-	return isInteger(v) || isFloat(v)
-}
-
-func isFloat(v interface{}) bool {
-	switch v.(type) {
-	case float32, float64:
-		return true
-	default:
-		return false
-	}
-}
-
-func isInteger(v interface{}) bool {
-	switch v.(type) {
-	case int, int8, int32, int64:
-		return true
-	default:
-		return false
-	}
-}
-
-func isBooleanSchema(sch any, val bool) bool {
-	b, ok := sch.(bool)
-	return ok && (b == val)
 }
