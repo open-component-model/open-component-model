@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test/RequiredDefaults.schema.json",
+  "title": "RequiredDefaults",
+  "type": "object",
+  "required": ["a", "b"],
+  "properties": {
+    "a": { "type": "string" },
+    "b": { "type": "integer", "default": 10 },
+    "c": { "type": "boolean" },
+    "d": {
+      "type": "object",
+      "required": ["x"],
+      "properties": {
+        "x": { "type": "string" },
+        "y": { "type": "number", "default": 1.25 }
+      }
+    }
+  }
+}

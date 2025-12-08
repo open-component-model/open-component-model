@@ -1,6 +1,6 @@
 module ocm.software/open-component-model/bindings/go/repository
 
-go 1.25.0
+go 1.25.4
 
 require (
 	github.com/gobwas/glob v0.2.3
