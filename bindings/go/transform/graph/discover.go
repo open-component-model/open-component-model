@@ -67,7 +67,7 @@ func discoverExpressions(
 ) ([]ast.ExpressionInspection, error) {
 	expressionInspections := make([]ast.ExpressionInspection, 0, len(fieldDescriptor.Expressions))
 	for _, expression := range fieldDescriptor.Expressions {
-		inspection, err := inspector.Inspect(expression)
+		inspection, err := inspector.Inspect(expression.Value)
 		if err != nil {
 			return nil, fmt.Errorf("failed to inspect expression %q: %w", expression, err)
 		}

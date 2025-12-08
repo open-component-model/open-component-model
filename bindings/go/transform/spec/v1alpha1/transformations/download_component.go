@@ -33,14 +33,6 @@ func (t *ComponentVersionDownloadTransformation) GetDeclType() *stv6jsonschema.D
 	return t.declType
 }
 
-type loader struct {
-	schema any
-}
-
-func (l loader) Load(url string) (any, error) {
-	return nil, fmt.Errorf("loader: no such resource %s", url)
-}
-
 func NewOCIComponentVersionDownloadTransformation(
 	repo repository.ComponentVersionRepositoryProvider,
 ) (*ComponentVersionDownloadTransformation, error) {
@@ -54,45 +46,35 @@ func NewOCIComponentVersionDownloadTransformation(
 		return nil, err
 	}
 	compiler := jsonschema.NewCompiler()
-	//compiler.UseLoader(loader{transformationJSON})
-
-	defs := transformationJSON.(map[string]any)["$defs"]
-	for key, def := range defs.(map[string]any) {
-		//id := def.(map[string]any)["$id"].(string)
-		if err := compiler.AddResource(key, def); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := compiler.AddResource("DownloadComponentTransformation.schema.json", transformationJSON); err != nil {
+	if err := compiler.AddResource("transformation.schema.json", transformationJSON); err != nil {
 		return nil, err
 	}
-	if err := compiler.AddResource("Repository.schema.json", repoJSON); err != nil {
+	if err := compiler.AddResource("repository.schema.json", repoJSON); err != nil {
 		return nil, err
 	}
-
 	base := &ComponentVersionDownloadTransformation{
 		repoProvider: repo,
 	}
-
-	schema, err := compiler.Compile("DownloadComponentTransformation.schema.json")
+	schema, err := compiler.Compile("transformation.schema.json")
 	if err != nil {
 		return nil, err
 	}
-	schema.Properties["type"].Enum = &jsonschema.Enum{Values: []any{base.GetType().String()}}
-
-	reposchema, err := compiler.Compile("Repository.schema.json")
+	schema.Properties["type"].Enum = &jsonschema.Enum{Values: []any{base.GetType()}}
+	reposchema, err := compiler.Compile("repository.schema.json")
 	if err != nil {
 		return nil, err
 	}
-	schema.Properties["spec"].Ref.Properties["repository"] = reposchema
-
+	//schema.Properties["spec"].Ref.Properties["repository"] = reposchema
+	schema.Properties["spec"].Ref.Properties["repository"] = &jsonschema.Schema{
+		OneOf: []*jsonschema.Schema{
+			reposchema,
+		},
+	}
 	v2descriptor, err := v2.GetJSONSchema()
 	if err != nil {
 		return nil, err
 	}
 	schema.Properties["output"] = v2descriptor
-
 	base.declType = stv6jsonschema.NewSchemaDeclType(schema)
 
 	return base, nil
@@ -207,31 +189,3 @@ func (t *DownloadComponentTransformation) FromGeneric(generic *v1alpha1.GenericT
 	t.Spec = transformation.Spec
 	return nil
 }
-
-//
-//func downloadComponentTransformationJSONSchema(
-//	provider repository.ComponentVersionRepositoryProvider,
-//	typ runtime.Type,
-//) (*invopop.Schema, *invopop.Schema, error) {
-//	// first convert repos
-//	repoSchema, err := provider.GetJSONSchema(context.TODO(), typ)
-//	if err != nil {
-//		return nil, nil, fmt.Errorf("failed to get JSON schema for repository %s: %w", typ, err)
-//	}
-//	repoInvopop := &invopop.Schema{}
-//	if err := repoInvopop.UnmarshalJSON(repoSchema); err != nil {
-//		return nil, nil, fmt.Errorf("failed to unmarshal JSON schema for repository %s: %w", typ, err)
-//	}
-//	reflector := invopop.Reflector{
-//		DoNotReference: true,
-//		Anonymous:      true,
-//		IgnoredTypes:   []any{&runtime.Raw{}},
-//	}
-//	transformationSpecJSONSchema := reflector.Reflect(&DownloadComponentTransformationSpec{})
-//	transformationSpecJSONSchema.Properties.Set("repository", repoInvopop)
-//	descriptorSchema, err := v2.GetJSONSchema()
-//	if err != nil {
-//		return nil, nil, fmt.Errorf("failed to get JSON schema for descriptor: %w", err)
-//	}
-//	return transformationSpecJSONSchema, &descriptorSchema.Invopop, nil
-//}

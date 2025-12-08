@@ -47,11 +47,11 @@ func ParseResource(resource map[string]interface{}, schema *jsonschema.Schema) (
 // It returns the list of field descriptors representing the extracted expressions with expected types.
 func ParseResourceFromDeclType(resource map[string]interface{}, declType *DeclType) ([]variable.FieldDescriptor, error) {
 	// because we modify the scheme of the decl type to be safe for expression-based values,
-	// we need to work on a copy of the decl type and its schema.
-	mutatedDeclType := *declType
-	mutatedScheme := *declType.Schema.Schema
-	mutatedDeclType.Schema = &Schema{Schema: &mutatedScheme}
-	declType = &mutatedDeclType
+	// we need to work on a copy of reference graph to avoid mutating the original decl type.
+	declType = &DeclType{
+		Type:   declType.Type,
+		Schema: &Schema{Schema: cloneSchemaGraphReferences(declType.Schema.Schema)},
+	}
 
 	// Phase 1: schemaless extraction
 	// for any field with a CEL expression, extract it without schema validation
@@ -98,18 +98,17 @@ func makeSchemaExpressionSafeAndDeriveExpectedTypes(
 ) ([]variable.FieldDescriptor, error) {
 	out := make([]variable.FieldDescriptor, len(descs))
 	for i, d := range descs {
-		sch, err := lookupSchemaForPath(declType.Schema.Schema, d.Path)
+		location, err := lookupSchemaForPath(declType.Schema.Schema, d.Path)
 		if err != nil {
 			return nil, fmt.Errorf("path %s was not found in the schema: %w", d.Path, err)
 		}
-
 		var celType *cel.Type
 		if !d.StandaloneExpression {
 			// String templates *always* evaluate to strings
 			celType = cel.StringType
 		} else {
 			if declType, err := declType.Resolve(d.Path); err != nil {
-				if sch.AdditionalProperties == true {
+				if location.Node.AdditionalProperties == true {
 					// treat unknown fields as dyn
 					celType = cel.DynType
 				} else {
@@ -124,53 +123,83 @@ func makeSchemaExpressionSafeAndDeriveExpectedTypes(
 
 		d.ExpectedType = celType
 		out[i] = d
-
-		*sch = jsonschema.Schema{
-			// Because the expression is always a string
-			// we dont expect the actual value but instead
-			// the string containing the expression(s).
-			Types: TypeForSchema(StringType),
-		}
 	}
 	return out, nil
 }
 
+type schemaLocation struct {
+	Parent *jsonschema.Schema // The schema containing the node
+	Node   *jsonschema.Schema // The schema node at the path (may be ref)
+	Key    string             // Object property name; "" means array item
+}
+
+func replaceSchemaAtLocation(loc *schemaLocation, replacement *jsonschema.Schema) {
+	// Root node
+	if loc.Parent == nil {
+		*loc.Node = *replacement
+		return
+	}
+
+	// Array item
+	if loc.Key == "" {
+		cloned := *replacement
+		loc.Parent.Items2020 = &cloned
+		return
+	}
+
+	// Object property
+	if loc.Parent.Properties == nil {
+		loc.Parent.Properties = map[string]*jsonschema.Schema{}
+	}
+	cloned := *replacement
+	loc.Parent.Properties[loc.Key] = &cloned
+}
+
 // lookupSchemaForPath returns the schema node that corresponds to a resource path.
-func lookupSchemaForPath(schema *jsonschema.Schema, path fieldpath.Path) (*jsonschema.Schema, error) {
-	current := schema
+func lookupSchemaForPath(root *jsonschema.Schema, path fieldpath.Path) (*schemaLocation, error) {
+	current := root
+	parent := (*jsonschema.Schema)(nil)
+	key := ""
 
 	for _, seg := range path {
-		// Follow $ref if required
+		if current == nil {
+			return nil, fmt.Errorf("nil schema while resolving %s", path)
+		}
+
+		// Follow $ref
 		if current.Ref != nil {
 			current = current.Ref
 		}
 
 		switch {
 		case seg.Index != nil:
-			// Array index
-			itemSchema, err := getArrayItemSchema(current, path)
+			item, err := getArrayItemSchema(current, path)
 			if err != nil {
 				return nil, err
 			}
-			current = itemSchema
+			parent = current
+			key = "" // array item
+			current = item
 		case seg.Name != "":
-			// Object property
-			next, err := getFieldSchema(current, seg.Name)
+			raw, err := getFieldSchema(current, seg.Name)
 			if err != nil {
 				return nil, err
 			}
-			switch t := next.(type) {
+			switch v := raw.(type) {
 			case *jsonschema.Schema:
-				current = t
-			case bool:
-				// AdditionalProperties = true → treat as "any"
-				if t {
-					current = &jsonschema.Schema{
-						Types:                TypeForSchema(schemaTypeAny),
-						AdditionalProperties: true,
-					}
-				} else {
-					return nil, fmt.Errorf("field %q not allowed by schema", seg.Name)
+				parent = current
+				key = seg.Name
+				current = v
+
+			case bool: // AdditionalProperties = true
+				if !v {
+					return nil, fmt.Errorf("field %q not allowed", seg.Name)
+				}
+				parent = current
+				key = seg.Name
+				current = &jsonschema.Schema{
+					Types:                TypeForSchema(schemaTypeAny),
+					AdditionalProperties: true,
 				}
 			default:
 				return nil, fmt.Errorf("invalid schema for field %q", seg.Name)
@@ -178,37 +207,21 @@ func lookupSchemaForPath(schema *jsonschema.Schema, path fieldpath.Path) (*jsons
 		}
 	}
 
-	// Resolve terminal $ref
-	if current != nil && current.Ref != nil {
-		return current.Ref, nil
+	// Resolve final $ref
+	if current.Ref != nil {
+		current = current.Ref
 	}
-	return current, nil
+
+	return &schemaLocation{
+		Parent: parent,
+		Node:   current,
+		Key:    key,
+	}, nil
 }
 
 func getArrayItemSchema(schema *jsonschema.Schema, path fieldpath.Path) (*jsonschema.Schema, error) {
 	if schema == nil {
 		return nil, fmt.Errorf("nil schema for path %s", path)
-	}
-
-	// JSON Schema draft uses two fields depending on dialect.
-	// Simple case: items: { ... }
-	if schema.Items != nil {
-		switch items := schema.Items.(type) {
-		case *jsonschema.Schema:
-			// Single schema for all items
-			return items, nil
-
-		case []*jsonschema.Schema:
-			// Tuple validation: items=[s1, s2, ...]
-			if len(items) == 0 {
-				return nil, fmt.Errorf("array schema at %s has empty items list", path)
-			}
-			// Kubernetes OpenAPI does not use tuple, so we pick items[0]
-			return items[0], nil
-
-		default:
-			return nil, fmt.Errorf("invalid items type %T at path %s", items, path)
-		}
 	}
 
 	if schema.Items2020 != nil {
@@ -248,10 +261,47 @@ func validateSchema(schema *jsonschema.Schema) error {
 	hasValidOneOf := len(schema.OneOf) != 0
 	hasValidAnyOf := len(schema.AnyOf) != 0
 	hasValidAdditionalProperties := schema.AdditionalProperties != nil
-	isValid := hasValidType || hasValidOneOf || hasValidAnyOf || hasValidAdditionalProperties
+	hasValidRef := schema.Ref != nil
+	isValid := hasValidType || hasValidOneOf || hasValidAnyOf || hasValidAdditionalProperties || hasValidRef
 	// Ensure the schema has at least one valid construct
 	if !isValid {
-		return fmt.Errorf("schema has no valid type, OneOf, AnyOf, or AdditionalProperties")
+		return fmt.Errorf("schema has no valid type, OneOf, AnyOf, or AdditionalProperties or $ref")
 	}
 	return nil
+}
+
+// cloneSchemaGraphReferences is a referencial clone that only clones the structure of the schema
+// reference pointers, but not other fields.
+// we work on this clone to avoid mutating the original schema relations when replacing
+// nodes with expression-safe versions.
+// because this is not a full clone, it should not be used for other purposes.
+func cloneSchemaGraphReferences(s *jsonschema.Schema) *jsonschema.Schema {
+	if s == nil {
+		return nil
+	}
+	out := *s // shallow copy of self
+
+	if s.Properties != nil {
+		out.Properties = make(map[string]*jsonschema.Schema, len(s.Properties))
+		for k, v := range s.Properties {
+			out.Properties[k] = cloneSchemaGraphReferences(v)
+		}
+	}
+
+	if s.AdditionalProperties != nil {
+		switch ap := s.AdditionalProperties.(type) {
+		case bool:
+			out.AdditionalProperties = ap
+		case *jsonschema.Schema:
+			out.AdditionalProperties = cloneSchemaGraphReferences(ap)
+		}
+	}
+
+	out.Items2020 = cloneSchemaGraphReferences(s.Items2020)
+	out.OneOf = slices.Clone(s.OneOf)
+	out.AnyOf = slices.Clone(s.AnyOf)
+	out.AllOf = slices.Clone(s.AllOf)
+	out.Ref = cloneSchemaGraphReferences(s.Ref)
+
+	return &out
 }

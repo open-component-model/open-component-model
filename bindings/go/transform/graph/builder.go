@@ -166,15 +166,13 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transf
 		return err
 	}
 
-	asts := map[string]*cel.Ast{}
-
 	for i, fieldDescriptor := range transformation.fieldDescriptors {
-		for _, expression := range fieldDescriptor.Expressions {
-			ast, issues := env.Compile(expression)
+		for j, expression := range fieldDescriptor.Expressions {
+			ast, issues := env.Compile(expression.Value)
 			if issues.Err() != nil {
-				return issues.Err()
+				return fmt.Errorf("cannot compile expression %q: %w", expression.Value, issues.Err())
 			}
-			asts[expression] = ast
+			fieldDescriptor.Expressions[j].AST = ast.NativeRep()
 		}
 		transformation.fieldDescriptors[i] = fieldDescriptor
 	}
@@ -189,40 +187,39 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(ctx context.Context, transf
 		return fmt.Errorf("no transformation registered for type %q", typ.String())
 	}
 	declType := stepRunner.GetDeclType()
-
 	b.builder.RegisterDeclTypes(declType)
 	b.builder.RegisterEnvOption(cel.Variable(transformation.ID, declType.CelType()))
 	transformation.declType = declType
 
-	specSchema, ok := declType.Schema.Schema.Properties["spec"]
-	if !ok {
-		return fmt.Errorf("transformation declType has no spec property")
-	}
-	validatedFieldDescriptors, err := stv6jsonschema.ParseResource(transformation.Spec.Data, specSchema)
+	specDeclType := declType.DeclTypeFromProperty("spec")
+	specFieldDescriptors, err := stv6jsonschema.ParseResourceFromDeclType(transformation.Spec.Data, specDeclType)
 	if err != nil {
 		return fmt.Errorf("validate transformation resource against schema: %w", err)
 	}
+
 	for i, fieldDescriptor := range transformation.fieldDescriptors {
-		validatedFieldDescriptors[i].ASTs = make(map[string]*cel.Ast, len(fieldDescriptor.Expressions))
-		for _, expression := range fieldDescriptor.Expressions {
-			celAST := asts[expression]
-			ok, err := check.AreTypesStructurallyCompatible(celAST.OutputType(), validatedFieldDescriptors[i].ExpectedType, provider)
+		for j, expression := range fieldDescriptor.Expressions {
+			outputType := expression.AST.GetType(expression.AST.Expr().ID())
+			expectedType := specFieldDescriptors[i].ExpectedType
+			ok, err := check.AreTypesStructurallyCompatible(outputType, expectedType, provider)
 			if err != nil {
 				return fmt.Errorf("checking type compatibility for expression %q at path %s failed: %w", expression, fieldDescriptor.Path, err)
 			}
 			if !ok {
 				return fmt.Errorf("expression output type %s is not assignable to expected type %s for path %s based on schema",
-					celAST.OutputType().TypeName(),
-					validatedFieldDescriptors[i].ExpectedType.TypeName(),
+					outputType.TypeName(),
+					specFieldDescriptors[i].ExpectedType.TypeName(),
 					fieldDescriptor.Path,
 				)
 			}
-			validatedFieldDescriptors[i].ASTs[expression] = celAST
+			specFieldDescriptors[i].Expressions[j].AST = expression.AST
 		}
 	}
-	transformation.fieldDescriptors = validatedFieldDescriptors
+	transformation.fieldDescriptors = specFieldDescriptors
 
 	b.analyzedTransformations[transformation.ID] = transformation
+
+	declType = stepRunner.GetDeclType()
 
 	return nil
 }
