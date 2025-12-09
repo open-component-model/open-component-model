@@ -100,7 +100,7 @@ func TestGetConfigFromSecret(t *testing.T) {
 				Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
 				Configurations: []*ocmruntime.Raw{
 					{
-						Type: ocmruntime.Type{Name: credentialsv1.ConfigType},
+						Type: ocmruntime.Type{Version: "", Name: credentialsv1.ConfigType},
 						Data: []byte(`{"repositories":[{"repository":{"dockerConfig":"{\"auths\": {\"my-registry.io\": {\"username\":\"user\",\"password\":\"pass\",\"email\":\"\"}}}","type":"DockerConfig/v1"}}],"type":"credentials.config.ocm.software"}`),
 					},
 				},
@@ -150,7 +150,7 @@ func TestGetConfigFromSecret(t *testing.T) {
 				Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
 				Configurations: []*ocmruntime.Raw{
 					{
-						Type: ocmruntime.Type{Name: credentialsv1.ConfigType},
+						Type: ocmruntime.Type{Version: "", Name: credentialsv1.ConfigType},
 						Data: []byte(`{"repositories":[{"repository":{"dockerConfig":"{\"auths\":{\"registry1.io\":{\"username\": \"user1\", \"password\": \"pass1\"},\"registry2.io\":{\"username\":\"user2\",\"password\":\"pass2\"}}}","type":"DockerConfig/v1"}}],"type":"credentials.config.ocm.software"}`),
 					},
 				},
@@ -172,7 +172,7 @@ func TestGetConfigFromSecret(t *testing.T) {
 				Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
 				Configurations: []*ocmruntime.Raw{
 					{
-						Type: ocmruntime.Type{Name: credentialsv1.ConfigType},
+						Type: ocmruntime.Type{Version: "", Name: credentialsv1.ConfigType},
 						Data: []byte(`{"repositories":[{"repository":{"dockerConfig":"{\"auths\":{\"my-registry.io\":{\"auth\": \"dXNlcjpwYXNz\"}}}","type":"DockerConfig/v1"}}],"type":"credentials.config.ocm.software"}`),
 					},
 				},
