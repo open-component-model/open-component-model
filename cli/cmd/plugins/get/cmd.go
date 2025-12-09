@@ -178,8 +178,10 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 					return fmt.Errorf("decoding plugin info label (outer) failed: %w", err)
 				}
 
-				if err := json.Unmarshal([]byte(raw), &info); err != nil {
-					return fmt.Errorf("decoding plugin info label (inner) failed: %w", err)
+				dec := json.NewDecoder(strings.NewReader(raw))
+				dec.DisallowUnknownFields()
+				if err := dec.Decode(&info); err != nil {
+					return fmt.Errorf("decoding plugin info label failed: %w", err)
 				}
 
 				info.Name = r.Name

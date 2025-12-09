@@ -147,7 +147,14 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 			var info PluginInfo
 			for _, l := range r.Labels {
 				if l.Name == PluginInfoKey {
-					dec := json.NewDecoder(strings.NewReader(string(l.Value)))
+
+					// l.Value is JSON representing a *string* which itself is JSON
+					var raw string
+					if err := json.Unmarshal(l.Value, &raw); err != nil {
+						return fmt.Errorf("decoding plugin info label (outer) failed: %w", err)
+					}
+
+					dec := json.NewDecoder(strings.NewReader(raw))
 					dec.DisallowUnknownFields()
 					if err := dec.Decode(&info); err != nil {
 						return fmt.Errorf("decoding plugin info label failed: %w", err)

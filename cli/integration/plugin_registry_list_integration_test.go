@@ -175,7 +175,13 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 			SortPluginsByAllFields(actualPlugins)
 			SortPluginsByAllFields(tc.result)
 
-			r.Equal(tc.result, actualPlugins, "plugin registry list should have the same result")
+			expected := make([]list.PluginInfo, len(tc.result))
+			for i, v := range tc.result {
+				v.Name = CreateCompRefNameFromPlugin(v.Name)
+				expected[i] = v
+			}
+
+			r.Equal(expected, actualPlugins, "plugin registry list should have the same result")
 		})
 	}
 }
