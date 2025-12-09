@@ -54,46 +54,34 @@ func IdentityMatchesPath(i, o Identity) bool {
 //
 // see IdentityMatchingChainFn and Identity.Match for more information.
 func IdentityMatchesURL(i, o Identity) bool {
-	iScheme := i[IdentityAttributeScheme]
-	oScheme := o[IdentityAttributeScheme]
-	iHost := i[IdentityAttributeHostname]
-	oHost := o[IdentityAttributeHostname]
-	iPort := i[IdentityAttributePort]
-	oPort := o[IdentityAttributePort]
+	iScheme, oScheme := i[IdentityAttributeScheme], o[IdentityAttributeScheme]
+	iHost, oHost := i[IdentityAttributeHostname], o[IdentityAttributeHostname]
+	iPort, oPort := i[IdentityAttributePort], o[IdentityAttributePort]
 
-	delete(i, IdentityAttributeScheme)
-	delete(i, IdentityAttributeHostname)
-	delete(i, IdentityAttributePort)
-	delete(o, IdentityAttributeScheme)
-	delete(o, IdentityAttributeHostname)
-	delete(o, IdentityAttributePort)
-
-	if iScheme != oScheme {
-		return false
+	for _, m := range []Identity{i, o} {
+		delete(m, IdentityAttributeScheme)
+		delete(m, IdentityAttributeHostname)
+		delete(m, IdentityAttributePort)
 	}
-	if iHost != oHost {
+
+	if iScheme != oScheme || iHost != oHost {
 		return false
 	}
 
-	if iPort == "" && iScheme != "" {
-		switch iScheme {
-		case "https":
-			iPort = "443"
-		case "http":
-			iPort = "80"
+	defaultPort := func(s, p string) string {
+		if p != "" {
+			return p
 		}
+		if s == "https" {
+			return "443"
+		}
+		if s == "http" {
+			return "80"
+		}
+		return ""
 	}
 
-	if oPort == "" && oScheme != "" {
-		switch oScheme {
-		case "https":
-			oPort = "443"
-		case "http":
-			oPort = "80"
-		}
-	}
-
-	return iPort == oPort
+	return defaultPort(iScheme, iPort) == defaultPort(oScheme, oPort)
 }
 
 // IdentityEqual is an equality IdentityMatchingChainFn. see Identity.Equal for more information
