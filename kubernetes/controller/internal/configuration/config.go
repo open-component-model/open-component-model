@@ -77,31 +77,25 @@ func createConfigFromDockerConfig(data []byte) (*genericv1.Config, error) {
 		return nil, fmt.Errorf("failed to convert docker config to raw")
 	}
 
-	// Create a config object containing the converted Docker configuration.
-	credConfig := credentialsv1.Config{
-		Type: runtime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
-		Repositories: []credentialsv1.RepositoryConfigEntry{
-			{
-				Repository: raw,
-			},
-		},
+	// Init a scheme for the credential type to use it converting later
+	credScheme := runtime.NewScheme()
+	credentialsv1.MustRegister(credScheme)
+
+	credConfig := &credentialsv1.Config{}
+	if _, err := credScheme.DefaultType(credConfig); err != nil {
+		return nil, fmt.Errorf("failed to get default type for credential config type")
 	}
 
-	// Marshal the credential configuration into JSON format.
-	credConfigData, err := json.Marshal(credConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal credential config")
+	credConfig.Repositories = []credentialsv1.RepositoryConfigEntry{{raw}}
+
+	rawCreds := &runtime.Raw{}
+	if err := credScheme.Convert(credConfig, rawCreds); err != nil {
+		return nil, fmt.Errorf("failed to convert credential config to raw")
 	}
 
-	// Construct the final genericv1.Config object embedding the credential configuration.
 	cfg := genericv1.Config{
-		Type: runtime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
-		Configurations: []*runtime.Raw{
-			{
-				Type: runtime.Type{Version: credentialsv1.Version, Name: credentialsv1.ConfigType},
-				Data: credConfigData,
-			},
-		},
+		Type:           runtime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+		Configurations: []*runtime.Raw{rawCreds},
 	}
 
 	return &cfg, nil
