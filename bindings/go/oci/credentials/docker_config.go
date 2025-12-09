@@ -107,9 +107,9 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 	}
 	if cred == auth.EmptyCredential {
 		// because ORAS stores docker credentials including its port if defined, we'll try
-		// once more including the port with the hostname. ( For ghcr io no port is there, but we
-		// default the port ot 443 so trying it with that in the first time would fail that's why
-		// this is a fallback try ).
+		// once more including the port with the hostname. (For ghcr.io no port is there, but we
+		// default the port to 443 so trying it with that in the first time would fail that's why
+		// this is a fallback try).
 		if port, ok := identity[runtime.IdentityAttributePort]; ok {
 			hostname = fmt.Sprintf("%s:%s", hostname, port)
 			cred, err = credStore.Get(ctx, hostname)
