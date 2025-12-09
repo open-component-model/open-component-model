@@ -223,49 +223,40 @@ func CreateCompRefNameFromPlugin(name string) string {
 func GeneratePluginReferences(componentName, version, description string, platforms []string) string {
 	name := CreateCompRefNameFromPlugin(componentName)
 
-	var b strings.Builder
-
-	_, _ = fmt.Fprintf(&b, `
+	s := fmt.Sprintf(`
   - name: %s
     version: %s
     componentName: %s
 `, name, version, componentName)
 
-	// Build pluginInfo payload
-	info := make(map[string]any)
+	// Add labels if description or platforms are provided
+	var labels string
 	if description != "" {
-		info["description"] = description
+		labels += fmt.Sprintf(`
+          description: %s
+`, description)
 	}
+
 	if len(platforms) > 0 {
-		trimmed := make([]string, len(platforms))
-		for i, p := range platforms {
-			trimmed[i] = strings.TrimSpace(p)
+		labels += `
+          platforms:
+`
+
+		for _, platform := range platforms {
+			labels += fmt.Sprintf(`
+            - %s`, strings.TrimSpace(platform))
 		}
-		info["platforms"] = trimmed
 	}
 
-	if len(info) > 0 {
-		jsonBytes, _ := json.MarshalIndent(info, "", "  ")
-		jsonStr := string(jsonBytes)
-
-		fmt.Fprintf(&b, `
+	if labels != "" {
+		s += fmt.Sprintf(`
     labels:
       - name: %s
-        value: |
-%s
-`, list.PluginInfoKey, indent(jsonStr, 10))
+        value:
+%s`, list.PluginInfoKey, labels)
 	}
 
-	return b.String()
-}
-
-func indent(s string, spaces int) string {
-	pad := strings.Repeat(" ", spaces)
-	lines := strings.Split(s, "\n")
-	for i := range lines {
-		lines[i] = pad + lines[i]
-	}
-	return strings.Join(lines, "\n")
+	return s
 }
 
 func CreatePluginRegistryConstructor(component, version, references string) string {
