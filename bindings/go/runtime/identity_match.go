@@ -44,6 +44,58 @@ func IdentityMatchesPath(i, o Identity) bool {
 	return match
 }
 
+// IdentityMatchesURL returns true if the URL components of two identities match,
+// applying default port mapping based on scheme.
+// - HTTPS defaults to port 443 if not explicitly set
+// - HTTP defaults to port 80 if not explicitly set
+// Allows identities differing only in explicit vs implicit ports to match.
+// Deletes the URL attributes (scheme, hostname, port) from both identities
+// after comparison, as it is expected to be used in a chain with Identity.Match.
+//
+// see IdentityMatchingChainFn and Identity.Match for more information.
+func IdentityMatchesURL(i, o Identity) bool {
+	iScheme := i[IdentityAttributeScheme]
+	oScheme := o[IdentityAttributeScheme]
+	iHost := i[IdentityAttributeHostname]
+	oHost := o[IdentityAttributeHostname]
+	iPort := i[IdentityAttributePort]
+	oPort := o[IdentityAttributePort]
+
+	delete(i, IdentityAttributeScheme)
+	delete(i, IdentityAttributeHostname)
+	delete(i, IdentityAttributePort)
+	delete(o, IdentityAttributeScheme)
+	delete(o, IdentityAttributeHostname)
+	delete(o, IdentityAttributePort)
+
+	if iScheme != oScheme {
+		return false
+	}
+	if iHost != oHost {
+		return false
+	}
+
+	if iPort == "" && iScheme != "" {
+		switch iScheme {
+		case "https":
+			iPort = "443"
+		case "http":
+			iPort = "80"
+		}
+	}
+
+	if oPort == "" && oScheme != "" {
+		switch oScheme {
+		case "https":
+			oPort = "443"
+		case "http":
+			oPort = "80"
+		}
+	}
+
+	return iPort == oPort
+}
+
 // IdentityEqual is an equality IdentityMatchingChainFn. see Identity.Equal for more information
 func IdentityEqual(a Identity, b Identity) bool {
 	del := func(s string, s2 string) bool {
@@ -77,11 +129,15 @@ func IdentitySubset(sub Identity, base Identity) bool {
 
 // Match returns true if the identity a matches the identity b.
 // It uses the provided Matchers to determine the match.
-// If no Matchers are provided, it uses IdentityMatchesPath and IdentityEqual in order.
+// If no Matchers are provided, it uses IdentityMatchesPath, IdentityMatchesURL, and IdentityEqual in order.
 // If any matcher returns false, it returns false.
 func (i Identity) Match(o Identity, matchers ...ChainableIdentityMatcher) bool {
 	if len(matchers) == 0 {
-		return i.Match(o, MatchAll(IdentityMatchingChainFn(IdentityMatchesPath), IdentityMatchingChainFn(IdentityEqual)))
+		return i.Match(o, MatchAll(
+			IdentityMatchingChainFn(IdentityMatchesPath),
+			IdentityMatchingChainFn(IdentityMatchesURL),
+			IdentityMatchingChainFn(IdentityEqual),
+		))
 	}
 
 	ci, co := maps.Clone(i), maps.Clone(o)
