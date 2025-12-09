@@ -104,15 +104,19 @@ tasks:
     cmd: |
       args=(
         --platform={{.PLATFORMS}}
-        -t {{.CONTROLLER_IMG}}
         -f '{{.TASKFILE_DIR}}/Dockerfile' '{{.TASKFILE_DIR}}'
       )
-      
+
+      # Add tags - CONTROLLER_IMG can be space-separated for multiple tags
+      for tag in {{.CONTROLLER_IMG}}; do
+        args+=(-t "$tag")
+      done
+
       # If LOAD is set, load single-arch image into local daemon
       if [ "{{.LOAD | default ""}}" = "true" ]; then
         args+=(--load)
       fi
-      
+
       # If PUSH is set, push image (or manifest) to registry
       if [ "{{.PUSH | default ""}}" = "true" ]; then
         args+=(--push)
