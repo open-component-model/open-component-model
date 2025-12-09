@@ -91,9 +91,6 @@ func CredentialFunc(identity runtime.Identity, credentials map[string]string) au
 //   - Match the credentials against the provided identity
 //   - Return a map of credential key-value pairs
 func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credentialsv1.DockerConfig, identity runtime.Identity) (map[string]string, error) {
-	// The docker server specified in the docker config should not contain a port part as the store will only
-	// sanitize for scheme and (sub) paths. Thus, there will be a mismatch below when the hostname is used from
-	// the identity.
 	credStore, err := getStore(ctx, dockerConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve credentials store: %w", err)
@@ -109,7 +106,23 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
 	}
 	if cred == auth.EmptyCredential {
-		return nil, nil
+		// because ORAS stores docker credentials including its port if defined, we'll try
+		// once more including the port with the hostname. ( For ghcr io no port is there, but we
+		// default the port ot 443 so trying it with that in the first time would fail that's why
+		// this is a fallback try ).
+		if port, ok := identity[runtime.IdentityAttributePort]; ok {
+			hostname = fmt.Sprintf("%s:%s", hostname, port)
+			cred, err = credStore.Get(ctx, hostname)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
+			}
+			if cred == auth.EmptyCredential {
+				return nil, nil
+			}
+		} else {
+			// no port, we have no creds
+			return nil, nil
+		}
 	}
 
 	credentialMap := map[string]string{}
