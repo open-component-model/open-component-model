@@ -111,5 +111,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build & Push
         env:
+          # create an additional tag that is easy to pin to and reference
           CONTROLLER_IMG: "ghcr.io/open-component-model/kubernetes/controller:${{ steps.version.outputs.version }} ghcr.io/open-component-model/kubernetes/controller:latest"
         run: task kubernetes/controller:docker-build/multi-arch PUSH=true
