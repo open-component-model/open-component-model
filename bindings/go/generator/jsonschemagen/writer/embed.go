@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
@@ -42,6 +43,9 @@ import (
 
 	// Accessors
 	for _, ti := range types {
+		if _, ok := jsonschemagen.SchemaFromMarker(jsonschemagen.ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, jsonschemagen.BaseMarker)); ok {
+			continue
+		}
 		fmt.Fprintf(&buf, `
 
 // JSONSchema returns the JSON Schema for %s.

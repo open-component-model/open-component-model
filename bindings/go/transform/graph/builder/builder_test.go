@@ -9,6 +9,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations/ctf"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations/oci"
 	ocitransformer "ocm.software/open-component-model/bindings/go/transform/transformer/oci"
 	"sigs.k8s.io/yaml"
@@ -16,15 +17,6 @@ import (
 
 func newTestBuilder(t *testing.T) *Builder {
 	t.Helper()
-	transformerScheme := runtime.NewScheme()
-	require.NoError(t, transformerScheme.RegisterWithAlias(
-		&oci.DownloadComponentTransformation{},
-		oci.DownloadComponentTransformationType,
-	))
-	//require.NoError(t, transformerScheme.RegisterWithAlias(
-	//	&transformations.UploadComponentTransformation{},
-	//	runtime.NewUnversionedType(transformations.UploadComponentTransformationType),
-	//))
 
 	pm := manager.NewPluginManager(t.Context())
 	repoProvider := provider.NewComponentVersionRepositoryProvider()
@@ -34,13 +26,18 @@ func newTestBuilder(t *testing.T) *Builder {
 		repoProvider,
 	))
 
-	return NewBuilder().WithTransformer(
-		oci.DownloadComponentTransformationType,
-		&oci.DownloadComponentTransformation{},
-		&ocitransformer.DownloadComponent{
-			RepoProvider: repoProvider,
-		},
-	)
+	transformerScheme := runtime.NewScheme()
+	transformerScheme.MustRegisterScheme(oci.Scheme)
+	transformerScheme.MustRegisterScheme(ctf.Scheme)
+
+	ociDownloadComponent := &ocitransformer.DownloadComponent{
+		Scheme:       transformerScheme,
+		RepoProvider: repoProvider,
+	}
+
+	return NewBuilder(transformerScheme).
+		WithTransformer(&oci.DownloadComponentTransformation{}, ociDownloadComponent).
+		WithTransformer(&ctf.DownloadComponentTransformation{}, ociDownloadComponent)
 }
 
 // ${environment.repository.type} interpolation
@@ -254,7 +251,7 @@ environment:
     accessMode: "readwrite"
 transformations:
 - id: download1
-  type: ocm.software.download.component.oci
+  type: ocm.software.download.component.ctf/v1alpha1
   spec:
     repository:
       type: ${environment.repository.type}
@@ -263,11 +260,11 @@ transformations:
     component: "github.com/acme.org/helloworld"
     version: "1.0.0"
 - id: download2
-  type: ocm.software.download.component.oci
+  type: ocm.software.download.component.ctf/v1alpha1
   spec:
     repository: ${download1.spec.repository}
-    component: ${download1.spec.component}
-    version: ${download1.spec.version}
+    component: ${download1.output.descriptor.component.name}
+    version: ${download1.output.descriptor.component.version}
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))

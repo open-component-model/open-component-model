@@ -86,19 +86,26 @@ func main() {
 	// GenerateJSONSchemaDraft202012 schemas for all annotated types.
 	packageGroups := make(map[string][]*universe.TypeInfo)
 	for _, ti := range annotated {
-		schema := gen.GenerateJSONSchemaDraft202012(ti)
-		if schema == nil {
-			slog.Warn("schema generation returned nil", "type", ti.Key.TypeName)
-			continue
+		markers := jsonschemagen.ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, jsonschemagen.BaseMarker)
+		if schema, ok := jsonschemagen.SchemaFromMarker(markers); ok {
+			sch := &jsonschemagen.JSONSchemaDraft202012{}
+			jsonschemagen.ApplyFileMarkers(sch, schema, ti.FilePath)
+		} else {
+			schema := gen.GenerateJSONSchemaDraft202012(ti)
+			if schema == nil {
+				slog.Warn("schema generation returned nil", "type", ti.Key.TypeName)
+				continue
+			}
+
+			if err := writer.WriteSchemaJSON(ti, schema); err != nil {
+				slog.Error("write schema error", "type", ti.Key.TypeName, "error", err)
+				os.Exit(1)
+			}
+
+			pkgDir := filepath.Dir(ti.FilePath)
+			packageGroups[pkgDir] = append(packageGroups[pkgDir], ti)
 		}
 
-		if err := writer.WriteSchemaJSON(ti, schema); err != nil {
-			slog.Error("write schema error", "type", ti.Key.TypeName, "error", err)
-			os.Exit(1)
-		}
-
-		pkgDir := filepath.Dir(ti.FilePath)
-		packageGroups[pkgDir] = append(packageGroups[pkgDir], ti)
 	}
 
 	// Generate embed files for each package that contains generated schemas.

@@ -11,19 +11,18 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/graph"
 	"ocm.software/open-component-model/bindings/go/transform/graph/analysis"
 	graphEnv "ocm.software/open-component-model/bindings/go/transform/graph/env"
-	"ocm.software/open-component-model/bindings/go/transform/graph/registry"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
 type Builder struct {
 	// holds all possible transformations
-	transformationRegistry *registry.Registry
-	transformers           map[runtime.Type]graphRuntime.Transformer
+	scheme       *runtime.Scheme
+	transformers map[runtime.Type]graphRuntime.Transformer
 }
 
-func NewBuilder() *Builder {
-	return &Builder{transformationRegistry: registry.NewRegistry()}
+func NewBuilder(scheme *runtime.Scheme) *Builder {
+	return &Builder{scheme: scheme, transformers: map[runtime.Type]graphRuntime.Transformer{}}
 }
 
 func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition) (*Graph, error) {
@@ -56,7 +55,7 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 	synced := syncdag.ToSyncedGraph(g)
 
 	pluginProcessor := &analysis.StaticPluginAnalysisProcessor{
-		Registry:                b.transformationRegistry,
+		Scheme:                  b.scheme,
 		Builder:                 builder,
 		AnalyzedTransformations: make(map[string]graph.Transformation),
 	}
@@ -85,15 +84,16 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 	}, nil
 }
 
-func (b *Builder) WithTransformer(runtimeType runtime.Type, typed interface {
+func (b *Builder) WithTransformer(typed interface {
 	runtime.Typed
-	registry.GenericTransformation
+	runtime.JSONSchemaIntrospectable
 }, transformer graphRuntime.Transformer) *Builder {
 	if b.transformers == nil {
 		b.transformers = map[runtime.Type]graphRuntime.Transformer{}
 	}
-	if err := b.transformationRegistry.RegisterTransformation(runtimeType, typed); err != nil {
-		panic(fmt.Sprintf("failed to register transformation type %s: %v", runtimeType, err))
+	runtimeType, err := b.scheme.TypeForPrototype(typed)
+	if err != nil {
+		panic(fmt.Sprintf("cannot get runtime type for transformer: %v", err))
 	}
 	if _, exists := b.transformers[runtimeType]; exists {
 		panic(fmt.Sprintf("transformer for type %s already registered", runtimeType))

@@ -26,3 +26,24 @@ type GenericTransformation struct {
 	Spec                    *runtime.Unstructured `json:"spec"`
 	Output                  *runtime.Unstructured `json:"output,omitempty"`
 }
+
+func (t *GenericTransformation) AsRaw() *runtime.Raw {
+	var r runtime.Raw
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(t, &r); err != nil {
+		panic(err)
+	}
+	return &r
+}
+
+func GenericTransformationFromTyped(r runtime.Typed) (*GenericTransformation, error) {
+	// Convert to raw first to drop unknown fields
+	var t runtime.Raw
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(r, &t); err != nil {
+		return nil, err
+	}
+	var gt GenericTransformation
+	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Convert(&t, &gt); err != nil {
+		return nil, err
+	}
+	return &gt, nil
+}

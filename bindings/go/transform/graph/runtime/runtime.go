@@ -15,8 +15,8 @@ import (
 type Transformer interface {
 	Transform(
 		ctx context.Context,
-		step *v1alpha1.GenericTransformation,
-	) (*v1alpha1.GenericTransformation, error)
+		step runtime.Typed,
+	) (runtime.Typed, error)
 }
 
 type Runtime struct {
@@ -70,13 +70,17 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 		return fmt.Errorf("no transformer runtime registered for type %s", runtimeType)
 	}
 
-	transformed, err := transformer.Transform(ctx, &transformation.GenericTransformation)
+	transformed, err := transformer.Transform(ctx, transformation.GenericTransformation.AsRaw())
 	if err != nil {
 		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
 	}
+	updated, err := v1alpha1.GenericTransformationFromTyped(transformed)
+	if err != nil {
+		return fmt.Errorf("failed to convert updated transformation %q to generic transformation: %w", transformation.ID, err)
+	}
 	evaluatedTransformation := map[string]any{
-		"spec":   transformed.Spec.Data,
-		"output": transformed.Output.Data,
+		"spec":   updated.Spec.Data,
+		"output": updated.Output.Data,
 	}
 	b.EvaluatedTransformations[transformation.ID] = evaluatedTransformation
 	return nil

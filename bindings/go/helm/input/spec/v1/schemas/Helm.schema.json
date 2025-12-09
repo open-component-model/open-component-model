@@ -61,7 +61,6 @@
     "ocm.software.open-component-model.bindings.go.runtime.Type": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$comment": "this core runtime schema was automatically included by the ocm schema generation tool to allow introspection",
-      "$id": "ocm.software/open-component-model/bindings/go/runtime/schemas/Type.schema.json",
       "title": "Type",
       "type": "string",
       "description": "Type represents a structured type with an optional version and a name. It is used to identify the type of an object in a versioned API.",
