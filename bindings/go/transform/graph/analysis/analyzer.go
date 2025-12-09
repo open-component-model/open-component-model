@@ -3,8 +3,11 @@ package analysis
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/google/cel-go/cel"
+	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
+	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl/check"
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 	"ocm.software/open-component-model/bindings/go/transform/graph"
@@ -62,6 +65,10 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(_ context.Context, transfor
 	if err != nil {
 		return fmt.Errorf("validate transformation resource against schema: %w", err)
 	}
+
+	slices.SortFunc(transformation.FieldDescriptors, func(a, b variable.FieldDescriptor) int {
+		return fieldpath.Compare(a.Path, b.Path)
+	})
 
 	for i, fieldDescriptor := range transformation.FieldDescriptors {
 		for j, expression := range fieldDescriptor.Expressions {

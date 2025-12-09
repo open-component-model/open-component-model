@@ -149,7 +149,7 @@ func suppressErrors(err *jsonschema.ValidationError, exprPaths map[string]struct
 		// 2. oneOf errors, which can encompass N errors based on each one of branch
 		// 3. reference errors, which can encompass 1 error from the referenced schema
 		switch err.ErrorKind.(type) {
-		case *kind.Schema, *kind.OneOf, *kind.Reference:
+		case *kind.Schema, *kind.OneOf, *kind.Reference, *kind.Required:
 			return true
 		}
 	}

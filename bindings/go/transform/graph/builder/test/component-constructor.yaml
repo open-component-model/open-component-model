@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://ocm.software/schemas/configuration-schema.yaml
+components:
+- name: github.com/acme.org/helloworld
+  version: 1.0.0
+  provider:
+    name: acme.org
+  resources:
+    # local Helm chart resource
+    - name: myresource
+      type: blob
+      input:
+        type: file
+        path: ./testfile

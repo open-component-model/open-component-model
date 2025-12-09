@@ -6,7 +6,6 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
@@ -60,7 +59,7 @@ type DownloadComponentTransformationOutput struct {
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type DownloadComponentTransformationSpec struct {
-	Repository *oci.Repository `json:"repository"`
-	Component  string          `json:"component"`
-	Version    string          `json:"version"`
+	Repository *runtime.Raw `json:"repository"`
+	Component  string       `json:"component"`
+	Version    string       `json:"version"`
 }

@@ -8,7 +8,6 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	v2runtime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -29,15 +28,13 @@ func (t *DownloadComponent) Transform(
 		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %v", err)
 	}
 
-	consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, transformation.Spec.Repository)
-	if err != nil {
-		return nil, fmt.Errorf("failed getting component version repository credential consumer identity: %v", err)
-	}
 	var creds map[string]string
 	if t.CredentialProvider != nil {
-		creds, err = t.CredentialProvider.Resolve(ctx, consumerId)
-		if err != nil {
-			return nil, fmt.Errorf("failed resolving credentials: %v", err)
+		if consumerId, err := t.RepoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(ctx, transformation.Spec.Repository); err == nil {
+			creds, err = t.CredentialProvider.Resolve(ctx, consumerId)
+			if err != nil {
+				return nil, fmt.Errorf("failed resolving credentials: %v", err)
+			}
 		}
 	}
 
@@ -80,19 +77,24 @@ func fromGeneric(from *v1alpha1.GenericTransformation, into *transformv1alpha1.D
 	if err != nil {
 		return fmt.Errorf("marshal spec: %w", err)
 	}
-	var repo oci.Repository
+	var repo runtime.Raw
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&repo); err != nil {
 		return fmt.Errorf("failed to decode strict into runtime raw: %w", err)
+	}
+	component := from.Spec.Data["component"]
+	version := from.Spec.Data["version"]
+	if component == nil || version == nil {
+		return fmt.Errorf("component and version must be specified in spec data")
 	}
 	transformation := &transformv1alpha1.DownloadComponentTransformation{
 		Type: from.Type,
 		ID:   from.ID,
 		Spec: &transformv1alpha1.DownloadComponentTransformationSpec{
 			Repository: &repo,
-			Component:  from.Spec.Data["component"].(string),
-			Version:    from.Spec.Data["version"].(string),
+			Component:  component.(string),
+			Version:    version.(string),
 		},
 		Output: nil,
 	}

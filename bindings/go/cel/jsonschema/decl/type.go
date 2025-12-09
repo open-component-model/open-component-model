@@ -168,6 +168,9 @@ pathLoop:
 			}
 			field, ok := current.Fields[name]
 			if !ok {
+				if current.AllowsAdditionalProperties() {
+					return DynType, nil
+				}
 				return nil, fmt.Errorf("field %q not found at segment %d", seg.Name, i)
 			}
 			current = field.Type

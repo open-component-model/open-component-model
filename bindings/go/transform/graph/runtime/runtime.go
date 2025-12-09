@@ -58,6 +58,8 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 		return fmt.Errorf("failed to resolve transformation %q: %w", transformation.ID, errors.Join(summary.Errors...))
 	}
 
+	// TODO now time to revalidate the resource after all field descriptors have been resolved
+
 	runtimeType := transformation.GenericTransformation.GetType()
 	if runtimeType.IsEmpty() {
 		return fmt.Errorf("transformation type after render is empty")
@@ -68,13 +70,13 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 		return fmt.Errorf("no transformer runtime registered for type %s", runtimeType)
 	}
 
-	output, err := transformer.Transform(ctx, &transformation.GenericTransformation)
+	transformed, err := transformer.Transform(ctx, &transformation.GenericTransformation)
 	if err != nil {
 		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
 	}
 	evaluatedTransformation := map[string]any{
-		"spec":   transformation.Spec.Data,
-		"output": output,
+		"spec":   transformed.Spec.Data,
+		"output": transformed.Output.Data,
 	}
 	b.EvaluatedTransformations[transformation.ID] = evaluatedTransformation
 	return nil
