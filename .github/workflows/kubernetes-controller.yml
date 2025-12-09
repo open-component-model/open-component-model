@@ -109,11 +109,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build & Push Versioned Image
+      - name: Build & Push
         env:
-          CONTROLLER_IMG: ghcr.io/open-component-model/kubernetes/controller:${{ steps.version.outputs.version }}
-        run: task kubernetes/controller:docker-build/multi-arch PUSH=true
-      - name: Build & Push Latest Image
-        env:
-          CONTROLLER_IMG: ghcr.io/open-component-model/kubernetes/controller:latest
+          CONTROLLER_IMG: ghcr.io/open-component-model/kubernetes/controller:${{ steps.version.outputs.version }} ghcr.io/open-component-model/kubernetes/controller:latest
         run: task kubernetes/controller:docker-build/multi-arch PUSH=true
