@@ -210,43 +210,56 @@ provider:
 `, name, version)
 }
 
-func GeneratePluginReferences(name, version, description string, platforms []string) string {
-	var s string
+func CreateCompRefNameFromPlugin(name string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(name, ".", "-"), "/", "-")
+}
 
-	s += fmt.Sprintf(`
+func GeneratePluginReferences(componentName, version, description string, platforms []string) string {
+	name := CreateCompRefNameFromPlugin(componentName)
+
+	var b strings.Builder
+
+	_, _ = fmt.Fprintf(&b, `
   - name: %s
     version: %s
     componentName: %s
-`, name, version, name)
+`, name, version, componentName)
 
-	// Add labels if description or platforms are provided
-	var labels string
+	// Build pluginInfo payload
+	info := make(map[string]any)
 	if description != "" {
-		labels += fmt.Sprintf(`
-          description: %s
-`, description)
+		info["description"] = description
 	}
-
 	if len(platforms) > 0 {
-		labels += `
-          platforms:
-`
-
-		for _, platform := range platforms {
-			labels += fmt.Sprintf(`
-            - %s`, strings.TrimSpace(platform))
+		trimmed := make([]string, len(platforms))
+		for i, p := range platforms {
+			trimmed[i] = strings.TrimSpace(p)
 		}
+		info["platforms"] = trimmed
 	}
 
-	if labels != "" {
-		s += fmt.Sprintf(`
+	if len(info) > 0 {
+		jsonBytes, _ := json.MarshalIndent(info, "", "  ")
+		jsonStr := string(jsonBytes)
+
+		fmt.Fprintf(&b, `
     labels:
       - name: %s
-        value:
-%s`, list.PluginInfoKey, labels)
+        value: |
+%s
+`, list.PluginInfoKey, indent(jsonStr, 10))
 	}
 
-	return s
+	return b.String()
+}
+
+func indent(s string, spaces int) string {
+	pad := strings.Repeat(" ", spaces)
+	lines := strings.Split(s, "\n")
+	for i := range lines {
+		lines[i] = pad + lines[i]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func CreatePluginRegistryConstructor(component, version, references string) string {

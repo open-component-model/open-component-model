@@ -164,11 +164,13 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 			getCmd.SetOut(&outputBuffer)
 			getCmd.SetErr(&errorBuffer)
 
+			name := CreateCompRefNameFromPlugin(tc.plugin)
+
 			cmdArgs := []string{
 				"plugin",
 				"registry",
 				"get",
-				tc.plugin,
+				name,
 				"--config", cfgPath,
 				"--registry", strings.Join(tc.pluginRegistries, ","),
 				"--output", "json",
@@ -220,7 +222,13 @@ func Test_Integration_PluginRegistryGet_WithFlag(t *testing.T) {
 			sortPluginsByAllFields(actualPlugins)
 			sortPluginsByAllFields(tc.result)
 
-			r.Equal(tc.result, actualPlugins, "plugin registry get should have the same result")
+			expected := make([]list.PluginInfo, len(tc.result))
+			for i, v := range tc.result {
+				v.Name = name
+				expected[i] = v
+			}
+
+			r.Equal(expected, actualPlugins, "plugin registry get should have the same result")
 		})
 	}
 }

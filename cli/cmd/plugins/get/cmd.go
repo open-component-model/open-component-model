@@ -171,10 +171,15 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 				}
 
 				slog.Debug("Found plugin in registry", "name", r.Name, "component", r.Component)
-				dec := json.NewDecoder(strings.NewReader(string(l.Value)))
-				dec.DisallowUnknownFields()
-				if err := dec.Decode(&info); err != nil {
-					return fmt.Errorf("decoding plugin info label failed: %w", err)
+
+				// l.Value is JSON representing a *string* which itself is JSON
+				var raw string
+				if err := json.Unmarshal(l.Value, &raw); err != nil {
+					return fmt.Errorf("decoding plugin info label (outer) failed: %w", err)
+				}
+
+				if err := json.Unmarshal([]byte(raw), &info); err != nil {
+					return fmt.Errorf("decoding plugin info label (inner) failed: %w", err)
 				}
 
 				info.Name = r.Name
