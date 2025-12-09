@@ -147,7 +147,6 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 			var info PluginInfo
 			for _, l := range r.Labels {
 				if l.Name == PluginInfoKey {
-
 					// l.Value is JSON representing a *string* which itself is JSON
 					var raw string
 					if err := json.Unmarshal(l.Value, &raw); err != nil {
