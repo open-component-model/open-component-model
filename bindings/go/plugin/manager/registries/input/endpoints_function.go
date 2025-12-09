@@ -5,6 +5,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -41,7 +42,7 @@ func RegisterInputProcessor[T runtime.Typed](
 		Location: ProcessSource,
 	})
 
-	schema, err := runtime.GenerateJSONSchemaForType(proto)
+	schema, err := plugins.GenerateJSONSchemaForType(proto)
 	if err != nil {
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}

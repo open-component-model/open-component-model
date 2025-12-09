@@ -24,9 +24,14 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
+	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	access "ocm.software/open-component-model/bindings/go/oci/spec/access"
-	ocmrepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
+	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/component"
@@ -37,7 +42,7 @@ import (
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/repository"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
+	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
 
@@ -157,20 +162,44 @@ func main() {
 		os.Exit(1)
 	}
 
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider()
-
-	ocmscheme := ocmruntime.NewScheme()
-	ocmrepository.MustAddToScheme(ocmscheme)
-	access.MustAddToScheme(ocmscheme)
-
-	pm := plugins.NewPluginManager(plugins.PluginManagerOptions{
-		IdleTimeout: time.Hour,
-		Logger:      &setupLog,
-		Scheme:      ocmscheme,
-		Provider:    repositoryProvider,
-	})
-	if err := mgr.Add(pm); err != nil {
-		setupLog.Error(err, "unable to add plugin manager")
+	pm := manager.NewPluginManager(ctx)
+	scheme := ocmruntime.NewScheme()
+	scheme.MustRegisterWithAlias(&ociv1.Repository{},
+		ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.Type),
+		ocmruntime.NewVersionedType(ociv1.ShortType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType),
+		ocmruntime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.ShortType2),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType),
+		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
+		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType2),
+	)
+	scheme.MustRegisterWithAlias(&ctfv1.Repository{},
+		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.Type),
+		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType),
+		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
+		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
+	)
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
+	if err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider); err != nil {
+		setupLog.Error(err, "failed to register internal component version repository plugin")
+		os.Exit(1)
+	}
+	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
+	if err != nil {
+		setupLog.Error(err, "failed to create signing handler")
+		os.Exit(1)
+	}
+	if err := pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler); err != nil {
+		setupLog.Error(err, "failed to register internal signing plugin")
+		os.Exit(1)
+	}
+	if err := pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(&ocicredentials.OCICredentialRepository{}, []ocmruntime.Type{credentials.AnyConsumerIdentityType}); err != nil {
+		setupLog.Error(err, "failed to register internal credential repository plugin")
 		os.Exit(1)
 	}
 
@@ -203,25 +232,26 @@ func main() {
 		os.Exit(1)
 	}
 
+	resolver := resolution.NewResolver(mgr.GetClient(), &setupLog, workerPool, pm)
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMContextCache: ocmContextCache,
+		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Repository")
 		os.Exit(1)
 	}
-
 	if err = (&component.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
 			Client:        mgr.GetClient(),
 			Scheme:        mgr.GetScheme(),
 			EventRecorder: eventsRecorder,
 		},
-		OCMContextCache: ocmContextCache,
+		Resolver:      resolver,
+		PluginManager: pm,
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Component")
 		os.Exit(1)

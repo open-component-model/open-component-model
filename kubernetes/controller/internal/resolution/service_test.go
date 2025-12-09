@@ -23,11 +23,9 @@ import (
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentversionrepository"
 	"ocm.software/open-component-model/bindings/go/repository"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/kubernetes/controller/internal/plugins"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/kubernetes/controller/internal/resolution/workerpool"
 )
@@ -446,28 +444,16 @@ func (e *testEnvironment) Close(ctx context.Context) error {
 func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Logger) *testEnvironment {
 	t.Helper()
 
-	// Register mock OCI plugin
-	scheme := ocmruntime.NewScheme()
-	ocirepository.MustAddToScheme(scheme)
-
 	cvRepoPlugin := &mockPlugin{
 		component: "test-component",
 		version:   "v1.0.0",
 	}
 
 	pm := manager.NewPluginManager(t.Context())
-	err := componentversionrepository.RegisterInternalComponentVersionRepositoryPlugin(
-		scheme,
-		pm.ComponentVersionRepositoryRegistry,
+	err := pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(
 		cvRepoPlugin,
-		&ociv1.Repository{},
 	)
 	require.NoError(t, err)
-	pluginManager := &plugins.PluginManager{
-		PluginManager: pm,
-		Scheme:        scheme,
-		Provider:      pm.ComponentVersionRepositoryRegistry,
-	}
 
 	cache := expirable.NewLRU[string, *workerpool.Result](0, nil, 0)
 	wp := workerpool.NewWorkerPool(workerpool.PoolOptions{
@@ -475,7 +461,7 @@ func setupTestEnvironment(t *testing.T, k8sClient client.Reader, logger *logr.Lo
 		Client: k8sClient,
 		Cache:  cache,
 	})
-	resolver := resolution.NewResolver(k8sClient, logger, wp, pluginManager)
+	resolver := resolution.NewResolver(k8sClient, logger, wp, pm)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -502,6 +488,12 @@ type mockPlugin struct {
 func (p *mockPlugin) GetJSONSchemaForRepositorySpecification(typ ocmruntime.Type) ([]byte, error) {
 	return nil, nil
 }
+
+func (p *mockPlugin) GetComponentVersionRepositoryScheme() *ocmruntime.Scheme {
+	return ocirepository.Scheme
+}
+
+var _ repository.ComponentVersionRepositoryProvider = (*mockPlugin)(nil)
 
 func (p *mockPlugin) GetComponentVersionRepositoryCredentialConsumerIdentity(
 	_ context.Context,

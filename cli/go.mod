@@ -1,35 +1,35 @@
 module ocm.software/open-component-model/cli
 
-go 1.25.1
+go 1.25.4
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
-	github.com/jedib0t/go-pretty/v6 v6.6.8
+	github.com/jedib0t/go-pretty/v6 v6.7.5
 	github.com/nlepage/go-tarfs v1.2.1
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.18.0
-	golang.org/x/sys v0.37.0
+	golang.org/x/sys v0.38.0
 	gopkg.in/yaml.v3 v3.0.1
-	ocm.software/open-component-model/bindings/go/blob v0.0.9
+	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/constructor v0.0.2
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251128170812-81b92bc4adf4
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251128170812-81b92bc4adf4
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha3
-	ocm.software/open-component-model/bindings/go/input/dir v0.0.1
-	ocm.software/open-component-model/bindings/go/input/file v0.0.2
-	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251124222340-4c1b948b736f
-	ocm.software/open-component-model/bindings/go/oci v0.0.15
-	ocm.software/open-component-model/bindings/go/plugin v0.0.10
-	ocm.software/open-component-model/bindings/go/repository v0.0.3
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251124222340-4c1b948b736f
-	ocm.software/open-component-model/bindings/go/runtime v0.0.2
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251128170812-81b92bc4adf4
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251204125915-cb295d402227
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251204125915-cb295d402227
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4
+	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
+	ocm.software/open-component-model/bindings/go/input/file v0.0.3
+	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251204125915-cb295d402227
+	ocm.software/open-component-model/bindings/go/oci v0.0.17
+	ocm.software/open-component-model/bindings/go/plugin v0.0.12
+	ocm.software/open-component-model/bindings/go/repository v0.0.4
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251204125915-cb295d402227
+	ocm.software/open-component-model/bindings/go/runtime v0.0.4
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251204125915-cb295d402227
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -37,7 +37,8 @@ require (
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
+	github.com/clipperhouse/stringish v0.1.1 // indirect
+	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

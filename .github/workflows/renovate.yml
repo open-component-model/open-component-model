@@ -1,7 +1,7 @@
 name: Renovate OCM
 on:
   schedule:
-    - cron: '0 0 * * 0' # Every Sunday at midnight UTC
+    - cron: '0 0 * * *' # At 00:0, every day
   workflow_dispatch:
     inputs:
       repoCache:
@@ -18,6 +18,9 @@ on:
     paths:
       - .github/renovate.json5
       - .github/workflows/renovate.yml
+
+permissions:
+  contents: read
 
 env:
   cache_archive: renovate_cache.tar.gz
@@ -69,7 +72,7 @@ jobs:
         run: echo "RENOVATE_DRY_RUN=extract" >> $GITHUB_ENV
 
       - name: Run
-        uses: renovatebot/github-action@a3c115cd6676c8a5bc72f9715f108759e570daf5 # v43.0.19
+        uses: renovatebot/github-action@c5fdc9f98fdf9e9bb16b5760f7e560256eb79326 # v44.0.2
         with:
           env-regex: |
             ^(?:RENOVATE_\w+|LOG_LEVEL|GITHUB_COM_TOKEN|GONOPROXY|GOPRIVATE|NODE_OPTIONS|(?:HTTPS?|NO)_PROXY|(?:https?|no)_proxy)$

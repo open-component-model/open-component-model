@@ -185,10 +185,28 @@ spec:
                       as per OCM specification.
                     properties:
                       hashAlgorithm:
+                        description: |-
+                          HashAlgorithm specifies the hashing algorithm applied after normalization.
+                          The choice of algorithm impacts compatibility across verifiers.
+
+                          See specification reference:
+                            - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/digest-algorithms.md
                         type: string
                       normalisationAlgorithm:
+                        description: |-
+                          NormalisationAlgorithm defines how the component descriptor or artifact
+                          is transformed into a stable byte representation before hashing.
+                          Normalization ensures reproducibility by excluding volatile fields
+                          such as transport-related access specifications.
+
+                          See specification references:
+                            - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md
+                            - https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/artifact-normalization-types.md
                         type: string
                       value:
+                        description: |-
+                          Value is the encoded digest result produced from the normalized representation.
+                          Typically hex or base64 encoded, depending on the algorithm specification.
                         type: string
                     required:
                     - hashAlgorithm

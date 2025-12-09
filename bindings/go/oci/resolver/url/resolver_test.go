@@ -265,11 +265,41 @@ func TestURLPathResolver_Ping(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("non-200 status fails", func(t *testing.T) {
+	t.Run("401 status should pass", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
 			assert.Equal(t, "/v2/", r.URL.Path)
 			w.WriteHeader(http.StatusUnauthorized)
+		}))
+		defer server.Close()
+
+		resolver, err := url.New(url.WithBaseURL(server.URL[7:]), url.WithPlainHTTP(true))
+		require.NoError(t, err)
+
+		err = resolver.Ping(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("403 status should pass", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, "/v2/", r.URL.Path)
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+
+		resolver, err := url.New(url.WithBaseURL(server.URL[7:]), url.WithPlainHTTP(true))
+		require.NoError(t, err)
+
+		err = resolver.Ping(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("500 status should fail", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodGet, r.Method)
+			assert.Equal(t, "/v2/", r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		defer server.Close()
 

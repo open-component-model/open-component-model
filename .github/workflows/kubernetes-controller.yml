@@ -52,13 +52,13 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up docker
-        uses: docker/setup-docker-action@efe9e3891a4f7307e689f2100b33a155b900a608 # v4
+        uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # v4
 
       - name: Setup ocm
         uses: open-component-model/ocm-setup-action@655f3525fd283ca7d22e6b2ceec42324331df401 # v1.0.0
 
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@4a15fa6a023259353ef750acf1c98fe88407d4d0 # v2.7.2
+        uses: fluxcd/flux2/action@b6e76ca2534f76dcb8dd94fb057cdfa923c3b641 # v2.7.3
 
       - name: Setup Local E2E Test Cluster
         run: task kubernetes/controller:test/e2e/setup/local

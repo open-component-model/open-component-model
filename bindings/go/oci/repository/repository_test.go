@@ -1,30 +1,14 @@
 package repository
 
 import (
-	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 )
-
-// MockClient is a mock implementation of remote.Client
-type MockClient struct {
-	mock.Mock
-}
-
-func (m *MockClient) Do(req *http.Request) (*http.Response, error) {
-	args := m.Called(req)
-	return args.Get(0).(*http.Response), args.Error(1)
-}
-
-func (m *MockClient) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
 
 func TestNewFromCTFRepoV1(t *testing.T) {
 	tests := []struct {
@@ -141,9 +125,7 @@ func TestNewFromOCIRepoV1(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := &MockClient{}
-
-			repo, err := NewFromOCIRepoV1(t.Context(), tt.repository, mockClient)
+			repo, err := NewFromOCIRepoV1(t.Context(), tt.repository, nil)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -153,9 +135,109 @@ func TestNewFromOCIRepoV1(t *testing.T) {
 			}
 			assert.NoError(t, err)
 			assert.NotNil(t, repo)
+		})
+	}
+}
 
-			// Verify mock expectations
-			mockClient.AssertExpectations(t)
+func TestBuildResolver_SubPathExtraction(t *testing.T) {
+	tests := []struct {
+		name             string
+		baseURL          string
+		subPath          string
+		expectedBasePath string
+		expectedCVRef    string
+	}{
+		{
+			name:             "https with single path segment",
+			baseURL:          "https://registry.example.com/my-org",
+			subPath:          "",
+			expectedBasePath: "registry.example.com/my-org/component-descriptors",
+			expectedCVRef:    "registry.example.com/my-org/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "https with multiple path segments",
+			baseURL:          "https://registry.example.com/my-org/components",
+			subPath:          "",
+			expectedBasePath: "registry.example.com/my-org/components/component-descriptors",
+			expectedCVRef:    "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "http with path",
+			baseURL:          "http://localhost:5000/test/path",
+			subPath:          "",
+			expectedBasePath: "localhost:5000/test/path/component-descriptors",
+			expectedCVRef:    "localhost:5000/test/path/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "no scheme with path",
+			baseURL:          "registry.example.com/org/repo",
+			subPath:          "",
+			expectedBasePath: "registry.example.com/org/repo/component-descriptors",
+			expectedCVRef:    "registry.example.com/org/repo/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "explicit subPath with path in baseURL",
+			baseURL:          "https://registry.example.com/extra",
+			subPath:          "explicit/path",
+			expectedBasePath: "registry.example.com/extra/explicit/path/component-descriptors",
+			expectedCVRef:    "registry.example.com/extra/explicit/path/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "baseURL without path",
+			baseURL:          "https://registry.example.com",
+			subPath:          "",
+			expectedBasePath: "registry.example.com/component-descriptors",
+			expectedCVRef:    "registry.example.com/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "baseURL with port and path",
+			baseURL:          "https://registry.example.com:8080/my-org",
+			subPath:          "",
+			expectedBasePath: "registry.example.com:8080/my-org/component-descriptors",
+			expectedCVRef:    "registry.example.com:8080/my-org/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "ghcr.io style URL",
+			baseURL:          "ghcr.io/my-org/my-repo",
+			subPath:          "",
+			expectedBasePath: "ghcr.io/my-org/my-repo/component-descriptors",
+			expectedCVRef:    "ghcr.io/my-org/my-repo/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "explicit baseURL and subPath",
+			baseURL:          "https://registry.example.com",
+			subPath:          "my-org/my-repo",
+			expectedBasePath: "registry.example.com/my-org/my-repo/component-descriptors",
+			expectedCVRef:    "registry.example.com/my-org/my-repo/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "concrete example for platform-mesh",
+			baseURL:          "ghcr.io/platform-mesh",
+			subPath:          "",
+			expectedBasePath: "ghcr.io/platform-mesh/component-descriptors",
+			expectedCVRef:    "ghcr.io/platform-mesh/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:             "avoid duplicates",
+			baseURL:          "https://registry.example.com/my-org/components",
+			expectedBasePath: "registry.example.com/my-org/components/component-descriptors",
+			expectedCVRef:    "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repository := &ocirepospecv1.Repository{
+				BaseUrl: tt.baseURL,
+				SubPath: tt.subPath,
+			}
+
+			resolver, err := buildResolver(nil, repository)
+			require.NoError(t, err)
+			require.NotNil(t, resolver)
+
+			assert.Equal(t, tt.expectedBasePath, resolver.BasePath())
+			assert.Equal(t, tt.expectedCVRef, resolver.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
 		})
 	}
 }

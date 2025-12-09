@@ -5,6 +5,7 @@ import (
 
 	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/endpoints"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -36,7 +37,7 @@ func RegisterBlobTransformer[T runtime.Typed](
 		},
 	)
 
-	schema, err := runtime.GenerateJSONSchemaForType(proto)
+	schema, err := plugins.GenerateJSONSchemaForType(proto)
 	if err != nil {
 		return fmt.Errorf("failed to generate jsonschema for prototype %T: %w", proto, err)
 	}

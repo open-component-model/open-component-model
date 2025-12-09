@@ -158,25 +158,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("health check with invalid authentication fails", func(t *testing.T) {
-		r := require.New(t)
-
-		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
-		r.NoError(err)
-		resolver.SetClient(createAuthClient(reg, "invalid-user", "invalid-password"))
-
-		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
-		r.NoError(err)
-
-		// Health check should fail for ghcr.io with invalid credentials
-		// GHCR returns 403 during token exchange when credentials are invalid
-		err = repo.CheckHealth(t.Context())
-		r.Error(err)
-		r.True(strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "denied"),
-			"Expected 403 or denied error, got: %v", err)
-	})
-
-	t.Run("health check without authentication fails for ghcr.io", func(t *testing.T) {
+	t.Run("health check without authentication for ghcr.io works", func(t *testing.T) {
 		r := require.New(t)
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
@@ -186,11 +168,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 
 		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
 		r.NoError(err)
-
-		// Health check should fail without credentials for ghcr.io
-		// GHCR returns 403 during token exchange when no credentials provided
-		err = repo.CheckHealth(t.Context())
-		r.ErrorContains(err, "401")
+		r.NoError(repo.CheckHealth(t.Context()))
 	})
 
 	t.Run("resolver ping with valid authentication succeeds", func(t *testing.T) {
@@ -205,30 +183,16 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 		r.NoError(err)
 	})
 
-	t.Run("resolver ping with invalid authentication fails", func(t *testing.T) {
-		r := require.New(t)
-
-		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
-		r.NoError(err)
-		resolver.SetClient(createAuthClient(reg, "invalid-user", "invalid-password"))
-
-		// Direct resolver ping should fail for ghcr.io with invalid credentials
-		// GHCR returns 403 during token exchange when credentials are invalid
-		err = resolver.Ping(t.Context())
-		r.ErrorContains(err, "403")
-	})
-
-	t.Run("resolver ping without authentication fails", func(t *testing.T) {
+	t.Run("resolver ping without authentication works", func(t *testing.T) {
 		r := require.New(t)
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 		r.NoError(err)
 		resolver.SetClient(http.DefaultClient)
 
-		// Direct resolver ping should fail for ghcr.io without credentials
-		// GHCR returns 403 during token exchange when no credentials provided
-		err = resolver.Ping(t.Context())
-		r.ErrorContains(err, "401")
+		// Direct resolver ping should pass for ghcr.io without credentials
+		// Because we are explicitly ignoring 401 and 403.
+		r.NoError(resolver.Ping(t.Context()))
 	})
 }
 
@@ -401,10 +365,8 @@ func Test_Integration_CTF(t *testing.T) {
 		r := require.New(t)
 		repoProvider := provider.NewComponentVersionRepositoryProvider()
 		repoSpec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
-		id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
-		r.NoError(err)
-
-		r.Equal(id[ocmruntime.IdentityAttributePath], fs.String())
+		_, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
+		r.Error(err)
 
 		repo, err := repoProvider.GetComponentVersionRepository(t.Context(), repoSpec, nil)
 		r.NoError(err)
