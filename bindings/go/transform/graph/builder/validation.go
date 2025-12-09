@@ -1,8 +1,10 @@
-package graph
+package builder
 
 import (
 	"fmt"
 	"regexp"
+
+	"ocm.software/open-component-model/bindings/go/transform/graph"
 )
 
 var (
@@ -12,7 +14,7 @@ var (
 
 // validateTransformationGraphDefinitionNamingConventions validates the naming conventions of
 // the given resource graph definition.
-func validateTransformationGraphDefinitionNamingConventions(transformations map[string]*Transformation) error {
+func validateTransformationGraphDefinitionNamingConventions(transformations map[string]*graph.Transformation) error {
 	err := validateResourceIDs(transformations)
 	if err != nil {
 		return fmt.Errorf("%s: %w", ErrNamingConvention, err)
@@ -65,7 +67,7 @@ var (
 // - The id should start with a lowercase letter.
 // - The id should only contain alphanumeric characters.
 // - Does not contain any special characters, underscores, or hyphens.
-func validateResourceIDs(transformations map[string]*Transformation) error {
+func validateResourceIDs(transformations map[string]*graph.Transformation) error {
 	seen := make(map[string]struct{})
 	for _, transformation := range transformations {
 		meta := transformation.TransformationMeta

@@ -1,4 +1,4 @@
-package graph
+package builder
 
 import (
 	"testing"
@@ -9,7 +9,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations"
+	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations/oci"
+	ocitransformer "ocm.software/open-component-model/bindings/go/transform/transformer/oci"
 	"sigs.k8s.io/yaml"
 )
 
@@ -17,8 +18,8 @@ func newTestBuilder(t *testing.T) *Builder {
 	t.Helper()
 	transformerScheme := runtime.NewScheme()
 	require.NoError(t, transformerScheme.RegisterWithAlias(
-		&transformations.DownloadComponentTransformation{},
-		runtime.NewUnversionedType(transformations.DownloadComponentTransformationType),
+		&oci.DownloadComponentTransformation{},
+		oci.DownloadComponentTransformationType,
 	))
 	//require.NoError(t, transformerScheme.RegisterWithAlias(
 	//	&transformations.UploadComponentTransformation{},
@@ -33,12 +34,13 @@ func newTestBuilder(t *testing.T) *Builder {
 		repoProvider,
 	))
 
-	registry, err := NewRegistry(t.Context(), repoProvider)
-	require.NoError(t, err)
-
-	return &Builder{
-		transformationRegistry: registry,
-	}
+	return NewBuilder().WithTransformer(
+		oci.DownloadComponentTransformationType,
+		&oci.DownloadComponentTransformation{},
+		&ocitransformer.DownloadComponent{
+			RepoProvider: repoProvider,
+		},
+	)
 }
 
 // ${environment.repository.type} interpolation
@@ -63,7 +65,7 @@ transformations:
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
-	graph, err := builder.NewTransferGraph(tgd)
+	graph, err := builder.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NotNil(graph)
 }
@@ -90,7 +92,7 @@ transformations:
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
-	graph, err := builder.NewTransferGraph(tgd)
+	graph, err := builder.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NotNil(graph)
 }
@@ -116,7 +118,7 @@ transformations:
 
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
-	graph, err := builder.NewTransferGraph(tgd)
+	graph, err := builder.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NotNil(graph)
 	r.Len(graph.checked.Vertices, 1)
@@ -146,7 +148,7 @@ transformations:
 
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
-	graph, err := builder.NewTransferGraph(tgd)
+	graph, err := builder.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NotNil(graph)
 	r.Len(graph.checked.Vertices, 1)
@@ -188,7 +190,7 @@ transformations:
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
-	graph, err := builder.NewTransferGraph(tgd)
+	graph, err := builder.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NotNil(graph)
 }
@@ -209,7 +211,7 @@ transformations:
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
-	_, err := builder.NewTransferGraph(tgd)
+	_, err := builder.BuildAndCheck(tgd)
 	r.Error(err)
 }
 
@@ -235,7 +237,7 @@ transformations:
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
-	graph, err := builder.NewTransferGraph(tgd)
+	graph, err := builder.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NotNil(graph)
 }
@@ -269,7 +271,9 @@ transformations:
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
-	graph, err := builder.NewTransferGraph(tgd)
+	graph, err := builder.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NotNil(graph)
+
+	r.NoError(graph.Process(t.Context()))
 }

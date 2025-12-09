@@ -1,4 +1,4 @@
-package graph
+package builder
 
 import (
 	"fmt"
@@ -11,11 +11,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/transform/graph"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
 
-func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition) (map[string]Transformation, error) {
-	transformations := make(map[string]Transformation, len(tgd.Transformations))
+func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition) (map[string]graph.Transformation, error) {
+	transformations := make(map[string]graph.Transformation, len(tgd.Transformations))
 	for order, transformation := range tgd.Transformations {
 		typ := transformation.GetType()
 		if typ.IsEmpty() {
@@ -28,31 +29,31 @@ func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition) (map[st
 		if _, exists := transformations[transformation.ID]; exists {
 			return nil, fmt.Errorf("duplicate transformation ID %s", transformation.ID)
 		}
-		transformations[transformation.ID] = Transformation{
+		transformations[transformation.ID] = graph.Transformation{
 			GenericTransformation: transformation,
-			fieldDescriptors:      fieldDescriptors,
-			order:                 order,
+			FieldDescriptors:      fieldDescriptors,
+			Order:                 order,
 		}
 	}
 	return transformations, nil
 }
 
-func discoverDependencies(graph *dag.DirectedAcyclicGraph[string], env *cel.Env) error {
-	keys := slices.Collect(maps.Keys(graph.Vertices))
+func discoverDependencies(g *dag.DirectedAcyclicGraph[string], env *cel.Env) error {
+	keys := slices.Collect(maps.Keys(g.Vertices))
 
 	inspector := ast.NewInspectorWithEnv(env, append(keys))
 
-	for id, vertex := range graph.Vertices {
-		ttransformation, ok := vertex.Attributes[syncdag.AttributeValue].(Transformation)
+	for id, vertex := range g.Vertices {
+		ttransformation, ok := vertex.Attributes[syncdag.AttributeValue].(graph.Transformation)
 		if !ok {
 			return fmt.Errorf("unknown transformation type for transformation %q", id)
 		}
-		for _, fieldDescriptor := range ttransformation.fieldDescriptors {
-			expressions, err := discoverExpressions(inspector, graph, id, fieldDescriptor)
+		for _, fieldDescriptor := range ttransformation.FieldDescriptors {
+			expressions, err := discoverExpressions(inspector, g, id, fieldDescriptor)
 			if err != nil {
 				return fmt.Errorf("failed to discover resource expressions of transformation %q: %w", id, err)
 			}
-			ttransformation.expressions = append(ttransformation.expressions, expressions...)
+			ttransformation.Expressions = append(ttransformation.Expressions, expressions...)
 		}
 	}
 
