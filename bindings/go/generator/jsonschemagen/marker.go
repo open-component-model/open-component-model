@@ -233,7 +233,7 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 
 	var oneOf []*JSONSchemaDraft202012
 	for _, v := range order {
-		constVal := inferConstValue(string(s.Type), v)
+		constVal := inferConstValue(s.Type, v)
 
 		_, isDeprecated := depSet[v]
 		var deprecatedPtr *bool
