@@ -22,8 +22,6 @@ require (
 	oras.land/oras-go/v2 v2.6.0
 )
 
-replace ocm.software/open-component-model/bindings/go/constructor => ../../bindings/go/constructor
-
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
@@ -104,7 +102,7 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.3 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect

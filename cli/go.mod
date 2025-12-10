@@ -14,7 +14,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
-	ocm.software/open-component-model/bindings/go/constructor v0.0.3
+	ocm.software/open-component-model/bindings/go/constructor v0.0.4
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
@@ -33,8 +33,6 @@ require (
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
 )
-
-replace ocm.software/open-component-model/bindings/go/constructor => ../bindings/go/constructor
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
