@@ -141,6 +141,13 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 	ref := &Ref{}
 	originalInput := input
 
+	parsedOptions := Options{}
+	for _, o := range opts {
+		if err := o.Apply(&parsedOptions); err != nil {
+			return nil, fmt.Errorf("failed to apply option: %w", err)
+		}
+	}
+
 	// Step 1: Extract optional type
 	if idx := strings.Index(input, "::"); idx != -1 {
 		ref.Type = input[:idx]
@@ -156,6 +163,7 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 		if !digestRegex.MatchString(digestPart) {
 			return nil, fmt.Errorf("invalid digest %q in %q, must match %q", digestPart, originalInput, DigestRegex)
 		}
+
 		ref.Digest = digestPart
 	}
 
@@ -164,9 +172,11 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 	if idx := strings.LastIndex(input, ":"); idx != -1 && !strings.Contains(input[idx:], "/") {
 		versionPart = input[idx+1:]
 		input = input[:idx]
-
 		if !versionRegex.MatchString(versionPart) {
-			slog.Warn("Version does not match semantic versioning, continuing anyway", "version", versionPart, "input", originalInput)
+			if !parsedOptions.IgnoreSemverCompatibility {
+				return nil, fmt.Errorf("invalid semantic version %q in %q, must match %q", versionPart, originalInput, VersionRegex)
+			}
+			slog.Warn("ignoring invalid semantic version due to IgnoreSemverCompatibility option", "version", versionPart, "input", originalInput)
 		}
 		ref.Version = versionPart
 	}

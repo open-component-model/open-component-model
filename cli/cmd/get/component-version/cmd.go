@@ -162,7 +162,9 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	reference := args[0]
 
 	// We have a reference, check if it is a component reference.
-	ref, compErr := compref.Parse(reference)
+	ref, compErr := compref.Parse(reference, []compref.Option{
+		compref.IgnoreSemverCompatibility(),
+	}...)
 	if compErr != nil {
 		// If not a component reference, check if it is a repository reference.
 		repository, repoErr := compref.ParseRepository(args[0])

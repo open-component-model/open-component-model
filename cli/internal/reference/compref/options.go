@@ -7,6 +7,8 @@ import (
 type Options struct {
 	// CTFAccessMode specifies the access mode for any CTF created from Parse
 	CTFAccessMode ctf.AccessMode
+
+	IgnoreSemverCompatibility bool
 }
 
 func (o *Options) Apply(opts *Options) error {
@@ -39,6 +41,13 @@ func (f OptionFunc) Apply(opts *Options) error {
 func WithCTFAccessMode(mode ctf.AccessMode) Option {
 	return OptionFunc(func(opts *Options) error {
 		opts.CTFAccessMode = mode
+		return nil
+	})
+}
+
+func IgnoreSemverCompatibility() Option {
+	return OptionFunc(func(opts *Options) error {
+		opts.IgnoreSemverCompatibility = true
 		return nil
 	})
 }

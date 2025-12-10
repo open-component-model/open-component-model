@@ -15,9 +15,10 @@ import (
 
 func Test_ComponentReference(t *testing.T) {
 	cases := []struct {
-		input    string
-		expected *Ref
-		err      assert.ErrorAssertionFunc
+		input                  string
+		expected               *Ref
+		ignoreSemverValidation bool
+		err                    assert.ErrorAssertionFunc
 	}{
 		{
 			input: "github.com/open-component-model/ocm//ocm.software/ocmcli:0.23.0",
@@ -260,6 +261,13 @@ func Test_ComponentReference(t *testing.T) {
 			err: assert.NoError,
 		},
 		{
+			input:    "github.com/open-component-model/ocm//ocm.software/ocmcli:invalid-0.23.0",
+			expected: nil,
+			err: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Error(t, err, i...) && strings.Contains(err.Error(), "invalid version format")
+			},
+		},
+		{
 			input: "github.com/open-component-model/ocm//ocm.software/ocmcli:invalid-0.23.0",
 			expected: &Ref{
 				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
@@ -270,7 +278,8 @@ func Test_ComponentReference(t *testing.T) {
 				Component: "ocm.software/ocmcli",
 				Version:   "invalid-0.23.0",
 			},
-			err: assert.NoError,
+			ignoreSemverValidation: true,
+			err:                    assert.NoError,
 		},
 	}
 
@@ -278,8 +287,12 @@ func Test_ComponentReference(t *testing.T) {
 		t.Run(fmt.Sprintf("case-%02d", i+1), func(t *testing.T) {
 			t.Logf("%q", tc.input)
 			r := require.New(t)
-			parsed, err := Parse(tc.input)
-			if tc.expected.Type != "" {
+			var opts []Option
+			if tc.ignoreSemverValidation {
+				opts = append(opts, IgnoreSemverCompatibility())
+			}
+			parsed, err := Parse(tc.input, opts...)
+			if tc.expected != nil && tc.expected.Type != "" {
 				if typ, err := runtime.TypeFromString(parsed.Type); err == nil {
 					tc.expected.Repository.SetType(typ)
 				}
