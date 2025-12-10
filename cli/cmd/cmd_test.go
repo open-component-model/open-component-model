@@ -206,6 +206,29 @@ COMPONENT                   │ VERSION │ PROVIDER
 	}
 }
 
+// Test_Get_Component_Version_Invalid_Semver tests the get cv command with invalid semver constraint
+func Test_Get_Component_Version_Invalid_Semver(t *testing.T) {
+	// Setup test repository with a single component version
+	desc := createTestDescriptor("ocm.software/test-component", "0.0.1")
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, desc)
+	require.NoError(t, err)
+
+	ref := compref.Ref{
+		Repository: &ctfv1.Repository{
+			FilePath: archivePath,
+		},
+		Component: desc.Component.Name,
+	}
+	path := ref.String()
+
+	logs := test.NewJSONLogReader()
+	result := new(bytes.Buffer)
+	_, err = test.OCM(t, test.WithArgs("get", "cv", path, "--semver-constraint", "invalid-constraint"), test.WithOutput(result), test.WithErrorOutput(logs))
+
+	require.ErrorContains(t, err, "invalid-constraint")
+	require.Error(t, err, "expected error but got none")
+}
+
 // Test_Get_Component_Version_Formats_Recursive tests the different output formats for the get cv command
 func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 	// Setup test repository
