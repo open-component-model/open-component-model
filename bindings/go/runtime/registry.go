@@ -202,6 +202,10 @@ func IsTypeAlreadyRegisteredError(err error) bool {
 // Note that if Scheme.RegisterWithAlias or Scheme.MustRegister were called before,
 // even the first type will be counted as an alias.
 func (r *Scheme) RegisterWithAlias(prototype Typed, types ...Type) error {
+	if len(types) == 0 {
+		return fmt.Errorf("no types provided to register %T", prototype)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
