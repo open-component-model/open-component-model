@@ -62,11 +62,11 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(_ context.Context, transfor
 	if err != nil {
 		return fmt.Errorf("compiling JSON schema for transformation type %q: %w", typ.String(), err)
 	}
+	transformation.Schema = schema
 
 	declType := stv6jsonschema.NewSchemaDeclType(schema)
 	b.Builder.RegisterDeclTypes(declType)
 	b.Builder.RegisterEnvOption(cel.Variable(transformation.ID, declType.CelType()))
-	transformation.DeclType = declType
 
 	if celEnv, provider, err = b.Builder.CurrentEnv(); err != nil {
 		return err

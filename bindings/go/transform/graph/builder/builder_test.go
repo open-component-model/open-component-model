@@ -6,12 +6,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/oci"
+	ocitransformer "ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations/ctf"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations/oci"
-	ocitransformer "ocm.software/open-component-model/bindings/go/transform/transformer/oci"
 	"sigs.k8s.io/yaml"
 )
 
@@ -27,8 +28,7 @@ func newTestBuilder(t *testing.T) *Builder {
 	))
 
 	transformerScheme := runtime.NewScheme()
-	transformerScheme.MustRegisterScheme(oci.Scheme)
-	transformerScheme.MustRegisterScheme(ctf.Scheme)
+	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
 
 	ociDownloadComponent := &ocitransformer.DownloadComponent{
 		Scheme:       transformerScheme,

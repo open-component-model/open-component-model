@@ -17,7 +17,7 @@ import (
 
 func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition) (map[string]graph.Transformation, error) {
 	transformations := make(map[string]graph.Transformation, len(tgd.Transformations))
-	for order, transformation := range tgd.Transformations {
+	for _, transformation := range tgd.Transformations {
 		typ := transformation.GetType()
 		if typ.IsEmpty() {
 			return nil, fmt.Errorf("transformations type is empty")
@@ -32,9 +32,13 @@ func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition) (map[st
 		transformations[transformation.ID] = graph.Transformation{
 			GenericTransformation: transformation,
 			FieldDescriptors:      fieldDescriptors,
-			Order:                 order,
 		}
 	}
+
+	if err := ValidateTransformations(transformations); err != nil {
+		return nil, err
+	}
+
 	return transformations, nil
 }
 

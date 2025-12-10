@@ -45,7 +45,6 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 				return fmt.Errorf("failed to evaluate expression %q: %w", expression.String(), err)
 			}
 
-			// TODO maybe consider dropping this for a smarter solution
 			val, err := GoNativeValue(result)
 			if err != nil {
 				return fmt.Errorf("failed to convert result of expression %q to go native type: %w", expression.String(), err)
@@ -59,11 +58,10 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 		return fmt.Errorf("failed to resolve transformation %q: %w", transformation.ID, errors.Join(summary.Errors...))
 	}
 
-	// TODO now time to revalidate the resource after all field descriptors have been resolved
 	unstructuredTransformationData := transformation.GenericTransformation.AsUnstructured().Data
 	fieldDescriptors, err := stv6jsonschema.ParseResource(
 		unstructuredTransformationData,
-		transformation.DeclType.Schema.Schema,
+		transformation.Schema,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to parse resolved transformation %q: %w", transformation.ID, err)
@@ -94,7 +92,7 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 
 	fieldDescriptors, err = stv6jsonschema.ParseResource(
 		evaluatedTransformation,
-		transformation.DeclType.Schema.Schema,
+		transformation.Schema,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to parse evaluated transformation %q: %w", transformation.ID, err)

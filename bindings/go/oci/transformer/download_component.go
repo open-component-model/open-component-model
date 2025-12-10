@@ -1,15 +1,15 @@
-package oci
+package transformer
 
 import (
 	"context"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
-	v2runtime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations/ctf"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/transformations/oci"
 )
 
 type DownloadComponent struct {
@@ -53,14 +53,14 @@ func (t *DownloadComponent) Transform(ctx context.Context, step runtime.Typed) (
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version repository: %v", err)
 	}
-	// TODO(fabianburth): throw an error if one attempts to marshal a runtime
-	//  descriptor
+
 	desc, err := repo.GetComponentVersion(ctx, component, version)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version %s:%s: %v", component, version, err)
 	}
 
-	v2desc, err := v2runtime.ConvertToV2(runtime.NewScheme(), desc)
+	// TODO(jakobmoellerdev): mabye use the OCI scheme here instead of a blank scheme.
+	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting component version to v2: %v", err)
 	}
