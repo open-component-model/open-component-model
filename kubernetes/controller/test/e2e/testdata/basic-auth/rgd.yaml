@@ -1,0 +1,61 @@
+apiVersion: kro.run/v1alpha1
+kind: ResourceGraphDefinition
+metadata:
+  name: basic-auth
+spec:
+  schema:
+    apiVersion: v1alpha1
+    kind: BasicAuth
+    spec:
+      prefix: string | default="basic-auth"
+  resources:
+    - id: resourceChart
+      template:
+        apiVersion: delivery.ocm.software/v1alpha1
+        kind: Resource
+        metadata:
+          name: "${schema.spec.prefix}-resource-chart-name"
+        spec:
+          componentRef:
+            name: basic-auth-component
+          resource:
+            byReference:
+              resource:
+                name: helm-resource
+          additionalStatusFields:
+            registry: resource.access.imageReference.toOCI().registry
+            repository: resource.access.imageReference.toOCI().repository
+            digest: resource.access.imageReference.toOCI().digest
+          interval: 10m
+          ocmConfig:
+            - kind: Secret
+              name: basic-auth
+    - id: ocirepository
+      template:
+        apiVersion: source.toolkit.fluxcd.io/v1beta2
+        kind: OCIRepository
+        metadata:
+          name: "${schema.spec.prefix}-oci-repository-name"
+        spec:
+          interval: 1m0s
+          insecure: true
+          layerSelector:
+            mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+            operation: copy
+          url: oci://${resourceChart.status.additional.registry}/${resourceChart.status.additional.repository}
+          ref:
+            digest: ${resourceChart.status.additional.digest}
+    - id: helmrelease
+      template:
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: "${schema.spec.prefix}-helm-release-name"
+        spec:
+          releaseName: basic-auth-podinfo
+          interval: 1m
+          timeout: 5m
+          chartRef:
+            kind: OCIRepository
+            name: ${ocirepository.metadata.name}
+            namespace: default
