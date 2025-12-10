@@ -33,6 +33,8 @@ const (
 // Descriptor defines a schema specific descriptor of a component containing additionally embedded signatures
 // verifying the validity of the component.
 // +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
+// +ocm:jsonschema-gen:schema-from=resources/schema-2020-12.json
 type Descriptor struct {
 	// Meta defines the schema version of the component.
 	Meta Meta `json:"meta"`

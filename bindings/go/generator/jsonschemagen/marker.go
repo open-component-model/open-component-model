@@ -1,10 +1,15 @@
 package jsonschemagen
 
 import (
+	"encoding/json"
 	"go/ast"
 	"maps"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+
+	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
 const (
@@ -228,7 +233,7 @@ func ApplyEnumMarkers(s *JSONSchemaDraft202012, markers map[string]string) {
 
 	var oneOf []*JSONSchemaDraft202012
 	for _, v := range order {
-		constVal := inferConstValue(s.Type, v)
+		constVal := inferConstValue(string(s.Type), v)
 
 		_, isDeprecated := depSet[v]
 		var deprecatedPtr *bool
@@ -260,4 +265,27 @@ func inferConstValue(schemaType, raw string) any {
 		}
 	}
 	return raw
+}
+
+func SchemaFromUniverseType(ti *universe.TypeInfo) (string, bool) {
+	markers := ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, BaseMarker)
+	if markers == nil {
+		return "", false
+	}
+	schemaFrom, ok := markers["schema-from"]
+	return schemaFrom, ok && schemaFrom != ""
+}
+
+func ApplyFileMarkers(base *JSONSchemaDraft202012, schema string, path string) {
+	basePath := filepath.Dir(path)
+	source, err := os.OpenInRoot(basePath, schema)
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		_ = source.Close()
+	}()
+	if err := json.NewDecoder(source).Decode(base); err != nil {
+		panic(err)
+	}
 }
