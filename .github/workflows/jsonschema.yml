@@ -25,7 +25,7 @@ jobs:
       uses: sourcemeta/jsonschema@8f163c81ee4d1e59321067de0b3c134b7120175e # v12.7.1
     - name: Lint JSON Schemas
       run: |
-        jsonschema lint $(git ls-files '*.schema.json') \
+        jsonschema lint $(git ls-files '**/schemas/*.schema.json') \
           --verbose \
           --strict \
           --exclude additional_properties_default # we want to explicitly set additional properties to avoid confusion
