@@ -21,23 +21,25 @@ import (
 // It wraps a real repository and uses a worker pool to handle concurrent access with caching.
 // This is a READ-ONLY cache. Writing operations are not cached.
 type CacheBackedRepository struct {
-	spec       runtime.Typed
-	cfg        *configuration.Configuration
-	workerPool *workerpool.WorkerPool
-	repo       repository.ComponentVersionRepository
-	logger     *logr.Logger
+	spec          runtime.Typed
+	cfg           *configuration.Configuration
+	workerPool    *workerpool.WorkerPool
+	repo          repository.ComponentVersionRepository
+	logger        *logr.Logger
+	requesterFunc func() workerpool.RequesterInfo
 }
 
 var _ repository.ComponentVersionRepository = (*CacheBackedRepository)(nil)
 
 // newCacheBackedRepository creates a new CacheBackedRepository instance.
-func newCacheBackedRepository(logger *logr.Logger, spec runtime.Typed, cfg *configuration.Configuration, wp *workerpool.WorkerPool, repo repository.ComponentVersionRepository) *CacheBackedRepository {
+func newCacheBackedRepository(logger *logr.Logger, spec runtime.Typed, cfg *configuration.Configuration, wp *workerpool.WorkerPool, repo repository.ComponentVersionRepository, requesterFunc func() workerpool.RequesterInfo) *CacheBackedRepository {
 	return &CacheBackedRepository{
-		logger:     logger,
-		spec:       spec,
-		cfg:        cfg,
-		workerPool: wp,
-		repo:       repo,
+		logger:        logger,
+		spec:          spec,
+		cfg:           cfg,
+		workerPool:    wp,
+		repo:          repo,
+		requesterFunc: requesterFunc,
 	}
 }
 
@@ -65,6 +67,7 @@ func (c *CacheBackedRepository) GetComponentVersion(ctx context.Context, compone
 		Version:    version,
 		Repository: c.repo,
 		KeyFunc:    keyFunc,
+		Requester:  c.requesterFunc(),
 	}
 
 	result, err := c.workerPool.GetComponentVersion(ctx, wpOpts)
