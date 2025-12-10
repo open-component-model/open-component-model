@@ -2715,8 +2715,8 @@ ocm.software/open-component-model/bindings/go/repository v0.0.4 h1:pDh8tHTaE8PtB
 ocm.software/open-component-model/bindings/go/repository v0.0.4/go.mod h1:v1ROvp4Hmq5q3t4Mg2gPUqoOJn4ENFaOVmd1XBXKdj4=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251204125915-cb295d402227 h1:3Pr4hU1sxZGlYvrAuZi/GvqcWNIUvc4N6FkHxQuDbCg=
 ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251204125915-cb295d402227/go.mod h1:NpbI5rIIyPpN5xnTjb63xRX//NMAEVkIG8QqualCwJU=
-ocm.software/open-component-model/bindings/go/runtime v0.0.4 h1:Z4r5MKj8tDXATzZNNnfJuTIpDw0/bvQ1XzuqcAcSRcE=
-ocm.software/open-component-model/bindings/go/runtime v0.0.4/go.mod h1:iokVCXI30cn36PM05bBBaDGeXpz0hbgU9ObTtdP26Eo=
+ocm.software/open-component-model/bindings/go/runtime v0.0.5 h1:z/gU2EMKZc8nPziSReG/KHtRTZJBkoOlR+B+XsaAmZ4=
+ocm.software/open-component-model/bindings/go/runtime v0.0.5/go.mod h1:9rDFSoH49kO95qKwG5o/lFsIb4Q9JR/le9QzxcVW+hk=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20251204125915-cb295d402227 h1:6nVRVoPEnK6DA3n+5XtNIXyJEeM/S833vpgI1P6TNh0=
 ocm.software/open-component-model/bindings/go/signing v0.0.0-20251204125915-cb295d402227/go.mod h1:+QR/3GRsKLdA63aSmqE/ajOnvp+2GH7D05iyBnXDQIo=
 oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=

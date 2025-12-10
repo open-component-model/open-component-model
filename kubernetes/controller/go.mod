@@ -45,7 +45,7 @@ require (
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251204125915-cb295d402227
-	ocm.software/open-component-model/bindings/go/runtime v0.0.4
+	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251204125915-cb295d402227
 )
 
