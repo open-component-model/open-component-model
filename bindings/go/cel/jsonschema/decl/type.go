@@ -5,7 +5,6 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
-
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 )
@@ -42,6 +41,10 @@ func (t *Type) TypeName() string {
 // CelType returns the CEL type of this declaration.
 func (t *Type) CelType() *cel.Type {
 	return t.celType
+}
+
+func (t *Type) SetOptional() {
+	t.celType = cel.OptionalType(t.celType)
 }
 
 // DefaultValue returns the CEL ref.Val representing the default value for this object type,

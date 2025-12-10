@@ -23,6 +23,7 @@ var DownloadComponentTransformationType = runtime.NewVersionedType("ocm.software
 type DownloadComponentTransformation struct {
 	// +ocm:jsonschema-gen:enum=ocm.software.download.component.ctf/v1alpha1
 	Type   runtime.Type                           `json:"type"`
+	ID     string                                 `json:"id,omitempty"`
 	Spec   *DownloadComponentTransformationSpec   `json:"spec"`
 	Output *DownloadComponentTransformationOutput `json:"output,omitempty"`
 }

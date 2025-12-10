@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/cel-go/cel"
+	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph"
 	"ocm.software/open-component-model/bindings/go/transform/graph/runtime/resolver"
@@ -59,6 +60,17 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 	}
 
 	// TODO now time to revalidate the resource after all field descriptors have been resolved
+	unstructuredTransformationData := transformation.GenericTransformation.AsUnstructured().Data
+	fieldDescriptors, err := stv6jsonschema.ParseResource(
+		unstructuredTransformationData,
+		transformation.DeclType.Schema.Schema,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to parse resolved transformation %q: %w", transformation.ID, err)
+	}
+	if len(fieldDescriptors) > 0 {
+		return fmt.Errorf("transformation %q has unresolved fields after resolution", transformation.ID)
+	}
 
 	runtimeType := transformation.GenericTransformation.GetType()
 	if runtimeType.IsEmpty() {
@@ -78,10 +90,19 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 	if err != nil {
 		return fmt.Errorf("failed to convert updated transformation %q to generic transformation: %w", transformation.ID, err)
 	}
-	evaluatedTransformation := map[string]any{
-		"spec":   updated.Spec.Data,
-		"output": updated.Output.Data,
+	evaluatedTransformation := updated.AsUnstructured().Data
+
+	fieldDescriptors, err = stv6jsonschema.ParseResource(
+		evaluatedTransformation,
+		transformation.DeclType.Schema.Schema,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to parse evaluated transformation %q: %w", transformation.ID, err)
 	}
+	if len(fieldDescriptors) > 0 {
+		return fmt.Errorf("transformation %q has unresolved fields after evaluation", transformation.ID)
+	}
+
 	b.EvaluatedTransformations[transformation.ID] = evaluatedTransformation
 	return nil
 }

@@ -35,6 +35,20 @@ func (t *GenericTransformation) AsRaw() *runtime.Raw {
 	return &r
 }
 
+func (t *GenericTransformation) AsUnstructured() *runtime.Unstructured {
+	obj := map[string]interface{}{
+		"id":   t.ID,
+		"type": t.GetType().String(),
+	}
+	if t.Spec != nil {
+		obj["spec"] = t.Spec.Data
+	}
+	if t.Output != nil {
+		obj["output"] = t.Output.Data
+	}
+	return &runtime.Unstructured{Data: obj}
+}
+
 func GenericTransformationFromTyped(r runtime.Typed) (*GenericTransformation, error) {
 	// Convert to raw first to drop unknown fields
 	var t runtime.Raw
