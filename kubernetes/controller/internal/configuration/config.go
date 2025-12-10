@@ -62,43 +62,36 @@ func createConfigFromDockerConfig(data []byte) (*genericv1.Config, error) {
 	}
 
 	dockerConfig := &v1.DockerConfig{}
-
-	// Set the default type for the DockerConfig object.
 	if _, err := credentials.Scheme.DefaultType(dockerConfig); err != nil {
-		return nil, fmt.Errorf("failed to get default type for docker config type")
+		return nil, fmt.Errorf("failed to get default type for docker config type %T: %w", dockerConfig, err)
 	}
 
-	// Assign the raw Docker configuration data to the DockerConfig object.
 	dockerConfig.DockerConfig = string(data)
-
-	// Convert the DockerConfig object into a runtime.Raw object.
 	raw := &runtime.Raw{}
 	if err := credentials.Scheme.Convert(dockerConfig, raw); err != nil {
-		return nil, fmt.Errorf("failed to convert docker config to raw")
+		return nil, fmt.Errorf("failed to convert docker config to raw: %w", err)
 	}
 
-	// Init a scheme for the credential type to use it converting later
 	credScheme := runtime.NewScheme()
 	credentialsv1.MustRegister(credScheme)
-
-	credConfig := &credentialsv1.Config{}
-	if _, err := credScheme.DefaultType(credConfig); err != nil {
-		return nil, fmt.Errorf("failed to get default type for credential config type")
+	credConfig := &credentialsv1.Config{
+		Repositories: []credentialsv1.RepositoryConfigEntry{{raw}},
 	}
-
-	credConfig.Repositories = []credentialsv1.RepositoryConfigEntry{{raw}}
+	if _, err := credScheme.DefaultType(credConfig); err != nil {
+		return nil, fmt.Errorf("failed to get default type for credentials config: %w", err)
+	}
 
 	rawCreds := &runtime.Raw{}
 	if err := credScheme.Convert(credConfig, rawCreds); err != nil {
-		return nil, fmt.Errorf("failed to convert credential config to raw")
+		return nil, fmt.Errorf("failed to convert credential config to raw type: %w", err)
 	}
 
-	cfg := genericv1.Config{
+	cfg := &genericv1.Config{
 		Type:           runtime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
 		Configurations: []*runtime.Raw{rawCreds},
 	}
 
-	return &cfg, nil
+	return cfg, nil
 }
 
 // GetConfigFromConfigMap extracts and decodes OCM configuration from a Kubernetes ConfigMap.
