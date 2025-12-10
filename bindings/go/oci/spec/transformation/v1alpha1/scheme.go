@@ -1,8 +1,6 @@
 package v1alpha1
 
 import (
-	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -10,11 +8,19 @@ var Scheme = runtime.NewScheme()
 
 func init() {
 	Scheme.MustRegisterWithAlias(
-		&oci.DownloadComponentTransformation{},
-		runtime.NewVersionedType(oci.DownloadComponentTransformationType, Version),
+		&OCIGetComponentVersion{},
+		runtime.NewVersionedType(OCIGetComponentVersionType, Version),
 	)
 	Scheme.MustRegisterWithAlias(
-		&ctf.DownloadComponentTransformation{},
-		runtime.NewVersionedType(ctf.DownloadComponentTransformationType, Version),
+		&OCIAddComponentVersion{},
+		runtime.NewVersionedType(OCIAddComponentVersionType, Version),
+	)
+	Scheme.MustRegisterWithAlias(
+		&CTFGetComponentVersion{},
+		runtime.NewVersionedType(CTFGetComponentVersionType, Version),
+	)
+	Scheme.MustRegisterWithAlias(
+		&CTFAddComponentVersion{},
+		runtime.NewVersionedType(CTFAddComponentVersionType, Version),
 	)
 }

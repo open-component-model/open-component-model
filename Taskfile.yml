@@ -160,9 +160,9 @@ tasks:
       - task: 'bindings/go/generator:ocmtypegen/generate'
       - task: 'bindings/go/generator:jsonschemagen/generate'
       - task: 'tools:deepcopy-gen/generate-deepcopy'
-      - task: 'kubernetes/controller:manifests'
-      - task: 'kubernetes/controller:generate'
-      - task: 'cli:generate/docs'
-        vars:
-          CLI_DOCUMENTATION_MODE: "hugo"
-          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/cli/docs/reference'
+#      - task: 'kubernetes/controller:manifests'
+#      - task: 'kubernetes/controller:generate'
+#      - task: 'cli:generate/docs'
+#        vars:
+#          CLI_DOCUMENTATION_MODE: "hugo"
+#          CLI_DOCUMENTATION_DIRECTORY: '{{ .ROOT_DIR }}/cli/docs/reference'

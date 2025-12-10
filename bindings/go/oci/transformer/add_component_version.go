@@ -6,19 +6,19 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/oci"
+	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-type DownloadComponent struct {
+type AddComponentVersion struct {
 	Scheme             *runtime.Scheme
 	RepoProvider       repository.ComponentVersionRepositoryProvider
 	CredentialProvider credentials.Resolver
 }
 
-func (t *DownloadComponent) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *AddComponentVersion) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	transformation, err := t.Scheme.NewObject(step.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("failed creating download component transformation object: %v", err)
@@ -27,14 +27,14 @@ func (t *DownloadComponent) Transform(ctx context.Context, step runtime.Typed) (
 		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %v", err)
 	}
 	var repoSpec runtime.Typed
-	var component, version string
+	var v2desc *v2.Descriptor
 	switch tr := transformation.(type) {
-	case *oci.DownloadComponentTransformation:
+	case *v1alpha1.OCIAddComponentVersion:
 		repoSpec = &tr.Spec.Repository
-		component, version = tr.Spec.Component, tr.Spec.Version
-	case *ctf.DownloadComponentTransformation:
+		v2desc = tr.Spec.Descriptor
+	case *v1alpha1.CTFAddComponentVersion:
 		repoSpec = &tr.Spec.Repository
-		component, version = tr.Spec.Component, tr.Spec.Version
+		v2desc = tr.Spec.Descriptor
 	default:
 		return nil, fmt.Errorf("unexpected transformation type: %T", transformation)
 	}
@@ -54,26 +54,15 @@ func (t *DownloadComponent) Transform(ctx context.Context, step runtime.Typed) (
 		return nil, fmt.Errorf("failed getting component version repository: %v", err)
 	}
 
-	desc, err := repo.GetComponentVersion(ctx, component, version)
+	desc, err := descriptor.ConvertFromV2(v2desc)
 	if err != nil {
-		return nil, fmt.Errorf("failed getting component version %s:%s: %v", component, version, err)
+		return nil, fmt.Errorf("failed converting component version from v2: %v", err)
 	}
 
-	// TODO(jakobmoellerdev): mabye use the OCI scheme here instead of a blank scheme.
-	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
-	if err != nil {
-		return nil, fmt.Errorf("failed converting component version to v2: %v", err)
+	if err := repo.AddComponentVersion(ctx, desc); err != nil {
+		return nil, fmt.Errorf("failed getting component version %s:%s: %v",
+			desc.Component.Name, desc.Component.Version, err)
 	}
 
-	switch transformation := transformation.(type) {
-	case *ctf.DownloadComponentTransformation:
-		transformation.Output = &ctf.DownloadComponentTransformationOutput{
-			Descriptor: v2desc,
-		}
-	case *oci.DownloadComponentTransformation:
-		transformation.Output = &oci.DownloadComponentTransformationOutput{
-			Descriptor: v2desc,
-		}
-	}
-	return transformation, err
+	return transformation, nil
 }

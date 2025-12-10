@@ -7,8 +7,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/ctf"
-	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1/oci"
 	ocitransformer "ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -30,14 +28,20 @@ func newTestBuilder(t *testing.T) *Builder {
 	transformerScheme := runtime.NewScheme()
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
 
-	ociDownloadComponent := &ocitransformer.DownloadComponent{
+	ociGetComponentVersion := &ocitransformer.GetComponentVersion{
+		Scheme:       transformerScheme,
+		RepoProvider: repoProvider,
+	}
+	ociAddComponentVersion := &ocitransformer.AddComponentVersion{
 		Scheme:       transformerScheme,
 		RepoProvider: repoProvider,
 	}
 
 	return NewBuilder(transformerScheme).
-		WithTransformer(&oci.DownloadComponentTransformation{}, ociDownloadComponent).
-		WithTransformer(&ctf.DownloadComponentTransformation{}, ociDownloadComponent)
+		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGetComponentVersion).
+		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAddComponentVersion).
+		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGetComponentVersion).
+		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAddComponentVersion)
 }
 
 // ${environment.repository.type} interpolation
@@ -251,7 +255,7 @@ environment:
     accessMode: "readwrite"
 transformations:
 - id: download1
-  type: ocm.software.download.component.ctf/v1alpha1
+  type: CTFGetComponentVersion/v1alpha1
   spec:
     repository:
       type: ${environment.repository.type}
@@ -260,11 +264,50 @@ transformations:
     component: "github.com/acme.org/helloworld"
     version: "1.0.0"
 - id: download2
-  type: ocm.software.download.component.ctf/v1alpha1
+  type: CTFGetComponentVersion/v1alpha1
   spec:
     repository: ${download1.spec.repository}
     component: ${download1.output.descriptor.component.name}
     version: ${download1.output.descriptor.component.version}
+`
+	tgd := &v1alpha1.TransformationGraphDefinition{}
+	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))
+	graph, err := builder.BuildAndCheck(tgd)
+	r.NoError(err)
+	r.NotNil(graph)
+
+	r.NoError(graph.Process(t.Context()))
+}
+
+func TestGraphBuilder_EvaluateGraphAndAdd(t *testing.T) {
+	r := require.New(t)
+	builder := newTestBuilder(t)
+
+	yamlSrc := `
+environment:
+  repository:
+    type: ctf
+    filePath: "/home/jakob/Projects/worktrees/open-component-model/transformadness/bindings/go/transform/graph/test/transport-archive"
+    accessMode: "readwrite"
+  target:
+    type: ctf
+    filePath: "/home/jakob/Projects/worktrees/open-component-model/transformadness/bindings/go/transform/graph/test/transport-archive-target"
+    accessMode: "readwrite|create"
+transformations:
+- id: download1
+  type: CTFGetComponentVersion/v1alpha1
+  spec:
+    repository:
+      type: ${environment.repository.type}
+      filePath: ${environment.repository.filePath}
+      accessMode: ${environment.repository.accessMode}
+    component: "github.com/acme.org/helloworld"
+    version: "1.0.0"
+- id: upload
+  type: CTFAddComponentVersion/v1alpha1
+  spec:
+    repository: ${environment.target}
+    descriptor: ${download1.output.descriptor}
 `
 	tgd := &v1alpha1.TransformationGraphDefinition{}
 	r.NoError(yaml.Unmarshal([]byte(yamlSrc), tgd))

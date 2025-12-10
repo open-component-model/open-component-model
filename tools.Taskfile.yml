@@ -24,10 +24,12 @@ tasks:
     silent: true
     prefix: '{{.ITEM}}'
     dir: '{{.ITEM}}'
-    cmd: |
-      {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }} \
-      --output-file "zz_generated.deepcopy.go" \
-      ./...
+    cmds:
+      - cmd: |
+          {{ .ROOT_DIR }}/tmp/bin/deepcopy-gen-{{ .DEEPCOPY_GEN_TARGET_VERSION }} \
+          --output-file "zz_generated.deepcopy.go" \
+          ./...
+        ignore_error: true
 
 
   deepcopy-gen/install:

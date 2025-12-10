@@ -1,4 +1,4 @@
-package oci
+package v1alpha1
 
 import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -6,29 +6,29 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const DownloadComponentTransformationType = "ocm.software.download.component.oci"
+const OCIGetComponentVersionType = "OCIGetComponentVersion"
 
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
-type DownloadComponentTransformation struct {
-	// +ocm:jsonschema-gen:enum=ocm.software.download.component.oci/v1alpha1
-	Type   runtime.Type                           `json:"type"`
-	ID     string                                 `json:"id,omitempty"`
-	Spec   *DownloadComponentTransformationSpec   `json:"spec"`
-	Output *DownloadComponentTransformationOutput `json:"output,omitempty"`
+type OCIGetComponentVersion struct {
+	// +ocm:jsonschema-gen:enum=OCIGetComponentVersion/v1alpha1
+	Type   runtime.Type                  `json:"type"`
+	ID     string                        `json:"id,omitempty"`
+	Spec   *OCIGetComponentVersionSpec   `json:"spec"`
+	Output *OCIGetComponentVersionOutput `json:"output,omitempty"`
 }
 
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type DownloadComponentTransformationOutput struct {
+type OCIGetComponentVersionOutput struct {
 	Descriptor *v2.Descriptor `json:"descriptor"`
 }
 
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
-type DownloadComponentTransformationSpec struct {
+type OCIGetComponentVersionSpec struct {
 	Repository oci.Repository `json:"repository"`
 	Component  string         `json:"component"`
 	Version    string         `json:"version"`
