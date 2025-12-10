@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth
+data:
+  # Base64 encoded value of OCM config containing username and password (based on .ocmconfig)
+  .ocmconfig: "dHlwZTogZ2VuZXJpYy5jb25maWcub2NtLnNvZnR3YXJlL3YxCmNvbmZpZ3VyYXRpb25zOgogIC0gdHlwZTogY3JlZGVudGlhbHMuY29uZmlnLm9jbS5zb2Z0d2FyZQogICAgY29uc3VtZXJzOgogICAgICAjIFJlcXVpcmVkIGZvciB0cmFuc2ZlciB0byB0aGUgcmVnaXN0cnkgKG91dHNpZGUgdGhlIGNsdXN0ZXIpCiAgICAgIC0gaWRlbnRpdHk6CiAgICAgICAgICB0eXBlOiBPQ0lSZWdpc3RyeQogICAgICAgICAgaG9zdG5hbWU6IGxvY2FsaG9zdAogICAgICAgICAgc2NoZW1lOiBodHRwCiAgICAgICAgICBwb3J0OiAiMzEwMDIiCiAgICAgICAgY3JlZGVudGlhbHM6CiAgICAgICAgICAtIHR5cGU6IENyZWRlbnRpYWxzCiAgICAgICAgICAgIHByb3BlcnRpZXM6CiAgICAgICAgICAgICAgdXNlcm5hbWU6IGFkbWluCiAgICAgICAgICAgICAgcGFzc3dvcmQ6IGFkbWluCiAgICAgIC0gaWRlbnRpdHk6CiAgICAgICAgICB0eXBlOiBPQ0lSZXBvc2l0b3J5CiAgICAgICAgICBob3N0bmFtZTogbG9jYWxob3N0CiAgICAgICAgICBzY2hlbWU6IGh0dHAKICAgICAgICAgIHBvcnQ6ICIzMTAwMiIKICAgICAgICBjcmVkZW50aWFsczoKICAgICAgICAgIC0gdHlwZTogQ3JlZGVudGlhbHMKICAgICAgICAgICAgcHJvcGVydGllczoKICAgICAgICAgICAgICB1c2VybmFtZTogYWRtaW4KICAgICAgICAgICAgICBwYXNzd29yZDogYWRtaW4KICAgICAgIyBSZXF1aXJlZCBmb3IgYXV0aGVudGljYXRpb24gaW5zaWRlIHRoZSBjbHVzdGVyCiAgICAgIC0gaWRlbnRpdHk6CiAgICAgICAgICB0eXBlOiBPQ0lSZWdpc3RyeQogICAgICAgICAgaG9zdG5hbWU6IHByb3RlY3RlZC1yZWdpc3RyeTEtaW50ZXJuYWwuZGVmYXVsdC5zdmMuY2x1c3Rlci5sb2NhbAogICAgICAgICAgc2NoZW1lOiBodHRwCiAgICAgICAgICBwb3J0OiAiNTAwMiIKICAgICAgICBjcmVkZW50aWFsczoKICAgICAgICAgIC0gdHlwZTogQ3JlZGVudGlhbHMKICAgICAgICAgICAgcHJvcGVydGllczoKICAgICAgICAgICAgICB1c2VybmFtZTogYWRtaW4KICAgICAgICAgICAgICBwYXNzd29yZDogYWRtaW4KICAgICAgLSBpZGVudGl0eToKICAgICAgICAgIHR5cGU6IE9DSVJlcG9zaXRvcnkKICAgICAgICAgIGhvc3RuYW1lOiBwcm90ZWN0ZWQtcmVnaXN0cnkxLWludGVybmFsLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwKICAgICAgICAgIHNjaGVtZTogaHR0cAogICAgICAgICAgcG9ydDogIjUwMDIiCiAgICAgICAgY3JlZGVudGlhbHM6CiAgICAgICAgICAtIHR5cGU6IENyZWRlbnRpYWxzCiAgICAgICAgICAgIHByb3BlcnRpZXM6CiAgICAgICAgICAgICAgdXNlcm5hbWU6IGFkbWluCiAgICAgICAgICAgICAgcGFzc3dvcmQ6IGFkbWluCg=="
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: basic-auth-repository
+spec:
+  repositorySpec:
+    baseUrl: http://protected-registry1-internal.default.svc.cluster.local:5002
+    scheme: http
+    port: 5002
+    type: OCIRegistry # ocm lib v1 type
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: basic-auth
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: basic-auth-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/basic-auth
+  repositoryRef:
+    name: basic-auth-repository
+  semver: 1.0.0
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: basic-auth
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: basic-auth-resource-rgd
+spec:
+  componentRef:
+    name: basic-auth-component
+  resource:
+    byReference:
+      resource:
+        name: kro-rgd
+  interval: 10m
+  ocmConfig:
+    - kind: Secret
+      name: basic-auth
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Deployer
+metadata:
+  name: basic-auth-deployer
+spec:
+  resourceRef:
+    name: basic-auth-resource-rgd
+    namespace: default
+  ocmConfig:
+    - kind: Secret
+      name: basic-auth
+      namespace: default

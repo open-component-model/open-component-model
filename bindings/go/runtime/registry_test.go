@@ -278,6 +278,15 @@ func TestRegistry_Default_UnregisteredType(t *testing.T) {
 	r.True(updated) // Type should be updated since it was unregistered
 }
 
+func TestRegistry_Default_NoAlias(t *testing.T) {
+	r := require.New(t)
+	registry := NewScheme()
+	r.Error(registry.RegisterWithAlias(&TestType{}))
+
+	registry.MustRegisterWithAlias(&TestType{}, NewVersionedType("test", "v1"))
+	r.Error(registry.RegisterWithAlias(&TestType{}))
+}
+
 func TestRegistry_MultipleTypes_With_Alias(t *testing.T) {
 	r := require.New(t)
 	def := NewVersionedType("test1", "v1")
