@@ -6,21 +6,16 @@ import (
 
 var Scheme = runtime.NewScheme()
 
+var (
+	OCIGetComponentVersionV1alpha1 = runtime.NewVersionedType(OCIGetComponentVersionType, Version)
+	OCIAddComponentVersionV1alpha1 = runtime.NewVersionedType(OCIAddComponentVersionType, Version)
+	CTFGetComponentVersionV1alpha1 = runtime.NewVersionedType(CTFGetComponentVersionType, Version)
+	CTFAddComponentVersionV1alpha1 = runtime.NewVersionedType(CTFAddComponentVersionType, Version)
+)
+
 func init() {
-	Scheme.MustRegisterWithAlias(
-		&OCIGetComponentVersion{},
-		runtime.NewVersionedType(OCIGetComponentVersionType, Version),
-	)
-	Scheme.MustRegisterWithAlias(
-		&OCIAddComponentVersion{},
-		runtime.NewVersionedType(OCIAddComponentVersionType, Version),
-	)
-	Scheme.MustRegisterWithAlias(
-		&CTFGetComponentVersion{},
-		runtime.NewVersionedType(CTFGetComponentVersionType, Version),
-	)
-	Scheme.MustRegisterWithAlias(
-		&CTFAddComponentVersion{},
-		runtime.NewVersionedType(CTFAddComponentVersionType, Version),
-	)
+	Scheme.MustRegisterWithAlias(&OCIGetComponentVersion{}, OCIGetComponentVersionV1alpha1)
+	Scheme.MustRegisterWithAlias(&OCIAddComponentVersion{}, OCIAddComponentVersionV1alpha1)
+	Scheme.MustRegisterWithAlias(&CTFGetComponentVersion{}, CTFGetComponentVersionV1alpha1)
+	Scheme.MustRegisterWithAlias(&CTFAddComponentVersion{}, CTFAddComponentVersionV1alpha1)
 }

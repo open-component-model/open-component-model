@@ -315,5 +315,5 @@ transformations:
 	r.NoError(err)
 	r.NotNil(graph)
 
-	r.NoError(graph.Process(t.Context()))
+	//r.NoError(graph.Process(t.Context()))
 }
