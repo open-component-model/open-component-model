@@ -166,7 +166,7 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 		input = input[:idx]
 
 		if !versionRegex.MatchString(versionPart) {
-			return nil, fmt.Errorf("invalid semantic version %q in %q, must match %q", versionPart, originalInput, VersionRegex)
+			slog.Warn("Version does not match semantic versioning, continuing anyway", "version", versionPart, "input", originalInput)
 		}
 		ref.Version = versionPart
 	}

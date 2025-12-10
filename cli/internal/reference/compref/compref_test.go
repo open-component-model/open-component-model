@@ -259,6 +259,19 @@ func Test_ComponentReference(t *testing.T) {
 			},
 			err: assert.NoError,
 		},
+		{
+			input: "github.com/open-component-model/ocm//ocm.software/ocmcli:invalid-0.23.0",
+			expected: &Ref{
+				Type: runtime.NewVersionedType(ociv1.Type, ociv1.Version).String(),
+				Repository: &ociv1.Repository{
+					BaseUrl: "github.com",
+					SubPath: "open-component-model/ocm",
+				},
+				Component: "ocm.software/ocmcli",
+				Version:   "invalid-0.23.0",
+			},
+			err: assert.NoError,
+		},
 	}
 
 	for i, tc := range cases {
