@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
 const (
@@ -265,7 +267,8 @@ func inferConstValue(schemaType, raw string) any {
 	return raw
 }
 
-func SchemaFromMarker(markers map[string]string) (string, bool) {
+func SchemaFromUniverseType(ti *universe.TypeInfo) (string, bool) {
+	markers := ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, BaseMarker)
 	if markers == nil {
 		return "", false
 	}

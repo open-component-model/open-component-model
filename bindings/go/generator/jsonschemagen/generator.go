@@ -36,8 +36,11 @@ func (g *Generator) GenerateJSONSchemaDraft202012(root *universe.TypeInfo) *JSON
 
 	schema.Defs = defs
 
-	// TODO (jakob): we need to decide if we actually drop nested schema ids because technically
-	//   they cannot be used for resolution anymore. For now, we drop them to avoid confusion.
+	// TODO (jakobmoellerdev): Currently, all schema IDs are virtual IDs that are not actually
+	//   resolvable by URL. This means that we now drop the ID field from the references so that
+	//   the definitions act as if they were part of the root schema. This effectively means
+	//   it is impossible to deduplicate the schemes in nested types, but always allows correct
+	//   referencing from defs.
 	for _, def := range schema.Defs {
 		def.ID = ""
 	}

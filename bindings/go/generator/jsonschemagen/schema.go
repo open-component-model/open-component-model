@@ -268,13 +268,14 @@ func (g *Generator) schemaForSelector(sel *ast.SelectorExpr, ctx *universe.TypeI
 	var base *JSONSchemaDraft202012
 	if ti, ok := g.U.ResolveSelector(ctx.FilePath, sel); ok {
 		base = &JSONSchemaDraft202012{}
-		typeMarkers := ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, BaseMarker)
-		if schema, ok := SchemaFromMarker(typeMarkers); ok {
+		if schema, ok := SchemaFromUniverseType(ti); ok {
+			// if the schema is based on the type, embed
+			// it directly as a nested reference instead of attempting
+			// to link it to the $defs section.
 			ApplyFileMarkers(base, schema, ti.FilePath)
 			return base
-		} else {
-			base.Ref = "#/$defs/" + universe.Definition(ti.Key)
 		}
+		base.Ref = "#/$defs/" + universe.Definition(ti.Key)
 	} else {
 		base = anyObjectSchema()
 	}
@@ -339,7 +340,11 @@ func (g *Generator) collectFromExpr(expr ast.Expr, ctx *universe.TypeInfo, walk 
 		}
 	case *ast.SelectorExpr:
 		if ti, ok := g.U.ResolveSelector(ctx.FilePath, t); ok {
-			if _, ok := SchemaFromMarker(ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, BaseMarker)); ok {
+			if _, ok := SchemaFromUniverseType(ti); ok {
+				// schema from file discovered, that means
+				// all types below this type are not relevant
+				// for schema generation and should be skipped from
+				// the walking queue.
 				return
 			}
 			walk(ti)

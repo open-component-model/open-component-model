@@ -44,10 +44,6 @@ type Descriptor struct {
 	Signatures []Signature `json:"signatures,omitempty"`
 }
 
-func (d *Descriptor) JSONSchema() []byte {
-	return JSONSchema
-}
-
 func (d *Descriptor) String() string {
 	base := d.Component.String()
 	if d.Meta.Version != "" {
