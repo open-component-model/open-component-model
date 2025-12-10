@@ -4,4 +4,8 @@ secret:
     name: kubernetes/controller/examples/helm-signing/ocm.software
   - match: c41c71837a9ffbb3eb165eb1fb62ebed35c129c9597ee17460a831a66a372422
     name: cli/cmd/cmd_test.go
+  - match: 57d4c1be78223b477215a9133e64eed43804b319138ad69e0d4f4d5b0ada836b
+    name: kubernetes/controller/test/e2e/testdata/docker-config-json/.docker-config-json
+  - match: 79b637493a4c76f72d00e49a2b21ed8df753a17214279912d3d51d1aa40899f2
+    name: kubernetes/controller/test/e2e/testdata/docker-config-json/bootstrap.yaml
 version: 2
