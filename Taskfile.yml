@@ -96,6 +96,10 @@ includes:
     optional: true
     taskfile: ./bindings/go/signing/Taskfile.yml
     dir: ./bindings/go/signing
+  bindings/go/transform:
+    optional: true
+    taskfile: ./bindings/go/transform/Taskfile.yml
+    dir: ./bindings/go/transform
   cli:
     optional: true
     taskfile: ./cli/Taskfile.yml
