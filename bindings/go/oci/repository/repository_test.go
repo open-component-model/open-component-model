@@ -141,87 +141,107 @@ func TestNewFromOCIRepoV1(t *testing.T) {
 
 func TestBuildResolver_SubPathExtraction(t *testing.T) {
 	tests := []struct {
-		name             string
-		baseURL          string
-		subPath          string
-		expectedBasePath string
-		expectedCVRef    string
+		name              string
+		baseURL           string
+		subPath           string
+		expectedBasePath  string
+		expectedCVRef     string
+		expectedReference string // make sure that the reference parser from ORAS isn't breaking.
 	}{
 		{
-			name:             "https with single path segment",
-			baseURL:          "https://registry.example.com/my-org",
-			subPath:          "",
-			expectedBasePath: "registry.example.com/my-org/component-descriptors",
-			expectedCVRef:    "registry.example.com/my-org/component-descriptors/test-component:1.0.0",
+			name:              "https with single path segment",
+			baseURL:           "https://registry.example.com/my-org",
+			subPath:           "",
+			expectedBasePath:  "registry.example.com/my-org/component-descriptors",
+			expectedCVRef:     "registry.example.com/my-org/component-descriptors/test-component:1.0.0",
+			expectedReference: "registry.example.com/my-org/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "https with multiple path segments",
-			baseURL:          "https://registry.example.com/my-org/components",
-			subPath:          "",
-			expectedBasePath: "registry.example.com/my-org/components/component-descriptors",
-			expectedCVRef:    "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0",
+			name:              "segmented url",
+			baseURL:           "host/ocm/",
+			subPath:           "",
+			expectedBasePath:  "host/ocm/component-descriptors",
+			expectedCVRef:     "host/ocm/component-descriptors/test-component:1.0.0",
+			expectedReference: "host/ocm/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "http with path",
-			baseURL:          "http://localhost:5000/test/path",
-			subPath:          "",
-			expectedBasePath: "localhost:5000/test/path/component-descriptors",
-			expectedCVRef:    "localhost:5000/test/path/component-descriptors/test-component:1.0.0",
+			name:              "https with multiple path segments",
+			baseURL:           "https://registry.example.com/my-org/components",
+			subPath:           "",
+			expectedBasePath:  "registry.example.com/my-org/components/component-descriptors",
+			expectedCVRef:     "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0",
+			expectedReference: "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "no scheme with path",
-			baseURL:          "registry.example.com/org/repo",
-			subPath:          "",
-			expectedBasePath: "registry.example.com/org/repo/component-descriptors",
-			expectedCVRef:    "registry.example.com/org/repo/component-descriptors/test-component:1.0.0",
+			name:              "http with path",
+			baseURL:           "http://localhost:5000/test/path",
+			subPath:           "",
+			expectedBasePath:  "localhost:5000/test/path/component-descriptors",
+			expectedCVRef:     "localhost:5000/test/path/component-descriptors/test-component:1.0.0",
+			expectedReference: "localhost:5000/test/path/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "explicit subPath with path in baseURL",
-			baseURL:          "https://registry.example.com/extra",
-			subPath:          "explicit/path",
-			expectedBasePath: "registry.example.com/extra/explicit/path/component-descriptors",
-			expectedCVRef:    "registry.example.com/extra/explicit/path/component-descriptors/test-component:1.0.0",
+			name:              "no scheme with path",
+			baseURL:           "registry.example.com/org/repo",
+			subPath:           "",
+			expectedBasePath:  "registry.example.com/org/repo/component-descriptors",
+			expectedCVRef:     "registry.example.com/org/repo/component-descriptors/test-component:1.0.0",
+			expectedReference: "registry.example.com/org/repo/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "baseURL without path",
-			baseURL:          "https://registry.example.com",
-			subPath:          "",
-			expectedBasePath: "registry.example.com/component-descriptors",
-			expectedCVRef:    "registry.example.com/component-descriptors/test-component:1.0.0",
+			name:              "explicit subPath with path in baseURL",
+			baseURL:           "https://registry.example.com/extra",
+			subPath:           "explicit/path",
+			expectedBasePath:  "registry.example.com/extra/explicit/path/component-descriptors",
+			expectedCVRef:     "registry.example.com/extra/explicit/path/component-descriptors/test-component:1.0.0",
+			expectedReference: "registry.example.com/extra/explicit/path/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "baseURL with port and path",
-			baseURL:          "https://registry.example.com:8080/my-org",
-			subPath:          "",
-			expectedBasePath: "registry.example.com:8080/my-org/component-descriptors",
-			expectedCVRef:    "registry.example.com:8080/my-org/component-descriptors/test-component:1.0.0",
+			name:              "baseURL without path",
+			baseURL:           "https://registry.example.com",
+			subPath:           "",
+			expectedBasePath:  "registry.example.com/component-descriptors",
+			expectedCVRef:     "registry.example.com/component-descriptors/test-component:1.0.0",
+			expectedReference: "registry.example.com/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "ghcr.io style URL",
-			baseURL:          "ghcr.io/my-org/my-repo",
-			subPath:          "",
-			expectedBasePath: "ghcr.io/my-org/my-repo/component-descriptors",
-			expectedCVRef:    "ghcr.io/my-org/my-repo/component-descriptors/test-component:1.0.0",
+			name:              "baseURL with port and path",
+			baseURL:           "https://registry.example.com:8080/my-org",
+			subPath:           "",
+			expectedBasePath:  "registry.example.com:8080/my-org/component-descriptors",
+			expectedCVRef:     "registry.example.com:8080/my-org/component-descriptors/test-component:1.0.0",
+			expectedReference: "registry.example.com:8080/my-org/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "explicit baseURL and subPath",
-			baseURL:          "https://registry.example.com",
-			subPath:          "my-org/my-repo",
-			expectedBasePath: "registry.example.com/my-org/my-repo/component-descriptors",
-			expectedCVRef:    "registry.example.com/my-org/my-repo/component-descriptors/test-component:1.0.0",
+			name:              "ghcr.io style URL",
+			baseURL:           "ghcr.io/my-org/my-repo",
+			subPath:           "",
+			expectedBasePath:  "ghcr.io/my-org/my-repo/component-descriptors",
+			expectedCVRef:     "ghcr.io/my-org/my-repo/component-descriptors/test-component:1.0.0",
+			expectedReference: "ghcr.io/my-org/my-repo/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "concrete example for platform-mesh",
-			baseURL:          "ghcr.io/platform-mesh",
-			subPath:          "",
-			expectedBasePath: "ghcr.io/platform-mesh/component-descriptors",
-			expectedCVRef:    "ghcr.io/platform-mesh/component-descriptors/test-component:1.0.0",
+			name:              "explicit baseURL and subPath",
+			baseURL:           "https://registry.example.com",
+			subPath:           "my-org/my-repo",
+			expectedBasePath:  "registry.example.com/my-org/my-repo/component-descriptors",
+			expectedCVRef:     "registry.example.com/my-org/my-repo/component-descriptors/test-component:1.0.0",
+			expectedReference: "registry.example.com/my-org/my-repo/component-descriptors/test-component:1.0.0",
 		},
 		{
-			name:             "avoid duplicates",
-			baseURL:          "https://registry.example.com/my-org/components",
-			expectedBasePath: "registry.example.com/my-org/components/component-descriptors",
-			expectedCVRef:    "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0",
+			name:              "concrete example for platform-mesh",
+			baseURL:           "ghcr.io/platform-mesh",
+			subPath:           "",
+			expectedBasePath:  "ghcr.io/platform-mesh/component-descriptors",
+			expectedCVRef:     "ghcr.io/platform-mesh/component-descriptors/test-component:1.0.0",
+			expectedReference: "ghcr.io/platform-mesh/component-descriptors/test-component:1.0.0",
+		},
+		{
+			name:              "avoid duplicates",
+			baseURL:           "https://registry.example.com/my-org/components",
+			expectedBasePath:  "registry.example.com/my-org/components/component-descriptors",
+			expectedCVRef:     "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0",
+			expectedReference: "registry.example.com/my-org/components/component-descriptors/test-component:1.0.0",
 		},
 	}
 
@@ -238,6 +258,9 @@ func TestBuildResolver_SubPathExtraction(t *testing.T) {
 
 			assert.Equal(t, tt.expectedBasePath, resolver.BasePath())
 			assert.Equal(t, tt.expectedCVRef, resolver.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
+			stringer, err := resolver.Reference(resolver.ComponentVersionReference(t.Context(), "test-component", "1.0.0"))
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedReference, stringer.String())
 		})
 	}
 }
