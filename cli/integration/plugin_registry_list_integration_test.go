@@ -62,11 +62,11 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	pluginRegistryVersionA := "v1.0.0"
 	pluginRegistryURLA := fmt.Sprintf("http://%s//%s:%s", registryURLA, pluginRegistryComponentA, pluginRegistryVersionA)
 	pluginsA := []list.PluginInfo{
-		{"plugin-one", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
-		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
-		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
-		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
-		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-one.io/myplugin", "v1.7.0", []string{"linux/amd64", "window/amd64", "macOS/arm64"}, "Second test plugin", pluginRegistryURLA, ""},
+		{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLA, ""},
+		{"plugin-two.io/myplugin", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two.io/myplugin", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLA, ""},
+		{"plugin-two.io/myplugin", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLA, ""},
 	}
 
 	// Create plugin constructors and add them to the registry
@@ -84,10 +84,10 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 	pluginRegistryVersionB := "v1.0.0"
 	pluginRegistryURLB := fmt.Sprintf("http://%s//%s:%s", registryURLB, pluginRegistryComponentB, pluginRegistryVersionB)
 	pluginsB := []list.PluginInfo{
-		{"plugin-one", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
-		{"plugin-two", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
-		{"plugin-two", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
-		{"plugin-two", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-one.io/myplugin", "v1.4.0", []string{"linux/amd64"}, "First test plugin", pluginRegistryURLB, ""},
+		{"plugin-two.io/myplugin", "v1.5.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two.io/myplugin", "v1.6.0", []string{"linux/amd64", "windows/adm64", "macOS/arm64"}, "Another test plugin", pluginRegistryURLB, ""},
+		{"plugin-two.io/myplugin", "v1.4.0", []string{"linux/amd64", "windows/adm64"}, "Another test plugin", pluginRegistryURLB, ""},
 	}
 
 	// Create plugin constructors and add them to the registry
@@ -175,7 +175,13 @@ func Test_Integration_PluginRegistryList_WithFlag(t *testing.T) {
 			SortPluginsByAllFields(actualPlugins)
 			SortPluginsByAllFields(tc.result)
 
-			r.Equal(tc.result, actualPlugins, "plugin registry list should have the same result")
+			expected := make([]list.PluginInfo, len(tc.result))
+			for i, v := range tc.result {
+				v.Name = CreateCompRefNameFromPlugin(v.Name)
+				expected[i] = v
+			}
+
+			r.Equal(expected, actualPlugins, "plugin registry list should have the same result")
 		})
 	}
 }
@@ -210,14 +216,18 @@ provider:
 `, name, version)
 }
 
-func GeneratePluginReferences(name, version, description string, platforms []string) string {
-	var s string
+func CreateCompRefNameFromPlugin(name string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(name, ".", "-"), "/", "-")
+}
 
-	s += fmt.Sprintf(`
+func GeneratePluginReferences(componentName, version, description string, platforms []string) string {
+	name := CreateCompRefNameFromPlugin(componentName)
+
+	s := fmt.Sprintf(`
   - name: %s
     version: %s
     componentName: %s
-`, name, version, name)
+`, name, version, componentName)
 
 	// Add labels if description or platforms are provided
 	var labels string

@@ -206,6 +206,29 @@ COMPONENT                   │ VERSION │ PROVIDER
 	}
 }
 
+// Test_Get_Component_Version_Invalid_Semver tests the get cv command with invalid semver constraint
+func Test_Get_Component_Version_Invalid_Semver(t *testing.T) {
+	// Setup test repository with a single component version
+	desc := createTestDescriptor("ocm.software/test-component", "0.0.1")
+	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, desc)
+	require.NoError(t, err)
+
+	ref := compref.Ref{
+		Repository: &ctfv1.Repository{
+			FilePath: archivePath,
+		},
+		Component: desc.Component.Name,
+	}
+	path := ref.String()
+
+	logs := test.NewJSONLogReader()
+	result := new(bytes.Buffer)
+	_, err = test.OCM(t, test.WithArgs("get", "cv", path, "--semver-constraint", "invalid-constraint"), test.WithOutput(result), test.WithErrorOutput(logs))
+
+	require.ErrorContains(t, err, "invalid-constraint")
+	require.Error(t, err, "expected error but got none")
+}
+
 // Test_Get_Component_Version_Formats_Recursive tests the different output formats for the get cv command
 func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 	// Setup test repository
@@ -812,6 +835,37 @@ resources:
 		r.Equal("foobar", buf.String(), "expected resource content to match test file content")
 
 		t.Run("expect failure on existing component version", func(t *testing.T) {
+			constructorYAML = fmt.Sprintf(`
+name: ocm.software/examples-01
+version: invalid_1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: my-file-replaced
+    type: blob
+    input:
+      type: file/v1
+      path: %[1]s
+`, testFilePath)
+
+			// Create a replacement test file to be added to the component version
+			testFilePath := filepath.Join(tmp, "test-file.txt")
+			r.NoError(os.WriteFile(testFilePath, []byte("replaced"), 0o600), "could not create test file")
+
+			constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-replace.yaml")
+			r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+			logs := test.NewJSONLogReader()
+			result := new(bytes.Buffer)
+			_, err := test.OCM(t, test.WithArgs("add", "cv",
+				"--constructor", constructorYAMLFilePath,
+				"--repository", archiveFilePath,
+				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
+			), test.WithErrorOutput(logs), test.WithOutput(result))
+
+			r.Error(err, "expected error on invalid component version semver")
+		})
+
+		t.Run("expect failure on invalid semver in constructor", func(t *testing.T) {
 
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,

@@ -32,20 +32,21 @@ require (
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
+	github.com/docker/cli v28.5.2+incompatible
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	ocm.software/ocm v0.32.0
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
 	ocm.software/open-component-model/bindings/go/configuration v0.0.9
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251204125915-cb295d402227
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251204125915-cb295d402227
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251210124739-758d8f0e96db
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251210124739-758d8f0e96db
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4
 	ocm.software/open-component-model/bindings/go/oci v0.0.19
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
-	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251204125915-cb295d402227
-	ocm.software/open-component-model/bindings/go/runtime v0.0.4
-	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251204125915-cb295d402227
+	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251210124739-758d8f0e96db
+	ocm.software/open-component-model/bindings/go/runtime v0.0.5
+	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251210124739-758d8f0e96db
 )
 
 require (
@@ -159,7 +160,6 @@ require (
 	github.com/digitorus/timestamp v0.0.0-20250524132541-c45532741eea // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/cli v28.5.2+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker v28.5.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.4 // indirect
@@ -412,7 +412,7 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/kubectl v0.34.1 // indirect
-	ocm.software/open-component-model/bindings/go/constructor v0.0.2 // indirect
+	ocm.software/open-component-model/bindings/go/constructor v0.0.4 // indirect
 	ocm.software/open-component-model/bindings/go/ctf v0.3.0 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect

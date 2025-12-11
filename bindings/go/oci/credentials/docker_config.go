@@ -106,7 +106,23 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig credenti
 		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
 	}
 	if cred == auth.EmptyCredential {
-		return nil, nil
+		// because ORAS stores docker credentials including its port if defined, we'll try
+		// once more including the port with the hostname. (For ghcr.io no port is there, but we
+		// default the port to 443 so trying it with that in the first time would fail that's why
+		// this is a fallback try).
+		if port, ok := identity[runtime.IdentityAttributePort]; ok {
+			hostname = fmt.Sprintf("%s:%s", hostname, port)
+			cred, err = credStore.Get(ctx, hostname)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
+			}
+			if cred == auth.EmptyCredential {
+				return nil, nil
+			}
+		} else {
+			// no port, we have no creds
+			return nil, nil
+		}
 	}
 
 	credentialMap := map[string]string{}
