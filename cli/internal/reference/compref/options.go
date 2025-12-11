@@ -7,6 +7,8 @@ import (
 type Options struct {
 	// CTFAccessMode specifies the access mode for any CTF created from Parse
 	CTFAccessMode ctf.AccessMode
+
+	IgnoreSemverCompatibility bool
 }
 
 func (o *Options) Apply(opts *Options) error {
@@ -39,6 +41,16 @@ func (f OptionFunc) Apply(opts *Options) error {
 func WithCTFAccessMode(mode ctf.AccessMode) Option {
 	return OptionFunc(func(opts *Options) error {
 		opts.CTFAccessMode = mode
+		return nil
+	})
+}
+
+// IgnoreSemverCompatibility configures the comparison to ignore semver compatibility checks.
+// It can be used to request components with non-semver compliant version strings to be compared.
+// If not set, components with non-semver compliant version strings will result in an error during compref parsing.
+func IgnoreSemverCompatibility() Option {
+	return OptionFunc(func(opts *Options) error {
+		opts.IgnoreSemverCompatibility = true
 		return nil
 	})
 }

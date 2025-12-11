@@ -13,6 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 )
 
@@ -20,7 +22,7 @@ func TestGetConfigFromSecret(t *testing.T) {
 	tests := []struct {
 		name    string
 		secret  *corev1.Secret
-		wantNil bool
+		want    *genericv1.Config
 		wantErr bool
 	}{
 		{
@@ -37,7 +39,10 @@ func TestGetConfigFromSecret(t *testing.T) {
 					}`),
 				},
 			},
-			wantNil: false,
+			want: &genericv1.Config{
+				Type:           ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+				Configurations: []*ocmruntime.Raw{},
+			},
 			wantErr: false,
 		},
 		{
@@ -49,7 +54,7 @@ func TestGetConfigFromSecret(t *testing.T) {
 				},
 				Data: map[string][]byte{},
 			},
-			wantNil: true,
+			want:    nil,
 			wantErr: true,
 		},
 		{
@@ -63,11 +68,11 @@ func TestGetConfigFromSecret(t *testing.T) {
 					v1alpha1.OCMConfigKey: {},
 				},
 			},
-			wantNil: true,
+			want:    nil,
 			wantErr: true,
 		},
 		{
-			name: "invalid json",
+			name: "invalid json ocm config",
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-secret",
@@ -77,8 +82,102 @@ func TestGetConfigFromSecret(t *testing.T) {
 					v1alpha1.OCMConfigKey: []byte(`invalid json`),
 				},
 			},
-			wantNil: false,
+			want:    nil,
 			wantErr: true,
+		},
+		{
+			name: "valid docker config returns generic config",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte(`{"auths": {"my-registry.io": {"username":"user","password":"pass","email":""}}}`),
+				},
+			},
+			want: &genericv1.Config{
+				Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+				Configurations: []*ocmruntime.Raw{
+					{
+						Type: ocmruntime.Type{Version: "", Name: credentialsv1.ConfigType},
+						Data: []byte(`{"repositories":[{"repository":{"dockerConfig":"{\"auths\": {\"my-registry.io\": {\"username\":\"user\",\"password\":\"pass\",\"email\":\"\"}}}","type":"DockerConfig/v1"}}],"type":"credentials.config.ocm.software"}`),
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty docker config returns error",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: {},
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "invalid docker config returns error",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte(`helloworld`),
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "docker config with multiple registries",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte(`{"auths":{"registry1.io":{"username": "user1", "password": "pass1"},"registry2.io":{"username":"user2","password":"pass2"}}}`),
+				},
+			},
+			want: &genericv1.Config{
+				Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+				Configurations: []*ocmruntime.Raw{
+					{
+						Type: ocmruntime.Type{Version: "", Name: credentialsv1.ConfigType},
+						Data: []byte(`{"repositories":[{"repository":{"dockerConfig":"{\"auths\":{\"registry1.io\":{\"username\": \"user1\", \"password\": \"pass1\"},\"registry2.io\":{\"username\":\"user2\",\"password\":\"pass2\"}}}","type":"DockerConfig/v1"}}],"type":"credentials.config.ocm.software"}`),
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "docker config with auth token",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte(`{"auths":{"my-registry.io":{"auth": "dXNlcjpwYXNz"}}}`),
+				},
+			},
+			want: &genericv1.Config{
+				Type: ocmruntime.Type{Version: genericv1.Version, Name: genericv1.ConfigType},
+				Configurations: []*ocmruntime.Raw{
+					{
+						Type: ocmruntime.Type{Version: "", Name: credentialsv1.ConfigType},
+						Data: []byte(`{"repositories":[{"repository":{"dockerConfig":"{\"auths\":{\"my-registry.io\":{\"auth\": \"dXNlcjpwYXNz\"}}}","type":"DockerConfig/v1"}}],"type":"credentials.config.ocm.software"}`),
+					},
+				},
+			},
+			wantErr: false,
 		},
 	}
 
@@ -90,11 +189,7 @@ func TestGetConfigFromSecret(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-			if tt.wantNil {
-				assert.Nil(t, cfg)
-			} else if !tt.wantErr {
-				assert.NotNil(t, cfg)
-			}
+			assert.Equal(t, tt.want, cfg)
 		})
 	}
 }

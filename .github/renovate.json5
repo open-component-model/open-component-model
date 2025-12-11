@@ -23,11 +23,15 @@
   ],
   prConcurrentLimit: 0,
   prHourlyLimit: 0,
-  automerge: true,
+  automerge: false,
   automergeType: "pr",
   separateMinorPatch: true,
   separateMultipleMajor: true,
   packageRules: [
+    {
+      matchUpdateTypes: ['minor','patch'],
+      automerge: true,
+    },
     {
       matchDatasources: ["golang-version"],
       rangeStrategy: "bump",
@@ -142,7 +146,8 @@
       ],
       'schedule': [
         '* 22,0-6 * * *' // At every minute past hour 22 and every hour from 0 through 6.
-      ]
+      ],
+      minimumReleaseAge: null,
     },
   ],
   customDatasources: {

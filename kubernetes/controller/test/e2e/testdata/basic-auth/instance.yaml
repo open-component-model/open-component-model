@@ -1,0 +1,6 @@
+apiVersion: kro.run/v1alpha1
+kind: BasicAuth
+metadata:
+  name: basic-auth
+spec:
+  prefix: basic-auth

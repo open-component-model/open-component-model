@@ -5,8 +5,8 @@ go 1.25.4
 require (
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
-	ocm.software/open-component-model/bindings/go/constructor v0.0.2
-	ocm.software/open-component-model/bindings/go/runtime v0.0.4
+	ocm.software/open-component-model/bindings/go/constructor v0.0.4
+	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -22,8 +22,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	ocm.software/open-component-model/bindings/go/credentials v0.0.5 // indirect
 	ocm.software/open-component-model/bindings/go/dag v0.0.6 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251204125915-cb295d402227 // indirect
-	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251204125915-cb295d402227 // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251210124739-758d8f0e96db // indirect
+	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251210124739-758d8f0e96db // indirect
 	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4 // indirect
 	ocm.software/open-component-model/bindings/go/repository v0.0.4 // indirect
 )

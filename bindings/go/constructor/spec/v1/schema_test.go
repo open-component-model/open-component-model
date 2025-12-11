@@ -150,6 +150,77 @@ func TestComponentConstructorSchema(t *testing.T) {
 			}`,
 			wantErr: false,
 		},
+		{
+			name: "valid component reference with string label",
+			json: `{
+				"name": "github.com/acme.org/component",
+				"version": "1.0.0",
+				"provider": { "name": "acme" },
+				"componentReferences": [
+					{
+						"name": "ref1",
+						"componentName": "github.com/acme.org/ref",
+						"version": "1.0.0",
+						"labels": [
+							{
+								"name": "label1",
+								"value": "string-value"
+							}
+						]
+					}
+				]
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "valid component reference with object label",
+			json: `{
+				"name": "github.com/acme.org/component",
+				"version": "1.0.0",
+				"provider": { "name": "acme" },
+				"componentReferences": [
+					{
+						"name": "ref1",
+						"componentName": "github.com/acme.org/ref",
+						"version": "1.0.0",
+						"labels": [
+							{
+								"name": "label1",
+								"value": {
+									"key": "value",
+									"nested": {
+										"foo": "bar"
+									}
+								}
+							}
+						]
+					}
+				]
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "invalid component reference with integer label value",
+			json: `{
+				"name": "github.com/acme.org/component",
+				"version": "1.0.0",
+				"provider": { "name": "acme" },
+				"componentReferences": [
+					{
+						"name": "ref1",
+						"componentName": "github.com/acme.org/ref",
+						"version": "1.0.0",
+						"labels": [
+							{
+								"name": "label1",
+								"value": 123
+							}
+						]
+					}
+				]
+			}`,
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

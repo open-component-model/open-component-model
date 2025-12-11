@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -86,6 +87,13 @@ func main() {
 	// GenerateJSONSchemaDraft202012 schemas for all annotated types.
 	packageGroups := make(map[string][]*universe.TypeInfo)
 	for _, ti := range annotated {
+		if _, ok := jsonschemagen.SchemaFromUniverseType(ti); ok {
+			slog.Debug("skipping schema generation, schema provided from type", "type", ti.Key.TypeName)
+			pkgDir := filepath.Dir(ti.FilePath)
+			packageGroups[pkgDir] = append(packageGroups[pkgDir], ti)
+			continue
+		}
+
 		schema := gen.GenerateJSONSchemaDraft202012(ti)
 		if schema == nil {
 			slog.Warn("schema generation returned nil", "type", ti.Key.TypeName)
@@ -109,19 +117,37 @@ func main() {
 	sort.Strings(dirs)
 
 	for _, pkgDir := range dirs {
-		types := packageGroups[pkgDir]
-		if len(types) == 0 {
-			continue
-		}
-
-		// Types from the same directory share a package name.
-		pkgName := types[0].File.Name.Name
-
-		if err := writer.WriteEmbedFileForPackage(pkgDir, pkgName, types); err != nil {
-			slog.Error("write embed file error", "dir", pkgDir, "error", err)
-			os.Exit(1)
-		}
+		group := packageGroups[pkgDir]
+		writeEmbedFiles(pkgDir, group)
 	}
 
 	slog.Info("jsonschemagen: completed successfully.")
+}
+
+func writeEmbedFiles(pkgDir string, group []*universe.TypeInfo) {
+	if len(group) == 0 {
+		return
+	}
+	// Types from the same directory share a package name.
+	pkgName := group[0].File.Name.Name
+
+	embedInfos := make([]writer.TypeEmbedInfo, 0, len(group))
+	for _, ti := range group {
+		var embedSchemaPath string
+		if pathFromType, ok := jsonschemagen.SchemaFromUniverseType(ti); ok {
+			// Schema is provided from type itself, skip generation here.
+			embedSchemaPath = pathFromType
+		} else {
+			embedSchemaPath = fmt.Sprintf("schemas/%s.schema.json", ti.Key.TypeName)
+		}
+		embedInfos = append(embedInfos, writer.TypeEmbedInfo{
+			Key:             ti.Key,
+			EmbedSchemaPath: embedSchemaPath,
+		})
+	}
+
+	if err := writer.WriteEmbedFileForPackage(pkgDir, pkgName, embedInfos); err != nil {
+		slog.Error("write embed file error", "dir", pkgDir, "error", err)
+		os.Exit(1)
+	}
 }

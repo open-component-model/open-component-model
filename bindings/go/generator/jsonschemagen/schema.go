@@ -1,6 +1,7 @@
 package jsonschemagen
 
 import (
+	"bytes"
 	"encoding/json"
 	"go/ast"
 	"slices"
@@ -63,8 +64,8 @@ type JSONSchemaDraft202012 struct {
 }
 
 type SchemaOrBool struct {
-	Schema *JSONSchemaDraft202012 `json:"schema,omitempty"`
-	Bool   *bool                  `json:"bool,omitempty"`
+	Schema *JSONSchemaDraft202012
+	Bool   *bool
 }
 
 func (sb SchemaOrBool) MarshalJSON() ([]byte, error) {
@@ -72,6 +73,24 @@ func (sb SchemaOrBool) MarshalJSON() ([]byte, error) {
 		return json.Marshal(*sb.Bool)
 	}
 	return json.Marshal(sb.Schema)
+}
+
+func (sb *SchemaOrBool) UnmarshalJSON(data []byte) error {
+	if bytes.EqualFold(data, []byte("true")) || bytes.EqualFold(data, []byte("false")) {
+		var b bool
+		if err := json.Unmarshal(data, &b); err != nil {
+			return err
+		}
+		sb.Bool = &b
+		return nil
+	}
+
+	var sch JSONSchemaDraft202012
+	if err := json.Unmarshal(data, &sch); err != nil {
+		return err
+	}
+	sb.Schema = &sch
+	return nil
 }
 
 func (g *Generator) buildRootSchema(ti *universe.TypeInfo) *JSONSchemaDraft202012 {
@@ -87,7 +106,6 @@ func (g *Generator) buildRootSchema(ti *universe.TypeInfo) *JSONSchemaDraft20201
 
 	if ti.Struct != nil {
 		desc, deprecated := extractStructDoc(ti.TypeSpec, ti.GenDecl)
-
 		sch := &JSONSchemaDraft202012{
 			Schema:               JSONSchemaDraft202012URL,
 			Comment:              GeneratedComment,
@@ -249,7 +267,15 @@ func (g *Generator) schemaForIdentWithField(id *ast.Ident, ctx *universe.TypeInf
 func (g *Generator) schemaForSelector(sel *ast.SelectorExpr, ctx *universe.TypeInfo, field *ast.Field) *JSONSchemaDraft202012 {
 	var base *JSONSchemaDraft202012
 	if ti, ok := g.U.ResolveSelector(ctx.FilePath, sel); ok {
-		base = &JSONSchemaDraft202012{Ref: "#/$defs/" + universe.Definition(ti.Key)}
+		base = &JSONSchemaDraft202012{}
+		if schema, ok := SchemaFromUniverseType(ti); ok {
+			// if the schema is based on the type, embed
+			// it directly as a nested reference instead of attempting
+			// to link it to the $defs section.
+			ApplyFileMarkers(base, schema, ti.FilePath)
+			return base
+		}
+		base.Ref = "#/$defs/" + universe.Definition(ti.Key)
 	} else {
 		base = anyObjectSchema()
 	}
@@ -314,6 +340,13 @@ func (g *Generator) collectFromExpr(expr ast.Expr, ctx *universe.TypeInfo, walk 
 		}
 	case *ast.SelectorExpr:
 		if ti, ok := g.U.ResolveSelector(ctx.FilePath, t); ok {
+			if _, ok := SchemaFromUniverseType(ti); ok {
+				// schema from file discovered, that means
+				// all types below this type are not relevant
+				// for schema generation and should be skipped from
+				// the walking queue.
+				return
+			}
 			walk(ti)
 		}
 	case *ast.StarExpr:

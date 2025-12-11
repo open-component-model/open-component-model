@@ -9,8 +9,16 @@ import (
 	_ "embed"
 )
 
+//go:embed resources/schema-2020-12.json
+var schemaDescriptor []byte
+
 //go:embed schemas/LocalBlob.schema.json
 var schemaLocalBlob []byte
+
+// JSONSchema returns the JSON Schema for Descriptor.
+func (Descriptor) JSONSchema() []byte {
+	return schemaDescriptor
+}
 
 // JSONSchema returns the JSON Schema for LocalBlob.
 func (LocalBlob) JSONSchema() []byte {

@@ -1,4 +1,5 @@
 {
+  "$id": "ocm.software/open-component-model/bindings/go/descriptor/v2/resources/schema-2020-12.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Open Component Model v2 schema",
   "$defs": {
@@ -471,9 +472,13 @@
         },
         "creationTime": {
           "description": "Creation time of the component version",
-          "type": [
-            "string",
-            "null"
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
           "format": "date-time"
         },

@@ -6,7 +6,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/mod v0.30.0
 	golang.org/x/tools v0.39.0
-	ocm.software/open-component-model/bindings/go/runtime v0.0.4
+	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 )
 
 require (
