@@ -5,6 +5,9 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
+
+	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
+	"ocm.software/open-component-model/bindings/go/cel/jsonschema"
 )
 
 var _ ref.Type = (*Type)(nil)
@@ -39,6 +42,10 @@ func (t *Type) TypeName() string {
 // CelType returns the CEL type of this declaration.
 func (t *Type) CelType() *cel.Type {
 	return t.celType
+}
+
+func (t *Type) SetOptional() {
+	t.celType = cel.OptionalType(t.celType)
 }
 
 // DefaultValue returns the CEL ref.Val representing the default value for this object type,
@@ -142,6 +149,52 @@ func (t *Type) MaybeAssignTypeName(name string) *Type {
 		return NewListType(updated, t.MaxElements)
 	}
 	return t
+}
+
+// Resolve walks a DeclType following the provided path segments and
+// returns the resulting cel type (decl.Type) if it exists.
+func (t *Type) Resolve(path fieldpath.Path) (*Type, error) {
+	if t == nil {
+		return NullType, nil
+	}
+
+	current := t
+pathLoop:
+	for i, seg := range path {
+		switch {
+		case current.CelType() == cel.DynType:
+			// dyn type will never restrict further and is always valid for all sub-paths to index into
+			break pathLoop
+		case current.IsObject():
+			name, ok := jsonschema.Escape(seg.Name)
+			if !ok {
+				return nil, fmt.Errorf("invalid field name %q at segment %d", seg.Name, i)
+			}
+			field, ok := current.Fields[name]
+			if !ok {
+				// if the field does not exist but the object allows additional properties,
+				// return dyn type to allow that field to exist.
+				if current.AllowsAdditionalProperties() {
+					return DynType, nil
+				}
+				return nil, fmt.Errorf("field %q not found at segment %d", seg.Name, i)
+			}
+			current = field.Type
+		case current.IsList():
+			// must be numeric, but index value does not affect type selection
+			current = current.ElemType
+		case current.IsMap():
+			// any key maps to the same value type
+			if current.ElemType == nil {
+				return nil, fmt.Errorf("map value type is nil at segment %d", i)
+			}
+			current = current.ElemType
+		default:
+			return nil, fmt.Errorf("type %q is not resolvable at segment %d", current.ElemType, i)
+		}
+	}
+
+	return current, nil
 }
 
 func (t *Type) AddMetadata(key string, value any) {

@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/google/cel-go/cel"
-	celast "github.com/google/cel-go/common/ast"
 
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 )
@@ -43,7 +42,7 @@ type Expression struct {
 	// AST is the parsed CEL AST of the expression.
 	// This can be nil if the expression has not been parsed yet.
 	// If the expression is parsed, this AST can be used for further analysis
-	AST *celast.AST
+	AST *cel.Ast
 }
 
 func (e Expression) String() string {

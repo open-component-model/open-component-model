@@ -19,9 +19,9 @@ const (
 //	${outer(${inner})}     // not allowed
 var ErrNestedExpression = errors.New("nested expressions are not allowed unless inside string literals")
 
-// extractExpressions extracts all non-nested CEL expressions from a string.
+// ExtractExpressions extracts all non-nested CEL expressions from a string.
 // It returns an error if it encounters an illegal nested expression.
-func extractExpressions(str string) ([]string, error) {
+func ExtractExpressions(str string) ([]string, error) {
 	var expressions []string
 
 	for i := 0; i < len(str); {
@@ -113,9 +113,9 @@ func scanExpression(str string, startIdx int) (string, int, error) {
 	return "", startIdx + 1, nil
 }
 
-// isStandaloneExpression checks if input is exactly one full expression.
-func isStandaloneExpression(str string) (bool, error) {
-	expressions, err := extractExpressions(str)
+// IsStandaloneExpression checks if input is exactly one full expression.
+func IsStandaloneExpression(str string) (bool, error) {
+	expressions, err := ExtractExpressions(str)
 	if err != nil {
 		return false, err
 	}
