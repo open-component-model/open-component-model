@@ -210,16 +210,43 @@ func NewDeclType(s *Schema) *DeclType {
 		return NewDeclType(s.Ref())
 	}
 
-	if s.OneOf() != nil {
-		if len(s.OneOf()) > 1 {
-			// in the future we can think of offering a parameterized union type for all branches of oneOf
-			// for now, we treat as dyn and defer evaluation to the runtime.
-			return declTypeForSchema(decl.DynType, s)
+	if oneOf := s.OneOf(); len(oneOf) > 0 {
+		if len(s.OneOf()) == 1 {
+			// special case: single-branch oneOf is equivalent to the branch itself
+			return NewDeclType(s.OneOf()[0])
 		}
-		return NewDeclType(s.OneOf()[0])
+		// special case: optional type wrapping based on oneOf [null, X]
+		if declType, ok := declTypeAsOptionalSchema(s); ok {
+			return declType
+		}
+		// in the future we can think of offering a parameterized union type for all branches of oneOf
+		// for now, we treat as dyn and defer evaluation to the runtime.
+		return declTypeForSchema(decl.DynType, s)
 	}
 
 	return nil
+}
+
+func declTypeAsOptionalSchema(s *Schema) (*DeclType, bool) {
+	if len(s.OneOf()) != 2 {
+		return nil, false
+	}
+	nonNullIdx := -1
+	hasNull := false
+	for i, br := range s.OneOf() {
+		if br.Type() == "null" {
+			hasNull = true
+		} else {
+			nonNullIdx = i
+		}
+	}
+	if hasNull {
+		schema := s.OneOf()[nonNullIdx]
+		declType := NewDeclType(schema)
+		declType.SetOptional()
+		return declType, true
+	}
+	return nil, false
 }
 
 // estimateMaxStringLengthPerRequest estimates the maximum string length (in characters)

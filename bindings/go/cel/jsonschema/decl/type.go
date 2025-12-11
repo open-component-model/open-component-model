@@ -44,6 +44,10 @@ func (t *Type) CelType() *cel.Type {
 	return t.celType
 }
 
+func (t *Type) SetOptional() {
+	t.celType = cel.OptionalType(t.celType)
+}
+
 // DefaultValue returns the CEL ref.Val representing the default value for this object type,
 // if one exists.
 func (t *Type) DefaultValue() ref.Val {
