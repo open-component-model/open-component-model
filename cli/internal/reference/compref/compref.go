@@ -173,7 +173,6 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 		versionPart = input[idx+1:]
 		input = input[:idx]
 		if !versionRegex.MatchString(versionPart) {
-
 			// If IgnoreSemverCompatibility is not set, return an error
 			// to ensure strict compliance with semantic versioning.
 			if !parsedOptions.IgnoreSemverCompatibility {
