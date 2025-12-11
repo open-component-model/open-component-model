@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/cel-go/cel"
+
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -49,7 +50,7 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 		return nil, err
 	}
 	if err := discoverDependencies(g, env); err != nil {
-		return nil, fmt.Errorf("error discovering dependencies: %v", err)
+		return nil, fmt.Errorf("error discovering dependencies: %w", err)
 	}
 
 	synced := syncdag.ToSyncedGraph(g)
@@ -87,7 +88,8 @@ func (b *Builder) BuildAndCheck(original *v1alpha1.TransformationGraphDefinition
 func (b *Builder) WithTransformer(typed interface {
 	runtime.Typed
 	runtime.JSONSchemaIntrospectable
-}, transformer graphRuntime.Transformer) *Builder {
+}, transformer graphRuntime.Transformer,
+) *Builder {
 	if b.transformers == nil {
 		b.transformers = map[runtime.Type]graphRuntime.Transformer{}
 	}

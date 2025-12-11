@@ -3,6 +3,7 @@ package env
 import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
+
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/provider"
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"

@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/google/cel-go/cel"
+
 	ast "ocm.software/open-component-model/bindings/go/cel/expression/inspector"
 	"ocm.software/open-component-model/bindings/go/cel/expression/parser"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
@@ -45,7 +46,7 @@ func getTransformationNodes(tgd *v1alpha1.TransformationGraphDefinition) (map[st
 func discoverDependencies(g *dag.DirectedAcyclicGraph[string], env *cel.Env) error {
 	keys := slices.Collect(maps.Keys(g.Vertices))
 
-	inspector := ast.NewInspectorWithEnv(env, append(keys))
+	inspector := ast.NewInspectorWithEnv(env, keys)
 
 	for id, vertex := range g.Vertices {
 		ttransformation, ok := vertex.Attributes[syncdag.AttributeValue].(graph.Transformation)

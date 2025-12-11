@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
 	"ocm.software/open-component-model/bindings/go/cel/expression/fieldpath"
 	"ocm.software/open-component-model/bindings/go/cel/expression/variable"
 	"ocm.software/open-component-model/bindings/go/cel/jsonschema/decl/check"
@@ -24,7 +25,7 @@ type StaticPluginAnalysisProcessor struct {
 }
 
 func (b *StaticPluginAnalysisProcessor) ProcessValue(_ context.Context, transformation graph.Transformation) error {
-	celEnv, provider, err := b.Builder.CurrentEnv()
+	celEnv, _, err := b.Builder.CurrentEnv()
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,8 @@ func (b *StaticPluginAnalysisProcessor) ProcessValue(_ context.Context, transfor
 	b.Builder.RegisterDeclTypes(declType)
 	b.Builder.RegisterEnvOption(cel.Variable(transformation.ID, declType.CelType()))
 
-	if celEnv, provider, err = b.Builder.CurrentEnv(); err != nil {
+	_, provider, err := b.Builder.CurrentEnv()
+	if err != nil {
 		return err
 	}
 

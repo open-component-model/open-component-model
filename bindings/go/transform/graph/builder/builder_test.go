@@ -28,7 +28,7 @@ func newTestBuilder(t *testing.T) *Builder {
 		WithTransformer(&testutils.MockAddObjectTransformer{}, mockAddObject)
 }
 
-func TestGraphBuilder_EvaluateGraphAndAdd(t *testing.T) {
+func TestGraphBuilder_EvaluateAndProcessGraph(t *testing.T) {
 	r := require.New(t)
 	builder := newTestBuilder(t)
 

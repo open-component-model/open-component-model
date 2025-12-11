@@ -14,7 +14,7 @@ type MockGetObject struct {
 func (t *MockGetObject) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	transformation := &MockGetObjectTransformer{}
 	if err := t.Scheme.Convert(step, transformation); err != nil {
-		return nil, fmt.Errorf("failed converting generic transformation to download component transformation: %v", err)
+		return nil, fmt.Errorf("failed converting generic transformation to mock get object transformation: %w", err)
 	}
 	transformation.Output = &MockGetObjectTransformerOutput{
 		Object: MockObject{

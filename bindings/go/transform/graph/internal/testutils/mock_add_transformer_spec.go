@@ -4,6 +4,7 @@ import "ocm.software/open-component-model/bindings/go/runtime"
 
 const MockAddObjectTransformerType = "MockAddObjectTransformer"
 
+// MockAddObjectTransformer is a transformer that mocks adding an object.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
@@ -16,12 +17,14 @@ type MockAddObjectTransformer struct {
 	Output *MockAddObjectTransformerOutput `json:"output,omitempty"`
 }
 
+// MockAddObjectTransformerOutput is the output of the MockAddObjectTransformer.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type MockAddObjectTransformerOutput struct {
 	Object MockObject `json:"object"`
 }
 
+// MockAddObjectTransformerSpec is the spec of the MockAddObjectTransformer.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type MockAddObjectTransformerSpec struct {

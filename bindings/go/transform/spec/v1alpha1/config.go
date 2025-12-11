@@ -5,6 +5,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
+// TransformationGraphDefinition defines a transformation graph. It is used to
+// unmarshal a serialized transformation graph and forms the basis to perform
+// static type analysis and execute the transformation steps.
 // +k8s:deepcopy-gen=true
 type TransformationGraphDefinition struct {
 	Environment     *runtime.Unstructured   `json:"environment"`
@@ -18,6 +21,9 @@ func (tgd *TransformationGraphDefinition) GetEnvironmentData() map[string]interf
 	return tgd.Environment.Data
 }
 
+// GenericTransformation is a generic transformation.
+// This representations is used to perform the initial parsing, extract the cel
+// expressions, and evaluate the dependencies between the steps.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true

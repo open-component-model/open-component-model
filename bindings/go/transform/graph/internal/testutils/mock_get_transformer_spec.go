@@ -4,6 +4,7 @@ import "ocm.software/open-component-model/bindings/go/runtime"
 
 const MockGetObjectTransformerType = "MockGetObjectTransformer"
 
+// MockGetObjectTransformer is a transformer that mocks getting an object.
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
@@ -16,12 +17,14 @@ type MockGetObjectTransformer struct {
 	Output *MockGetObjectTransformerOutput `json:"output,omitempty"`
 }
 
+// MockGetObjectTransformerOutput is the output of the MockGetObjectTransformer.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type MockGetObjectTransformerOutput struct {
 	Object MockObject `json:"object"`
 }
 
+// MockGetObjectTransformerSpec is the spec of the MockGetObjectTransformer.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type MockGetObjectTransformerSpec struct {

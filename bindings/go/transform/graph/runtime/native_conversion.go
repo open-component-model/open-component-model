@@ -9,10 +9,8 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 )
 
-var (
-	// ErrUnsupportedType is returned when the type is not supported.
-	ErrUnsupportedType = errors.New("unsupported type")
-)
+// ErrUnsupportedType is returned when the type is not supported.
+var ErrUnsupportedType = errors.New("unsupported type")
 
 // GoNativeValue transforms CEL output into corresponding Go native type values.
 func GoNativeValue(v ref.Val) (interface{}, error) {

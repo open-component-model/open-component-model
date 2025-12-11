@@ -99,7 +99,7 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 		// Not sure if these kinds of errors should be fatal, these paths are produced
 		// by the parser, so they should be valid.
 		// Maybe we should log them instead…
-		result.Error = fmt.Errorf("error getting value: %v", err)
+		result.Error = fmt.Errorf("error getting value: %w", err)
 		return result
 	}
 
@@ -111,7 +111,7 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 		}
 		err = r.setValueAtPath(field.Path, resolvedValue)
 		if err != nil {
-			result.Error = fmt.Errorf("error setting value: %v", err)
+			result.Error = fmt.Errorf("error setting value: %w", err)
 			return result
 		}
 		result.Resolved = true
@@ -135,7 +135,7 @@ func (r *Resolver) resolveField(field variable.FieldDescriptor) ResolutionResult
 
 		err = r.setValueAtPath(field.Path, replaced)
 		if err != nil {
-			result.Error = fmt.Errorf("error setting value: %v", err)
+			result.Error = fmt.Errorf("error setting value: %w", err)
 			return result
 		}
 		result.Resolved = true

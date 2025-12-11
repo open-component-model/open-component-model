@@ -7,10 +7,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/graph"
 )
 
-var (
-	// ErrNamingConvention is the base error message for naming convention violations
-	ErrNamingConvention = "naming convention violation"
-)
+// ErrNamingConvention is the base error message for naming convention violations
+var ErrNamingConvention = "naming convention violation"
 
 // ValidateTransformations validates the naming conventions of the transformations.
 func ValidateTransformations(transformations map[string]graph.Transformation) error {

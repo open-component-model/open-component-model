@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/cel-go/cel"
+
 	stv6jsonschema "ocm.software/open-component-model/bindings/go/cel/jsonschema/santhosh-tekuri/v6"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transform/graph"
@@ -22,11 +23,9 @@ type Transformer interface {
 
 type Runtime struct {
 	Environment              *cel.Env
-	transformations          map[string]graph.Transformation
 	EvaluatedExpressionCache map[string]any
 	EvaluatedTransformations map[string]any
 
-	scheme       *runtime.Scheme
 	Transformers map[runtime.Type]Transformer
 }
 
@@ -70,7 +69,7 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 		return fmt.Errorf("transformation %q has unresolved fields after resolution", transformation.ID)
 	}
 
-	runtimeType := transformation.GenericTransformation.GetType()
+	runtimeType := transformation.GetType()
 	if runtimeType.IsEmpty() {
 		return fmt.Errorf("transformation type after render is empty")
 	}
@@ -80,7 +79,7 @@ func (b *Runtime) ProcessValue(ctx context.Context, transformation graph.Transfo
 		return fmt.Errorf("no transformer runtime registered for type %s", runtimeType)
 	}
 
-	transformed, err := transformer.Transform(ctx, transformation.GenericTransformation.AsRaw())
+	transformed, err := transformer.Transform(ctx, transformation.AsRaw())
 	if err != nil {
 		return fmt.Errorf("failed to transform transformation %q: %w", transformation.ID, err)
 	}
