@@ -36,7 +36,7 @@ func TestBuild(t *testing.T) {
 			segments: []Segment{
 				NamedSegment("aws.eks.cluster"),
 			},
-			want: `["aws.eks.cluster"]`,
+			want: `"aws.eks.cluster"`,
 		},
 		{
 			name: "mixed names and indices",
@@ -55,7 +55,7 @@ func TestBuild(t *testing.T) {
 				IndexedSegment(0),
 				NamedSegment("value"),
 			},
-			want: `somefield["labels.kubernetes.io/name"][0].value`,
+			want: `somefield."labels.kubernetes.io/name"[0].value`,
 		},
 		{
 			name: "consecutive indices",
@@ -78,15 +78,15 @@ func TestBuild(t *testing.T) {
 				NamedSegment("subfield"),
 				IndexedSegment(0),
 				NamedSegment("kubernetes.io/config"),
-				NamedSegment(""),
+				NamedSegment(""), // ignored as empty
 				NamedSegment("field"),
 				IndexedSegment(1),
 			},
-			want: `field.subfield[0]["kubernetes.io/config"][""].field[1]`,
+			want: `field.subfield[0]."kubernetes.io/config".field[1]`,
 		},
 	}
 
-	for _, tt := range tests[0:1] {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := Build(tt.segments)
 			if got != tt.want {

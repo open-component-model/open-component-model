@@ -16,6 +16,26 @@ type DeclType struct {
 	*Schema
 }
 
+// DeclTypeFromProperty creates a DeclType for a specific property of the DeclType's Schema.
+// It returns nil if the property does not exist.
+func (t *DeclType) DeclTypeFromProperty(property string) *DeclType {
+	if t == nil || t.Schema == nil {
+		return nil
+	}
+	field, ok := t.Fields[property]
+	if !ok {
+		return nil
+	}
+	schemaProperty, ok := t.Properties()[property]
+	if !ok {
+		return nil
+	}
+	return &DeclType{
+		Type:   field.Type,
+		Schema: &Schema{Schema: schemaProperty.Schema},
+	}
+}
+
 // declTypeForSchema creates a DeclType from the provided decl.Type and Schema.
 func declTypeForSchema(t *decl.Type, schema *Schema) *DeclType {
 	return &DeclType{
@@ -33,7 +53,7 @@ func NewDeclType(s *Schema) *DeclType {
 	}
 
 	switch s.Type() {
-	case "array":
+	case ArrayType:
 		if s.Items() == nil {
 			// JSON Schema default: "items": {}
 			return declTypeForSchema(decl.NewListType(decl.DynType, decl.NoMaxLength), s)
@@ -56,7 +76,7 @@ func NewDeclType(s *Schema) *DeclType {
 			s,
 		)
 
-	case "object":
+	case ObjectType:
 		// If additionalProperties is itself a schema → treat as map<string, X>
 		if s.AdditionalProperties() != nil {
 			if propsType := NewDeclType(s.AdditionalProperties()); propsType != nil {
@@ -96,9 +116,6 @@ func NewDeclType(s *Schema) *DeclType {
 
 			// Resolve type (including ref fallback)
 			fieldType := NewDeclType(prop)
-			if fieldType == nil && prop.Ref() != nil {
-				fieldType = NewDeclType(prop.Ref())
-			}
 			if fieldType == nil {
 				continue
 			}
@@ -127,7 +144,7 @@ func NewDeclType(s *Schema) *DeclType {
 				decl.NewMapType(decl.StringType, decl.DynType, decl.NoMaxLength), s,
 			)
 		}
-		id := "object"
+		id := ObjectType
 		if s.Schema.ID != "" {
 			// if we have a unique schema ID, use that
 			id = s.Schema.ID
@@ -141,7 +158,7 @@ func NewDeclType(s *Schema) *DeclType {
 			base.MaxElements = decl.NoMaxLength
 		}
 		return base
-	case "string":
+	case StringType:
 		switch s.Format() {
 		case "byte":
 			t := decl.NewSimpleTypeWithMinSize("bytes", cel.BytesType, types.Bytes([]byte{}), decl.MinStringSize)
@@ -180,14 +197,11 @@ func NewDeclType(s *Schema) *DeclType {
 		}
 
 		return declTypeForSchema(str, s)
-
-	case "boolean":
+	case BooleanType:
 		return declTypeForSchema(decl.BoolType, s)
-
-	case "number":
+	case NumType:
 		return declTypeForSchema(decl.DoubleType, s)
-
-	case "integer":
+	case IntegerType:
 		return declTypeForSchema(decl.IntType, s)
 	}
 
@@ -196,7 +210,43 @@ func NewDeclType(s *Schema) *DeclType {
 		return NewDeclType(s.Ref())
 	}
 
+	if oneOf := s.OneOf(); len(oneOf) > 0 {
+		if len(s.OneOf()) == 1 {
+			// special case: single-branch oneOf is equivalent to the branch itself
+			return NewDeclType(s.OneOf()[0])
+		}
+		// special case: optional type wrapping based on oneOf [null, X]
+		if declType, ok := declTypeAsOptionalSchema(s); ok {
+			return declType
+		}
+		// in the future we can think of offering a parameterized union type for all branches of oneOf
+		// for now, we treat as dyn and defer evaluation to the runtime.
+		return declTypeForSchema(decl.DynType, s)
+	}
+
 	return nil
+}
+
+func declTypeAsOptionalSchema(s *Schema) (*DeclType, bool) {
+	if len(s.OneOf()) != 2 {
+		return nil, false
+	}
+	nonNullIdx := -1
+	hasNull := false
+	for i, br := range s.OneOf() {
+		if br.Type() == "null" {
+			hasNull = true
+		} else {
+			nonNullIdx = i
+		}
+	}
+	if hasNull {
+		schema := s.OneOf()[nonNullIdx]
+		declType := NewDeclType(schema)
+		declType.SetOptional()
+		return declType, true
+	}
+	return nil, false
 }
 
 // estimateMaxStringLengthPerRequest estimates the maximum string length (in characters)

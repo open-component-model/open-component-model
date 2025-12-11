@@ -36,27 +36,22 @@ func InferFromGoValue(goRuntimeVal interface{}) (*jsonschema.Schema, error) {
 	switch typed := goRuntimeVal.(type) {
 	case bool:
 		return &jsonschema.Schema{
-			Types: typeForSchema("boolean"),
+			Types: TypeForSchema(BooleanType),
 			Const: &goRuntimeVal,
 		}, nil
-	case int64:
+	case int64, uint64:
 		return &jsonschema.Schema{
-			Types: typeForSchema("integer"),
-			Const: &goRuntimeVal,
-		}, nil
-	case uint64:
-		return &jsonschema.Schema{
-			Types: typeForSchema("integer"),
+			Types: TypeForSchema(IntegerType),
 			Const: &goRuntimeVal,
 		}, nil
 	case float64:
 		return &jsonschema.Schema{
-			Types: typeForSchema("number"),
+			Types: TypeForSchema(NumType),
 			Const: &goRuntimeVal,
 		}, nil
 	case string:
 		return &jsonschema.Schema{
-			Types: typeForSchema("string"),
+			Types: TypeForSchema(StringType),
 			Const: &goRuntimeVal,
 		}, nil
 	case []interface{}:
@@ -70,7 +65,7 @@ func InferFromGoValue(goRuntimeVal interface{}) (*jsonschema.Schema, error) {
 
 func inferArraySchema(arr []interface{}) (*jsonschema.Schema, error) {
 	schema := &jsonschema.Schema{
-		Types: typeForSchema("array"),
+		Types: TypeForSchema(ArrayType),
 	}
 
 	if len(arr) > 0 {
@@ -86,7 +81,7 @@ func inferArraySchema(arr []interface{}) (*jsonschema.Schema, error) {
 
 func inferObjectSchema(obj map[string]interface{}) (*jsonschema.Schema, error) {
 	schema := &jsonschema.Schema{
-		Types:      typeForSchema("object"),
+		Types:      TypeForSchema(ObjectType),
 		Properties: make(map[string]*jsonschema.Schema),
 	}
 
@@ -99,10 +94,4 @@ func inferObjectSchema(obj map[string]interface{}) (*jsonschema.Schema, error) {
 	}
 
 	return schema, nil
-}
-
-func typeForSchema(typ string) *jsonschema.Types {
-	var t jsonschema.Types
-	t.Add(typ)
-	return &t
 }

@@ -2,6 +2,7 @@ package fieldpath
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -14,17 +15,20 @@ func Build(segments []Segment) string {
 	var b strings.Builder
 
 	for i, segment := range segments {
-		if i > 0 && !strings.HasSuffix(b.String(), "]") {
-			b.WriteByte('.')
-		}
-
 		if segment.Index != nil {
-			b.WriteString(fmt.Sprintf("[%d]", segment.Index))
+			b.WriteString(fmt.Sprintf("[%d]", *segment.Index))
 			continue
 		}
-
-		if strings.Contains(segment.Name, ".") {
-			b.WriteString(fmt.Sprintf(`[%q]`, segment.Name))
+		if segment.Name == "" {
+			continue
+		}
+		if i > 0 {
+			b.WriteRune('.')
+		}
+		if strings.ContainsRune(segment.Name, '.') ||
+			strings.ContainsRune(segment.Name, '[') ||
+			strings.ContainsRune(segment.Name, ']') {
+			b.WriteString(strconv.Quote(segment.Name))
 		} else {
 			b.WriteString(segment.Name)
 		}
