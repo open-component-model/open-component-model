@@ -6,8 +6,8 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.11
 	github.com/stretchr/testify v1.11.1
 	ocm.software/open-component-model/bindings/go/blob v0.0.10
-	ocm.software/open-component-model/bindings/go/constructor v0.0.2
-	ocm.software/open-component-model/bindings/go/runtime v0.0.4
+	ocm.software/open-component-model/bindings/go/constructor v0.0.4
+	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 )
 
 require (
