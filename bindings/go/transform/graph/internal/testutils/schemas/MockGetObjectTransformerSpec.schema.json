@@ -4,6 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transform/graph/internal/testutils/schemas/MockGetObjectTransformerSpec.schema.json",
   "title": "MockGetObjectTransformerSpec",
   "type": "object",
+  "description": "MockGetObjectTransformerSpec is the spec of the MockGetObjectTransformer.",
   "properties": {
     "name": {
       "type": "string"

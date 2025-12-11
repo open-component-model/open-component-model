@@ -4,6 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transform/graph/internal/testutils/schemas/MockAddObjectTransformerOutput.schema.json",
   "title": "MockAddObjectTransformerOutput",
   "type": "object",
+  "description": "MockAddObjectTransformerOutput is the output of the MockAddObjectTransformer.",
   "properties": {
     "object": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transform.graph.internal.testutils.MockObject"
