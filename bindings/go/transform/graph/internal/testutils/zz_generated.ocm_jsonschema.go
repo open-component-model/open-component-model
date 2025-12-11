@@ -9,6 +9,15 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/MockAddObjectTransformer.schema.json
+var schemaMockAddObjectTransformer []byte
+
+//go:embed schemas/MockAddObjectTransformerOutput.schema.json
+var schemaMockAddObjectTransformerOutput []byte
+
+//go:embed schemas/MockAddObjectTransformerSpec.schema.json
+var schemaMockAddObjectTransformerSpec []byte
+
 //go:embed schemas/MockGetObjectTransformer.schema.json
 var schemaMockGetObjectTransformer []byte
 
@@ -17,6 +26,21 @@ var schemaMockGetObjectTransformerOutput []byte
 
 //go:embed schemas/MockGetObjectTransformerSpec.schema.json
 var schemaMockGetObjectTransformerSpec []byte
+
+// JSONSchema returns the JSON Schema for MockAddObjectTransformer.
+func (MockAddObjectTransformer) JSONSchema() []byte {
+	return schemaMockAddObjectTransformer
+}
+
+// JSONSchema returns the JSON Schema for MockAddObjectTransformerOutput.
+func (MockAddObjectTransformerOutput) JSONSchema() []byte {
+	return schemaMockAddObjectTransformerOutput
+}
+
+// JSONSchema returns the JSON Schema for MockAddObjectTransformerSpec.
+func (MockAddObjectTransformerSpec) JSONSchema() []byte {
+	return schemaMockAddObjectTransformerSpec
+}
 
 // JSONSchema returns the JSON Schema for MockGetObjectTransformer.
 func (MockGetObjectTransformer) JSONSchema() []byte {

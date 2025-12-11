@@ -20,7 +20,7 @@ func (t *MockGetObject) Transform(ctx context.Context, step runtime.Typed) (runt
 		Object: MockObject{
 			Name:    transformation.Spec.Name,
 			Version: transformation.Spec.Version,
-			Content: "context added by mock transformer " + transformation.ID,
+			Content: fmt.Sprintf("object retrieved by %s at step with id %s", MockGetObjectV1alpha1, transformation.ID),
 		},
 	}
 	return transformation, nil

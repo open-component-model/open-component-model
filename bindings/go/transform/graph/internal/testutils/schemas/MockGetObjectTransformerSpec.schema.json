@@ -5,16 +5,16 @@
   "title": "MockGetObjectTransformerSpec",
   "type": "object",
   "properties": {
-    "Name": {
+    "name": {
       "type": "string"
     },
-    "Version": {
+    "version": {
       "type": "string"
     }
   },
   "required": [
-    "Name",
-    "Version"
+    "name",
+    "version"
   ],
   "additionalProperties": false
 }
