@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"runtime"
 	"slices"
 
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -36,7 +34,6 @@ import (
 	deliveryv1alpha1 "ocm.software/open-component-model/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/kubernetes/controller/internal/controller/deployer/dynamic"
-	"ocm.software/open-component-model/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/kubernetes/controller/internal/util"
@@ -250,6 +247,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			return ctrl.Result{}, fmt.Errorf("failed to untrack deployer: %w", err)
 		}
 
+		// Prune all deployed resources
+		// TODO #624 not sure if we should do this all the time or watch for the --prune flag
+		applySet := NewApplySet(r.GetClient(), r.Scheme, r.resourceRESTMapper, deployer, nil)
+		if err := applySet.PruneAll(ctx); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to prune resources: %w", err)
+		}
+
+		if err := r.Delete(ctx, deployer); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete deployer: %w", err)
+		}
+
 		return ctrl.Result{}, fmt.Errorf("deployer is being deleted, waiting for resource watches to be removed")
 	}
 
@@ -290,7 +298,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to download resource from OCM or retrieve it from the cache: %w", err)
 	}
 
-	if err = r.applyConcurrently(ctx, resource, deployer, objs); err != nil {
+	applySet := NewApplySet(r.GetClient(), r.Scheme, r.resourceRESTMapper, deployer, resource)
+	if err := applySet.Apply(ctx, objs); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ApplyFailed, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to apply resources: %w", err)
@@ -302,7 +311,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to sync deployed resources: %w", err)
 	}
 
+	// TODO: 624 still needed?
 	updateDeployedObjectStatusReferences(objs, deployer)
+
 	// TODO: move finalizer up because removal is anyhow idempotent
 	controllerutil.AddFinalizer(deployer, resourceWatchFinalizer)
 
@@ -468,45 +479,11 @@ func (r *Reconciler) getResource(cv ocmctx.ComponentVersionAccess, resourceAcces
 	return data, digest[0].String(), nil
 }
 
-var digestSpecStringPattern = regexp.MustCompile(`^(?P<algo>[\w\-]+):(?P<digest>[a-fA-F0-9]+)\[(?P<norm>[\w\/]+)\]$`)
-
-// TODO(jakobmoellerdev): currently digests are stored as strings in resource status, we should really consider storing them natively...
-func digestSpec(s string) (v1.DigestSpec, error) {
-	matches := digestSpecStringPattern.FindStringSubmatch(s)
-	if expectedMatches := 4; len(matches) != expectedMatches {
-		return v1.DigestSpec{}, fmt.Errorf("invalid digest spec format: %s", s)
-	}
-
-	digestSpec := v1.DigestSpec{}
-	for i, name := range digestSpecStringPattern.SubexpNames() {
-		switch name {
-		case "algo":
-			digestSpec.HashAlgorithm = matches[i]
-		case "digest":
-			digestSpec.Value = matches[i]
-		case "norm":
-			digestSpec.NormalisationAlgorithm = matches[i]
-		}
-	}
-
-	return digestSpec, nil
-}
-
 // applyConcurrently applies the resource objects to the cluster concurrently.
 //
 // See Apply for more details on how the objects are applied.
+// TODO: 624 is this still needed?
 func (r *Reconciler) applyConcurrently(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer *deliveryv1alpha1.Deployer, objs []*unstructured.Unstructured) error {
-	if len(objs) > 1 {
-		// TODO(jakobmoellerdev): remove once https://github.com/open-component-model/ocm-k8s-toolkit/issues/273#issue-3201709052
-		//  is implemented in the deployer controller. We need proper apply detection so we can support pruning diffs.
-		//  Otherwise we can orphan resources.
-		msg := "multiple objects found in manifest," +
-			"the current deployer implementation does not officially support this yet," +
-			"and will not prune diffs properly."
-		event.New(r, deployer, nil, eventv1.EventSeverityInfo, msg)
-		log.FromContext(ctx).Info(msg)
-	}
-
 	eg, egctx := errgroup.WithContext(ctx)
 
 	for i := range objs {
@@ -618,6 +595,7 @@ func (r *Reconciler) track(ctx context.Context, deployer *deliveryv1alpha1.Deplo
 	return nil
 }
 
+// TODO: 624 is this still needed?
 func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer *deliveryv1alpha1.Deployer) {
 	for _, obj := range objs {
 		apiVersion, kind := obj.GetObjectKind().GroupVersionKind().ToAPIVersionAndKind()
