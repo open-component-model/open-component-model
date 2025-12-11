@@ -45,6 +45,9 @@ func WithCTFAccessMode(mode ctf.AccessMode) Option {
 	})
 }
 
+// IgnoreSemverCompatibility configures the comparison to ignore semver compatibility checks.
+// It can be used to request components with non-semver compliant version strings to be compared.
+// If not set, components with non-semver compliant version strings will result in an error during compref parsing.
 func IgnoreSemverCompatibility() Option {
 	return OptionFunc(func(opts *Options) error {
 		opts.IgnoreSemverCompatibility = true

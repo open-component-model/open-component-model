@@ -173,9 +173,15 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 		versionPart = input[idx+1:]
 		input = input[:idx]
 		if !versionRegex.MatchString(versionPart) {
+
+			// If IgnoreSemverCompatibility is not set, return an error
+			// to ensure strict compliance with semantic versioning.
 			if !parsedOptions.IgnoreSemverCompatibility {
 				return nil, fmt.Errorf("invalid semantic version %q in %q, must match %q", versionPart, originalInput, VersionRegex)
 			}
+
+			// If IgnoreSemverCompatibility is set, we just log a warning instead of erroring out
+			// This is a compatibility feature to work with non-semver compliant versions for requesting components
 			slog.Warn("ignoring invalid semantic version due to IgnoreSemverCompatibility option", "version", versionPart, "input", originalInput)
 		}
 		ref.Version = versionPart
