@@ -1,22 +1,20 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 
+	"golang.org/x/tools/go/packages"
 	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
 	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen/writer"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
 
 func main() {
-	// -------------------------------
-	// Logging flag
-	// -------------------------------
 	logLevelFlag := flag.String("loglevel", "info", "debug, info, warn, error")
 	flag.Parse()
 
@@ -48,12 +46,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	roots := args
+	if err := Run(context.Background(), args...); err != nil {
+		slog.Error("jsonschemagen failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func Run(ctx context.Context, roots ...string) error {
 	for i, root := range roots {
 		abs, err := filepath.Abs(root)
 		if err != nil {
-			slog.Error("cannot resolve root directory", "root", root, "error", err)
-			os.Exit(1)
+			return fmt.Errorf("cannot resolve root directory %q: %w", root, err)
 		}
 		roots[i] = abs
 	}
@@ -61,10 +64,9 @@ func main() {
 	slog.Info("scanning...", "roots", roots)
 
 	// Build the universe of all discovered types and imports.
-	u, err := universe.Build(roots)
+	u, err := universe.Build(ctx, roots)
 	if err != nil {
-		slog.Error("universe build failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("universe build error: %w", err)
 	}
 
 	// Collect all types annotated for schema generation.
@@ -77,7 +79,7 @@ func main() {
 
 	if len(annotated) == 0 {
 		slog.Warn("No annotated types found. Nothing to do.", "baseMarker", jsonschemagen.BaseMarker)
-		return
+		return nil
 	}
 	slog.Info("discovered annotated types", "types", len(annotated), "baseMarker", jsonschemagen.BaseMarker)
 
@@ -85,12 +87,11 @@ func main() {
 	gen := jsonschemagen.New(u)
 
 	// GenerateJSONSchemaDraft202012 schemas for all annotated types.
-	packageGroups := make(map[string][]*universe.TypeInfo)
+	groups := make(map[*packages.Package][]*universe.TypeInfo)
 	for _, ti := range annotated {
 		if _, ok := jsonschemagen.SchemaFromUniverseType(ti); ok {
 			slog.Debug("skipping schema generation, schema provided from type", "type", ti.Key.TypeName)
-			pkgDir := filepath.Dir(ti.FilePath)
-			packageGroups[pkgDir] = append(packageGroups[pkgDir], ti)
+			groups[ti.Pkg] = append(groups[ti.Pkg], ti)
 			continue
 		}
 
@@ -101,35 +102,25 @@ func main() {
 		}
 
 		if err := writer.WriteSchemaJSON(ti, schema); err != nil {
-			slog.Error("write schema error", "type", ti.Key.TypeName, "error", err)
-			os.Exit(1)
+			return fmt.Errorf("write schema error for type %q: %w", ti.Key.TypeName, err)
 		}
 
-		pkgDir := filepath.Dir(ti.FilePath)
-		packageGroups[pkgDir] = append(packageGroups[pkgDir], ti)
+		groups[ti.Pkg] = append(groups[ti.Pkg], ti)
 	}
 
-	// Generate embed files for each package that contains generated schemas.
-	dirs := make([]string, 0, len(packageGroups))
-	for d := range packageGroups {
-		dirs = append(dirs, d)
-	}
-	sort.Strings(dirs)
-
-	for _, pkgDir := range dirs {
-		group := packageGroups[pkgDir]
-		writeEmbedFiles(pkgDir, group)
+	for pkg, group := range groups {
+		writeEmbedFiles(pkg, group)
 	}
 
 	slog.Info("jsonschemagen: completed successfully.")
+	return nil
 }
 
-func writeEmbedFiles(pkgDir string, group []*universe.TypeInfo) {
+func writeEmbedFiles(pkg *packages.Package, group []*universe.TypeInfo) {
 	if len(group) == 0 {
 		return
 	}
 	// Types from the same directory share a package name.
-	pkgName := group[0].File.Name.Name
 
 	embedInfos := make([]writer.TypeEmbedInfo, 0, len(group))
 	for _, ti := range group {
@@ -146,8 +137,8 @@ func writeEmbedFiles(pkgDir string, group []*universe.TypeInfo) {
 		})
 	}
 
-	if err := writer.WriteEmbedFileForPackage(pkgDir, pkgName, embedInfos); err != nil {
-		slog.Error("write embed file error", "dir", pkgDir, "error", err)
+	if err := writer.WriteEmbedFileForPackage(pkg.Dir, pkg.Types.Name(), embedInfos); err != nil {
+		slog.Error("write embed file error", "dir", pkg.Dir, "error", err)
 		os.Exit(1)
 	}
 }
