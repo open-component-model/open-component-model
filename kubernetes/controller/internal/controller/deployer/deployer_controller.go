@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/ptr"
 	ocmctx "ocm.software/ocm/api/ocm"
+	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"ocm.software/ocm/api/ocm/extensions/attrs/signingattr"
 	"ocm.software/ocm/api/ocm/tools/signing"
@@ -357,9 +358,11 @@ func (r *Reconciler) DownloadResourceWithOCM(
 		return nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
+	// Take the resource reference from the status to ensure we are getting the exact same resource
+	// (The looked-up component version above is already the component version containing the resource. So, the name
+	// is sufficient here.)
 	resourceReference := v1.ResourceReference{
-		Resource:      resource.Spec.Resource.ByReference.Resource,
-		ReferencePath: resource.Spec.Resource.ByReference.ReferencePath,
+		Resource: ocmv1.NewIdentity(resource.Status.Resource.Name),
 	}
 
 	resourceAccess, _, err := ocm.GetResourceAccessForComponentVersion(ctx, cv, resourceReference, ocm.NewSessionResolver(octx, session), resource.Spec.SkipVerify)
@@ -375,7 +378,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
 
-		return nil, fmt.Errorf("failed to get  manifest: %w", err)
+		return nil, fmt.Errorf("failed to get manifest: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, manifest.Close())
