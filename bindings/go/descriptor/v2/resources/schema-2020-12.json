@@ -132,7 +132,13 @@
       "description": "Base type for access specifications",
       "required": [
         "type"
-      ]
+      ],
+      "properties": {
+        "type": {
+          "description": "Type of the access method",
+          "$ref": "#/$defs/ocmType"
+        }
+      }
     },
     "sourceDefinition": {
       "type": "object",
