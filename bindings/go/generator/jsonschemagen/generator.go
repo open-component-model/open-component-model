@@ -18,65 +18,59 @@ func New(u *universe.Universe) *Generator {
 func (g *Generator) GenerateJSONSchemaDraft202012(root *universe.TypeInfo) *JSONSchemaDraft202012 {
 	schema := g.buildRootSchema(root)
 
-	reachable := g.collectReachableQueue(root)
 	defs := map[string]*JSONSchemaDraft202012{}
-	protectedFromIDRemoval := map[string]struct{}{}
+	protected := map[string]struct{}{}
 
-	for _, ti := range reachable {
+	for _, ti := range g.collectReachableQueue(root) {
 		key := universe.Definition(ti.Key)
 
-		// Build full schema, but flatten its defs away
 		full := g.buildRootSchema(ti)
 
-		// Collect external properties into defs.
-		// any property with an ID is considered external
-		// we replace it with a $ref to the defs section
-		// of the root schema.
-		// This effectively flattens all properties with an ID into the root defs.
-		// That will deduplicate types that are used in multiple places.
-		var collectExternalProps func(s *JSONSchemaDraft202012)
-		collectExternalProps = func(s *JSONSchemaDraft202012) {
-			if len(s.Properties) > 0 {
-				for _, p := range s.Properties {
-					collectExternalProps(p)
-				}
-			}
-			if s.ID == "" {
-				return
-			}
-			normalized := strings.ReplaceAll(s.ID, "/", ".")
-			cp := *s
-			defs[normalized] = &cp
-			protectedFromIDRemoval[normalized] = struct{}{}
-			*s = JSONSchemaDraft202012{Ref: "#/$defs/" + normalized}
-		}
-		for _, prop := range full.Properties {
-			collectExternalProps(prop)
+		// Flatten all externally identified schemas into root defs
+		for _, subschema := range full.Properties {
+			g.flattenExternalSchemas(subschema, defs, protected)
 		}
 
 		full.Defs = nil
 
-		typeMarkers := ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, BaseMarker)
-		ApplyNumericMarkers(full, typeMarkers)
-		ApplyEnumMarkers(full, typeMarkers)
+		markers := ExtractMarkerMap(ti.TypeSpec, ti.GenDecl, BaseMarker)
+		ApplyNumericMarkers(full, markers)
+		ApplyEnumMarkers(full, markers)
 		ApplyConstEnum(full, ti.Consts)
 
 		defs[key] = full
 	}
 
-	schema.Defs = defs
-
-	// TODO (jakobmoellerdev): Currently, all schema IDs are virtual IDs that are not actually
-	//   resolvable by URL. This means that we now drop the ID field from the references so that
-	//   the definitions act as if they were part of the root schema. This effectively means
-	//   it is impossible to deduplicate the schemes in nested types, but always allows correct
-	//   referencing from defs.
-	for key, def := range schema.Defs {
-		if _, ok := protectedFromIDRemoval[key]; ok {
-			continue
+	// Drop non-protected IDs (virtual IDs are not resolvable)
+	for k, def := range defs {
+		if _, keep := protected[k]; !keep {
+			def.ID = ""
 		}
-		def.ID = ""
 	}
 
+	schema.Defs = defs
 	return schema
+}
+
+func (g *Generator) flattenExternalSchemas(
+	s *JSONSchemaDraft202012,
+	defs map[string]*JSONSchemaDraft202012,
+	protected map[string]struct{},
+) {
+	for _, p := range s.Properties {
+		g.flattenExternalSchemas(p, defs, protected)
+	}
+	if s.ID == "" {
+		return
+	}
+
+	key := strings.ReplaceAll(s.ID, "/", ".")
+	cp := *s
+
+	defs[key] = &cp
+	protected[key] = struct{}{}
+
+	*s = JSONSchemaDraft202012{
+		Ref: "#/$defs/" + key,
+	}
 }

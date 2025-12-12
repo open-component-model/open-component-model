@@ -8,7 +8,6 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
-	"ocm.software/open-component-model/cli/cmd/transfer/component-version/localblob"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -21,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
+	"ocm.software/open-component-model/cli/cmd/transfer/component-version/localblob"
 	ocmctx "ocm.software/open-component-model/cli/internal/context"
 	"ocm.software/open-component-model/cli/internal/flags/enum"
 	"ocm.software/open-component-model/cli/internal/reference/compref"

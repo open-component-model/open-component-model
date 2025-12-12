@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -16,19 +17,22 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const MoveLocalBlobsTypeString = "MoveLocalBlobs"
-const Version = "v1alpha1"
+const (
+	MoveLocalBlobsTypeString = "MoveLocalBlobs"
+	Version                  = "v1alpha1"
+)
 
 var Scheme = runtime.NewScheme()
 
-var (
-	MoveLocalBlobsV1Alpha1 = runtime.NewVersionedType(MoveLocalBlobsTypeString, Version)
-)
+var MoveLocalBlobsV1Alpha1 = runtime.NewVersionedType(MoveLocalBlobsTypeString, Version)
 
 func init() {
 	Scheme.MustRegisterWithAlias(&MoveLocalBlobs{}, MoveLocalBlobsV1Alpha1)
 }
 
+// MoveLocalBlobs is a transformer specification to move local blob resources
+// from one repository to another.
+//
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
@@ -41,6 +45,7 @@ type MoveLocalBlobs struct {
 	Output *MoveLocalBlobsOutput `json:"output,omitempty"`
 }
 
+// MoveLocalBlobsSpec is the specification of the input specification for MoveLocalBlobs.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type MoveLocalBlobsSpec struct {
@@ -50,18 +55,21 @@ type MoveLocalBlobsSpec struct {
 	To   *runtime.Raw `json:"to"`
 }
 
+// MoveLocalBlobsOutput is the output specification of MoveLocalBlobs.
 // +k8s:deepcopy-gen=true
 // +ocm:jsonschema-gen=true
 type MoveLocalBlobsOutput struct {
 	Descriptor *v2.Descriptor `json:"descriptor,omitempty"`
 }
 
+// MoveLocalBlobsTransformer is a transformer to move local blob resources
 type MoveLocalBlobsTransformer struct {
 	Scheme             *runtime.Scheme
 	RepoProvider       repository.ComponentVersionRepositoryProvider
 	CredentialProvider credentials.Resolver
 }
 
+// Transform moves local blob resources from one repository to another.
 func (t *MoveLocalBlobsTransformer) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	var tr MoveLocalBlobs
 	if err := t.Scheme.Convert(step, &tr); err != nil {
@@ -115,6 +123,7 @@ func (t *MoveLocalBlobsTransformer) Transform(ctx context.Context, step runtime.
 	return &tr, nil
 }
 
+// moveResource moves a single local blob resource from one repository to another.
 func (t *MoveLocalBlobsTransformer) moveResource(
 	ctx context.Context,
 	component v2.Component,
@@ -146,6 +155,7 @@ func (t *MoveLocalBlobsTransformer) moveResource(
 	return v2res, nil
 }
 
+// getRepository resolves a repository from a raw specification.
 func (t *MoveLocalBlobsTransformer) getRepository(
 	ctx context.Context,
 	raw *runtime.Raw,
