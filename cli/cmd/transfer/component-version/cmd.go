@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
+	"ocm.software/open-component-model/cli/cmd/transfer/component-version/localblob"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -143,8 +144,10 @@ func buildGraphDefinition(
 	return &transformv1alpha1.TransformationGraphDefinition{
 		Environment: &runtime.Unstructured{
 			Data: map[string]interface{}{
-				"from": asUnstructured(from).Data,
-				"to":   asUnstructured(to).Data,
+				"from":      asUnstructured(from).Data,
+				"to":        asUnstructured(to).Data,
+				"component": component,
+				"version":   version,
 			},
 		},
 		Transformations: []transformv1alpha1.GenericTransformation{
@@ -154,9 +157,20 @@ func buildGraphDefinition(
 					ID:   "download",
 				},
 				Spec: &runtime.Unstructured{Data: map[string]interface{}{
-					"repository": asUnstructured(from).Data,
-					"component":  component,
-					"version":    version,
+					"repository": "${environment.from}",
+					"component":  "${environment.component}",
+					"version":    "${environment.version}",
+				}},
+			},
+			{
+				TransformationMeta: meta.TransformationMeta{
+					Type: localblob.MoveLocalBlobsV1Alpha1,
+					ID:   "move",
+				},
+				Spec: &runtime.Unstructured{Data: map[string]interface{}{
+					"from":       "${environment.from}",
+					"to":         "${environment.to}",
+					"descriptor": "${download.output.descriptor}",
 				}},
 			},
 			{
@@ -165,8 +179,8 @@ func buildGraphDefinition(
 					ID:   "upload",
 				},
 				Spec: &runtime.Unstructured{Data: map[string]interface{}{
-					"repository": asUnstructured(to).Data,
-					"descriptor": "${download.output.descriptor}",
+					"repository": "${environment.to}",
+					"descriptor": "${move.output.descriptor}",
 				}},
 			},
 		},
@@ -197,7 +211,9 @@ func chooseAddType(repo runtime.Typed) runtime.Type {
 
 // TODO: make this a plugin manager integration.
 func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Resolver) *builder.Builder {
-	transformerScheme := ociv1alpha1.Scheme
+	transformerScheme := runtime.NewScheme()
+	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
+	transformerScheme.MustRegisterScheme(localblob.Scheme)
 
 	ociGet := &transformer.GetComponentVersion{
 		Scheme:             transformerScheme,
@@ -210,11 +226,18 @@ func graphBuilder(pm *manager.PluginManager, credentialProvider credentials.Reso
 		CredentialProvider: credentialProvider,
 	}
 
+	localBlobMover := &localblob.MoveLocalBlobsTransformer{
+		Scheme:             transformerScheme,
+		RepoProvider:       pm.ComponentVersionRepositoryRegistry,
+		CredentialProvider: credentialProvider,
+	}
+
 	return builder.NewBuilder(transformerScheme).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
 		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
-		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd)
+		WithTransformer(&ociv1alpha1.CTFAddComponentVersion{}, ociAdd).
+		WithTransformer(&localblob.MoveLocalBlobs{}, localBlobMover)
 }
 
 func asUnstructured(typed runtime.Typed) *runtime.Unstructured {
