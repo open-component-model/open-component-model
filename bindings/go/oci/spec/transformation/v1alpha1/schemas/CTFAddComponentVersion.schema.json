@@ -111,11 +111,18 @@
               "description": "Metadata of the component descriptor"
             },
             "nestedDigests": {
-              "type": "array",
               "description": "Digest information for nested components",
-              "items": {
-                "$ref": "#/$defs/nestedComponentDigests"
-              }
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/nestedComponentDigests"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "signatures": {
               "type": "array",
@@ -133,6 +140,12 @@
             "access": {
               "type": "object",
               "description": "Base type for access specifications",
+              "properties": {
+                "type": {
+                  "$ref": "#/$defs/ocmType",
+                  "description": "Type of the access method"
+                }
+              },
               "required": [
                 "type"
               ]
@@ -142,11 +155,18 @@
               "description": "A component containing sources, resources, and references to other components",
               "properties": {
                 "componentReferences": {
-                  "type": "array",
                   "description": "References to other component versions",
-                  "items": {
-                    "$ref": "#/$defs/componentReference"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/componentReference"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "creationTime": {
                   "description": "Creation time of the component version",
@@ -161,11 +181,18 @@
                   ]
                 },
                 "labels": {
-                  "type": "array",
                   "description": "Labels associated with the component",
-                  "items": {
-                    "$ref": "#/$defs/label"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/label"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "name": {
                   "$ref": "#/$defs/componentName",
@@ -176,11 +203,18 @@
                   "description": "Provider type of the component in the origin's context"
                 },
                 "repositoryContexts": {
-                  "type": "array",
                   "description": "Previous repositories of the component",
-                  "items": {
-                    "$ref": "#/$defs/repositoryContext"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/repositoryContext"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "resources": {
                   "type": "array",
@@ -190,11 +224,18 @@
                   }
                 },
                 "sources": {
-                  "type": "array",
                   "description": "Sources that produced the component",
-                  "items": {
-                    "$ref": "#/$defs/sourceDefinition"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/sourceDefinition"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "version": {
                   "$ref": "#/$defs/relaxedSemver",
@@ -241,11 +282,18 @@
                   "description": "Additional identity attributes for the reference"
                 },
                 "labels": {
-                  "type": "array",
                   "description": "Labels associated with the reference",
-                  "items": {
-                    "$ref": "#/$defs/label"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/label"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "name": {
                   "type": "string",
@@ -375,11 +423,18 @@
                   "description": "Name of the component"
                 },
                 "resourceDigests": {
-                  "type": "array",
                   "description": "Digest information for resources in the component",
-                  "items": {
-                    "$ref": "#/$defs/nestedDigestSpec"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/nestedDigestSpec"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "version": {
                   "$ref": "#/$defs/relaxedSemver",
@@ -468,11 +523,18 @@
                   "description": "Additional identity attributes for the resource"
                 },
                 "labels": {
-                  "type": "array",
                   "description": "Labels associated with the resource",
-                  "items": {
-                    "$ref": "#/$defs/label"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/label"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "name": {
                   "type": "string",
@@ -488,11 +550,18 @@
                   ]
                 },
                 "srcRefs": {
-                  "type": "array",
                   "description": "References to sources that produced this resource",
-                  "items": {
-                    "$ref": "#/$defs/srcRef"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/srcRef"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "type": {
                   "$ref": "#/$defs/ocmType",
@@ -575,11 +644,18 @@
                   "description": "Additional identity attributes for the source"
                 },
                 "labels": {
-                  "type": "array",
                   "description": "Labels associated with the source",
-                  "items": {
-                    "$ref": "#/$defs/label"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/label"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "name": {
                   "type": "string",
@@ -611,11 +687,18 @@
                   "description": "Selector for identifying the source"
                 },
                 "labels": {
-                  "type": "array",
                   "description": "Labels for further identification of the source",
-                  "items": {
-                    "$ref": "#/$defs/label"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/label"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "additionalProperties": false
