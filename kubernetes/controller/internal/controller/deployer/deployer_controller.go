@@ -22,7 +22,6 @@ import (
 	"k8s.io/utils/ptr"
 	ocmctx "ocm.software/ocm/api/ocm"
 	ocmv1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
-	v1 "ocm.software/ocm/api/ocm/compdesc/meta/v1"
 	"ocm.software/ocm/api/ocm/extensions/attrs/signingattr"
 	"ocm.software/ocm/api/ocm/tools/signing"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -361,7 +360,7 @@ func (r *Reconciler) DownloadResourceWithOCM(
 	// Take the resource reference from the status to ensure we are getting the exact same resource
 	// (The looked-up component version above is already the component version containing the resource. So, the name
 	// is sufficient here.)
-	resourceReference := v1.ResourceReference{
+	resourceReference := ocmv1.ResourceReference{
 		Resource: ocmv1.NewIdentity(resource.Status.Resource.Name),
 	}
 
@@ -474,13 +473,13 @@ func (r *Reconciler) getResource(cv ocmctx.ComponentVersionAccess, resourceAcces
 var digestSpecStringPattern = regexp.MustCompile(`^(?P<algo>[\w\-]+):(?P<digest>[a-fA-F0-9]+)\[(?P<norm>[\w\/]+)\]$`)
 
 // TODO(jakobmoellerdev): currently digests are stored as strings in resource status, we should really consider storing them natively...
-func digestSpec(s string) (v1.DigestSpec, error) {
+func digestSpec(s string) (ocmv1.DigestSpec, error) {
 	matches := digestSpecStringPattern.FindStringSubmatch(s)
 	if expectedMatches := 4; len(matches) != expectedMatches {
-		return v1.DigestSpec{}, fmt.Errorf("invalid digest spec format: %s", s)
+		return ocmv1.DigestSpec{}, fmt.Errorf("invalid digest spec format: %s", s)
 	}
 
-	digestSpec := v1.DigestSpec{}
+	digestSpec := ocmv1.DigestSpec{}
 	for i, name := range digestSpecStringPattern.SubexpNames() {
 		switch name {
 		case "algo":
