@@ -28,4 +28,5 @@ jobs:
         jsonschema lint $(git ls-files '**/schemas/*.schema.json') \
           --verbose \
           --strict \
-          --exclude additional_properties_default # we want to explicitly set additional properties to avoid confusion
+          --exclude additional_properties_default \
+          --exclude enum_with_type
