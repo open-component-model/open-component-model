@@ -15,6 +15,7 @@ import (
 	pluginregistry "ocm.software/open-component-model/cli/cmd/plugins"
 	"ocm.software/open-component-model/cli/cmd/setup/hooks"
 	"ocm.software/open-component-model/cli/cmd/sign"
+	"ocm.software/open-component-model/cli/cmd/transfer"
 	"ocm.software/open-component-model/cli/cmd/verify"
 	"ocm.software/open-component-model/cli/cmd/version"
 	"ocm.software/open-component-model/cli/internal/flags/log"
@@ -62,5 +63,6 @@ func New() *cobra.Command {
 	cmd.AddCommand(verify.New())
 	cmd.AddCommand(sign.New())
 	cmd.AddCommand(pluginregistry.New())
+	cmd.AddCommand(transfer.New())
 	return cmd
 }

@@ -20,21 +20,24 @@ require (
 	ocm.software/open-component-model/bindings/go/dag v0.0.6
 	ocm.software/open-component-model/bindings/go/descriptor/normalisation v0.0.0-20251212081102-d29be105f685
 	ocm.software/open-component-model/bindings/go/descriptor/runtime v0.0.0-20251212081102-d29be105f685
-	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha4
+	ocm.software/open-component-model/bindings/go/descriptor/v2 v2.0.1-alpha5
 	ocm.software/open-component-model/bindings/go/input/dir v0.0.2
 	ocm.software/open-component-model/bindings/go/input/file v0.0.3
 	ocm.software/open-component-model/bindings/go/input/utf8 v0.0.0-20251212081102-d29be105f685
-	ocm.software/open-component-model/bindings/go/oci v0.0.19
+	ocm.software/open-component-model/bindings/go/oci v0.0.21
 	ocm.software/open-component-model/bindings/go/plugin v0.0.12
 	ocm.software/open-component-model/bindings/go/repository v0.0.4
 	ocm.software/open-component-model/bindings/go/rsa v0.0.0-20251212081102-d29be105f685
 	ocm.software/open-component-model/bindings/go/runtime v0.0.5
 	ocm.software/open-component-model/bindings/go/signing v0.0.0-20251212081102-d29be105f685
+	ocm.software/open-component-model/bindings/go/transform v0.0.0-20251212144004-005f2245428d
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
+	cel.dev/expr v0.25.1 // indirect
+	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
@@ -45,6 +48,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.11 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/google/cel-go v0.26.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
@@ -54,8 +58,14 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/veqryn/slog-context v0.8.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
+	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39 // indirect
 	golang.org/x/text v0.31.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20251124214823-79d6a2a48846 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
+	ocm.software/open-component-model/bindings/go/cel v0.0.0-20251211122149-413b01a4c39a // indirect
 )
